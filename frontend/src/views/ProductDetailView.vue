@@ -3,7 +3,7 @@
 //   - 顶部: 关键信息 (OEM/MR/Type)
 //   - 中部: 7 分区规格 (基础信息/尺寸/螺纹/性能/包装/媒体/备注)
 //   - 底部: 交叉引用 + 适用车型
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { productApi } from '@/api'
 import type { ProductDetail } from '@/api/types'

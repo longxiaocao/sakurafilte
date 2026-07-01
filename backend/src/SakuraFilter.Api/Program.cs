@@ -787,17 +787,45 @@ app.MapGet("/api/admin/products/{id:long}/images", async (long id, AdminProductI
 .WithName("AdminListProductImages");
 
 // Day 8.4: 产品变更历史查询 (后台详情页"变更记录"tab 用)
+//   Day 9.2: 加可选筛选 (changeType/since/until) 用于 history 抽屉顶部筛选
+//     - changeType: create/update/discontinue/restore
+//     - since/until: ISO8601 (例: 2026-07-01T00:00:00Z),DateTime 隐式绑定
 app.MapGet("/api/admin/products/{id:long}/history", async (
     long id,
+    [Microsoft.AspNetCore.Mvc.FromQuery] string? changeType,
+    [Microsoft.AspNetCore.Mvc.FromQuery] string? since,
+    [Microsoft.AspNetCore.Mvc.FromQuery] string? until,
+    [Microsoft.AspNetCore.Mvc.FromQuery] int? limit,
     AdminProductService svc,
     HttpContext ctx,
     CancellationToken ct) =>
 {
     try
     {
-        // 简化版: limit 不用 FromQuery, 避免绑定问题, 后端用默认 50
-        var items = await svc.GetHistoryAsync(id, 50, ct);
-        return Results.Ok(new { total = items.Count, items });
+        DateTime? sinceUtc = null, untilUtc = null;
+        if (!string.IsNullOrEmpty(since))
+        {
+            if (!DateTime.TryParse(since, null, System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal, out var ps))
+                return Results.BadRequest(new { error = "since 必须是 ISO8601", since });
+            sinceUtc = ps;
+        }
+        if (!string.IsNullOrEmpty(until))
+        {
+            if (!DateTime.TryParse(until, null, System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal, out var pu))
+                return Results.BadRequest(new { error = "until 必须是 ISO8601", until });
+            untilUtc = pu;
+        }
+        var cap = Math.Clamp(limit ?? 50, 1, 200);
+        var items = await svc.GetHistoryAsync(id, cap, changeType, sinceUtc, untilUtc, ct);
+        return Results.Ok(new
+        {
+            total = items.Count,
+            limit = cap,
+            changeType,
+            since = sinceUtc,
+            until = untilUtc,
+            items
+        });
     }
     catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
     catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }

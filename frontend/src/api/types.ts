@@ -16,40 +16,60 @@ export interface PageResp<T> {
 }
 
 // ===== 搜索 =====
+// Day 9.2: 字段名改 PascalCase 匹配后端 (C# record 默认 System.Text.Json PascalCase 序列化)
+//   之前用 snake_case,导致 result.hits undefined + 表格列 prop 找不到值
+//   错误堆栈: SearchView.vue Proxy._sfc_render TypeError: Cannot read properties of undefined (reading 'length')
 export interface SearchRequest {
   q?: string
-  limit?: number
-  filters?: Record<string, any>
+  type?: string
+  d1?: number
+  d2?: number
+  d3?: number
+  h1?: number
+  h2?: number
+  h3?: number
+  d7?: number
+  d8?: number
+  tolerance?: number
+  includeDiscontinued?: boolean
+  page?: number
+  pageSize?: number
 }
 
 export interface SearchResult {
-  hits: SearchHit[]
   total: number
-  provider?: string
+  page: number
+  pageSize: number
+  totalPages: number
+  elapsedMs: number
+  // Day 9.2: 后端字段是 Items (PascalCase), 不是 hits
+  items: SearchHit[]
+  // 兼容老字段 (万一旧前端代码混用)
+  hits?: SearchHit[]
 }
 
 export interface SearchHit {
   id: number
-  oem_no_display: string
-  oem_no_normalized: string
+  oemNoDisplay: string
+  remark?: string
+  type: string
+  d1Mm?: number
+  d2Mm?: number
+  h1Mm?: number
+  imageKey?: string
+  isDiscontinued: boolean
+  // Day 9.2: 兼容老 snake_case 字段 (前几版 SearchView 用了这些列名)
+  oem_no_display?: string
   product_name_1?: string
-  product_name_2?: string
-  type?: string
   mr_1?: string
-  oem_2?: string
   d1_mm?: number
   d2_mm?: number
   d3_mm?: number
   h1_mm?: number
-  h2_mm?: number
   d7_thread?: string
   d8_thread?: string
   media?: string
   media_model?: string
-  remark?: string
-  image_key?: string
-  is_published?: boolean
-  is_discontinued?: boolean
   updated_at?: string
 }
 

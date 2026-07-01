@@ -30,19 +30,30 @@ async function doSearch() {
   loading.value = true
   lastError.value = ''
   try {
-    const { provider: p, result } = await searchApi.search({ q: q.value.trim(), limit: 50 })
+    const { provider: p, result } = await searchApi.search({
+      q: q.value.trim(),
+      pageSize: 50
+    })
     provider.value = p
-    hits.value = result.hits
-    total.value = result.total
+    // Day 9.2: 修复 - 后端字段是 items (PascalCase), 不是 hits
+    //   兼容 fallback: 万一后端返回 hits 也能用
+    const items = (result?.items ?? result?.hits ?? []) as SearchHit[]
+    hits.value = items
+    total.value = result?.total ?? 0
   } catch (e: any) {
     lastError.value = e?.message || '搜索失败'
+    // Day 9.2: 出错时清空, 防止 undefined.length 报错
+    hits.value = []
+    total.value = 0
   } finally {
     loading.value = false
   }
 }
 
 function viewDetail(row: SearchHit) {
-  router.push(`/product/${encodeURIComponent(row.oem_no_display)}`)
+  // Day 9.2: 兼容 snake_case 和 PascalCase 字段
+  const oem = row.oemNoDisplay ?? row.oem_no_display ?? ''
+  router.push(`/product/${encodeURIComponent(oem)}`)
 }
 
 function fmtDate(iso?: string) {
@@ -100,20 +111,41 @@ onMounted(() => {
         max-height="calc(100vh - 200px)"
       >
         <el-table-column prop="id" label="ID" width="60" />
-        <el-table-column prop="oem_no_display" label="OEM" width="180" />
-        <el-table-column prop="mr_1" label="MR.1" width="120" show-overflow-tooltip />
+        <!-- Day 9.2: 列 prop 改 PascalCase 匹配后端, 加 fallback 兼容 snake_case -->
+        <el-table-column label="OEM" width="180">
+          <template #default="{ row }">{{ row.oemNoDisplay ?? row.oem_no_display }}</template>
+        </el-table-column>
+        <el-table-column label="MR.1" width="120" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.mr1 ?? row.mr_1 }}</template>
+        </el-table-column>
         <el-table-column prop="type" label="Type" width="80" />
-        <el-table-column prop="product_name_1" label="名称" min-width="200" show-overflow-tooltip />
-        <el-table-column prop="d1_mm" label="D1" width="60" align="right" />
-        <el-table-column prop="d2_mm" label="D2" width="60" align="right" />
-        <el-table-column prop="d3_mm" label="D3" width="60" align="right" />
-        <el-table-column prop="h1_mm" label="H1" width="60" align="right" />
-        <el-table-column prop="d7_thread" label="D7" width="80" />
-        <el-table-column prop="d8_thread" label="D8" width="80" />
+        <el-table-column label="名称" min-width="200" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.productName1 ?? row.product_name_1 }}</template>
+        </el-table-column>
+        <el-table-column label="D1" width="60" align="right">
+          <template #default="{ row }">{{ row.d1Mm ?? row.d1_mm }}</template>
+        </el-table-column>
+        <el-table-column label="D2" width="60" align="right">
+          <template #default="{ row }">{{ row.d2Mm ?? row.d2_mm }}</template>
+        </el-table-column>
+        <el-table-column label="D3" width="60" align="right">
+          <template #default="{ row }">{{ row.d3Mm ?? row.d3_mm }}</template>
+        </el-table-column>
+        <el-table-column label="H1" width="60" align="right">
+          <template #default="{ row }">{{ row.h1Mm ?? row.h1_mm }}</template>
+        </el-table-column>
+        <el-table-column label="D7" width="80">
+          <template #default="{ row }">{{ row.d7Thread ?? row.d7_thread }}</template>
+        </el-table-column>
+        <el-table-column label="D8" width="80">
+          <template #default="{ row }">{{ row.d8Thread ?? row.d8_thread }}</template>
+        </el-table-column>
         <el-table-column prop="media" label="Media" width="120" show-overflow-tooltip />
-        <el-table-column prop="media_model" label="MediaModel" width="120" show-overflow-tooltip />
+        <el-table-column label="MediaModel" width="120" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.mediaModel ?? row.media_model }}</template>
+        </el-table-column>
         <el-table-column label="更新" width="120">
-          <template #default="{ row }">{{ fmtDate(row.updated_at) }}</template>
+          <template #default="{ row }">{{ fmtDate(row.updatedAt ?? row.updated_at) }}</template>
         </el-table-column>
       </el-table>
     </div>

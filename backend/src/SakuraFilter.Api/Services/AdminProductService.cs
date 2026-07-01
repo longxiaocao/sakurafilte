@@ -279,18 +279,38 @@ public class AdminProductService
     /// <summary>
     /// 获取产品变更历史, 倒序返回 (最新变更在前)
     /// </summary>
-    public async Task<List<ProductHistoryItemDto>> GetHistoryAsync(long productId, int limit = 50, CancellationToken ct = default)
+    // Day 9.2: GetHistoryAsync 加可选筛选参数 (changeType / since / until)
+    //   WHY 增量改进: 后台看历史 50 条太多, 需要按 类型/时间 过滤
+    //   WHY 不动 EF Query 链结构: 用 IQueryable 累积, EF Core 翻译成单条 SQL
+    //   WHY limit 默认 50 保留: 与前端抽屉默认条数一致, 不破坏既有调用
+    public async Task<List<ProductHistoryItemDto>> GetHistoryAsync(
+        long productId,
+        int limit = 50,
+        string? changeType = null,
+        DateTime? since = null,
+        DateTime? until = null,
+        CancellationToken ct = default)
     {
-        _logger.LogInformation("GetHistoryAsync 入口 id={Id} limit={Limit}", productId, limit);
+        _logger.LogInformation("GetHistoryAsync 入口 id={Id} limit={Limit} type={Type} since={Since} until={Until}",
+            productId, limit, changeType, since, until);
         // 验证产品存在 (避免对已删除产品查询历史)
         var exists = await _db.Products.AsNoTracking()
             .AnyAsync(x => x.Id == productId, ct);
-        _logger.LogInformation("GetHistoryAsync exists={Exists}", exists);
         if (!exists)
             throw new KeyNotFoundException($"产品 id={productId} 不存在");
 
-        return await _db.ProductHistory.AsNoTracking()
-            .Where(h => h.ProductId == productId)
+        // Day 9.2: 累积式查询链, 用返回值接住 query = query.Where(...) 让 EF 翻译正确
+        //   之前项目记忆有坑: void 扩展方法 IQueryable 修改不可见, 必须返回 IQueryable<T>
+        IQueryable<ProductHistory> query = _db.ProductHistory.AsNoTracking()
+            .Where(h => h.ProductId == productId);
+        if (!string.IsNullOrWhiteSpace(changeType))
+            query = query.Where(h => h.ChangeType == changeType);
+        if (since.HasValue)
+            query = query.Where(h => h.ChangedAt >= since.Value);
+        if (until.HasValue)
+            query = query.Where(h => h.ChangedAt <= until.Value);
+
+        return await query
             .OrderByDescending(h => h.ChangedAt)
             .Take(limit)
             .Select(h => new ProductHistoryItemDto(

@@ -38,6 +38,14 @@ const advFilter = reactive<AdminSearchRequest>({})
 // 历史抽屉
 const historyOpen = ref(false)
 const historyItems = ref<ProductHistoryItem[]>([])
+// Day 9.2: 历史抽屉筛选 (changeType / since / until / limit)
+const historyFilter = reactive<{
+  changeType: string
+  since: string
+  until: string
+  limit: number
+}>({ changeType: '', since: '', until: '', limit: 50 })
+const historyLoading = ref(false)
 
 // 批量选择
 const selected = ref<ProductListItem[]>([])
@@ -104,12 +112,45 @@ async function restore(row: ProductListItem) {
   } catch (e: any) {}
 }
 
+// 当前查看历史的产品 id (用于筛选条件变化时 reload)
+const currentHistoryProductId = ref<number | null>(null)
+
 async function viewHistory(row: ProductListItem) {
+  // Day 9.2: 用 historyFilter 调 API (支持 changeType/since/until/limit)
+  //   打开抽屉前先 load, 避免空闪烁
+  currentHistoryProductId.value = row.id
+  historyOpen.value = true
+  await loadHistory(row.id)
+}
+
+async function reloadCurrentHistory() {
+  // Day 9.2: 筛选项 change 时自动 reload
+  if (currentHistoryProductId.value !== null) {
+    await loadHistory(currentHistoryProductId.value)
+  }
+}
+
+async function loadHistory(productId: number) {
+  historyLoading.value = true
   try {
-    const { items } = await adminProductApi.history(row.id, 50)
+    const params: any = { limit: historyFilter.limit }
+    if (historyFilter.changeType) params.changeType = historyFilter.changeType
+    if (historyFilter.since) params.since = new Date(historyFilter.since).toISOString()
+    if (historyFilter.until) params.until = new Date(historyFilter.until).toISOString()
+    const { items } = await adminProductApi.history(productId, params)
     historyItems.value = items
-    historyOpen.value = true
-  } catch (e: any) {}
+  } catch (e: any) {
+    // 错误已被拦截器
+  } finally {
+    historyLoading.value = false
+  }
+}
+
+function resetHistoryFilter() {
+  historyFilter.changeType = ''
+  historyFilter.since = ''
+  historyFilter.until = ''
+  historyFilter.limit = 50
 }
 
 async function batchCompare() {
@@ -239,6 +280,8 @@ onMounted(load)
             <el-button v-if="!row.isDiscontinued" size="small" text type="warning" @click="discontinue(row)">停售</el-button>
             <el-button v-else size="small" text type="success" @click="restore(row)">恢复</el-button>
             <el-button size="small" text @click="viewHistory(row)">历史</el-button>
+            <!-- Day 9.2: history 打开后自动 reload, 避免先开再选筛选项空跑 -->
+
           </template>
         </el-table-column>
       </el-table>
@@ -308,9 +351,63 @@ onMounted(load)
     </el-drawer>
 
     <!-- 历史抽屉 (Day 9.1: 解析 changedFields JSON, 按字段展示) -->
-    <el-drawer v-model="historyOpen" title="变更历史" size="700px" direction="rtl">
-      <div class="p-3" v-if="historyItems.length > 0">
-        <el-timeline>
+    <!-- Day 9.2: 顶部加筛选 (changeType / since / until / limit) -->
+    <el-drawer v-model="historyOpen" title="变更历史" size="700px" direction="rtl" :close-on-click-modal="false">
+      <!-- 筛选条 -->
+      <div class="px-3 py-2 hairline-b bg-neutral-50">
+        <div class="grid grid-cols-4 gap-2 items-end">
+          <div>
+            <div class="text-xs text-muted mb-1">类型</div>
+            <el-select v-model="historyFilter.changeType" placeholder="全部" clearable size="small" @change="reloadCurrentHistory">
+              <el-option label="全部" value="" />
+              <el-option label="create" value="create" />
+              <el-option label="update" value="update" />
+              <el-option label="discontinue" value="discontinue" />
+              <el-option label="restore" value="restore" />
+            </el-select>
+          </div>
+          <div>
+            <div class="text-xs text-muted mb-1">开始</div>
+            <el-date-picker
+              v-model="historyFilter.since"
+              type="datetime"
+              placeholder="不限"
+              size="small"
+              value-format="YYYY-MM-DDTHH:mm:ss"
+              @change="reloadCurrentHistory"
+            />
+          </div>
+          <div>
+            <div class="text-xs text-muted mb-1">结束</div>
+            <el-date-picker
+              v-model="historyFilter.until"
+              type="datetime"
+              placeholder="不限"
+              size="small"
+              value-format="YYYY-MM-DDTHH:mm:ss"
+              @change="reloadCurrentHistory"
+            />
+          </div>
+          <div>
+            <div class="text-xs text-muted mb-1">条数</div>
+            <el-select v-model.number="historyFilter.limit" size="small" @change="reloadCurrentHistory">
+              <el-option :value="20" label="20" />
+              <el-option :value="50" label="50" />
+              <el-option :value="100" label="100" />
+              <el-option :value="200" label="200" />
+            </el-select>
+          </div>
+        </div>
+        <div class="mt-2 text-xs text-muted flex items-center gap-2">
+          <span>共 {{ historyItems.length }} 条</span>
+          <span v-if="historyLoading">加载中...</span>
+          <el-button size="small" text @click="resetHistoryFilter">重置</el-button>
+        </div>
+      </div>
+
+      <div class="p-3" v-loading="historyLoading">
+        <div v-if="historyItems.length === 0" class="text-center text-muted py-8">暂无历史</div>
+        <el-timeline v-else>
           <el-timeline-item
             v-for="h in historyItems"
             :key="h.id"
@@ -318,7 +415,7 @@ onMounted(load)
             placement="top"
           >
             <div class="text-sm mb-1">
-              <el-tag size="small" :type="h.changeType === 'discontinue' ? 'warning' : h.changeType === 'create' ? 'success' : 'info'">
+              <el-tag size="small" :type="h.changeType === 'discontinue' ? 'warning' : h.changeType === 'create' ? 'success' : h.changeType === 'restore' ? 'primary' : 'info'">
                 {{ h.changeType }}
               </el-tag>
               <span class="ml-2 text-muted">by {{ h.changedBy || 'system' }}</span>
@@ -341,7 +438,6 @@ onMounted(load)
           </el-timeline-item>
         </el-timeline>
       </div>
-      <div v-else class="text-center text-muted py-8">暂无历史</div>
     </el-drawer>
   </div>
 </template>

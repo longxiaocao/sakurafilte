@@ -51,7 +51,9 @@ public class EtlProgress
     private long _errors;
     private long _indexed;       // 直接成功写入 Meili
     private long _indexPending;  // 失败入队待补偿
-    private string _status = "idle";  // idle/running/completed/failed
+    private long _rowsTotal;     // Day 9.2: 文件总行数 (启动时估读,用于前端进度条)
+    private string _stage = "idle";  // Day 9.2: idle/reading/staging/inserting/committing/meili-sync
+    private string _status = "idle";  // idle/running/completed/failed/cancelled
     private DateTime? _startedAt;
     private DateTime? _finishedAt;
     private string? _currentFile;
@@ -67,6 +69,11 @@ public class EtlProgress
     public long Errors => Interlocked.Read(ref _errors);
     public long Indexed => Interlocked.Read(ref _indexed);
     public long IndexPending => Interlocked.Read(ref _indexPending);
+    public long RowsTotal => Interlocked.Read(ref _rowsTotal);
+    // Day 9.2: Stage 字段公开 - 用于前端精细化显示当前 ETL 阶段
+    //   值: idle / reading / staging / inserting / committing / meili-sync
+    //   WHY Interlocked.Exchange: 后台 Meili 同步在另一线程跑,需要线程安全
+    public string Stage => Interlocked.CompareExchange(ref _stage, null, null) ?? "idle";
     public string Status => _status;
     public DateTime? StartedAt => _startedAt;
     public DateTime? FinishedAt => _finishedAt;
@@ -85,6 +92,29 @@ public class EtlProgress
     }
 
     public void Start(string file) { _status = "running"; _currentFile = file; _startedAt = DateTime.UtcNow; }
+
+    /// <summary>Day 9.2: 设置当前阶段 (用于前端精细化显示)
+    ///   可选值: idle / reading / staging / inserting / committing / meili-sync
+    ///   线程安全: 用 Interlocked.Exchange 写引用类型,后台 Meili 线程可并发调
+    /// </summary>
+    public void SetStage(string stage) { Interlocked.Exchange(ref _stage, stage ?? "idle"); }
+
+    /// <summary>Day 9.2: 设置文件总行数 (前端进度条分母, 启动时调一次)</summary>
+    public void SetRowsTotal(long rowsTotal) { Interlocked.Exchange(ref _rowsTotal, Math.Max(0, rowsTotal)); }
+
+    /// <summary>Day 9.2: 估算文件总行数 (用于前端进度条)
+    ///   WHY 不精确到字符: JSONL 每行一条,ByteCount 估读 100ms 内完成,1M 行误差 ±5% 可接受
+    ///   WHY 不用 File.ReadLines().Count: 1M 行要 2s+,会阻塞 ETL 启动
+    /// </summary>
+    public static long EstimateFileLines(string filePath, int avgLineBytes = 200)
+    {
+        try
+        {
+            var size = new FileInfo(filePath).Length;
+            return Math.Max(1, size / Math.Max(1, avgLineBytes));
+        }
+        catch { return 0; }
+    }
     public void Finish(string entityType, string mode)
     {
         _status = "completed"; _finishedAt = DateTime.UtcNow;
@@ -189,6 +219,8 @@ public class EtlProgress
         Interlocked.Exchange(ref _errors, 0);
         Interlocked.Exchange(ref _indexed, 0);
         Interlocked.Exchange(ref _indexPending, 0);
+        Interlocked.Exchange(ref _rowsTotal, 0);
+        Interlocked.Exchange(ref _stage, "idle");
         _status = "idle"; _startedAt = null; _finishedAt = null; _currentFile = null; _lastError = null;
         lock (_errorsLock) _recentErrors.Clear();
     }
@@ -196,6 +228,8 @@ public class EtlProgress
     public object ToJson() => new
     {
         status = Status,
+        stage = Stage,                          // Day 9.2: 暴露 stage 字段给前端
+        rowsTotal = RowsTotal,                  // Day 9.2: 暴露总行数 (前端进度条)
         currentFile = CurrentFile,
         read = Read,
         inserted = Inserted,
@@ -373,26 +407,49 @@ public class EtlImportService
 
     /// <summary>
     /// 获取当前活跃任务 + 进度信息 (后台 ETL 页面 3s 轮询)
+    /// Day 9.2: stage 直接读 Progress.Stage (精确反映 reading/staging/inserting/committing/meili-sync)
+    ///   之前用 p.IndexPending > 0 ? "meili-sync" : "commit" 简化推断,无法识别 staging/inserting
     /// </summary>
     public object GetActiveTaskInfo()
     {
         var p = Progress;
         var inProgress = p.Status == "running";
-        long? rowsTotal = null;  // Day 7.x ETL 不精确报 total, 只报 processed
-        int? pct = null;
+        // Day 9.2: stage 优先取 Progress.Stage (精确), running 状态下 fallback 推断
         string stage = p.Status switch
         {
-            "running" => p.IndexPending > 0 ? "meili-sync" : "commit",
-            _ => p.Status
+            "running" => string.IsNullOrEmpty(p.Stage) || p.Stage == "idle"
+                ? (p.IndexPending > 0 ? "meili-sync" : "commit")
+                : p.Stage,
+            _ => p.Stage == "idle" ? p.Status : p.Stage
         };
+        // Day 9.2: rowsTotal 从 Progress.RowsTotal 取 (启动时估算)
+        long? rowsTotal = p.RowsTotal > 0 ? p.RowsTotal : (long?)null;
+        // Day 9.2: progressPct 按 stage 计算,staging/read 阶段 = read/total
+        int? pct = null;
+        if (rowsTotal.HasValue && rowsTotal.Value > 0)
+        {
+            // staging: 用 read 数 (已读取行数)
+            // inserting: 用 read 数 (几乎在 INSERT 完就 close,所以读数 ≈ 总数)
+            // committing: 视为 99%
+            // meili-sync: 用 indexed/(estimated)
+            var denom = rowsTotal.Value;
+            long numer = stage switch
+            {
+                "staging" or "inserting" => p.Read,
+                "committing" => (long)(denom * 0.99),
+                "meili-sync" => p.Indexed,
+                _ => p.Read
+            };
+            pct = (int)Math.Clamp(numer * 100 / denom, 0, 100);
+        }
         return new
         {
             inProgress,
             activeTask = inProgress ? new
             {
                 status = p.Status,
-                currentFile = p.CurrentFile,
                 stage,
+                currentFile = p.CurrentFile,
                 read = p.Read,
                 inserted = p.Inserted,
                 updated = p.Updated,
@@ -420,6 +477,8 @@ public class EtlImportService
     {
         Progress.Reset();
         Progress.Start(jsonlPath);
+        // Day 9.2: 估算文件总行数 (前端进度条分母, 启动 < 1ms)
+        Progress.SetRowsTotal(EtlProgress.EstimateFileLines(jsonlPath));
         var importStartedAt = Progress.StartedAt ?? DateTime.UtcNow;
 
         try
@@ -438,12 +497,14 @@ public class EtlImportService
 
             // 1) 准备 staging 表 (跳过 LoadExistingOemMapAsync:1M 规模下 Dictionary 太重,
             //    inserted/updated 统计改为 UPSERT RETURNING (xmax=0))
+            Progress.SetStage("staging");
             var swStaging = System.Diagnostics.Stopwatch.StartNew();
             await CreateStagingTableAsync(conn, ct);
             swStaging.Stop();
             _logger.LogInformation("[TIMING] 创建 staging: {Ms}ms", swStaging.ElapsedMilliseconds);
 
             // 3) 流式读 JSONL + COPY 入 staging
+            Progress.SetStage("staging");  // 显式再次设置,前端可能错过 start 后的状态变更
             var swCopy = System.Diagnostics.Stopwatch.StartNew();
             var lineNo = 0;
             // Day 9.2: COPY 阶段每 1000 行检查一次取消信号
@@ -508,6 +569,9 @@ public class EtlImportService
             _logger.LogInformation("[TIMING] staging COPY: {Ms}ms ({Count} 行)", swCopy.ElapsedMilliseconds, Progress.Read);
 
             // 4) 根据 mode 选择导入策略
+            //    Day 9.2: 切换 stage = "inserting" 给前端精细化显示
+            //    WHY 在这里 (而不是 ExecuteNonQueryAsync 之后): 用户感知 "INSERT 写库" 是从 cmd 启动开始
+            Progress.SetStage("inserting");
             //    full-load: TRUNCATE + INSERT (首次全量, 5s 内完成 1M)
             //    insert-only: INSERT ON CONFLICT DO NOTHING (只插新行,不更新已有)
             //    upsert: 完整 INSERT ON CONFLICT DO UPDATE (默认,慢但最完整)
@@ -604,6 +668,8 @@ public class EtlImportService
             }
 
             // 5) 提交事务
+            //   Day 9.2: 切换 stage = "committing"
+            Progress.SetStage("committing");
             var swCommit = System.Diagnostics.Stopwatch.StartNew();
             await using (var commit = new NpgsqlCommand("COMMIT;", conn))
                 await commit.ExecuteNonQueryAsync(ct);
@@ -611,10 +677,13 @@ public class EtlImportService
             _logger.LogInformation("[TIMING] COMMIT: {Ms}ms", swCommit.ElapsedMilliseconds);
 
             // 6) 异步推 Meili 索引 (失败入队待补偿,不阻塞导入成功返回)
+            //   Day 9.2: 后台任务启动前 stage = "meili-sync" (后续在 SyncSearchIndexAsync 内重置回 idle)
+            Progress.SetStage("meili-sync");
             _ = Task.Run(async () =>
             {
                 try { await SyncSearchIndexAsync(importStartedAt, CancellationToken.None); }
                 catch (Exception ex) { _logger.LogError(ex, "后台 Meili 同步失败"); }
+                finally { Progress.SetStage("idle"); }  // Day 9.2: Meili 同步完结,stage 归零
             });
 
             Progress.Finish("products", mode);
@@ -751,6 +820,8 @@ public class EtlImportService
     {
         Progress.Reset();
         Progress.Start(jsonlPath);
+        // Day 9.2: 文件总行数估算 (前端进度条)
+        Progress.SetRowsTotal(EtlProgress.EstimateFileLines(jsonlPath));
         try
         {
             await using var conn = new NpgsqlConnection(_pgConn);
@@ -902,6 +973,8 @@ public class EtlImportService
     {
         Progress.Reset();
         Progress.Start(jsonlPath);
+        // Day 9.2: 文件总行数估算 (前端进度条)
+        Progress.SetRowsTotal(EtlProgress.EstimateFileLines(jsonlPath));
         try
         {
             await using var conn = new NpgsqlConnection(_pgConn);

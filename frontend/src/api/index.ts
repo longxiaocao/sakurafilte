@@ -50,8 +50,16 @@ export const adminProductApi = {
   restore(id: number, by: string): Promise<void> {
     return http.post(`/admin/products/${id}/restore`, null, { headers: { 'X-User': by } }).then((r) => r.data)
   },
-  history(id: number, limit = 50): Promise<{ total: number; items: ProductHistoryItem[] }> {
-    return http.get(`/admin/products/${id}/history`, { params: { limit } }).then((r) => r.data)
+  history(
+    id: number,
+    options?: { limit?: number; changeType?: string; since?: string; until?: string }
+  ): Promise<{ total: number; limit: number; changeType?: string; since?: string; until?: string; items: ProductHistoryItem[] }> {
+    const params: Record<string, any> = {}
+    if (options?.limit) params.limit = options.limit
+    if (options?.changeType) params.changeType = options.changeType
+    if (options?.since) params.since = options.since
+    if (options?.until) params.until = options.until
+    return http.get(`/admin/products/${id}/history`, { params }).then((r) => r.data)
   },
   compare(ids: number[]): Promise<{ count: number; items: ProductDetail[] }> {
     return http.post('/admin/products/compare', { ids }).then((r) => r.data)
