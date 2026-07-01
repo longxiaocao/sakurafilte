@@ -206,6 +206,7 @@ public class EtlProgress
     public void IncrInsertedBy(long n) => Interlocked.Add(ref _inserted, n);
     public void IncrUpdatedBy(long n) => Interlocked.Add(ref _updated, n);
     public void IncrSkipped() => Interlocked.Increment(ref _skipped);
+    public void IncrSkippedBy(long n) => Interlocked.Add(ref _skipped, n);
     public void IncrSkippedMissingOem() { Interlocked.Increment(ref _skipped); Interlocked.Increment(ref _skippedMissingOem); }
     public void IncrSkippedNullField() { Interlocked.Increment(ref _skipped); Interlocked.Increment(ref _skippedNullField); }
     public void IncrSkippedDuplicate() { Interlocked.Increment(ref _skipped); Interlocked.Increment(ref _skippedDuplicate); }
@@ -392,7 +393,10 @@ public class EtlImportService
     /// Day 9.1: 取消当前活跃 ETL 任务
     /// - 若没有活跃任务, 返回 false
     /// - 取消信号传播到 Import*Async 内部 COPY/INSERT, 任务会抛 OperationCanceledException
-    /// - 已插入/更新的数据会保留 (不事务回滚, 因为 COPY 阶段无显式事务)
+    /// - 已插入/更新的数据会保留 (COPY+INSERT 在同一事务内, 但 cancel 时 Npgsql 连接 dispose
+    ///   会自动 ROLLBACK 未提交事务 → TRUNCATE 也回滚, 数据恢复到导入前状态)
+    ///   Day 9.9 复核: BEGIN(CreateStagingTableAsync) → COPY → INSERT → COMMIT, 配对完整
+    ///   异常时 await using conn 自动 dispose → Npgsql 自动 ROLLBACK → 临时表随会话结束清理
     /// Day 9.4: reason 写入 _activeCancelReason, catch 块读出后写到 etl_progress_log.cancel_reason
     /// Day 9.5: reasonCode 写入 _activeCancelReasonCode, 枚举白名单校验 (兜底 OTHER)
     /// </summary>
@@ -685,6 +689,22 @@ public class EtlImportService
             swCopy.Stop();
             _logger.LogInformation("[TIMING] staging COPY: {Ms}ms ({Count} 行)", swCopy.ElapsedMilliseconds, Progress.Read);
 
+            // Day 9.9: 数据完整性校验 — COPY 后查 stage 行数, 防止静默丢行
+            //   WHY: 100万行 COPY 可能因连接中断/内存压力丢行, 之前无对账
+            //   对账 1: stage_count + errors == read (每行要么进 stage, 要么 error)
+            long stageCount;
+            await using (var countCmd = new NpgsqlCommand("SELECT count(*) FROM products_stage", conn))
+                stageCount = (long)(await countCmd.ExecuteScalarAsync(ct))!;
+            _logger.LogInformation("[AUDIT] products_stage: read={Read} stage={Stage} errors={Errors}", Progress.Read, stageCount, Progress.Errors);
+            if (stageCount + Progress.Errors != Progress.Read)
+            {
+                var msg = $"数据完整性校验失败: read={Progress.Read} stage={stageCount} errors={Progress.Errors} (期望 stage+errors=read)";
+                _logger.LogError(msg);
+                Progress.Fail(msg);
+                Progress.PersistLogAsync("products", mode);
+                return Progress;
+            }
+
             // 4) 根据 mode 选择导入策略
             //    Day 9.2: 切换 stage = "inserting" 给前端精细化显示
             //    WHY 在这里 (而不是 ExecuteNonQueryAsync 之后): 用户感知 "INSERT 写库" 是从 cmd 启动开始
@@ -782,6 +802,25 @@ public class EtlImportService
                     // upsert 模式: 简化为"全部计为 updated"(避免 RETURNING 慢)
                     Progress.IncrUpdatedBy(affected);
                 }
+            }
+
+            // Day 9.9: 对账 2 — INSERT 影响行数 <= stage 行数 (去重/冲突后应少于等于)
+            //   WHY: DISTINCT ON 去重 + ON CONFLICT 会让 affected <= stage_count
+            //   skipped = stage_count - affected (被去重/冲突跳过的行)
+            var actualAffected = mode == "upsert" ? Progress.Updated : Progress.Inserted;
+            if (actualAffected > stageCount)
+            {
+                var msg = $"数据完整性校验失败: affected={actualAffected} > stage={stageCount} (INSERT 影响行数不应超过 stage 行数)";
+                _logger.LogError(msg);
+                Progress.Fail(msg);
+                Progress.PersistLogAsync("products", mode);
+                return Progress;
+            }
+            var skippedCount = stageCount - actualAffected;
+            if (skippedCount > 0)
+            {
+                Progress.IncrSkippedBy(skippedCount);
+                _logger.LogInformation("[AUDIT] products: skipped={Skipped} (去重/冲突, stage={Stage} affected={Affected})", skippedCount, stageCount, actualAffected);
             }
 
             // 5) 提交事务
@@ -1030,6 +1069,21 @@ public class EtlImportService
             swCopy.Stop();
             _logger.LogInformation("[TIMING] xrefs staging COPY: {Ms}ms ({Count} 行, skipped={Skipped})", swCopy.ElapsedMilliseconds, Progress.Read, missing);
 
+            // Day 9.9: 数据完整性校验 — COPY 后查 stage 行数, 防止静默丢行
+            //   对账 1: stage_count + errors + missing_oem == read (正常行进 stage, 缺 oem/解析失败不进)
+            long xrefStageCount;
+            await using (var xrefCountCmd = new NpgsqlCommand("SELECT count(*) FROM xrefs_stage", conn))
+                xrefStageCount = (long)(await xrefCountCmd.ExecuteScalarAsync(ct))!;
+            _logger.LogInformation("[AUDIT] xrefs_stage: read={Read} stage={Stage} errors={Errors} missingOem={Missing}", Progress.Read, xrefStageCount, Progress.Errors, Progress.SkippedMissingOem);
+            if (xrefStageCount + Progress.Errors + Progress.SkippedMissingOem != Progress.Read)
+            {
+                var msg = $"数据完整性校验失败: read={Progress.Read} stage={xrefStageCount} errors={Progress.Errors} missingOem={Progress.SkippedMissingOem} (期望 stage+errors+missingOem=read)";
+                _logger.LogError(msg);
+                Progress.Fail(msg);
+                Progress.PersistLogAsync("xrefs", mode);
+                return Progress;
+            }
+
             // Day 7.6: 计算 DISTINCT ON 去重掉的行数
             // WHY: silent 去重无信号,运维无法判断"为什么 read=36 但 inserted=0"
             //      公式: raw_count - distinct_count = 重复行数
@@ -1090,6 +1144,17 @@ public class EtlImportService
                     Progress.IncrInsertedBy(affected);
                 else
                     Progress.IncrUpdatedBy(affected);
+            }
+
+            // Day 9.9: 对账 2 — INSERT 影响行数 <= stage 行数 (去重/冲突后应少于等于)
+            var xrefAffected = mode == "upsert" ? Progress.Updated : Progress.Inserted;
+            if (xrefAffected > xrefStageCount)
+            {
+                var msg = $"数据完整性校验失败: xrefs affected={xrefAffected} > stage={xrefStageCount}";
+                _logger.LogError(msg);
+                Progress.Fail(msg);
+                Progress.PersistLogAsync("xrefs", mode);
+                return Progress;
             }
 
             await using (var commit = new NpgsqlCommand("COMMIT;", conn))
@@ -1223,6 +1288,20 @@ public class EtlImportService
             swCopy.Stop();
             _logger.LogInformation("[TIMING] apps staging COPY: {Ms}ms ({Count} 行, skipped={Skipped})", swCopy.ElapsedMilliseconds, Progress.Read, missing);
 
+            // Day 9.9: 数据完整性校验 — COPY 后查 stage 行数, 防止静默丢行
+            long appStageCount;
+            await using (var appCountCmd = new NpgsqlCommand("SELECT count(*) FROM apps_stage", conn))
+                appStageCount = (long)(await appCountCmd.ExecuteScalarAsync(ct))!;
+            _logger.LogInformation("[AUDIT] apps_stage: read={Read} stage={Stage} errors={Errors} missingOem={Missing}", Progress.Read, appStageCount, Progress.Errors, Progress.SkippedMissingOem);
+            if (appStageCount + Progress.Errors + Progress.SkippedMissingOem != Progress.Read)
+            {
+                var msg = $"数据完整性校验失败: read={Progress.Read} stage={appStageCount} errors={Progress.Errors} missingOem={Progress.SkippedMissingOem} (期望 stage+errors+missingOem=read)";
+                _logger.LogError(msg);
+                Progress.Fail(msg);
+                Progress.PersistLogAsync("apps", mode);
+                return Progress;
+            }
+
             // Day 7.6: 计算 DISTINCT ON 去重掉的行数
             await using (var dupCmd = new NpgsqlCommand(@"
                 SELECT count(*) - count(DISTINCT (product_id, machine_brand, machine_model))
@@ -1290,6 +1369,17 @@ public class EtlImportService
                     Progress.IncrInsertedBy(affected);
                 else
                     Progress.IncrUpdatedBy(affected);
+            }
+
+            // Day 9.9: 对账 2 — INSERT 影响行数 <= stage 行数 (去重/冲突后应少于等于)
+            var appAffected = mode == "upsert" ? Progress.Updated : Progress.Inserted;
+            if (appAffected > appStageCount)
+            {
+                var msg = $"数据完整性校验失败: apps affected={appAffected} > stage={appStageCount}";
+                _logger.LogError(msg);
+                Progress.Fail(msg);
+                Progress.PersistLogAsync("apps", mode);
+                return Progress;
             }
 
             await using (var commit = new NpgsqlCommand("COMMIT;", conn))

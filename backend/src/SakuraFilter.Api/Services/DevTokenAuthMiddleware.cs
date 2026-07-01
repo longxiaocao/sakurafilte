@@ -12,12 +12,17 @@ namespace SakuraFilter.Api.Services;
 ///   - 错误统一返回 RFC 7807 ProblemDetails
 ///   - 401 含 WWW-Authenticate 头, 符合 HTTP 规范
 ///   WHY 不直接 JWT: MVP 阶段前端无登录, 单 token 足矣; 生产换 JWT 时只改这一个类
+/// Day 9.9: 双 key 轮换支持 (与 CursorHmac 一致)
+///   - CurrentKey + PreviousKey(可选) 两个 token
+///   - 轮转步骤: ops 配 PreviousKey = 旧 token + CurrentKey = 新 token → 部署 → 等前端刷新 → 清空 PreviousKey
+///   - 用 PreviousKey 验证成功时记录 Warning, 提示运维过渡期尚未结束
 /// </summary>
 public class DevTokenAuthMiddleware
 {
     private readonly RequestDelegate _next;
     private readonly ILogger<DevTokenAuthMiddleware> _logger;
     private readonly string _expectedToken;
+    private readonly string? _previousToken;  // Day 9.9: 双 key 轮换
     private readonly bool _enabled;
     private readonly string[] _adminPrefixes;
     private readonly string[] _exemptExactPaths;
@@ -38,6 +43,23 @@ public class DevTokenAuthMiddleware
         {
             throw new InvalidOperationException(
                 $"Auth:DevStaticToken 长度 {_expectedToken.Length} < 32, 不安全");
+        }
+        // Day 9.9: 加载 PreviousKey (可选, 轮换过渡期用)
+        _previousToken = config["Auth:DevStaticTokenPrevious"];
+        if (string.IsNullOrEmpty(_previousToken)) _previousToken = null;  // 空字符串视作未配置
+        if (_enabled && _previousToken is { Length: < 32 })
+        {
+            throw new InvalidOperationException(
+                $"Auth:DevStaticTokenPrevious 长度 {_previousToken.Length} < 32, 不安全");
+        }
+        if (_previousToken is not null && _previousToken == _expectedToken)
+        {
+            _logger.LogWarning("DevStaticToken 与 Previous 相同, Previous 忽略");
+            _previousToken = null;
+        }
+        else if (_previousToken is not null)
+        {
+            _logger.LogWarning("DevTokenAuth 双 key 模式: PreviousKey 已配置, 过渡期内旧 token 仍可用");
         }
         _adminPrefixes = config.GetSection("Auth:AdminPaths").Get<string[]>()
             ?? new[] { "/api/admin", "/api/etl" };
@@ -82,8 +104,21 @@ public class DevTokenAuthMiddleware
         }
 
         // 验证 token (Header X-Admin-Token: <token>)
-        if (!ctx.Request.Headers.TryGetValue("X-Admin-Token", out var provided)
-            || !string.Equals(provided.ToString(), _expectedToken, StringComparison.Ordinal))
+        // Day 9.9: 双 key — 先匹配 Current, 再匹配 Previous (过渡期)
+        var tokenValid = false;
+        var usingPrevious = false;
+        if (ctx.Request.Headers.TryGetValue("X-Admin-Token", out var provided))
+        {
+            var tokenStr = provided.ToString();
+            if (string.Equals(tokenStr, _expectedToken, StringComparison.Ordinal))
+                tokenValid = true;
+            else if (_previousToken is not null && string.Equals(tokenStr, _previousToken, StringComparison.Ordinal))
+            {
+                tokenValid = true;
+                usingPrevious = true;
+            }
+        }
+        if (!tokenValid)
         {
             _logger.LogWarning("鉴权失败 path={Path} ip={Ip} ua={UA}",
                 path, ctx.Connection.RemoteIpAddress, ctx.Request.Headers.UserAgent.ToString());
@@ -98,6 +133,8 @@ public class DevTokenAuthMiddleware
                 "\"instance\":\"" + path + "\"}");
             return;
         }
+        if (usingPrevious)
+            _logger.LogWarning("PreviousKey 验证成功 path={Path}, 过渡期旧 token 仍在使用", path);
 
         await _next(ctx);
     }
