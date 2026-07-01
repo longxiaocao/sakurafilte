@@ -1,0 +1,96 @@
+# Day 9.9: CI E2E gate — master push 强制, PR fail-soft
+#   WHY: 之前 .github/workflows 不存在, Day 9.6 声称设了 CI gate 但未落盘
+#   设计:
+#     - master push: E2E 全过才允许合并 (gate)
+#     - PR: E2E 失败不阻塞 (fail-soft), 仅报告
+#     - PostgreSQL service container (离线, 无外部依赖)
+#     - .NET build + Python E2E (Day 9.5/9.6/9.7/9.8)
+name: E2E Tests
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+env:
+  DOTNET_VERSION: '8.0.x'
+  PYTHON_VERSION: '3.12'
+  ADMIN_TOKEN: 'dev-admin-token-rotate-in-prod-MZK4R9P3X6V2N7Q1L5F0B8H3C'
+  PG_PASSWORD: '784533'
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    # Day 9.6: PR 模式 fail-soft (不阻塞合并)
+    continue-on-error: ${{ github.event_name == 'pull_request' }}
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: 784533
+          POSTGRES_DB: spike_test_v3
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Python deps
+        run: pip install psycopg2-binary
+
+      - name: Build backend
+        run: |
+          cd backend/src/SakuraFilter.Api
+          dotnet build -c Release --nologo
+
+      - name: Run API server (background)
+        run: |
+          cd backend/src/SakuraFilter.Api
+          dotnet run -c Release --no-build --urls "http://localhost:5148" &
+          sleep 5
+          curl -s http://localhost:5148/api/etl/status -H "X-Admin-Token: $ADMIN_TOKEN" || exit 1
+
+      - name: Run E2E Day 9.5 (cancel enum + alert filter + cursor HMAC)
+        working-directory: spike-test
+        run: python _test_day95.py
+
+      - name: Run E2E Day 9.6 (radio UI + CI gate + HMAC rotation + SSE broadcast)
+        working-directory: spike-test
+        run: python _test_day96.py
+
+      - name: Run E2E Day 9.7 (cross-instance SSE NOTIFY/LISTEN)
+        working-directory: spike-test
+        run: |
+          # Day 9.7 需要双实例, CI 内启动第二个
+          cd ../backend/src/SakuraFilter.Api
+          dotnet run -c Release --no-build --urls "http://localhost:5149" &
+          sleep 3
+          cd ../../spike-test
+          python _test_day97.py
+
+      - name: Run E2E Day 9.8 (ETL history audit + reason_code pie chart)
+        working-directory: spike-test
+        run: python _test_day98.py
+
+      - name: E2E gate check (master only)
+        if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+        run: |
+          echo "E2E gate passed — all tests green on master push"

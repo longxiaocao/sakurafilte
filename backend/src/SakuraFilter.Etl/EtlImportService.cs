@@ -375,54 +375,17 @@ public class EtlImportService
         var normalizedMode = NormalizeMode(mode);
         var normalizedEntity = entityType?.Trim().ToLowerInvariant() ?? "";
 
-        // Day 9.1: 抢占式单任务: 若已有 ETL 在跑, 抛 InvalidOperationException
-        //   WHY: Import*Async 内部修改 Progress (单例状态), 并发跑会互相覆盖计数
-        CancellationTokenSource cts;
-        lock (_ctsLock)
+        // Day 9.9: _activeCts 下沉到 Import*Async 入口, TriggerAsync 只做路由
+        //   WHY: 之前 _activeCts 在 TriggerAsync 设置, HTTP 端点绕过 TriggerAsync 直接调
+        //        Import*Async 导致 cancel 失效。现在 Import*Async 入口自己调 AcquireActiveCts
+        //   单任务检查也在 AcquireActiveCts 内, 任何入口都安全
+        return normalizedEntity switch
         {
-            if (_activeCts != null && !_activeCts.IsCancellationRequested)
-                throw new InvalidOperationException($"已有 ETL 任务在运行 (entity={_activeTaskEntity}), 请先等待完成或调用 /api/admin/etl/task 取消");
-            cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            _activeCts = cts;
-            _activeTaskEntity = normalizedEntity;
-        }
-
-        // Day 9.7: 跨实例广播 snapshot timer 移到 Import*Async 内部启动
-        //   WHY: /api/etl/import 端点直接调 ImportProductsAsync,绕过 TriggerAsync,
-        //        之前 timer 仅在 TriggerAsync 启动 → HTTP 路径不会广播
-        //   修复: 提取 StartSnapshotTimerIfNeeded, Import*Async 入口调一次, TriggerAsync 不再启动
-        try
-        {
-            return normalizedEntity switch
-            {
-                "products" or "product" => await ImportProductsAsync(jsonlPath, normalizedMode, cts.Token),
-                "xrefs" or "xref" or "cross_references" => await ImportXrefsAsync(jsonlPath, normalizedMode, cts.Token),
-                "apps" or "machine_applications" => await ImportAppsAsync(jsonlPath, normalizedMode, cts.Token),
-                _ => throw new ArgumentException($"未知 entityType={entityType}, 期望 products/xrefs/apps")
-            };
-        }
-        catch (OperationCanceledException) when (cts.IsCancellationRequested)
-        {
-            // Day 9.4: ImportXxxAsync 内部 catch 已处理日志落库 + Progress.Cancel,
-            //   这里仅上抛给调用方 (HTTP layer 看到 4xx 或 200 都行,触发链路已结束)
-            //   WHY 不要再 PersistLogAsync: 写两条 cancelled 日志会让历史分析重复计数
-            _logger.LogInformation("ETL 任务已取消, 调用方准备返回 entity={Entity}", normalizedEntity);
-            throw;
-        }
-        finally
-        {
-            // Day 9.7: snapshot timer 在 Import*Async 内部管理 (启停+终态推送),
-            //   TriggerAsync 不再管,避免双 timer
-            lock (_ctsLock)
-            {
-                if (ReferenceEquals(_activeCts, cts))
-                {
-                    _activeCts = null;
-                    _activeTaskEntity = null;
-                }
-                cts.Dispose();
-            }
-        }
+            "products" or "product" => await ImportProductsAsync(jsonlPath, normalizedMode, ct),
+            "xrefs" or "xref" or "cross_references" => await ImportXrefsAsync(jsonlPath, normalizedMode, ct),
+            "apps" or "machine_applications" => await ImportAppsAsync(jsonlPath, normalizedMode, ct),
+            _ => throw new ArgumentException($"未知 entityType={entityType}, 期望 products/xrefs/apps")
+        };
     }
 
     /// <summary>
@@ -448,6 +411,38 @@ public class EtlImportService
             return true;
         }
     }
+
+    // Day 9.9: _activeCts 下沉到 Import*Async 入口
+    //   WHY: 之前 _activeCts 仅在 TriggerAsync 设置, HTTP 端点直接调 Import*Async 会绕过,
+    //        导致 CancelActiveTask 永远 cancelled=False (xrefs/apps 端点均有此 BUG)
+    //   方案: Import*Async 入口调 AcquireActiveCts, finally 调 ReleaseActiveCts
+    //        TriggerAsync 简化为纯路由, 不再管 _activeCts
+    private CancellationTokenSource AcquireActiveCts(string entityType, CancellationToken externalCt)
+    {
+        lock (_ctsLock)
+        {
+            if (_activeCts != null && !_activeCts.IsCancellationRequested)
+                throw new InvalidOperationException($"已有 ETL 任务在运行 (entity={_activeTaskEntity}), 请先等待完成或调用 /api/admin/etl/task 取消");
+            var cts = CancellationTokenSource.CreateLinkedTokenSource(externalCt);
+            _activeCts = cts;
+            _activeTaskEntity = entityType;
+            return cts;
+        }
+    }
+
+    private void ReleaseActiveCts(CancellationTokenSource cts)
+    {
+        lock (_ctsLock)
+        {
+            if (ReferenceEquals(_activeCts, cts))
+            {
+                _activeCts = null;
+                _activeTaskEntity = null;
+            }
+            cts.Dispose();
+        }
+    }
+
     private static string NormalizeMode(string? mode)
     {
         if (string.IsNullOrWhiteSpace(mode)) return "upsert";
@@ -591,6 +586,9 @@ public class EtlImportService
     /// </summary>
     public async Task<EtlProgress> ImportProductsAsync(string jsonlPath, string mode = "upsert", CancellationToken ct = default)
     {
+        // Day 9.9: _activeCts 下沉, 确保任何入口 (HTTP 端点/TriggerAsync/直接调用) 都能被 cancel
+        var cts = AcquireActiveCts("products", ct);
+        ct = cts.Token;
         Progress.Reset();
         Progress.Start(jsonlPath);
         // Day 9.2: 估算文件总行数 (前端进度条分母, 启动 < 1ms)
@@ -827,6 +825,7 @@ public class EtlImportService
         finally
         {
             StopSnapshotTimer(broadcastCtx);
+            ReleaseActiveCts(cts);
         }
 
         return Progress;
@@ -953,6 +952,9 @@ public class EtlImportService
     /// </summary>
     public async Task<EtlProgress> ImportXrefsAsync(string jsonlPath, string mode = "upsert", CancellationToken ct = default)
     {
+        // Day 9.9: _activeCts 下沉
+        var cts = AcquireActiveCts("xrefs", ct);
+        ct = cts.Token;
         Progress.Reset();
         Progress.Start(jsonlPath);
         // Day 9.2: 文件总行数估算 (前端进度条)
@@ -1110,6 +1112,7 @@ public class EtlImportService
         finally
         {
             StopSnapshotTimer(broadcastCtx);
+            ReleaseActiveCts(cts);
         }
         return Progress;
     }
@@ -1120,6 +1123,9 @@ public class EtlImportService
     /// </summary>
     public async Task<EtlProgress> ImportAppsAsync(string jsonlPath, string mode = "upsert", CancellationToken ct = default)
     {
+        // Day 9.9: _activeCts 下沉
+        var cts = AcquireActiveCts("apps", ct);
+        ct = cts.Token;
         Progress.Reset();
         Progress.Start(jsonlPath);
         // Day 9.2: 文件总行数估算 (前端进度条)
@@ -1306,6 +1312,7 @@ public class EtlImportService
         finally
         {
             StopSnapshotTimer(broadcastCtx);
+            ReleaseActiveCts(cts);
         }
         return Progress;
     }

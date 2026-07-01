@@ -342,7 +342,8 @@ app.MapPost("/api/etl/import-xrefs", async (ImportRequest req, EtlImportService 
         return Results.Conflict(new { error = "已有导入任务在运行,请等待完成", progress = etl.Progress.ToJson() });
     var mode = (req.Mode ?? "upsert").ToLowerInvariant();
     logger.LogInformation("触发 xrefs 导入: {Path} (mode={Mode})", req.JsonlPath, mode);
-    _ = Task.Run(async () => await etl.ImportXrefsAsync(req.JsonlPath, mode, CancellationToken.None));
+    // Day 9.9: 统一走 TriggerAsync (校验 + 路由 + _activeCts 已下沉到 Import*Async)
+    _ = Task.Run(async () => await etl.TriggerAsync("xrefs", req.JsonlPath, mode, CancellationToken.None));
     return Results.Accepted(value: etl.Progress.ToJson());
 })
 .WithName("EtlImportXrefs")
@@ -357,7 +358,8 @@ app.MapPost("/api/etl/import-apps", async (ImportRequest req, EtlImportService e
         return Results.Conflict(new { error = "已有导入任务在运行,请等待完成", progress = etl.Progress.ToJson() });
     var mode = (req.Mode ?? "upsert").ToLowerInvariant();
     logger.LogInformation("触发 apps 导入: {Path} (mode={Mode})", req.JsonlPath, mode);
-    _ = Task.Run(async () => await etl.ImportAppsAsync(req.JsonlPath, mode, CancellationToken.None));
+    // Day 9.9: 统一走 TriggerAsync (校验 + 路由 + _activeCts 已下沉到 Import*Async)
+    _ = Task.Run(async () => await etl.TriggerAsync("apps", req.JsonlPath, mode, CancellationToken.None));
     return Results.Accepted(value: etl.Progress.ToJson());
 })
 .WithName("EtlImportApps")
