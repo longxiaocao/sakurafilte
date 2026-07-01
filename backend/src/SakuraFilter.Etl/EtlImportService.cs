@@ -108,6 +108,16 @@ public class EtlProgress
         PushError(error);
     }
 
+    // Day 9.1: 标记任务被取消 (CancelActiveTask 触发 OperationCanceledException 后调用)
+    //   WHY: Status/LastError 是只读 getter, 必须用此方法安全写
+    public void Cancel(string reason = "用户取消")
+    {
+        _status = "cancelled";
+        _lastError = reason;
+        _finishedAt = DateTime.UtcNow;
+        PushError(reason);
+    }
+
     /// <summary>Day 7.7: 异步持久化日志
     /// WHY: EtlImportService 是 Singleton,DbContext 是 Scoped → 必须在 scope 内解析
     ///      失败也不重试:日志写失败不影响业务结果,只丢一行历史
@@ -313,8 +323,7 @@ public class EtlImportService
         catch (OperationCanceledException) when (cts.IsCancellationRequested)
         {
             _logger.LogWarning("ETL 任务被取消 entity={Entity}", normalizedEntity);
-            Progress.Status = "cancelled";
-            Progress.LastError = "用户取消";
+            Progress.Cancel("用户取消");
             throw;
         }
         finally
@@ -437,6 +446,10 @@ public class EtlImportService
             // 3) 流式读 JSONL + COPY 入 staging
             var swCopy = System.Diagnostics.Stopwatch.StartNew();
             var lineNo = 0;
+            // Day 9.2: COPY 阶段每 1000 行检查一次取消信号
+            //   WHY: 单行处理 1-2ms, 1000 行 ~1s, 取消时最大延迟 1s 内生效
+            //   之前: 100K 行取消要等 100s 才能停
+            const int CancelCheckInterval = 1000;
             await using (var writer = await conn.BeginBinaryImportAsync(@"
                 COPY products_stage (oem_no_normalized, oem_no_display, type, product_name_3,
                     remark, d1_mm, d2_mm, d3_mm, h1_mm, h2_mm, h3_mm,
@@ -451,6 +464,7 @@ public class EtlImportService
                 while ((line = await reader.ReadLineAsync(ct)) != null)
                 {
                     lineNo++;
+                    if (lineNo % CancelCheckInterval == 0) ct.ThrowIfCancellationRequested();
                     Progress.IncrRead();
                     try
                     {
@@ -777,6 +791,7 @@ public class EtlImportService
                 while ((line = await reader.ReadLineAsync(ct)) != null)
                 {
                     lineNo++;
+                    if (lineNo % 1000 == 0) ct.ThrowIfCancellationRequested();
                     Progress.IncrRead();
                     try
                     {
@@ -934,6 +949,7 @@ public class EtlImportService
                 while ((line = await reader.ReadLineAsync(ct)) != null)
                 {
                     lineNo++;
+                    if (lineNo % 1000 == 0) ct.ThrowIfCancellationRequested();
                     Progress.IncrRead();
                     try
                     {

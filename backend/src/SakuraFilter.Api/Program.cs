@@ -818,28 +818,98 @@ app.MapPost("/api/admin/etl/trigger", async (
     if (req.DryRun)
     {
         // Day 9.1: dry-run 校验 + 前 5 行 JSON 样本, 避免大文件等待
+        // Day 9.2: 加 JSON Schema 校验 — 解析 samples 字段, 列出缺失/类型错
         if (!File.Exists(req.JsonlPath))
             return Results.Problem(detail: $"文件不存在: {req.JsonlPath}", statusCode: 404, title: "File Not Found");
+
+        // Day 9.2: local function — 解析单行 JSON, 列出必填字段缺失
+        //   WHY 用 local function: 顶级语句文件不允许 public static method (CS8803)
+        //   WHY 不可变 record: 跨方法访问 .MissingFields (元组字段名不可见)
+        //   WHY 不加 type mismatch 检查: 当前 ETL 字段类型都是 string/number/nullable, 强校验收效小
+        LineSchemaReport? ValidateLineSchema(string? line, string[] requiredFields)
+        {
+            if (line is null) return null;
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(line);
+                var root = doc.RootElement;
+                var fields = new Dictionary<string, string>();
+                var missing = new List<string>();
+                foreach (var req in requiredFields)
+                {
+                    if (root.TryGetProperty(req, out var prop))
+                        fields[req] = prop.ValueKind.ToString().ToLowerInvariant();
+                    else
+                    {
+                        fields[req] = "missing";
+                        missing.Add(req);
+                    }
+                }
+                return new LineSchemaReport(0, fields, missing, new List<string>(), null);
+            }
+            catch (Exception ex)
+            {
+                return new LineSchemaReport(0, new Dictionary<string, string>(), new List<string>(), new List<string>(), ex.Message);
+            }
+        }
+
         var lines = 0;
         var samples = new List<string>();
+        var sampleSchemas = new List<LineSchemaReport>();
+        var missingFieldTotal = new Dictionary<string, int>();
+        var typeMismatchTotal = new Dictionary<string, int>();
+        const int SampleSizeForSchema = 5;     // 前端展示
+        const int SampleSizeForMissing = 1000;  // 字段缺失统计抽样
+        var requiredFields = (req.EntityType?.ToLowerInvariant() ?? "products") switch
+        {
+            "products" or "product" => new[] { "oem_no_normalized", "oem_no_display" },
+            "xrefs" or "xref" or "cross_references" => new[] { "oem_no_normalized", "oem_brand", "oem_no_3" },
+            "apps" or "machine_applications" => new[] { "oem_no_normalized", "machine_brand", "machine_model" },
+            _ => new[] { "oem_no_normalized" }
+        };
         using (var fs = File.OpenRead(req.JsonlPath))
         using (var sr = new StreamReader(fs))
         {
             string? line;
             while ((line = await sr.ReadLineAsync(ct)) != null)
             {
-                if (samples.Count < 5) samples.Add(line);
                 lines++;
+                if (samples.Count < SampleSizeForSchema) samples.Add(line);
+                if (lines <= SampleSizeForMissing)
+                {
+                    var report = ValidateLineSchema(line, requiredFields);
+                    if (report != null)
+                    {
+                        report = report with { LineNo = lines };
+                        sampleSchemas.Add(report);
+                        foreach (var f in report.MissingFields)
+                        {
+                            missingFieldTotal.TryGetValue(f, out var c);
+                            missingFieldTotal[f] = c + 1;
+                        }
+                        foreach (var f in report.TypeMismatches)
+                        {
+                            typeMismatchTotal.TryGetValue(f, out var c);
+                            typeMismatchTotal[f] = c + 1;
+                        }
+                    }
+                }
             }
         }
         return Results.Ok(new
         {
             dryRun = true,
             file = req.JsonlPath,
+            entity = req.EntityType ?? "products",
             mode = req.Mode ?? "upsert",
+            requiredFields,
             lines,
             sizeBytes = new FileInfo(req.JsonlPath).Length,
-            samples
+            samples,
+            sampleSchemas,
+            missingFieldTotal,
+            typeMismatchTotal,
+            schemaCheckedLines = Math.Min(lines, SampleSizeForMissing)
         });
     }
 
@@ -869,6 +939,15 @@ app.MapGet("/api/admin/etl/progress", (EtlImportService etl) =>
 .RequireRateLimiting("etl");
 
 app.Run();
+
+// Day 9.2: dry-run JSON Schema 校验结果
+//   显式 record 而非 tuple: 跨 lambda 调用 .MissingFields/.TypeMismatches (元组字段名跨方法不可见)
+public record LineSchemaReport(
+    int LineNo,
+    Dictionary<string, string> Fields,
+    List<string> MissingFields,
+    List<string> TypeMismatches,
+    string? Error);
 
 public record ImportRequest(string JsonlPath, string? Mode);
 

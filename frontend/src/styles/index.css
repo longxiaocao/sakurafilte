@@ -1,5 +1,5 @@
-// Day 9: 全局样式 — Musk 风格极简
-//   - 无阴影, 1px hairline 边框, 8px 网格, Inter 字体
+/* Day 9: 全局样式 — Musk 风格极简 */
+/*   - 无阴影, 1px hairline 边框, 8px 网格, Inter 字体 */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

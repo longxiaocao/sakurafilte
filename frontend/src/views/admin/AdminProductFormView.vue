@@ -284,5 +284,5 @@ onMounted(load)
         </el-collapse-item>
       </el-collapse>
     </el-form>
-  </div>onMounted(load)
-</script>
+  </div>
+</template>

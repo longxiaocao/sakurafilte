@@ -25,7 +25,7 @@ public record ProductHistoryItemDto(
 ///   - Mode: full-load | insert-only | upsert (Day 7 设计, 三态统一)
 ///   - DryRun: true 时只校验不写库 (Day 8.4 增强)
 /// </summary>
-public record EtlTriggerRequest(string JsonlPath, string? Mode, bool DryRun = false);
+public record EtlTriggerRequest(string JsonlPath, string? Mode, bool DryRun = false, string? EntityType = null);
 
 /// <summary>
 /// ETL 进度响应 (含手动触发任务)
