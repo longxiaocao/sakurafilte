@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;  // GetDbTransaction 扩展
 using Npgsql;  // Day 7.10.1: advisory lock 需要
 using SakuraFilter.Core.Entities;
 using SakuraFilter.Infrastructure.Data;
@@ -104,37 +105,44 @@ public class DeadLetterRecoveryService : BackgroundService
 
     /// <summary>
     /// Day 7.10.1: 对外暴露 advisory lock 持有方法
-    ///   1) 尝试取锁 (非阻塞) — pg_try_advisory_xact_lock(key)
-    ///      拿不到立即返回 false, 不等待
-    ///   2) 拿锁后执行 work, lock 在事务结束自动释放
-    ///   WHY pg_try_advisory_xact_lock 而非 lock:
-    ///      - 事务结束自动释放 (无需 try/finally)
-    ///      - try 形式避免长事务, 锁竞争时立即放弃
+    ///   1) 显式开事务 (db.Database.BeginTransactionAsync)
+    ///   2) 事务内执行 pg_try_advisory_xact_lock — 锁随事务提交/回滚释放
+    ///   3) 拿锁后执行 work, 事务结束自动释放
+    ///   WHY 显式事务:
+    ///      - pg_try_advisory_xact_lock 是事务级锁, 不开事务会随每个语句自动 commit 而立即释放
+    ///      - 之前实现是 bug, lock 实际只保护了 SELECT 一瞬间, SaveChanges 时已无锁
+    ///   WHY pg_try 而非 pg_advisory: 非阻塞, 锁竞争时 worker 立即放弃本轮
     /// </summary>
     public static async Task<bool> TryWithAdvisoryLockAsync(
         ProductDbContext db,
         Func<Task> work,
-        CancellationToken ct,
-        NpgsqlConnection? conn = null)
+        CancellationToken ct)
     {
-        var ownConn = conn is null;
-        ownConn = ownConn || conn!.State != System.Data.ConnectionState.Open;
-        // 用 FromSqlRaw 直接执行, 不走 EF 事务
-        if (ownConn)
-            conn = (NpgsqlConnection)db.Database.GetDbConnection();
+        // 显式事务 — lock 跟随事务生命周期
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        var conn = (NpgsqlConnection)db.Database.GetDbConnection();
         if (conn.State != System.Data.ConnectionState.Open)
             await conn.OpenAsync(ct);
 
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT pg_try_advisory_xact_lock(@key)";
-        cmd.Parameters.Add(new NpgsqlParameter("key", AdvisoryLockKey));
-        var result = await cmd.ExecuteScalarAsync(ct);
-        if (result is bool got && got)
+        bool got = false;
+        using (var cmd = conn.CreateCommand())
         {
-            await work();
-            return true;
+            cmd.Transaction = (NpgsqlTransaction)tx.GetDbTransaction();
+            cmd.CommandText = "SELECT pg_try_advisory_xact_lock(@key)";
+            cmd.Parameters.Add(new NpgsqlParameter("key", AdvisoryLockKey));
+            var result = await cmd.ExecuteScalarAsync(ct);
+            got = result is bool b && b;
         }
-        return false;
+        if (!got)
+        {
+            // 锁被占用, 回滚事务 (释放 BEGIN 资源)
+            await tx.RollbackAsync(ct);
+            return false;
+        }
+        // 拿锁: 在事务内执行 work + SaveChanges
+        await work();
+        await tx.CommitAsync(ct);
+        return true;
     }
 
     private async Task<int> RunOnceAsync(CancellationToken ct)
@@ -227,6 +235,9 @@ public class DeadLetterRecoveryService : BackgroundService
             candidates.Count, maxCount, coolingMinutes);
 
         int moved = 0;
+        // Day 7.10.1 PATCH: 跟踪新增的 pending entity, SaveChanges 后直接从 instance 读 Id
+        // WHY: 之前用 Payload+CreatedAt+RetryCount==0 重查匹配, 并发下可能匹配错行
+        var addedPending = new Dictionary<long, SearchIndexPending>();
         foreach (var dead in candidates)
         {
             if (ct.IsCancellationRequested) break;
@@ -250,38 +261,29 @@ public class DeadLetterRecoveryService : BackgroundService
             };
             db.SearchIndexPending.Add(pending);
 
-            // Day 7.10.1 BUG FIX: 死信行不删除, 改 status + 递增 recovery_count
-            // 留痕: recovered_at + recovered_to_pending_id 便于链路追踪
+            // Day 7.10.1 BUG FIX: 死信行不删除,改 status + 递增 recovery_count
             dead.Status = "recovered";
             dead.RecoveryCount += 1;
             dead.LastRecoveryAt = now;
             dead.LastRecoveryError = null;
             dead.RecoveredAt = now;
-            // RecoveredToPendingId 需要 SaveChanges 后回填 (pending.Id 还没生成)
+            // 关联 pending entity (SaveChanges 后能从这里直接读 Id)
+            addedPending[dead.Id] = pending;
             moved++;
         }
 
-        // 先 SaveChanges 让 pending.Id 生成
+        // SaveChanges 让 pending.Id 生成 (EF Core 会填充到 entity 实例)
         await db.SaveChangesAsync(ct);
 
-        // 第二轮 SaveChanges 回填 RecoveredToPendingId
-        // WHY: 需要 pending.Id 才能填进 dead.RecoveredToPendingId
-        //   但 EF Core 的 Add 操作不返回 id, 需 SaveChanges 后再查
-        //   简化: 直接遍历 candidates, 找对应 pending (按 Payload + CreatedAt 匹配)
+        // 直接从跟踪的 pending entity 读 Id 回填
+        // WHY: 比 "重查 Payload+CreatedAt" 安全, 不受并发影响
         foreach (var dead in candidates)
         {
             if (dead.Status != "recovered") continue;
             if (dead.RecoveredToPendingId.HasValue) continue;
-            var matchedPending = await db.SearchIndexPending
-                .Where(p => p.Payload == dead.Payload
-                         && p.CreatedAt == dead.CreatedAt
-                         && p.RetryCount == 0
-                         && p.LastError == null)
-                .OrderByDescending(p => p.Id)
-                .FirstOrDefaultAsync(ct);
-            if (matchedPending != null)
+            if (addedPending.TryGetValue(dead.Id, out var pending))
             {
-                dead.RecoveredToPendingId = matchedPending.Id;
+                dead.RecoveredToPendingId = pending.Id;
             }
         }
         await db.SaveChangesAsync(ct);

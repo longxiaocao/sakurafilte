@@ -68,7 +68,7 @@
           "refId": "A",
           "datasource": { "type": "postgres", "uid": "postgres-sakurafilter" },
           "format": "table",
-          "rawSql": "SELECT count(*) AS new24h FROM search_index_dead_letter WHERE moved_at >= now() - interval '24 hours'",
+          "rawSql": "SELECT count(*) AS new24h FROM search_index_dead_letter WHERE status = 'active' AND moved_at >= now() - interval '24 hours'",
           "rawQuery": true
         }
       ],
@@ -135,7 +135,7 @@
           "refId": "A",
           "datasource": { "type": "postgres", "uid": "postgres-sakurafilter" },
           "format": "table",
-          "rawSql": "SELECT count(*) AS over_limit FROM search_index_dead_letter WHERE recovery_count >= 3",
+          "rawSql": "SELECT count(*) AS over_limit FROM search_index_dead_letter WHERE status = 'active' AND recovery_count >= 3",
           "rawQuery": true
         }
       ],
@@ -356,7 +356,7 @@
           "refId": "A",
           "datasource": { "type": "postgres", "uid": "postgres-sakurafilter" },
           "format": "table",
-          "rawSql": "SELECT substring(last_error, 1, 80) AS error_class, count(*) AS cnt, count(*) FILTER (WHERE recovery_count >= 3) AS over_limit FROM search_index_dead_letter WHERE moved_at >= now() - interval '7 days' GROUP BY 1 ORDER BY 2 DESC LIMIT 10",
+          "rawSql": "SELECT substring(last_error, 1, 80) AS error_class, count(*) AS cnt, count(*) FILTER (WHERE recovery_count >= 3) AS over_limit FROM search_index_dead_letter WHERE status = 'active' AND moved_at >= now() - interval '7 days' GROUP BY 1 ORDER BY 2 DESC LIMIT 10",
           "rawQuery": true
         }
       ],

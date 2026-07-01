@@ -315,6 +315,7 @@ app.MapPost("/api/admin/dead-letter/{id:long}/recover", async (long id, ProductD
         dead.LastRecoveryError = null;
         dead.RecoveredAt = now;
         await db.SaveChangesAsync(ct);
+        // 直接从跟踪的 entity 读 Id (避免重查错配)
         dead.RecoveredToPendingId = pending.Id;
         await db.SaveChangesAsync(ct);
         logger.LogInformation("死信 {Id} (original={OriginalId}) 恢复成功 → pending {NewId} (recovery_count={Rc})",
@@ -375,6 +376,8 @@ app.MapPost("/api/admin/dead-letter/recover-batch", async (
 
         var now = DateTime.UtcNow;
         int moved = 0;
+        // Day 7.10.1 PATCH: 跟踪新增的 pending entity 关联 dead, 直接从 instance 读 Id
+        var addedPending = new Dictionary<long, SearchIndexPending>();
         foreach (var d in dead)
         {
             var pending = new SearchIndexPending
@@ -392,21 +395,16 @@ app.MapPost("/api/admin/dead-letter/recover-batch", async (
             d.LastRecoveryAt = now;
             d.LastRecoveryError = null;
             d.RecoveredAt = now;
+            addedPending[d.Id] = pending;
             moved++;
         }
         await db.SaveChangesAsync(ct);
-        // 回填 RecoveredToPendingId (按 payload+createdAt 匹配)
+        // 直接从跟踪的 entity 读 Id 回填
         foreach (var d in dead)
         {
             if (d.RecoveredToPendingId.HasValue) continue;
-            var matchedPending = await db.SearchIndexPending
-                .Where(p => p.Payload == d.Payload
-                         && p.CreatedAt == d.CreatedAt
-                         && p.RetryCount == 0
-                         && p.LastError == null)
-                .OrderByDescending(p => p.Id)
-                .FirstOrDefaultAsync(ct);
-            if (matchedPending != null) d.RecoveredToPendingId = matchedPending.Id;
+            if (addedPending.TryGetValue(d.Id, out var p))
+                d.RecoveredToPendingId = p.Id;
         }
         await db.SaveChangesAsync(ct);
 
