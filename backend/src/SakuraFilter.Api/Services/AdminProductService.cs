@@ -19,11 +19,13 @@ public class AdminProductService
 {
     private readonly ProductDbContext _db;
     private readonly ILogger<AdminProductService> _logger;
+    private readonly CursorHmac _cursorHmac;
 
-    public AdminProductService(ProductDbContext db, ILogger<AdminProductService> logger)
+    public AdminProductService(ProductDbContext db, ILogger<AdminProductService> logger, CursorHmac cursorHmac)
     {
         _db = db;
         _logger = logger;
+        _cursorHmac = cursorHmac;
     }
 
     // ========== 新增产品 ==========
@@ -335,8 +337,8 @@ public class AdminProductService
             Mr1 = keyword,
             IncludeDiscontinued = includeDiscontinued
         };
-        // Day 8.2.2: ListAsync 旧 API 不暴露 cursor, 丢弃第三个返回参数
-        var (items, total, _) = await SearchAsync(req, ct);
+        // Day 8.2.2 + Day 8.3: ListAsync 旧 API 不暴露 cursor 和 countModeUsed
+        var (items, total, _, _) = await SearchAsync(req, ct);
         return (items, total);
     }
 
@@ -347,7 +349,7 @@ public class AdminProductService
     //     - 批量 OEM 走 OR 匹配 (任一命中)
     //     - 排序走白名单 (防 SQL 注入)
     //     - 机型字段走 EXISTS 子查询, 避免 N+1
-    public async Task<(List<ProductListItem> items, long total, string? nextCursor)> SearchAsync(
+    public async Task<(List<ProductListItem> items, long total, string? nextCursor, string countModeUsed)> SearchAsync(
         AdminProductSearchRequest req, CancellationToken ct = default)
     {
         var page = Math.Max(1, req.Page ?? 1);
@@ -365,7 +367,9 @@ public class AdminProductService
         if (pagingMode == "cursor")
         {
             // cursor 模式强制 sortBy=updated_at DESC (keyset 要求有序键, 忽略客户端 sortBy)
-            // cursor 解析: "<ISO8601 updatedAt>|<id>", 空 = 首页
+            // cursor 解析: "<ISO8601 updatedAt>|<id>|<sig16>", 空 = 首页
+            //   Day 8.3: sig16 = HMAC-SHA256(secret, "<ISO8601>|<id>") 截断 16 字符
+            //   验证失败 → 抛 ArgumentException (Endpoint 转 400)
             //
             //   ⚠️ Npgsql EnableLegacyTimestampBehavior 怪癖 (实测验证):
             //     Npgsql 收到 DateTime {Kind=Utc, value=T UTC} 时, 直接用 value 部分 (T),
@@ -382,14 +386,13 @@ public class AdminProductService
             //     PG CST 解释 → 2026-07-01 05:22:17 CST = 2026-06-30 21:22:17 UTC ✓
             if (!string.IsNullOrEmpty(req.Cursor))
             {
-                var parts = req.Cursor.Split('|', 2);
-                if (parts.Length != 2
-                    || !DateTime.TryParse(parts[0], null,
-                        System.Globalization.DateTimeStyles.RoundtripKind,
-                        out var cdt)
-                    || !long.TryParse(parts[1], out var cid))
+                // Day 8.3: HMAC 验签 + 提取 updatedAt/id
+                var (iso, cid) = _cursorHmac.VerifyAndExtract(req.Cursor);
+                if (!DateTime.TryParse(iso, null,
+                    System.Globalization.DateTimeStyles.RoundtripKind,
+                    out var cdt))
                 {
-                    throw new ArgumentException($"cursor 格式错, 期望 <ISO8601 updatedAt>|<id>, 实际: {req.Cursor}");
+                    throw new ArgumentException($"cursor ISO8601 段解析失败, 实际: {iso}");
                 }
                 // 强制按 UTC 解释: 客户端传的 cursor 字符串总是带 Z (UTC) 后缀
                 if (cdt.Kind == DateTimeKind.Local)
@@ -550,36 +553,55 @@ public class AdminProductService
             query = query.Where(p => p.UpdatedAt < cdt || (p.UpdatedAt == cdt && p.Id < cid));
         }
 
-        // Day 8.2.1: count 模式分支
+        // Day 8.2.1 + Day 8.3: count 模式分支 + 自动降级
         //   - exact: LongCountAsync 准确值 (默认, 兼容老调用)
         //   - estimated: 取 PG reltuples 统计, 跳过 17 字段 EXISTS 的 COUNT 代价
         //     误差 ±20% 适合"约 N 条"提示, 1M 数据下 50ms vs 5s
         //   - none: total=-1, 前端用 hasMore 提示
+        //   Day 8.3 自动降级:
+        //     exact 模式 LongCountAsync 走 17 字段 EXISTS 嵌套, 慢查询可能 2-5s
+        //     用 Task.WhenAny + Task.Delay 触发超时, 超时后切到 estimated
+        //     countModeUsed 返回前端实际用的模式 (用于埋点 + UI 提示 "约 N 条")
+        var countTimeoutMs = Math.Clamp(req.CountTimeoutMs ?? 500, 0, 10_000);
         long total;
+        string countModeUsed = countMode;
         if (countMode == "none")
         {
             total = -1;
         }
         else if (countMode == "estimated")
         {
-            // 优先用基础表的 reltuples (无过滤, 但 O(1)), 加 +/-20% 误差标识
-            try
-            {
-                total = await _db.Products.Select(p => 1).CountAsync(ct) == 0
-                    ? 0
-                    : await _db.Database
-                        .SqlQueryRaw<long>("SELECT COALESCE(c.reltuples::bigint, 0) FROM pg_class c WHERE c.relname = 'products'")
-                        .FirstOrDefaultAsync(ct);
-            }
-            catch
-            {
-                // 兜底: reltuples 不可用时退到 COUNT(*)
-                total = await query.LongCountAsync(ct);
-            }
+            total = await GetEstimatedCountAsync(ct);
         }
         else
         {
-            total = await query.LongCountAsync(ct);
+            // exact 模式: 超时降级
+            //   WHY 不传 ct 给 countTask: 超时后 LongCountAsync 还在跑, 不要让它跟着请求取消
+            //   (强制 cancel 会让 PG 中断查询, 浪费已经投入的资源)
+            //   实际效果: 超时后请求立刻返回 estimated 值, LongCountAsync 在后台跑完丢弃
+            if (countTimeoutMs == 0)
+            {
+                total = await query.LongCountAsync(ct);
+            }
+            else
+            {
+                // Day 8.3 修复: 用独立 CancellationTokenSource 让超时后主动 cancel EF query,
+                //   否则后台 LongCountAsync 继续跑占 PG 连接 (会拖垮生产连接池)
+                //   竞态无害: countTask 正好完成 → await 拿结果走 exact; 超时触发 → 抛 OCE 走 estimated
+                using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                cts.CancelAfter(countTimeoutMs);
+                try
+                {
+                    total = await query.LongCountAsync(cts.Token);
+                }
+                catch (OperationCanceledException) when (cts.IsCancellationRequested && !ct.IsCancellationRequested)
+                {
+                    _logger.LogWarning("exact count 超时 {TimeoutMs}ms → 降级 estimated, type={Type} mb={Mb} oem={Oem}",
+                        countTimeoutMs, req.Type, req.MachineBrand, req.Oem2);
+                    total = await GetEstimatedCountAsync(ct);
+                    countModeUsed = "estimated";
+                }
+            }
         }
         // Day 8.2.2: 顺序很关键 - Skip 必须放在 Take 之前
         //   错误顺序: Take(pageSize+1) 然后 Skip((page-1)*pageSize) 会导致 page>1 时跳过 pageSize 条
@@ -614,10 +636,32 @@ public class AdminProductService
                     : last.UpdatedAt.ToUniversalTime();
                 // Day 8.2.2 修复: PG timestamptz 是微秒精度 (6 位), .fff 毫秒精度会丢精度导致下一页漏数据
                 // 同一毫秒内多次写入 (e.g. 5 个产品间隔 0.05s) 会命中同一毫秒, .fff 截断后游标"跳过"这些行
-                nextCursor = $"{new DateTimeOffset(lastUtc, TimeSpan.Zero):yyyy-MM-ddTHH:mm:ss.ffffffZ}|{last.Id}";
+                // Day 8.3: cursor 末尾追加 HMAC 签名, 防止客户端篡改 updatedAt/id 越权访问
+                var iso = $"{new DateTimeOffset(lastUtc, TimeSpan.Zero):yyyy-MM-ddTHH:mm:ss.ffffffZ}";
+                var sig = _cursorHmac.Sign(iso, last.Id);
+                nextCursor = $"{iso}|{last.Id}|{sig}";
             }
         }
-        return (items, total, nextCursor);
+        return (items, total, nextCursor, countModeUsed);
+    }
+
+    // ========== 估算 count (Day 8.3 重构) ==========
+    //   用 PG reltuples 统计, O(1), 误差 ±20% 适合"约 N 条"提示
+    //   兜底: reltuples 不可用时退到 COUNT(*)
+    private async Task<long> GetEstimatedCountAsync(CancellationToken ct)
+    {
+        try
+        {
+            // 优先用基础表的 reltuples (无过滤, O(1))
+            return await _db.Database
+                .SqlQueryRaw<long>("SELECT COALESCE(c.reltuples::bigint, 0) FROM pg_class c WHERE c.relname = 'products'")
+                .FirstOrDefaultAsync(ct);
+        }
+        catch
+        {
+            // 兜底: reltuples 不可用时退到 COUNT(*) 准确值
+            return await _db.Products.LongCountAsync(ct);
+        }
     }
 
     // ========== 尺寸范围应用 (Day 8.2, 表达式树拼接, EF 可翻译) ==========

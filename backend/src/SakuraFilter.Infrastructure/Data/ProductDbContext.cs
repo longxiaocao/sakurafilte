@@ -15,6 +15,7 @@ public class ProductDbContext : DbContext
     public DbSet<CrossReference> CrossReferences => Set<CrossReference>();
     public DbSet<MachineApplication> MachineApplications => Set<MachineApplication>();
     public DbSet<ProductHistory> ProductHistory => Set<ProductHistory>();
+    public DbSet<ProductImage> ProductImages => Set<ProductImage>();  // Day 8.1
     public DbSet<SystemSetting> SystemSettings => Set<SystemSetting>();
     public DbSet<SearchIndexPending> SearchIndexPending => Set<SearchIndexPending>();
     public DbSet<SearchIndexDeadLetter> SearchIndexDeadLetters => Set<SearchIndexDeadLetter>();
@@ -87,6 +88,21 @@ public class ProductDbContext : DbContext
             e.Property(h => h.ChangedFields).HasColumnType("jsonb");
             e.Property(h => h.ChangedBy).HasMaxLength(100);
             e.HasIndex(h => new { h.ProductId, h.ChangedAt });
+        });
+
+        // ProductImage (Day 8.1: 规格分区 4, 1-6 张图)
+        mb.Entity<ProductImage>(e =>
+        {
+            e.ToTable("product_images");
+            e.HasKey(i => i.Id);
+            e.Property(i => i.ImageKey).HasMaxLength(500).IsRequired();
+            e.Property(i => i.ContentType).HasMaxLength(50);
+            e.Property(i => i.UploadedBy).HasMaxLength(100);
+            e.Property(i => i.Slot).IsRequired();
+            e.Property(i => i.DisplayOrder).HasDefaultValue(0);
+            // UNIQUE (product_id, slot) 由 SQL migration 保证 (slot=1-6 互斥)
+            e.HasIndex(i => new { i.ProductId, i.Slot }).IsUnique();
+            e.HasIndex(i => i.ProductId);
         });
 
         // SystemSetting

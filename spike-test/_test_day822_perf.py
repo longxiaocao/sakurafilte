@@ -12,7 +12,7 @@
 import time
 import requests
 
-API = 'http://localhost:5148'
+API = 'http://localhost:5000'
 
 def measure(params, label, n=3):
     """跑 n 次取平均"""

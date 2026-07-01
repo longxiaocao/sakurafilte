@@ -14,7 +14,7 @@
 import requests
 import psycopg2
 
-API = 'http://localhost:5148'
+API = 'http://localhost:5000'
 PG = dict(host='localhost', port=5432, dbname='spike_test_v3', user='postgres', password='784533')
 
 # ========== 准备数据 ==========

@@ -3,7 +3,7 @@ import requests
 import psycopg2
 import time
 
-API = 'http://localhost:5148'
+API = 'http://localhost:5000'
 PG = dict(host='localhost', port=5432, dbname='spike_test_v3', user='postgres', password='784533')
 
 # 清理

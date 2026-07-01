@@ -1,9 +1,9 @@
 namespace SakuraFilter.Core.Entities;
-
 using System.ComponentModel.DataAnnotations.Schema;
 
 /// <summary>
 /// 滤芯产品主表 (100 万级,按 Type 分区)
+/// Day 8.1: 扩展 19 字段支撑后台 7 分区录入表单 (规格 新思路.xlsx)
 /// </summary>
 public class Product
 {
@@ -15,33 +15,59 @@ public class Product
     /// <summary>从 product_name_3 派生,ETL 强制注入</summary>
     public string Type { get; set; } = "";
 
+    // ========== Day 8.1: 分区 1 (Product Name 1, Product Name 2, MR.1, OEM 2, 上架) ==========
+    // WHY product_name_1 在主表: 规格"一个产品一个主名", 与 xref 的 product_name_1 区分
+    [Column("product_name_1")] public string? ProductName1 { get; set; }
+    [Column("product_name_2")] public string? ProductName2 { get; set; }
+    [Column("mr_1")]           public string? Mr1 { get; set; }
+    [Column("oem_2")]          public string? Oem2 { get; set; }
+    [Column("is_published")]   public bool IsPublished { get; set; } = true;  // 上架
+
     // 尺寸 (mm) - 显式列名(因 NamingConvention 不识别 D1Mm 中的 Mm 后缀)
     [Column("d1_mm")] public decimal? D1Mm { get; set; }
     [Column("d2_mm")] public decimal? D2Mm { get; set; }
     [Column("d3_mm")] public decimal? D3Mm { get; set; }
+    [Column("d4_mm")] public decimal? D4Mm { get; set; }  // Day 8.1
     [Column("h1_mm")] public decimal? H1Mm { get; set; }
     [Column("h2_mm")] public decimal? H2Mm { get; set; }
     [Column("h3_mm")] public decimal? H3Mm { get; set; }
+    [Column("h4_mm")] public decimal? H4Mm { get; set; }  // Day 8.1
     [Column("d7_thread")] public string? D7Thread { get; set; }
     [Column("d8_thread")] public string? D8Thread { get; set; }
     [Column("media")] public string? Media { get; set; }
 
-    // 技术参数
+    // ========== Day 8.1: 分区 3 (No. Check / Bypass Valves) ==========
+    [Column("no_check_valves")]  public int? NoCheckValves { get; set; }
+    [Column("no_bypass_valves")] public int? NoBypassValves { get; set; }
+
+    // ========== Day 8.1: 分区 5 (Media Model, Bypass Valve HR, Efficiency 2, Bypass Pressure) ==========
+    [Column("media_model")]     public string? MediaModel { get; set; }
     [Column("sealing_material")] public string? SealingMaterial { get; set; }
-    [Column("efficiency_1")] public string? Efficiency1 { get; set; }
+    [Column("efficiency_1")]    public string? Efficiency1 { get; set; }
+    [Column("efficiency_2")]    public string? Efficiency2 { get; set; }  // Day 8.1
     [Column("bypass_valve_lr")] public decimal? BypassValveLr { get; set; }
+    [Column("bypass_valve_hr")] public decimal? BypassValveHr { get; set; }  // Day 8.1
+    [Column("bypass_pressure")] public decimal? BypassPressure { get; set; }  // Day 8.1 (列早存在, 类型 NUMERIC)
     [Column("collapse_pressure_bar")] public decimal? CollapsePressureBar { get; set; }
-    [Column("temp_range")] public string? TempRange { get; set; }
+    [Column("temp_range")]      public string? TempRange { get; set; }
 
-    // 包装
-    [Column("qty_per_carton")] public int? QtyPerCarton { get; set; }
-    [Column("weight_kgs")] public decimal? WeightKgs { get; set; }
-    [Column("carton_length_mm")] public decimal? CartonLengthMm { get; set; }
-    [Column("carton_width_mm")] public decimal? CartonWidthMm { get; set; }
-    [Column("carton_height_mm")] public decimal? CartonHeightMm { get; set; }
+    // 包装 (Carton)
+    [Column("qty_per_carton")]     public int? QtyPerCarton { get; set; }
+    [Column("weight_kgs")]         public decimal? WeightKgs { get; set; }
+    [Column("carton_length_mm")]   public decimal? CartonLengthMm { get; set; }
+    [Column("carton_width_mm")]    public decimal? CartonWidthMm { get; set; }
+    [Column("carton_height_mm")]   public decimal? CartonHeightMm { get; set; }
 
-    // 图片(只存 S3 key)
-    [Column("image_key")] public string? ImageKey { get; set; }
+    // ========== Day 8.1: 分区 6 (MasterBox + 派生体积) ==========
+    [Column("master_box_qty")]          public int? MasterBoxQty { get; set; }
+    [Column("master_box_weight_kgs")]   public decimal? MasterBoxWeightKgs { get; set; }
+    [Column("master_box_length_mm")]    public decimal? MasterBoxLengthMm { get; set; }
+    [Column("master_box_width_mm")]     public decimal? MasterBoxWidthMm { get; set; }
+    [Column("master_box_height_mm")]    public decimal? MasterBoxHeightMm { get; set; }
+    [Column("volume_per_carton_m3")]    public decimal? VolumePerCartonM3 { get; set; }  // 派生
+
+    // 图片(只存 S3 key, 6 张图走 product_images 表)
+    [Column("image_key")]    public string? ImageKey { get; set; }  // 主图(图1)
     [Column("image_status")] public string ImageStatus { get; set; } = "pending";
 
     // 软删除
@@ -53,6 +79,29 @@ public class Product
     // 导航属性
     public ICollection<CrossReference> CrossReferences { get; set; } = new List<CrossReference>();
     public ICollection<MachineApplication> MachineApplications { get; set; } = new List<MachineApplication>();
+    public ICollection<ProductImage> Images { get; set; } = new List<ProductImage>();  // Day 8.1
+}
+
+/// <summary>
+/// 产品图片 (Day 8.1: 规格分区 4, 1-6 张图)
+/// </summary>
+public class ProductImage
+{
+    public long Id { get; set; }
+    [Column("product_id")]   public long ProductId { get; set; }
+    public short Slot { get; set; }  // 1-6
+    [Column("image_key")]    public string ImageKey { get; set; } = "";
+    [Column("file_size")]    public long? FileSize { get; set; }
+    [Column("content_type")] public string? ContentType { get; set; }
+    public int? Width { get; set; }
+    public int? Height { get; set; }
+    [Column("is_primary")]   public bool IsPrimary { get; set; }
+    [Column("display_order")] public int DisplayOrder { get; set; }
+    [Column("uploaded_at")]  public DateTime UploadedAt { get; set; } = DateTime.UtcNow;
+    [Column("uploaded_by")]  public string? UploadedBy { get; set; }
+
+    // 导航
+    public Product? Product { get; set; }
 }
 
 /// <summary>
@@ -71,6 +120,7 @@ public class CrossReference
 
 /// <summary>
 /// 机型适配(1-30 个/产品)
+/// Day 8.1: 扩展 18 字段支撑后台规格分区 7 录入
 /// </summary>
 public class MachineApplication
 {
@@ -82,7 +132,28 @@ public class MachineApplication
     [Column("engine_brand")] public string? EngineBrand { get; set; }
     [Column("engine_type")] public string? EngineType { get; set; }
     [Column("engine_energy")] public string? EngineEnergy { get; set; }
+
+    // ========== Day 8.1: 分区 7 扩展 (生产日期 / 动力 / 车架号 / 车身 / 底盘 / 发动机 / 排放) ==========
     [Column("production_date_start")] public DateTime? ProductionDateStart { get; set; }
+    [Column("production_date_end")]   public DateTime? ProductionDateEnd { get; set; }
+    [Column("power")]                  public string? Power { get; set; }
+    [Column("serial_number_from")]     public string? SerialNumberFrom { get; set; }
+    [Column("serial_number_to")]       public string? SerialNumberTo { get; set; }
+    [Column("car_body_type")]          public string? CarBodyType { get; set; }
+    [Column("series")]                 public string? Series { get; set; }
+    [Column("co2_emission_standard")]  public string? Co2EmissionStandard { get; set; }
+    [Column("transmission_type")]      public string? TransmissionType { get; set; }
+    [Column("engine_displacement")]    public string? EngineDisplacement { get; set; }
+    [Column("number_of_cylinders")]    public int? NumberOfCylinders { get; set; }
+    [Column("gvwr")]                   public string? Gvwr { get; set; }
+    [Column("tonnage")]                public string? Tonnage { get; set; }
+    [Column("geographic_area")]        public string? GeographicArea { get; set; }
+    [Column("chassis_type")]           public string? ChassisType { get; set; }
+    [Column("engine_model")]           public string? EngineModel { get; set; }
+    [Column("cabin_type")]             public string? CabinType { get; set; }
+    [Column("capacity")]               public string? Capacity { get; set; }
+    [Column("engine_serial_number")]   public string? EngineSerialNumber { get; set; }
+
     [Column("is_ongoing")] public bool IsOngoing { get; set; } = true;
     [Column("is_discontinued")] public bool IsDiscontinued { get; set; }
     [Column("created_at")] public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

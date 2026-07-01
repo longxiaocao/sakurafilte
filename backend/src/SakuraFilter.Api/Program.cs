@@ -1,11 +1,22 @@
+using Microsoft.AspNetCore.Routing;
+using Microsoft.AspNetCore.Routing.Constraints;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Minio;
 using SakuraFilter.Api.Services;
 using SakuraFilter.Core.DTOs;
 using SakuraFilter.Core.Entities;
+using SakuraFilter.Core.Interfaces;
 using SakuraFilter.Infrastructure.Data;
+using SakuraFilter.Infrastructure.Storage;
 using SakuraFilter.Search;
 using SakuraFilter.Etl;
+
+// Npgsql 6+: 默认只接受 DateTime Kind=Utc, 反序列化 "2007-01-01" 这类无时区字符串会抛异常
+//   Day 8.1: machine_application.production_date_start 等字段是 DATE 类型,
+//            前端 JSON 传 "2007-01-01" 被 .NET 当 Kind=Unspecified
+//   启用 legacy behavior: Npgsql 自动按 UTC 写入, 不强制 UTC
+AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -60,7 +71,53 @@ builder.Services.AddHttpClient("EtlAlert", c =>
     c.Timeout = TimeSpan.FromSeconds(5);  // 告警推送快进快出,失败可重试
 });
 
+// Day 8.3: cursor HMAC 签名工具 (单例, 内部从 IConfiguration 读 Search:CursorHmacKey)
+builder.Services.AddSingleton<CursorHmac>();
+
+// Day 8.1: 注册 IObjectStorage (MinIO)
+//   WHY Singleton: IMinioClient 是线程安全单例, MinioStorage 无内部状态
+//   WHY 不放 appsettings.Development: 默认值兜底, dev 可覆盖 endpoint/bucket
+builder.Services.AddSingleton<IObjectStorage>(sp =>
+{
+    var config = builder.Configuration.GetSection("Minio");
+    var endpoint = config["Endpoint"] ?? "localhost:9000";
+    var useSSL = bool.TryParse(config["UseSSL"], out var ssl) && ssl;
+    var minioClient = new MinioClient()
+        .WithEndpoint(endpoint)
+        .WithCredentials(config["AccessKey"] ?? "minioadmin", config["SecretKey"] ?? "minioadmin")
+        .WithSSL(useSSL)
+        .Build();
+    return new MinioStorage(
+        minioClient,
+        config["BucketName"] ?? "sakurafilter",
+        config["PublicEndpoint"] ?? $"http://{endpoint}"
+    );
+});
+
+// Day 8.1: CORS (前端 Vite dev server localhost:5173 + 未来其它端口)
+//   WHY 显式 AllowedOrigins 而非 AllowAnyOrigin: AllowAnyOrigin + AllowCredentials
+//        浏览器会拒绝, 必须白名单
+var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
+    ?? new[] { "http://localhost:5173", "http://localhost:3000" };
+builder.Services.AddCors(o => o.AddPolicy("SakuraFilterCors", p =>
+    p.WithOrigins(allowedOrigins)
+     .AllowAnyMethod()
+     .AllowAnyHeader()
+     .AllowCredentials()));
+
+// Day 8.1: 路由约束 — slot 用 :int (后端内部转 short, 范围 1-6 校验)
+//   WHY 不注册 :short: ASP.NET Core 8 Routing.ConstraintMap 不支持 typeof(short),
+//   必须用 IParameterPolicy 实现 (如 Int16RouteConstraint 不存在, 用 IntRouteConstraint)
+//   简化:用 :int 接收, 内部 short 强转 + 范围校验
+// builder.Services.Configure<RouteOptions>(o => o.ConstraintMap["short"] = typeof(Int16RouteConstraint));
+
+// Day 8.1: 后台产品服务 (Scoped, 跟 DbContext 一致)
+builder.Services.AddScoped<AdminProductService>();
+builder.Services.AddScoped<AdminProductImageService>();
+
 var app = builder.Build();
+
+app.UseCors("SakuraFilterCors");
 
 if (app.Environment.IsDevelopment())
 {
@@ -429,9 +486,202 @@ app.MapPost("/api/admin/dead-letter/recover-batch", async (
 .WithName("RecoverDeadLetterBatch")
 .WithOpenApi();
 
+// =================== Day 8.1: 后台产品管理端点 (规格 后台新增产品格式) ===================
+
+// 新增产品 (7 分区表单一次性提交)
+app.MapPost("/api/admin/products", async (ProductFormDto form, AdminProductService svc, HttpContext ctx, CancellationToken ct) =>
+{
+    try
+    {
+        var user = ctx.Request.Headers["X-User"].FirstOrDefault() ?? "system";
+        var p = await svc.CreateAsync(form, user, ct);
+        return Results.Created($"/api/admin/products/{p.Id}", p);
+    }
+    catch (InvalidOperationException ex) { return Results.Conflict(new { error = ex.Message }); }
+    catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
+})
+.WithName("AdminCreateProduct");
+
+// 列表分页
+app.MapGet("/api/admin/products", async (
+    [Microsoft.AspNetCore.Mvc.FromQuery] int? page,
+    [Microsoft.AspNetCore.Mvc.FromQuery] int? pageSize,
+    [Microsoft.AspNetCore.Mvc.FromQuery] string? type,
+    [Microsoft.AspNetCore.Mvc.FromQuery] string? keyword,
+    [Microsoft.AspNetCore.Mvc.FromQuery] bool? includeDiscontinued,
+    AdminProductService svc, CancellationToken ct) =>
+{
+    var (items, total) = await svc.ListAsync(
+        page ?? 1, pageSize ?? 50, type, keyword, includeDiscontinued ?? false, ct);
+    return Results.Ok(new { total, page = page ?? 1, pageSize = pageSize ?? 50, items });
+})
+.WithName("AdminListProducts");
+
+// 高级搜索 (Day 8.2, 17 字段 + 尺寸范围 + 批量 OEM)
+//   接受 AdminProductSearchRequest 全部 query string 字段 (扁平 DTO)
+//   例: GET /api/admin/products/search?type=oil&d1Min=90&d1Max=100&sizeTolerance=5&oem2Batch=ABC,XYZ
+//   Day 8.2.1: countMode=exact|estimated|none, 默认 exact (向后兼容)
+app.MapGet("/api/admin/products/search", async (
+    [AsParameters] AdminProductSearchRequest req,
+    AdminProductService svc, CancellationToken ct) =>
+{
+    try
+    {
+        var (items, total, nextCursor, countModeUsed) = await svc.SearchAsync(req, ct);
+        var page = req.Page ?? 1;
+        var pageSize = req.PageSize ?? 50;
+        // countMode 归一化 (与 Service 内部一致, 共享 DTO 扩展方法)
+        var countMode = req.NormalizeCountMode();
+        // pagingMode 归一化
+        var pagingMode = req.NormalizePagingMode();
+        // hasMore 判断:
+        //   - countMode=exact/estimated: total - (page*pageSize) > 0
+        //   - countMode=none: items.Count < pageSize 表示末页 (拿不满 = 没了)
+        //   WHY 不论 mode 都用 items.Count < pageSize 兜底:
+        //     翻到末页时 exact/estimated 的 total 计算也可能漏 (并发新增数据), 实际条数永远最准
+        bool hasMore = items.Count >= pageSize
+            && (countMode == "none" || total > (long)page * pageSize);
+        return Results.Ok(new
+        {
+            total,
+            countMode,        // 客户端请求的 count 模式
+            countModeUsed,    // 实际使用的模式 (exact 模式超时可能降级到 estimated)
+            pagingMode,
+            hasMore,
+            nextCursor,    // cursor 模式下为下一页起点, 末页为 null
+            page,
+            pageSize,
+            sizeTolerance = req.SizeTolerance ?? 5m,
+            items
+        });
+    }
+    catch (ArgumentException ex)
+    {
+        // Day 8.3: cursor HMAC 验签失败 / 格式错统一转 400
+        return Results.BadRequest(new { error = ex.Message });
+    }
+})
+.WithName("AdminSearchProducts");
+
+// 批量对比 (Day 8.2, 1-6 个产品)
+//   WHY POST 而非 GET: URL 长度限制 (RFC 7230 推荐 8000 字符), 6 个 id 不会爆但 POST 语义更清晰
+//   WHY body 是 { ids: [1,2,3] }: 数组 query string 多语言绑定不稳定, JSON body 通用
+app.MapPost("/api/admin/products/compare", async (
+    CompareRequest body,
+    AdminProductService svc, CancellationToken ct) =>
+{
+    if (body?.Ids is null || body.Ids.Count == 0)
+        return Results.BadRequest(new { error = "ids 不能为空" });
+    if (body.Ids.Count > 6)
+        return Results.BadRequest(new { error = "对比最多 6 个产品", given = body.Ids.Count });
+    var items = await svc.CompareAsync(body.Ids, null, ct);
+    return Results.Ok(new { count = items.Count, items });
+})
+.WithName("AdminCompareProducts");
+
+// 详情
+app.MapGet("/api/admin/products/{id:long}", async (long id, AdminProductService svc, AdminProductImageService imgSvc, CancellationToken ct) =>
+{
+    try
+    {
+        var p = await svc.GetByIdAsync(id, ct);
+        var imgs = await imgSvc.ListAsync(id, ct);
+        return Results.Ok(p with { Images = imgs });
+    }
+    catch (KeyNotFoundException ex) { return Results.NotFound(new { error = ex.Message }); }
+})
+.WithName("AdminGetProduct");
+
+// 更新
+app.MapPut("/api/admin/products/{id:long}", async (long id, ProductFormDto form, AdminProductService svc, HttpContext ctx, CancellationToken ct) =>
+{
+    try
+    {
+        var user = ctx.Request.Headers["X-User"].FirstOrDefault() ?? "system";
+        var p = await svc.UpdateAsync(id, form, user, ct);
+        return Results.Ok(p);
+    }
+    catch (KeyNotFoundException ex) { return Results.NotFound(new { error = ex.Message }); }
+    catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
+})
+.WithName("AdminUpdateProduct");
+
+// 软删除 (下架)
+app.MapDelete("/api/admin/products/{id:long}", async (long id, AdminProductService svc, HttpContext ctx, CancellationToken ct) =>
+{
+    try
+    {
+        var user = ctx.Request.Headers["X-User"].FirstOrDefault() ?? "system";
+        await svc.DeleteAsync(id, user, ct);
+        return Results.Ok(new { id, discontinued = true });
+    }
+    catch (KeyNotFoundException ex) { return Results.NotFound(new { error = ex.Message }); }
+    catch (InvalidOperationException ex) { return Results.Conflict(new { error = ex.Message }); }
+})
+.WithName("AdminDeleteProduct");
+
+// 恢复 (从下架恢复)
+app.MapPost("/api/admin/products/{id:long}/restore", async (long id, AdminProductService svc, HttpContext ctx, CancellationToken ct) =>
+{
+    try
+    {
+        var user = ctx.Request.Headers["X-User"].FirstOrDefault() ?? "system";
+        await svc.RestoreAsync(id, user, ct);
+        return Results.Ok(new { id, restored = true });
+    }
+    catch (KeyNotFoundException ex) { return Results.NotFound(new { error = ex.Message }); }
+    catch (InvalidOperationException ex) { return Results.Conflict(new { error = ex.Message }); }
+})
+.WithName("AdminRestoreProduct");
+
+// 上传产品图 (slot 1-6)
+app.MapPost("/api/admin/products/{id:long}/images/{slot:int}", async (
+    long id, int slot, HttpRequest req, AdminProductImageService svc, CancellationToken ct) =>
+{
+    if (slot < 1 || slot > 6) return Results.BadRequest(new { error = "slot 必须在 1-6 之间" });
+    if (!req.HasFormContentType) return Results.BadRequest(new { error = "需 multipart/form-data" });
+    var form = await req.ReadFormAsync(ct);
+    var file = form.Files.GetFile("file");
+    if (file == null) return Results.BadRequest(new { error = "缺 file 字段" });
+    var user = req.Headers["X-User"].FirstOrDefault() ?? "system";
+    try
+    {
+        using var stream = file.OpenReadStream();
+        var img = await svc.UploadAsync(id, (short)slot, stream, file.ContentType ?? "image/jpeg", user, ct);
+        return Results.Ok(img);
+    }
+    catch (KeyNotFoundException ex) { return Results.NotFound(new { error = ex.Message }); }
+    catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
+    catch (InvalidOperationException ex) { return Results.BadRequest(new { error = ex.Message }); }
+})
+.WithName("AdminUploadProductImage")
+.DisableAntiforgery();  // 后台上传不强制 CSRF (内部 API)
+
+// 删除产品图
+app.MapDelete("/api/admin/products/{id:long}/images/{slot:int}", async (long id, int slot, AdminProductImageService svc, CancellationToken ct) =>
+{
+    if (slot < 1 || slot > 6) return Results.BadRequest(new { error = "slot 必须在 1-6 之间" });
+    try
+    {
+        await svc.DeleteAsync(id, (short)slot, ct);
+        return Results.Ok(new { productId = id, slot, deleted = true });
+    }
+    catch (KeyNotFoundException ex) { return Results.NotFound(new { error = ex.Message }); }
+    catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
+})
+.WithName("AdminDeleteProductImage");
+
+// 列出产品 6 张图
+app.MapGet("/api/admin/products/{id:long}/images", async (long id, AdminProductImageService svc, CancellationToken ct) =>
+    Results.Ok(await svc.ListAsync(id, ct)))
+.WithName("AdminListProductImages");
+
 app.Run();
 
 public record ImportRequest(string JsonlPath, string? Mode);
+
+// Day 8.2: 批量对比请求体
+public record CompareRequest(List<long> Ids);
 
 // Day 7.5: 死信查询参数 (运维可见性)
 // Day 7.10: 增加 recovery_count / last_recovery_at / last_recovery_error 字段
