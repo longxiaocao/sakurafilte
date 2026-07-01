@@ -10,7 +10,9 @@ import type {
   ProductListItem,
   EtlTriggerRequest,
   EtlProgress,
-  EtlActiveTaskInfo
+  EtlActiveTaskInfo,
+  EtlHistoryItem,
+  EtlReasonCodeAggregate
 } from './types'
 
 // ===== 搜索 (公开, 无需 token) =====
@@ -105,6 +107,15 @@ export const etlApi = {
   },
   legacyStatus(): Promise<EtlProgress> {
     return http.get('/etl/status').then((r) => r.data)
+  },
+  // Day 9.8: 历史日志 + reason_code 聚合 (运营审计饼图)
+  history(limit = 50, status?: string): Promise<{ count: number; items: EtlHistoryItem[] }> {
+    const params: Record<string, any> = { limit }
+    if (status) params.status = status
+    return http.get('/admin/etl/history', { params }).then((r) => r.data)
+  },
+  reasonCodeAggregate(): Promise<EtlReasonCodeAggregate> {
+    return http.get('/admin/etl/history/aggregate').then((r) => r.data)
   }
 }
 

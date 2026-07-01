@@ -8,7 +8,8 @@
 import { ref, reactive, onMounted, onBeforeUnmount, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { etlApi } from '@/api'
-import type { EtlActiveTaskInfo, EtlProgress, EtlDryRunResult } from '@/api/types'
+import type { EtlActiveTaskInfo, EtlProgress, EtlDryRunResult, EtlHistoryItem, EtlReasonCodeAggregate } from '@/api/types'
+import EtlReasonCodePie from '@/components/EtlReasonCodePie.vue'
 
 // ===== 表单 =====
 const form = reactive({
@@ -70,6 +71,27 @@ const lastDryRun = ref<EtlDryRunResult | null>(null)
 // Day 9.4: dry-run 样本展开/收起 (50 行太长, 默认只显示 10 行)
 const showAllSamples = ref(false)
 
+// Day 9.8: 取消原因 reason_code 饼图数据 (运营审计)
+const reasonCodeAgg = ref<EtlReasonCodeAggregate | null>(null)
+const historyItems = ref<EtlHistoryItem[]>([])
+const historyLoading = ref(false)
+
+async function refreshAudit() {
+  historyLoading.value = true
+  try {
+    const [agg, hist] = await Promise.all([
+      etlApi.reasonCodeAggregate(),
+      etlApi.history(20, 'cancelled')
+    ])
+    reasonCodeAgg.value = agg
+    historyItems.value = hist.items
+  } catch (e) {
+    // 已被拦截器处理
+  } finally {
+    historyLoading.value = false
+  }
+}
+
 // Day 9.1: 持久化最近一次完成结果到 localStorage (刷新页面不丢)
 const LS_KEY_FINISHED = 'sakura_etl_last_finished'
 try {
@@ -122,6 +144,11 @@ function connectSSE() {
           }
         }).catch(() => {})
       }
+      // Day 9.8: 任务进入终态 (completed/failed/cancelled) → 刷新审计饼图 + 历史列表
+      if (!r.inProgress && r.activeTask &&
+          ['completed', 'failed', 'cancelled'].includes(r.activeTask.status)) {
+        refreshAudit()
+      }
     } catch {}
   }
   es.onerror = () => {
@@ -133,6 +160,8 @@ function connectSSE() {
 
 onMounted(() => {
   connectSSE()
+  // Day 9.8: 进入页面立即拉一次审计 (避免要等下次 ETL 完结才显示)
+  refreshAudit()
 })
 
 onBeforeUnmount(() => {
@@ -475,5 +504,76 @@ function prettyJson(raw: string): string {
         </el-table>
       </div>
     </el-card>
+
+    <!-- Day 9.8: ETL 取消审计 — reason_code 饼图 + 历史列表 -->
+    <el-card shadow="never">
+      <template #header>
+        <div class="flex items-center gap-2">
+          <span class="font-semibold">取消审计 (按 reason_code 聚合)</span>
+          <el-tag size="small" type="info">运营可观察</el-tag>
+          <div class="flex-1" />
+          <el-button size="small" :loading="historyLoading" @click="refreshAudit">刷新</el-button>
+        </div>
+      </template>
+      <div class="audit-grid">
+        <!-- 饼图 -->
+        <div class="audit-pie">
+          <EtlReasonCodePie :data="reasonCodeAgg" />
+        </div>
+        <!-- 历史表 -->
+        <div class="audit-table">
+          <div class="text-xs text-gray-500 mb-2">最近 20 条 cancelled 记录</div>
+          <el-table :data="historyItems" size="small" max-height="380" border stripe>
+            <el-table-column prop="id" label="#" width="60" />
+            <el-table-column prop="entityType" label="entity" width="90" />
+            <el-table-column prop="mode" label="mode" width="100" />
+            <el-table-column label="reasonCode" width="160">
+              <template #default="{ row }">
+                <el-tag v-if="row.reasonCode" size="small" type="info">{{ row.reasonCode }}</el-tag>
+                <span v-else class="text-gray-400 text-xs">LEGACY</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="cancelReason" label="原因" show-overflow-tooltip min-width="180" />
+            <el-table-column label="已读/插/改" width="120">
+              <template #default="{ row }">
+                <span class="text-xs">
+                  {{ row.readCount }} / {{ row.insertedCount }} / {{ row.updatedCount }}
+                </span>
+              </template>
+            </el-table-column>
+            <el-table-column label="耗时" width="80">
+              <template #default="{ row }">
+                <span class="text-xs">{{ row.durationSec.toFixed(1) }}s</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="取消时间" width="170">
+              <template #default="{ row }">
+                <span class="text-xs text-gray-500">{{ (row.cancelledAt || row.finishedAt).slice(0, 19) }}</span>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+      </div>
+    </el-card>
   </div>
 </template>
+
+<style scoped>
+.audit-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 380px) 1fr;
+  gap: 24px;
+  align-items: flex-start;
+}
+.audit-pie {
+  padding: 8px 0;
+}
+.audit-table {
+  min-width: 0;  /* 防止 grid item 内容溢出 */
+}
+@media (max-width: 1024px) {
+  .audit-grid {
+    grid-template-columns: 1fr;
+  }
+}
+</style>

@@ -329,3 +329,40 @@ export interface EtlDryRunResult {
   sizeBytes: number
   samples: string[]
 }
+
+// Day 9.8: ETL 历史日志条目 (来自 /api/admin/etl/history)
+export interface EtlHistoryItem {
+  id: number
+  entityType: string
+  mode: string
+  status: string
+  reasonCode?: string | null
+  cancelReason?: string | null
+  cancelledAt?: string | null
+  readCount: number
+  insertedCount: number
+  updatedCount: number
+  skippedCount: number
+  skippedMissingOem: number
+  skippedNullField: number
+  skippedDuplicate: number
+  errorCount: number
+  indexedCount: number
+  indexPendingCount: number
+  lastError?: string | null
+  startedAt: string
+  finishedAt: string
+  durationSec: number
+}
+
+// Day 9.8: reason_code 聚合数据 (来自 /api/admin/etl/history/aggregate)
+export interface EtlReasonCodeBreakdown {
+  code: string
+  count: number
+  pct: number
+}
+
+export interface EtlReasonCodeAggregate {
+  total: number
+  breakdown: EtlReasonCodeBreakdown[]
+}

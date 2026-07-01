@@ -1068,6 +1068,92 @@ app.MapGet("/api/admin/etl/progress", (EtlImportService etl) =>
 .WithName("AdminEtlProgress")
 .RequireRateLimiting("etl");
 
+// Day 9.8: ETL 历史日志查询 + reason_code 聚合
+//   - /history: 拉最近 N 条记录, 给前端表格/列表用
+//   - /history/aggregate: 按 reason_code 聚合, 给饼图用
+//   - 两端都不分页 (admin 后台 + 数据量 < 1000/天), 简单 list 即可
+app.MapGet("/api/admin/etl/history", async (
+    [Microsoft.AspNetCore.Mvc.FromQuery] int? limit,
+    [Microsoft.AspNetCore.Mvc.FromQuery] string? status,
+    ProductDbContext db,
+    CancellationToken ct) =>
+{
+    var cap = Math.Clamp(limit ?? 50, 1, 500);
+    var query = db.EtlProgressLogs.AsNoTracking().OrderByDescending(l => l.Id);
+    if (!string.IsNullOrEmpty(status))
+        query = (IOrderedQueryable<EtlProgressLog>)query.Where(l => l.Status == status);
+    var rows = await query.Take(cap).Select(l => new
+    {
+        l.Id,
+        l.EntityType,
+        l.Mode,
+        l.Status,
+        l.ReasonCode,
+        l.CancelReason,
+        l.CancelledAt,
+        l.ReadCount,
+        l.InsertedCount,
+        l.UpdatedCount,
+        l.SkippedCount,
+        l.SkippedMissingOem,
+        l.SkippedNullField,
+        l.SkippedDuplicate,
+        l.ErrorCount,
+        l.IndexedCount,
+        l.IndexPendingCount,
+        l.LastError,
+        l.StartedAt,
+        l.FinishedAt,
+        l.DurationSec
+    }).ToListAsync(ct);
+    return Results.Ok(new { count = rows.Count, items = rows });
+})
+.WithName("AdminEtlHistory")
+.RequireRateLimiting("etl");
+
+// Day 9.8: 按 reason_code 聚合 (饼图数据源)
+//   5 枚举固定: USER_REQUEST / TIMEOUT / SYSTEM_SHUTDOWN / ADMIN_OVERRIDE / OTHER
+//   未分类 (NULL) 用 LEGACY 表示 (旧记录无 reason_code)
+//   统计口径: status='cancelled' 的所有记录 (历史数据可能 status 是 completed/failed 但有 reason_code, 不计入)
+app.MapGet("/api/admin/etl/history/aggregate", async (ProductDbContext db, CancellationToken ct) =>
+{
+    // Day 9.8: GROUP BY reason_code, 同时统计总数 + 各枚举占比
+    //   不用 EF 的 GroupBy (翻译复杂), 改用原生 SQL 一行解决
+    var sql = @"
+        SELECT
+            COALESCE(reason_code, 'LEGACY') AS code,
+            COUNT(*) AS n
+        FROM etl_progress_log
+        WHERE status = 'cancelled'
+        GROUP BY COALESCE(reason_code, 'LEGACY')
+        ORDER BY n DESC";
+    var conn = db.Database.GetDbConnection();
+    if (conn.State != System.Data.ConnectionState.Open) await conn.OpenAsync(ct);
+    await using var cmd = conn.CreateCommand();
+    cmd.CommandText = sql;
+    var breakdown = new List<(string Code, long Count)>();
+    await using (var reader = await cmd.ExecuteReaderAsync(ct))
+    {
+        while (await reader.ReadAsync(ct))
+        {
+            breakdown.Add((reader.GetString(0), reader.GetInt64(1)));
+        }
+    }
+    var total = breakdown.Sum(x => x.Count);
+    return Results.Ok(new
+    {
+        total,
+        breakdown = breakdown.Select(x => new
+        {
+            code = x.Code,
+            count = x.Count,
+            pct = total > 0 ? Math.Round(x.Count * 100.0 / total, 1) : 0
+        }).ToArray()
+    });
+})
+.WithName("AdminEtlHistoryAggregate")
+.RequireRateLimiting("etl");
+
 app.Run();
 
 // Day 9.2: dry-run JSON Schema 校验结果
