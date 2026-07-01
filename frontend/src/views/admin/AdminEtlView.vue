@@ -157,28 +157,76 @@ function clearLastFinished() {
   ElMessage.success('已清除')
 }
 
+// Day 9.6: 取消原因枚举白名单
+//   WHY 固定: 与后端 EtlProgress.AllowedReasonCodes 对齐, 避免传任意字符串
+//   运营审计按 reason_code 聚合 (USER_REQUEST/TIMEOUT/SYSTEM_SHUTDOWN/ADMIN_OVERRIDE/OTHER)
+const reasonCodeOptions = [
+  { value: 'USER_REQUEST', label: '用户主动取消', defaultReason: '用户主动取消' },
+  { value: 'ADMIN_OVERRIDE', label: '管理员强制取消', defaultReason: '管理员强制取消' },
+  { value: 'TIMEOUT', label: '任务超时', defaultReason: '任务执行超时' },
+  { value: 'SYSTEM_SHUTDOWN', label: '系统关闭/重启', defaultReason: '服务关闭/重启' },
+  { value: 'OTHER', label: '其他原因', defaultReason: '其他原因' }
+] as const
+
 // Day 9.1: 取消当前活跃 ETL 任务
 //   Day 9.4: 用 ElMessageBox.prompt 让用户输入取消原因, 写到 etl_progress_log.cancel_reason
+//   Day 9.6: 改用枚举下拉 + 默认描述 (与后端 AllowedReasonCodes 对齐, 减少误分类)
 async function doCancel() {
-  let reason = "用户取消"
+  let reasonCode: string = 'USER_REQUEST'
+  let reason: string = reasonCodeOptions[0].defaultReason
   try {
-    const r = await ElMessageBox.prompt('请输入取消原因 (会写入历史审计)', '取消 ETL 任务', {
+    // 步骤 1: 选择 reason_code 枚举 (Element Plus ElMessageBox 自定义 HTML)
+    await ElMessageBox({
+      title: '取消 ETL 任务',
+      message: `
+        <div style="text-align:left;font-size:13px;line-height:1.6">
+          <div style="margin-bottom:8px;color:#606266">请选择取消原因 (会写入历史审计, 按此码聚合):</div>
+          <div id="cancel-reason-list" style="display:flex;flex-direction:column;gap:6px">
+            ${reasonCodeOptions.map((o, i) => `
+              <label style="display:flex;align-items:flex-start;gap:6px;cursor:pointer;padding:6px 8px;border:1px solid #ebeef5;border-radius:4px;${i === 0 ? 'background:#ecf5ff;border-color:#409eff' : ''}">
+                <input type="radio" name="cancel-reason-code" value="${o.value}" ${i === 0 ? 'checked' : ''} style="margin-top:3px" />
+                <div>
+                  <div style="font-weight:600">${o.label}</div>
+                  <div style="color:#909399;font-size:12px">${o.value} — ${o.defaultReason}</div>
+                </div>
+              </label>
+            `).join('')}
+          </div>
+        </div>
+      `,
+      showCancelButton: true,
+      confirmButtonText: '下一步',
+      cancelButtonText: '不取消',
+      type: 'warning',
+      dangerouslyUseHTMLString: true
+    })
+    // 提取选中的 code
+    const checked = document.querySelector<HTMLInputElement>('input[name="cancel-reason-code"]:checked')
+    reasonCode = checked?.value || 'USER_REQUEST'
+    const picked = reasonCodeOptions.find(o => o.value === reasonCode) || reasonCodeOptions[0]
+    reason = picked.defaultReason
+  } catch {
+    return
+  }
+  // 步骤 2: 询问是否填写更详细的描述 (可选, 留空则用默认)
+  try {
+    const r = await ElMessageBox.prompt('可补充详细描述 (留空用默认)', '取消原因说明', {
       confirmButtonText: '确认取消',
       cancelButtonText: '不取消',
-      inputPlaceholder: '例如: 数据源有问题, 需要重新生成 JSONL',
-      inputValue: "",
-      inputValidator: (v: string) => v.trim().length > 0 || '请填写取消原因',
+      inputPlaceholder: reason,
+      inputValue: reason,
+      inputValidator: undefined
     })
-
-    reason = r.value.trim()
+    const v = (r.value || '').trim()
+    if (v) reason = v
   } catch {
     return
   }
   cancelling.value = true
   try {
-    const r = await etlApi.cancel(reason)
+    const r = await etlApi.cancel(reason, reasonCode)
     if (r.cancelled) {
-      ElMessage.warning('已发送取消信号 (原因: ' + reason + '), 任务即将终止')
+      ElMessage.warning(`已发送取消信号 (码: ${reasonCode}), 任务即将终止`)
     } else {
       ElMessage.info(r.reason || '无活跃任务可取消')
     }

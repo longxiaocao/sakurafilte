@@ -121,9 +121,15 @@ jobs:
           # 完整 bootstrap 由 _apply_migration_* 系列脚本承担 (见 spike-test/)
 
       # Day 9.5: 跑 E2E 套件, 任意 case 失败 → exit 1 → CI 红
-      # 注: 启动 dotnet + 初始化数据需要点时间, 套件自带 retry
+      # Day 9.6: E2E_REQUIRED 门禁
+      #   - master 分支: 默认开 (PR merge 前必须全绿)
+      #   - feature 分支: 默认关 (跑过即记录, 避免数据集未 ready 永久红)
+      #   - 工作流 dispatch 或 E2E_REQUIRED=true: 强制开
+      # WHY 区分: master 是基线, 必须严格; feature 还在迭代, 数据集可能未 seed
       - name: Run E2E regression
         working-directory: spike-test
+        env:
+          E2E_REQUIRED: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && 'true' || (github.event_name == 'workflow_dispatch' && 'true' || 'false') }}
         run: |
           # 启动后端 (后台, 等几秒健康检查)
           cd ../backend/src/SakuraFilter.Api
@@ -138,8 +144,26 @@ jobs:
             fi
             sleep 1
           done
-          # 跑 E2E
+          # 跑 E2E 套件
           cd ../../spike-test
-          python _test_day94.py || true
-          # 暂不强制 fail: 跑过即记录, 等数据集 ready 再 gate
-          echo "E2E finished (no-gate for now, see logs)"
+          ALL_PASS=0
+          for suite in _test_day95.py _test_day94.py; do
+            if [ -f "$suite" ]; then
+              echo "================ Running $suite ================"
+              if python "$suite"; then
+                echo "[PASS] $suite"
+              else
+                RC=$?
+                echo "[FAIL] $suite (rc=$RC)"
+                ALL_PASS=1
+                if [ "$E2E_REQUIRED" = "true" ]; then
+                  echo "E2E_REQUIRED=true → 立即终止"
+                  exit $RC
+                fi
+              fi
+            fi
+          done
+          if [ "$ALL_PASS" != "0" ] && [ "$E2E_REQUIRED" != "true" ]; then
+            echo "E2E 有失败 (但 E2E_REQUIRED=false, 记录日志但不 fail job)"
+          fi
+          echo "E2E finished. E2E_REQUIRED=$E2E_REQUIRED"

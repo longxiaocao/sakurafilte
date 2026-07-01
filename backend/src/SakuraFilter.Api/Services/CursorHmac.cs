@@ -11,45 +11,80 @@ namespace SakuraFilter.Api.Services;
 ///   - cursor 格式: "<ISO8601 updatedAt>|<id>|<sig16>"
 ///   - 旧格式 (无 sig) 视作非法, 直接 400 拒绝
 ///   - secret 来自 appsettings.json Search:CursorHmacKey (生产请用环境变量覆盖)
+///
+/// Day 9.6: 双 key 轮转支持 (无侵入)
+///   WHY: 单纯换 key 后, 旧 cursor 全部失效 → 翻页中断 → 用户体验断崖
+///   解法:
+///     - 启动时加载 CurrentKey + PreviousKey(可选) 两个 key
+///     - 编码 cursor 始终用 CurrentKey
+///     - 验签按 CurrentKey → PreviousKey 顺序尝试, 任一通过即可
+///     - 轮转步骤: ops 配 PreviousKey = 旧 key + CurrentKey = 新 key → 部署 → 等 24h 旧 cursor 全部失效 → 清空 PreviousKey
+///   副作用: 验签 O(n) (n=2, 几乎无开销)
 /// </summary>
 public class CursorHmac
 {
-    private readonly byte[] _key;
+    private readonly byte[] _currentKey;
+    private readonly byte[]? _previousKey;
     private readonly ILogger<CursorHmac> _logger;
 
     public CursorHmac(IConfiguration config, ILogger<CursorHmac> logger)
     {
         _logger = logger;
-        var secret = config["Search:CursorHmacKey"];
-        if (string.IsNullOrWhiteSpace(secret))
+        var current = config["Search:CursorHmacKey"];
+        if (string.IsNullOrWhiteSpace(current))
         {
             // 不允许无 secret 启动, 避免"忘配 key 默默通过"的安全事故
             throw new InvalidOperationException(
                 "Search:CursorHmacKey 未配置, 必须在 appsettings.json 或环境变量 Search__CursorHmacKey 提供");
         }
-        if (secret.Length < 32)
+        if (current.Length < 32)
         {
             // 太短的 key HMAC 抗碰撞能力不足, 强制要求 ≥ 32 字符
             throw new InvalidOperationException(
-                $"Search:CursorHmacKey 长度 {secret.Length} < 32, 不安全, 请使用至少 32 字符的随机串");
+                $"Search:CursorHmacKey 长度 {current.Length} < 32, 不安全, 请使用至少 32 字符的随机串");
         }
-        _key = Encoding.UTF8.GetBytes(secret);
-        _logger.LogInformation("CursorHmac 初始化完成, key 长度 {Len} 字节", _key.Length);
+        _currentKey = Encoding.UTF8.GetBytes(current);
+
+        // Day 9.6: 可选 previous key (轮转过渡期, 验签时也接受它)
+        var previous = config["Search:CursorHmacKeyPrevious"];
+        if (!string.IsNullOrWhiteSpace(previous))
+        {
+            if (previous.Length < 32)
+            {
+                throw new InvalidOperationException(
+                    $"Search:CursorHmacKeyPrevious 长度 {previous.Length} < 32, 不安全");
+            }
+            if (previous == current)
+            {
+                _logger.LogWarning("CursorHmac CurrentKey 与 PreviousKey 相同, PreviousKey 忽略");
+            }
+            else
+            {
+                _previousKey = Encoding.UTF8.GetBytes(previous);
+                _logger.LogInformation("CursorHmac 双 key 模式: 当前 key 长度 {Cur}, 旧 key 长度 {Prev} 字节",
+                    _currentKey.Length, _previousKey.Length);
+                _logger.LogInformation("提示: 轮转过渡期 (建议 24h) 后清空 Search:CursorHmacKeyPrevious 减小验签开销");
+            }
+        }
+
+        _logger.LogInformation("CursorHmac 初始化完成, key 长度 {Len} 字节", _currentKey.Length);
     }
 
     /// <summary>
     /// 给 (updatedAt, id) 签名, 返回截断的 Base64URL 字符串
+    /// Day 9.6: 始终用 CurrentKey 签名 (避免新 cursor 走 PreviousKey 导致后续 CurrentKey 切换时再失效)
     /// </summary>
     public string Sign(string updatedAtIso, long id)
     {
         var payload = $"{updatedAtIso}|{id}";
-        var hash = HMACSHA256.HashData(_key, Encoding.UTF8.GetBytes(payload));
+        var hash = HMACSHA256.HashData(_currentKey, Encoding.UTF8.GetBytes(payload));
         return ToBase64Url(hash)[..16]; // 截断到 16 字符, 约 96 位安全强度, 够用且 URL 友好
     }
 
     /// <summary>
     /// 验证 cursor 三段式格式: <ISO8601>|<id>|<sig16>
     /// 验证失败抛 ArgumentException (由 Endpoint 转 400)
+    /// Day 9.6: 双 key 验证 — CurrentKey 不过试 PreviousKey (轮转过渡期兼容)
     /// </summary>
     public (string updatedAtIso, long id) VerifyAndExtract(string cursor)
     {
@@ -67,16 +102,29 @@ public class CursorHmac
         if (!long.TryParse(idStr, out var id))
             throw new ArgumentException($"cursor id 段解析失败, 实际: {idStr}");
 
-        // 重算签名比对
-        var expected = Sign(updatedAtIso, id);
-        // CryptographicOperations.FixedTimeEquals 抗时序攻击
-        if (!CryptographicOperations.FixedTimeEquals(
-                Encoding.ASCII.GetBytes(sig),
-                Encoding.ASCII.GetBytes(expected)))
+        // Day 9.6: 双 key 验证
+        // 先试 CurrentKey (绝大多数情况), 不过再试 PreviousKey
+        if (VerifyKey(_currentKey, updatedAtIso, id, sig))
+            return (updatedAtIso, id);
+        if (_previousKey != null && VerifyKey(_previousKey, updatedAtIso, id, sig))
         {
-            throw new ArgumentException("cursor 签名验证失败, 可能被篡改或使用过期 secret");
+            _logger.LogDebug("cursor 用 PreviousKey 验签通过 (轮转过渡期)");
+            return (updatedAtIso, id);
         }
-        return (updatedAtIso, id);
+        throw new ArgumentException("cursor 签名验证失败, 可能被篡改或使用过期 secret");
+    }
+
+    /// <summary>
+    /// 用指定 key 重算签名并常时比较 (抗时序攻击)
+    /// </summary>
+    private static bool VerifyKey(byte[] key, string updatedAtIso, long id, string sig)
+    {
+        var payload = $"{updatedAtIso}|{id}";
+        var hash = HMACSHA256.HashData(key, Encoding.UTF8.GetBytes(payload));
+        var expected = ToBase64Url(hash)[..16];
+        return CryptographicOperations.FixedTimeEquals(
+            Encoding.ASCII.GetBytes(sig),
+            Encoding.ASCII.GetBytes(expected));
     }
 
     private static string ToBase64Url(byte[] bytes)

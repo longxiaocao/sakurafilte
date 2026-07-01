@@ -73,7 +73,14 @@ builder.Services.AddSingleton(sp => new EtlImportService(
     pgConn,
     sp.GetRequiredService<ILogger<EtlImportService>>(),
     sp,
-    sp.GetRequiredService<IOptions<EtlOptions>>()));
+    sp.GetRequiredService<IOptions<EtlOptions>>(),
+    // Day 9.6: 跨实例 SSE 广播器 (PG NOTIFY/LISTEN,零新依赖)
+    sp.GetRequiredService<IEtlProgressBroadcaster>()));
+
+// Day 9.6: ETL 跨实例广播器 (PG NOTIFY/LISTEN 实现,零新依赖)
+//   - 多实例部署时, A 实例 ETL 进度变化 → 所有实例的 SSE 客户端都收到
+//   - 单实例部署时降级为本地轮询 (无影响)
+builder.Services.AddSingleton<IEtlProgressBroadcaster, EtlProgressBroadcaster>();
 
 // 后台服务:产品变更历史清理 (永久保留,客户可配置)
 builder.Services.AddHostedService<HistoryCleanupService>();
@@ -204,6 +211,19 @@ builder.Services.AddScoped<AdminProductService>();
 builder.Services.AddScoped<AdminProductImageService>();
 
 var app = builder.Build();
+
+// Day 9.6: 启动 ETL 跨实例广播器 (PG LISTEN 后台 task)
+_ = Task.Run(async () =>
+{
+    try
+    {
+        await app.Services.GetRequiredService<IEtlProgressBroadcaster>().InitAsync();
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogWarning(ex, "EtlProgressBroadcaster 启动失败, SSE 将退化为本地轮询");
+    }
+});
 
 // Day 8.4: 中间件 pipeline 顺序
 //   1) UseExceptionHandler 统一错误 (开发环境显示堆栈, 生产隐藏)
@@ -973,26 +993,71 @@ app.MapDelete("/api/admin/etl/task", (EtlImportService etl, [Microsoft.AspNetCor
 
 // Day 8.4: 后台 ETL 进度查询 (后台 ETL 页面 3s 轮询)
 // Day 9.4: 后台 ETL 进度 SSE 流 (替换 3s 轮询)
-//   格式: text/event-stream, 每 1s 推一次 activeTask 状态
+//   格式: text/event-stream, 实时推送 activeTask 状态
 //   客户端 EventSource 关闭时 (页面卸载), ct 触发, 自动停止推送
 //   WHY 不用 SignalR: 运维监控场景用 SSE 更轻, EventSource API 是 W3C 标准
-app.MapGet("/api/admin/etl/progress/stream", async (HttpContext ctx, EtlImportService etl) =>
+// Day 9.6: 跨实例广播 (PG NOTIFY/LISTEN)
+//   - 订阅 IEtlProgressBroadcaster, 收到消息时立即推给客户端
+//   - 15s 心跳注释行 (避免代理/Nginx 60s 超时断开)
+//   - broadcaster 不可用 (单 PG 故障) 时降级为 1s 轮询本地 GetActiveTaskInfo
+app.MapGet("/api/admin/etl/progress/stream", async (HttpContext ctx, EtlImportService etl, IEtlProgressBroadcaster broadcaster) =>
 {
     ctx.Response.ContentType = "text/event-stream";
     ctx.Response.Headers.CacheControl = "no-cache";
     ctx.Response.Headers.Connection = "keep-alive";
     ctx.Response.Headers["X-Accel-Buffering"] = "no";  // 禁用 nginx 缓冲
-    // 立即推一帧 (避免客户端等 1s 才看到第一帧)
+    // 立即推本地一帧 (避免客户端等 broadcaster 第一帧)
     var first = etl.GetActiveTaskInfo();
-    await ctx.Response.WriteAsync($"data: {System.Text.Json.JsonSerializer.Serialize(first)}\n\n", ctx.RequestAborted);
+    var firstJson = System.Text.Json.JsonSerializer.Serialize(first);
+    await ctx.Response.WriteAsync($"data: {firstJson}\n\n", ctx.RequestAborted);
     await ctx.Response.Body.FlushAsync(ctx.RequestAborted);
-    while (!ctx.RequestAborted.IsCancellationRequested)
+
+    // Day 9.6: 订阅跨实例广播, 收到 NOTIFY 时立即推
+    IDisposable? subscription = null;
+    if (broadcaster.IsListening)
     {
-        await Task.Delay(1000, ctx.RequestAborted);
-        var info = etl.GetActiveTaskInfo();
-        var json = System.Text.Json.JsonSerializer.Serialize(info);
-        await ctx.Response.WriteAsync($"data: {json}\n\n", ctx.RequestAborted);
-        await ctx.Response.Body.FlushAsync(ctx.RequestAborted);
+        subscription = broadcaster.Subscribe(async (payload) =>
+        {
+            try
+            {
+                if (ctx.RequestAborted.IsCancellationRequested) return;
+                await ctx.Response.WriteAsync($"data: {payload}\n\n", ctx.RequestAborted);
+                await ctx.Response.Body.FlushAsync(ctx.RequestAborted);
+            }
+            catch
+            {
+                // 客户端断开 (ct 触发), 静默
+            }
+        });
+    }
+
+    try
+    {
+        // 心跳循环: 15s 发一次注释行, 保持连接活跃 + 顺便做 broadcaster 兜底轮询
+        var lastLocalJson = firstJson;
+        while (!ctx.RequestAborted.IsCancellationRequested)
+        {
+            await Task.Delay(15000, ctx.RequestAborted);
+            // broadcaster 未连上时,15s 兜底轮询本地 (单实例降级)
+            if (!broadcaster.IsListening)
+            {
+                var localJson = System.Text.Json.JsonSerializer.Serialize(etl.GetActiveTaskInfo());
+                if (localJson != lastLocalJson)
+                {
+                    lastLocalJson = localJson;
+                    await ctx.Response.WriteAsync($"data: {localJson}\n\n", ctx.RequestAborted);
+                    await ctx.Response.Body.FlushAsync(ctx.RequestAborted);
+                }
+            }
+            // 注释行 (SSE 注释, 浏览器忽略) — 保持连接
+            await ctx.Response.WriteAsync(": keepalive\n\n", ctx.RequestAborted);
+            await ctx.Response.Body.FlushAsync(ctx.RequestAborted);
+        }
+    }
+    catch (OperationCanceledException) { /* 客户端断开 */ }
+    finally
+    {
+        subscription?.Dispose();
     }
     return Results.Empty;  // 占位, 不会执行到这里
 });

@@ -339,18 +339,24 @@ public class EtlImportService
 
     // Day 7.8: 改用 IOptions<EtlOptions> 注入 (替代手动 IConfiguration 读取)
     //   WHY: 配置校验集中在 EtlOptionsValidator,启动失败立即可见,不必运行期才发现
+    // Day 9.6: 可选 IEtlProgressBroadcaster (跨实例 SSE 广播),缺省时单实例本地轮询
+    //   - 用 default = null 而非强制注入: 减少对 spike-test 脚本的影响 (它们不通过 DI 构造)
     public EtlImportService(
         string connectionString,
         ILogger<EtlImportService> logger,
         IServiceProvider sp,
-        IOptions<EtlOptions> etlOptions)
+        IOptions<EtlOptions> etlOptions,
+        IEtlProgressBroadcaster? broadcaster = null)
     {
         _pgConn = connectionString;
         _logger = logger;
         _sp = sp;
         _options = etlOptions.Value;
+        _broadcaster = broadcaster;
         Progress = new EtlProgress(logger, _options.RecentErrorBuffer, sp);
     }
+
+    private readonly IEtlProgressBroadcaster? _broadcaster;
 
     // ========== Day 8.4 手动触发 + 进度查询 ==========
 
@@ -381,6 +387,38 @@ public class EtlImportService
             _activeTaskEntity = normalizedEntity;
         }
 
+        // Day 9.6: 启动跨实例广播 snapshot timer
+        //   WHY: 1s 拍一次 Progress.ToJson(),与上次对比,变化时通过 PG NOTIFY 广播
+        //   - 多实例部署时,所有实例的 SSE 客户端都能收到 progress 变化
+        //   - broadcaster 为 null 时 (单元测试 / 离线脚本) 自动跳过
+        //   - timer 在 finally 块停止, 避免持续占用 CPU
+        var lastPublishedJson = "";
+        Timer? snapshotTimer = null;
+        if (_broadcaster != null)
+        {
+            snapshotTimer = new Timer(_ =>
+            {
+                try
+                {
+                    var json = System.Text.Json.JsonSerializer.Serialize(Progress.ToJson());
+                    if (json != lastPublishedJson)
+                    {
+                        lastPublishedJson = json;
+                        _broadcaster.Publish(json);
+                    }
+                }
+                catch { /* 静默, 不影响 ETL */ }
+            }, null, 500, 500);
+            // 立即推一帧 (让其他实例 SSE 立即看到)
+            try
+            {
+                var json0 = System.Text.Json.JsonSerializer.Serialize(Progress.ToJson());
+                _broadcaster.Publish(json0);
+                lastPublishedJson = json0;
+            }
+            catch { }
+        }
+
         try
         {
             return normalizedEntity switch
@@ -401,6 +439,21 @@ public class EtlImportService
         }
         finally
         {
+            // Day 9.6: 停止 snapshot timer
+            snapshotTimer?.Dispose();
+            // 终态推一帧, 让其他实例 SSE 收到 completed/failed/cancelled
+            if (_broadcaster != null)
+            {
+                try
+                {
+                    var finalJson = System.Text.Json.JsonSerializer.Serialize(Progress.ToJson());
+                    if (finalJson != lastPublishedJson)
+                    {
+                        _broadcaster.Publish(finalJson);
+                    }
+                }
+                catch { }
+            }
             lock (_ctsLock)
             {
                 if (ReferenceEquals(_activeCts, cts))
