@@ -387,38 +387,10 @@ public class EtlImportService
             _activeTaskEntity = normalizedEntity;
         }
 
-        // Day 9.6: 启动跨实例广播 snapshot timer
-        //   WHY: 1s 拍一次 Progress.ToJson(),与上次对比,变化时通过 PG NOTIFY 广播
-        //   - 多实例部署时,所有实例的 SSE 客户端都能收到 progress 变化
-        //   - broadcaster 为 null 时 (单元测试 / 离线脚本) 自动跳过
-        //   - timer 在 finally 块停止, 避免持续占用 CPU
-        var lastPublishedJson = "";
-        Timer? snapshotTimer = null;
-        if (_broadcaster != null)
-        {
-            snapshotTimer = new Timer(_ =>
-            {
-                try
-                {
-                    var json = System.Text.Json.JsonSerializer.Serialize(Progress.ToJson());
-                    if (json != lastPublishedJson)
-                    {
-                        lastPublishedJson = json;
-                        _broadcaster.Publish(json);
-                    }
-                }
-                catch { /* 静默, 不影响 ETL */ }
-            }, null, 500, 500);
-            // 立即推一帧 (让其他实例 SSE 立即看到)
-            try
-            {
-                var json0 = System.Text.Json.JsonSerializer.Serialize(Progress.ToJson());
-                _broadcaster.Publish(json0);
-                lastPublishedJson = json0;
-            }
-            catch { }
-        }
-
+        // Day 9.7: 跨实例广播 snapshot timer 移到 Import*Async 内部启动
+        //   WHY: /api/etl/import 端点直接调 ImportProductsAsync,绕过 TriggerAsync,
+        //        之前 timer 仅在 TriggerAsync 启动 → HTTP 路径不会广播
+        //   修复: 提取 StartSnapshotTimerIfNeeded, Import*Async 入口调一次, TriggerAsync 不再启动
         try
         {
             return normalizedEntity switch
@@ -439,21 +411,8 @@ public class EtlImportService
         }
         finally
         {
-            // Day 9.6: 停止 snapshot timer
-            snapshotTimer?.Dispose();
-            // 终态推一帧, 让其他实例 SSE 收到 completed/failed/cancelled
-            if (_broadcaster != null)
-            {
-                try
-                {
-                    var finalJson = System.Text.Json.JsonSerializer.Serialize(Progress.ToJson());
-                    if (finalJson != lastPublishedJson)
-                    {
-                        _broadcaster.Publish(finalJson);
-                    }
-                }
-                catch { }
-            }
+            // Day 9.7: snapshot timer 在 Import*Async 内部管理 (启停+终态推送),
+            //   TriggerAsync 不再管,避免双 timer
             lock (_ctsLock)
             {
                 if (ReferenceEquals(_activeCts, cts))
@@ -507,6 +466,66 @@ public class EtlImportService
     /// Day 9.2: stage 直接读 Progress.Stage (精确反映 reading/staging/inserting/committing/meili-sync)
     ///   之前用 p.IndexPending > 0 ? "meili-sync" : "commit" 简化推断,无法识别 staging/inserting
     /// </summary>
+
+    /// <summary>
+    /// Day 9.7: 跨实例广播上下文 (timer + 终态对比基准)
+    ///   WHY 改用闭包内部 lastJson: 避免外层 ctx 字段被 timer 异步修改
+    /// </summary>
+    private sealed class BroadcastCtx : IDisposable
+    {
+        public Timer? Timer;
+        public string LastJson;
+        public bool IsActive => Timer != null;
+        public BroadcastCtx(Timer? timer, string lastJson) { Timer = timer; LastJson = lastJson; }
+        public void Dispose() { try { Timer?.Dispose(); } catch { } }
+    }
+
+    /// <summary>
+    /// Day 9.7: 启动 snapshot timer (Import*Async 入口处调,覆盖所有调用路径)
+    ///   - 立即推一帧 (让其他实例 SSE 立即看到)
+    ///   - 500ms 拍一次 Progress.ToJson() 推给 broadcaster
+    ///   - broadcaster 为 null (单测/离线脚本) 时直接返回 inactive ctx
+    /// </summary>
+    private BroadcastCtx StartSnapshotTimerIfNeeded()
+    {
+        if (_broadcaster == null) return new BroadcastCtx(null, "");
+        // 拍首帧
+        var firstJson = System.Text.Json.JsonSerializer.Serialize(Progress.ToJson());
+        try { _broadcaster.Publish(firstJson); } catch { }
+        // 闭包内维护 lastJson,避免 ctx 字段被 timer 异步读写冲突
+        var lastJsonRef = new[] { firstJson };
+        var timer = new Timer(_ =>
+        {
+            try
+            {
+                var json = System.Text.Json.JsonSerializer.Serialize(Progress.ToJson());
+                if (json != lastJsonRef[0])
+                {
+                    lastJsonRef[0] = json;
+                    _broadcaster.Publish(json);
+                }
+            }
+            catch { /* 静默, 不影响 ETL */ }
+        }, null, 500, 500);
+        return new BroadcastCtx(timer, firstJson);
+    }
+
+    /// <summary>
+    /// Day 9.7: 停止 snapshot timer + 推终态帧 (Import*Async finally 块调)
+    /// </summary>
+    private void StopSnapshotTimer(BroadcastCtx? ctx)
+    {
+        if (ctx == null || ctx.Timer == null) return;
+        ctx.Dispose();
+        // 推终态 (completed/failed/cancelled)
+        try
+        {
+            var finalJson = System.Text.Json.JsonSerializer.Serialize(Progress.ToJson());
+            if (finalJson != ctx.LastJson) _broadcaster?.Publish(finalJson);
+        }
+        catch { }
+    }
+
     public object GetActiveTaskInfo()
     {
         var p = Progress;
@@ -577,6 +596,9 @@ public class EtlImportService
         // Day 9.2: 估算文件总行数 (前端进度条分母, 启动 < 1ms)
         Progress.SetRowsTotal(EtlProgress.EstimateFileLines(jsonlPath));
         var importStartedAt = Progress.StartedAt ?? DateTime.UtcNow;
+
+        // Day 9.7: 启动跨实例广播 snapshot timer (在 Import*Async 内部,所有入口都覆盖)
+        var broadcastCtx = StartSnapshotTimerIfNeeded();
 
         try
         {
@@ -802,6 +824,10 @@ public class EtlImportService
             Progress.Fail(ex.Message, "products", mode);
             _logger.LogError(ex, "ETL 导入失败");
         }
+        finally
+        {
+            StopSnapshotTimer(broadcastCtx);
+        }
 
         return Progress;
     }
@@ -931,6 +957,8 @@ public class EtlImportService
         Progress.Start(jsonlPath);
         // Day 9.2: 文件总行数估算 (前端进度条)
         Progress.SetRowsTotal(EtlProgress.EstimateFileLines(jsonlPath));
+        // Day 9.7: 启动跨实例广播 snapshot timer
+        var broadcastCtx = StartSnapshotTimerIfNeeded();
         try
         {
             await using var conn = new NpgsqlConnection(_pgConn);
@@ -1079,6 +1107,10 @@ public class EtlImportService
             Progress.Fail(ex.Message, "xrefs", mode);
             _logger.LogError(ex, "xrefs 导入失败");
         }
+        finally
+        {
+            StopSnapshotTimer(broadcastCtx);
+        }
         return Progress;
     }
 
@@ -1092,6 +1124,8 @@ public class EtlImportService
         Progress.Start(jsonlPath);
         // Day 9.2: 文件总行数估算 (前端进度条)
         Progress.SetRowsTotal(EtlProgress.EstimateFileLines(jsonlPath));
+        // Day 9.7: 启动跨实例广播 snapshot timer
+        var broadcastCtx = StartSnapshotTimerIfNeeded();
         try
         {
             await using var conn = new NpgsqlConnection(_pgConn);
@@ -1268,6 +1302,10 @@ public class EtlImportService
         {
             Progress.Fail(ex.Message, "apps", mode);
             _logger.LogError(ex, "apps 导入失败");
+        }
+        finally
+        {
+            StopSnapshotTimer(broadcastCtx);
         }
         return Progress;
     }
