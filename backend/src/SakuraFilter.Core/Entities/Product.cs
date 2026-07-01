@@ -259,4 +259,7 @@ public class EtlProgressLog
     [Column("finished_at")] public DateTime FinishedAt { get; set; }
     [Column("duration_sec")] public double DurationSec { get; set; }
     [Column("alert_sent")] public bool AlertSent { get; set; }  // Day 7.9: 失败告警是否已推送
+    // Day 9.4: 取消审计 (DELETE /api/admin/etl/task 时写入)
+    [Column("cancel_reason")] public string? CancelReason { get; set; }
+    [Column("cancelled_at")] public DateTime? CancelledAt { get; set; }
 }

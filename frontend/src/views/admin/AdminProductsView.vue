@@ -38,6 +38,9 @@ const advFilter = reactive<AdminSearchRequest>({})
 // 历史抽屉
 const historyOpen = ref(false)
 const historyItems = ref<ProductHistoryItem[]>([])
+// Day 9.4: cursor 累积 + 加载更多
+const historyNextCursor = ref<string | null>(null)
+const historyHasMore = ref(false)
 // Day 9.3: 历史分页响应 (含 total, 反映筛选后真实条数)
 const historyTotal = ref(0)
 // Day 9.3: 筛选条件变化时存 localStorage (放在 historyFilter 定义之后)
@@ -148,7 +151,10 @@ const currentHistoryProductId = ref<number | null>(null)
 async function viewHistory(row: ProductListItem) {
   // Day 9.2: 用 historyFilter 调 API (支持 changeType/since/until/limit)
   //   打开抽屉前先 load, 避免空闪烁
+  //   Day 9.4: 切换产品时重置 cursor, 不然下一页的 cursor 是上个产品的
   currentHistoryProductId.value = row.id
+  historyNextCursor.value = null
+  historyHasMore.value = false
   historyOpen.value = true
   await loadHistory(row.id)
 }
@@ -160,21 +166,35 @@ async function reloadCurrentHistory() {
   }
 }
 
-async function loadHistory(productId: number) {
+async function loadHistory(productId: number, append = false) {
   historyLoading.value = true
   try {
     const params: any = { limit: historyFilter.limit }
     if (historyFilter.changeType) params.changeType = historyFilter.changeType
     if (historyFilter.since) params.since = new Date(historyFilter.since).toISOString()
     if (historyFilter.until) params.until = new Date(historyFilter.until).toISOString()
+    if (append && historyNextCursor.value) params.cursor = historyNextCursor.value
     const result = await adminProductApi.history(productId, params)
-    historyItems.value = result.items
+    if (append) {
+      historyItems.value = historyItems.value.concat(result.items)
+    } else {
+      historyItems.value = result.items
+    }
     historyTotal.value = result.total
+    // Day 9.4: 翻页 cursor
+    historyNextCursor.value = result.nextCursor ?? null
+    historyHasMore.value = !!result.nextCursor
   } catch (e: any) {
     // 错误已被拦截器
   } finally {
     historyLoading.value = false
   }
+}
+
+async function loadMoreHistory() {
+  if (!historyHasMore.value || historyLoading.value) return
+  if (currentHistoryProductId.value == null) return
+  await loadHistory(currentHistoryProductId.value, true)
 }
 
 async function batchCompare() {
@@ -464,6 +484,11 @@ onMounted(load)
             <div v-else class="text-xs text-muted">无字段级变更</div>
           </el-timeline-item>
         </el-timeline>
+        <!-- Day 9.4: cursor 加载更多 (keyset 翻页) -->
+        <div v-if="historyHasMore" class="text-center mt-3">
+          <el-button :loading="historyLoading" @click="loadMoreHistory">加载更多</el-button>
+        </div>
+        <div v-else-if="historyItems.length > 0" class="text-center text-xs text-muted mt-3">已到底</div>
       </div>
     </el-drawer>
   </div>

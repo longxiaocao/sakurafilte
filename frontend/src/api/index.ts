@@ -51,15 +51,17 @@ export const adminProductApi = {
     return http.post(`/admin/products/${id}/restore`, null, { headers: { 'X-User': by } }).then((r) => r.data)
   },
   // Day 9.3: 返回 ProductHistoryPage, total 反映筛选后真实总数
+  //   Day 9.4: 加 cursor 字段, keyset 翻下一页
   history(
     id: number,
-    options?: { limit?: number; changeType?: string; since?: string; until?: string }
+    options?: { limit?: number; changeType?: string; since?: string; until?: string; cursor?: string }
   ): Promise<import('./types').ProductHistoryPage> {
     const params: Record<string, any> = {}
     if (options?.limit) params.limit = options.limit
     if (options?.changeType) params.changeType = options.changeType
     if (options?.since) params.since = options.since
     if (options?.until) params.until = options.until
+    if (options?.cursor) params.cursor = options.cursor
     return http.get(`/admin/products/${id}/history`, { params }).then((r) => r.data)
   },
   compare(ids: number[]): Promise<{ count: number; items: ProductDetail[] }> {
@@ -91,9 +93,12 @@ export const etlApi = {
   trigger(req: EtlTriggerRequest): Promise<EtlProgress> {
     return http.post('/admin/etl/trigger', req).then((r) => r.data)
   },
-  cancel(): Promise<{ cancelled: boolean; reason?: string }> {
-    return http.delete('/admin/etl/task').then((r) => r.data)
+  // Day 9.4: 取消 ETL, 接受 reason 写到 etl_progress_log.cancel_reason
+  cancel(reason?: string): Promise<{ cancelled: boolean; reason?: string }> {
+    return http.delete('/admin/etl/task', { data: { reason } }).then((r) => r.data)
   },
+
+
   progress(): Promise<EtlActiveTaskInfo> {
     return http.get('/admin/etl/progress').then((r) => r.data)
   },

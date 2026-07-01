@@ -211,6 +211,7 @@ export interface ProductHistoryItem {
 }
 
 // Day 9.3: 历史分页响应 (含 total, 反映筛选后真实条数)
+//   Day 9.4: 加 nextCursor, keyset 分页用 (前端存这个字符串翻下一页)
 export interface ProductHistoryPage {
   total: number
   limit: number
@@ -218,6 +219,7 @@ export interface ProductHistoryPage {
   since?: string
   until?: string
   items: ProductHistoryItem[]
+  nextCursor?: string | null
 }
 
 // ===== 高级搜索请求 (Day 8.2 DTO) =====

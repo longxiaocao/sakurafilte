@@ -162,6 +162,11 @@ async function removeImage(slot: number) {
   } catch (e: any) {}
 }
 
+function isAppRowDirty(m: any): boolean {
+  // Day 9.4: 车型行只要填了一个字段就算 dirty, 必填 brand/model
+  return !!(m.machineBrand?.trim() || m.machineModel?.trim() || m.modelName?.trim() || m.engineBrand?.trim() || m.engineType?.trim())
+}
+
 onMounted(load)
 </script>
 
@@ -265,8 +270,8 @@ onMounted(load)
         <!-- 分区 7: 车型 -->
         <el-collapse-item :title="`⑥ 适用车型 (${form.machineApplications.length})`" name="7">
           <div v-for="(m, i) in form.machineApplications" :key="i" class="grid grid-cols-5 gap-2 mb-2">
-            <el-input v-model="m.machineBrand" placeholder="品牌" />
-            <el-input v-model="m.machineModel" placeholder="型号" />
+<el-input v-model="m.machineBrand" placeholder="品牌 (必填)" :class="{ 'app-required': isAppRowDirty(m) && !m.machineBrand?.trim() }" />
+<el-input v-model="m.machineModel" placeholder="型号 (必填)" :class="{ 'app-required': isAppRowDirty(m) && !m.machineModel?.trim() }" />
             <el-input v-model="m.modelName" placeholder="名称" />
             <el-input v-model="m.engineBrand" placeholder="发动机品牌" />
             <div class="flex gap-1">
@@ -296,3 +301,7 @@ onMounted(load)
     </el-form>
   </div>
 </template>
+<style scoped>
+/* Day 9.4: 车型必填字段未填时红框提示 */
+.app-required :deep(.el-input__wrapper) { box-shadow: 0 0 0 1px #ef4444 inset !important; }
+</style>

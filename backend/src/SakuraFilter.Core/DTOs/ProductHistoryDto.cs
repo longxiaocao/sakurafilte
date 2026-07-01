@@ -16,14 +16,19 @@ public record ProductHistoryItemDto(
     DateTime ChangedAt,
     string? ChangedFields
 );
-/// <summary>Day 9.3: 历史分页响应</summary>
+
+/// <summary>Day 9.3: 历史分页响应
+///   Day 9.4: 加 NextCursor, keyset 分页用 (ChangedAt + Id 编码 base64url)
+///   nextCursor == null 表示无下一页 (已翻到末尾)
+/// </summary>
 public record ProductHistoryPageDto(
     int Total,
     int Limit,
     string? ChangeType,
     DateTime? Since,
     DateTime? Until,
-    List<ProductHistoryItemDto> Items
+    List<ProductHistoryItemDto> Items,
+    string? NextCursor = null
 );
 
 /// <summary>

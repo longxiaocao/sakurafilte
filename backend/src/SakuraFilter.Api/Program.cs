@@ -796,6 +796,7 @@ app.MapGet("/api/admin/products/{id:long}/history", async (
     [Microsoft.AspNetCore.Mvc.FromQuery] string? since,
     [Microsoft.AspNetCore.Mvc.FromQuery] string? until,
     [Microsoft.AspNetCore.Mvc.FromQuery] int? limit,
+    [Microsoft.AspNetCore.Mvc.FromQuery] string? cursor,
     AdminProductService svc,
     HttpContext ctx,
     CancellationToken ct) =>
@@ -816,8 +817,10 @@ app.MapGet("/api/admin/products/{id:long}/history", async (
             untilUtc = pu;
         }
         var cap = Math.Clamp(limit ?? 50, 1, 200);
-        var page = await svc.GetHistoryAsync(id, cap, changeType, sinceUtc, untilUtc, ct);
+        var page = await svc.GetHistoryAsync(id, cap, changeType, sinceUtc, untilUtc, cursor, ct);
         return Results.Ok(page);
+    }
+
     catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
     catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
 })
@@ -836,7 +839,7 @@ app.MapPost("/api/admin/etl/trigger", async (
 
     if (req.DryRun)
     {
-        // Day 9.1: dry-run 校验 + 前 5 行 JSON 样本, 避免大文件等待
+        // Day 9.1: dry-run 校验 + 前 5 行 JSON 样本 (Day 9.4 改为 50 行), 避免大文件等待
         // Day 9.2: 加 JSON Schema 校验 — 解析 samples 字段, 列出缺失/类型错
         if (!File.Exists(req.JsonlPath))
             return Results.Problem(detail: $"文件不存在: {req.JsonlPath}", statusCode: 404, title: "File Not Found");
@@ -877,8 +880,9 @@ app.MapPost("/api/admin/etl/trigger", async (
         var sampleSchemas = new List<LineSchemaReport>();
         var missingFieldTotal = new Dictionary<string, int>();
         var typeMismatchTotal = new Dictionary<string, int>();
-        const int SampleSizeForSchema = 5;     // 前端展示
-        const int SampleSizeForMissing = 1000;  // 字段缺失统计抽样
+        // Day 9.4: 50 行样本足够覆盖 99% 字段异构场景 (OEM/MR/D1-8/H1-4 等 17+ 字段)
+        const int SampleSizeForSchema = 50;    // 前端展示 (Day 9.4: 5 → 50)
+        const int SampleSizeForMissing = 1000; // 字段缺失统计抽样
         var requiredFields = (req.EntityType?.ToLowerInvariant() ?? "products") switch
         {
             "products" or "product" => new[] { "oem_no_normalized", "oem_no_display" },
@@ -939,17 +943,49 @@ app.MapPost("/api/admin/etl/trigger", async (
 .RequireRateLimiting("etl");
 
 // Day 9.1: 后台取消 ETL 任务 (后台 ETL 页面 "取消" 按钮)
-app.MapDelete("/api/admin/etl/task", (EtlImportService etl) =>
+//   Day 9.4: 接受 body { reason }, 透传给 EtlImportService.CancelActiveTask(reason)
+//     reason 写入 etl_progress_log.cancel_reason, 供运维审计
+//     缺省时使用 "用户取消" (向后兼容)
+app.MapDelete("/api/admin/etl/task", (EtlImportService etl, [Microsoft.AspNetCore.Mvc.FromBody] CancelRequest? body) =>
 {
-    var cancelled = etl.CancelActiveTask();
+    var reason = string.IsNullOrWhiteSpace(body?.Reason) ? "用户取消" : body!.Reason!.Trim();
+    var cancelled = etl.CancelActiveTask(reason);
     if (!cancelled)
         return Results.Ok(new { cancelled = false, reason = "无活跃任务" });
-    return Results.Ok(new { cancelled = true });
+    return Results.Ok(new { cancelled = true, reason });
 })
 .WithName("AdminCancelEtl")
 .RequireRateLimiting("etl");
 
+
+
+
+
 // Day 8.4: 后台 ETL 进度查询 (后台 ETL 页面 3s 轮询)
+// Day 9.4: 后台 ETL 进度 SSE 流 (替换 3s 轮询)
+//   格式: text/event-stream, 每 1s 推一次 activeTask 状态
+//   客户端 EventSource 关闭时 (页面卸载), ct 触发, 自动停止推送
+//   WHY 不用 SignalR: 运维监控场景用 SSE 更轻, EventSource API 是 W3C 标准
+app.MapGet("/api/admin/etl/progress/stream", async (HttpContext ctx, EtlImportService etl) =>
+{
+    ctx.Response.ContentType = "text/event-stream";
+    ctx.Response.Headers.CacheControl = "no-cache";
+    ctx.Response.Headers.Connection = "keep-alive";
+    ctx.Response.Headers["X-Accel-Buffering"] = "no";  // 禁用 nginx 缓冲
+    // 立即推一帧 (避免客户端等 1s 才看到第一帧)
+    var first = etl.GetActiveTaskInfo();
+    await ctx.Response.WriteAsync($"data: {System.Text.Json.JsonSerializer.Serialize(first)}\n\n", ctx.RequestAborted);
+    await ctx.Response.Body.FlushAsync(ctx.RequestAborted);
+    while (!ctx.RequestAborted.IsCancellationRequested)
+    {
+        await Task.Delay(1000, ctx.RequestAborted);
+        var info = etl.GetActiveTaskInfo();
+        var json = System.Text.Json.JsonSerializer.Serialize(info);
+        await ctx.Response.WriteAsync($"data: {json}\n\n", ctx.RequestAborted);
+        await ctx.Response.Body.FlushAsync(ctx.RequestAborted);
+    }
+    return Results.Empty;  // 占位, 不会执行到这里
+});
 app.MapGet("/api/admin/etl/progress", (EtlImportService etl) =>
 {
     return Results.Ok(etl.GetActiveTaskInfo());
@@ -971,6 +1007,12 @@ public record LineSchemaReport(
 public record ImportRequest(string JsonlPath, string? Mode);
 
 // Day 8.2: 批量对比请求体
+// Day 9.4: ETL 取消请求体, 携带取消原因写到 etl_progress_log
+public record CancelRequest(string? Reason);
+
+
+
+
 public record CompareRequest(List<long> Ids);
 
 // Day 7.5: 死信查询参数 (运维可见性)

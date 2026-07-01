@@ -67,6 +67,8 @@ async function doTrigger() {
 const task = ref<EtlActiveTaskInfo>({ inProgress: false })
 const lastFinished = ref<EtlProgress | null>(null)
 const lastDryRun = ref<EtlDryRunResult | null>(null)
+// Day 9.4: dry-run 样本展开/收起 (50 行太长, 默认只显示 10 行)
+const showAllSamples = ref(false)
 
 // Day 9.1: 持久化最近一次完成结果到 localStorage (刷新页面不丢)
 const LS_KEY_FINISHED = 'sakura_etl_last_finished'
@@ -100,17 +102,50 @@ async function pollOnce() {
   }
 }
 
+// Day 9.4: SSE 替换 3s 轮询
+//   关闭 EventSource = 停止订阅, 不需要手动 clearInterval
+let eventSource: EventSource | null = null
+
+function connectSSE() {
+  if (eventSource) eventSource.close()
+  const es = new EventSource("/api/admin/etl/progress/stream")
+  es.onmessage = (e) => {
+    try {
+      const r = JSON.parse(e.data)
+      task.value = r
+      // 任务刚结束 (inProgress 由 true 变 false) → 拉一次 legacy status 拿到最终结果
+      if (!r.inProgress && r.activeTask && r.activeTask.status === 'completed') {
+        etlApi.legacyStatus().then((legacy) => {
+          if (legacy && (legacy as any).status !== 'running') {
+            lastFinished.value = legacy
+            try { localStorage.setItem(LS_KEY_FINISHED, JSON.stringify(legacy)) } catch {}
+          }
+        }).catch(() => {})
+      }
+    } catch {}
+  }
+  es.onerror = () => {
+    // 浏览器会自动重连, 这里只打印
+    console.warn('SSE 连接断开, 浏览器将自动重连')
+  }
+  eventSource = es
+}
+
 onMounted(() => {
-  pollOnce()
-  pollTimer = window.setInterval(pollOnce, 3000)
+  connectSSE()
 })
 
 onBeforeUnmount(() => {
+  if (eventSource) {
+    eventSource.close()
+    eventSource = null
+  }
   if (pollTimer) {
     clearInterval(pollTimer)
     pollTimer = null
   }
 })
+
 
 function clearLastFinished() {
   lastFinished.value = null
@@ -123,17 +158,27 @@ function clearLastFinished() {
 }
 
 // Day 9.1: 取消当前活跃 ETL 任务
+//   Day 9.4: 用 ElMessageBox.prompt 让用户输入取消原因, 写到 etl_progress_log.cancel_reason
 async function doCancel() {
+  let reason = "用户取消"
   try {
-    await ElMessageBox.confirm('确定取消当前 ETL 任务吗? 已写入数据会保留。', '确认', { type: 'warning' })
+    const r = await ElMessageBox.prompt('请输入取消原因 (会写入历史审计)', '取消 ETL 任务', {
+      confirmButtonText: '确认取消',
+      cancelButtonText: '不取消',
+      inputPlaceholder: '例如: 数据源有问题, 需要重新生成 JSONL',
+      inputValue: "",
+      inputValidator: (v: string) => v.trim().length > 0 || '请填写取消原因',
+    })
+
+    reason = r.value.trim()
   } catch {
     return
   }
   cancelling.value = true
   try {
-    const r = await etlApi.cancel()
+    const r = await etlApi.cancel(reason)
     if (r.cancelled) {
-      ElMessage.warning('已发送取消信号, 任务即将终止')
+      ElMessage.warning('已发送取消信号 (原因: ' + reason + '), 任务即将终止')
     } else {
       ElMessage.info(r.reason || '无活跃任务可取消')
     }
@@ -328,8 +373,8 @@ function prettyJson(raw: string): string {
       </el-descriptions>
 
       <div v-if="lastDryRun.samples && lastDryRun.samples.length > 0" class="mt-3">
-        <div class="text-sm font-semibold mb-1">样本预览 (前 5 行 JSON)</div>
-        <el-table :data="lastDryRun.samples.map((s, i) => ({ idx: i + 1, raw: s }))" size="small" border max-height="320">
+        <div class="text-sm font-semibold mb-1">样本预览 (前 {{ lastDryRun.samples?.length || 0 }} 行 JSON)</div>
+        <el-table :data="(showAllSamples ? lastDryRun.samples : lastDryRun.samples.slice(0, 10)).map((s, i) => ({ idx: i + 1, raw: s }))" size="small" border max-height="320">
           <el-table-column prop="idx" label="#" width="50" />
           <el-table-column label="原始 JSON">
             <template #default="{ row }">
@@ -337,6 +382,11 @@ function prettyJson(raw: string): string {
             </template>
           </el-table-column>
         </el-table>
+        <div class="mt-2 flex justify-end">
+          <el-button text size="small" @click="showAllSamples = !showAllSamples">
+            {{ showAllSamples ? "收起 (只显示前 10 行)" : "展开全部 " + (lastDryRun.samples?.length || 0) + " 行" }}
+          </el-button>
+        </div>
       </div>
     </el-card>
 

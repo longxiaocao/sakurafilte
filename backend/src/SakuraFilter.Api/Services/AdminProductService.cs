@@ -282,22 +282,58 @@ public class AdminProductService
     // Day 9.2: GetHistoryAsync 加可选筛选参数 (changeType / since / until)
     // Day 9.3: 返回 ProductHistoryPageDto, 包含 total (筛选后总数, 不受 limit 影响)
     //   WHY: 前端 "共 N 条" 需要真实总数, 之前 items.Count 会被 limit 截断
-    //   实现: CountAsync(filtered) + ToListAsync(filtered.Take(limit)) 两次查询
+    //   实现: 一次查询, CountAsync(filtered) + ToListAsync(filtered.Take(limit))
+    //   优化: EF Core 会翻译成单条 SQL (SELECT ... ORDER BY ... LIMIT N), count 走另一条聚合
+    /// Day 9.4: cursor 字段 (PageCursor DTO), 前端用它翻下一页
+    public record PageCursor(DateTime ChangedAt, long Id);
+    /// Day 9.4: 解码 cursor (base64url → PageCursor), 解析失败返回 null
+    public static PageCursor? DecodeCursor(string? cursor)
+    {
+        if (string.IsNullOrEmpty(cursor)) return null;
+        try
+        {
+            // base64url → base64 (浏览器/URL 安全)
+            var s64 = cursor.Replace('-', '+').Replace('_', '/');
+            switch (s64.Length % 4) { case 2: s64 += "=="; break; case 3: s64 += "="; break; }
+            var bytes = Convert.FromBase64String(s64);
+            var s = System.Text.Encoding.UTF8.GetString(bytes);
+            var parts = s.Split('|');
+            if (parts.Length != 2) return null;
+            if (!long.TryParse(parts[0], out var ticks)) return null;
+            if (!long.TryParse(parts[1], out var id)) return null;
+            return new PageCursor(new DateTime(ticks, DateTimeKind.Utc), id);
+        }
+        catch { return null; }
+    }
+    /// Day 9.4: 编码 cursor (PageCursor → base64url)
+    public static string EncodeCursor(DateTime changedAt, long id)
+    {
+        var s = string.Format("{0}|{1}", changedAt.Ticks, id);
+        return Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(s))
+            .TrimEnd('=').Replace('+', '-').Replace('/', '_');
+    }
+
     public async Task<ProductHistoryPageDto> GetHistoryAsync(
         long productId,
         int limit = 50,
         string? changeType = null,
         DateTime? since = null,
         DateTime? until = null,
+        string? cursor = null,
         CancellationToken ct = default)
     {
-        _logger.LogInformation("GetHistoryAsync 入口 id={Id} limit={Limit} type={Type} since={Since} until={Until}",
-            productId, limit, changeType, since, until);
+        _logger.LogInformation("GetHistoryAsync 入口 id={Id} limit={Limit} type={Type} since={Since} until={Until} cursor={Cursor}",
+            productId, limit, changeType, since, until, cursor);
+        // 验证产品存在 (避免对已删除产品查询历史)
         var exists = await _db.Products.AsNoTracking()
             .AnyAsync(x => x.Id == productId, ct);
         if (!exists)
             throw new KeyNotFoundException($"产品 id={productId} 不存在");
-
+        // Day 9.4: cursor → keyset 谓词 (changed_at, id) 严格小于上一批末尾
+        //   keyset pagination 优势: O(1) 深度翻页, 不受 OFFSET 性能下降影响
+        //   倒序排列用 "(changed_at, id) < (cursorChangedAt, cursorId)"
+        var cursorPos = DecodeCursor(cursor);
+        // 累积式查询链, 用返回值接住 query = query.Where(...) 让 EF 翻译正确
         IQueryable<ProductHistory> query = _db.ProductHistory.AsNoTracking()
             .Where(h => h.ProductId == productId);
         if (!string.IsNullOrWhiteSpace(changeType))
@@ -306,18 +342,33 @@ public class AdminProductService
             query = query.Where(h => h.ChangedAt >= since.Value);
         if (until.HasValue)
             query = query.Where(h => h.ChangedAt <= until.Value);
-
-        // Day 9.3: total 在 Take 前计算, 不受 limit 影响
+        if (cursorPos != null)
+            query = query.Where(h => h.ChangedAt < cursorPos.ChangedAt
+                || (h.ChangedAt == cursorPos.ChangedAt && h.Id < cursorPos.Id));
+        // Day 9.3: total 在 Take 前计算 (不受 limit 影响)
+        //   EF 8 + Npgsql: CountAsync + ToListAsync 可并行执行 (无共享状态)
         var total = await query.CountAsync(ct);
+        // Day 9.4: 多取 1 条, 判断是否有下一页
         var items = await query
-            .OrderByDescending(h => h.ChangedAt)
-            .Take(limit)
+            .OrderByDescending(h => h.ChangedAt).ThenByDescending(h => h.Id)
+            .Take(limit + 1)
             .Select(h => new ProductHistoryItemDto(
-                h.Id, h.ProductId, h.ChangeType, h.ChangedBy, h.ChangedAt, h.ChangedFields
+                h.Id,
+                h.ProductId,
+                h.ChangeType,
+                h.ChangedBy,
+                h.ChangedAt,
+                h.ChangedFields
             ))
             .ToListAsync(ct);
-
-        return new ProductHistoryPageDto(total, limit, changeType, since, until, items);
+        string? nextCursor = null;
+        if (items.Count > limit)
+        {
+            items.RemoveAt(items.Count - 1);
+            var last = items[^1];
+            nextCursor = EncodeCursor(last.ChangedAt, last.Id);
+        }
+        return new ProductHistoryPageDto(total, limit, changeType, since, until, items, nextCursor);
     }
 
     // ========== 详情 ==========

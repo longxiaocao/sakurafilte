@@ -58,6 +58,8 @@ public class EtlProgress
     private DateTime? _finishedAt;
     private string? _currentFile;
     private string? _lastError;
+    private string? _cancelReason;   // Day 9.4: 取消原因 (写到 etl_progress_log.cancel_reason)
+    private DateTime? _cancelledAt;   // Day 9.4: 取消时间 (写到 etl_progress_log.cancelled_at)
 
     public long Read => Interlocked.Read(ref _read);
     public long Inserted => Interlocked.Read(ref _inserted);
@@ -79,6 +81,9 @@ public class EtlProgress
     public DateTime? FinishedAt => _finishedAt;
     public string? CurrentFile => _currentFile;
     public string? LastError => _lastError;
+    // Day 9.4: 取消审计 getter (EtlImportService 写日志用)
+    public string? CancelReason => _cancelReason;
+    public DateTime? CancelledAt => _cancelledAt;
     // Day 7.7 修复: 已完结 (completed/failed) 时用 finishedAt-startedAt,避免查询时继续计时
     // 之前 5s 后查 status 显示 5.05s 实际 ETL 0.15s,运维误判
     public TimeSpan? Elapsed => _startedAt.HasValue
@@ -137,24 +142,27 @@ public class EtlProgress
         _finishedAt = DateTime.UtcNow;
         PushError(error);
     }
-
     // Day 9.1: 标记任务被取消 (CancelActiveTask 触发 OperationCanceledException 后调用)
     //   WHY: Status/LastError 是只读 getter, 必须用此方法安全写
+    // Day 9.4: 取消审计字段 (cancel_reason / cancelled_at) 写到 etl_progress_log
     public void Cancel(string reason = "用户取消")
     {
         _status = "cancelled";
         _lastError = reason;
-        _finishedAt = DateTime.UtcNow;
+        _cancelReason = reason;
+        _cancelledAt = DateTime.UtcNow;
+        _finishedAt = _cancelledAt;
         PushError(reason);
     }
 
-    /// <summary>Day 7.7: 异步持久化日志
-    /// WHY: EtlImportService 是 Singleton,DbContext 是 Scoped → 必须在 scope 内解析
-    ///      失败也不重试:日志写失败不影响业务结果,只丢一行历史
+    
+    /// <summary>Day 9.4: 公开的日志落库入口, 给 EtlImportService.TriggerAsync catch 块调用
+    ///   cancel 时 PersistLogAsync 私有不可见, 这里包一层
     /// </summary>
-    private async Task PersistLogAsync(string entityType, string mode)
+    public Task PersistLogAsync(string entityType, string mode) => PersistLogAsyncInternal(entityType, mode);
+    private async Task PersistLogAsyncInternal(string entityType, string mode)
     {
-        if (_sp is null) return;  // 无 sp 上下文(单测场景),直接跳过
+        if (_sp is null) return;
         try
         {
             using var scope = _sp.CreateScope();
@@ -170,6 +178,7 @@ public class EtlProgress
             _logger?.LogWarning(ex, "ETL 历史落库失败 (不影响业务结果)");
         }
     }
+
     public void IncrRead() => Interlocked.Increment(ref _read);
     public void IncrInserted() => Interlocked.Increment(ref _inserted);
     public void IncrUpdated() => Interlocked.Increment(ref _updated);
@@ -272,7 +281,10 @@ public class EtlProgress
             LastError = LastError,
             StartedAt = StartedAt ?? DateTime.UtcNow,
             FinishedAt = FinishedAt ?? DateTime.UtcNow,
-            DurationSec = Elapsed?.TotalSeconds ?? 0
+            DurationSec = Elapsed?.TotalSeconds ?? 0,
+            // Day 9.4: 取消审计字段 (NULL 表示非取消)
+            CancelReason = _cancelReason,
+            CancelledAt = _cancelledAt
         };
     }
 }
@@ -299,6 +311,7 @@ public class EtlImportService
     private readonly object _ctsLock = new();
     private CancellationTokenSource? _activeCts;
     private string? _activeTaskEntity;  // products/xrefs/apps
+    private string? _activeCancelReason;  // Day 9.4: 取消原因 (CancelActiveTask 写入, catch 块读出后落库)
 
     // Day 7.8: 改用 IOptions<EtlOptions> 注入 (替代手动 IConfiguration 读取)
     //   WHY: 配置校验集中在 EtlOptionsValidator,启动失败立即可见,不必运行期才发现
@@ -356,8 +369,10 @@ public class EtlImportService
         }
         catch (OperationCanceledException) when (cts.IsCancellationRequested)
         {
-            _logger.LogWarning("ETL 任务被取消 entity={Entity}", normalizedEntity);
-            Progress.Cancel("用户取消");
+            // Day 9.4: ImportXxxAsync 内部 catch 已处理日志落库 + Progress.Cancel,
+            //   这里仅上抛给调用方 (HTTP layer 看到 4xx 或 200 都行,触发链路已结束)
+            //   WHY 不要再 PersistLogAsync: 写两条 cancelled 日志会让历史分析重复计数
+            _logger.LogInformation("ETL 任务已取消, 调用方准备返回 entity={Entity}", normalizedEntity);
             throw;
         }
         finally
@@ -379,19 +394,20 @@ public class EtlImportService
     /// - 若没有活跃任务, 返回 false
     /// - 取消信号传播到 Import*Async 内部 COPY/INSERT, 任务会抛 OperationCanceledException
     /// - 已插入/更新的数据会保留 (不事务回滚, 因为 COPY 阶段无显式事务)
+    /// Day 9.4: reason 写入 _activeCancelReason, catch 块读出后写到 etl_progress_log.cancel_reason
     /// </summary>
-    public bool CancelActiveTask()
+    public bool CancelActiveTask(string? reason = null)
     {
         lock (_ctsLock)
         {
             if (_activeCts == null || _activeCts.IsCancellationRequested)
                 return false;
+            _activeCancelReason = string.IsNullOrWhiteSpace(reason) ? "用户取消" : reason.Trim();
             _activeCts.Cancel();
-            _logger.LogInformation("ETL 任务取消信号已发送 entity={Entity}", _activeTaskEntity);
+            _logger.LogInformation("ETL 任务取消信号已发送 entity={Entity} reason={Reason}", _activeTaskEntity, _activeCancelReason);
             return true;
         }
     }
-
     private static string NormalizeMode(string? mode)
     {
         if (string.IsNullOrWhiteSpace(mode)) return "upsert";
@@ -687,6 +703,17 @@ public class EtlImportService
             });
 
             Progress.Finish("products", mode);
+        }
+        // Day 9.4: 区分 "用户主动取消" 与 "真异常失败"
+        //   Bug: 之前 catch (Exception) 全部走 Fail,导致 CancelActiveTask 后 Npgsql 抛
+        //        OperationCanceledException 也会被吞进 "failed" 桶, cancel_reason 落空
+        //   Fix: ct.IsCancellationRequested 时调 Cancel (落 cancel_reason + cancelled_at)
+        //        其他异常才走 Fail
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            Progress.Cancel(_activeCancelReason ?? "用户取消");
+            Progress.PersistLogAsync("products", mode);  // 不 await: 写日志失败不阻塞取消信号
+            _logger.LogInformation("ETL products 任务被用户取消, reason={Reason}", _activeCancelReason);
         }
         catch (Exception ex)
         {
@@ -1138,6 +1165,13 @@ public class EtlImportService
             await using (var commit = new NpgsqlCommand("COMMIT;", conn))
                 await commit.ExecuteNonQueryAsync(ct);
             Progress.Finish("apps", mode);
+        }
+        // Day 9.4: 区分取消与失败 (同 products, 见 ImportProductsAsync 注释)
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            Progress.Cancel(_activeCancelReason ?? "用户取消");
+            Progress.PersistLogAsync("apps", mode);
+            _logger.LogInformation("ETL apps 任务被用户取消, reason={Reason}", _activeCancelReason);
         }
         catch (Exception ex)
         {
