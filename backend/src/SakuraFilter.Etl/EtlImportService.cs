@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Npgsql;
 using NpgsqlTypes;
 using SakuraFilter.Core.Entities;
@@ -244,23 +245,22 @@ public class EtlImportService
     private readonly string _pgConn;
     private readonly ILogger<EtlImportService> _logger;
     private readonly IServiceProvider _sp;
+    private readonly EtlOptions _options;
     public EtlProgress Progress { get; }
 
-    public EtlImportService(string connectionString, ILogger<EtlImportService> logger, IServiceProvider sp)
+    // Day 7.8: 改用 IOptions<EtlOptions> 注入 (替代手动 IConfiguration 读取)
+    //   WHY: 配置校验集中在 EtlOptionsValidator,启动失败立即可见,不必运行期才发现
+    public EtlImportService(
+        string connectionString,
+        ILogger<EtlImportService> logger,
+        IServiceProvider sp,
+        IOptions<EtlOptions> etlOptions)
     {
         _pgConn = connectionString;
         _logger = logger;
         _sp = sp;
-        // Day 7.7: 从配置读环形缓冲容量 (默认 5,生产可调高)
-        // WHY: 失败风暴时 5 条不够,生产环境需要 50+ 才能看分布
-        var bufferSize = 5;
-        var config = sp.GetService<IConfiguration>();
-        if (config != null)
-        {
-            var raw = config["Etl:RecentErrorBuffer"];
-            if (!string.IsNullOrEmpty(raw) && int.TryParse(raw, out var v) && v > 0) bufferSize = v;
-        }
-        Progress = new EtlProgress(logger, bufferSize, sp);
+        _options = etlOptions.Value;
+        Progress = new EtlProgress(logger, _options.RecentErrorBuffer, sp);
     }
 
     /// <summary>
