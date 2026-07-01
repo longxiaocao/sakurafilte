@@ -127,6 +127,9 @@ public class IndexReplayWorker : BackgroundService
     /// Day 7: 把 retry_count >= 5 的 pending 条目转入死信队列
     /// WHY: 反复重试无意义的条目 (Meili schema 错误、payload 损坏) 占用 pending 队列
     ///      转移到 dead_letter 等待人工排查,worker 只处理下次重试
+    /// Day 7.10.1: 改 status='active' 而非删除
+    ///   若 payload 相同且最近 dead_letter 已 recovered, 复用并递增 recovery_count
+    ///   (跨恢复-重试-重新死信循环,计数不丢失,max_recovery_count 限位有效)
     /// </summary>
     private async Task ProcessDeadLetterAsync(CancellationToken ct)
     {
@@ -142,22 +145,56 @@ public class IndexReplayWorker : BackgroundService
 
         if (exhausted.Count == 0) return;
 
-        // 复制到 dead_letter
-        var deadLetters = exhausted.Select(p => new SearchIndexDeadLetter
+        // Day 7.10.1 BUG FIX: 同一 payload 已 recovered 的死信, 复用其 recovery_count
+        //   WHY: 之前方案删除死信行后, 新入队的死信 recovery_count=0, max 限位失效
+        //   现在死信行 status='recovered' 保留, 新失败时检查同 payload 最近 dead_letter
+        //   找到则更新其 status='active' + retry_count/last_error, 不新增行
+        var deadLetters = new List<SearchIndexDeadLetter>();
+        foreach (var p in exhausted)
         {
-            OriginalId = p.Id,
-            Operation = p.Operation,
-            Payload = p.Payload,
-            RetryCount = p.RetryCount,
-            LastError = p.LastError,
-            CreatedAt = p.CreatedAt,
-            MovedAt = now
-        }).ToList();
-        await db.SearchIndexDeadLetters.AddRangeAsync(deadLetters, ct);
+            // 查找同 operation + payload 的最近 recovered 死信
+            var existingDead = await db.SearchIndexDeadLetters
+                .Where(d => d.Operation == p.Operation && d.Payload == p.Payload && d.Status == "recovered")
+                .OrderByDescending(d => d.RecoveredAt)
+                .FirstOrDefaultAsync(ct);
+
+            if (existingDead != null)
+            {
+                // 复用: 更新 retry_count + last_error + status 重置为 active
+                //   RecoveryCount 保持不变 (入死信不递增, 恢复时才 +1)
+                //   若这里把 pending.retry_count 写进去会污染字段语义
+                existingDead.RetryCount = p.RetryCount;
+                existingDead.LastError = p.LastError;
+                existingDead.Status = "active";
+                existingDead.MovedAt = now;
+                existingDead.RecoveredAt = null;          // 清除旧 recovered 标记
+                existingDead.RecoveredToPendingId = null; // 由下次恢复时回填
+                _logger.LogWarning("死信复用: id={Id} recovery_count={Rc} 再次失败, 重置为 active (retry_count={Ret})",
+                    existingDead.Id, existingDead.RecoveryCount, p.RetryCount);
+            }
+            else
+            {
+                // 新死信: 正常创建
+                deadLetters.Add(new SearchIndexDeadLetter
+                {
+                    OriginalId = p.Id,
+                    Operation = p.Operation,
+                    Payload = p.Payload,
+                    RetryCount = p.RetryCount,
+                    LastError = p.LastError,
+                    CreatedAt = p.CreatedAt,
+                    MovedAt = now,
+                    Status = "active",
+                });
+            }
+        }
+        if (deadLetters.Count > 0)
+            await db.SearchIndexDeadLetters.AddRangeAsync(deadLetters, ct);
         db.SearchIndexPending.RemoveRange(exhausted);
         await db.SaveChangesAsync(ct);
-        _logger.LogWarning("已转死信: {Count} 条 (最后一次错误示例: {Err})",
-            deadLetters.Count, deadLetters[0].LastError?.Substring(0, Math.Min(100, deadLetters[0].LastError?.Length ?? 0)));
+        _logger.LogWarning("已转死信: {New} 新建 + {Reused} 复用, 共 {Total} 条 (最后一次错误示例: {Err})",
+            deadLetters.Count, exhausted.Count - deadLetters.Count, exhausted.Count,
+            (exhausted[0].LastError?.Substring(0, Math.Min(100, exhausted[0].LastError?.Length ?? 0)) ?? ""));
     }
 
     private static async Task UpdateRetryAsync(ProductDbContext db, List<SearchIndexPending> items, string error, CancellationToken ct)

@@ -150,6 +150,13 @@ public class SearchIndexDeadLetter
     [Column("recovery_count")] public int RecoveryCount { get; set; } = 0;
     [Column("last_recovery_at")] public DateTime? LastRecoveryAt { get; set; }
     [Column("last_recovery_error")] public string? LastRecoveryError { get; set; }
+
+    // Day 7.10.1 Bug Fix: status 列 — 死信永不删除,改 status 标记
+    //   'active'    = 等待处理 (worker 扫描候选)
+    //   'recovered' = 已恢复到 pending, 历史留痕 (worker 跳过, cleanup 可清)
+    [Column("status")] public string Status { get; set; } = "active";
+    [Column("recovered_at")] public DateTime? RecoveredAt { get; set; }
+    [Column("recovered_to_pending_id")] public long? RecoveredToPendingId { get; set; }
 }
 
 /// <summary>

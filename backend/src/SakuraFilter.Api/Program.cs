@@ -239,7 +239,8 @@ app.MapGet("/api/admin/dead-letter", async (
             d.Payload.ToString().Length > 200
                 ? d.Payload.ToString().Substring(0, 200) + "..."
                 : d.Payload.ToString(),
-            d.RecoveryCount, d.LastRecoveryAt, d.LastRecoveryError))
+            d.RecoveryCount, d.LastRecoveryAt, d.LastRecoveryError,
+            d.Status, d.RecoveredAt, d.RecoveredToPendingId))
         .ToListAsync(ct);
     var hasMore = rows.Count > cap;
     if (hasMore) rows.RemoveAt(rows.Count - 1);  // 弹出探针行
@@ -274,38 +275,64 @@ app.MapGet("/api/admin/dead-letter", async (
 // Day 7.5: 死信恢复 (单条) — 移回 pending,retry_count 重置
 //   流程: dead_letter → pending (retry=0, next_retry_at=now) → IndexReplayWorker 自动重试
 //   WHY: 死信只移不删,排查后通过此端点重新激活
-//   Day 7.10: 改用 RETURNING + 原子事务,加 recovery_count 限位保护
+//   Day 7.10.1 BUG FIX: 不删除 dead_letter 行,改 status='recovered' + 留痕
+//   Day 7.10.1: 用 advisory lock 与后台 worker 串行化
 app.MapPost("/api/admin/dead-letter/{id:long}/recover", async (long id, ProductDbContext db, ILogger<Program> logger, CancellationToken ct) =>
 {
-    var dead = await db.SearchIndexDeadLetters.FirstOrDefaultAsync(d => d.Id == id, ct);
-    if (dead is null)
-        return Results.NotFound(new { error = "死信条目不存在", id });
+    bool gotLock = false;
+    object? result = null;
+    gotLock = await DeadLetterRecoveryService.TryWithAdvisoryLockAsync(db, async () =>
+    {
+        var dead = await db.SearchIndexDeadLetters.FirstOrDefaultAsync(d => d.Id == id, ct);
+        if (dead is null)
+        {
+            result = Results.NotFound(new { error = "死信条目不存在", id });
+            return;
+        }
+        if (dead.Status == "recovered")
+        {
+            // 已恢复: 仅回填 pending_id 提示信息, 不重复恢复
+            result = Results.Conflict(new { error = "死信已恢复,无需再次操作", id, recoveredAt = dead.RecoveredAt, recoveredToPendingId = dead.RecoveredToPendingId });
+            return;
+        }
 
-    var now = DateTime.UtcNow;
-    var pending = new SearchIndexPending
+        var now = DateTime.UtcNow;
+        var pending = new SearchIndexPending
+        {
+            Operation = dead.Operation,
+            Payload = dead.Payload,
+            RetryCount = 0,
+            LastError = null,
+            CreatedAt = dead.CreatedAt,
+            NextRetryAt = now
+        };
+        db.SearchIndexPending.Add(pending);
+
+        // BUG FIX: 死信行不删,改 status + 留痕
+        dead.Status = "recovered";
+        dead.RecoveryCount += 1;
+        dead.LastRecoveryAt = now;
+        dead.LastRecoveryError = null;
+        dead.RecoveredAt = now;
+        await db.SaveChangesAsync(ct);
+        dead.RecoveredToPendingId = pending.Id;
+        await db.SaveChangesAsync(ct);
+        logger.LogInformation("死信 {Id} (original={OriginalId}) 恢复成功 → pending {NewId} (recovery_count={Rc})",
+            dead.Id, dead.OriginalId, pending.Id, dead.RecoveryCount);
+        result = Results.Ok(new
+        {
+            recovered = true,
+            newPendingId = pending.Id,
+            originalId = dead.OriginalId,
+            recoveryCount = dead.RecoveryCount,
+        });
+    }, ct);
+
+    if (!gotLock)
     {
-        Operation = dead.Operation,
-        Payload = dead.Payload,
-        RetryCount = 0,
-        LastError = null,
-        CreatedAt = dead.CreatedAt,
-        NextRetryAt = now
-    };
-    db.SearchIndexPending.Add(pending);
-    // Day 7.10: 人工 recover 也会递增 recovery_count,留痕
-    dead.RecoveryCount += 1;
-    dead.LastRecoveryAt = now;
-    db.SearchIndexDeadLetters.Remove(dead);
-    await db.SaveChangesAsync(ct);
-    logger.LogInformation("死信 {Id} (original={OriginalId}) 恢复成功 → pending {NewId} (recovery_count={Rc})",
-        dead.Id, dead.OriginalId, pending.Id, dead.RecoveryCount);
-    return Results.Ok(new
-    {
-        recovered = true,
-        newPendingId = pending.Id,
-        originalId = dead.OriginalId,
-        recoveryCount = dead.RecoveryCount,
-    });
+        return Results.Conflict(new { error = "advisory lock 被占用,后台 worker 正在恢复,请稍后重试" });
+    }
+    return result!;
 })
 .WithName("RecoverDeadLetter")
 .WithOpenApi();
@@ -314,6 +341,7 @@ app.MapPost("/api/admin/dead-letter/{id:long}/recover", async (long id, ProductD
 //   WHY: 凌晨某时段批量产生 200+ 死信 (Meili 短暂 5xx), 逐条 /recover 太累
 //   参数: operation=index|delete, lastErrorContains=关键词, maxRecoveryCount=N (只恢复未达上限的)
 //   限位: 严格按 recovery_count < maxRecoveryCount 过滤,与后台 worker 策略一致
+//   Day 7.10.1 BUG FIX: 不删除行,改 status + 留痕 + 用 advisory lock
 app.MapPost("/api/admin/dead-letter/recover-batch", async (
     [Microsoft.AspNetCore.Mvc.FromQuery] string? operation,
     [Microsoft.AspNetCore.Mvc.FromQuery] string? lastErrorContains,
@@ -325,47 +353,80 @@ app.MapPost("/api/admin/dead-letter/recover-batch", async (
 {
     var cap = Math.Clamp(limit ?? 100, 1, 1000);
     var maxRc = maxRecoveryCount ?? 3;
-    var query = db.SearchIndexDeadLetters.Where(d => d.RecoveryCount < maxRc);
-    if (!string.IsNullOrEmpty(operation))
-        query = query.Where(d => d.Operation == operation);
-    if (!string.IsNullOrEmpty(lastErrorContains))
-        query = query.Where(d => d.LastError != null && d.LastError.ToLower().Contains(lastErrorContains.ToLower()));
-
-    var dead = await query.OrderBy(d => d.MovedAt).Take(cap).ToListAsync(ct);
-    if (dead.Count == 0)
-        return Results.Ok(new { matched = 0, moved = 0 });
-
-    var now = DateTime.UtcNow;
-    int moved = 0;
-    foreach (var d in dead)
+    bool gotLock = false;
+    object? result = null;
+    gotLock = await DeadLetterRecoveryService.TryWithAdvisoryLockAsync(db, async () =>
     {
-        var pending = new SearchIndexPending
+        // Day 7.10.1: 加 status='active' 过滤,跳过已恢复的
+        var query = db.SearchIndexDeadLetters
+            .Where(d => d.Status == "active")
+            .Where(d => d.RecoveryCount < maxRc);
+        if (!string.IsNullOrEmpty(operation))
+            query = query.Where(d => d.Operation == operation);
+        if (!string.IsNullOrEmpty(lastErrorContains))
+            query = query.Where(d => d.LastError != null && d.LastError.ToLower().Contains(lastErrorContains.ToLower()));
+
+        var dead = await query.OrderBy(d => d.MovedAt).Take(cap).ToListAsync(ct);
+        if (dead.Count == 0)
         {
-            Operation = d.Operation,
-            Payload = d.Payload,
-            RetryCount = 0,
-            LastError = null,
-            CreatedAt = d.CreatedAt,
-            NextRetryAt = now,
-        };
-        db.SearchIndexPending.Add(pending);
-        d.RecoveryCount += 1;
-        d.LastRecoveryAt = now;
-        d.LastRecoveryError = null;
-        db.SearchIndexDeadLetters.Remove(d);
-        moved++;
-    }
-    await db.SaveChangesAsync(ct);
-    logger.LogInformation("批量恢复 {Moved}/{Matched} 条死信 → pending (operation={Op}, lastErrorContains={Lec}, maxRc={MaxRc})",
-        moved, dead.Count, operation, lastErrorContains, maxRc);
-    return Results.Ok(new
+            result = Results.Ok(new { matched = 0, moved = 0 });
+            return;
+        }
+
+        var now = DateTime.UtcNow;
+        int moved = 0;
+        foreach (var d in dead)
+        {
+            var pending = new SearchIndexPending
+            {
+                Operation = d.Operation,
+                Payload = d.Payload,
+                RetryCount = 0,
+                LastError = null,
+                CreatedAt = d.CreatedAt,
+                NextRetryAt = now,
+            };
+            db.SearchIndexPending.Add(pending);
+            d.Status = "recovered";
+            d.RecoveryCount += 1;
+            d.LastRecoveryAt = now;
+            d.LastRecoveryError = null;
+            d.RecoveredAt = now;
+            moved++;
+        }
+        await db.SaveChangesAsync(ct);
+        // 回填 RecoveredToPendingId (按 payload+createdAt 匹配)
+        foreach (var d in dead)
+        {
+            if (d.RecoveredToPendingId.HasValue) continue;
+            var matchedPending = await db.SearchIndexPending
+                .Where(p => p.Payload == d.Payload
+                         && p.CreatedAt == d.CreatedAt
+                         && p.RetryCount == 0
+                         && p.LastError == null)
+                .OrderByDescending(p => p.Id)
+                .FirstOrDefaultAsync(ct);
+            if (matchedPending != null) d.RecoveredToPendingId = matchedPending.Id;
+        }
+        await db.SaveChangesAsync(ct);
+
+        logger.LogInformation("批量恢复 {Moved}/{Matched} 条死信 → pending (operation={Op}, lastErrorContains={Lec}, maxRc={MaxRc})",
+            moved, dead.Count, operation, lastErrorContains, maxRc);
+        result = Results.Ok(new
+        {
+            matched = dead.Count,
+            moved = moved,
+            operation = operation,
+            lastErrorContains = lastErrorContains,
+            maxRecoveryCount = maxRc,
+        });
+    }, ct);
+
+    if (!gotLock)
     {
-        matched = dead.Count,
-        moved = moved,
-        operation = operation,
-        lastErrorContains = lastErrorContains,
-        maxRecoveryCount = maxRc,
-    });
+        return Results.Conflict(new { error = "advisory lock 被占用,后台 worker 正在恢复,请稍后重试" });
+    }
+    return result!;
 })
 .WithName("RecoverDeadLetterBatch")
 .WithOpenApi();
@@ -376,6 +437,8 @@ public record ImportRequest(string JsonlPath, string? Mode);
 
 // Day 7.5: 死信查询参数 (运维可见性)
 // Day 7.10: 增加 recovery_count / last_recovery_at / last_recovery_error 字段
+// Day 7.10.1: 增加 status / recovered_at / recovered_to_pending_id 字段
 public record DeadLetterItem(long Id, long OriginalId, string Operation, int RetryCount,
     string? LastError, DateTime CreatedAt, DateTime MovedAt, string PayloadPreview,
-    int RecoveryCount, DateTime? LastRecoveryAt, string? LastRecoveryError);
+    int RecoveryCount, DateTime? LastRecoveryAt, string? LastRecoveryError,
+    string Status, DateTime? RecoveredAt, long? RecoveredToPendingId);

@@ -118,9 +118,13 @@ public class ProductDbContext : DbContext
             e.Property(p => p.Payload).HasColumnType("jsonb");
             e.HasIndex(p => p.MovedAt);
             e.HasIndex(p => p.Operation);
-            // Day 7.10 Item 4: 自动恢复 worker 扫描索引
-            e.HasIndex(p => new { p.RecoveryCount, p.LastRecoveryAt })
-                .HasDatabaseName("idx_dead_letter_recovery");
+            // Day 7.10.1: status 列过滤,active 是 worker 候选
+            e.Property(p => p.Status).HasMaxLength(20).IsRequired();
+            e.HasIndex(p => p.Status);
+            // worker 扫描索引: (status=active, recovery_count < max)
+            e.HasIndex(p => new { p.Status, p.RecoveryCount, p.LastRecoveryAt })
+                .HasDatabaseName("idx_dead_letter_active_recovery")
+                .HasFilter("status = 'active'");
         });
 
         // EtlProgressLog (Day 7.7: ETL 历史快照)
