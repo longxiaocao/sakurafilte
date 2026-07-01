@@ -44,8 +44,18 @@ builder.Services.AddHostedService<HistoryCleanupService>();
 // 后台服务:ETL 历史清理 (Day 7.8,默认关闭,etl_log.retention_enabled=true 时启用)
 builder.Services.AddHostedService<EtlLogCleanupService>();
 
-// 后台服务:Meili 索引写入补偿 (Day 5)
+// 后台服务:Meili 死信清理 (Day 7.9,默认 7 天保留,dead_letter.retention_enabled=true 时启用)
+builder.Services.AddHostedService<DeadLetterCleanupService>();
+
+// 后台服务:Meili 索引写入补偿 (Day 5;Day 7.9 配置由 EtlOptions 注入)
 builder.Services.AddHostedService<IndexReplayWorker>();
+
+// 后台服务:ETL 失败告警 (Day 7.9,默认关闭,alert.enabled=true 时启用,需配 webhook_url)
+builder.Services.AddHostedService<EtlAlertService>();
+builder.Services.AddHttpClient("EtlAlert", c =>
+{
+    c.Timeout = TimeSpan.FromSeconds(5);  // 告警推送快进快出,失败可重试
+});
 
 var app = builder.Build();
 

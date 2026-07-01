@@ -175,4 +175,5 @@ public class EtlProgressLog
     [Column("started_at")] public DateTime StartedAt { get; set; }
     [Column("finished_at")] public DateTime FinishedAt { get; set; }
     [Column("duration_sec")] public double DurationSec { get; set; }
+    [Column("alert_sent")] public bool AlertSent { get; set; }  // Day 7.9: 失败告警是否已推送
 }

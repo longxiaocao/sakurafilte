@@ -1,16 +1,18 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using SakuraFilter.Core.DTOs;
 using SakuraFilter.Core.Entities;
 using SakuraFilter.Infrastructure.Data;
 using SakuraFilter.Search;
+using SakuraFilter.Etl;
 
 namespace SakuraFilter.Api.Services;
 
 /// <summary>
 /// Meili 索引写入补偿 Worker (Day 5)
-/// - 每 10s 扫描 search_index_pending (Day 7: 从 30s 缩到 10s)
-/// - 每批 500 条 (Day 7: 从 100 提升到 500)
+/// - 每 N s 扫描 search_index_pending (Day 7: 10s;Day 7.9: 改用配置)
+/// - 每批 M 条 (Day 7: 500;Day 7.9: 改用配置)
 /// - 对 retry_count < 5 的条目重试 (指数退避 60s/120s/300s/600s/1800s)
 /// - 成功后删除条目,失败更新 next_retry_at
 /// - 重试 5 次后转入 search_index_dead_letter (Day 7) 等待人工排查
@@ -19,17 +21,25 @@ public class IndexReplayWorker : BackgroundService
 {
     private readonly IServiceProvider _sp;
     private readonly ILogger<IndexReplayWorker> _logger;
+    private readonly EtlOptions _options;
     private static readonly int[] BackoffSeconds = { 60, 120, 300, 600, 1800 };
-    // Day 7: 优化参数 (10s 间隔 + 500/批) — 用户感知索引滞后从 ~30s 降到 ~10s
-    private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(10);
-    private const int BatchSize = 500;
+    // Day 7.9: PollInterval / BatchSize 改读 EtlOptions.IndexReplayPollSeconds / IndexReplayBatchSize
+    // WHY: 与 EtlOptions 校验联动,配错启动即失败
+    // 不再使用 static readonly,改为实例属性,启动后即可生效(不需重启进程)
     private const int MaxRetryCount = 5;  // Day 7: 超过此值转 dead_letter
 
-    public IndexReplayWorker(IServiceProvider sp, ILogger<IndexReplayWorker> logger)
+    public IndexReplayWorker(
+        IServiceProvider sp,
+        ILogger<IndexReplayWorker> logger,
+        IOptions<EtlOptions> etlOptions)
     {
         _sp = sp;
         _logger = logger;
+        _options = etlOptions.Value;
     }
+
+    private TimeSpan PollInterval => TimeSpan.FromSeconds(_options.IndexReplayPollSeconds);
+    private int BatchSize => _options.IndexReplayBatchSize;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
