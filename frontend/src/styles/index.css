@@ -1,0 +1,95 @@
+// Day 9: 全局样式 — Musk 风格极简
+//   - 无阴影, 1px hairline 边框, 8px 网格, Inter 字体
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-border: #e5e7eb;
+  --color-text: #111827;
+  --color-text-muted: #6b7280;
+  --color-accent: #2563eb;
+  --color-bg: #ffffff;
+  --color-bg-hover: #f9fafb;
+}
+
+html, body, #app {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-size: 14px;
+  line-height: 1.5;
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+/* 1px hairline 边框工具类 */
+@layer utilities {
+  .hairline {
+    border: 1px solid var(--color-border);
+  }
+  .hairline-t {
+    border-top: 1px solid var(--color-border);
+  }
+  .hairline-b {
+    border-bottom: 1px solid var(--color-border);
+  }
+  .hairline-r {
+    border-right: 1px solid var(--color-border);
+  }
+  .hairline-l {
+    border-left: 1px solid var(--color-border);
+  }
+  .text-muted {
+    color: var(--color-text-muted);
+  }
+  .bg-hover:hover {
+    background: var(--color-bg-hover);
+  }
+}
+
+/* Element Plus 覆盖 — 去除圆角和阴影, 跟 Musk 风格一致 */
+.el-button,
+.el-input__wrapper,
+.el-card,
+.el-dialog,
+.el-message,
+.el-message-box,
+.el-drawer,
+.el-popper,
+.el-tag,
+.el-table,
+.el-table__inner-wrapper {
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+.el-button--primary {
+  --el-button-bg-color: var(--color-accent);
+  --el-button-border-color: var(--color-accent);
+}
+
+.el-button--default {
+  --el-button-border-color: var(--color-border);
+}
+
+/* 表格紧凑 (高密度) */
+.el-table {
+  font-size: 13px;
+  --el-table-border-color: var(--color-border);
+  --el-table-header-bg-color: #fafafa;
+  --el-table-row-hover-bg-color: var(--color-bg-hover);
+}
+
+.el-table th.el-table__cell {
+  font-weight: 500;
+  color: var(--color-text);
+}
+
+/* Element Plus 中文 locale 提示 */
+.el-message {
+  min-width: 280px;
+}

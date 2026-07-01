@@ -1,0 +1,381 @@
+<script setup lang="ts">
+// Day 9: 后台 ETL 触发 + 实时进度页
+//   - 实体选择: products / xrefs / apps
+//   - 模式选择: full-load / insert-only / upsert
+//   - dry-run 切换: 仅校验文件 + 行数, 不写库
+//   - 3s 轮询 /api/admin/etl/progress 实时显示状态
+//   - 上次完成结果快照 + recent errors
+import { ref, reactive, onMounted, onBeforeUnmount, computed } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { etlApi } from '@/api'
+import type { EtlActiveTaskInfo, EtlProgress, EtlDryRunResult } from '@/api/types'
+
+// ===== 表单 =====
+const form = reactive({
+  entity: 'products' as 'products' | 'xrefs' | 'apps',
+  mode: 'upsert' as 'full-load' | 'insert-only' | 'upsert',
+  dryRun: false,
+  jsonlPath: 'D:/data/sakurafilter/products.jsonl'
+})
+
+const entityPaths: Record<string, string> = {
+  products: 'D:/data/sakurafilter/products.jsonl',
+  xrefs: 'D:/data/sakurafilter/xrefs.jsonl',
+  apps: 'D:/data/sakurafilter/apps.jsonl'
+}
+
+function changeEntity(v: 'products' | 'xrefs' | 'apps') {
+  form.entity = v
+  form.jsonlPath = entityPaths[v]
+}
+
+// ===== 触发 =====
+const submitting = ref(false)
+const cancelling = ref(false)
+async function doTrigger() {
+  try {
+    await ElMessageBox.confirm(
+      `即将触发 ${form.entity} ETL (${form.mode}${form.dryRun ? ' - dry-run' : ''}), 是否继续?`,
+      '确认',
+      { type: 'warning' }
+    )
+  } catch {
+    return
+  }
+  submitting.value = true
+  try {
+    const r = await etlApi.trigger({
+      jsonlPath: form.jsonlPath,
+      mode: form.mode,
+      dryRun: form.dryRun
+    })
+    ElMessage.success(form.dryRun ? 'dry-run 校验完成' : '已触发 ETL, 后台执行中')
+    // 触发后立即拉一次进度
+    await pollOnce()
+    // dry-run 模式下 r 是 { dryRun, file, mode, lines, sizeBytes }
+    if (form.dryRun) {
+      lastDryRun.value = r as any
+    }
+  } catch (e: any) {
+    // 已被拦截器处理
+  } finally {
+    submitting.value = false
+  }
+}
+
+// ===== 进度轮询 =====
+const task = ref<EtlActiveTaskInfo>({ inProgress: false })
+const lastFinished = ref<EtlProgress | null>(null)
+const lastDryRun = ref<EtlDryRunResult | null>(null)
+
+// Day 9.1: 持久化最近一次完成结果到 localStorage (刷新页面不丢)
+const LS_KEY_FINISHED = 'sakura_etl_last_finished'
+try {
+  const cached = localStorage.getItem(LS_KEY_FINISHED)
+  if (cached) lastFinished.value = JSON.parse(cached)
+} catch {
+  // 忽略解析失败
+}
+
+let pollTimer: number | null = null
+
+async function pollOnce() {
+  try {
+    const r = await etlApi.progress()
+    task.value = r
+    // 任务刚结束 (inProgress 由 true 变 false) → 拉一次 legacy status 拿到最终结果
+    if (!r.inProgress && r.activeTask && r.activeTask.status === 'completed') {
+      const legacy = await etlApi.legacyStatus()
+      if (legacy && (legacy as any).status !== 'running') {
+        lastFinished.value = legacy
+        try {
+          localStorage.setItem(LS_KEY_FINISHED, JSON.stringify(legacy))
+        } catch {
+          // 忽略写入失败 (容量 / 隐私模式)
+        }
+      }
+    }
+  } catch (e: any) {
+    // 已被拦截器处理
+  }
+}
+
+onMounted(() => {
+  pollOnce()
+  pollTimer = window.setInterval(pollOnce, 3000)
+})
+
+onBeforeUnmount(() => {
+  if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = null
+  }
+})
+
+function clearLastFinished() {
+  lastFinished.value = null
+  try {
+    localStorage.removeItem(LS_KEY_FINISHED)
+  } catch {
+    // 忽略
+  }
+  ElMessage.success('已清除')
+}
+
+// Day 9.1: 取消当前活跃 ETL 任务
+async function doCancel() {
+  try {
+    await ElMessageBox.confirm('确定取消当前 ETL 任务吗? 已写入数据会保留。', '确认', { type: 'warning' })
+  } catch {
+    return
+  }
+  cancelling.value = true
+  try {
+    const r = await etlApi.cancel()
+    if (r.cancelled) {
+      ElMessage.warning('已发送取消信号, 任务即将终止')
+    } else {
+      ElMessage.info(r.reason || '无活跃任务可取消')
+    }
+  } catch (e: any) {
+    // 已被拦截器处理
+  } finally {
+    cancelling.value = false
+  }
+}
+
+// ===== 计算 =====
+const status = computed(() => task.value.activeTask?.status ?? (task.value.inProgress ? 'running' : 'idle'))
+const stage = computed(() => task.value.activeTask?.stage ?? '-')
+const progressPct = computed(() => task.value.activeTask?.progressPct ?? null)
+
+function fmt(n?: number) {
+  if (n === undefined || n === null) return '-'
+  return n.toLocaleString()
+}
+
+function fmtBytes(n?: number) {
+  if (!n) return '-'
+  if (n < 1024) return `${n} B`
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
+  return `${(n / 1024 / 1024).toFixed(2)} MB`
+}
+
+function statusTagType(s: string): 'success' | 'warning' | 'info' | 'danger' | 'primary' {
+  if (s === 'running') return 'primary'
+  if (s === 'completed') return 'success'
+  if (s === 'failed') return 'danger'
+  if (s === 'idle') return 'info'
+  return 'warning'
+}
+
+function stageLabel(s: string) {
+  return (
+    {
+      staging: 'COPY 暂存',
+      insert: 'INSERT 写库',
+      commit: 'COMMIT 提交',
+      meili: 'Meili 同步',
+      done: '完成'
+    } as Record<string, string>
+  )[s] ?? s
+}
+
+// Day 9.1: 格式化 JSON 样本 (尝试 JSON.parse 失败则原样返回)
+function prettyJson(raw: string): string {
+  try {
+    return JSON.stringify(JSON.parse(raw), null, 2)
+  } catch {
+    return raw
+  }
+}
+</script>
+
+<template>
+  <div class="p-3 max-w-screen-2xl mx-auto">
+    <!-- 顶部：触发表单 -->
+    <el-card shadow="never" class="mb-3">
+      <template #header>
+        <div class="flex items-center gap-2">
+          <span class="font-semibold">手动 ETL 触发</span>
+          <el-tag size="small" type="info">Day 8.4</el-tag>
+        </div>
+      </template>
+
+      <el-form :inline="false" label-width="100px" size="default">
+        <el-form-item label="实体">
+          <el-radio-group v-model="form.entity" @change="changeEntity">
+            <el-radio-button value="products">products</el-radio-button>
+            <el-radio-button value="xrefs">xrefs</el-radio-button>
+            <el-radio-button value="apps">apps</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+
+        <el-form-item label="模式">
+          <el-radio-group v-model="form.mode">
+            <el-radio-button value="full-load">full-load (TRUNCATE+INSERT)</el-radio-button>
+            <el-radio-button value="insert-only">insert-only (ON CONFLICT DO NOTHING)</el-radio-button>
+            <el-radio-button value="upsert">upsert (ON CONFLICT DO UPDATE)</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+
+        <el-form-item label="文件路径">
+          <el-input
+            v-model="form.jsonlPath"
+            placeholder="JSONL 绝对路径"
+            style="width: 500px"
+            clearable
+          />
+        </el-form-item>
+
+        <el-form-item label=" ">
+          <div class="flex items-center gap-3">
+            <el-checkbox v-model="form.dryRun">dry-run (仅校验文件)</el-checkbox>
+            <el-button
+              type="primary"
+              :loading="submitting"
+              :disabled="status === 'running'"
+              @click="doTrigger"
+            >
+              {{ form.dryRun ? '执行 dry-run' : '立即导入' }}
+            </el-button>
+            <el-button
+              v-if="status === 'running'"
+              type="danger"
+              :loading="cancelling"
+              @click="doCancel"
+            >
+              取消任务
+            </el-button>
+          </div>
+        </el-form-item>
+      </el-form>
+    </el-card>
+
+    <!-- 实时进度 -->
+    <el-card shadow="never" class="mb-3">
+      <template #header>
+        <div class="flex items-center gap-2">
+          <span class="font-semibold">实时进度</span>
+          <el-tag :type="statusTagType(status)" size="small">{{ status }}</el-tag>
+          <el-tag v-if="status === 'running'" size="small" type="info">stage: {{ stageLabel(stage) }}</el-tag>
+        </div>
+      </template>
+
+      <div v-if="!task.activeTask" class="text-gray-500 text-sm">
+        当前无活跃任务。 等待触发或查看历史任务。
+      </div>
+
+      <div v-else>
+        <!-- 进度条 -->
+        <div class="mb-3">
+          <el-progress
+            v-if="progressPct !== null"
+            :percentage="progressPct"
+            :stroke-width="14"
+            :text-inside="true"
+            :status="status === 'failed' ? 'exception' : status === 'completed' ? 'success' : undefined"
+          />
+          <el-progress v-else :percentage="0" :stroke-width="14" :indeterminate="true" />
+          <div class="text-xs text-gray-500 mt-1">
+            rows: {{ fmt(task.activeTask.rowsProcessed) }} /
+            {{ task.activeTask.rowsTotal !== null ? fmt(task.activeTask.rowsTotal) : '?' }}
+            · elapsed: {{ task.activeTask.elapsedSec ?? 0 }}s
+            · started: {{ task.activeTask.startedAt ?? '-' }}
+          </div>
+        </div>
+
+        <!-- 实时计数 -->
+        <el-descriptions :column="4" size="small" border>
+          <el-descriptions-item label="read">{{ fmt(task.activeTask.read) }}</el-descriptions-item>
+          <el-descriptions-item label="inserted">{{ fmt(task.activeTask.inserted) }}</el-descriptions-item>
+          <el-descriptions-item label="updated">{{ fmt(task.activeTask.updated) }}</el-descriptions-item>
+          <el-descriptions-item label="skipped">{{ fmt(task.activeTask.skipped) }}</el-descriptions-item>
+          <el-descriptions-item label="errors">{{ fmt(task.activeTask.errors) }}</el-descriptions-item>
+          <el-descriptions-item label="indexed">{{ fmt(task.activeTask.indexed) }}</el-descriptions-item>
+          <el-descriptions-item label="indexPending">{{ fmt(task.activeTask.indexPending) }}</el-descriptions-item>
+          <el-descriptions-item label="currentFile">
+            <el-tooltip :content="task.activeTask.currentFile ?? ''" placement="top" v-if="task.activeTask.currentFile">
+              <span class="text-xs">{{ task.activeTask.currentFile.length > 40 ? task.activeTask.currentFile.slice(0, 40) + '...' : task.activeTask.currentFile }}</span>
+            </el-tooltip>
+            <span v-else>-</span>
+          </el-descriptions-item>
+        </el-descriptions>
+
+        <!-- 错误信息 -->
+        <div v-if="task.activeTask.lastError" class="mt-3">
+          <el-alert :title="task.activeTask.lastError" type="error" :closable="false" />
+        </div>
+      </div>
+    </el-card>
+
+    <!-- dry-run 结果 (Day 9.1: 含前 5 行样本) -->
+    <el-card v-if="lastDryRun" shadow="never" class="mb-3">
+      <template #header>
+        <div class="flex items-center gap-2">
+          <span class="font-semibold">最近 dry-run 校验</span>
+          <el-tag size="small" type="info">{{ lastDryRun.mode }}</el-tag>
+          <el-tag v-if="lastDryRun.samples && lastDryRun.samples.length > 0" size="small" type="success">
+            样本 {{ lastDryRun.samples.length }} 行
+          </el-tag>
+        </div>
+      </template>
+      <el-descriptions :column="2" size="small" border>
+        <el-descriptions-item label="文件">{{ lastDryRun.file }}</el-descriptions-item>
+        <el-descriptions-item label="大小">{{ fmtBytes(lastDryRun.sizeBytes) }}</el-descriptions-item>
+        <el-descriptions-item label="行数">{{ fmt(lastDryRun.lines) }}</el-descriptions-item>
+        <el-descriptions-item label="模式">{{ lastDryRun.mode }}</el-descriptions-item>
+      </el-descriptions>
+
+      <div v-if="lastDryRun.samples && lastDryRun.samples.length > 0" class="mt-3">
+        <div class="text-sm font-semibold mb-1">样本预览 (前 5 行 JSON)</div>
+        <el-table :data="lastDryRun.samples.map((s, i) => ({ idx: i + 1, raw: s }))" size="small" border max-height="320">
+          <el-table-column prop="idx" label="#" width="50" />
+          <el-table-column label="原始 JSON">
+            <template #default="{ row }">
+              <pre class="text-xs whitespace-pre-wrap break-all m-0">{{ prettyJson(row.raw) }}</pre>
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
+    </el-card>
+
+    <!-- 最近完成 -->
+    <el-card v-if="lastFinished" shadow="never">
+      <template #header>
+        <div class="flex items-center gap-2">
+          <span class="font-semibold">最近一次完成结果</span>
+          <el-tag :type="statusTagType(lastFinished.status)" size="small">{{ lastFinished.status }}</el-tag>
+          <div class="flex-1" />
+          <el-button size="small" text @click="clearLastFinished">清除</el-button>
+        </div>
+      </template>
+      <el-descriptions :column="4" size="small" border>
+        <el-descriptions-item label="read">{{ fmt(lastFinished.read) }}</el-descriptions-item>
+        <el-descriptions-item label="inserted">{{ fmt(lastFinished.inserted) }}</el-descriptions-item>
+        <el-descriptions-item label="updated">{{ fmt(lastFinished.updated) }}</el-descriptions-item>
+        <el-descriptions-item label="skipped">{{ fmt(lastFinished.skipped) }}</el-descriptions-item>
+        <el-descriptions-item label="skipped_missing_oem">{{ fmt(lastFinished.skippedMissingOem) }}</el-descriptions-item>
+        <el-descriptions-item label="skipped_null_field">{{ fmt(lastFinished.skippedNullField) }}</el-descriptions-item>
+        <el-descriptions-item label="skipped_duplicate">{{ fmt(lastFinished.skippedDuplicate) }}</el-descriptions-item>
+        <el-descriptions-item label="errors">{{ fmt(lastFinished.errors) }}</el-descriptions-item>
+        <el-descriptions-item label="indexed">{{ fmt(lastFinished.indexed) }}</el-descriptions-item>
+        <el-descriptions-item label="indexPending">{{ fmt(lastFinished.indexPending) }}</el-descriptions-item>
+        <el-descriptions-item label="elapsed">{{ lastFinished.elapsedSec ?? 0 }}s</el-descriptions-item>
+        <el-descriptions-item label="finishedAt">{{ lastFinished.finishedAt ?? '-' }}</el-descriptions-item>
+      </el-descriptions>
+
+      <div v-if="lastFinished.lastError" class="mt-3">
+        <el-alert :title="lastFinished.lastError" type="error" :closable="false" />
+      </div>
+
+      <div v-if="lastFinished.recentErrors && lastFinished.recentErrors.length > 0" class="mt-3">
+        <div class="text-sm font-semibold mb-1">最近错误 (最多 10 条)</div>
+        <el-table :data="lastFinished.recentErrors" size="small" max-height="240" border>
+          <el-table-column prop="at" label="时间" width="200" />
+          <el-table-column prop="message" label="错误" show-overflow-tooltip />
+        </el-table>
+      </div>
+    </el-card>
+  </div>
+</template>

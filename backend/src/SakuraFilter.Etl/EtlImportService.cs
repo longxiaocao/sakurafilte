@@ -248,6 +248,14 @@ public class EtlImportService
     private readonly EtlOptions _options;
     public EtlProgress Progress { get; }
 
+    // Day 9.1: 当前活跃任务的 CancellationTokenSource
+    //   - 取消时让 CancellationToken 传播到 Import*Async 内部的 COPY/INSERT
+    //   - 锁用 object, 因为 EtlImportService 是 Singleton, 可能多线程访问
+    //   - 单任务: 同时只允许一个 ETL 任务运行, 新的 TriggerAsync 在已有任务时抛 InvalidOperationException
+    private readonly object _ctsLock = new();
+    private CancellationTokenSource? _activeCts;
+    private string? _activeTaskEntity;  // products/xrefs/apps
+
     // Day 7.8: 改用 IOptions<EtlOptions> 注入 (替代手动 IConfiguration 读取)
     //   WHY: 配置校验集中在 EtlOptionsValidator,启动失败立即可见,不必运行期才发现
     public EtlImportService(
@@ -280,13 +288,65 @@ public class EtlImportService
         var normalizedMode = NormalizeMode(mode);
         var normalizedEntity = entityType?.Trim().ToLowerInvariant() ?? "";
 
-        return normalizedEntity switch
+        // Day 9.1: 抢占式单任务: 若已有 ETL 在跑, 抛 InvalidOperationException
+        //   WHY: Import*Async 内部修改 Progress (单例状态), 并发跑会互相覆盖计数
+        CancellationTokenSource cts;
+        lock (_ctsLock)
         {
-            "products" or "product" => await ImportProductsAsync(jsonlPath, normalizedMode, ct),
-            "xrefs" or "xref" or "cross_references" => await ImportXrefsAsync(jsonlPath, normalizedMode, ct),
-            "apps" or "machine_applications" => await ImportAppsAsync(jsonlPath, normalizedMode, ct),
-            _ => throw new ArgumentException($"未知 entityType={entityType}, 期望 products/xrefs/apps")
-        };
+            if (_activeCts != null && !_activeCts.IsCancellationRequested)
+                throw new InvalidOperationException($"已有 ETL 任务在运行 (entity={_activeTaskEntity}), 请先等待完成或调用 /api/admin/etl/task 取消");
+            cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            _activeCts = cts;
+            _activeTaskEntity = normalizedEntity;
+        }
+
+        try
+        {
+            return normalizedEntity switch
+            {
+                "products" or "product" => await ImportProductsAsync(jsonlPath, normalizedMode, cts.Token),
+                "xrefs" or "xref" or "cross_references" => await ImportXrefsAsync(jsonlPath, normalizedMode, cts.Token),
+                "apps" or "machine_applications" => await ImportAppsAsync(jsonlPath, normalizedMode, cts.Token),
+                _ => throw new ArgumentException($"未知 entityType={entityType}, 期望 products/xrefs/apps")
+            };
+        }
+        catch (OperationCanceledException) when (cts.IsCancellationRequested)
+        {
+            _logger.LogWarning("ETL 任务被取消 entity={Entity}", normalizedEntity);
+            Progress.Status = "cancelled";
+            Progress.LastError = "用户取消";
+            throw;
+        }
+        finally
+        {
+            lock (_ctsLock)
+            {
+                if (ReferenceEquals(_activeCts, cts))
+                {
+                    _activeCts = null;
+                    _activeTaskEntity = null;
+                }
+                cts.Dispose();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Day 9.1: 取消当前活跃 ETL 任务
+    /// - 若没有活跃任务, 返回 false
+    /// - 取消信号传播到 Import*Async 内部 COPY/INSERT, 任务会抛 OperationCanceledException
+    /// - 已插入/更新的数据会保留 (不事务回滚, 因为 COPY 阶段无显式事务)
+    /// </summary>
+    public bool CancelActiveTask()
+    {
+        lock (_ctsLock)
+        {
+            if (_activeCts == null || _activeCts.IsCancellationRequested)
+                return false;
+            _activeCts.Cancel();
+            _logger.LogInformation("ETL 任务取消信号已发送 entity={Entity}", _activeTaskEntity);
+            return true;
+        }
     }
 
     private static string NormalizeMode(string? mode)

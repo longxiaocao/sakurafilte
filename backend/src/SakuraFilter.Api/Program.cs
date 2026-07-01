@@ -817,22 +817,47 @@ app.MapPost("/api/admin/etl/trigger", async (
 
     if (req.DryRun)
     {
-        // Day 8.4: dry-run 只校验文件存在 + JSON 行数, 不写库
+        // Day 9.1: dry-run 校验 + 前 5 行 JSON 样本, 避免大文件等待
         if (!File.Exists(req.JsonlPath))
             return Results.Problem(detail: $"文件不存在: {req.JsonlPath}", statusCode: 404, title: "File Not Found");
         var lines = 0;
+        var samples = new List<string>();
         using (var fs = File.OpenRead(req.JsonlPath))
         using (var sr = new StreamReader(fs))
         {
-            while (await sr.ReadLineAsync(ct) != null) lines++;
+            string? line;
+            while ((line = await sr.ReadLineAsync(ct)) != null)
+            {
+                if (samples.Count < 5) samples.Add(line);
+                lines++;
+            }
         }
-        return Results.Ok(new { dryRun = true, file = req.JsonlPath, mode = req.Mode ?? "upsert", lines, sizeBytes = new FileInfo(req.JsonlPath).Length });
+        return Results.Ok(new
+        {
+            dryRun = true,
+            file = req.JsonlPath,
+            mode = req.Mode ?? "upsert",
+            lines,
+            sizeBytes = new FileInfo(req.JsonlPath).Length,
+            samples
+        });
     }
 
     var p = await etl.TriggerAsync("products", req.JsonlPath, req.Mode ?? "upsert", ct);
     return Results.Ok(p.ToJson());
 })
 .WithName("AdminTriggerEtl")
+.RequireRateLimiting("etl");
+
+// Day 9.1: 后台取消 ETL 任务 (后台 ETL 页面 "取消" 按钮)
+app.MapDelete("/api/admin/etl/task", (EtlImportService etl) =>
+{
+    var cancelled = etl.CancelActiveTask();
+    if (!cancelled)
+        return Results.Ok(new { cancelled = false, reason = "无活跃任务" });
+    return Results.Ok(new { cancelled = true });
+})
+.WithName("AdminCancelEtl")
 .RequireRateLimiting("etl");
 
 // Day 8.4: 后台 ETL 进度查询 (后台 ETL 页面 3s 轮询)
