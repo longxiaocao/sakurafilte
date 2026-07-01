@@ -105,31 +105,34 @@ public class DeadLetterCleanupService : BackgroundService
             return;
         }
 
-        // 2) 计算截止时间 (按 moved_at 算,而非 created_at:
-        //    moved_at = 进入死信的时间;created_at = 进入 pending 的时间,可能远早于 moved_at)
+        // 2) 计算截止时间
         // Day 7.10.1 BUG FIX: 只清 status='recovered' 的, 保留 active 永不清
         //   WHY: 死信行是历史留痕, active 状态的死信可能正等待 worker / 人工处理
         //   之前方案直接 DELETE 死信, 误删了 active 行会让数据丢失
+        // Day 7.10.2 PATCH: 清理条件用 recovered_at 而非 moved_at
+        //   WHY: moved_at = 首次入死信时间, recovered_at = 恢复时间
+        //   一条 7 天前入死信但 1 小时前刚恢复的记录, 用 moved_at 会被误删
+        //   改用 recovered_at 避免丢失恢复历史
         var cutoff = DateTime.UtcNow.AddDays(-retentionDays);
 
-        // 3) 先 Count 整体规模 (限定 status=recovered)
+        // 3) 先 Count 整体规模 (status=recovered + recovered_at < cutoff)
         var totalCandidate = await db.SearchIndexDeadLetters
-            .Where(d => d.Status == "recovered" && d.MovedAt < cutoff)
+            .Where(d => d.Status == "recovered" && d.RecoveredAt != null && d.RecoveredAt < cutoff)
             .LongCountAsync(ct);
         if (totalCandidate == 0)
         {
-            _logger.LogInformation("死信无需清理 (cutoff={Cutoff}, status=recovered 无候选记录)", cutoff);
+            _logger.LogInformation("死信无需清理 (cutoff={Cutoff}, status=recovered 且 recovered_at < cutoff 无候选记录)", cutoff);
             return;
         }
-        _logger.LogInformation("开始清理 {Cutoff} 之前 status=recovered 死信,候选 {Total} 条 (保留 {Days} 天, 批大小 {Batch})",
+        _logger.LogInformation("开始清理 recovered_at < {Cutoff} 的 status=recovered 死信, 候选 {Total} 条 (保留 {Days} 天, 批大小 {Batch})",
             cutoff, totalCandidate, retentionDays, batchSize);
 
-        // 4) 分批删除 (限定 status=recovered 双重保护,防止并发恢复后误删)
+        // 4) 分批删除 (三重保护: status + recovered_at + 防止并发恢复后误删)
         long totalDeleted = 0;
         while (!ct.IsCancellationRequested)
         {
             var idsToDelete = await db.SearchIndexDeadLetters
-                .Where(d => d.Status == "recovered" && d.MovedAt < cutoff)
+                .Where(d => d.Status == "recovered" && d.RecoveredAt != null && d.RecoveredAt < cutoff)
                 .OrderBy(d => d.Id)
                 .Take(batchSize)
                 .Select(d => d.Id)

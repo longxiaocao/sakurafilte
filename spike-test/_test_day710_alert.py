@@ -103,7 +103,7 @@ print('\n验证告警抑制: 再注入 2 条同源错误 (基于 products/xrefs 
 for entity, source_idx in (('products', 1), ('xrefs', 2)):
     # 复用 line 67 之后已经注入的 3 条中, 取 entity 匹配的 last_error
     cur.execute("""SELECT last_error FROM etl_progress_log
-                   WHERE entity_type=%s AND last_error LIKE 'TEST-DAY710-ALERT-%'
+                   WHERE entity_type=%s AND last_error LIKE 'TEST-DAY710-ALERT-%%'
                    ORDER BY id DESC LIMIT 1""", (entity,))
     row = cur.fetchone()
     if not row:

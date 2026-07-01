@@ -377,7 +377,7 @@
           "refId": "A",
           "datasource": { "type": "postgres", "uid": "postgres-sakurafilter" },
           "format": "table",
-          "rawSql": "SELECT id, operation, recovery_count, moved_at, last_recovery_at, substring(coalesce(last_recovery_error, ''), 1, 60) AS recovery_error, substring(coalesce(last_error, ''), 1, 60) AS last_error FROM search_index_dead_letter WHERE last_recovery_at >= now() - interval '24 hours' ORDER BY last_recovery_at DESC LIMIT 50",
+          "rawSql": "SELECT id, operation, recovery_count, moved_at, last_recovery_at, substring(coalesce(last_recovery_error, ''), 1, 60) AS recovery_error, substring(coalesce(last_error, ''), 1, 60) AS last_error FROM search_index_dead_letter WHERE status = 'recovered' AND last_recovery_at >= now() - interval '24 hours' ORDER BY last_recovery_at DESC LIMIT 50",
           "rawQuery": true
         }
       ],
