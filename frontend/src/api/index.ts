@@ -94,8 +94,9 @@ export const etlApi = {
     return http.post('/admin/etl/trigger', req).then((r) => r.data)
   },
   // Day 9.4: 取消 ETL, 接受 reason 写到 etl_progress_log.cancel_reason
-  cancel(reason?: string): Promise<{ cancelled: boolean; reason?: string }> {
-    return http.delete('/admin/etl/task', { data: { reason } }).then((r) => r.data)
+  // Day 9.5: 接受 reasonCode 写到 etl_progress_log.reason_code (USER_REQUEST/TIMEOUT/SYSTEM_SHUTDOWN/ADMIN_OVERRIDE/OTHER)
+  cancel(reason?: string, reasonCode?: string): Promise<{ cancelled: boolean; reason?: string; reasonCode?: string; normalizedCode?: string }> {
+    return http.delete('/admin/etl/task', { data: { reason, reasonCode } }).then((r) => r.data)
   },
 
 

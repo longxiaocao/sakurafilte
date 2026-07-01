@@ -143,6 +143,9 @@ public class EtlAlertService : BackgroundService
         }
 
         // 2) 取出未告警的失败记录
+        //   Day 9.5: 显式排除 status='cancelled' 防止误告警
+        //     Day 9.4 修复后, 取消走 status='cancelled', 但 "被取消" 不应触发 P0/P1 告警
+        //     (用户主动取消是设计行为, 不算故障; 系统取消需要单独监控)
         var failed = await db.EtlProgressLogs
             .Where(l => l.Status == "failed" && !l.AlertSent)
             .OrderBy(l => l.Id)
@@ -309,6 +312,7 @@ public class EtlAlertService : BackgroundService
     /// <summary>
     /// 构造 webhook payload (通用 JSON,支持钉钉/飞书/Slack/自定义)
     /// WHY 用通用结构: 不同 webhook 接收格式不同,通用 JSON 由接收端 adapter 解析
+    /// Day 9.5: 加入 reason_code + cancel_reason, 让告警接收方能区分 "用户取消" 与 "真异常"
     /// </summary>
     private static object BuildPayload(Core.Entities.EtlProgressLog item)
     {
@@ -333,6 +337,10 @@ public class EtlAlertService : BackgroundService
                 indexed_count = item.IndexedCount,
                 index_pending_count = item.IndexPendingCount,
                 last_error = item.LastError,
+                // Day 9.5: 取消审计 (NULL 表示非取消)
+                cancel_reason = item.CancelReason,
+                cancelled_at = item.CancelledAt?.ToString("o"),
+                reason_code = item.ReasonCode,
                 started_at = item.StartedAt.ToString("o"),
                 finished_at = item.FinishedAt.ToString("o"),
                 duration_sec = item.DurationSec,

@@ -949,10 +949,20 @@ app.MapPost("/api/admin/etl/trigger", async (
 app.MapDelete("/api/admin/etl/task", (EtlImportService etl, [Microsoft.AspNetCore.Mvc.FromBody] CancelRequest? body) =>
 {
     var reason = string.IsNullOrWhiteSpace(body?.Reason) ? "用户取消" : body!.Reason!.Trim();
-    var cancelled = etl.CancelActiveTask(reason);
+    // Day 9.5: reasonCode 可选 (USER_REQUEST/TIMEOUT/SYSTEM_SHUTDOWN/ADMIN_OVERRIDE/OTHER), 兜底 USER_REQUEST
+    var reasonCode = string.IsNullOrWhiteSpace(body?.ReasonCode) ? "USER_REQUEST" : body!.ReasonCode!.Trim();
+    var normalizedCode = EtlProgress.NormalizeReasonCode(reasonCode);
+    var cancelled = etl.CancelActiveTask(reason, reasonCode);
     if (!cancelled)
-        return Results.Ok(new { cancelled = false, reason = "无活跃任务" });
-    return Results.Ok(new { cancelled = true, reason });
+        // Day 9.5: 即便没活跃任务, 也回显规范化后的 code, 便于前端 echo 用户输入
+        return Results.Ok(new { cancelled = false, reason = "无活跃任务", reasonCode, normalizedCode });
+    return Results.Ok(new
+    {
+        cancelled = true,
+        reason,
+        reasonCode,
+        normalizedCode
+    });
 })
 .WithName("AdminCancelEtl")
 .RequireRateLimiting("etl");
@@ -1008,7 +1018,7 @@ public record ImportRequest(string JsonlPath, string? Mode);
 
 // Day 8.2: 批量对比请求体
 // Day 9.4: ETL 取消请求体, 携带取消原因写到 etl_progress_log
-public record CancelRequest(string? Reason);
+public record CancelRequest(string? Reason, string? ReasonCode);
 
 
 

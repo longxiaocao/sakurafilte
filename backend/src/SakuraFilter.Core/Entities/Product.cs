@@ -262,4 +262,6 @@ public class EtlProgressLog
     // Day 9.4: 取消审计 (DELETE /api/admin/etl/task 时写入)
     [Column("cancel_reason")] public string? CancelReason { get; set; }
     [Column("cancelled_at")] public DateTime? CancelledAt { get; set; }
+    // Day 9.5: 取消原因标准化枚举码 (USER_REQUEST/TIMEOUT/SYSTEM_SHUTDOWN/ADMIN_OVERRIDE/OTHER)
+    [Column("reason_code")] public string? ReasonCode { get; set; }
 }

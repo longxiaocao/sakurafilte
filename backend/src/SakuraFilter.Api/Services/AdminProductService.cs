@@ -284,10 +284,11 @@ public class AdminProductService
     //   WHY: 前端 "共 N 条" 需要真实总数, 之前 items.Count 会被 limit 截断
     //   实现: 一次查询, CountAsync(filtered) + ToListAsync(filtered.Take(limit))
     //   优化: EF Core 会翻译成单条 SQL (SELECT ... ORDER BY ... LIMIT N), count 走另一条聚合
-    /// Day 9.4: cursor 字段 (PageCursor DTO), 前端用它翻下一页
+    // Day 9.4: cursor 字段 (PageCursor DTO), 前端用它翻下一页
+    // Day 9.5: cursor HMAC 签名 (复用 CursorHmac, 防止客户端篡改 (changedAt, id) 越权访问其他产品)
     public record PageCursor(DateTime ChangedAt, long Id);
-    /// Day 9.4: 解码 cursor (base64url → PageCursor), 解析失败返回 null
-    public static PageCursor? DecodeCursor(string? cursor)
+    /// Day 9.5: 解码 cursor (base64url → PageCursor), 验签失败返回 null
+    public PageCursor? DecodeCursor(string? cursor)
     {
         if (string.IsNullOrEmpty(cursor)) return null;
         try
@@ -298,17 +299,40 @@ public class AdminProductService
             var bytes = Convert.FromBase64String(s64);
             var s = System.Text.Encoding.UTF8.GetString(bytes);
             var parts = s.Split('|');
-            if (parts.Length != 2) return null;
+            if (parts.Length != 3) return null;  // Day 9.5: 多一段 sig
             if (!long.TryParse(parts[0], out var ticks)) return null;
             if (!long.TryParse(parts[1], out var id)) return null;
-            return new PageCursor(new DateTime(ticks, DateTimeKind.Utc), id);
+            var sig = parts[2];
+            // Day 9.5: 验签 — CursorHmac.VerifyAndExtract 失败抛 ArgumentException
+            //   重要: 编码端 DateTime.Kind 不可控 (Npgsql legacy 模式可能 Utc/Local/Unspecified)
+            //         ISO "o" 格式因 Kind 不同会带 +08:00 / Z / 无后缀, 导致签名不匹配
+            //   解决: 用 raw ticks (Kind 无关) 作为签名输入
+            try
+            {
+                _cursorHmac.VerifyAndExtract($"{ticks}|{id}|{sig}");
+            }
+            catch (ArgumentException ex)
+            {
+                _logger.LogWarning("DecodeCursor 验签失败: {Ex} cursor={Cursor}", ex.Message, cursor);
+                return null;
+            }
+            // 还原 DateTime (Kind=Unspecified, 与 Npgsql 读出时一致; Query 内 EF 会正确处理)
+            return new PageCursor(new DateTime(ticks, DateTimeKind.Unspecified), id);
         }
-        catch { return null; }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "DecodeCursor 异常: cursor={Cursor}", cursor);
+            return null;
+        }
     }
-    /// Day 9.4: 编码 cursor (PageCursor → base64url)
-    public static string EncodeCursor(DateTime changedAt, long id)
+    /// Day 9.5: 编码 cursor (PageCursor → base64url), 附带 HMAC 签名
+    public string EncodeCursor(DateTime changedAt, long id)
     {
-        var s = string.Format("{0}|{1}", changedAt.Ticks, id);
+        // WHY 用 raw ticks 不用 ToString("o"): ISO "o" 格式对 Kind 敏感
+        //   (Local/Utc/Unspecified 输出不同, +08:00 vs Z vs 无后缀)
+        //   raw ticks 唯一标识一个时间点, 跨 Kind 稳定
+        var sig = _cursorHmac.Sign(changedAt.Ticks.ToString(), id);
+        var s = string.Format("{0}|{1}|{2}", changedAt.Ticks, id, sig);
         return Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(s))
             .TrimEnd('=').Replace('+', '-').Replace('/', '_');
     }
