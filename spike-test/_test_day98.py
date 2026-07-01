@@ -151,9 +151,30 @@ def test_new_cancel_recorded():
     # WHY 必须用正确字段: EtlImportService 读 oem_no_normalized/oem_no_display/type
     #   之前用 oem_no 全部 'key not present' 报错, 2.9s 跑完 30K, cancel 永远来不及
     jsonl_path = "D:/data/sakurafilter/_test_day98_audit_100k.jsonl"
-    if not os.path.exists(jsonl_path):
+
+    # Day 9.8 v3: 文件存在也校验内容, 防止历史错误格式文件被复用
+    # WHY: 30K 文件生成时字段名错 (oem_no) 写入磁盘, 后续测试若只检查 exists 就会用错文件
+    need_regen = True
+    if os.path.exists(jsonl_path):
+        try:
+            with open(jsonl_path, "r", encoding="utf-8") as f:
+                first_line = f.readline()
+            sample = json.loads(first_line)
+            if "oem_no_normalized" in sample and "oem_no_display" in sample and "type" in sample:
+                need_regen = False
+                print(f"  [INFO] 复用现有 100K 文件 (字段已正确): {jsonl_path}")
+            else:
+                print(f"  [WARN] 现有 100K 文件字段错, 删除重建: missing keys = {set(['oem_no_normalized','oem_no_display','type']) - set(sample.keys())}")
+                os.remove(jsonl_path)
+        except Exception as e:
+            print(f"  [WARN] 现有 100K 文件解析失败 ({e}), 删除重建")
+            try:
+                os.remove(jsonl_path)
+            except Exception:
+                pass
+    if need_regen:
         print(f"  [INFO] 正在生成 100000 测试文件 (用正确字段名)...")
-        with open(jsonl_path, "w") as f:
+        with open(jsonl_path, "w", encoding="utf-8") as f:
             for i in range(1, 100001):
                 f.write(json.dumps({
                     "oem_no_normalized": f"DAY98-AUDIT-{i:06d}",
@@ -165,8 +186,6 @@ def test_new_cancel_recorded():
                     "h1_mm": 100.0
                 }) + "\n")
         print(f"  [INFO] 文件已生成: {jsonl_path}")
-    else:
-        print(f"  [INFO] 复用现有 100K 文件: {jsonl_path}")
 
     # 先记录当前最大 id (基线)
     code0, body0 = http("GET", "/api/admin/etl/history?status=cancelled&limit=1", headers=H_ADMIN)

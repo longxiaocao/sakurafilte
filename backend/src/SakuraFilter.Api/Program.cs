@@ -317,8 +317,11 @@ app.MapPost("/api/etl/import", async (ImportRequest req, EtlImportService etl, I
 
     var mode = (req.Mode ?? "upsert").ToLowerInvariant();
     logger.LogInformation("触发 ETL 导入: {Path} (mode={Mode})", req.JsonlPath, mode);
-    // 后台跑,不阻塞 HTTP 响应
-    _ = Task.Run(async () => await etl.ImportProductsAsync(req.JsonlPath, mode, CancellationToken.None));
+    // Day 9.8 BUG FIX: 必须走 TriggerAsync, 让 _activeCts 正确设置
+    //   之前直接调 ImportProductsAsync 绕过 _activeCts, 导致 CancelActiveTask 永远 cancelled=False
+    //   症状: HTTP 触发的 ETL 无法被取消, /api/admin/etl/task 端点 cancelled 永远 False
+    //   修复: 后台触发 TriggerAsync, 内部 _activeCts 会被设置, finally 清空
+    _ = Task.Run(async () => await etl.TriggerAsync("products", req.JsonlPath, mode, CancellationToken.None));
     return Results.Accepted(value: etl.Progress.ToJson());
 })
 .WithName("EtlImport")
