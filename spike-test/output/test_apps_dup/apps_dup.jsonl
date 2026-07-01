@@ -1,0 +1,4 @@
+{"product_oem": "0H56617", "machine_brand": "DUP_TEST", "machine_model": "M1", "model_name": null, "engine_brand": null, "engine_type": null, "engine_energy": null, "production_date_start": null, "is_ongoing": false}
+{"product_oem": "0H56617", "machine_brand": "DUP_TEST", "machine_model": "M1", "model_name": "DUPLICATE", "engine_brand": null, "engine_type": null, "engine_energy": null, "production_date_start": null, "is_ongoing": false}
+{"product_oem": "0H56617", "machine_brand": "DUP_TEST", "machine_model": "M2", "model_name": null, "engine_brand": null, "engine_type": null, "engine_energy": null, "production_date_start": null, "is_ongoing": false}
+{"product_oem": "0H56617", "machine_brand": null, "machine_model": "M3", "model_name": null, "engine_brand": null, "engine_type": null, "engine_energy": null, "production_date_start": null, "is_ongoing": false}

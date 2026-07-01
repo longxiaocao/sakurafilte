@@ -1,0 +1,6 @@
+{ this is not valid json
+{"product_oem": "0H56617"}
+{"product_oem": null, "machine_brand": "X", "machine_model": "Y"}
+null
+{}
+not even json

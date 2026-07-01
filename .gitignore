@@ -1,0 +1,33 @@
+## .NET 编译产物
+bin/
+obj/
+*.user
+*.suo
+.vs/
+
+## IDE
+.vscode/
+.idea/
+*.swp
+
+## Trae IDE
+.trae/
+
+## Python
+__pycache__/
+*.pyc
+*.pyo
+
+## 临时文件
+*.tmp
+*.log
+!spike-test/etl_clean.log
+!spike-test/pg_log.txt
+!spike-test/meili_*.log
+
+## 操作系统
+.DS_Store
+Thumbs.db
+
+## 大型测试数据 (避免污染仓库)
+spike-test/output/synthetic_*_1000k.*

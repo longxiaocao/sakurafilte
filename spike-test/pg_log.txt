@@ -1,0 +1,21 @@
+================================================================================
+Day 2: PostgreSQL 100 万数据性能基线
+================================================================================
+[1] 创建数据库 spike_test
+
+[2] 建表 products (按 Type LIST 分区) + xrefs + apps + history
+    表 + 分区 + 索引创建完成
+
+[3] 批量导入 products (100 万行) ...
+    products: 64.3s (15,562 rows/s)
+
+[4] 批量导入 cross_references (12.5M) ...
+    [4a] 构建 OEM → product_id 映射 ...
+Traceback (most recent call last):
+  File "D:\projects\sakurafilter\spike-test\bench_postgres.py", line 240, in <module>
+    cur.execute(f"INSERT INTO oem_to_id SELECT oem_no_normalized, id FROM products")
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+psycopg2.errors.UndefinedTable: 错误:  关系 "oem_to_id" 不存在
+LINE 1: INSERT INTO oem_to_id SELECT oem_no_normalized, id FROM prod...
+                    ^
+

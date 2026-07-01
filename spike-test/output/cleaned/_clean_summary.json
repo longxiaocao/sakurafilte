@@ -1,0 +1,24 @@
+{
+  "stats": {
+    "products_read": 2132,
+    "products_emitted": 2132,
+    "xrefs_read": 2017,
+    "xrefs_emitted": 2017,
+    "apps_read": 1650,
+    "apps_emitted": 1602,
+    "apps_aligned_dropped": 1547,
+    "xrefs_aligned_dropped": 1981,
+    "dropped_header": 0,
+    "dropped_separator": 0,
+    "parsed_unit_suffix": 2108,
+    "parsed_eu_decimal": 0,
+    "parsed_special_date": 396,
+    "oem_normalized": 2132,
+    "oem_display_kept": 2132
+  },
+  "sheets_processed": [
+    "产品区",
+    "OEM区",
+    "机型区"
+  ]
+}

@@ -1,0 +1,111 @@
+2026-06-30 23:06:10,194 [INFO] 读取: d:\projects\sakurafilter\新思路.xlsx
+2026-06-30 23:06:10,419 [INFO] Sheet 列表: ['产品区', 'OEM区', '机型区', '后台新增产品格式', '各分区新增内容的管理界面', '前端展示内容', '后台搜索统筹', '对比界面']
+2026-06-30 23:06:10,574 [INFO] 产品区: 2132 行, 23 列
+2026-06-30 23:06:10,864 [INFO] OEM区: 2017 行, 4 列
+2026-06-30 23:06:11,120 [INFO] 机型区: 1650 行, 27 列
+2026-06-30 23:06:11,285 [INFO] 写出: output\cleaned\products.jsonl (2132 条)
+2026-06-30 23:06:11,292 [INFO] 写出: output\cleaned\xrefs.jsonl (2017 条)
+2026-06-30 23:06:11,299 [INFO] 写出: output\cleaned\apps.jsonl (1602 条)
+2026-06-30 23:06:11,300 [INFO] 汇总: output\cleaned\_clean_summary.json
+2026-06-30 23:06:11,300 [INFO] 最终统计: {
+  "products_read": 2132,
+  "products_emitted": 2132,
+  "xrefs_read": 2017,
+  "xrefs_emitted": 2017,
+  "apps_read": 1650,
+  "apps_emitted": 1602,
+  "dropped_header": 0,
+  "dropped_separator": 0,
+  "parsed_unit_suffix": 2108,
+  "parsed_eu_decimal": 0,
+  "parsed_special_date": 0,
+  "oem_normalized": 2132,
+  "oem_display_kept": 2132
+}
+2026-07-01 00:29:17,999 [INFO] 读取: d:\projects\sakurafilter\新思路.xlsx
+2026-07-01 00:29:18,308 [INFO] Sheet 列表: ['产品区', 'OEM区', '机型区', '后台新增产品格式', '各分区新增内容的管理界面', '前端展示内容', '后台搜索统筹', '对比界面']
+2026-07-01 00:29:18,459 [INFO] 产品区: 2132 行, 23 列
+2026-07-01 00:29:18,739 [INFO] OEM区: 2017 行, 4 列
+2026-07-01 00:29:18,989 [INFO] 机型区: 1650 行, 27 列
+2026-07-01 00:29:19,138 [INFO] 对齐: xrefs 丢弃 1981 条, apps 丢弃 1547 条 (产品集 1949 个 OEM)
+2026-07-01 00:29:19,153 [INFO] 写出: d:\projects\sakurafilter\spike-test\output\cleaned\products.jsonl (2132 条)
+2026-07-01 00:29:19,154 [INFO] 写出: d:\projects\sakurafilter\spike-test\output\cleaned\xrefs.jsonl (36 条)
+2026-07-01 00:29:19,155 [INFO] 写出: d:\projects\sakurafilter\spike-test\output\cleaned\apps.jsonl (55 条)
+2026-07-01 00:29:19,156 [INFO] 汇总: d:\projects\sakurafilter\spike-test\output\cleaned\_clean_summary.json
+2026-07-01 00:29:19,156 [INFO] 最终统计: {
+  "products_read": 2132,
+  "products_emitted": 2132,
+  "xrefs_read": 2017,
+  "xrefs_emitted": 2017,
+  "apps_read": 1650,
+  "apps_emitted": 1602,
+  "apps_aligned_dropped": 1547,
+  "xrefs_aligned_dropped": 1981,
+  "dropped_header": 0,
+  "dropped_separator": 0,
+  "parsed_unit_suffix": 2108,
+  "parsed_eu_decimal": 0,
+  "parsed_special_date": 0,
+  "oem_normalized": 2132,
+  "oem_display_kept": 2132
+}
+2026-07-01 00:32:02,805 [INFO] 读取: d:\projects\sakurafilter\新思路.xlsx
+2026-07-01 00:32:03,045 [INFO] Sheet 列表: ['产品区', 'OEM区', '机型区', '后台新增产品格式', '各分区新增内容的管理界面', '前端展示内容', '后台搜索统筹', '对比界面']
+2026-07-01 00:32:03,199 [INFO] 产品区: 2132 行, 23 列
+2026-07-01 00:32:03,486 [INFO] OEM区: 2017 行, 4 列
+2026-07-01 00:32:03,738 [INFO] 机型区: 1650 行, 27 列
+2026-07-01 00:32:03,876 [INFO] 对齐: xrefs 丢弃 1981 条, apps 丢弃 1547 条 (产品集 1949 个 OEM)
+2026-07-01 00:32:03,894 [INFO] 写出: d:\projects\sakurafilter\spike-test\output\cleaned\products.jsonl (2132 条)
+2026-07-01 00:32:03,895 [INFO] 写出: d:\projects\sakurafilter\spike-test\output\cleaned\xrefs.jsonl (36 条)
+2026-07-01 00:32:03,897 [INFO] 写出: d:\projects\sakurafilter\spike-test\output\cleaned\apps.jsonl (55 条)
+2026-07-01 00:32:03,897 [INFO] 汇总: d:\projects\sakurafilter\spike-test\output\cleaned\_clean_summary.json
+2026-07-01 00:32:03,897 [INFO] 最终统计: {
+  "products_read": 2132,
+  "products_emitted": 2132,
+  "xrefs_read": 2017,
+  "xrefs_emitted": 2017,
+  "apps_read": 1650,
+  "apps_emitted": 1602,
+  "apps_aligned_dropped": 1547,
+  "xrefs_aligned_dropped": 1981,
+  "dropped_header": 0,
+  "dropped_separator": 0,
+  "parsed_unit_suffix": 2108,
+  "parsed_eu_decimal": 0,
+  "parsed_special_date": 396,
+  "oem_normalized": 2132,
+  "oem_display_kept": 2132
+}
+2026-07-01 07:56:09,317 [INFO] 读取: d:\projects\sakurafilter\新思路.xlsx
+2026-07-01 07:56:09,538 [INFO] Sheet 列表: ['产品区', 'OEM区', '机型区', '后台新增产品格式', '各分区新增内容的管理界面', '前端展示内容', '后台搜索统筹', '对比界面']
+2026-07-01 07:56:09,682 [INFO] 产品区: 2132 行, 23 列
+2026-07-01 07:56:09,682 [INFO] sheet '产品区' 列名校验通过 (3 项必填列)
+2026-07-01 07:56:09,956 [INFO] OEM区: 2017 行, 4 列
+2026-07-01 07:56:09,957 [INFO] sheet 'OEM区' 列名校验通过 (3 项必填列)
+2026-07-01 07:56:10,203 [INFO] 机型区: 1650 行, 27 列
+2026-07-01 07:56:10,203 [INFO] sheet '机型区' 列名校验通过 (6 项必填列)
+2026-07-01 07:56:10,335 [INFO] 对齐: xrefs 丢弃 1981 条, apps 丢弃 1547 条 (产品集 1949 个 OEM)
+2026-07-01 07:56:10,351 [INFO] 写出: d:\projects\sakurafilter\spike-test\output\cleaned\products.jsonl (2132 条)
+2026-07-01 07:56:10,351 [INFO] 写出: d:\projects\sakurafilter\spike-test\output\cleaned\xrefs.jsonl (36 条)
+2026-07-01 07:56:10,352 [INFO] 写出: d:\projects\sakurafilter\spike-test\output\cleaned\apps.jsonl (55 条)
+2026-07-01 07:56:10,353 [INFO] 汇总: d:\projects\sakurafilter\spike-test\output\cleaned\_clean_summary.json
+2026-07-01 07:56:10,353 [INFO] 最终统计: {
+  "products_read": 2132,
+  "products_emitted": 2132,
+  "xrefs_read": 2017,
+  "xrefs_emitted": 2017,
+  "apps_read": 1650,
+  "apps_emitted": 1602,
+  "apps_aligned_dropped": 1547,
+  "xrefs_aligned_dropped": 1981,
+  "dropped_header": 0,
+  "dropped_separator": 0,
+  "parsed_unit_suffix": 2108,
+  "parsed_eu_decimal": 0,
+  "parsed_special_date": 396,
+  "oem_normalized": 2132,
+  "oem_display_kept": 2132
+}
+2026-07-01 07:56:17,004 [INFO] sheet '机型区' 列名校验通过 (6 项必填列)
+2026-07-01 07:56:17,005 [INFO] sheet '机型区' 列名校验通过 (6 项必填列)
+2026-07-01 07:56:23,413 [WARNING] sheet '机型区' 缺少必填列: ['Machine Brand']

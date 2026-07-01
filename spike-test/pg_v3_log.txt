@@ -1,0 +1,36 @@
+================================================================================
+Day 2 v3: PostgreSQL 100 万 - 全 COPY 方案
+================================================================================
+[1] spike_test_v3 已创建
+
+[2] 建表 + 索引(无 GIN trgm) ...
+    完成
+
+[3] COPY 导入 products (100 万) ...
+    products: 65.3s (15,311 rows/s)
+
+[4] 构建 OEM → product_id 内存映射 ...
+    962,127 条 | 0.7s
+
+[5] COPY 导入 cross_references (12.5M) ...
+    xrefs: 591.1s (21,160 rows/s, 跳过 0)
+
+[6] COPY 导入 machine_applications (15.5M) ...
+    apps: 390.3s (39,704 rows/s, 跳过 0)
+
+[7] ANALYZE ...
+    完成
+
+================================================================================
+性能测试 (5 次取 P50/P95/P99)
+================================================================================
+  [1. 主键查询                                 ] P50=    0.1ms | P95=    2.0ms | P99=    2.0ms
+  [2. 精确 OEM (normalized)                  ] P50=    0.1ms | P95=    1.7ms | P99=    1.7ms
+  [3. 精确 OEM (display)                     ] P50=    0.1ms | P95=    0.7ms | P99=    0.7ms
+Traceback (most recent call last):
+  File "D:\projects\sakurafilter\spike-test\bench_postgres_v3.py", line 295, in <module>
+    r = time_query(cur, sql, params, n_runs=5)
+  File "D:\projects\sakurafilter\spike-test\bench_postgres_v3.py", line 35, in time_query
+    cursor.execute(sql, params or ())
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+IndexError: tuple index out of range

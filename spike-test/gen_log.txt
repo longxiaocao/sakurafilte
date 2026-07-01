@@ -1,0 +1,25 @@
+开始生成 1,000,000 条产品数据 ...
+  已生成 100,000/1,000,000 | 累计 xref=1,250,382 app=1,550,207 | 耗时 25.7s
+  已生成 200,000/1,000,000 | 累计 xref=2,497,983 app=3,096,935 | 耗时 51.1s
+  已生成 300,000/1,000,000 | 累计 xref=3,749,638 app=4,645,881 | 耗时 78.4s
+  已生成 400,000/1,000,000 | 累计 xref=5,001,608 app=6,199,152 | 耗时 104.9s
+  已生成 500,000/1,000,000 | 累计 xref=6,253,500 app=7,750,288 | 耗时 130.5s
+  已生成 600,000/1,000,000 | 累计 xref=7,505,050 app=9,295,647 | 耗时 156.8s
+  已生成 700,000/1,000,000 | 累计 xref=8,755,440 app=10,845,458 | 耗时 181.6s
+  已生成 800,000/1,000,000 | 累计 xref=10,006,512 app=12,397,078 | 耗时 207.6s
+  已生成 900,000/1,000,000 | 累计 xref=11,256,205 app=13,949,178 | 耗时 233.3s
+  已生成 1,000,000/1,000,000 | 累计 xref=12,508,151 app=15,496,365 | 耗时 262.8s
+
+[1] JSONL 生成完成: 262.8s
+    products: d:\projects\sakurafilter\spike-test\output\synthetic_products_1000k.jsonl (644.9 MB)
+    xrefs:    d:\projects\sakurafilter\spike-test\output\synthetic_xrefs_1000k.jsonl (1319.0 MB) | 12,508,151 条
+    apps:     d:\projects\sakurafilter\spike-test\output\synthetic_apps_1000k.jsonl (3229.5 MB) | 15,496,365 条
+
+[2] 生成 100,000 条样本 xlsx (ETL 流程测试用) ...
+    d:\projects\sakurafilter\spike-test\output\synthetic_products_1000k.xlsx (13.8 MB)
+
+[3] 分布报告: d:\projects\sakurafilter\spike-test\output\DISTRIBUTION-REPORT.md
+
+[4] 总耗时: 295.6s
+=== Day 1 完成 ===
+
