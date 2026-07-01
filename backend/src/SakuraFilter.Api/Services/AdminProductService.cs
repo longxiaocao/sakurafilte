@@ -581,6 +581,15 @@ public class AdminProductService
         {
             total = await query.LongCountAsync(ct);
         }
+        // Day 8.2.2: 顺序很关键 - Skip 必须放在 Take 之前
+        //   错误顺序: Take(pageSize+1) 然后 Skip((page-1)*pageSize) 会导致 page>1 时跳过 pageSize 条
+        //     拿 pageSize+1 - (page-1)*pageSize 条, page=2 pageSize=100 时只剩 1 条
+        //   正确顺序: 先 Skip 再 Take, EF 翻译成 SQL: LIMIT (pageSize+1) OFFSET (page-1)*pageSize
+        //   注意: cursor 模式不需要 Skip (keyset 已经用 updated_at < cdt 跳过)
+        if (pagingMode == "offset" && page > 1)
+        {
+            query = query.Skip((page - 1) * pageSize);
+        }
         var items = await query
             .Take(pageSize + 1)  // 多取 1 条用于探测下一页 (cursor/offset 模式都可用)
             .Select(p => new ProductListItem(
@@ -607,12 +616,6 @@ public class AdminProductService
                 // 同一毫秒内多次写入 (e.g. 5 个产品间隔 0.05s) 会命中同一毫秒, .fff 截断后游标"跳过"这些行
                 nextCursor = $"{new DateTimeOffset(lastUtc, TimeSpan.Zero):yyyy-MM-ddTHH:mm:ss.ffffffZ}|{last.Id}";
             }
-        }
-
-        // Day 8.2.2: offset 模式需要 Skip (cursor 模式已用 keyset 跳过)
-        if (pagingMode == "offset" && page > 1)
-        {
-            items = items.Skip((page - 1) * pageSize).ToList();
         }
         return (items, total, nextCursor);
     }
