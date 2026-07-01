@@ -816,17 +816,8 @@ app.MapGet("/api/admin/products/{id:long}/history", async (
             untilUtc = pu;
         }
         var cap = Math.Clamp(limit ?? 50, 1, 200);
-        var items = await svc.GetHistoryAsync(id, cap, changeType, sinceUtc, untilUtc, ct);
-        return Results.Ok(new
-        {
-            total = items.Count,
-            limit = cap,
-            changeType,
-            since = sinceUtc,
-            until = untilUtc,
-            items
-        });
-    }
+        var page = await svc.GetHistoryAsync(id, cap, changeType, sinceUtc, untilUtc, ct);
+        return Results.Ok(page);
     catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
     catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
 })

@@ -280,10 +280,10 @@ public class AdminProductService
     /// 获取产品变更历史, 倒序返回 (最新变更在前)
     /// </summary>
     // Day 9.2: GetHistoryAsync 加可选筛选参数 (changeType / since / until)
-    //   WHY 增量改进: 后台看历史 50 条太多, 需要按 类型/时间 过滤
-    //   WHY 不动 EF Query 链结构: 用 IQueryable 累积, EF Core 翻译成单条 SQL
-    //   WHY limit 默认 50 保留: 与前端抽屉默认条数一致, 不破坏既有调用
-    public async Task<List<ProductHistoryItemDto>> GetHistoryAsync(
+    // Day 9.3: 返回 ProductHistoryPageDto, 包含 total (筛选后总数, 不受 limit 影响)
+    //   WHY: 前端 "共 N 条" 需要真实总数, 之前 items.Count 会被 limit 截断
+    //   实现: CountAsync(filtered) + ToListAsync(filtered.Take(limit)) 两次查询
+    public async Task<ProductHistoryPageDto> GetHistoryAsync(
         long productId,
         int limit = 50,
         string? changeType = null,
@@ -293,14 +293,11 @@ public class AdminProductService
     {
         _logger.LogInformation("GetHistoryAsync 入口 id={Id} limit={Limit} type={Type} since={Since} until={Until}",
             productId, limit, changeType, since, until);
-        // 验证产品存在 (避免对已删除产品查询历史)
         var exists = await _db.Products.AsNoTracking()
             .AnyAsync(x => x.Id == productId, ct);
         if (!exists)
             throw new KeyNotFoundException($"产品 id={productId} 不存在");
 
-        // Day 9.2: 累积式查询链, 用返回值接住 query = query.Where(...) 让 EF 翻译正确
-        //   之前项目记忆有坑: void 扩展方法 IQueryable 修改不可见, 必须返回 IQueryable<T>
         IQueryable<ProductHistory> query = _db.ProductHistory.AsNoTracking()
             .Where(h => h.ProductId == productId);
         if (!string.IsNullOrWhiteSpace(changeType))
@@ -310,18 +307,17 @@ public class AdminProductService
         if (until.HasValue)
             query = query.Where(h => h.ChangedAt <= until.Value);
 
-        return await query
+        // Day 9.3: total 在 Take 前计算, 不受 limit 影响
+        var total = await query.CountAsync(ct);
+        var items = await query
             .OrderByDescending(h => h.ChangedAt)
             .Take(limit)
             .Select(h => new ProductHistoryItemDto(
-                h.Id,
-                h.ProductId,
-                h.ChangeType,
-                h.ChangedBy,
-                h.ChangedAt,
-                h.ChangedFields
+                h.Id, h.ProductId, h.ChangeType, h.ChangedBy, h.ChangedAt, h.ChangedFields
             ))
             .ToListAsync(ct);
+
+        return new ProductHistoryPageDto(total, limit, changeType, since, until, items);
     }
 
     // ========== 详情 ==========

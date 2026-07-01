@@ -129,6 +129,11 @@ function removeApp(idx: number) {
 }
 
 async function uploadImage(slot: number, e: Event) {
+  // Day 9.3: 前端 slot 范围校验, 与后端 AdminProductImageService.UploadAsync 一致
+  if (slot < 1 || slot > 6 || !Number.isInteger(slot)) {
+    ElMessage.error('Slot 非法: ' + slot + ', 必须在 1-6 之间')
+    return
+  }
   const input = e.target as HTMLInputElement
   const file = input.files?.[0]
   if (!file) return
@@ -145,6 +150,11 @@ async function uploadImage(slot: number, e: Event) {
 }
 
 async function removeImage(slot: number) {
+  // Day 9.3: 前端 slot 范围校验
+  if (slot < 1 || slot > 6 || !Number.isInteger(slot)) {
+    ElMessage.error('Slot 非法: ' + slot + ', 必须在 1-6 之间')
+    return
+  }
   try {
     await imageApi.remove(productId.value, slot)
     images.value[slot - 1] = undefined as any

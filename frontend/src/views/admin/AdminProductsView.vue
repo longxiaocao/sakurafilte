@@ -4,7 +4,7 @@
 //   - 关键字段筛选 + 分页
 //   - 行操作: 编辑 / 软删 / 恢复 / 查看历史
 //   - 批量对比
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { adminProductApi } from '@/api'
@@ -38,6 +38,9 @@ const advFilter = reactive<AdminSearchRequest>({})
 // 历史抽屉
 const historyOpen = ref(false)
 const historyItems = ref<ProductHistoryItem[]>([])
+// Day 9.3: 历史分页响应 (含 total, 反映筛选后真实条数)
+const historyTotal = ref(0)
+// Day 9.3: 筛选条件变化时存 localStorage (放在 historyFilter 定义之后)
 // Day 9.2: 历史抽屉筛选 (changeType / since / until / limit)
 const historyFilter = reactive<{
   changeType: string
@@ -46,6 +49,33 @@ const historyFilter = reactive<{
   limit: number
 }>({ changeType: '', since: '', until: '', limit: 50 })
 const historyLoading = ref(false)
+// Day 9.3: history 筛选条件 localStorage 持久化 (跨产品查看时保留)
+const HISTORY_FILTER_KEY = 'sakura_admin_history_filter'
+const resetHistoryFilter = () => {
+  historyFilter.changeType = ''
+  historyFilter.since = ''
+  historyFilter.until = ''
+  historyFilter.limit = 50
+  saveHistoryFilter()
+}
+function saveHistoryFilter() {
+  try { localStorage.setItem(HISTORY_FILTER_KEY, JSON.stringify({...historyFilter})) } catch {}
+}
+function loadHistoryFilter() {
+  try {
+    const raw = localStorage.getItem(HISTORY_FILTER_KEY)
+    if (!raw) return
+    const saved = JSON.parse(raw)
+    if (typeof saved.changeType === 'string') historyFilter.changeType = saved.changeType
+    if (typeof saved.since === 'string') historyFilter.since = saved.since
+    if (typeof saved.until === 'string') historyFilter.until = saved.until
+    if (typeof saved.limit === 'number') historyFilter.limit = saved.limit
+  } catch {}
+}
+loadHistoryFilter()
+// Day 9.3: 筛选条件变化时存 localStorage
+watch(historyFilter, () => saveHistoryFilter(), { deep: true })
+// (上面这行是第 2 个 watch,删除后保留 1 个)
 
 // 批量选择
 const selected = ref<ProductListItem[]>([])
@@ -137,20 +167,14 @@ async function loadHistory(productId: number) {
     if (historyFilter.changeType) params.changeType = historyFilter.changeType
     if (historyFilter.since) params.since = new Date(historyFilter.since).toISOString()
     if (historyFilter.until) params.until = new Date(historyFilter.until).toISOString()
-    const { items } = await adminProductApi.history(productId, params)
-    historyItems.value = items
+    const result = await adminProductApi.history(productId, params)
+    historyItems.value = result.items
+    historyTotal.value = result.total
   } catch (e: any) {
     // 错误已被拦截器
   } finally {
     historyLoading.value = false
   }
-}
-
-function resetHistoryFilter() {
-  historyFilter.changeType = ''
-  historyFilter.since = ''
-  historyFilter.until = ''
-  historyFilter.limit = 50
 }
 
 async function batchCompare() {
@@ -399,7 +423,10 @@ onMounted(load)
           </div>
         </div>
         <div class="mt-2 text-xs text-muted flex items-center gap-2">
-          <span>共 {{ historyItems.length }} 条</span>
+          <!-- Day 9.3: total 反映筛选后真实总数, 不受 limit 影响 -->
+          <span>共 <b class="text-fg">{{ historyTotal }}</b> 条
+            <span v-if="historyTotal > historyItems.length" class="text-muted">(本页 {{ historyItems.length }} / 限制 {{ historyFilter.limit }})</span>
+          </span>
           <span v-if="historyLoading">加载中...</span>
           <el-button size="small" text @click="resetHistoryFilter">重置</el-button>
         </div>

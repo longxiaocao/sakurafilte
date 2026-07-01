@@ -210,6 +210,16 @@ export interface ProductHistoryItem {
   changedFields?: string
 }
 
+// Day 9.3: 历史分页响应 (含 total, 反映筛选后真实条数)
+export interface ProductHistoryPage {
+  total: number
+  limit: number
+  changeType?: string
+  since?: string
+  until?: string
+  items: ProductHistoryItem[]
+}
+
 // ===== 高级搜索请求 (Day 8.2 DTO) =====
 export interface AdminSearchRequest {
   page?: number

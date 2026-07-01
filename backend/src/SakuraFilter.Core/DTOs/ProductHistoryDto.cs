@@ -16,6 +16,15 @@ public record ProductHistoryItemDto(
     DateTime ChangedAt,
     string? ChangedFields
 );
+/// <summary>Day 9.3: 历史分页响应</summary>
+public record ProductHistoryPageDto(
+    int Total,
+    int Limit,
+    string? ChangeType,
+    DateTime? Since,
+    DateTime? Until,
+    List<ProductHistoryItemDto> Items
+);
 
 /// <summary>
 /// 后台手动 ETL 触发请求

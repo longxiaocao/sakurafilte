@@ -50,10 +50,11 @@ export const adminProductApi = {
   restore(id: number, by: string): Promise<void> {
     return http.post(`/admin/products/${id}/restore`, null, { headers: { 'X-User': by } }).then((r) => r.data)
   },
+  // Day 9.3: 返回 ProductHistoryPage, total 反映筛选后真实总数
   history(
     id: number,
     options?: { limit?: number; changeType?: string; since?: string; until?: string }
-  ): Promise<{ total: number; limit: number; changeType?: string; since?: string; until?: string; items: ProductHistoryItem[] }> {
+  ): Promise<import('./types').ProductHistoryPage> {
     const params: Record<string, any> = {}
     if (options?.limit) params.limit = options.limit
     if (options?.changeType) params.changeType = options.changeType
@@ -100,3 +101,4 @@ export const etlApi = {
     return http.get('/etl/status').then((r) => r.data)
   }
 }
+
