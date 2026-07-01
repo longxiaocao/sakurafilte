@@ -5,7 +5,7 @@ import path from 'node:path'
 // Day 9: Vite 配置
 //   - @ 别名: @/ -> src/
 //   - 开发服务器: 5173 (CORS 白名单)
-//   - API 代理: /api -> http://localhost:5000 (后端 Kestrel)
+//   - API 代理: /api -> http://localhost:5148 (后端 Kestrel)
 export default defineConfig({
   plugins: [vue()],
   resolve: {
@@ -18,7 +18,7 @@ export default defineConfig({
     host: '0.0.0.0',
     proxy: {
       '/api': {
-        target: 'http://localhost:5000',
+        target: 'http://localhost:5148',
         changeOrigin: true
       }
     }

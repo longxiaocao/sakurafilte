@@ -750,10 +750,9 @@ public class AdminProductService
             if (pagingMode == "cursor")
             {
                 var last = items[^1];
-                // 强转 UTC: Npgsql legacy 模式下 DateTime 可能是 Local Kind, 不强转 DateTimeOffset 抛异常
-                var lastUtc = last.UpdatedAt.Kind == DateTimeKind.Utc
-                    ? last.UpdatedAt
-                    : last.UpdatedAt.ToUniversalTime();
+                // Day 9.9: 修复 EnableLegacyTimestampBehavior 下 Kind=Local → ToUniversalTime 会偏移 8h
+                //   SpecifyKind 只改 Kind 不改时间值 (值已是正确的 UTC, 仅 Kind 标记错误)
+                var lastUtc = DateTime.SpecifyKind(last.UpdatedAt, DateTimeKind.Utc);
                 // Day 8.2.2 修复: PG timestamptz 是微秒精度 (6 位), .fff 毫秒精度会丢精度导致下一页漏数据
                 // 同一毫秒内多次写入 (e.g. 5 个产品间隔 0.05s) 会命中同一毫秒, .fff 截断后游标"跳过"这些行
                 // Day 8.3: cursor 末尾追加 HMAC 签名, 防止客户端篡改 updatedAt/id 越权访问

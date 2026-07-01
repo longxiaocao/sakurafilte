@@ -911,7 +911,11 @@ public class EtlImportService
                 var docs = batch.Select(p => new ProductIndexDoc(
                     p.Id, p.OemNoNormalized, p.OemNoDisplay ?? "", p.Remark, p.Type ?? "UNKNOWN",
                     p.D1Mm, p.D2Mm, p.H3Mm, p.H1Mm, p.Media, p.IsDiscontinued,
-                    new DateTimeOffset(p.UpdatedAt, TimeSpan.Zero).ToUnixTimeSeconds()
+                    // Day 9.9: 修复 EnableLegacyTimestampBehavior 下 Kind=Local 导致 DateTimeOffset 构造异常
+                    //   WHY: Npgsql.EnableLegacyTimestampBehavior 读 timestamptz 返回 Kind=Local,
+                    //        new DateTimeOffset(dt, TimeSpan.Zero) 要求 Kind==Utc, 否则抛 ArgumentException
+                    //   修复: SpecifyKind 改为 Utc (不改时间值, 只改 Kind 标记)
+                    new DateTimeOffset(DateTime.SpecifyKind(p.UpdatedAt, DateTimeKind.Utc), TimeSpan.Zero).ToUnixTimeSeconds()
                 )).ToList();
                 try
                 {

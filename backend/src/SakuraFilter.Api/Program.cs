@@ -440,7 +440,7 @@ app.MapGet("/api/admin/dead-letter", async (
     if (hasMore && rows.Count > 0)
     {
         var last = rows[^1];
-        nextCursor = $"{new DateTimeOffset(last.MovedAt, TimeSpan.Zero):yyyy-MM-ddTHH:mm:ss.fffZ}|{last.Id}";
+        nextCursor = $"{new DateTimeOffset(DateTime.SpecifyKind(last.MovedAt, DateTimeKind.Utc), TimeSpan.Zero):yyyy-MM-ddTHH:mm:ss.fffZ}|{last.Id}";
     }
     var totalAll = await db.SearchIndexDeadLetters.CountAsync(ct);
     var totalInRange = sinceUtc.HasValue || minRecoveryCount.HasValue || maxRecoveryCount.HasValue
