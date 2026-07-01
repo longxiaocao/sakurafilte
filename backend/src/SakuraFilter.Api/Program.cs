@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.Routing.Constraints;
 using Microsoft.EntityFrameworkCore;
@@ -11,6 +12,7 @@ using SakuraFilter.Infrastructure.Data;
 using SakuraFilter.Infrastructure.Storage;
 using SakuraFilter.Search;
 using SakuraFilter.Etl;
+using System.Threading.RateLimiting;
 
 // Npgsql 6+: 默认只接受 DateTime Kind=Utc, 反序列化 "2007-01-01" 这类无时区字符串会抛异常
 //   Day 8.1: machine_application.production_date_start 等字段是 DATE 类型,
@@ -21,7 +23,31 @@ AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1", new() { Title = "SakuraFilter API", Version = "0.4.0" });
+    c.AddSecurityDefinition("X-Admin-Token", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+    {
+        Name = "X-Admin-Token",
+        Type = Microsoft.OpenApi.Models.SecuritySchemeType.ApiKey,
+        In = Microsoft.OpenApi.Models.ParameterLocation.Header,
+        Description = "Day 8.4: dev 静态 token, 从 appsettings.json 的 Auth:DevStaticToken 读"
+    });
+    c.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
+    {
+        {
+            new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+            {
+                Reference = new Microsoft.OpenApi.Models.OpenApiReference
+                {
+                    Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme,
+                    Id = "X-Admin-Token"
+                }
+            },
+            Array.Empty<string>()
+        }
+    });
+});
 
 // PostgreSQL
 var pgConn = builder.Configuration.GetConnectionString("Postgres")
@@ -94,16 +120,78 @@ builder.Services.AddSingleton<IObjectStorage>(sp =>
     );
 });
 
-// Day 8.1: CORS (前端 Vite dev server localhost:5173 + 未来其它端口)
+// Day 8.1: CORS (前端 Vite dev server localhost:5173 / 5174 + 未来其它端口)
 //   WHY 显式 AllowedOrigins 而非 AllowAnyOrigin: AllowAnyOrigin + AllowCredentials
 //        浏览器会拒绝, 必须白名单
 var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
-    ?? new[] { "http://localhost:5173", "http://localhost:3000" };
+    ?? new[] { "http://localhost:5173", "http://localhost:5174", "http://localhost:3000" };
 builder.Services.AddCors(o => o.AddPolicy("SakuraFilterCors", p =>
     p.WithOrigins(allowedOrigins)
      .AllowAnyMethod()
      .AllowAnyHeader()
      .AllowCredentials()));
+
+// Day 8.4: API Rate Limiting (.NET 8 内置 System.Threading.RateLimiting)
+//   设计: 三个分区独立限流
+//     - "global"   全局默认 600/分钟 (后台 CRUD 等)
+//     - "search"   前台搜索 300/分钟 (防爬虫)
+//     - "etl"      ETL 触发 30/分钟 (防误触发 / 误重试)
+//   算法: FixedWindow 1 分钟 (简单可控, 适合 MVP)
+//   超限响应: 429 + Retry-After + ProblemDetails
+var rateLimitConfig = builder.Configuration.GetSection("RateLimit").Get<RateLimitOptions>()
+    ?? new RateLimitOptions();
+if (rateLimitConfig.Enabled)
+{
+    builder.Services.AddRateLimiter(options =>
+    {
+        options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+        options.OnRejected = async (context, ct) =>
+        {
+            context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+            context.HttpContext.Response.ContentType = "application/problem+json";
+            if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
+            {
+                context.HttpContext.Response.Headers.RetryAfter =
+                    ((int)retryAfter.TotalSeconds).ToString();
+            }
+            await context.HttpContext.Response.WriteAsync(
+                "{\"type\":\"https://tools.ietf.org/html/rfc6585#section-4\"," +
+                "\"title\":\"Too Many Requests\"," +
+                "\"status\":429," +
+                "\"detail\":\"请求频率超限, 请稍后重试\"}", ct);
+        };
+        options.AddPolicy("global", ctx =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: ctx.Connection.RemoteIpAddress?.ToString() ?? "global",
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = rateLimitConfig.GlobalPermitsPerMinute,
+                    Window = TimeSpan.FromMinutes(1),
+                    QueueLimit = 0,
+                    AutoReplenishment = true
+                }));
+        options.AddPolicy("search", ctx =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: ctx.Connection.RemoteIpAddress?.ToString() ?? "search",
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = rateLimitConfig.SearchPermitsPerMinute,
+                    Window = TimeSpan.FromMinutes(1),
+                    QueueLimit = 0,
+                    AutoReplenishment = true
+                }));
+        options.AddPolicy("etl", ctx =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: ctx.Connection.RemoteIpAddress?.ToString() ?? "etl",
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = rateLimitConfig.EtlPermitsPerMinute,
+                    Window = TimeSpan.FromMinutes(1),
+                    QueueLimit = 0,
+                    AutoReplenishment = true
+                }));
+    });
+}
 
 // Day 8.1: 路由约束 — slot 用 :int (后端内部转 short, 范围 1-6 校验)
 //   WHY 不注册 :short: ASP.NET Core 8 Routing.ConstraintMap 不支持 typeof(short),
@@ -117,13 +205,34 @@ builder.Services.AddScoped<AdminProductImageService>();
 
 var app = builder.Build();
 
-app.UseCors("SakuraFilterCors");
-
+// Day 8.4: 中间件 pipeline 顺序
+//   1) UseExceptionHandler 统一错误 (开发环境显示堆栈, 生产隐藏)
+//   2) UseCors 跨域 (要在鉴权前, 否则 preflight 失败)
+//   3) UseRateLimiter 限流 (鉴权前, 防匿名 DoS)
+//   4) DevTokenAuthMiddleware 自定义鉴权
+//   5) UseOpenAPI 文档 (所有环境可用, 替代原 Swagger)
 if (app.Environment.IsDevelopment())
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
+    app.UseDeveloperExceptionPage();
 }
+app.UseCors("SakuraFilterCors");
+if (rateLimitConfig.Enabled)
+{
+    app.UseRateLimiter();
+}
+app.UseMiddleware<DevTokenAuthMiddleware>();
+
+// Day 8.4: Scalar UI 替代 Swagger (生产环境也可访问, 配防火墙策略控制)
+//   端点: /scalar (Scalar UI) + /openapi/v1.json (原始 OpenAPI 文档, 给前端生成 TS 类型用)
+//   Day 8.4 实际回退: 环境无外网, 用已缓存的 Swashbuckle 6.6.2 (Swagger UI)
+//   生产部署时: nuget 装 Scalar.AspNetCore → 改用 MapScalarApiReference
+app.UseSwagger();
+app.UseSwaggerUI(c =>
+{
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "SakuraFilter v1");
+    c.DocumentTitle = "SakuraFilter API (Day 8.4)";
+    c.DocExpansion(Swashbuckle.AspNetCore.SwaggerUI.DocExpansion.List);
+});
 
 app.MapGet("/", () => Results.Ok(new { name = "SakuraFilter API", version = "0.3.0", status = "running" }));
 
@@ -134,7 +243,8 @@ app.MapPost("/api/search", async (SearchRequest req, ISearchProvider search, Can
     return Results.Ok(new { provider = search.Name, result });
 })
 .WithName("SearchProducts")
-.WithOpenApi();
+.WithOpenApi()
+.RequireRateLimiting("search");
 
 // 搜索健康检查 (监控主备状态)
 app.MapGet("/api/search/health", async (ISearchProvider search, CancellationToken ct) =>
@@ -497,8 +607,8 @@ app.MapPost("/api/admin/products", async (ProductFormDto form, AdminProductServi
         var p = await svc.CreateAsync(form, user, ct);
         return Results.Created($"/api/admin/products/{p.Id}", p);
     }
-    catch (InvalidOperationException ex) { return Results.Conflict(new { error = ex.Message }); }
-    catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
+    catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+    catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
 })
 .WithName("AdminCreateProduct");
 
@@ -523,7 +633,7 @@ app.MapGet("/api/admin/products", async (
 //   Day 8.2.1: countMode=exact|estimated|none, 默认 exact (向后兼容)
 app.MapGet("/api/admin/products/search", async (
     [AsParameters] AdminProductSearchRequest req,
-    AdminProductService svc, CancellationToken ct) =>
+    AdminProductService svc, HttpContext ctx, CancellationToken ct) =>
 {
     try
     {
@@ -557,8 +667,8 @@ app.MapGet("/api/admin/products/search", async (
     }
     catch (ArgumentException ex)
     {
-        // Day 8.3: cursor HMAC 验签失败 / 格式错统一转 400
-        return Results.BadRequest(new { error = ex.Message });
+        // Day 8.4: cursor HMAC 验签失败 / 格式错统一转 ProblemDetails
+        return ProblemDetailsFactory.FromException(ctx, ex);
     }
 })
 .WithName("AdminSearchProducts");
@@ -580,7 +690,7 @@ app.MapPost("/api/admin/products/compare", async (
 .WithName("AdminCompareProducts");
 
 // 详情
-app.MapGet("/api/admin/products/{id:long}", async (long id, AdminProductService svc, AdminProductImageService imgSvc, CancellationToken ct) =>
+app.MapGet("/api/admin/products/{id:long}", async (long id, AdminProductService svc, AdminProductImageService imgSvc, HttpContext ctx, CancellationToken ct) =>
 {
     try
     {
@@ -588,7 +698,7 @@ app.MapGet("/api/admin/products/{id:long}", async (long id, AdminProductService 
         var imgs = await imgSvc.ListAsync(id, ct);
         return Results.Ok(p with { Images = imgs });
     }
-    catch (KeyNotFoundException ex) { return Results.NotFound(new { error = ex.Message }); }
+    catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
 })
 .WithName("AdminGetProduct");
 
@@ -601,8 +711,8 @@ app.MapPut("/api/admin/products/{id:long}", async (long id, ProductFormDto form,
         var p = await svc.UpdateAsync(id, form, user, ct);
         return Results.Ok(p);
     }
-    catch (KeyNotFoundException ex) { return Results.NotFound(new { error = ex.Message }); }
-    catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
+    catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+    catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
 })
 .WithName("AdminUpdateProduct");
 
@@ -615,8 +725,8 @@ app.MapDelete("/api/admin/products/{id:long}", async (long id, AdminProductServi
         await svc.DeleteAsync(id, user, ct);
         return Results.Ok(new { id, discontinued = true });
     }
-    catch (KeyNotFoundException ex) { return Results.NotFound(new { error = ex.Message }); }
-    catch (InvalidOperationException ex) { return Results.Conflict(new { error = ex.Message }); }
+    catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+    catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
 })
 .WithName("AdminDeleteProduct");
 
@@ -629,14 +739,14 @@ app.MapPost("/api/admin/products/{id:long}/restore", async (long id, AdminProduc
         await svc.RestoreAsync(id, user, ct);
         return Results.Ok(new { id, restored = true });
     }
-    catch (KeyNotFoundException ex) { return Results.NotFound(new { error = ex.Message }); }
-    catch (InvalidOperationException ex) { return Results.Conflict(new { error = ex.Message }); }
+    catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+    catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
 })
 .WithName("AdminRestoreProduct");
 
 // 上传产品图 (slot 1-6)
 app.MapPost("/api/admin/products/{id:long}/images/{slot:int}", async (
-    long id, int slot, HttpRequest req, AdminProductImageService svc, CancellationToken ct) =>
+    long id, int slot, HttpRequest req, AdminProductImageService svc, HttpContext ctx, CancellationToken ct) =>
 {
     if (slot < 1 || slot > 6) return Results.BadRequest(new { error = "slot 必须在 1-6 之间" });
     if (!req.HasFormContentType) return Results.BadRequest(new { error = "需 multipart/form-data" });
@@ -650,15 +760,15 @@ app.MapPost("/api/admin/products/{id:long}/images/{slot:int}", async (
         var img = await svc.UploadAsync(id, (short)slot, stream, file.ContentType ?? "image/jpeg", user, ct);
         return Results.Ok(img);
     }
-    catch (KeyNotFoundException ex) { return Results.NotFound(new { error = ex.Message }); }
-    catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
-    catch (InvalidOperationException ex) { return Results.BadRequest(new { error = ex.Message }); }
+    catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+    catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+    catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
 })
 .WithName("AdminUploadProductImage")
 .DisableAntiforgery();  // 后台上传不强制 CSRF (内部 API)
 
 // 删除产品图
-app.MapDelete("/api/admin/products/{id:long}/images/{slot:int}", async (long id, int slot, AdminProductImageService svc, CancellationToken ct) =>
+app.MapDelete("/api/admin/products/{id:long}/images/{slot:int}", async (long id, int slot, AdminProductImageService svc, HttpContext ctx, CancellationToken ct) =>
 {
     if (slot < 1 || slot > 6) return Results.BadRequest(new { error = "slot 必须在 1-6 之间" });
     try
@@ -666,8 +776,8 @@ app.MapDelete("/api/admin/products/{id:long}/images/{slot:int}", async (long id,
         await svc.DeleteAsync(id, (short)slot, ct);
         return Results.Ok(new { productId = id, slot, deleted = true });
     }
-    catch (KeyNotFoundException ex) { return Results.NotFound(new { error = ex.Message }); }
-    catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
+    catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+    catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
 })
 .WithName("AdminDeleteProductImage");
 
@@ -675,6 +785,63 @@ app.MapDelete("/api/admin/products/{id:long}/images/{slot:int}", async (long id,
 app.MapGet("/api/admin/products/{id:long}/images", async (long id, AdminProductImageService svc, CancellationToken ct) =>
     Results.Ok(await svc.ListAsync(id, ct)))
 .WithName("AdminListProductImages");
+
+// Day 8.4: 产品变更历史查询 (后台详情页"变更记录"tab 用)
+app.MapGet("/api/admin/products/{id:long}/history", async (
+    long id,
+    AdminProductService svc,
+    HttpContext ctx,
+    CancellationToken ct) =>
+{
+    try
+    {
+        // 简化版: limit 不用 FromQuery, 避免绑定问题, 后端用默认 50
+        var items = await svc.GetHistoryAsync(id, 50, ct);
+        return Results.Ok(new { total = items.Count, items });
+    }
+    catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+    catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+})
+.WithName("AdminGetProductHistory")
+.RequireRateLimiting("global");
+
+// Day 8.4: 后台手动 ETL 触发 (后台 ETL 页面 "立即导入" 按钮)
+app.MapPost("/api/admin/etl/trigger", async (
+    [FromBody] EtlTriggerRequest req,
+    EtlImportService etl,
+    ILogger<Program> logger,
+    CancellationToken ct) =>
+{
+    logger.LogInformation("手动 ETL 触发 entity={Entity} mode={Mode} file={File} dryRun={Dry}",
+        req.JsonlPath, req.Mode, req.JsonlPath, req.DryRun);
+
+    if (req.DryRun)
+    {
+        // Day 8.4: dry-run 只校验文件存在 + JSON 行数, 不写库
+        if (!File.Exists(req.JsonlPath))
+            return Results.Problem(detail: $"文件不存在: {req.JsonlPath}", statusCode: 404, title: "File Not Found");
+        var lines = 0;
+        using (var fs = File.OpenRead(req.JsonlPath))
+        using (var sr = new StreamReader(fs))
+        {
+            while (await sr.ReadLineAsync(ct) != null) lines++;
+        }
+        return Results.Ok(new { dryRun = true, file = req.JsonlPath, mode = req.Mode ?? "upsert", lines, sizeBytes = new FileInfo(req.JsonlPath).Length });
+    }
+
+    var p = await etl.TriggerAsync("products", req.JsonlPath, req.Mode ?? "upsert", ct);
+    return Results.Ok(p.ToJson());
+})
+.WithName("AdminTriggerEtl")
+.RequireRateLimiting("etl");
+
+// Day 8.4: 后台 ETL 进度查询 (后台 ETL 页面 3s 轮询)
+app.MapGet("/api/admin/etl/progress", (EtlImportService etl) =>
+{
+    return Results.Ok(etl.GetActiveTaskInfo());
+})
+.WithName("AdminEtlProgress")
+.RequireRateLimiting("etl");
 
 app.Run();
 

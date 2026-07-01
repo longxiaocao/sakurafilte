@@ -275,6 +275,35 @@ public class AdminProductService
         _logger.LogInformation("产品恢复 id={Id} by={By}", id, restoredBy);
     }
 
+    // ========== 变更历史 (Day 8.4) ==========
+    /// <summary>
+    /// 获取产品变更历史, 倒序返回 (最新变更在前)
+    /// </summary>
+    public async Task<List<ProductHistoryItemDto>> GetHistoryAsync(long productId, int limit = 50, CancellationToken ct = default)
+    {
+        _logger.LogInformation("GetHistoryAsync 入口 id={Id} limit={Limit}", productId, limit);
+        // 验证产品存在 (避免对已删除产品查询历史)
+        var exists = await _db.Products.AsNoTracking()
+            .AnyAsync(x => x.Id == productId, ct);
+        _logger.LogInformation("GetHistoryAsync exists={Exists}", exists);
+        if (!exists)
+            throw new KeyNotFoundException($"产品 id={productId} 不存在");
+
+        return await _db.ProductHistory.AsNoTracking()
+            .Where(h => h.ProductId == productId)
+            .OrderByDescending(h => h.ChangedAt)
+            .Take(limit)
+            .Select(h => new ProductHistoryItemDto(
+                h.Id,
+                h.ProductId,
+                h.ChangeType,
+                h.ChangedBy,
+                h.ChangedAt,
+                h.ChangedFields
+            ))
+            .ToListAsync(ct);
+    }
+
     // ========== 详情 ==========
     public async Task<ProductDetailDto> GetByIdAsync(long id, CancellationToken ct = default)
     {

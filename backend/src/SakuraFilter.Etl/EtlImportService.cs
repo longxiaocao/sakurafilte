@@ -263,6 +263,84 @@ public class EtlImportService
         Progress = new EtlProgress(logger, _options.RecentErrorBuffer, sp);
     }
 
+    // ========== Day 8.4 手动触发 + 进度查询 ==========
+
+    /// <summary>
+    /// 手动触发 ETL (后台 ETL 页面 "立即导入" 按钮调用)
+    /// entityType: products / xrefs / apps
+    /// mode: full-load / insert-only / upsert
+    /// </summary>
+    public async Task<EtlProgress> TriggerAsync(string entityType, string jsonlPath, string mode, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(jsonlPath))
+            throw new ArgumentException("jsonlPath 不能为空");
+        if (!File.Exists(jsonlPath))
+            throw new FileNotFoundException($"JSONL 文件不存在: {jsonlPath}");
+
+        var normalizedMode = NormalizeMode(mode);
+        var normalizedEntity = entityType?.Trim().ToLowerInvariant() ?? "";
+
+        return normalizedEntity switch
+        {
+            "products" or "product" => await ImportProductsAsync(jsonlPath, normalizedMode, ct),
+            "xrefs" or "xref" or "cross_references" => await ImportXrefsAsync(jsonlPath, normalizedMode, ct),
+            "apps" or "machine_applications" => await ImportAppsAsync(jsonlPath, normalizedMode, ct),
+            _ => throw new ArgumentException($"未知 entityType={entityType}, 期望 products/xrefs/apps")
+        };
+    }
+
+    private static string NormalizeMode(string? mode)
+    {
+        if (string.IsNullOrWhiteSpace(mode)) return "upsert";
+        var m = mode.Trim().ToLowerInvariant();
+        return m switch
+        {
+            "full" or "full-load" or "fullload" or "truncate" => "full-load",
+            "insert" or "insert-only" or "insertonly" => "insert-only",
+            "upsert" or "update" => "upsert",
+            _ => "upsert"
+        };
+    }
+
+    /// <summary>
+    /// 获取当前活跃任务 + 进度信息 (后台 ETL 页面 3s 轮询)
+    /// </summary>
+    public object GetActiveTaskInfo()
+    {
+        var p = Progress;
+        var inProgress = p.Status == "running";
+        long? rowsTotal = null;  // Day 7.x ETL 不精确报 total, 只报 processed
+        int? pct = null;
+        string stage = p.Status switch
+        {
+            "running" => p.IndexPending > 0 ? "meili-sync" : "commit",
+            _ => p.Status
+        };
+        return new
+        {
+            inProgress,
+            activeTask = inProgress ? new
+            {
+                status = p.Status,
+                currentFile = p.CurrentFile,
+                stage,
+                read = p.Read,
+                inserted = p.Inserted,
+                updated = p.Updated,
+                skipped = p.Skipped,
+                errors = p.Errors,
+                indexed = p.Indexed,
+                indexPending = p.IndexPending,
+                rowsProcessed = p.Inserted + p.Updated,
+                rowsTotal,
+                progressPct = pct,
+                startedAt = p.StartedAt,
+                elapsedSec = p.Elapsed?.TotalSeconds,
+                lastError = p.LastError
+            } : null
+        };
+    }
+
     /// <summary>
     /// 主入口: 导入 products JSONL
     /// mode: "upsert" (默认,完整 INSERT ON CONFLICT DO UPDATE)
