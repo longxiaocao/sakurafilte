@@ -32,7 +32,10 @@ public class EtlAlertService : BackgroundService
     private static readonly (string Key, string Value, string Description)[] Defaults = new[]
     {
         ("alert.enabled", "false", "ETL 失败告警全局开关 (true/false, 默认关闭)"),
-        ("alert.webhook_url", "", "告警 webhook URL (钉钉/飞书/Slack/自定义 POST)"),
+        ("alert.webhook_url", "", "告警 webhook URL (钉钉/飞书/Slack/自定义 POST,通用兜底)"),
+        ("alert.webhook_url_p0", "", "P0 严重告警 webhook (Meili 连接/500/timeout, 必配)"),
+        ("alert.webhook_url_p1", "", "P1 数据问题告警 webhook (schema/列名/字段错, 可空则用通用 URL)"),
+        ("alert.webhook_url_p2", "", "P2 一般告警 webhook (其它,可空则用通用 URL)"),
         ("alert.poll_seconds", "60", "轮询周期 (秒),失败时按此间隔重试"),
         ("alert.batch_size", "50", "单批推送上限,避免一次推太多"),
     };
@@ -46,6 +49,21 @@ public class EtlAlertService : BackgroundService
         _logger = logger;
         _httpFactory = httpFactory;
     }
+
+    // Day 7.10: 失败退避状态
+    //   连续推送失败时,_consecutiveFailures 递增,poll_seconds 指数放大
+    //   任意一次成功即清零
+    //   WHY: webhook 持续不可用时,避免每分钟打日志/触发 ALERT 告警
+    private int _consecutiveFailures = 0;
+    private const int MaxBackoffMultiplier = 8;  // 8x 即最大 8*60=480s ≈ 8min
+    private const int MaxBackoffSeconds = 300;   // 硬上限 5min,避免 webhook 恢复后仍长时间沉默
+
+    // Day 7.10: 告警抑制 (per-process in-memory,5min 内同源不重发)
+    //   key = "{entity_type}|{error_class}",value = 上次推送时间
+    //   WHY: 失败风暴时 (例如 100 条同样错误) 不刷屏 webhook
+    //   牺牲: 进程重启后抑制状态丢失,但 alert_sent 列在 DB 防重,只是可能多推一次
+    private readonly Dictionary<string, DateTime> _suppressedKeys = new();
+    private static readonly TimeSpan SuppressionWindow = TimeSpan.FromMinutes(5);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -104,6 +122,9 @@ public class EtlAlertService : BackgroundService
 
         var enabled = settings.GetValueOrDefault("alert.enabled") == "true";
         var webhookUrl = settings.GetValueOrDefault("alert.webhook_url") ?? "";
+        var webhookUrlP0 = settings.GetValueOrDefault("alert.webhook_url_p0") ?? "";
+        var webhookUrlP1 = settings.GetValueOrDefault("alert.webhook_url_p1") ?? "";
+        var webhookUrlP2 = settings.GetValueOrDefault("alert.webhook_url_p2") ?? "";
         var pollSec = int.TryParse(settings.GetValueOrDefault("alert.poll_seconds"), out var ps) && ps > 0 ? ps : 60;
         var batchSize = int.TryParse(settings.GetValueOrDefault("alert.batch_size"), out var bs) && bs > 0 ? bs : 50;
 
@@ -112,9 +133,12 @@ public class EtlAlertService : BackgroundService
             _logger.LogDebug("ETL 告警已禁用 (alert.enabled != true),跳过");
             return pollSec;
         }
-        if (string.IsNullOrWhiteSpace(webhookUrl))
+        if (string.IsNullOrWhiteSpace(webhookUrl)
+            && string.IsNullOrWhiteSpace(webhookUrlP0)
+            && string.IsNullOrWhiteSpace(webhookUrlP1)
+            && string.IsNullOrWhiteSpace(webhookUrlP2))
         {
-            _logger.LogWarning("ETL 告警已启用但 alert.webhook_url 为空,跳过 (请配置)");
+            _logger.LogWarning("ETL 告警已启用但所有 webhook URL 都为空,跳过 (请配置 alert.webhook_url*)");
             return pollSec;
         }
 
@@ -131,29 +155,60 @@ public class EtlAlertService : BackgroundService
             return pollSec;
         }
 
-        _logger.LogInformation("发现 {Count} 条未告警的失败记录,开始推送 webhook", failed.Count);
+        _logger.LogInformation("发现 {Count} 条未告警的失败记录,开始推送 webhook (consecutive_failures={Fail})",
+            failed.Count, _consecutiveFailures);
 
         // 3) 逐条推送 (避免一条失败影响整批)
-        int pushed = 0, failed_push = 0;
+        int pushed = 0, failed_push = 0, suppressed = 0;
         foreach (var item in failed)
         {
             if (ct.IsCancellationRequested) break;
+
+            // Day 7.10: 告警抑制 — 5min 内同 entity_type + error_class 不重推
+            var key = BuildSuppressionKey(item);
+            if (_suppressedKeys.TryGetValue(key, out var lastAlertedAt)
+                && DateTime.UtcNow - lastAlertedAt < SuppressionWindow)
+            {
+                // 不推送,但仍置 alert_sent=true (避免下次轮询再处理)
+                item.AlertSent = true;
+                suppressed++;
+                continue;
+            }
+
             try
             {
                 var payload = BuildPayload(item);
+                // Day 7.10: 按严重度选 webhook URL (P0 > P1 > P2 > 通用兜底)
+                var severity = ClassifySeverity(item);
+                var targetUrl = severity switch
+                {
+                    "P0" => FirstNonEmpty(webhookUrlP0, webhookUrlP1, webhookUrlP2, webhookUrl),
+                    "P1" => FirstNonEmpty(webhookUrlP1, webhookUrlP2, webhookUrl, webhookUrlP0),
+                    _    => FirstNonEmpty(webhookUrlP2, webhookUrl, webhookUrlP0, webhookUrlP1),
+                };
+                if (string.IsNullOrWhiteSpace(targetUrl))
+                {
+                    _logger.LogWarning("无可用 webhook URL 推送 {Severity} 告警: id={Id} severity={Sev}",
+                        severity, item.Id, severity);
+                    failed_push++;
+                    continue;
+                }
                 using var http = _httpFactory.CreateClient("EtlAlert");
-                var resp = await http.PostAsJsonAsync(webhookUrl, payload, ct);
+                var resp = await http.PostAsJsonAsync(targetUrl, payload, ct);
                 if (resp.IsSuccessStatusCode)
                 {
                     item.AlertSent = true;
                     pushed++;
+                    _consecutiveFailures = 0;  // 成功即清零
+                    _suppressedKeys[key] = DateTime.UtcNow;
                 }
                 else
                 {
                     var body = await resp.Content.ReadAsStringAsync(ct);
-                    _logger.LogWarning("webhook 推送失败: id={Id} status={Status} body={Body}",
-                        item.Id, (int)resp.StatusCode, body.Length > 200 ? body[..200] : body);
+                    _logger.LogWarning("webhook 推送失败: id={Id} severity={Sev} status={Status} body={Body}",
+                        item.Id, severity, (int)resp.StatusCode, body.Length > 200 ? body[..200] : body);
                     failed_push++;
+                    _consecutiveFailures++;
                     // 不置 alert_sent,下次轮询重试
                 }
             }
@@ -161,17 +216,94 @@ public class EtlAlertService : BackgroundService
             {
                 _logger.LogWarning(ex, "webhook 推送异常: id={Id}", item.Id);
                 failed_push++;
+                _consecutiveFailures++;
             }
         }
 
-        if (pushed > 0)
+        if (pushed > 0 || suppressed > 0)
         {
             await db.SaveChangesAsync(ct);
         }
-        _logger.LogInformation("本轮告警推送: 成功 {Pushed} / 失败 {Failed} / 候选 {Total}",
-            pushed, failed_push, failed.Count);
+        _logger.LogInformation("本轮告警推送: 成功 {Pushed} / 失败 {Failed} / 抑制 {Suppressed} / 候选 {Total}",
+            pushed, failed_push, suppressed, failed.Count);
 
+        // Day 7.10: 退避计算 — 连续失败时 pollSec 指数放大,任意成功即下次回基础
+        if (_consecutiveFailures > 0)
+        {
+            var multiplier = Math.Min(MaxBackoffMultiplier, _consecutiveFailures);
+            var backoff = Math.Min(MaxBackoffSeconds, pollSec * multiplier);
+            _logger.LogInformation("退避中: consecutive_failures={N}, pollSec {Old}s → {New}s",
+                _consecutiveFailures, pollSec, backoff);
+            return backoff;
+        }
         return pollSec;
+    }
+
+    /// <summary>
+    /// 严重度分类 — Day 7.10
+    ///   P0: Meili/网络/服务可用性问题 (ConnectionRefused/Timeout/HTTP 5xx)
+    ///   P1: 数据 schema 问题 (列名/字段错/malformed)
+    ///   P2: 其它未归类
+    /// WHY 关键词匹配而非堆栈追踪: 错误来自 ETL log LastError 字符串,
+    ///   性能开销低,无需引入异常分类器
+    /// </summary>
+    private static string ClassifySeverity(Core.Entities.EtlProgressLog item)
+    {
+        var err = item.LastError?.ToLowerInvariant() ?? "";
+        if (err.Length == 0) return "P2";
+
+        // P0: Meili 连接 / 5xx / timeout
+        if (err.Contains("connectionrefused")
+            || err.Contains("connection refused")
+            || err.Contains("timeout")
+            || err.Contains("timed out")
+            || err.Contains(" 500 ")
+            || err.Contains(" 502 ")
+            || err.Contains(" 503 ")
+            || err.Contains(" 504 ")
+            || err.Contains("internal server error")
+            || err.Contains("network")
+            || err.Contains("dns")
+            || err.Contains("unreachable"))
+            return "P0";
+
+        // P1: 数据 schema / 列名 / 字段错
+        if (err.Contains("column")
+            || err.Contains("schema")
+            || err.Contains("malformed")
+            || err.Contains("invalid")
+            || err.Contains("null value")
+            || err.Contains("constraint")
+            || err.Contains("duplicate key")
+            || err.Contains("violates")
+            || err.Contains("type ")
+            || err.Contains("cast"))
+            return "P1";
+
+        return "P2";
+    }
+
+    /// <summary>
+    /// 返回第一个非空字符串
+    /// WHY: webhook URL 有 4 个候选 (P0/P1/P2/通用),严重度路由时按优先级选第一个非空
+    /// </summary>
+    private static string FirstNonEmpty(params string[] candidates)
+    {
+        foreach (var c in candidates)
+        {
+            if (!string.IsNullOrWhiteSpace(c)) return c;
+        }
+        return "";
+    }
+
+    /// <summary>
+    /// 告警抑制 key (entity_type|error_class 前 50 字符)
+    /// WHY error_class: 同根因的失败应合并告警,例如 100 条都是 "Meili ConnectionRefused" 不应推 100 次
+    /// </summary>
+    private static string BuildSuppressionKey(Core.Entities.EtlProgressLog item)
+    {
+        var errClass = item.LastError?.Length > 50 ? item.LastError[..50] : item.LastError ?? "";
+        return $"{item.EntityType}|{errClass}";
     }
 
     /// <summary>

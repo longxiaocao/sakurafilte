@@ -118,6 +118,9 @@ public class ProductDbContext : DbContext
             e.Property(p => p.Payload).HasColumnType("jsonb");
             e.HasIndex(p => p.MovedAt);
             e.HasIndex(p => p.Operation);
+            // Day 7.10 Item 4: 自动恢复 worker 扫描索引
+            e.HasIndex(p => new { p.RecoveryCount, p.LastRecoveryAt })
+                .HasDatabaseName("idx_dead_letter_recovery");
         });
 
         // EtlProgressLog (Day 7.7: ETL 历史快照)

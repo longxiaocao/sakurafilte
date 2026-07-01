@@ -145,6 +145,11 @@ public class SearchIndexDeadLetter
     [Column("last_error")] public string? LastError { get; set; }
     [Column("created_at")] public DateTime CreatedAt { get; set; }    // 原入队时间
     [Column("moved_at")] public DateTime MovedAt { get; set; } = DateTime.UtcNow;  // 转入死信时间
+
+    // Day 7.10 Item 4: 自动恢复元数据
+    [Column("recovery_count")] public int RecoveryCount { get; set; } = 0;
+    [Column("last_recovery_at")] public DateTime? LastRecoveryAt { get; set; }
+    [Column("last_recovery_error")] public string? LastRecoveryError { get; set; }
 }
 
 /// <summary>

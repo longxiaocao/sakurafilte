@@ -1,0 +1,412 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "SakuraFilter ETL 运维面板 — Day 7.10\n涵盖: ETL 导入吞吐、死信队列、补偿 worker 状态、告警分布、恢复轨迹\n依赖: PostgreSQL 数据源 (uid: postgres-sakurafilter)\n导入方式: Grafana → Dashboards → Import → 上传本 JSON",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "死信总条数",
+      "description": "当前 search_index_dead_letter 总条数,持续增长说明有未解决问题",
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "postgres-sakurafilter" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "postgres-sakurafilter" },
+          "format": "table",
+          "rawSql": "SELECT count(*) AS total FROM search_index_dead_letter",
+          "rawQuery": true
+        }
+      ],
+      "options": {
+        "reduceOptions": { "values": false, "calcs": ["lastNotNull"], "fields": "" },
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "area"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": 0, "color": "green" },
+              { "value": 100, "color": "yellow" },
+              { "value": 1000, "color": "red" }
+            ]
+          },
+          "unit": "short"
+        }
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "近 24h 转入死信",
+      "description": "moved_at 距今 < 24h 的死信条数,反映新故障速率",
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "postgres-sakurafilter" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "postgres-sakurafilter" },
+          "format": "table",
+          "rawSql": "SELECT count(*) AS new24h FROM search_index_dead_letter WHERE moved_at >= now() - interval '24 hours'",
+          "rawQuery": true
+        }
+      ],
+      "options": {
+        "reduceOptions": { "values": false, "calcs": ["lastNotNull"], "fields": "" },
+        "colorMode": "background",
+        "graphMode": "area"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": 0, "color": "green" },
+              { "value": 50, "color": "yellow" },
+              { "value": 500, "color": "red" }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "近 24h 自动恢复",
+      "description": "last_recovery_at 距今 < 24h 的死信条目数,反映 DeadLetterRecoveryService 工作情况",
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "postgres-sakurafilter" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "postgres-sakurafilter" },
+          "format": "table",
+          "rawSql": "SELECT count(*) AS auto_recovered_24h FROM search_index_dead_letter WHERE last_recovery_at >= now() - interval '24 hours'",
+          "rawQuery": true
+        }
+      ],
+      "options": {
+        "reduceOptions": { "values": false, "calcs": ["lastNotNull"], "fields": "" },
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": 0, "color": "green" },
+              { "value": 1, "color": "blue" }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "超限不可恢复",
+      "description": "recovery_count >= 3 的死信,必须人工 /recover",
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "postgres-sakurafilter" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "postgres-sakurafilter" },
+          "format": "table",
+          "rawSql": "SELECT count(*) AS over_limit FROM search_index_dead_letter WHERE recovery_count >= 3",
+          "rawQuery": true
+        }
+      ],
+      "options": {
+        "reduceOptions": { "values": false, "calcs": ["lastNotNull"], "fields": "" },
+        "colorMode": "background",
+        "graphMode": "none"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": 0, "color": "green" },
+              { "value": 1, "color": "red" }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "ETL 失败率 (近 1h)",
+      "description": "近 1h ETL 任务失败比例 (failed / total)",
+      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "postgres-sakurafilter" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "postgres-sakurafilter" },
+          "format": "table",
+          "rawSql": "SELECT round(100.0 * sum(case when status='failed' then 1 else 0 end) / nullif(count(*), 0), 2) AS fail_pct FROM etl_progress_log WHERE finished_at >= now() - interval '1 hour'",
+          "rawQuery": true
+        }
+      ],
+      "options": {
+        "reduceOptions": { "values": false, "calcs": ["lastNotNull"], "fields": "" },
+        "colorMode": "background",
+        "graphMode": "none",
+        "unit": "percent"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": 0, "color": "green" },
+              { "value": 5, "color": "yellow" },
+              { "value": 20, "color": "red" }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "索引积压 (pending)",
+      "description": "search_index_pending 当前条数,> 1000 说明 IndexReplayWorker 跟不上",
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "postgres-sakurafilter" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "postgres-sakurafilter" },
+          "format": "table",
+          "rawSql": "SELECT count(*) AS pending FROM search_index_pending",
+          "rawQuery": true
+        }
+      ],
+      "options": {
+        "reduceOptions": { "values": false, "calcs": ["lastNotNull"], "fields": "" },
+        "colorMode": "background",
+        "graphMode": "none"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": 0, "color": "green" },
+              { "value": 100, "color": "yellow" },
+              { "value": 1000, "color": "red" }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "死信队列趋势 (按 operation)",
+      "description": "近 7 天死信转入速率,按 operation 分组",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "datasource": { "type": "postgres", "uid": "postgres-sakurafilter" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "postgres-sakurafilter" },
+          "format": "time_series",
+          "rawSql": "SELECT date_trunc('hour', moved_at) AS time, operation, count(*) AS cnt FROM search_index_dead_letter WHERE moved_at >= now() - interval '7 days' GROUP BY 1, 2 ORDER BY 1",
+          "rawQuery": true
+        }
+      ],
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["last", "sum"] },
+        "tooltip": { "mode": "multi" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "fillOpacity": 20,
+            "spanNulls": true
+          },
+          "unit": "short"
+        }
+      }
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "ETL 导入吞吐 (近 24h)",
+      "description": "按 entity_type 分组的 ETL 完成速率",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "datasource": { "type": "postgres", "uid": "postgres-sakurafilter" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "postgres-sakurafilter" },
+          "format": "time_series",
+          "rawSql": "SELECT date_trunc('15 minutes', finished_at) AS time, entity_type, sum(inserted_count) AS rows FROM etl_progress_log WHERE finished_at >= now() - interval '24 hours' AND status='success' GROUP BY 1, 2 ORDER BY 1",
+          "rawQuery": true
+        }
+      ],
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["last", "max"] },
+        "tooltip": { "mode": "multi" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "drawStyle": "bars", "fillOpacity": 70 },
+          "unit": "short"
+        }
+      }
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "ETL 失败率 (按 entity_type)",
+      "description": "近 7 天按 entity_type 分组的失败率",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "datasource": { "type": "postgres", "uid": "postgres-sakurafilter" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "postgres-sakurafilter" },
+          "format": "time_series",
+          "rawSql": "SELECT date_trunc('hour', finished_at) AS time, entity_type, round(100.0 * sum(case when status='failed' then 1 else 0 end) / nullif(count(*), 0), 2) AS fail_pct FROM etl_progress_log WHERE finished_at >= now() - interval '7 days' GROUP BY 1, 2 ORDER BY 1",
+          "rawQuery": true
+        }
+      ],
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["last", "max"] }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "drawStyle": "line", "fillOpacity": 10 },
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": 0, "color": "green" },
+              { "value": 5, "color": "yellow" },
+              { "value": 20, "color": "red" }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Pending 重试队列 (按 retry_count)",
+      "description": "search_index_pending 实时分布,按 retry_count 分组",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "datasource": { "type": "postgres", "uid": "postgres-sakurafilter" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "postgres-sakurafilter" },
+          "format": "time_series",
+          "rawSql": "SELECT date_trunc('minute', created_at) AS time, retry_count, count(*) AS cnt FROM search_index_pending WHERE created_at >= now() - interval '1 hour' GROUP BY 1, 2 ORDER BY 1, 2",
+          "rawQuery": true
+        }
+      ],
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["last", "max"] }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "drawStyle": "line", "fillOpacity": 20 },
+          "unit": "short"
+        }
+      }
+    },
+    {
+      "id": 20,
+      "type": "table",
+      "title": "Top 10 死信错误 (按出现次数)",
+      "description": "近 7 天死信 last_error 聚类,定位最常见故障",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 20 },
+      "datasource": { "type": "postgres", "uid": "postgres-sakurafilter" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "postgres-sakurafilter" },
+          "format": "table",
+          "rawSql": "SELECT substring(last_error, 1, 80) AS error_class, count(*) AS cnt, count(*) FILTER (WHERE recovery_count >= 3) AS over_limit FROM search_index_dead_letter WHERE moved_at >= now() - interval '7 days' GROUP BY 1 ORDER BY 2 DESC LIMIT 10",
+          "rawQuery": true
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "sortBy": [{ "displayName": "cnt", "desc": true }]
+      }
+    },
+    {
+      "id": 21,
+      "type": "table",
+      "title": "死信恢复历史 (近 24h)",
+      "description": "last_recovery_at 距今 < 24h 的死信,验证 DeadLetterRecoveryService 行为",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 28 },
+      "datasource": { "type": "postgres", "uid": "postgres-sakurafilter" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "postgres-sakurafilter" },
+          "format": "table",
+          "rawSql": "SELECT id, operation, recovery_count, moved_at, last_recovery_at, substring(coalesce(last_recovery_error, ''), 1, 60) AS recovery_error, substring(coalesce(last_error, ''), 1, 60) AS last_error FROM search_index_dead_letter WHERE last_recovery_at >= now() - interval '24 hours' ORDER BY last_recovery_at DESC LIMIT 50",
+          "rawQuery": true
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "sortBy": [{ "displayName": "last_recovery_at", "desc": true }]
+      }
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": ["sakurafilter", "etl", "day7.10"],
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "type": "datasource",
+        "label": "数据源",
+        "current": { "text": "PostgreSQL-sakurafilter", "value": "postgres-sakurafilter" },
+        "query": "postgres"
+      }
+    ]
+  },
+  "time": { "from": "now-24h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "SakuraFilter ETL 运维面板",
+  "uid": "sakurafilter-etl-day710",
+  "version": 1,
+  "weekStart": ""
+}

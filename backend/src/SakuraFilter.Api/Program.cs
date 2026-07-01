@@ -47,6 +47,9 @@ builder.Services.AddHostedService<EtlLogCleanupService>();
 // 后台服务:Meili 死信清理 (Day 7.9,默认 7 天保留,dead_letter.retention_enabled=true 时启用)
 builder.Services.AddHostedService<DeadLetterCleanupService>();
 
+// 后台服务:死信自动恢复 (Day 7.10 Item 4,默认关闭,dead_letter.auto_recovery_enabled=true 时启用)
+builder.Services.AddHostedService<DeadLetterRecoveryService>();
+
 // 后台服务:Meili 索引写入补偿 (Day 5;Day 7.9 配置由 EtlOptions 注入)
 builder.Services.AddHostedService<IndexReplayWorker>();
 
@@ -174,11 +177,14 @@ app.MapPost("/api/etl/import-apps", async (ImportRequest req, EtlImportService e
 // Day 7.8: 加 keyset cursor 分页 — 解决 3000+ 行时 offset 性能差的问题
 //   cursor 格式: "<ISO8601 movedAt>|<id>" (例: 2026-07-01T00:00:00Z|12345)
 //   返回: nextCursor (下一页起点,末页为 null) + hasMore (是否还有更多)
+// Day 7.10: 增加 ?min_recovery_count=N / ?max_recovery_count=N 过滤,便于排查"自动恢复多次仍失败"
 app.MapGet("/api/admin/dead-letter", async (
     [Microsoft.AspNetCore.Mvc.FromQuery] int? limit,
     [Microsoft.AspNetCore.Mvc.FromQuery] string? operation,
     [Microsoft.AspNetCore.Mvc.FromQuery] string? since,
     [Microsoft.AspNetCore.Mvc.FromQuery] string? cursor,
+    [Microsoft.AspNetCore.Mvc.FromQuery(Name = "min_recovery_count")] int? minRecoveryCount,
+    [Microsoft.AspNetCore.Mvc.FromQuery(Name = "max_recovery_count")] int? maxRecoveryCount,
     ProductDbContext db,
     CancellationToken ct) =>
 {
@@ -186,6 +192,11 @@ app.MapGet("/api/admin/dead-letter", async (
     var query = db.SearchIndexDeadLetters.AsNoTracking();
     if (!string.IsNullOrEmpty(operation))
         query = query.Where(d => d.Operation == operation);
+    // Day 7.10: 恢复次数过滤 — 排查"自动恢复 N 次仍失败"用
+    if (minRecoveryCount.HasValue)
+        query = query.Where(d => d.RecoveryCount >= minRecoveryCount.Value);
+    if (maxRecoveryCount.HasValue)
+        query = query.Where(d => d.RecoveryCount <= maxRecoveryCount.Value);
     // Day 7.6: 时间过滤 — 排查"今天又累积了多少"用,不必每次 limit 翻页
     //   since 接受 ISO8601 (如 2026-07-01T00:00:00Z),未传则不过滤
     DateTime? sinceUtc = null;
@@ -227,7 +238,8 @@ app.MapGet("/api/admin/dead-letter", async (
             d.CreatedAt, d.MovedAt,
             d.Payload.ToString().Length > 200
                 ? d.Payload.ToString().Substring(0, 200) + "..."
-                : d.Payload.ToString()))
+                : d.Payload.ToString(),
+            d.RecoveryCount, d.LastRecoveryAt, d.LastRecoveryError))
         .ToListAsync(ct);
     var hasMore = rows.Count > cap;
     if (hasMore) rows.RemoveAt(rows.Count - 1);  // 弹出探针行
@@ -238,7 +250,9 @@ app.MapGet("/api/admin/dead-letter", async (
         nextCursor = $"{new DateTimeOffset(last.MovedAt, TimeSpan.Zero):yyyy-MM-ddTHH:mm:ss.fffZ}|{last.Id}";
     }
     var totalAll = await db.SearchIndexDeadLetters.CountAsync(ct);
-    var totalInRange = sinceUtc.HasValue ? await query.CountAsync(ct) : totalAll;
+    var totalInRange = sinceUtc.HasValue || minRecoveryCount.HasValue || maxRecoveryCount.HasValue
+        ? await query.CountAsync(ct)
+        : totalAll;
     return Results.Ok(new
     {
         total = totalAll,
@@ -246,6 +260,8 @@ app.MapGet("/api/admin/dead-letter", async (
         returned = rows.Count,
         limit = cap,
         since = sinceUtc,
+        minRecoveryCount = minRecoveryCount,
+        maxRecoveryCount = maxRecoveryCount,
         cursor = cursor,
         nextCursor = nextCursor,
         hasMore = hasMore,
@@ -258,6 +274,7 @@ app.MapGet("/api/admin/dead-letter", async (
 // Day 7.5: 死信恢复 (单条) — 移回 pending,retry_count 重置
 //   流程: dead_letter → pending (retry=0, next_retry_at=now) → IndexReplayWorker 自动重试
 //   WHY: 死信只移不删,排查后通过此端点重新激活
+//   Day 7.10: 改用 RETURNING + 原子事务,加 recovery_count 限位保护
 app.MapPost("/api/admin/dead-letter/{id:long}/recover", async (long id, ProductDbContext db, ILogger<Program> logger, CancellationToken ct) =>
 {
     var dead = await db.SearchIndexDeadLetters.FirstOrDefaultAsync(d => d.Id == id, ct);
@@ -275,13 +292,82 @@ app.MapPost("/api/admin/dead-letter/{id:long}/recover", async (long id, ProductD
         NextRetryAt = now
     };
     db.SearchIndexPending.Add(pending);
+    // Day 7.10: 人工 recover 也会递增 recovery_count,留痕
+    dead.RecoveryCount += 1;
+    dead.LastRecoveryAt = now;
     db.SearchIndexDeadLetters.Remove(dead);
     await db.SaveChangesAsync(ct);
-    logger.LogInformation("死信 {Id} (original={OriginalId}) 恢复成功 → pending {NewId}",
-        dead.Id, dead.OriginalId, pending.Id);
-    return Results.Ok(new { recovered = true, newPendingId = pending.Id, originalId = dead.OriginalId });
+    logger.LogInformation("死信 {Id} (original={OriginalId}) 恢复成功 → pending {NewId} (recovery_count={Rc})",
+        dead.Id, dead.OriginalId, pending.Id, dead.RecoveryCount);
+    return Results.Ok(new
+    {
+        recovered = true,
+        newPendingId = pending.Id,
+        originalId = dead.OriginalId,
+        recoveryCount = dead.RecoveryCount,
+    });
 })
 .WithName("RecoverDeadLetter")
+.WithOpenApi();
+
+// Day 7.10: 死信批量恢复 — 按过滤条件一次性移回 pending
+//   WHY: 凌晨某时段批量产生 200+ 死信 (Meili 短暂 5xx), 逐条 /recover 太累
+//   参数: operation=index|delete, lastErrorContains=关键词, maxRecoveryCount=N (只恢复未达上限的)
+//   限位: 严格按 recovery_count < maxRecoveryCount 过滤,与后台 worker 策略一致
+app.MapPost("/api/admin/dead-letter/recover-batch", async (
+    [Microsoft.AspNetCore.Mvc.FromQuery] string? operation,
+    [Microsoft.AspNetCore.Mvc.FromQuery] string? lastErrorContains,
+    [Microsoft.AspNetCore.Mvc.FromQuery] int? maxRecoveryCount,
+    [Microsoft.AspNetCore.Mvc.FromQuery] int? limit,
+    ProductDbContext db,
+    ILogger<Program> logger,
+    CancellationToken ct) =>
+{
+    var cap = Math.Clamp(limit ?? 100, 1, 1000);
+    var maxRc = maxRecoveryCount ?? 3;
+    var query = db.SearchIndexDeadLetters.Where(d => d.RecoveryCount < maxRc);
+    if (!string.IsNullOrEmpty(operation))
+        query = query.Where(d => d.Operation == operation);
+    if (!string.IsNullOrEmpty(lastErrorContains))
+        query = query.Where(d => d.LastError != null && d.LastError.ToLower().Contains(lastErrorContains.ToLower()));
+
+    var dead = await query.OrderBy(d => d.MovedAt).Take(cap).ToListAsync(ct);
+    if (dead.Count == 0)
+        return Results.Ok(new { matched = 0, moved = 0 });
+
+    var now = DateTime.UtcNow;
+    int moved = 0;
+    foreach (var d in dead)
+    {
+        var pending = new SearchIndexPending
+        {
+            Operation = d.Operation,
+            Payload = d.Payload,
+            RetryCount = 0,
+            LastError = null,
+            CreatedAt = d.CreatedAt,
+            NextRetryAt = now,
+        };
+        db.SearchIndexPending.Add(pending);
+        d.RecoveryCount += 1;
+        d.LastRecoveryAt = now;
+        d.LastRecoveryError = null;
+        db.SearchIndexDeadLetters.Remove(d);
+        moved++;
+    }
+    await db.SaveChangesAsync(ct);
+    logger.LogInformation("批量恢复 {Moved}/{Matched} 条死信 → pending (operation={Op}, lastErrorContains={Lec}, maxRc={MaxRc})",
+        moved, dead.Count, operation, lastErrorContains, maxRc);
+    return Results.Ok(new
+    {
+        matched = dead.Count,
+        moved = moved,
+        operation = operation,
+        lastErrorContains = lastErrorContains,
+        maxRecoveryCount = maxRc,
+    });
+})
+.WithName("RecoverDeadLetterBatch")
 .WithOpenApi();
 
 app.Run();
@@ -289,5 +375,7 @@ app.Run();
 public record ImportRequest(string JsonlPath, string? Mode);
 
 // Day 7.5: 死信查询参数 (运维可见性)
+// Day 7.10: 增加 recovery_count / last_recovery_at / last_recovery_error 字段
 public record DeadLetterItem(long Id, long OriginalId, string Operation, int RetryCount,
-    string? LastError, DateTime CreatedAt, DateTime MovedAt, string PayloadPreview);
+    string? LastError, DateTime CreatedAt, DateTime MovedAt, string PayloadPreview,
+    int RecoveryCount, DateTime? LastRecoveryAt, string? LastRecoveryError);
