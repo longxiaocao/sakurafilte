@@ -97,9 +97,15 @@ jobs:
         working-directory: spike-test
         run: |
           # Day 9.7 需要双实例, CI 内启动第二个
+          # Day 9.12 v7: 修复 cd 路径错误
+          #   WHY: working-directory=spike-test, cd ../backend/src/SakuraFilter.Api 后
+          #        cwd=checkout/backend/src/SakuraFilter.Api
+          #        cd ../../spike-test 只回退 2 级到 backend/, 进 spike-test = backend/spike-test (不存在)
+          #        set -e 触发 cd 失败 → step 立即退出 (0 秒失败, 无 ::error:: 注解输出)
+          #        必须回退 3 级: ../../../spike-test = checkout/spike-test
           cd ../backend/src/SakuraFilter.Api
           dotnet run -c Release --no-build --urls "http://localhost:5149" > /tmp/api5149.log 2>&1 &
-          cd ../../spike-test
+          cd ../../../spike-test
           # Day 9.12: 循环等待 5149 实例可达 (最多 30s)
           #   WHY: 之前固定 sleep 3s 不够, dotnet 启动 + Database.Migrate + LISTEN 需 5-8s
           #        API 可达时 EtlProgressBroadcaster 已建立 LISTEN (HostedService.StartAsync 完成)

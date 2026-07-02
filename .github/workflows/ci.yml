@@ -149,7 +149,11 @@ jobs:
             exit 1
           fi
           # 跑 E2E 套件
-          cd ../../spike-test
+          # Day 9.12 v7: 修复 cd 路径错误 (同 e2e.yml Day 9.7 step)
+          #   WHY: cwd 在 checkout/backend/src/SakuraFilter.Api
+          #        cd ../../spike-test = backend/spike-test (不存在) → set -e 退出
+          #        正确路径: ../../../spike-test = checkout/spike-test
+          cd ../../../spike-test
           ALL_PASS=0
           for suite in _test_day95.py _test_day94.py; do
             if [ -f "$suite" ]; then
