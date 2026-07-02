@@ -447,6 +447,46 @@ public class EtlImportService
         }
     }
 
+    // Day 9.9: full-load 性能优化 — DROP 非约束索引, INSERT 后 CREATE
+    //   WHY: products 表 15 个索引, INSERT 1M 行 = 1500 万次索引更新, 占 55s/62s
+    //   DROP+CREATE 后 INSERT 只需更新 PK+UNIQUE 索引, 速度提升 5-10 倍
+    private async Task<List<(string Name, string Definition)>> DropNonConstraintIndexesAsync(
+        NpgsqlConnection conn, string table, CancellationToken ct)
+    {
+        var indexes = new List<(string Name, string Definition)>();
+        // 查询非约束索引 (排除 PRIMARY KEY 和 UNIQUE)
+        var sql = $"SELECT indexname, indexdef FROM pg_indexes WHERE tablename = '{table}' " +
+                  "AND indexdef NOT LIKE '%UNIQUE%' AND indexdef NOT LIKE '%PRIMARY KEY%'";
+        // WHY 显式 {} 作用域: reader 必须在 DROP INDEX 前释放,
+        //   否则 Npgsql 抛 "A command is already in progress" (reader 仍占用连接)
+        {
+            await using var queryCmd = new NpgsqlCommand(sql, conn);
+            await using var reader = await queryCmd.ExecuteReaderAsync(ct);
+            while (await reader.ReadAsync(ct))
+                indexes.Add((reader.GetString(0), reader.GetString(1)));
+        } // reader 在此 Dispose, 连接释放给后续 DROP INDEX 使用
+
+        foreach (var (name, _) in indexes)
+        {
+            await using var dropCmd = new NpgsqlCommand($"DROP INDEX IF EXISTS {name}", conn);
+            await dropCmd.ExecuteNonQueryAsync(ct);
+        }
+        _logger.LogInformation("Dropped {Count} non-constraint indexes on {Table}", indexes.Count, table);
+        return indexes;
+    }
+
+    private async Task RecreateIndexesAsync(
+        NpgsqlConnection conn, List<(string Name, string Definition)> indexes, CancellationToken ct)
+    {
+        foreach (var (_, def) in indexes)
+        {
+            await using var createCmd = new NpgsqlCommand(def, conn);
+            createCmd.CommandTimeout = 0;  // 大索引可能超 30s
+            await createCmd.ExecuteNonQueryAsync(ct);
+        }
+        _logger.LogInformation("Recreated {Count} indexes", indexes.Count);
+    }
+
     private static string NormalizeMode(string? mode)
     {
         if (string.IsNullOrWhiteSpace(mode)) return "upsert";
@@ -709,6 +749,19 @@ public class EtlImportService
             //    Day 9.2: 切换 stage = "inserting" 给前端精细化显示
             //    WHY 在这里 (而不是 ExecuteNonQueryAsync 之后): 用户感知 "INSERT 写库" 是从 cmd 启动开始
             Progress.SetStage("inserting");
+
+            // Day 9.9: full-load 性能优化 — DROP 非约束索引, INSERT 后 CREATE
+            //   WHY: 15 个索引 × 1M 行 = 1500 万次索引更新, 占 INSERT 55s 的 88%
+            //   DROP+CREATE 后 INSERT 只需更新 PK+UNIQUE 索引, 速度提升 5-10 倍
+            List<(string Name, string Definition)> savedIndexes = new();
+            if (mode == "full-load")
+            {
+                var swDrop = System.Diagnostics.Stopwatch.StartNew();
+                savedIndexes = await DropNonConstraintIndexesAsync(conn, "products", ct);
+                swDrop.Stop();
+                _logger.LogInformation("[TIMING] DROP indexes: {Ms}ms ({Count} indexes)", swDrop.ElapsedMilliseconds, savedIndexes.Count);
+            }
+
             //    full-load: TRUNCATE + INSERT (首次全量, 5s 内完成 1M)
             //    insert-only: INSERT ON CONFLICT DO NOTHING (只插新行,不更新已有)
             //    upsert: 完整 INSERT ON CONFLICT DO UPDATE (默认,慢但最完整)
@@ -802,6 +855,15 @@ public class EtlImportService
                     // upsert 模式: 简化为"全部计为 updated"(避免 RETURNING 慢)
                     Progress.IncrUpdatedBy(affected);
                 }
+            }
+
+            // Day 9.9: full-load 性能优化 — CREATE 索引 (INSERT 后, COMMIT 前)
+            if (mode == "full-load" && savedIndexes.Count > 0)
+            {
+                var swRecreate = System.Diagnostics.Stopwatch.StartNew();
+                await RecreateIndexesAsync(conn, savedIndexes, ct);
+                swRecreate.Stop();
+                _logger.LogInformation("[TIMING] CREATE indexes: {Ms}ms ({Count} indexes)", swRecreate.ElapsedMilliseconds, savedIndexes.Count);
             }
 
             // Day 9.9: 对账 2 — INSERT 影响行数 <= stage 行数 (去重/冲突后应少于等于)
@@ -1088,21 +1150,11 @@ public class EtlImportService
                 return Progress;
             }
 
-            // Day 7.6: 计算 DISTINCT ON 去重掉的行数
-            // WHY: silent 去重无信号,运维无法判断"为什么 read=36 但 inserted=0"
-            //      公式: raw_count - distinct_count = 重复行数
-            await using (var dupCmd = new NpgsqlCommand(@"
-                SELECT count(*) - count(DISTINCT (product_id, oem_brand, oem_no_3))
-                FROM xrefs_stage
-                WHERE oem_brand IS NOT NULL AND oem_no_3 IS NOT NULL", conn))
-            {
-                var dup = (long)(await dupCmd.ExecuteScalarAsync(ct) ?? 0L);
-                if (dup > 0)
-                {
-                    for (long i = 0; i < dup; i++) Progress.IncrSkippedDuplicate();
-                    _logger.LogInformation("xrefs 去重: {Dup} 行 (DISTINCT ON)", dup);
-                }
-            }
+            // Day 9.10: 删除 pre-INSERT 的 COUNT(DISTINCT) 统计查询
+            //   根因: 20M 行的 COUNT(DISTINCT (col1,col2,col3)) 是重聚合,即便 CommandTimeout=0
+            //   也要 5-10 分钟,导致 xrefs 总时间超 600s 超时
+            //   优化: 用 stage_count - affected 推算 skipped_duplicate,语义更准确
+            //   (DISTINCT ON 去重 + ON CONFLICT 跳过 都计入 skipped_duplicate)
 
             // Day 7: 加 mode + DISTINCT ON + ON CONFLICT
             // WHY: 真实 Excel 同 (product_id, oem_brand, oem_no_3) 多行,UNIQUE 索引会触发冲突
@@ -1159,6 +1211,17 @@ public class EtlImportService
                 Progress.Fail(msg);
                 Progress.PersistLogAsync("xrefs", mode);
                 return Progress;
+            }
+
+            // Day 9.10: 用 stage_count - affected 推算 skipped_duplicate (替代 pre-INSERT COUNT DISTINCT)
+            //   语义: DISTINCT ON 去重 + ON CONFLICT 跳过 都计入此值
+            //   性能: 零额外查询,INSERT 已得 affected,纯内存减法
+            //   注意: IncrSkippedDuplicate() 内部已调 IncrSkipped(),不能再用 IncrSkippedBy(dup),否则 skipped 翻倍
+            var xrefDup = xrefStageCount - xrefAffected;
+            if (xrefDup > 0)
+            {
+                for (long i = 0; i < xrefDup; i++) Progress.IncrSkippedDuplicate();
+                _logger.LogInformation("xrefs 去重/冲突: {Dup} 行 (stage={Stage} affected={Affected})", xrefDup, xrefStageCount, xrefAffected);
             }
 
             await using (var commit = new NpgsqlCommand("COMMIT;", conn))
@@ -1306,19 +1369,7 @@ public class EtlImportService
                 return Progress;
             }
 
-            // Day 7.6: 计算 DISTINCT ON 去重掉的行数
-            await using (var dupCmd = new NpgsqlCommand(@"
-                SELECT count(*) - count(DISTINCT (product_id, machine_brand, machine_model))
-                FROM apps_stage
-                WHERE machine_brand IS NOT NULL AND machine_model IS NOT NULL", conn))
-            {
-                var dup = (long)(await dupCmd.ExecuteScalarAsync(ct) ?? 0L);
-                if (dup > 0)
-                {
-                    for (long i = 0; i < dup; i++) Progress.IncrSkippedDuplicate();
-                    _logger.LogInformation("apps 去重: {Dup} 行 (DISTINCT ON)", dup);
-                }
-            }
+            // Day 9.10: 删除 pre-INSERT 的 COUNT(DISTINCT) 统计查询 (同 xrefs,改用 stage_count - affected 推算)
 
             // Day 7: 加 mode + DISTINCT ON + ON CONFLICT
             string finalSql = mode switch
@@ -1384,6 +1435,15 @@ public class EtlImportService
                 Progress.Fail(msg);
                 Progress.PersistLogAsync("apps", mode);
                 return Progress;
+            }
+
+            // Day 9.10: 用 stage_count - affected 推算 skipped_duplicate (同 xrefs)
+            //   注意: 不能用 IncrSkippedBy(dup) + IncrSkippedDuplicate(),后者内部已调 IncrSkipped,会翻倍
+            var appDup = appStageCount - appAffected;
+            if (appDup > 0)
+            {
+                for (long i = 0; i < appDup; i++) Progress.IncrSkippedDuplicate();
+                _logger.LogInformation("apps 去重/冲突: {Dup} 行 (stage={Stage} affected={Affected})", appDup, appStageCount, appAffected);
             }
 
             await using (var commit = new NpgsqlCommand("COMMIT;", conn))

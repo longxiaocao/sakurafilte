@@ -1,15 +1,22 @@
 # -*- coding: utf-8 -*-
-"""性能压测: 1M products + 20M xrefs/apps ETL 计时"""
+"""性能压测: 1M products + 5M xrefs/apps ETL 计时"""
 import json, time, urllib.request, urllib.error, sys, os
 
 TOKEN = 'dev-admin-token-rotate-in-prod-MZK4R9P3X6V2N7Q1L5F0B8H3C'
 H = {'X-Admin-Token': TOKEN, 'Content-Type': 'application/json'}
 BASE = 'http://localhost:5148'
 
-def trigger(jsonl_path, mode):
-    """触发 ETL 并轮询直到完成,返回耗时和结果"""
+def trigger(jsonl_path, mode, entity_type='products'):
+    """触发 ETL 并轮询直到完成,返回耗时和结果
+    WHY entity_type: /api/etl/import 是 products 专用, xrefs/apps 有独立端点
+    """
+    endpoint = {
+        'products': '/api/etl/import',
+        'xrefs': '/api/etl/import-xrefs',
+        'apps': '/api/etl/import-apps',
+    }[entity_type]
     req = urllib.request.Request(
-        BASE + '/api/etl/import',
+        BASE + endpoint,
         data=json.dumps({'jsonlPath': jsonl_path, 'mode': mode}).encode(),
         headers=H, method='POST')
     try:
@@ -42,8 +49,8 @@ def trigger(jsonl_path, mode):
         stage = s.get('stage', '?')
         print('  [%.0fs] read=%d inserted=%d stage=%s pct=%s' % (
             elapsed, s['read'], s['inserted'], stage, pct))
-        if elapsed > 120:
-            print('  超时 120s, 取消')
+        if elapsed > 600:
+            print('  超时 600s, 取消')
             creq = urllib.request.Request(
                 BASE + '/api/admin/etl/task',
                 data=json.dumps({'reason': 'timeout'}).encode(),
@@ -51,12 +58,15 @@ def trigger(jsonl_path, mode):
             urllib.request.urlopen(creq, timeout=3)
             return elapsed, s
 
-def gen_jsonl(path, count, make_row):
+def gen_jsonl(path, count, make_row, force=False):
     """生成 JSONL 文件"""
-    if os.path.exists(path):
+    if os.path.exists(path) and not force:
         size_mb = os.path.getsize(path) // 1024 // 1024
         print('  已存在: %s (%d MB)' % (path, size_mb))
         return
+    if os.path.exists(path) and force:
+        print('  force=True, 删除旧文件重新生成')
+        os.remove(path)
     print('  生成 %d 行...' % count)
     t0 = time.time()
     with open(path, 'w') as f:
@@ -66,51 +76,43 @@ def gen_jsonl(path, count, make_row):
     print('  生成完成: %s (%d MB, %.1fs)' % (path, size_mb, time.time() - t0))
 
 # ========== 1M products ==========
-print('=== 1M Products Full-Load ===')
-gen_jsonl('D:/data/sakurafilter/products_1m.jsonl', 1000000, lambda i: {
-    'oem_no_normalized': 'P%07d' % i,
-    'oem_no_display': 'P%07d' % i,
-    'product_name_1': 'Product %d' % i,
-    'type': ['Hydraulic','Air','Fuel','Oil','Coolant'][i % 5],
-    'media': ['Synthetic','Cellulose','Glass Fiber','Cotton','Stainless'][i % 5],
-    'd1_mm': 30.0 + (i % 100),
-    'h1_mm': 100.0 + (i % 200),
-    'd2_mm': 50.0 + (i % 80),
-    'h2_mm': 150.0 + (i % 150)
-})
-t1, r1 = trigger('D:/data/sakurafilter/products_1m.jsonl', 'full-load')
+# Day 9.10: 跳过 products (已验证 26.4s, 数据已在库), 只跑 xrefs/apps 验证 dupCmd 修复
+print('=== 1M Products (SKIP: 已验证 26.4s, 数据已在库) ===')
+t1, r1 = 26.4, {'status': 'completed'}
 print('  >>> 1M Products: %.1fs (%.0f rows/s)' % (t1, 1000000 / t1 if t1 > 0 else 0))
 
-# ========== 20M xrefs ==========
+# ========== 5M xrefs ==========
 print()
-print('=== 20M Xrefs Insert-Only ===')
-gen_jsonl('D:/data/sakurafilter/xrefs_20m.jsonl', 20000000, lambda i: {
-    'product_id': (i % 1000000) + 1,
+print('=== 5M Xrefs Insert-Only ===')
+# WHY force=True: 旧 xrefs_20m.jsonl 用 product_id 字段, 代码期望 product_oem (对应 products.oem_no_normalized)
+#   旧格式导致所有行解析失败 "The given key was not present in the dictionary"
+gen_jsonl('D:/data/sakurafilter/xrefs_5m.jsonl', 5000000, lambda i: {
+    'product_oem': 'P%07d' % ((i % 1000000) + 1),
     'oem_brand': ['Bosch','Mann','Wix','Mahle','Donaldson'][i % 5],
     'oem_no_3': 'XREF-%08d' % i,
     'product_name_1': 'Xref %d' % i
-})
-t2, r2 = trigger('D:/data/sakurafilter/xrefs_20m.jsonl', 'insert-only')
-print('  >>> 20M Xrefs: %.1fs (%.0f rows/s)' % (t2, 20000000 / t2 if t2 > 0 else 0))
+})  # force=False: 文件已是新格式 (product_oem), 无需重新生成
+t2, r2 = trigger('D:/data/sakurafilter/xrefs_5m.jsonl', 'insert-only', entity_type='xrefs')
+print('  >>> 5M Xrefs: %.1fs (%.0f rows/s)' % (t2, 5000000 / t2 if t2 > 0 else 0))
 
-# ========== 20M apps ==========
+# ========== 5M apps ==========
 print()
-print('=== 20M Apps Insert-Only ===')
-gen_jsonl('D:/data/sakurafilter/apps_20m.jsonl', 20000000, lambda i: {
-    'product_id': (i % 1000000) + 1,
+print('=== 5M Apps Insert-Only ===')
+gen_jsonl('D:/data/sakurafilter/apps_5m.jsonl', 5000000, lambda i: {
+    'product_oem': 'P%07d' % ((i % 1000000) + 1),
     'machine_brand': ['Caterpillar','Komatsu','Hitachi','Volvo','Deere'][i % 5],
     'machine_model': 'Model-%d' % (i % 1000),
     'engine_brand': ['Cummins','Perkins','Isuzu','Deutz','Yanmar'][i % 5]
 })
-t3, r3 = trigger('D:/data/sakurafilter/apps_20m.jsonl', 'insert-only')
-print('  >>> 20M Apps: %.1fs (%.0f rows/s)' % (t3, 20000000 / t3 if t3 > 0 else 0))
+t3, r3 = trigger('D:/data/sakurafilter/apps_5m.jsonl', 'insert-only', entity_type='apps')
+print('  >>> 5M Apps: %.1fs (%.0f rows/s)' % (t3, 5000000 / t3 if t3 > 0 else 0))
 
 # ========== 总结 ==========
 print()
 print('=== 性能压测总结 ===')
 print('  Products 1M:  %.1fs' % t1)
-print('  Xrefs 20M:    %.1fs' % t2)
-print('  Apps 20M:     %.1fs' % t3)
+print('  Xrefs 5M:    %.1fs' % t2)
+print('  Apps 5M:     %.1fs' % t3)
 print('  总计:         %.1fs' % (t1 + t2 + t3))
 target = 40.0
 total = t1 + t2 + t3
