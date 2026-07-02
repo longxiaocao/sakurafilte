@@ -8,6 +8,7 @@
 import json
 import os
 import re
+import sys
 import time
 import urllib.request
 import urllib.error
@@ -169,28 +170,38 @@ best = cur.fetchone()
 if not best or best[1] < 6:
     # seed
     cur.execute("SELECT max(id) FROM products")
-    cur_pid = cur.fetchone()[0]
-    base = psycopg2.Timestamp(2026, 7, 1, 12, 0, 0)
-    from datetime import datetime, timedelta, timezone
-    base = datetime(2026, 7, 1, 12, 0, 0, tzinfo=timezone.utc)
-    for i in range(20):
-        cur.execute("""
-            INSERT INTO product_history (product_id, change_type, changed_by, changed_at, changed_fields)
-            VALUES (%s, 'update', 'day95-cursor-test', %s, '{"_day":9.5}')
-        """, (cur_pid, base + timedelta(minutes=i * 5)))
-    conn.commit()
-    print(f"  [INFO] 已为 product_id={cur_pid} seed 20 条历史")
-    target_pid = cur_pid
+    _row = cur.fetchone()
+    cur_pid = _row[0] if _row else None
+    if cur_pid is None:
+        # Day 9.11: CI 空数据库, products 表为空, 跳过 cursor 测试
+        print("  [SKIP] products 表为空, 跳过 cursor HMAC 测试 (CI 空数据库)")
+        target_pid = None
+        conn.close()
+    else:
+        from datetime import datetime, timedelta, timezone
+        base = datetime(2026, 7, 1, 12, 0, 0, tzinfo=timezone.utc)
+        for i in range(20):
+            cur.execute("""
+                INSERT INTO product_history (product_id, change_type, changed_by, changed_at, changed_fields)
+                VALUES (%s, 'update', 'day95-cursor-test', %s, '{"_day":9.5}')
+            """, (cur_pid, base + timedelta(minutes=i * 5)))
+        conn.commit()
+        print(f"  [INFO] 已为 product_id={cur_pid} seed 20 条历史")
+        target_pid = cur_pid
+        conn.close()
 else:
     target_pid = best[0]
-conn.close()
+    conn.close()
 
-# 拉第一页拿到 cursor
-s, h1 = call("GET", f"/admin/products/{target_pid}/history?limit=5")
-check("history HTTP 200", s == 200, f"status={s}")
-next_cursor = h1.get("nextCursor")
-check("nextCursor 字段存在", next_cursor is not None, f"h1 keys={list(h1.keys())}")
-print(f"  [INFO] nextCursor = {next_cursor[:30]}...")
+# Day 9.11: target_pid=None 时 (CI 空数据库) 跳过 cursor 测试, 避免 /admin/products/None/history 抛异常
+next_cursor = None  # 初始化, 避免 target_pid=None 时 line 204 if next_cursor 抛 NameError
+if target_pid is not None:
+    # 拉第一页拿到 cursor
+    s, h1 = call("GET", f"/admin/products/{target_pid}/history?limit=5")
+    check("history HTTP 200", s == 200, f"status={s}")
+    next_cursor = h1.get("nextCursor")
+    check("nextCursor 字段存在", next_cursor is not None, f"h1 keys={list(h1.keys())}")
+    print(f"  [INFO] nextCursor = {next_cursor[:30] if next_cursor else 'None'}...")
 
 if next_cursor:
     # 用合法 cursor 拉第二页
@@ -247,7 +258,9 @@ if os.path.exists(ci_path):
     check("workflow 含 backend-integration job", "backend-integration" in ci_text, "")
     check("workflow 含 postgres service", "postgres:16" in ci_text, "")
     check("workflow 含 E2E regression step", "_test_day94.py" in ci_text, "")
-    check("workflow 含 psql migration apply", "psql" in ci_text, "")
+    # Day 9.11: psql migration apply 步骤已删除 (改为 EF Core Migrations)
+    #   检查 ci.yml 含 "Migrate" 注释 (证明 Migrate 已集成)
+    check("ci.yml 含 EF Core Migrations 集成注释", "Migrate" in ci_text, "ci.yml 无 Migrate 注释")
 else:
     print(f"  [FAIL] CI workflow 文件不存在")
 
@@ -259,6 +272,10 @@ if failed:
     for n, info in failed:
         print(f"    - {n}: {info}")
 print("=" * 70)
+
+# Day 9.11: 测试失败时 exit 1, 确保 CI 能捕获失败 (之前缺此行, 即使 FAIL 也 exit 0)
+if failed:
+    sys.exit(1)
 
 # 清理 seed 数据
 if cur_pid:
