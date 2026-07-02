@@ -386,7 +386,10 @@ public class EtlImportService
     /// mode: full-load / insert-only / upsert
     /// P1.1 (Task 3): startLineNo = 0 走全新 ETL, > 0 走续读模式 (从第 N+1 行开始读 JSONL)
     /// </summary>
-    public async Task<EtlProgress> TriggerAsync(string entityType, string jsonlPath, string mode, long startLineNo = 0, CancellationToken ct = default)
+    // Day 11 改进 2: 增加 cascade 参数 (仅 products full-load 生效)
+    //   - cascade=true (默认, 兼容旧行为): TRUNCATE products CASCADE 清空 xrefs/apps
+    //   - cascade=false: 仅 TRUNCATE products, 保留 xrefs/apps (用于单独刷新产品主表)
+    public async Task<EtlProgress> TriggerAsync(string entityType, string jsonlPath, string mode, long startLineNo = 0, CancellationToken ct = default, bool cascade = true)
     {
         if (string.IsNullOrWhiteSpace(jsonlPath))
             throw new ArgumentException("jsonlPath 不能为空");
@@ -400,12 +403,9 @@ public class EtlImportService
         if (startLineNo > 0) ClearPausedFlag();
 
         // Day 9.9: _activeCts 下沉到 Import*Async 入口, TriggerAsync 只做路由
-        //   WHY: 之前 _activeCts 在 TriggerAsync 设置, HTTP 端点绕过 TriggerAsync 直接调
-        //        Import*Async 导致 cancel 失效。现在 Import*Async 入口自己调 AcquireActiveCts
-        //   单任务检查也在 AcquireActiveCts 内, 任何入口都安全
         return normalizedEntity switch
         {
-            "products" or "product" => await ImportProductsAsync(jsonlPath, normalizedMode, startLineNo, ct),
+            "products" or "product" => await ImportProductsAsync(jsonlPath, normalizedMode, startLineNo, ct, cascade),
             "xrefs" or "xref" or "cross_references" => await ImportXrefsAsync(jsonlPath, normalizedMode, startLineNo, ct),
             "apps" or "machine_applications" => await ImportAppsAsync(jsonlPath, normalizedMode, startLineNo, ct),
             _ => throw new ArgumentException($"未知 entityType={entityType}, 期望 products/xrefs/apps")
@@ -700,7 +700,10 @@ public class EtlImportService
     ///       "insert-only" (INSERT ON CONFLICT DO NOTHING,只插新行)
     /// P1.1 (Task 3): startLineNo 参数与 xrefs 对齐 — products 暂不实现批次, 传 0 即可
     /// </summary>
-    public async Task<EtlProgress> ImportProductsAsync(string jsonlPath, string mode = "upsert", long startLineNo = 0, CancellationToken ct = default)
+    // Day 11 改进 2: cascade 参数控制 full-load TRUNCATE 行为
+    //   - cascade=true (默认): TRUNCATE products, cross_references, machine_applications (兼容旧行为)
+    //   - cascade=false: 仅 TRUNCATE products, 保留 xrefs/apps (用于单独刷新主表)
+    public async Task<EtlProgress> ImportProductsAsync(string jsonlPath, string mode = "upsert", long startLineNo = 0, CancellationToken ct = default, bool cascade = true)
     {
         // Day 9.9: _activeCts 下沉, 确保任何入口 (HTTP 端点/TriggerAsync/直接调用) 都能被 cancel
         var cts = AcquireActiveCts("products", ct);
@@ -841,13 +844,20 @@ public class EtlImportService
             //    full-load: TRUNCATE + INSERT (首次全量, 5s 内完成 1M)
             //    insert-only: INSERT ON CONFLICT DO NOTHING (只插新行,不更新已有)
             //    upsert: 完整 INSERT ON CONFLICT DO UPDATE (默认,慢但最完整)
+            // Day 11 改进 2: cascade 参数控制 TRUNCATE 范围
+            //   - cascade=true (默认): TRUNCATE products + xrefs + apps (旧行为, 首次全量场景)
+            //   - cascade=false: 仅 TRUNCATE products (单独刷新产品主表, 保留 xrefs/apps)
+            //     场景: 修复 products 字段 (如 product_name_1/2) 不想破坏 xrefs/apps 关联
+            string truncateClause = cascade
+                ? "TRUNCATE products, cross_references, machine_applications RESTART IDENTITY CASCADE;"
+                : "TRUNCATE products RESTART IDENTITY CASCADE;";
             string finalSql = mode switch
             {
                 // WHY: RESTART IDENTITY 让 serial 列从 1 重新开始,首次全量场景下 id 连续
                 //      CASCADE 防御性写法,即使未来加 FK 也不会破坏 ETL
                 //      Day 7 修复: 同时清 cross_references/machine_applications 避免孤儿行 (无 FK 约束时不会失败)
-                "full-load" => @"
-                    TRUNCATE products, cross_references, machine_applications RESTART IDENTITY CASCADE;
+                "full-load" => $@"
+                    {truncateClause}
                     INSERT INTO products (oem_no_normalized, oem_no_display, type,
                         product_name_1, product_name_2, product_name_3,
                         remark, d1_mm, d2_mm, d3_mm, h1_mm, h2_mm, h3_mm,

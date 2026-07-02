@@ -373,6 +373,10 @@ app.MapGet("/api/products/{oem}", async (string oem, ProductDbContext db, Cancel
 .WithOpenApi();
 
 // ETL 导入接口 (Day 5: 触发导入 + 查询进度)
+// Day 11 改进 1: 统一入口, EntityType 参数路由到 products/xrefs/apps
+//   - 兼容: 不传 EntityType = products (旧调用)
+//   - 新调用: POST /api/etl/import { entityType: "xrefs" } = 触发 xrefs
+//   - cascade: 仅 products full-load 时生效 (改进 2: CASCADE 安全锁)
 app.MapPost("/api/etl/import", (ImportRequest req, EtlImportService etl, ILogger<Program> logger, CancellationToken ct) =>
 {
     if (!File.Exists(req.JsonlPath))
@@ -382,12 +386,19 @@ app.MapPost("/api/etl/import", (ImportRequest req, EtlImportService etl, ILogger
         return Results.Conflict(new { error = "已有导入任务在运行,请等待完成", progress = etl.Progress.ToJson() });
 
     var mode = (req.Mode ?? "upsert").ToLowerInvariant();
-    logger.LogInformation("触发 ETL 导入: {Path} (mode={Mode})", req.JsonlPath, mode);
-    // Day 9.8 BUG FIX: 必须走 TriggerAsync, 让 _activeCts 正确设置
-    //   之前直接调 ImportProductsAsync 绕过 _activeCts, 导致 CancelActiveTask 永远 cancelled=False
-    //   症状: HTTP 触发的 ETL 无法被取消, /api/admin/etl/task 端点 cancelled 永远 False
-    //   修复: 后台触发 TriggerAsync, 内部 _activeCts 会被设置, finally 清空
-    _ = Task.Run(async () => await etl.TriggerAsync("products", req.JsonlPath, mode, 0, CancellationToken.None));
+    var entityType = (req.EntityType ?? "products").ToLowerInvariant();
+    // 改进 2: cascade 安全锁, 仅 products full-load 默认 cascade=true (兼容旧行为)
+    //   显式传 cascade=false 可防止 TRUNCATE CASCADE 清空 xrefs/apps
+    var cascade = req.Cascade ?? true;
+
+    if (entityType != "products" && entityType != "xrefs" && entityType != "apps")
+        return Results.BadRequest(new { error = "EntityType 必须是 products/xrefs/apps", value = entityType });
+
+    logger.LogInformation("触发 ETL 导入: {Entity} {Path} (mode={Mode}, cascade={Cascade})", entityType, req.JsonlPath, mode, cascade);
+
+    // 改进 2: 仅 products 传 cascade 标志, xrefs/apps 忽略
+    var cascadeFlag = entityType == "products" ? cascade : true;
+    _ = Task.Run(async () => await etl.TriggerAsync(entityType, req.JsonlPath, mode, 0, CancellationToken.None, cascadeFlag));
     return Results.Accepted(value: etl.Progress.ToJson());
 })
 .WithName("EtlImport")
@@ -1905,7 +1916,11 @@ public record LineSchemaReport(
     List<string> TypeMismatches,
     string? Error);
 
-public record ImportRequest(string JsonlPath, string? Mode);
+// Day 11 改进 1: 统一 ETL 端点入口, EntityType 可选参数
+//   - 不传或传 products: 走 /api/etl/import (默认, 兼容旧调用)
+//   - 传 xrefs/apps: 路由到对应 Import*Async
+//   - 旧端点 /import-xrefs /import-apps 保留 (向后兼容)
+public record ImportRequest(string JsonlPath, string? Mode, string? EntityType, bool? Cascade);
 
 // Day 8.2: 批量对比请求体
 // Day 9.4: ETL 取消请求体, 携带取消原因写到 etl_progress_log

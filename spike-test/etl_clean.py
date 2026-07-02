@@ -66,6 +66,27 @@ REQUIRED_COLUMNS = {
     '机型区': ['OEM NO.2', 'Machine Brand', 'Machine Model', 'Engine Brand', 'Engine Type', 'Engine Energy'],
 }
 
+# Day 11 改进 3: 期望列清单 (与 Product.cs / MachineApplication.cs 实体字段对齐)
+#   - validate_columns 只校验 REQUIRED_COLUMNS (必填, 缺失抛异常)
+#   - audit_columns 对比 EXPECTED_COLUMNS (全量期望, 缺失只 warning)
+#   - 防止再出现 product_name_1/2 漏读那种事故 (源有列, 清洗脚本没读, ETL 也没读)
+EXPECTED_COLUMNS = {
+    '产品区': [
+        'OEM NO.2', 'Product Name 1', 'Product Name 2', 'product name 3', 'Remark',
+        'Dimension 1 (D1)', 'Dimension 2 (D2)', 'Dimension 3 (D3)',
+        'Height 1 (H1)', 'Height 2 (H2)', 'Height 3 (H3)',
+        'Thread 1 (D7)', 'Thread 2 (D8)', 'Media', 'Seal Material',
+        'Efficiency 1', 'Efficiency 2',
+        'Bypass Valve Setting (LR)', 'Bypass Valve Setting (HR)',
+        'Δ Collapse Pressure', 'Temperature Range', 'Bypass Pressure',
+    ],
+    'OEM区': ['OEM NO.2', ' OEM Brand', 'Product Name 1', 'OEM NO.3'],
+    '机型区': [
+        'OEM NO.2', 'Machine Brand', 'Machine Model', 'Model Name',
+        'Engine Brand', 'Engine Type', 'Engine Energy', 'Production Date',
+    ],
+}
+
 
 def validate_columns(sheet_name: str, actual_cols: list[str], strict: bool = True) -> list[str]:
     """Day 7.5: 启动时校验必填列是否存在(大小写不敏感,空格归一)
@@ -87,6 +108,37 @@ def validate_columns(sheet_name: str, actual_cols: list[str], strict: bool = Tru
     else:
         log.info(f"sheet '{sheet_name}' 列名校验通过 ({len(required)} 项必填列)")
     return missing
+
+
+def audit_columns(sheet_name: str, actual_cols: list[str]) -> None:
+    """Day 11 改进 3: 源数据溯源 — 打印实际列名 + 与期望清单差集对比
+
+    WHY: 之前 product_name_1/2 在 Excel 源数据中存在, 但 etl_clean.py 没读取,
+         ETL 也没写入, 导致 products 表这两列全 NULL。持续多轮未发现。
+         本函数启动时打印实际列名清单, 并与 EXPECTED_COLUMNS 做差集:
+          - 实际有期望无: 源数据新增字段, 可能需要补充读取逻辑 (info)
+          - 期望有实际无: 源数据缺字段, 数据质量问题 (warning)
+    不抛异常, 只日志报告 (strict 校验由 validate_columns 负责)
+    """
+    expected = EXPECTED_COLUMNS.get(sheet_name, [])
+    if not expected:
+        return
+    actual_norm = {str(c).strip().lower(): str(c).strip() for c in actual_cols}
+    expected_norm = {c.strip().lower(): c.strip() for c in expected}
+
+    # 实际有, 期望无 (源新增字段)
+    extra = [actual_norm[k] for k in actual_norm if k not in expected_norm]
+    # 期望有, 实际无 (源缺字段)
+    missing_optional = [expected_norm[k] for k in expected_norm if k not in actual_norm]
+
+    log.info(f"=== {sheet_name} 源数据列溯源 ===")
+    log.info(f"  实际列 ({len(actual_cols)}): {list(actual_cols)}")
+    if extra:
+        log.info(f"  源新增字段 ({len(extra)}, 可能需补充读取逻辑): {extra}")
+    if missing_optional:
+        log.warning(f"  ⚠ 期望字段缺失 ({len(missing_optional)}, 数据将置 NULL): {missing_optional}")
+    if not extra and not missing_optional:
+        log.info(f"  ✓ 期望字段全齐 ({len(expected)} 项)")
 
 
 def is_header_row(row: pd.Series) -> bool:
@@ -298,6 +350,7 @@ def main():
         df_p.columns = [str(c).strip() for c in df_p.columns]
         log.info(f"产品区: {len(df_p)} 行, {len(df_p.columns)} 列")
         validate_columns('产品区', list(df_p.columns), strict=True)  # Day 7.5
+        audit_columns('产品区', list(df_p.columns))  # Day 11 改进 3: 源数据溯源
         products = clean_products_sheet(df_p)
     else:
         products = []
@@ -308,6 +361,7 @@ def main():
         df_x.columns = [str(c) for c in df_x.columns]  # 保留前导空格以便识别 ' OEM Brand'
         log.info(f"OEM区: {len(df_x)} 行, {len(df_x.columns)} 列")
         validate_columns('OEM区', list(df_x.columns), strict=True)  # Day 7.5
+        audit_columns('OEM区', list(df_x.columns))  # Day 11 改进 3: 源数据溯源
         xrefs = clean_xrefs_sheet(df_x)
     else:
         xrefs = []
@@ -318,6 +372,7 @@ def main():
         df_a.columns = [str(c).strip() for c in df_a.columns]
         log.info(f"机型区: {len(df_a)} 行, {len(df_a.columns)} 列")
         validate_columns('机型区', list(df_a.columns), strict=True)  # Day 7.5
+        audit_columns('机型区', list(df_a.columns))  # Day 11 改进 3: 源数据溯源
         apps = clean_apps_sheet(df_a)
     else:
         apps = []
