@@ -64,9 +64,26 @@ jobs:
       - name: Run API server (background)
         run: |
           cd backend/src/SakuraFilter.Api
-          dotnet run -c Release --no-build --urls "http://localhost:5148" &
-          sleep 5
-          curl -s http://localhost:5148/api/etl/status -H "X-Admin-Token: $ADMIN_TOKEN" || exit 1
+          dotnet run -c Release --no-build --urls "http://localhost:5148" > /tmp/api5148.log 2>&1 &
+          # Day 9.12: 循环等待 5148 可达 (最多 60s)
+          #   WHY: 之前固定 sleep 5 不够, dotnet 启动 + Database.Migrate + LISTEN 需 5-10s
+          #        Linux CI runner 状态波动大, 偶发需 30s+
+          A_READY=0
+          for i in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5148/api/etl/status -H "X-Admin-Token: $ADMIN_TOKEN" 2>/dev/null || echo 000)
+            if [ "$code" = "200" ]; then
+              echo "API 5148 ready after ${i}s"
+              A_READY=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$A_READY" != "1" ]; then
+            echo "=== FAIL: API 5148 60s 内未就绪 ==="
+            echo "--- 5148 API 日志 (前 100 行) ---"
+            head -n 100 /tmp/api5148.log || echo "无日志"
+            exit 1
+          fi
 
       - name: Run E2E Day 9.5 (cancel enum + alert filter + cursor HMAC)
         working-directory: spike-test

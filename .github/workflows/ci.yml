@@ -123,20 +123,31 @@ jobs:
         working-directory: spike-test
         env:
           E2E_REQUIRED: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && 'true' || (github.event_name == 'workflow_dispatch' && 'true' || 'false') }}
+          ADMIN_TOKEN: 'dev-admin-token-rotate-in-prod-MZK4R9P3X6V2N7Q1L5F0B8H3C'
         run: |
           # 启动后端 (后台, 等几秒健康检查)
           cd ../backend/src/SakuraFilter.Api
           nohup dotnet run --no-build -c Release --urls http://localhost:5148 > /tmp/api.log 2>&1 &
           API_PID=$!
           echo "API PID: $API_PID"
-          # 等服务起来
-          for i in {1..30}; do
-            if curl -s -o /dev/null -w "%{http_code}" http://localhost:5148/ | grep -q 200; then
-              echo "API ready after ${i}s"
+          # Day 9.12: 循环等待 5148 可达 (最多 60s) + 失败诊断
+          #   WHY: 之前 30s 不够 + 无失败检查, 5148 没起来直接跑测试会失败
+          A_READY=0
+          for i in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5148/api/etl/status -H "X-Admin-Token: $ADMIN_TOKEN" 2>/dev/null || echo 000)
+            if [ "$code" = "200" ]; then
+              echo "API 5148 ready after ${i}s"
+              A_READY=1
               break
             fi
             sleep 1
           done
+          if [ "$A_READY" != "1" ]; then
+            echo "=== FAIL: API 5148 60s 内未就绪 ==="
+            echo "--- 5148 API 日志 (前 100 行) ---"
+            head -n 100 /tmp/api.log || echo "无日志"
+            exit 1
+          fi
           # 跑 E2E 套件
           cd ../../spike-test
           ALL_PASS=0
