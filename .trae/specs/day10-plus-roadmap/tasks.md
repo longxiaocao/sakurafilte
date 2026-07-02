@@ -128,25 +128,33 @@
 
 ---
 
-## Phase 3: P3 搜索+展示 (3 任务) ⏳ 待开始
+## Phase 3: P3 搜索+展示 (4 任务) ⏳ 待开始
 
-### Task 9: P3.1 搜索容差 UI (±1/±5/±10mm) (0.5 session)
+> **规格依据**: 新思路.xlsx → "后台搜索统筹" / "对比界面" / "前端展示内容" / "各分区管理界面" 5 个 sheet 严格对应
 
-- [ ] SubTask 9.1: `AdminSearchView.vue` 加"尺寸容差"下拉
-  - 组件: `<el-select v-model="tolerance"><el-option label="±1mm" :value="1"/>...`
-  - 默认值: 5mm
-- [ ] SubTask 9.2: `PublicSearchView.vue` (P3.4) 同步加
-- [ ] SubTask 9.3: 选 5mm → 搜索请求带 `tolerance=5` (后端 Day 8.4 已实现)
-  - 拦截器: `http.get('/api/products/search', { params: { tolerance, h1, h2, ... } })`
-- [ ] SubTask 9.4: popover 提示"切换容差会显著影响搜索速度 (10mm 比 1mm 慢 5-10 倍)"
-  - `<el-popover>` 包裹容差下拉
-- [ ] 验证: 容差切换后, 搜索结果数量变化符合预期
-  - E2E: `spike-test/_test_tolerance_ui.py`
-  - Case: 1mm → 3 条, 10mm → 50+ 条
+### Task 9: P3.1 搜索容差 UI (±5mm 固定) (0.5 session)
 
-**复用模式**: Day 8.4 后端已实现 `(diameter BETWEEN lo AND hi)`,前端只改 UI + 请求参数。
+> **规格纠正**: 新思路.xlsx R9-R18 明确"**搜索范围支持±5mm**" (H1-H4/D1-D4/D7/D8 共 10 个尺寸字段),**不是 ±1/±5/±10 三档**
+
+- [ ] SubTask 9.1: 后端确认 tolerance 默认 5 (Day 8.4 已实现,无需改)
+  - 验证: `grep -n "tolerance" backend/.../AdminSearchController.cs` 应见 `int? tolerance = 5`
+  - 若默认 1 或 10 → 改为 5
+- [ ] SubTask 9.2: 前端 `AdminSearchView.vue` **删除容差下拉**,尺寸字段直接传 `tolerance=5`
+  - **不**加 `<el-select>` 三档选择
+  - 请求参数固定: `{ tolerance: 5, h1, h2, d1, d2, ... }`
+- [ ] SubTask 9.3: `PublicSearchView.vue` (P3.4) 同步实现
+- [ ] SubTask 9.4: (可选) popover 提示: 鼠标悬停尺寸字段时显示"搜索范围 ±5mm"
+  - `<el-popover trigger="hover">` 包裹尺寸 input
+- [ ] 验证: 尺寸字段输入 → 搜索结果符合 ±5mm 范围
+  - E2E: `spike-test/_test_tolerance_ui.py` (新)
+  - Case 1: H1=100 → 约 20 条 (H1 ∈ 95-105)
+  - Case 2: H1=100 + H2=200 → 5-10 条 (双字段 AND 收窄)
+
+**复用模式**: Day 8.4 后端 `(h BETWEEN lo AND hi) AND (d BETWEEN lo AND hi)` 已实现 `lo = value-5, hi = value+5`,前端无需改逻辑。
 
 ### Task 10: P3.2 Excel 多行复制粘贴查询 (1 session)
+
+> **规格来源**: 新思路.xlsx → "后台搜索统筹" R6/R8 "**是否可是支持Excel多行复制黏贴查询**" 明确针对 OEM 2 / OEM 3
 
 - [ ] SubTask 10.1: 搜索输入框加"批量粘贴"模式
   - `el-tabs` 切换: 单条 / 批量
@@ -172,39 +180,96 @@
 
 ### Task 11: P3.3 前台产品详情页 (公开) (1 session)
 
-- [ ] SubTask 11.1: `PublicProductView.vue` 路由 `/product/:oem`
+> **规格来源**: 新思路.xlsx → "前端展示内容" R1 "**域名格式:product name 1+product name2+OEM BRAND+OEM NO.**" + "后台新增产品格式" 7 分区字段 + "前端展示内容" R5 "图片名称需要同一命名为对应的OEM号码"
+
+- [ ] SubTask 11.1: `PublicProductView.vue` 路由 `/product/{name1}-{name2}-{oemBrand}-{oemNo}` (URL 编码)
   - 文件: `frontend/src/views/public/PublicProductView.vue`
-  - 路由: `router/index.ts` 加 `{ path: '/product/:oem', component: PublicProductView, meta: { public: true } }`
-- [ ] SubTask 11.2: 7 分区折叠展示
-  - 1 图片 / 2 基础 / 3 尺寸 / 4 性能 / 5 包装 / 6 车型 / 7 Cross Ref
-  - `<el-collapse v-model="activeNames">` + `<el-collapse-item>`
+  - 路由: `router/index.ts` 加 `{ path: '/product/:slug', component: PublicProductView, meta: { public: true } }`
+  - slug 解析: name1 + name2 + oemBrand + oemNo 用 `-` 连接
+- [ ] SubTask 11.2: 7 分区折叠展示 (按"后台新增产品格式"规格)
+  - **分区 1 基础**: Product Name 1, Product Name 2, Type, MR.1, OEM 2, 上架
+  - **分区 2 替代**: OEM Brand, OEM 3, 上架, Remark, 排序
+  - **分区 3 尺寸**: H1-H4, D1-D4, D7, D8, No. Check Valves, No. Bypass Valves
+  - **分区 4 图片**: 图片 1-6 (主图 + 5 副图)
+  - **分区 5 性能**: Media Name, Media Model, Bypass Valve LR/HR, Efficiency 1/2, Δ Collapse Pressure, Seal Material, Temperature Range, Bypass Pressure
+  - **分区 6 包装**: QTY, Weight/KGS, Length/Wide/Height, Volume/m³ (自动计算)
+  - **分区 7 适配**: machine brand/model/name, Engine brand/type/energy, Production date, Power, Serial number (from/to), Car body type, Series, CO₂ emission, Transmission, Engine displacement, Number of cylinders, GVWR, Tonnage, Geographic area, Chassis type, Engine model, Cabin type, Capacity, Engine serial number
+  - `<el-collapse v-model="activeNames">` + `<el-collapse-item>` (默认全展开)
 - [ ] SubTask 11.3: SEO `<title>` + OG meta tags
   - 用 `useHead` (vueuse) 或直接 `document.title = ...`
-  - `<meta property="og:title">` / `og:image` / `og:description` / `og:type`
-- [ ] SubTask 11.4: 图片按 OEM 编号命名验证 (imageKey 前缀 = `oem2` 编码)
-  - `oem2/11427622448.jpg` / `oem2/11427622448_2.jpg`
+  - `<meta property="og:title">` / `og:image` / `og:description` / `og:type>`
+  - title 格式: `{{ name1 }} {{ name2 }} {{ oemBrand }} {{ oemNo }} - SakuraFilter`
+- [ ] SubTask 11.4: 图片按 OEM 编号命名 (imageKey 验证)
+  - 主图: `oem2/{OEM}.jpg` (slot 1)
+  - 副图: `oem2/{OEM}_{slot}.jpg` (slot 2-6)
+  - 缺图回退: `static/logo.png`
   - OSS 预签名 URL 1h 有效
-- [ ] SubTask 11.5: 公开搜索 `/search?q=`, 无 admin 鉴权
+- [ ] SubTask 11.5: 公开搜索 `/search` 路由 (P3.4 独立 Task)
   - 路由: `/search` (公开, 无 token)
 - [ ] SubTask 11.6: Playwright 截图测试
   - `tests/visual/public-product.spec.ts`
   - 截图存 `tests/visual/baselines/public-product.png`
-- [ ] 验证: `/product/11427622448` 公开访问, 首屏 < 1.5s, title/OG 正确
+- [ ] 验证: `/product/oil-filter-of100-mann-w950` 公开访问, 首屏 < 1.5s, title/OG 正确
   - lighthouse 性能跑分
 
 **复用模式**:
-- 7 分区数据模型: `Product` Entity (Day 5 已建)
-- SEO: 见 `spec.md` P3.3 章节 HTML 模板
+- 7 分区数据模型: `Product` Entity (Day 5 已建, 23 字段已具备)
+- 字段映射: 见 `spec.md` P3.3 7 分区字段表
+- SEO: 见 `spec.md` P3.3 HTML 模板
+
+### Task 11.5: P3.4 公开搜索页 (8 字段多框) (0.5 session) — 新增独立 Task
+
+> **规格来源**: 新思路.xlsx → "前端展示内容" R2 "**都多框支持所有 oem brand, oem 2 no, oem 3 no, machine brand, machine model, model name, engine brand, engine type 模糊搜索**" + R8 示例 URL
+
+- [ ] SubTask 11.5.1: `PublicSearchView.vue` 8 字段多框布局
+  - 字段 (按规格顺序): oem brand / oem 2 no / oem 3 no / machine brand / machine model / model name / engine brand / engine type
+  - 8 个 `<el-input>` 并排 (2 行 4 列 grid)
+  - 任一框输入触发搜索 (debounce 300ms)
+- [ ] SubTask 11.5.2: 后端 `GET /api/public/search` 接 8 字段
+  - 参数: `oemBrand, oemNo2, oemNo3, machineBrand, machineModel, modelName, engineBrand, engineType` (全部可选 string)
+  - 走 P0.1 ILIKE ESCAPE 模糊 (前后通配)
+  - 多个字段 = AND 关系
+  - 走 Meili 索引
+- [ ] SubTask 11.5.3: URL 路由与查询参数同步
+  - 路由: `/search` 公开
+  - 字段值变化时同步到 URL query (可分享)
+  - 例: `?oemBrand=CAT&machineModel=320D`
+- [ ] SubTask 11.5.4: E2E 验证规格 R8 例子
+  - `?oemBrand=CAT` → 模糊返回 oem_brand 含 "CAT"
+  - `?oemNo3=207-60` → 模糊返回 oem_no_3 以 "207-60" 开头
+- [ ] 验证: 8 字段任一输入触发搜索, 多字段 AND 收窄, URL 可分享
+
+**复用模式**:
+- Meili 索引: Day 9.3 SearchService 已封装
+- ILIKE 转义: P0.1 `LikeEscapeExtensions.EscapeKeyword`
 
 ### Task 12: P3.5 对比 UI 完整版 (0.5 session)
 
-- [ ] SubTask 12.1: `AdminCompareView.vue` 6 列布局
+> **规格来源**: 新思路.xlsx → "对比界面" sheet 严格列出 23 字段,与"后台搜索统筹" R27 "查询之后需要显示的内容及顺序" **完全一致**
+
+- [ ] SubTask 12.1: `AdminCompareView.vue` 6 列布局 (23 字段)
+  - 字段顺序 (与"对比界面"规格严格一致):
+    1. 图片 1 (主图缩略图)
+    2. MR. 1
+    3. OEM 2 NO.
+    4. OEM 3 NO.
+    5-8. H1, H2, H3, H4
+    9-12. D1, D2, D3, D4
+    13-14. D7, D8 (螺纹)
+    15. Media Name
+    16. Media Model
+    17. remark
+    18. Each Carton QTY
+    19. Each Carton Weight/KGS
+    20-22. Length, Wide, Height (mm)
+    23. **Volume/CTN (m³) 自动计算**
   - `<div class="grid grid-cols-7">` (1 字段名 + 6 产品)
 - [ ] SubTask 12.2: 高亮差异 (相同灰底/不同黄底)
   - 算法: `const allEqual = values.every(v => v === values[0])`
   - CSS: `.same { background: #f5f5f5; } .diff { background: #fffbe6; }`
-- [ ] SubTask 12.3: 拖拽列调整顺序
+- [ ] SubTask 12.3: 拖拽**列产品**调顺序 (字段顺序固定,不能拖)
   - `vuedraggable` 包 6 列
+  - 注: 字段行**不**可拖,只可拖产品列
 - [ ] SubTask 12.4: 打印优化 CSS `@media print`
   ```css
   @media print {
@@ -212,7 +277,7 @@
     .grid { grid-template-columns: 200px repeat(6, 1fr); }
   }
   ```
-- [ ] 验证: 6 产品对比页一次性展示, 差异高亮, 截图 E2E
+- [ ] 验证: 6 产品对比页一次性展示 23 字段, 差异高亮, 截图 E2E
   - E2E: `spike-test/_test_compare.py` + Playwright 截图
 
 ---
@@ -397,3 +462,848 @@ Phase 4 (⏳):
 | 7 | Task 15 (P5 打磨) | 低 (锦上添花) | 低 | Phase 4 最后 |
 
 最高优先级 (Next): **Task 11 (P3.3 前台产品页)** — 依赖 Task 7 (字典 typeahead) + Task 8 (type 排序) 全部完成, 可立即启动。
+
+---
+
+# Next 任务执行手册 (Day 11 启动用)
+
+> **使用场景**: 任何新 session 启动时,翻到本节直接执行。本节为"照着做"的最小可执行清单。
+
+## 🟢 Task 11: P3.3 前台产品详情页 (1 session) — Next
+
+### 启动检查 (5 分钟)
+
+```bash
+# 0. 备份 (高危: 新建 controller + 改路由, 需备份)
+cd d:\projects\sakurafilter
+git status  # 必须 clean
+# 若有未提交 → git add -A && git commit -m "backup: pre Task-11 启动"
+
+# 1. 数据库
+psql -h localhost -U postgres -d spike_test_v3 -c "SELECT count(*) FROM products"
+# 预期: ~10000 (Day 1-10 已有)
+
+# 2. 编译
+cd backend/src/SakuraFilter.Api && dotnet build --nologo
+# 预期: 0 Error
+
+# 3. 启动后端 (新窗口)
+dotnet run --urls "http://localhost:5148"
+# 预期: Now listening on http://localhost:5148
+
+# 4. E2E 回归 (P2 必须仍绿)
+cd d:\projects\sakurafilter\spike-test
+python _test_day10_oem_brands.py   # 10/10
+python _test_p22_seven_dicts.py     # 9/9
+python _test_type_ordering.py       # 5/5
+```
+
+### SubTask 详细步骤
+
+#### SubTask 11.1: 后端 `PublicProductController` (15 分钟)
+
+```bash
+# 1. 创建文件
+touch backend/src/SakuraFilter.Api/Controllers/PublicProductController.cs
+```
+
+**代码模板** (复制后改):
+```csharp
+// 参考 AdminProductController.cs, 但 [AllowAnonymous] 且只读
+[ApiController]
+[Route("api/public")]
+[AllowAnonymous]  // 关键: 无需 admin token
+public class PublicProductController : ControllerBase
+{
+    [HttpGet("product/{oem}")]
+    public async Task<ActionResult<ProductDetailDto>> GetByOem(string oem) { ... }
+
+    [HttpGet("products/by-type")]
+    public async Task<ActionResult<List<TypeGroupDto>>> ByType() { ... }
+}
+```
+
+**验证**:
+```bash
+# 1. 编译
+dotnet build --nologo  # 0 Error
+
+# 2. 启动后 curl
+curl http://localhost:5148/api/public/product/11427622448
+# 预期: 200 + JSON (无 token)
+# 预期: { oem, name1, name2, type, dimensions, machines, xrefs, images }
+```
+
+#### SubTask 11.2: 前台 `PublicProductView.vue` (30 分钟)
+
+```bash
+# 1. 创建文件
+mkdir -p frontend/src/views/public
+touch frontend/src/views/public/PublicProductView.vue
+```
+
+**7 分区模板** (复制 Day 9 AdminProductView.vue, 删鉴权 + 加 SEO):
+```vue
+<template>
+  <div class="public-product">
+    <el-collapse v-model="activeNames">
+      <el-collapse-item title="1. 图片" name="1">
+        <el-carousel :interval="4000"><el-carousel-item v-for="img in product.images" :key="img.url">
+          <img :src="img.url" :alt="product.oem" />
+        </el-carousel-item></el-carousel>
+      </el-collapse-item>
+      <el-collapse-item title="2. 基础" name="2">
+        <dl><dt>Product Name 1</dt><dd>{{ product.name1 }}</dd>...</dl>
+      </el-collapse-item>
+      <!-- 3-7 分区同上 -->
+    </el-collapse>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { useHead } from '@vueuse/head'  // SEO
+useHead({
+  title: `${product.name1} ${product.name2} ${product.oemBrand} ${product.oem} - SakuraFilter`,
+  meta: [
+    { property: 'og:title', content: `${product.name1} ${product.name2}` },
+    { property: 'og:image', content: product.images[0]?.url },
+    { property: 'og:description', content: `${product.oemBrand} ${product.oem}` },
+    { property: 'og:type', content: 'product' }
+  ]
+})
+</script>
+```
+
+**验证**:
+```bash
+# 1. 前端编译
+cd frontend && npm run build  # 0 Error
+
+# 2. 浏览器手动
+# 访问 http://localhost:5173/product/11427622448
+# 预期: 看到 7 个折叠面板, 标题正确
+```
+
+#### SubTask 11.3: 路由配置 (5 分钟)
+
+```typescript
+// frontend/src/router/index.ts 加 2 行
+{
+  path: '/product/:oem',
+  component: () => import('@/views/public/PublicProductView.vue'),
+  meta: { public: true, title: '产品详情' }
+},
+{
+  path: '/search',
+  component: () => import('@/views/public/PublicSearchView.vue'),
+  meta: { public: true, title: '产品搜索' }
+}
+```
+
+#### SubTask 11.4: Playwright 截图 (20 分钟)
+
+```bash
+cd frontend
+npx playwright test tests/visual/public-product.spec.ts
+# 首次跑会创建 baseline, 后续跑比对
+```
+
+**spec 模板**:
+```typescript
+import { test, expect } from '@playwright/test'
+test('public product page', async ({ page }) => {
+  await page.goto('http://localhost:5148/product/11427622448')
+  await expect(page).toHaveTitle(/SakuraFilter/)
+  await expect(page.locator('.el-collapse-item')).toHaveCount(7)
+  await page.screenshot({ path: 'tests/visual/baselines/public-product.png', fullPage: true })
+})
+```
+
+#### SubTask 11.5: E2E (20 分钟)
+
+```bash
+touch spike-test/_test_public_product.py
+```
+
+**模板** (复制 `_test_type_ordering.py`):
+```python
+import requests, sys
+BASE = "http://localhost:5148"
+
+def test_get_product_no_token():
+    """前台产品页无需 token"""
+    r = requests.get(f"{BASE}/api/public/product/11427622448")
+    assert r.status_code == 200, f"need 200, got {r.status_code}: {r.text}"
+    data = r.json()
+    assert "oem" in data, "must have oem field"
+    print("[OK] public product accessible without token")
+
+def test_get_product_with_images():
+    """产品页含 imageKey (OSS URL)"""
+    r = requests.get(f"{BASE}/api/public/product/11427622448")
+    data = r.json()
+    if data.get("images"):
+        assert "url" in data["images"][0]
+        print("[OK] images have url field")
+
+if __name__ == "__main__":
+    test_get_product_no_token()
+    test_get_product_with_images()
+    print("2/2 PASS")
+```
+
+#### 11.6 提交 + 推送
+
+```bash
+git add -A
+git commit -m "task-11: P3.3 前台产品页 (公开) - 7 分区 + SEO + OSS 图片"
+# GFW 阻断时: 后台重试循环
+for i in {1..30}; do
+  git push origin master && break
+  echo "push failed, retry $i in 8s..."
+  sleep 8
+done
+```
+
+### Task 11 回滚方案
+
+```bash
+# 若 SubTask 11.2 前端编译失败
+git revert HEAD  # 撤销最后一次 commit
+git push origin master
+
+# 若 SubTask 11.1 后端编译失败
+# 检查 [AllowAnonymous] 是否漏, AdminProductController 鉴权是否被误改
+grep -n "X-Admin-Token" backend/src/SakuraFilter.Api/Controllers/AdminProductController.cs
+```
+
+---
+
+## 🟡 Task 12: P3.5 对比 UI (0.5 session) — 备选 Next
+
+### 启动检查
+
+```bash
+# 0. 备份 (前端单文件, 可不备份, 但仍建议)
+git status  # clean
+
+# 1. 复用 Day 9.4 后端接口
+curl -H "X-Admin-Token: $TOKEN" http://localhost:5148/api/admin/compare?ids=1,2,3
+# 预期: 200 + JSON (3 产品 + 字段)
+```
+
+### SubTask 详细步骤
+
+#### SubTask 12.1: 6 列 grid 布局 (15 分钟)
+
+```bash
+# 1. 创建/改造
+touch frontend/src/views/admin/AdminCompareView.vue
+```
+
+**模板**:
+```vue
+<template>
+  <div class="compare-view">
+    <div class="grid grid-cols-7 gap-2">
+      <!-- 1 列字段名 + 6 列产品 -->
+      <div v-for="field in fields" :key="field.name" class="field-row">
+        <div class="field-name">{{ field.label }}</div>
+        <div v-for="(product, idx) in products" :key="product.id"
+             :class="['field-value', getHighlightClass(field, idx)]">
+          {{ product[field.name] || '—' }}
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+// 差异高亮算法
+const getHighlightClass = (field, colIdx) => {
+  const values = products.value.map(p => p[field.name])
+  const allEqual = values.every(v => v === values[0])
+  return allEqual ? 'same' : 'diff'
+}
+</script>
+
+<style scoped>
+.same { background: #f5f5f5; }
+.diff { background: #fffbe6; }
+
+@media print {
+  .el-button, .el-toolbar { display: none !important; }
+  .grid { grid-template-columns: 200px repeat(6, 1fr); }
+}
+</style>
+```
+
+#### SubTask 12.2: 拖拽列调序 (15 分钟)
+
+```bash
+npm install vuedraggable@next
+```
+
+```vue
+<draggable v-model="products" item-key="id" handle=".drag-handle">
+  <template #item="{ element }">
+    <div class="product-column" :data-id="element.id">
+      <el-icon class="drag-handle"><Rank /></el-icon>
+      <h3>{{ element.oem }}</h3>
+    </div>
+  </template>
+</draggable>
+```
+
+#### SubTask 12.3: 验证 (5 分钟)
+
+```bash
+# 1. 浏览器
+# 访问 http://localhost:5173/admin/compare?ids=1,2,3,4,5,6
+# 预期: 6 列 grid, 差异高亮, 拖拽生效
+
+# 2. E2E
+cd spike-test && python _test_compare.py
+# 预期: PASS
+
+# 3. Playwright 截图
+cd frontend && npx playwright test tests/visual/compare.spec.ts
+# 预期: PASS
+```
+
+#### SubTask 12.4: 提交
+
+```bash
+git add -A && git commit -m "task-12: P3.5 对比 UI 完整版 - 6 列 + 差异高亮 + 拖拽 + 打印"
+git push origin master
+```
+
+---
+
+## 🔵 Task 9: P3.1 容差 UI (0.5 session) — 备选 Next
+
+### SubTask 详细步骤
+
+#### SubTask 9.1: 后端确认 (5 分钟, 必跑)
+
+```bash
+# Day 8.4 已实现, 确认 tolerance 参数存在
+grep -n "tolerance" backend/src/SakuraFilter.Api/Controllers/AdminSearchController.cs
+# 预期: 看到 public async Task<ActionResult> Search(int? tolerance, ...)
+```
+
+#### SubTask 9.2: 前端下拉 (15 分钟)
+
+```bash
+# 改造 AdminSearchView.vue
+touch /tmp/diff.txt  # 占位
+```
+
+**代码片段**:
+```vue
+<template>
+  <el-popover placement="bottom" :width="300" trigger="hover">
+    <template #content>
+      <p>切换容差会显著影响搜索速度</p>
+      <p>10mm 比 1mm 慢 5-10 倍</p>
+    </template>
+    <el-select v-model="tolerance" placeholder="尺寸容差" style="width: 120px">
+      <el-option label="±1mm" :value="1" />
+      <el-option label="±5mm" :value="5" />
+      <el-option label="±10mm" :value="10" />
+    </el-select>
+  </el-popover>
+</template>
+
+<script setup lang="ts">
+const tolerance = ref(5)  // 默认 5mm
+// 搜索请求自动带 tolerance
+const search = async () => {
+  const { data } = await http.get('/api/products/search', {
+    params: { tolerance: tolerance.value, h1, h2, d1, d2 }
+  })
+}
+</script>
+```
+
+#### SubTask 9.3: 验证 (10 分钟)
+
+```bash
+# 1. 浏览器手动
+# 访问 /admin/search, 切换 ±1mm → 看到结果数减少
+
+# 2. DevTools Network
+# 看到请求 URL 含 ?tolerance=1
+
+# 3. E2E
+cd spike-test && python _test_tolerance_ui.py
+# 预期: 3/3 PASS
+```
+
+---
+
+## 🟣 Task 10: P3.2 Excel 粘贴 (1 session) — 备选 Next
+
+### SubTask 详细步骤
+
+#### SubTask 10.1: 后端 `POST /api/search/batch-oem` (30 分钟)
+
+```bash
+touch backend/src/SakuraFilter.Api/Controllers/BatchOemController.cs
+```
+
+**代码模板**:
+```csharp
+[ApiController]
+[Route("api/search")]
+public class BatchOemController : ControllerBase
+{
+    public record BatchOemRequest(List<string> Oems);
+    public record BatchOemResult(string Oem, bool Found, long? ProductId, string? OemBrand);
+
+    [HttpPost("batch-oem")]
+    public async Task<ActionResult<List<BatchOemResult>>> BatchOem(
+        [FromBody] BatchOemRequest req, CancellationToken ct)
+    {
+        if (req.Oems == null || req.Oems.Count == 0)
+            return BadRequest("oems 不能为空");
+        if (req.Oems.Count > 500)
+            return BadRequest("oems 最多 500 个");
+
+        // 走 Meili 索引 (Day 9.3 SearchService 已封装)
+        var results = await _searchService.SearchByOemBatchAsync(req.Oems, ct);
+        return Ok(results);
+    }
+}
+```
+
+**SearchService 扩展** (30 分钟):
+```csharp
+public async Task<List<BatchOemResult>> SearchByOemBatchAsync(
+    List<string> oems, CancellationToken ct)
+{
+    // Meili 多值查询 (search engine 支持 ANY 语义)
+    var filter = $"oem_no_2 IN [{string.Join(',', oems.Select(o => $"\"{o}\""))}]";
+    var meiliResults = await _meili.Index("products").SearchAsync<MeiliProductDto>("", new SearchQuery
+    {
+        Filter = filter,
+        Limit = oems.Count * 2  // 每个 OEM 最多 2 个候选
+    });
+
+    // 聚合: 每个 OEM 取 best match (按 sort_order)
+    return oems.Select(oem => new BatchOemResult(
+        Oem: oem,
+        Found: meiliResults.Hits.Any(h => h.OemNo2 == oem || h.OemNo3 == oem),
+        ProductId: meiliResults.Hits.FirstOrDefault(h => h.OemNo2 == oem)?.Id,
+        OemBrand: meiliResults.Hits.FirstOrDefault(h => h.OemNo2 == oem)?.OemBrand
+    )).ToList();
+}
+```
+
+#### SubTask 10.2: 前端批量粘贴 (30 分钟)
+
+**代码片段** (PublicSearchView.vue):
+```vue
+<template>
+  <el-tabs v-model="mode">
+    <el-tab-pane label="单条" name="single">
+      <el-input v-model="singleOem" placeholder="OEM 编号" />
+    </el-tab-pane>
+    <el-tab-pane label="批量粘贴" name="batch">
+      <el-input v-model="batchText" type="textarea" :rows="10"
+                placeholder="支持 tab/换行/逗号分隔, 最多 500 个" />
+      <el-button @click="searchBatch">查询 ({{ parsedOems.length }})</el-button>
+    </el-tab-pane>
+  </el-tabs>
+
+  <el-table v-if="results.length" :data="results">
+    <el-table-column prop="oem" label="OEM 编号" />
+    <el-table-column label="状态">
+      <template #default="{ row }">
+        <el-tag :type="row.found ? 'success' : 'danger'">
+          {{ row.found ? '✓ 命中' : '✗ 未命中' }}
+        </el-tag>
+      </template>
+    </el-table-column>
+    <el-table-column prop="productId" label="产品 ID" />
+    <el-table-column prop="oemBrand" label="OEM Brand" />
+  </el-table>
+</template>
+
+<script setup lang="ts">
+const batchText = ref('')
+const parsedOems = computed(() => {
+  return [...new Set(
+    batchText.value
+      .split(/[\t\n,;]+/)  // tab/换行/逗号/分号
+      .map(s => s.trim())
+      .filter(Boolean)
+  )]
+})
+
+const searchBatch = async () => {
+  const { data } = await http.post('/api/search/batch-oem', { oems: parsedOems.value })
+  results.value = data
+}
+</script>
+```
+
+#### SubTask 10.3: 验证 (20 分钟)
+
+```bash
+# 1. curl 测试
+curl -X POST http://localhost:5148/api/search/batch-oem \
+  -H "Content-Type: application/json" \
+  -d '{"oems":["11427622448","11427622449"]}'
+# 预期: 200 + JSON (2 行结果)
+
+# 2. 边界测试
+# 中文: "滤清器 1142" → 单元素, 正确解析
+# 斜杠: "AB/CD/123" → 单元素, 正确解析
+# 引号: '"OEN-123"' → 保留引号
+# 空行 / 重复 / 前后空格 → 健壮处理
+
+# 3. E2E
+cd spike-test && python _test_batch_oem.py
+# 预期: PASS + 耗时 < 1s
+```
+
+---
+
+## 🔴 Task 13: P4.1 E2E 全量 (1 session) — Phase 4 入口
+
+### 启动检查
+
+```bash
+# 1. 备份 (spike-test 增量, 建议备份)
+git status  # clean
+
+# 2. 现有 E2E 列表
+ls spike-test/_test_*.py
+# 预期: ~10 个 (Day 9-10 + P2 全部)
+
+# 3. 缺哪些
+ls spike-test/_test_dict_*.py 2>/dev/null  # 字典 E2E
+# 预期: 6 个新文件待建
+```
+
+### SubTask 详细步骤
+
+#### SubTask 13.1: 6 个新字典 E2E (30 分钟)
+
+```bash
+# 模板: 复制 spike-test/_test_day10_oem_brands.py
+cp spike-test/_test_day10_oem_brands.py spike-test/_test_dict_product_name1.py
+# 改 dict 名 → 跑 → 验证
+for dict in product_name1 product_name2 type oem_no3 media machine engine; do
+  sed "s/oem-brand/${dict//_/-}/g" spike-test/_test_day10_oem_brands.py \
+    > spike-test/_test_dict_${dict}.py
+done
+
+# 跑全部
+for f in spike-test/_test_dict_*.py; do
+  echo "=== $f ==="
+  python "$f" || echo "FAIL: $f"
+done
+```
+
+#### SubTask 13.2: P3 E2E (30 分钟)
+
+```bash
+# 已有: _test_tolerance_ui.py / _test_batch_oem.py / _test_public_product.py / _test_compare.py
+# (从 Task 9/10/11/12 复制过来)
+
+ls spike-test/_test_p3_*.py 2>/dev/null || echo "[TODO] 创建 P3 E2E"
+```
+
+#### SubTask 13.3: CI 拆分 matrix (30 分钟)
+
+```yaml
+# .github/workflows/e2e.yml
+jobs:
+  e2e-matrix:
+    strategy:
+      matrix:
+        test: [day10, p22, type-ordering, pause-resume, cdn-switch,
+               dict-pn1, dict-pn2, dict-type, dict-oem3, dict-media, dict-machine, dict-engine,
+               tolerance-ui, batch-oem, public-product, compare]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run E2E
+        run: cd spike-test && python _test_${{ matrix.test }}.py
+```
+
+**预期**: 总耗时 < 10 分钟, 单 job < 3 分钟。
+
+---
+
+## 🟠 Task 14: P4.2+P4.3 契约 + 视觉 (1 session)
+
+### SubTask 详细步骤
+
+#### SubTask 14.1: `GET /api/admin/dict/_schema` (30 分钟)
+
+```bash
+touch backend/src/SakuraFilter.Api/Controllers/DictSchemaController.cs
+```
+
+**代码**:
+```csharp
+[ApiController]
+[Route("api/admin/dict")]
+public class DictSchemaController : ControllerBase
+{
+    [HttpGet("_schema")]
+    public ActionResult<Dictionary<string, Dictionary<string, string>>> Schema()
+    {
+        // 反射 DbContext.Model 提取所有 entity 字段
+        var dicts = new[] {
+            typeof(DictOemBrand), typeof(DictProductName1), typeof(DictProductName2),
+            typeof(DictType), typeof(DictOemNo3), typeof(DictMedia),
+            typeof(DictMachine), typeof(DictEngine)
+        };
+        var schema = new Dictionary<string, Dictionary<string, string>>();
+        foreach (var t in dicts)
+        {
+            var props = t.GetProperties()
+                .ToDictionary(p => p.Name, p => p.PropertyType.Name);
+            schema[t.Name] = props;
+        }
+        return Ok(schema);
+    }
+}
+```
+
+#### SubTask 14.2: 前端契约测试 (20 分钟)
+
+```bash
+cd frontend
+npm install --save-dev zod
+touch tests/contract/dict-schema.test.ts
+```
+
+```typescript
+import { describe, expect, test } from 'vitest'
+import { z } from 'zod'
+
+const DictItemSchema = z.object({
+  id: z.number(),
+  value: z.string(),
+  sortOrder: z.number(),
+  isDeleted: z.boolean(),
+  deletedAt: z.string().nullable()
+})
+
+describe('dict schema contract', () => {
+  test('backend dict_item matches frontend', async () => {
+    const res = await fetch('http://localhost:5148/api/admin/dict/_schema', {
+      headers: { 'X-Admin-Token': process.env.ADMIN_TOKEN }
+    })
+    const schema = await res.json()
+    // 校验每个字典有 5 个字段
+    for (const [name, fields] of Object.entries(schema)) {
+      expect(fields).toHaveProperty('id')
+      expect(fields).toHaveProperty('value')
+      expect(fields).toHaveProperty('sortOrder')
+    }
+  })
+})
+```
+
+#### SubTask 14.3: Playwright 视觉回归 (30 分钟)
+
+```bash
+cd frontend
+npm install --save-dev pixelmatch pngjs
+touch tests/visual/dict-pages.spec.ts
+```
+
+```typescript
+import { test, expect } from '@playwright/test'
+
+const DICTS = ['oem-brand', 'product-name1', 'product-name2', 'type',
+               'oem-no3', 'media', 'machine', 'engine']
+
+for (const dict of DICTS) {
+  test(`dict ${dict} visual baseline`, async ({ page }) => {
+    await page.goto(`http://localhost:5173/admin/dict/${dict}`)
+    await expect(page.locator('.dict-table')).toBeVisible()
+    await page.screenshot({
+      path: `tests/visual/baselines/dict-${dict}.png`,
+      fullPage: true
+    })
+  })
+}
+```
+
+**像素 diff** (5% 阈值):
+```typescript
+import pixelmatch from 'pixelmatch'
+import { PNG } from 'pngjs'
+import fs from 'fs'
+
+test('compare with baseline', async () => {
+  const baseline = PNG.sync.read(fs.readFileSync('tests/visual/baselines/dict-type.png'))
+  const current = PNG.sync.read(fs.readFileSync('tests/visual/current/dict-type.png'))
+  const diff = new PNG({ width: baseline.width, height: baseline.height })
+  const changed = pixelmatch(baseline.data, current.data, diff.data,
+    baseline.width, baseline.height, { threshold: 0.05 })
+  expect(changed / (baseline.width * baseline.height)).toBeLessThan(0.05)
+})
+```
+
+---
+
+## 🟤 Task 15: P5 打磨 (1 session)
+
+### SubTask 详细步骤
+
+#### SubTask 15.1: P5.1 Volume 自动计算 (15 分钟)
+
+```bash
+# 改造 AdminProductFormView.vue
+grep -n "cartonLength\|cartonWidth\|cartonHeight" frontend/src/views/admin/AdminProductFormView.vue
+# 预期: 3 个表单字段
+```
+
+**代码**:
+```typescript
+import { watch } from 'vue'
+
+// 监听 L/W/H 变化自动计算 Volume
+watch(
+  [() => form.cartonLength, () => form.cartonWidth, () => form.cartonHeight],
+  ([l, w, h]) => {
+    if (l && w && h) {
+      form.cartonVolume = Number(((l * w * h) / 1e9).toFixed(4))
+    }
+  }
+)
+// masterBox 同理
+```
+
+#### SubTask 15.2: P5.2 字段 popover (30 分钟)
+
+```bash
+# 1. 新建 Entity
+touch backend/src/SakuraFilter.Core/Entities/DictFieldHelp.cs
+```
+
+**Entity**:
+```csharp
+public class DictFieldHelp
+{
+    public long Id { get; set; }
+    public string FieldName { get; set; } = "";
+    public string? Description { get; set; }
+    public string? Unit { get; set; }
+    public string? Example { get; set; }
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+}
+```
+
+**Migration**:
+```bash
+cd backend/src/SakuraFilter.Api
+dotnet ef migrations add AddDictFieldHelp
+```
+
+**API + 组件**: 略 (见 spec.md P5.2)
+
+#### SubTask 15.3: P5.3 主题切换 (30 分钟)
+
+```bash
+mkdir -p frontend/src/stores
+touch frontend/src/stores/theme.ts
+```
+
+```typescript
+import { defineStore } from 'pinia'
+
+export const useThemeStore = defineStore('theme', {
+  state: () => ({
+    current: (localStorage.getItem('theme') as 'light' | 'dark') || 'light'
+  }),
+  actions: {
+    toggle() {
+      this.current = this.current === 'light' ? 'dark' : 'light'
+      localStorage.setItem('theme', this.current)
+      document.documentElement.classList.toggle('dark', this.current === 'dark')
+    }
+  }
+})
+```
+
+**CSS 变量**:
+```css
+/* frontend/src/styles/theme.css */
+:root {
+  --bg-primary: #ffffff;
+  --text-primary: #000000;
+  --border-color: #e5e5e5;
+}
+.dark {
+  --bg-primary: #0a0a0a;
+  --text-primary: #fafafa;
+  --border-color: #262626;
+}
+```
+
+#### SubTask 15.4: P5.4 帮助页 (20 分钟)
+
+```bash
+npm install markdown-it
+touch frontend/src/views/admin/AdminHelpView.vue
+```
+
+**内容模块**:
+```vue
+<template>
+  <div class="help-view">
+    <h1>操作指南</h1>
+    <div v-html="renderedMarkdown" />
+  </div>
+</template>
+
+<script setup lang="ts">
+import MarkdownIt from 'markdown-it'
+const md = new MarkdownIt()
+const content = `
+# 快速开始
+1. 登录后台
+2. 选择字典管理
+3. 拖拽排序
+
+# 字典使用规范
+- oem-brand: 替代品牌
+- type: 滤芯类型
+- ...
+
+# 批量导入流程
+1. 准备 XLSX
+2. 拖到后台导入区
+3. 等待 ETL 完成
+`
+const renderedMarkdown = computed(() => md.render(content))
+</script>
+```
+
+---
+
+# 总执行顺序 (优先级 + 依赖)
+
+```
+Day 11+ 推荐执行顺序:
+  Step 1: 跑 Session 启动检查表 (5min) → 全绿
+  Step 2: Task 11 (P3.3 前台页)        → 1 session
+  Step 3: Task 12 (P3.5 对比 UI)        → 0.5 session (可与 Step 2 并行)
+  Step 4: Task 9 (P3.1 容差)            → 0.5 session
+  Step 5: Task 10 (P3.2 Excel)          → 1 session
+  Step 6: Task 13 (P4.1 E2E)            → 1 session
+  Step 7: Task 14 (P4.2+4.3 契约+视觉)  → 1 session
+  Step 8: Task 15 (P5 打磨)             → 1 session
+  Step 9: git push → CI 全绿 → 结项
+```
+
+**总剩余工作量**: 6-7 session
+

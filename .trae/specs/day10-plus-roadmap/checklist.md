@@ -132,26 +132,29 @@
 
 ## Phase 3: P3 搜索+展示 ⏳ 待开始
 
-### Task 9: P3.1 搜索容差 UI
-- [ ] `AdminSearchView.vue` "尺寸容差" 下拉 (1/5/10mm)
-  - 验证: 浏览器访问 `/admin/search` 看到下拉
-- [ ] `PublicSearchView.vue` 同步实现
-  - 验证: 浏览器访问 `/search` 看到下拉
-- [ ] 选 5mm → 请求带 `tolerance=5` (后端 Day 8.4 已实现)
-  - 验证: DevTools Network 看到 `?tolerance=5&...`
-- [ ] popover 提示"切换容差会显著影响搜索速度"
-  - 验证: 鼠标悬停下拉, 看到提示文字
-- [ ] E2E 验证切换前后结果数变化
-  - 验证: `cd spike-test && python _test_tolerance_ui.py` 预期 3/3 PASS
-  - 1mm → 3 条, 10mm → 50+ 条 (H1=100 基准)
+> **规格依据**: 新思路.xlsx → "后台搜索统筹" / "对比界面" / "前端展示内容" / "各分区管理界面" 5 个 sheet
 
-### Task 10: P3.2 Excel 多行粘贴
-- [ ] 搜索输入框"批量粘贴"模式
+### Task 9: P3.1 搜索容差 UI (±5mm 固定)
+- [ ] 后端 `tolerance` 参数默认 5
+  - 验证: `grep "tolerance" backend/.../AdminSearchController.cs` 应见 `int? tolerance = 5`
+  - 失败: 改为 5
+- [ ] 前端 `AdminSearchView.vue` **无容差下拉**,尺寸字段请求固定 `tolerance=5`
+  - 验证: 浏览器访问 `/admin/search` 看到尺寸字段, 但**没有**容差下拉
+  - DevTools Network 看到 `?tolerance=5&h1=...&d1=...`
+- [ ] `PublicSearchView.vue` (P3.4) 同步实现
+- [ ] (可选) 尺寸字段 popover 提示"搜索范围 ±5mm"
+- [ ] E2E 验证搜索结果符合 ±5mm 范围
+  - 验证: `cd spike-test && python _test_tolerance_ui.py` 预期 2/2 PASS
+  - Case 1: H1=100 → 约 20 条 (H1 ∈ 95-105)
+  - Case 2: H1=100 + H2=200 → 5-10 条 (双字段 AND)
+
+### Task 10: P3.2 Excel 多行粘贴 (OEM 2 / OEM 3)
+- [ ] 搜索输入框"批量粘贴"模式 (OEM 2/3 专用)
   - 验证: 浏览器看到 el-tabs 切换 单条/批量
-- [ ] 解析 tab/换行/逗号分隔
+- [ ] 解析 tab/换行/逗号/分号分隔
   - 验证: 粘贴 100 个 OEM, 自动拆成 100 元素数组
 - [ ] API `POST /api/search/batch-oem` 接 `oems: string[]`
-  - 验证: `curl -X POST http://localhost:5148/api/search/batch-oem -H "Content-Type: application/json" -d '{"oems":["1142","1234"]}'`
+  - 验证: `curl -X POST http://localhost:5148/api/search/batch-oem -H "Content-Type: application/json" -d '{"oems":["11427622448","11427622449"]}'`
 - [ ] 前端结果表 1 行 1 OEM
   - 验证: 浏览器看到表格, 100 行
 - [ ] E2E 100 OEM < 1s 返回
@@ -162,36 +165,54 @@
   - 验证: E2E 边界 case: 含空行/重复/前后空格 全部去重
 
 ### Task 11: P3.3 前台产品详情页
-- [ ] `PublicProductView.vue` 路由 `/product/:oem` 存在
+- [ ] `PublicProductView.vue` 路由 `/product/:slug` 存在
   - 验证: `ls frontend/src/views/public/PublicProductView.vue`
-- [ ] 7 分区折叠展示 (图片 / 基础 / 尺寸 / 性能 / 包装 / 车型 / Cross Ref)
-  - 验证: 浏览器访问 `/product/11427622448` 看到 7 个折叠面板
+  - URL 格式: `/product/{name1}-{name2}-{oemBrand}-{oemNo}` (按规格 R1)
+- [ ] 7 分区折叠展示 (按"后台新增产品格式"规格)
+  - 验证: 浏览器访问 `/product/...` 看到 7 个折叠面板
+  - 字段: 见 `spec.md` P3.3 7 分区字段表 (分区 1-7 共 30+ 字段)
 - [ ] SEO `<title>` 格式正确
   - 验证: View Page Source, title = "ProductName1 ProductName2 OEM BRAND OEM NO - SakuraFilter"
-- [ ] OG meta tags (og:title / og:image / og:description)
+- [ ] OG meta tags (og:title / og:image / og:description / og:type=product)
   - 验证: View Page Source, 4 个 og meta 都有
-- [ ] 公开 `/search?q=` 无 admin 鉴权
-  - 验证: `curl http://localhost:5148/search?q=...` 不需要 token
+- [ ] 公开 `/product/:slug` 无 admin 鉴权
+  - 验证: `curl -I http://localhost:5148/product/oil-filter-of100-mann-w950` 预期 200 (无 token)
 - [ ] Playwright 截图测试通过
   - 验证: `cd frontend && npx playwright test tests/visual/public-product.spec.ts` 预期 PASS
 - [ ] 首屏 < 1.5s (lighthouse)
-  - 验证: `npx lighthouse http://localhost:5148/product/11427622448 --only-categories=performance` 预期 score > 90
-- [ ] imageKey 前缀 = `oem2` 编码 (规格 R5)
+  - 验证: `npx lighthouse http://localhost:5148/product/oil-filter-of100-mann-w950 --only-categories=performance` 预期 score > 90
+- [ ] imageKey 命名严格按 R5 规格 (按 OEM 编号)
+  - 验证: 主图 `oem2/{OEM}.jpg`, 副图 `oem2/{OEM}_{slot}.jpg`
   - 验证: `curl -I $(image_url) | head -1` 预期 200, URL 含 `oem2/`
-- [ ] URL `/product/11427622448` 公开可访问 (无 token)
-  - 验证: `curl -I http://localhost:5148/product/11427622448` 预期 200
+  - 缺图回退: `static/logo.png`
 
-### Task 12: P3.5 对比 UI
-- [ ] `AdminCompareView.vue` 6 列布局
-  - 验证: 浏览器访问 `/admin/compare` 看到 6 列 grid
+### Task 11.5: P3.4 公开搜索页 (8 字段多框) — 新增
+- [ ] `PublicSearchView.vue` 8 字段多框布局
+  - 验证: 浏览器看到 8 个 `<el-input>` (2 行 4 列)
+  - 字段: oem brand / oem 2 no / oem 3 no / machine brand / machine model / model name / engine brand / engine type
+- [ ] 后端 `GET /api/public/search` 接 8 可选 string 参数
+  - 验证: `curl http://localhost:5148/api/public/search?oemBrand=CAT` 返 JSON 数组
+  - 验证: 多字段 AND: `?oemBrand=MANN&machineBrand=Caterpillar`
+- [ ] URL 同步 query 参数 (可分享)
+  - 验证: 字段值变化时 URL query 同步更新
+- [ ] E2E 验证规格 R8 例子
+  - 验证: `?oemBrand=CAT` → 含 "CAT" 的产品
+  - 验证: `?oemNo3=207-60` → 以 "207-60" 开头的产品
+- [ ] ILIKE 转义 (P0.1) 防止注入
+  - 验证: 字段值含 `%` / `_` / `\` 正确转义
+
+### Task 12: P3.5 对比 UI (23 字段)
+- [ ] `AdminCompareView.vue` 6 列布局 (23 字段,与"对比界面"规格严格一致)
+  - 验证: 浏览器访问 `/admin/compare?ids=...` 看到 6 列 grid
+  - 字段顺序: 图片1 / MR.1 / OEM 2 / OEM 3 / H1-H4 / D1-D4 / D7 / D8 / Media Name / Media Model / remark / QTY / Weight / Length / Wide / Height / Volume
 - [ ] 差异高亮 (相同灰底/不同黄底)
-  - 验证: 6 产品同一字段全等 → 灰底; 不全等 → 黄底
-- [ ] 拖拽列调序
-  - 验证: 鼠标拖动列头, 列顺序变化
+  - 验证: 6 产品同一字段全等 → 灰底 #f5f5f5; 不全等 → 黄底 #fffbe6
+- [ ] 拖拽**列产品**调顺序 (字段顺序固定,不能拖)
+  - 验证: 鼠标拖动列头, 产品列顺序变化
+  - 验证: 字段行顺序**不**变 (与"对比界面"规格严格一致)
 - [ ] `@media print` 打印优化 CSS
   - 验证: 浏览器 Ctrl+P, 看到无按钮 + A4 横向
-- [ ] 6 产品对比页一次性展示所有字段
-  - 验证: 6 产品加入, 30+ 字段全部展示
+- [ ] 6 产品 × 23 字段 = 138 单元格一次性展示
 - [ ] Playwright 截图测试
   - 验证: `cd frontend && npx playwright test tests/visual/compare.spec.ts` 预期 PASS
 - [ ] E2E 验证高亮规则
@@ -384,3 +405,439 @@ cat d:\projects\sakurafilter\spike-test\_bench_results.json | jq .
 | **总计** | **15 任务** | **🟡** | **8/15 (53%)** |
 
 > 实时更新: 每次 Task 完成立即勾选 + 更新本表。
+
+---
+
+# Next 任务验证手册 (Day 11 启动用)
+
+> **使用场景**: 启动新 Task 时,翻到本节查"验证命令 + 期望输出 + 失败诊断"。
+
+## 🟢 Task 11 P3.3 前台产品页验证
+
+### 11.1 后端编译 + 启动
+
+```bash
+cd d:\projects\sakurafilter\backend\src\SakuraFilter.Api
+dotnet build --nologo
+# 预期: 0 Error, 19 Warning (与 Phase 2 基线一致)
+# 失败: 见"诊断 D1"
+```
+
+### 11.2 公开 API 无 token
+
+```bash
+curl -i http://localhost:5148/api/public/product/11427622448
+# 预期: HTTP/1.1 200 OK + JSON
+# 失败: 见"诊断 D2"
+```
+
+**期望响应**:
+```json
+{
+  "oem": "11427622448",
+  "name1": "Oil Filter",
+  "name2": "OF-100",
+  "type": "oil",
+  "dimensions": { "h1": 100, "d1": 80, "d2": 70 },
+  "images": [{ "slot": 1, "url": "https://oss.../oem2/11427622448.jpg" }],
+  "machines": [{ "brand": "Caterpillar", "model": "320D" }],
+  "xrefs": [{ "oemBrand": "MANN", "oemNo3": "W950" }]
+}
+```
+
+### 11.3 前台路由
+
+```bash
+curl -i http://localhost:5148/product/11427622448
+# 预期: HTTP/1.1 200 + HTML (SPA 入口)
+# 失败: 见"诊断 D3"
+```
+
+### 11.4 SEO meta tags
+
+```bash
+# 浏览器 F12 → Elements → <head>
+# 预期看到:
+# <title>Oil Filter OF-100 MANN 11427622448 - SakuraFilter</title>
+# <meta property="og:title" content="...">
+# <meta property="og:image" content="https://oss.../oem2/11427622448.jpg">
+# <meta property="og:description" content="...">
+# <meta property="og:type" content="product">
+```
+
+### 11.5 Lighthouse 性能
+
+```bash
+npx lighthouse http://localhost:5148/product/11427622448 \
+  --only-categories=performance \
+  --output=json --output-path=/tmp/lh.json
+cat /tmp/lh.json | jq '.categories.performance.score'
+# 预期: > 0.9 (> 90 分)
+# 失败: 见"诊断 D4"
+```
+
+### 11.6 E2E
+
+```bash
+cd d:\projects\sakurafilter\spike-test
+python _test_public_product.py
+# 预期: 2/2 PASS
+# 失败: 见"诊断 D5"
+```
+
+### 11.7 Playwright 截图
+
+```bash
+cd d:\projects\sakurafilter\frontend
+npx playwright test tests/visual/public-product.spec.ts
+# 预期: 1 passed
+# 首次跑会创建 baseline
+```
+
+---
+
+## 🟡 Task 12 P3.5 对比 UI 验证
+
+### 12.1 6 列布局
+
+```bash
+# 浏览器访问 /admin/compare?ids=1,2,3,4,5,6
+# 预期: 6 列 grid 布局
+# 失败: 见"诊断 D6"
+```
+
+### 12.2 差异高亮
+
+```bash
+# 6 产品加入, 同一字段 H1=100/100/100/100/100/100 → 灰底 #f5f5f5
+# 6 产品 H1=100/100/100/100/100/105 → 黄底 #fffbe6
+# F12 → computed style → background-color 验证
+```
+
+### 12.3 拖拽列
+
+```bash
+# 鼠标按住列头 drag-handle 拖动 → 列顺序变化
+# DevTools → Vue DevTools → products 数组顺序变化
+```
+
+### 12.4 打印优化
+
+```bash
+# 浏览器 Ctrl+P → 打印预览
+# 预期: 无按钮, A4 横向
+# 失败: 见"诊断 D7"
+```
+
+### 12.5 E2E
+
+```bash
+cd d:\projects\sakurafilter\spike-test
+python _test_compare.py
+# 预期: PASS
+
+cd d:\projects\sakurafilter\frontend
+npx playwright test tests/visual/compare.spec.ts
+# 预期: 1 passed
+```
+
+---
+
+## 🔵 Task 9 P3.1 容差 UI 验证
+
+### 9.1 后端 tolerance 参数
+
+```bash
+grep -n "tolerance" d:\projects\sakurafilter\backend\src\SakuraFilter.Api\Controllers\AdminSearchController.cs
+# 预期: 看到 Search(int? tolerance, ...)
+# 缺失: Day 8.4 未实现,需先补
+```
+
+### 9.2 前端下拉
+
+```bash
+# 浏览器访问 /admin/search → 顶部看到 el-select
+# 选项: ±1mm / ±5mm / ±10mm
+# 默认: 5mm
+```
+
+### 9.3 DevTools Network
+
+```bash
+# 切换到 ±1mm → 触发搜索 → DevTools Network 看到:
+# /api/products/search?tolerance=1&h1=100&h2=200&...
+```
+
+### 9.4 E2E
+
+```bash
+cd d:\projects\sakurafilter\spike-test
+python _test_tolerance_ui.py
+# 预期: 3/3 PASS
+# Case 1: 1mm → 3 条
+# Case 2: 5mm → 20 条
+# Case 3: 10mm → 50+ 条
+```
+
+---
+
+## 🟣 Task 10 P3.2 Excel 粘贴验证
+
+### 10.1 批量 API
+
+```bash
+curl -X POST http://localhost:5148/api/search/batch-oem \
+  -H "Content-Type: application/json" \
+  -d '{"oems":["11427622448","11427622449"]}'
+# 预期: 200 + 2 行结果
+# 失败: 见"诊断 D8"
+```
+
+**期望响应**:
+```json
+[
+  { "oem": "11427622448", "found": true, "productId": 123, "oemBrand": "MANN" },
+  { "oem": "11427622449", "found": false, "productId": null, "oemBrand": null }
+]
+```
+
+### 10.2 边界 - 中文
+
+```bash
+curl -X POST http://localhost:5148/api/search/batch-oem \
+  -H "Content-Type: application/json" \
+  -d '{"oems":["滤清器 1142"]}'
+# 预期: 200 + 1 行结果 (单元素正确解析)
+```
+
+### 10.3 边界 - 斜杠
+
+```bash
+curl -X POST http://localhost:5148/api/search/batch-oem \
+  -H "Content-Type: application/json" \
+  -d '{"oems":["AB/CD/123"]}'
+# 预期: 200 + 1 行 (斜杠不分割)
+```
+
+### 10.4 边界 - 引号
+
+```bash
+curl -X POST http://localhost:5148/api/search/batch-oem \
+  -H "Content-Type: application/json" \
+  -d '{"oems":["\"OEN-123\""]}'
+# 预期: 200 + 1 行 (引号保留)
+```
+
+### 10.5 性能
+
+```bash
+# 100 个 OEM 必须 < 1s
+time curl -X POST http://localhost:5148/api/search/batch-oem \
+  -H "Content-Type: application/json" \
+  -d @spike-test/_test_batch_oem_data.json
+# 预期: real < 1s
+```
+
+### 10.6 E2E
+
+```bash
+cd d:\projects\sakurafilter\spike-test
+python _test_batch_oem.py
+# 预期: PASS + 耗时 < 1s
+```
+
+---
+
+## 🔴 Task 13 P4.1 E2E 全量验证
+
+### 13.1 字典 E2E 全集
+
+```bash
+ls spike-test/_test_dict_*.py
+# 预期: 7 个 (oem-brand, product-name1, product-name2, type, oem-no3, media, machine, engine)
+# 注: oem-brand 是 _test_day10_oem_brands.py, 但已包含在矩阵中
+```
+
+### 13.2 跑全部
+
+```bash
+cd d:\projects\sakurafilter\spike-test
+for f in _test_*.py; do
+  echo "=== $f ==="
+  python "$f" 2>&1 | tail -1
+done
+# 预期: 全部 PASS, 总耗时 < 5min (本地)
+```
+
+### 13.3 CI 总耗时
+
+```bash
+# 触发 push → 看 GitHub Actions 总耗时
+gh run list --workflow=e2e --limit=1
+gh run view <run-id> --json jobs --jq '.jobs[] | "\(.name): \(.conclusion) (\(.startedAt) -> \(.completedAt))"'
+# 预期: 总耗时 < 10min
+```
+
+### 13.4 失败 → 红叉
+
+```bash
+# 故意改坏一个 E2E → push → workflow 红叉 + 不能 merge
+echo "assert False, '故意失败'" >> spike-test/_test_dict_type.py
+git add -A && git commit -m "test: 故意失败" && git push
+# 预期: CI 红叉
+# 还原: git revert HEAD && git push
+```
+
+---
+
+## 🟠 Task 14 P4.2+4.3 契约 + 视觉验证
+
+### 14.1 字典 schema API
+
+```bash
+curl -H "X-Admin-Token: $TOKEN" \
+  http://localhost:5148/api/admin/dict/_schema | jq .
+# 预期: 8 个字典 (OemBrand + 7 新字典)
+# 失败: 见"诊断 D9"
+```
+
+**期望响应**:
+```json
+{
+  "DictOemBrand": { "Id": "Int64", "Brand": "String", "SortOrder": "Int32", ... },
+  "DictProductName1": { ... },
+  ...
+}
+```
+
+### 14.2 前端契约测试
+
+```bash
+cd d:\projects\sakurafilter\frontend
+npm run test:contract
+# 预期: PASS
+# 失败: 见"诊断 D10"
+```
+
+### 14.3 视觉回归 baseline
+
+```bash
+cd d:\projects\sakurafilter\frontend
+npx playwright test tests/visual/dict-pages.spec.ts
+# 预期: 8 passed (8 个字典管理页)
+# 首次跑会创建 baseline
+ls tests/visual/baselines/dict-*.png
+# 预期: 8 个 png 文件
+```
+
+### 14.4 像素 diff
+
+```bash
+# 故意改 AdminTypeView.vue 样式 → 重跑 → 失败
+# 还原样式 → 重跑 → 通过
+# 失败: 见"诊断 D11"
+```
+
+---
+
+## 🟤 Task 15 P5 打磨验证
+
+### 15.1 Volume 自动计算
+
+```bash
+# 浏览器访问 /admin/product/new
+# 输入 L=300, W=200, H=150 → Volume 字段自动显示 0.009
+# 改 H=200 → Volume 自动更新为 0.012
+# 失败: 见"诊断 D12"
+```
+
+### 15.2 字段 popover
+
+```bash
+# 浏览器悬停字段 `?` 图标 → 看到说明
+# DevTools Network → /api/admin/dict/field-help/h1 → 200
+# 失败: 见"诊断 D13"
+```
+
+### 15.3 主题切换
+
+```bash
+# 浏览器点击太阳/月亮图标 → 全部组件切换深色
+# F12 → Application → Local Storage → theme = "dark"
+# F5 刷新 → 仍深色
+# 失败: 见"诊断 D14"
+```
+
+### 15.4 帮助页
+
+```bash
+# 浏览器访问 /admin/help
+# 预期看到 5 个模块: 快速开始 / 字典规范 / 批量导入 / 容差建议 / FAQ
+# Markdown 正确渲染 (标题/列表/链接)
+```
+
+### 15.5 E2E
+
+```bash
+cd d:\projects\sakurafilter\spike-test
+python _test_p5_volume.py
+python _test_p5_theme.py
+# 预期: 全 PASS
+```
+
+---
+
+# 失败诊断手册 (按错误信息定位)
+
+> **使用场景**: 跑 E2E 或手动验证出现错误时,翻到本节查根因。
+
+| 错误码 / 现象 | 根因 | 排查命令 | 修复 |
+|--------------|------|---------|------|
+| **D1** `dotnet build` 0 Error → 19+ Warning | 新加代码引用未 using | `dotnet build --nologo /v:n` 看具体 warning | 补 using 或修类型 |
+| **D2** `curl /api/public/...` 返回 401 | 缺 `[AllowAnonymous]` 特性 | `grep -n "AllowAnonymous" backend/.../PublicProductController.cs` | 加 `[AllowAnonymous]` |
+| **D3** `/product/:oem` 返回 404 | 路由未配置 | `grep -n "PublicProductView" frontend/src/router/index.ts` | 加路由配置 |
+| **D4** Lighthouse 分数 < 90 | 图片未懒加载 / JS 过大 | `cat /tmp/lh.json \| jq '.audits["largest-contentful-paint"]'` | 加 `<img loading="lazy">` |
+| **D5** `_test_public_product.py` 失败 | 后端 404 或 500 | `dotnet run` 控制台日志 | 查 stacktrace |
+| **D6** 6 列布局变 1 列 | CSS grid 写错 | `curl localhost:5173 \| grep "grid-cols-7"` | 改 `grid-cols-7` |
+| **D7** 打印仍显示按钮 | `@media print` CSS 未覆盖 | `Ctrl+P → More settings → Background graphics` | 改 CSS `.el-button { display: none }` |
+| **D8** `POST /api/search/batch-oem` 400 | 参数校验失败 | `curl -v` 看响应 | 检查 `oems` 字段名 |
+| **D9** `/api/admin/dict/_schema` 500 | 反射失败 | `dotnet run` 日志 | 检查 `typeof(DictOemBrand)` 类名 |
+| **D10** `npm run test:contract` 失败 | 前后端字段不一致 | `cat contract-test-output` | 同步 TS interface |
+| **D11** pixel diff > 5% | 样式改了未更新 baseline | `ls tests/visual/baselines/` | 重新生成 baseline |
+| **D12** Volume 字段不更新 | watch 未注册 | `grep -A 3 "watch(" AdminProductFormView.vue` | 补 watch |
+| **D13** popover 不显示 | el-popover 触发器错 | F12 → Console | 改 `trigger="hover"` |
+| **D14** 主题不持久化 | localStorage 未保存 | F12 → Application | 改 `localStorage.setItem` |
+
+---
+
+# Session 启动检查 (粘贴到 IDE 终端)
+
+> 复制本节到终端,5 分钟确认环境健康。
+
+```bash
+# 1. 备份
+cd d:\projects\sakurafilter
+git status
+
+# 2. 数据库
+psql -h localhost -U postgres -d spike_test_v3 -c "SELECT 1"
+
+# 3. 后端编译
+cd backend/src/SakuraFilter.Api
+dotnet build --nologo
+
+# 4. 启动后端 (新窗口)
+dotnet run --urls "http://localhost:5148"
+
+# 5. E2E 回归 (P2 必须仍绿)
+cd d:\projects\sakurafilter\spike-test
+python _test_day10_oem_brands.py
+python _test_p22_seven_dicts.py
+python _test_type_ordering.py
+
+# 6. 完整诊断 (出问题时跑)
+curl -i http://localhost:5148/api/public/product/11427622448
+curl -i -H "X-Admin-Token: $TOKEN" http://localhost:5148/api/admin/dict/_schema
+```
+
+**全绿 → 开始新 Task;任一红 → 修完再继续。**
