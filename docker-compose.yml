@@ -1,0 +1,109 @@
+# SakuraFilter 一键部署 docker-compose
+#   用法:
+#     1. cp .env.example .env && 编辑 .env 填入生产密钥
+#     2. docker compose up -d --build
+#     3. 访问 http://localhost (前端) / http://localhost:5148 (后端 API)
+#
+#   服务:
+#     - postgres    PostgreSQL 16 数据库
+#     - minio       MinIO 对象存储 (图片)
+#     - meilisearch  Meilisearch 搜索引擎
+#     - backend     .NET 8 后端 API
+#     - frontend    Vue 3 前端 (nginx)
+#
+#   离线部署:
+#     1. 在有网环境 docker compose pull + docker compose build
+#     2. docker save > sakurafilter-images.tar
+#     3. 目标机器 docker load < sakurafilter-images.tar
+#     4. docker compose up -d (不需要网络)
+
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ${DB_NAME:-spike_test_v3}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-784533}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.12
+    environment:
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-}
+      MEILI_NO_ANALYTICS: "true"
+    ports:
+      - "7700:7700"
+    volumes:
+      - meili_data:/meili_data
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      - ConnectionStrings__Postgres=Host=postgres;Port=5432;Database=${DB_NAME:-spike_test_v3};Username=${DB_USER:-postgres};Password=${DB_PASSWORD:-784533}
+      - MeiliSearch__Endpoint=http://meilisearch:7700
+      - MeiliSearch__ApiKey=${MEILI_MASTER_KEY:-}
+      - Minio__Endpoint=minio:9000
+      - Minio__AccessKey=${MINIO_ACCESS_KEY:-minioadmin}
+      - Minio__SecretKey=${MINIO_SECRET_KEY:-minioadmin}
+      - Minio__PublicEndpoint=${MINIO_PUBLIC_ENDPOINT:-http://localhost:9000}
+      - Storage__Provider=${STORAGE_PROVIDER:-minio}
+      - Auth__DevStaticToken=${ADMIN_TOKEN:-dev-admin-token-rotate-in-prod-MZK4R9P3X6V2N7Q1L5F0B8H3C}
+      - Search__CursorHmacKey=${CURSOR_HMAC_KEY:-dev-cursor-hmac-key-rotate-in-prod-XYZ7K3P9Q2M5V8N1B4D6F0G2H}
+      - Cors__AllowedOrigins__0=http://localhost
+      - Cors__AllowedOrigins__1=http://localhost:80
+      - ASPNETCORE_ENVIRONMENT=Production
+    ports:
+      - "5148:5148"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  pg_data:
+  minio_data:
+  meili_data:
