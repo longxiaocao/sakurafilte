@@ -150,6 +150,12 @@ jobs:
         working-directory: spike-test
         run: python _test_day98.py
 
+      - name: Run E2E Day 10 (OEM Brand 字典 CRUD + 排序 + typeahead)
+        working-directory: spike-test
+        # Day 10: P1.3 OEM Brand 字典 — CI 空白 PG 无历史数据, Case 9 (xrefCount) 会自动 skip
+        #   Case 1-8 + 10 验证表结构/CRUD/排序/typeahead, EF Core Migrate 会建 xref_oem_brand 表
+        run: python _test_day10_oem_brands.py
+
       - name: E2E gate check (master only)
         if: github.ref == 'refs/heads/master' && github.event_name == 'push'
         run: |

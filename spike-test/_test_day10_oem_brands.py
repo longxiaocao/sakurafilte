@@ -459,9 +459,15 @@ def test_xref_count():
 
 # ========== Case 10: list limit ==========
 def test_list_limit():
-    """limit 参数生效"""
+    """limit 参数生效
+    Day 10: 本地测试加 timeout=15 容忍 IndexReplayWorker 干扰
+      CI 空白 PG 无 ETL 死信/挂起任务,默认 5s 够用
+      本地 spike_test_v3 有 500 万 xref + ETL 历史,后台服务 (IndexReplayWorker/EtlAlertService)
+      偶发挤占 CPU/IO,5s 超时偶发 flaky
+    """
     # 先确保有 ≥ 3 条 (上面已创建 3 个 reorder + 多条其他)
-    code, body = http("GET", f"/api/admin/dict/oem-brands?limit=2", headers=H_ADMIN)
+    code, body = http("GET", f"/api/admin/dict/oem-brands?limit=2",
+                      headers=H_ADMIN, timeout=15)
     assert code == 200
     items = json.loads(body).get("items", [])
     assert len(items) <= 2, f"limit=2 应 ≤ 2 条, 实际 {len(items)}"
