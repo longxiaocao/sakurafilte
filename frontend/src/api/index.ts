@@ -121,6 +121,16 @@ export const etlApi = {
   cancel(reason?: string, reasonCode?: string): Promise<{ cancelled: boolean; reason?: string; reasonCode?: string; normalizedCode?: string }> {
     return http.delete('/admin/etl/task', { data: { reason, reasonCode } }).then((r) => r.data)
   },
+  // P1.1 (Task 3): 暂停 ETL 任务 — 区别于 cancel, 当前批次跑完后优雅退出
+  //   返回 { paused: true/false, checkpointId?: number, entity?: string }
+  pause(): Promise<{ paused: boolean; reason?: string; checkpointId?: number; entity?: string }> {
+    return http.post('/admin/etl/pause', {}).then((r) => r.data)
+  },
+  // P1.1 (Task 3): 恢复 ETL 任务 — 从最近 paused 记录的 checkpoint_id 续读
+  //   返回 { resumed: true/false, checkpointId?: number, batchSize?: number, nextLineNo?: number }
+  resume(): Promise<{ resumed: boolean; error?: string; entity?: string; mode?: string; checkpointId?: number; batchSize?: number; nextLineNo?: number }> {
+    return http.post('/admin/etl/resume', {}).then((r) => r.data)
+  },
 
 
   progress(): Promise<EtlActiveTaskInfo> {

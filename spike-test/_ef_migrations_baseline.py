@@ -46,15 +46,17 @@ from typing import List
 
 import psycopg2
 
-# === 默认 4 个老 migration (Day 10 反复踩坑的根因) ===
+# === 默认 5 个老 migration (Day 10 + Task 3 P1.1 反复踩坑的根因) ===
 # EF Core 8 + EFCore.NamingConventions 不会改以下表名, 仍查 PascalCase __EFMigrationsHistory
 # SQL migration 18 已经建过这个表 (含 InitialCreate 1 行), 但 SQL migration 创建的索引/列名
 # 与 EF Core 8 期望的不一致 (ix_ vs idx_, uq_ vs IX_), 所以 EF Core 一上来就 DROP/ALTER 失败.
+# Task 3 (P1.1) 新增 AddEtlCheckpointId: 实际由 EF Core 跑 (新列, 历史 DB 无), 不进 seed
 DEFAULT_MIGRATIONS = [
     "20260702025150_InitialCreate",
     "20260702051540_AddUniqueIndexOnOemNoNormalized",
     "20260702052101_AddIsPublishedDefaultTrue",
     "20260702052628_AddProductsDefaultsV9",
+    "20260702062636_AddXrefOemBrandDict",
 ]
 DEFAULT_PRODUCT_VERSION = "8.0.10"
 

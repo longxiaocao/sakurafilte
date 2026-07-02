@@ -176,6 +176,17 @@ public class EtlProgress
         PushError(reason);
     }
 
+    // P1.1 (Task 3): 标记任务暂停 (Pause API 触发时调用)
+    //   与 Cancel 的区别:
+    //     - Cancel: _status = "cancelled", _finishedAt = now(), 写 cancel_reason + cancelled_at
+    //     - Pause:  _status = "paused", _finishedAt = now(), 不写 cancel_reason (不是取消)
+    //   PersistPausedLogAsync 单独写一条 status='paused' 的日志记录 (含 checkpoint_id)
+    public void Pause()
+    {
+        _status = "paused";
+        _finishedAt = DateTime.UtcNow;
+    }
+
     
     /// <summary>Day 9.4: 公开的日志落库入口, 给 EtlImportService.TriggerAsync catch 块调用
     ///   cancel 时 PersistLogAsync 私有不可见, 这里包一层
@@ -201,6 +212,8 @@ public class EtlProgress
     }
 
     public void IncrRead() => Interlocked.Increment(ref _read);
+    // P1.1 (Task 3): xrefs 批次循环累加 read (1 批 1000 行)
+    public void IncrReadBy(long n) => Interlocked.Add(ref _read, n);
     public void IncrInserted() => Interlocked.Increment(ref _inserted);
     public void IncrUpdated() => Interlocked.Increment(ref _updated);
     public void IncrInsertedBy(long n) => Interlocked.Add(ref _inserted, n);
@@ -338,6 +351,12 @@ public class EtlImportService
     private string? _activeCancelReason;  // Day 9.4: 取消原因 (CancelActiveTask 写入, catch 块读出后落库)
     private string? _activeCancelReasonCode;  // Day 9.5: 取消原因枚举码 (USER_REQUEST/TIMEOUT/...)
 
+    // P1.1 (Task 3): Pause/Resume 标志位
+    //   - Pause 不释放 _activeCts, 与 Cancel 区别 (Cancel 走 cts.Cancel(), Pause 走 _pausedFlag)
+    //   - Interlocked.Exchange 保证多线程可见 (AdminEtlView 调 API 时, ETL 内部循环每批次检查)
+    //   - 值: 0=未暂停, 1=已请求暂停
+    private int _pausedFlag;
+
     // Day 7.8: 改用 IOptions<EtlOptions> 注入 (替代手动 IConfiguration 读取)
     //   WHY: 配置校验集中在 EtlOptionsValidator,启动失败立即可见,不必运行期才发现
     // Day 9.6: 可选 IEtlProgressBroadcaster (跨实例 SSE 广播),缺省时单实例本地轮询
@@ -365,8 +384,9 @@ public class EtlImportService
     /// 手动触发 ETL (后台 ETL 页面 "立即导入" 按钮调用)
     /// entityType: products / xrefs / apps
     /// mode: full-load / insert-only / upsert
+    /// P1.1 (Task 3): startLineNo = 0 走全新 ETL, > 0 走续读模式 (从第 N+1 行开始读 JSONL)
     /// </summary>
-    public async Task<EtlProgress> TriggerAsync(string entityType, string jsonlPath, string mode, CancellationToken ct = default)
+    public async Task<EtlProgress> TriggerAsync(string entityType, string jsonlPath, string mode, long startLineNo = 0, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(jsonlPath))
             throw new ArgumentException("jsonlPath 不能为空");
@@ -376,17 +396,42 @@ public class EtlImportService
         var normalizedMode = NormalizeMode(mode);
         var normalizedEntity = entityType?.Trim().ToLowerInvariant() ?? "";
 
+        // P1.1: Resume 触发时重置 _pausedFlag, 避免继承上一次 ETL 的暂停状态
+        if (startLineNo > 0) ClearPausedFlag();
+
         // Day 9.9: _activeCts 下沉到 Import*Async 入口, TriggerAsync 只做路由
         //   WHY: 之前 _activeCts 在 TriggerAsync 设置, HTTP 端点绕过 TriggerAsync 直接调
         //        Import*Async 导致 cancel 失效。现在 Import*Async 入口自己调 AcquireActiveCts
         //   单任务检查也在 AcquireActiveCts 内, 任何入口都安全
         return normalizedEntity switch
         {
-            "products" or "product" => await ImportProductsAsync(jsonlPath, normalizedMode, ct),
-            "xrefs" or "xref" or "cross_references" => await ImportXrefsAsync(jsonlPath, normalizedMode, ct),
-            "apps" or "machine_applications" => await ImportAppsAsync(jsonlPath, normalizedMode, ct),
+            "products" or "product" => await ImportProductsAsync(jsonlPath, normalizedMode, startLineNo, ct),
+            "xrefs" or "xref" or "cross_references" => await ImportXrefsAsync(jsonlPath, normalizedMode, startLineNo, ct),
+            "apps" or "machine_applications" => await ImportAppsAsync(jsonlPath, normalizedMode, startLineNo, ct),
             _ => throw new ArgumentException($"未知 entityType={entityType}, 期望 products/xrefs/apps")
         };
+    }
+
+    /// <summary>
+    /// P1.1 (Task 3): 读 etl_progress_log 最近一条 status='paused' 的 checkpoint_id,
+    ///   触发新 ETL 任务从该 checkpoint_id+1 行续读
+    ///   - 用于 admin 点 "恢复" 按钮
+    ///   - 找不到 paused 记录时抛 InvalidOperationException (前端弹窗提示)
+    /// </summary>
+    public async Task<(long checkpointId, string entity, string mode, string filePath)> GetLastPausedCheckpointAsync()
+    {
+        using var scope = _sp.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ProductDbContext>();
+        var last = await db.EtlProgressLogs
+            .AsNoTracking()
+            .Where(l => l.Status == "paused" && l.CheckpointId != null)
+            .OrderByDescending(l => l.Id)
+            .FirstOrDefaultAsync();
+        if (last is null || last.CheckpointId is null)
+        {
+            throw new InvalidOperationException("找不到 paused 状态的 ETL 记录, 无法 Resume");
+        }
+        return (last.CheckpointId.Value, last.EntityType, last.Mode, last.FilePath);
     }
 
     /// <summary>
@@ -415,6 +460,32 @@ public class EtlImportService
             return true;
         }
     }
+
+    // P1.1 (Task 3): Pause/Resume 框架
+    //   设计要点:
+    //     - Pause 不释放 _activeCts, 不抛 OperationCanceledException
+    //       (区别于 Cancel, 避免触发现有 catch 块的 Cancel 分支走错路径)
+    //     - 当前批次跑完后, ETL 内部循环 Interlocked.Exchange(ref _pausedFlag, 0) 命中则 break
+    //     - checkpoint_id 写到 etl_progress_log, 用于 Resume 时定位
+    //     - Resume 复用 _activeCts 不可行 (旧 ETL 已退出, 调 Pause 之前的 _activeCts 已被 ReleaseActiveCts 释放)
+    //       → Resume 走新 TriggerAsync 路径, 传 startLineNo 跳过已读行
+    //   生产部署前: 5 百万 xref 真实测试需在 staging 跑 (本机 10 万行 1 批次约 0.1s × 100 = 10s)
+
+    /// <summary>设置 _pausedFlag=1, 请求当前 ETL 暂停 (admin 调 Pause API 时)</summary>
+    public bool PauseActiveTask()
+    {
+        if (_activeCts == null || _activeCts.IsCancellationRequested)
+            return false;
+        Interlocked.Exchange(ref _pausedFlag, 1);
+        _logger.LogInformation("ETL 任务暂停信号已发送 entity={Entity}", _activeTaskEntity);
+        return true;
+    }
+
+    /// <summary>内部: 批次循环检测 _pausedFlag, 命中则请求暂停</summary>
+    public bool IsPausedRequested() => Interlocked.CompareExchange(ref _pausedFlag, 0, 0) == 1;
+
+    /// <summary>重置暂停标志 (Resume 触发新 ETL 之前调)</summary>
+    public void ClearPausedFlag() => Interlocked.Exchange(ref _pausedFlag, 0);
 
     // Day 9.9: _activeCts 下沉到 Import*Async 入口
     //   WHY: 之前 _activeCts 仅在 TriggerAsync 设置, HTTP 端点直接调 Import*Async 会绕过,
@@ -627,8 +698,9 @@ public class EtlImportService
     /// mode: "upsert" (默认,完整 INSERT ON CONFLICT DO UPDATE)
     ///       "full-load" (TRUNCATE + INSERT,适合 1M 首次全量, 5s 内)
     ///       "insert-only" (INSERT ON CONFLICT DO NOTHING,只插新行)
+    /// P1.1 (Task 3): startLineNo 参数与 xrefs 对齐 — products 暂不实现批次, 传 0 即可
     /// </summary>
-    public async Task<EtlProgress> ImportProductsAsync(string jsonlPath, string mode = "upsert", CancellationToken ct = default)
+    public async Task<EtlProgress> ImportProductsAsync(string jsonlPath, string mode = "upsert", long startLineNo = 0, CancellationToken ct = default)
     {
         // Day 9.9: _activeCts 下沉, 确保任何入口 (HTTP 端点/TriggerAsync/直接调用) 都能被 cancel
         var cts = AcquireActiveCts("products", ct);
@@ -1054,8 +1126,12 @@ public class EtlImportService
     /// JSONL 中 product_oem 是 OEM 字符串,先映射到 product_id
     /// mode: "upsert" (默认, ON CONFLICT DO UPDATE) | "full-load" (TRUNCATE + INSERT)
     ///       | "insert-only" (ON CONFLICT DO NOTHING)
+    /// P1.1 (Task 3): startLineNo > 0 时为续读模式, 跳过前 startLineNo 行, 从 startLineNo+1 行开始处理
+    ///   - 批次大小: BatchSize (默认 1000)
+    ///   - 每批 1 个事务 (BEGIN/COPY/INSERT/COMMIT)
+    ///   - 批次间检查 _pausedFlag, 命中则写 checkpoint_id 到 etl_progress_log 后退出
     /// </summary>
-    public async Task<EtlProgress> ImportXrefsAsync(string jsonlPath, string mode = "upsert", CancellationToken ct = default)
+    public async Task<EtlProgress> ImportXrefsAsync(string jsonlPath, string mode = "upsert", long startLineNo = 0, CancellationToken ct = default)
     {
         // Day 9.9: _activeCts 下沉
         var cts = AcquireActiveCts("xrefs", ct);
@@ -1066,6 +1142,11 @@ public class EtlImportService
         Progress.SetRowsTotal(EtlProgress.EstimateFileLines(jsonlPath));
         // Day 9.7: 启动跨实例广播 snapshot timer
         var broadcastCtx = StartSnapshotTimerIfNeeded();
+
+        // P1.1 (Task 3): 批次大小, 1000 行/批, 1 批 1 事务, 暂停粒度精确到 1k 行
+        const int BatchSize = 1000;
+        long lastCommittedBatchId = startLineNo;  // 累计已成功 COMMIT 的总行数 (= checkpoint_id)
+        bool isFirstBatch = startLineNo == 0;      // 续读时跳过 full-load 的 TRUNCATE 等特殊处理
         try
         {
             await using var conn = new NpgsqlConnection(_pgConn);
@@ -1082,40 +1163,142 @@ public class EtlImportService
             swMap.Stop();
             _logger.LogInformation("[TIMING] xrefs 加载 OEM map: {Ms}ms ({Count} 条)", swMap.ElapsedMilliseconds, oemMap.Count);
 
-            await using (var begin = new NpgsqlCommand("BEGIN;", conn))
-                await begin.ExecuteNonQueryAsync(ct);
-            await using (var create = new NpgsqlCommand(@"
-                CREATE TEMP TABLE xrefs_stage (
+            // P1.1: 批次循环 — 每 BatchSize 行 1 个事务, 暂停检查点
+            Progress.SetStage("staging");
+            using var reader = new StreamReader(jsonlPath);
+            // P1.1: 跳过前 startLineNo 行 (resume 续读)
+            if (startLineNo > 0)
+            {
+                _logger.LogInformation("ETL xrefs Resume: 跳过前 {StartLineNo} 行", startLineNo);
+                for (long i = 0; i < startLineNo; i++)
+                {
+                    if (await reader.ReadLineAsync(ct) == null) break;
+                }
+            }
+            // P1.1: 续读时 full-load 不能 TRUNCATE (会清掉首批已写入的数据), 强制转为 upsert
+            if (!isFirstBatch && mode == "full-load")
+            {
+                _logger.LogWarning("ETL xrefs Resume 时 full-load 模式不安全 (会清掉已写入数据), 强制转为 upsert");
+                mode = "upsert";
+            }
+            var batchLines = new List<string>(BatchSize);
+            string? line;
+            long lineNo = startLineNo;  // 全局行号 (含已跳过的)
+            while ((line = await reader.ReadLineAsync(ct)) != null)
+            {
+                batchLines.Add(line);
+                lineNo++;
+                if (batchLines.Count >= BatchSize)
+                {
+                    // P1.1 (Task 3) 修复: ProcessXrefBatchAsync 现在返回 per-batch affected (4-tuple)
+                    //   此前 3-tuple + 后续用 cumulative Progress 算 dup, 公式错误 (dup 翻倍)
+                    //   正确 dup = stageCount - affected (本批) — 与 ImportAppsAsync 一致
+                    var (batchMissing, batchErrors, xrefStageCount, batchAffected) = await ProcessXrefBatchAsync(
+                        conn, batchLines, oemMap, mode, isFirstBatch, ct);
+                    lastCommittedBatchId += batchLines.Count;
+                    Progress.IncrReadBy(batchLines.Count);
+                    // dup = stageCount - affected (DISTINCT ON 去重 + ON CONFLICT 跳过)
+                    var dup = xrefStageCount - batchAffected;
+                    if (dup > 0) for (long i = 0; i < dup; i++) Progress.IncrSkippedDuplicate();
+                    batchLines.Clear();
+                    isFirstBatch = false;
+                    _logger.LogDebug("[BATCH] xrefs 已 commit 累计 {Count} 行, checkpoint={Cp}, dup={Dup}", lastCommittedBatchId, lastCommittedBatchId, dup);
+                    // P1.1: 批次间检查暂停
+                    if (IsPausedRequested())
+                    {
+                        await PersistPausedLogAsync("xrefs", mode, lastCommittedBatchId, ct);
+                        Progress.SetStage("paused");
+                        Progress.Pause();  // P1.1: 同步 _status = "paused" 让前端 SSE 看到 paused 状态
+                        _logger.LogInformation("ETL xrefs 已暂停, checkpoint_id={Cp}, 下次 Resume 从 {Next} 行开始", lastCommittedBatchId, lastCommittedBatchId + 1);
+                        return Progress;
+                    }
+                }
+            }
+            // 处理剩余 (最后一批 < BatchSize)
+            if (batchLines.Count > 0)
+            {
+                // P1.1 (Task 3) 修复: 同样 4-tuple
+                var (batchMissing, batchErrors, xrefStageCount, batchAffected) = await ProcessXrefBatchAsync(
+                    conn, batchLines, oemMap, mode, isFirstBatch, ct);
+                lastCommittedBatchId += batchLines.Count;
+                Progress.IncrReadBy(batchLines.Count);
+                var dup = xrefStageCount - batchAffected;
+                if (dup > 0) for (long i = 0; i < dup; i++) Progress.IncrSkippedDuplicate();
+                isFirstBatch = false;
+            }
+            Progress.Finish("xrefs", mode);
+        }
+        // Day 9.4: 区分取消与失败 (同 products, 见 ImportProductsAsync 注释)
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            Progress.Cancel(_activeCancelReason ?? "用户取消", _activeCancelReasonCode ?? "OTHER");
+            Progress.PersistLogAsync("xrefs", mode);
+            _logger.LogInformation("ETL xrefs 任务被用户取消, reason={Reason} code={Code}",
+                _activeCancelReason, _activeCancelReasonCode);
+        }
+        catch (Exception ex)
+        {
+            Progress.Fail(ex.Message, "xrefs", mode);
+            _logger.LogError(ex, "xrefs 导入失败");
+        }
+        finally
+        {
+            StopSnapshotTimer(broadcastCtx);
+            ReleaseActiveCts(cts);
+        }
+        return Progress;
+    }
+
+    /// <summary>
+    /// P1.1 (Task 3): 处理 xrefs 1 批 (BatchSize 行): BEGIN → COPY → INSERT → COMMIT
+    ///   - 每批 1 个独立事务, 暂停粒度 = 1 批
+    ///   - staging 改用 regular table (非 TEMP), TRUNCATE 每批开头清空
+    ///   - 续读模式: isFirstBatch=false 时跳过 full-load 的 TRUNCATE cross_references
+    /// </summary>
+    private async Task<(long missing, long errors, long stageCount, long affected)> ProcessXrefBatchAsync(
+        NpgsqlConnection conn,
+        List<string> batchLines,
+        Dictionary<string, long> oemMap,
+        string mode,
+        bool isFirstBatch,
+        CancellationToken ct)
+    {
+        long missing = 0;
+        long errors = 0;
+        long stageCount = 0;
+        long batchAffected = 0;  // P1.1 (Task 3): 本批 INSERT 实际影响行数, 用于 dup 计算
+
+        await using (var begin = new NpgsqlCommand("BEGIN;", conn))
+            await begin.ExecuteNonQueryAsync(ct);
+        try
+        {
+            // P1.1: 用 regular table 而非 TEMP, 跨批持久 (每批 TRUNCATE 即可, 不用 CREATE/DROP)
+            await using (var ensureStage = new NpgsqlCommand(@"
+                CREATE TABLE IF NOT EXISTS xrefs_stage (
                     product_id BIGINT,
                     product_name_1 VARCHAR(100),
                     oem_brand VARCHAR(100),
                     oem_no_3 VARCHAR(100)
-                ) ON COMMIT DROP;
-            ", conn))
-                await create.ExecuteNonQueryAsync(ct);
+                );", conn))
+                await ensureStage.ExecuteNonQueryAsync(ct);
+            await using (var trunc = new NpgsqlCommand("TRUNCATE xrefs_stage", conn))
+                await trunc.ExecuteNonQueryAsync(ct);
 
-            var swCopy = System.Diagnostics.Stopwatch.StartNew();
-            var lineNo = 0;
-            long missing = 0;
+            // COPY 写入 staging
             await using (var writer = await conn.BeginBinaryImportAsync(@"
                 COPY xrefs_stage (product_id, product_name_1, oem_brand, oem_no_3) FROM STDIN (FORMAT BINARY)
             ", ct))
             {
-                using var reader = new StreamReader(jsonlPath);
-                string? line;
-                while ((line = await reader.ReadLineAsync(ct)) != null)
+                foreach (var jsonLine in batchLines)
                 {
-                    lineNo++;
-                    if (lineNo % 1000 == 0) ct.ThrowIfCancellationRequested();
-                    Progress.IncrRead();
                     try
                     {
-                        var doc = JsonSerializer.Deserialize<JsonElement>(line);
+                        var doc = JsonSerializer.Deserialize<JsonElement>(jsonLine);
                         var oem = doc.GetProperty("product_oem").GetString();
                         if (oem is null || !oemMap.TryGetValue(oem, out var pid))
                         {
                             missing++;
-                            Progress.IncrSkippedMissingOem();  // Day 7.5: 区分原因
+                            Progress.IncrSkippedMissingOem();
                             continue;
                         }
                         await writer.StartRowAsync(ct);
@@ -1126,43 +1309,24 @@ public class EtlImportService
                     }
                     catch (Exception ex)
                     {
+                        errors++;
                         Progress.IncrErrors();
-                        _logger.LogWarning("xrefs 行 {LineNo} 解析失败: {Error}", lineNo, ex.Message);
+                        _logger.LogWarning("xrefs 批次内行解析失败: {Error}", ex.Message);
                     }
                 }
                 await writer.CompleteAsync(ct);
             }
-            swCopy.Stop();
-            _logger.LogInformation("[TIMING] xrefs staging COPY: {Ms}ms ({Count} 行, skipped={Skipped})", swCopy.ElapsedMilliseconds, Progress.Read, missing);
 
-            // Day 9.9: 数据完整性校验 — COPY 后查 stage 行数, 防止静默丢行
-            //   对账 1: stage_count + errors + missing_oem == read (正常行进 stage, 缺 oem/解析失败不进)
-            long xrefStageCount;
-            await using (var xrefCountCmd = new NpgsqlCommand("SELECT count(*) FROM xrefs_stage", conn))
-                xrefStageCount = (long)(await xrefCountCmd.ExecuteScalarAsync(ct))!;
-            _logger.LogInformation("[AUDIT] xrefs_stage: read={Read} stage={Stage} errors={Errors} missingOem={Missing}", Progress.Read, xrefStageCount, Progress.Errors, Progress.SkippedMissingOem);
-            if (xrefStageCount + Progress.Errors + Progress.SkippedMissingOem != Progress.Read)
-            {
-                var msg = $"数据完整性校验失败: read={Progress.Read} stage={xrefStageCount} errors={Progress.Errors} missingOem={Progress.SkippedMissingOem} (期望 stage+errors+missingOem=read)";
-                _logger.LogError(msg);
-                Progress.Fail(msg);
-                Progress.PersistLogAsync("xrefs", mode);
-                return Progress;
-            }
+            // 校验 stage 行数
+            await using (var countCmd = new NpgsqlCommand("SELECT count(*) FROM xrefs_stage", conn))
+                stageCount = (long)(await countCmd.ExecuteScalarAsync(ct))!;
 
-            // Day 9.10: 删除 pre-INSERT 的 COUNT(DISTINCT) 统计查询
-            //   根因: 20M 行的 COUNT(DISTINCT (col1,col2,col3)) 是重聚合,即便 CommandTimeout=0
-            //   也要 5-10 分钟,导致 xrefs 总时间超 600s 超时
-            //   优化: 用 stage_count - affected 推算 skipped_duplicate,语义更准确
-            //   (DISTINCT ON 去重 + ON CONFLICT 跳过 都计入 skipped_duplicate)
-
-            // Day 7: 加 mode + DISTINCT ON + ON CONFLICT
-            // WHY: 真实 Excel 同 (product_id, oem_brand, oem_no_3) 多行,UNIQUE 索引会触发冲突
-            //      DISTINCT ON (product_id, oem_brand, oem_no_3) 按 ctid DESC 取最后一行 (最新数据)
+            // full-load 仅在首批 TRUNCATE, 续读模式强制 upsert
+            string truncClause = (isFirstBatch && mode == "full-load") ? "TRUNCATE cross_references;" : "";
             string finalSql = mode switch
             {
-                "full-load" => @"
-                    TRUNCATE cross_references;
+                "full-load" => $@"
+                    {truncClause}
                     INSERT INTO cross_references (product_id, product_name_1, oem_brand, oem_no_3, created_at)
                     SELECT DISTINCT ON (product_id, oem_brand, oem_no_3)
                         product_id, product_name_1, oem_brand, oem_no_3, now()
@@ -1189,71 +1353,120 @@ public class EtlImportService
                         created_at = now();"
             };
 
-            var swInsert = System.Diagnostics.Stopwatch.StartNew();
             await using (var insert = new NpgsqlCommand(finalSql, conn))
             {
                 insert.CommandTimeout = 0;
                 var affected = await insert.ExecuteNonQueryAsync(ct);
-                swInsert.Stop();
-                _logger.LogInformation("[TIMING] xrefs {Mode}: {Ms}ms ({Affected} 行)", mode, swInsert.ElapsedMilliseconds, affected);
                 if (mode == "full-load" || mode == "insert-only")
                     Progress.IncrInsertedBy(affected);
                 else
                     Progress.IncrUpdatedBy(affected);
-            }
-
-            // Day 9.9: 对账 2 — INSERT 影响行数 <= stage 行数 (去重/冲突后应少于等于)
-            var xrefAffected = mode == "upsert" ? Progress.Updated : Progress.Inserted;
-            if (xrefAffected > xrefStageCount)
-            {
-                var msg = $"数据完整性校验失败: xrefs affected={xrefAffected} > stage={xrefStageCount}";
-                _logger.LogError(msg);
-                Progress.Fail(msg);
-                Progress.PersistLogAsync("xrefs", mode);
-                return Progress;
-            }
-
-            // Day 9.10: 用 stage_count - affected 推算 skipped_duplicate (替代 pre-INSERT COUNT DISTINCT)
-            //   语义: DISTINCT ON 去重 + ON CONFLICT 跳过 都计入此值
-            //   性能: 零额外查询,INSERT 已得 affected,纯内存减法
-            //   注意: IncrSkippedDuplicate() 内部已调 IncrSkipped(),不能再用 IncrSkippedBy(dup),否则 skipped 翻倍
-            var xrefDup = xrefStageCount - xrefAffected;
-            if (xrefDup > 0)
-            {
-                for (long i = 0; i < xrefDup; i++) Progress.IncrSkippedDuplicate();
-                _logger.LogInformation("xrefs 去重/冲突: {Dup} 行 (stage={Stage} affected={Affected})", xrefDup, xrefStageCount, xrefAffected);
+                // P1.1 (Task 3) 修复: 直接把 affected 传出,避免调用方用 cumulative Progress
+                //   算 per-batch dup (此前公式 dup = 2*stageCount - xrefAffected - missing - errors 错误翻倍)
+                //   正确公式: dup = stageCount - affected (DISTINCT ON 去重 + ON CONFLICT 跳过)
+                batchAffected = affected;
             }
 
             await using (var commit = new NpgsqlCommand("COMMIT;", conn))
                 await commit.ExecuteNonQueryAsync(ct);
-            Progress.Finish("xrefs", mode);
+
+            // 清理 staging (任务彻底完成时)
+            //   不在每批清理, 保留 stageCount 校验后再删, 避免任务中断时残留
+            //   ETL 正常完成由调用方负责清理
         }
-        // Day 9.4: 区分取消与失败 (同 products, 见 ImportProductsAsync 注释)
-        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        catch
         {
-            Progress.Cancel(_activeCancelReason ?? "用户取消", _activeCancelReasonCode ?? "OTHER");
-            Progress.PersistLogAsync("xrefs", mode);
-            _logger.LogInformation("ETL xrefs 任务被用户取消, reason={Reason} code={Code}",
-                _activeCancelReason, _activeCancelReasonCode);
+            // 任意异常 ROLLBACK 当前批, 不影响已 commit 的前批
+            try
+            {
+                await using var rb = new NpgsqlCommand("ROLLBACK;", conn);
+                await rb.ExecuteNonQueryAsync(CancellationToken.None);
+            }
+            catch { }
+            throw;
+        }
+        return (missing, errors, stageCount, batchAffected);
+    }
+
+    /// <summary>
+    /// P1.1 (Task 3): ETL 暂停时持久化日志到 etl_progress_log
+    ///   - status = 'paused' 区别于 completed/failed/cancelled
+    ///   - checkpoint_id = lastCommittedBatchId
+    /// </summary>
+    private async Task PersistPausedLogAsync(string entityType, string mode, long checkpointId, CancellationToken ct)
+    {
+        try
+        {
+            using var scope = _sp.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<ProductDbContext>();
+            var log = new EtlProgressLog
+            {
+                EntityType = entityType,
+                Mode = mode,
+                FilePath = Progress.CurrentFile ?? "",
+                Status = "paused",
+                ReadCount = Progress.Read,
+                InsertedCount = Progress.Inserted,
+                UpdatedCount = Progress.Updated,
+                SkippedCount = Progress.Skipped,
+                SkippedMissingOem = Progress.SkippedMissingOem,
+                SkippedNullField = Progress.SkippedNullField,
+                SkippedDuplicate = Progress.SkippedDuplicate,
+                ErrorCount = Progress.Errors,
+                IndexedCount = Progress.Indexed,
+                IndexPendingCount = Progress.IndexPending,
+                LastError = null,
+                StartedAt = Progress.StartedAt ?? DateTime.UtcNow,
+                FinishedAt = DateTime.UtcNow,
+                DurationSec = Progress.Elapsed?.TotalSeconds ?? 0,
+                CancelReason = null,
+                CancelledAt = null,
+                ReasonCode = null,
+                CheckpointId = checkpointId
+            };
+            db.EtlProgressLogs.Add(log);
+            await db.SaveChangesAsync(ct);
+            _logger.LogInformation("ETL {Entity} 暂停日志落库: id={Id} checkpoint_id={Cp}", entityType, log.Id, checkpointId);
         }
         catch (Exception ex)
         {
-            Progress.Fail(ex.Message, "xrefs", mode);
-            _logger.LogError(ex, "xrefs 导入失败");
+            _logger.LogWarning(ex, "ETL {Entity} 暂停日志落库失败", entityType);
         }
-        finally
+    }
+
+    /// <summary>
+    /// P1.1 (Task 3): ETL 暂停后, 找到刚写的 completed 状态行 (Progress.Finish 触发), 改为 paused
+    ///   - 简化设计: 不另外写 paused 行, 而是把 Progress.Finish 写的 completed 行改成 paused
+    ///   - 这种实现减少了日志表双写
+    /// </summary>
+    private async Task UpdateLastLogToPausedAsync(long checkpointId, CancellationToken ct)
+    {
+        try
         {
-            StopSnapshotTimer(broadcastCtx);
-            ReleaseActiveCts(cts);
+            using var scope = _sp.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<ProductDbContext>();
+            var last = await db.EtlProgressLogs
+                .OrderByDescending(l => l.Id)
+                .FirstOrDefaultAsync(ct);
+            if (last != null && last.Status == "completed")
+            {
+                last.Status = "paused";
+                last.CheckpointId = checkpointId;
+                await db.SaveChangesAsync(ct);
+            }
         }
-        return Progress;
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "ETL 暂停状态更新失败");
+        }
     }
 
     /// <summary>
     /// 导入机型适配 (apps.jsonl) -> machine_applications
     /// mode: "upsert" (默认) | "full-load" | "insert-only"
+    /// P1.1 (Task 3): startLineNo 参数与 xrefs 对齐 — apps 暂不实现批次, 传 0 即可
     /// </summary>
-    public async Task<EtlProgress> ImportAppsAsync(string jsonlPath, string mode = "upsert", CancellationToken ct = default)
+    public async Task<EtlProgress> ImportAppsAsync(string jsonlPath, string mode = "upsert", long startLineNo = 0, CancellationToken ct = default)
     {
         // Day 9.9: _activeCts 下沉
         var cts = AcquireActiveCts("apps", ct);

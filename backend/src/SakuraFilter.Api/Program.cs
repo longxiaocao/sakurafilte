@@ -342,7 +342,7 @@ app.MapPost("/api/etl/import", async (ImportRequest req, EtlImportService etl, I
     //   之前直接调 ImportProductsAsync 绕过 _activeCts, 导致 CancelActiveTask 永远 cancelled=False
     //   症状: HTTP 触发的 ETL 无法被取消, /api/admin/etl/task 端点 cancelled 永远 False
     //   修复: 后台触发 TriggerAsync, 内部 _activeCts 会被设置, finally 清空
-    _ = Task.Run(async () => await etl.TriggerAsync("products", req.JsonlPath, mode, CancellationToken.None));
+    _ = Task.Run(async () => await etl.TriggerAsync("products", req.JsonlPath, mode, 0, CancellationToken.None));
     return Results.Accepted(value: etl.Progress.ToJson());
 })
 .WithName("EtlImport")
@@ -364,7 +364,7 @@ app.MapPost("/api/etl/import-xrefs", async (ImportRequest req, EtlImportService 
     var mode = (req.Mode ?? "upsert").ToLowerInvariant();
     logger.LogInformation("触发 xrefs 导入: {Path} (mode={Mode})", req.JsonlPath, mode);
     // Day 9.9: 统一走 TriggerAsync (校验 + 路由 + _activeCts 已下沉到 Import*Async)
-    _ = Task.Run(async () => await etl.TriggerAsync("xrefs", req.JsonlPath, mode, CancellationToken.None));
+    _ = Task.Run(async () => await etl.TriggerAsync("xrefs", req.JsonlPath, mode, 0, CancellationToken.None));
     return Results.Accepted(value: etl.Progress.ToJson());
 })
 .WithName("EtlImportXrefs")
@@ -380,7 +380,7 @@ app.MapPost("/api/etl/import-apps", async (ImportRequest req, EtlImportService e
     var mode = (req.Mode ?? "upsert").ToLowerInvariant();
     logger.LogInformation("触发 apps 导入: {Path} (mode={Mode})", req.JsonlPath, mode);
     // Day 9.9: 统一走 TriggerAsync (校验 + 路由 + _activeCts 已下沉到 Import*Async)
-    _ = Task.Run(async () => await etl.TriggerAsync("apps", req.JsonlPath, mode, CancellationToken.None));
+    _ = Task.Run(async () => await etl.TriggerAsync("apps", req.JsonlPath, mode, 0, CancellationToken.None));
     return Results.Accepted(value: etl.Progress.ToJson());
 })
 .WithName("EtlImportApps")
@@ -982,7 +982,7 @@ app.MapPost("/api/admin/etl/trigger", async (
         });
     }
 
-    var p = await etl.TriggerAsync("products", req.JsonlPath, req.Mode ?? "upsert", ct);
+    var p = await etl.TriggerAsync("products", req.JsonlPath, req.Mode ?? "upsert", 0, ct);
     return Results.Ok(p.ToJson());
 })
 .WithName("AdminTriggerEtl")
@@ -1013,6 +1013,59 @@ app.MapDelete("/api/admin/etl/task", (EtlImportService etl, [Microsoft.AspNetCor
 .WithName("AdminCancelEtl")
 .RequireRateLimiting("etl");
 
+// P1.1 (Task 3): 后台暂停 ETL 任务 (后台 ETL 页面 "暂停" 按钮)
+//   与 Cancel 区别: Cancel 走 _activeCts.Cancel() 抛 OperationCanceledException,
+//                   Pause 走 _pausedFlag=1, 当前批次跑完后优雅退出
+//   checkpoint_id 写入 etl_progress_log, Resume 时按此值续读
+app.MapPost("/api/admin/etl/pause", (EtlImportService etl, ILogger<Program> logger) =>
+{
+    var paused = etl.PauseActiveTask();
+    if (!paused)
+        return Results.Ok(new { paused = false, reason = "无活跃任务或任务已被取消" });
+    logger.LogInformation("ETL 暂停信号已发送 (admin 手动暂停)");
+    // 返回当前累计行数作为 checkpoint,前端显示
+    return Results.Ok(new
+    {
+        paused = true,
+        checkpointId = etl.Progress.Read,
+        entity = etl.Progress.CurrentFile
+    });
+})
+.WithName("AdminPauseEtl")
+.RequireRateLimiting("etl");
+
+// P1.1 (Task 3): 后台恢复 ETL 任务 (后台 ETL 页面 "恢复" 按钮)
+//   找到最近一条 status='paused' 的记录, 读 checkpoint_id, 触发新 ETL 从该行续读
+//   与 Cancel 区别: Cancel 终止, Resume 续跑
+//   找不到 paused 记录时 404 (前端弹窗提示)
+app.MapPost("/api/admin/etl/resume", async (EtlImportService etl, ILogger<Program> logger, CancellationToken ct) =>
+{
+    try
+    {
+        var (checkpointId, entity, mode, filePath) = await etl.GetLastPausedCheckpointAsync();
+        if (!File.Exists(filePath))
+            return Results.BadRequest(new { error = "暂停时记录的 JSONL 文件不存在, 无法 Resume", filePath });
+        logger.LogInformation("ETL Resume 触发 entity={Entity} mode={Mode} checkpointId={Cp} file={File}",
+            entity, mode, checkpointId, filePath);
+        // 统一走 TriggerAsync, startLineNo=checkpointId 让 ETL 跳过已读行
+        _ = Task.Run(async () => await etl.TriggerAsync(entity, filePath, mode, checkpointId, CancellationToken.None));
+        return Results.Ok(new
+        {
+            resumed = true,
+            entity,
+            mode,
+            checkpointId,
+            batchSize = 1000,
+            nextLineNo = checkpointId + 1
+        });
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.NotFound(new { error = ex.Message });
+    }
+})
+.WithName("AdminResumeEtl")
+.RequireRateLimiting("etl");
 
 
 

@@ -284,4 +284,10 @@ public class EtlProgressLog
     [Column("cancelled_at")] public DateTime? CancelledAt { get; set; }
     // Day 9.5: 取消原因标准化枚举码 (USER_REQUEST/TIMEOUT/SYSTEM_SHUTDOWN/ADMIN_OVERRIDE/OTHER)
     [Column("reason_code")] public string? ReasonCode { get; set; }
+    // P1.1 (Task 3): 暂停/恢复 checkpoint — 最后成功 COMMIT 的批次 ID, 暂停时更新
+    //   语义:
+    //     - NULL  = 该次 ETL 未暂停过 (正常完成或失败)
+    //     - 数字   = 最后一次 Pause 时刻已 COMMIT 的最大批次 id (后续用此值续读)
+    //   不影响历史 ETL 日志 (nullable), 仅新生成的暂停任务会填
+    [Column("checkpoint_id")] public long? CheckpointId { get; set; }
 }

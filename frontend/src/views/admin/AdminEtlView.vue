@@ -33,6 +33,9 @@ function changeEntity(v: 'products' | 'xrefs' | 'apps') {
 // ===== 触发 =====
 const submitting = ref(false)
 const cancelling = ref(false)
+// P1.1 (Task 3): 暂停/恢复状态
+const pausing = ref(false)
+const resuming = ref(false)
 async function doTrigger() {
   try {
     await ElMessageBox.confirm(
@@ -148,6 +151,10 @@ function connectSSE() {
       if (!r.inProgress && r.activeTask &&
           ['completed', 'failed', 'cancelled'].includes(r.activeTask.status)) {
         refreshAudit()
+      }
+      // P1.1 (Task 3): 任务进入 paused 状态 → 刷新"恢复"按钮可见性
+      if (r.activeTask && r.activeTask.status === 'paused') {
+        checkPausedTask()
       }
     } catch {}
   }
@@ -270,6 +277,65 @@ async function doCancel() {
 const status = computed(() => task.value.activeTask?.status ?? (task.value.inProgress ? 'running' : 'idle'))
 const stage = computed(() => task.value.activeTask?.stage ?? '-')
 const progressPct = computed(() => task.value.activeTask?.progressPct ?? null)
+// P1.1 (Task 3): 是否有 paused 状态的 ETL (前端根据此显示"恢复"按钮)
+const hasPausedTask = ref(false)
+async function checkPausedTask() {
+  try {
+    const hist = await etlApi.history(20, 'paused')
+    hasPausedTask.value = (hist?.items?.length ?? 0) > 0
+  } catch (e) { hasPausedTask.value = false }
+}
+onMounted(() => { checkPausedTask() })
+
+// P1.1 (Task 3): 暂停当前活跃 ETL 任务
+//   与 Cancel 区别: Cancel 走 cts.Cancel() 抛异常, Pause 走 flag 标记, 当前批次跑完后优雅退出
+async function doPause() {
+  try {
+    await ElMessageBox.confirm(
+      '暂停当前 ETL 任务?\n\n当前批次跑完后会优雅退出, checkpoint_id 会写入 etl_progress_log, 后续可用"恢复"按钮从该点续读。\n\n(区别于"取消" — 取消会立即终止并回滚当前批次)',
+      '暂停 ETL 任务',
+      { type: 'warning', confirmButtonText: '暂停', cancelButtonText: '不暂停' }
+    )
+  } catch { return }
+  pausing.value = true
+  try {
+    const r = await etlApi.pause()
+    if (r.paused) {
+      ElMessage.warning(`已发送暂停信号, checkpoint_id=${r.checkpointId ?? '?'}, 当前批次跑完后退出`)
+    } else {
+      ElMessage.info(r.reason || '无活跃任务可暂停')
+    }
+  } catch (e: any) {
+    // 已被拦截器处理
+  } finally {
+    pausing.value = false
+  }
+}
+
+// P1.1 (Task 3): 恢复暂停的 ETL 任务 — 从最近 paused 记录的 checkpoint_id 续读
+async function doResume() {
+  try {
+    await ElMessageBox.confirm(
+      '恢复暂停的 ETL 任务?\n\n将从最近一条 paused 记录的 checkpoint_id+1 行开始续读, 跳过已 COMMIT 的批次。',
+      '恢复 ETL 任务',
+      { type: 'info', confirmButtonText: '恢复', cancelButtonText: '不恢复' }
+    )
+  } catch { return }
+  resuming.value = true
+  try {
+    const r = await etlApi.resume()
+    if (r.resumed) {
+      ElMessage.success(`已触发 Resume: entity=${r.entity} checkpoint=${r.checkpointId} (从第 ${r.nextLineNo} 行开始)`)
+      hasPausedTask.value = false  // Resume 已触发新的 ETL, paused 记录应已不算最新
+    } else {
+      ElMessage.warning(r.error || '恢复失败')
+    }
+  } catch (e: any) {
+    // 已被拦截器处理
+  } finally {
+    resuming.value = false
+  }
+}
 
 function fmt(n?: number) {
   if (n === undefined || n === null) return '-'
@@ -363,11 +429,27 @@ function prettyJson(raw: string): string {
             </el-button>
             <el-button
               v-if="status === 'running'"
+              type="warning"
+              :loading="pausing"
+              @click="doPause"
+            >
+              暂停任务
+            </el-button>
+            <el-button
+              v-if="status === 'running'"
               type="danger"
               :loading="cancelling"
               @click="doCancel"
             >
               取消任务
+            </el-button>
+            <el-button
+              v-if="status !== 'running' && hasPausedTask"
+              type="success"
+              :loading="resuming"
+              @click="doResume"
+            >
+              恢复暂停的任务
             </el-button>
           </div>
         </el-form-item>
