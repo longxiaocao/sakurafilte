@@ -211,7 +211,6 @@ jobs:
       #   - 改后端字段不改前端 → CI fail
       #   - 跑在 backend 已经 ready 之后 (复用 5148 进程)
       - name: Setup Node
-        if: false  # P4.2/4.3 是新功能, 暂不阻塞, 跑通后再开 continue-on-error=false
         uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -219,7 +218,6 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install frontend deps
-        if: false
         working-directory: frontend
         run: npm ci --no-audit --no-fund
 
