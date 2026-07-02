@@ -47,11 +47,17 @@ public class PostgresSearchProvider : ISearchProvider
         // 1) 模糊关键词 (对 OEM/Remark)
         if (!string.IsNullOrWhiteSpace(req.Q))
         {
-            var pattern = req.Q.Trim();
+            // Day 10+ P0.1: 3 参重载 + ESCAPE '\\' 防止下划线/百分号被当通配符
+            //   WHY 内联 Replace 不用 LikeEscapeExtensions 扩展:
+            //     LikeEscapeExtensions 位于 SakuraFilter.Api.Services, 而 Search 项目
+            //     不引用 Api (Api 反向引用 Search, 形成循环), 故此处内联等价实现
+            //   顺序: 先转义反斜杠, 再转义 %, 再转义 _
+            var raw = req.Q.Trim();
+            var pattern = raw.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
             q = q.Where(p =>
-                EF.Functions.ILike(p.OemNoNormalized, $"%{pattern}%") ||
-                EF.Functions.ILike(p.OemNoDisplay, $"%{pattern}%") ||
-                (p.Remark != null && EF.Functions.ILike(p.Remark, $"%{pattern}%"))
+                EF.Functions.ILike(p.OemNoNormalized, $"%{pattern}%", "\\") ||
+                EF.Functions.ILike(p.OemNoDisplay, $"%{pattern}%", "\\") ||
+                (p.Remark != null && EF.Functions.ILike(p.Remark, $"%{pattern}%", "\\"))
             );
         }
 

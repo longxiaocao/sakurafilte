@@ -537,14 +537,15 @@ public class AdminProductService
             query = query.Where(p => p.IsPublished == req.IsPublished.Value);
 
         // 文本字段 (单值 ILIKE)
+        //   Day 10+ P0.1: 3 参重载 + ESCAPE '\\' 防止下划线/百分号被当通配符, 用 EscapeLikePattern 统一转义
         if (!string.IsNullOrWhiteSpace(req.ProductName1))
-            query = query.Where(p => p.ProductName1 != null && EF.Functions.ILike(p.ProductName1, $"%{req.ProductName1}%"));
+            query = query.Where(p => p.ProductName1 != null && EF.Functions.ILike(p.ProductName1, $"%{req.ProductName1.EscapeLikePattern()}%", "\\"));
         if (!string.IsNullOrWhiteSpace(req.ProductName2))
-            query = query.Where(p => p.ProductName2 != null && EF.Functions.ILike(p.ProductName2, $"%{req.ProductName2}%"));
+            query = query.Where(p => p.ProductName2 != null && EF.Functions.ILike(p.ProductName2, $"%{req.ProductName2.EscapeLikePattern()}%", "\\"));
         if (!string.IsNullOrWhiteSpace(req.Type))
             query = query.Where(p => p.Type == req.Type);
         if (!string.IsNullOrWhiteSpace(req.Mr1))
-            query = query.Where(p => p.Mr1 != null && EF.Functions.ILike(p.Mr1, $"%{req.Mr1}%"));
+            query = query.Where(p => p.Mr1 != null && EF.Functions.ILike(p.Mr1, $"%{req.Mr1.EscapeLikePattern()}%", "\\"));
         if (!string.IsNullOrWhiteSpace(req.Oem2))
             query = query.Where(p => p.OemNoDisplay.Contains(req.Oem2) || (p.Oem2 != null && p.Oem2.Contains(req.Oem2)));
         // Day 8.2.2: 合并 xref 2 个 EXISTS (OemBrand + Oem3Batch) → 1 个 EXISTS
@@ -569,14 +570,14 @@ public class AdminProductService
                 && (oems3 == null || oems3.Any(o => x.OemNo3 == o))));
         }
         if (!string.IsNullOrWhiteSpace(req.MediaName))
-            query = query.Where(p => p.Media != null && EF.Functions.ILike(p.Media, $"%{req.MediaName}%"));
+            query = query.Where(p => p.Media != null && EF.Functions.ILike(p.Media, $"%{req.MediaName.EscapeLikePattern()}%", "\\"));
         if (!string.IsNullOrWhiteSpace(req.MediaModel))
-            query = query.Where(p => p.MediaModel != null && EF.Functions.ILike(p.MediaModel, $"%{req.MediaModel}%"));
+            query = query.Where(p => p.MediaModel != null && EF.Functions.ILike(p.MediaModel, $"%{req.MediaModel.EscapeLikePattern()}%", "\\"));
         // Day 8.2.1: 补齐规格"前端展示内容"分区 5 文本字段
         if (!string.IsNullOrWhiteSpace(req.SealingMaterial))
-            query = query.Where(p => p.SealingMaterial != null && EF.Functions.ILike(p.SealingMaterial, $"%{req.SealingMaterial}%"));
+            query = query.Where(p => p.SealingMaterial != null && EF.Functions.ILike(p.SealingMaterial, $"%{req.SealingMaterial.EscapeLikePattern()}%", "\\"));
         if (!string.IsNullOrWhiteSpace(req.Efficiency1))
-            query = query.Where(p => p.Efficiency1 != null && EF.Functions.ILike(p.Efficiency1, $"%{req.Efficiency1}%"));
+            query = query.Where(p => p.Efficiency1 != null && EF.Functions.ILike(p.Efficiency1, $"%{req.Efficiency1.EscapeLikePattern()}%", "\\"));
 
         // 批量 OEM (Excel 多行复制黏贴)
         if (!string.IsNullOrWhiteSpace(req.Oem2Batch))
@@ -600,9 +601,9 @@ public class AdminProductService
         query = ApplySizeFilter(query, "H3Mm", req.H3Min, req.H3Max, tol);
         query = ApplySizeFilter(query, "H4Mm", req.H4Min, req.H4Max, tol);
         if (!string.IsNullOrWhiteSpace(req.D7Thread))
-            query = query.Where(p => p.D7Thread != null && EF.Functions.ILike(p.D7Thread, $"%{req.D7Thread}%"));
+            query = query.Where(p => p.D7Thread != null && EF.Functions.ILike(p.D7Thread, $"%{req.D7Thread.EscapeLikePattern()}%", "\\"));
         if (!string.IsNullOrWhiteSpace(req.D8Thread))
-            query = query.Where(p => p.D8Thread != null && EF.Functions.ILike(p.D8Thread, $"%{req.D8Thread}%"));
+            query = query.Where(p => p.D8Thread != null && EF.Functions.ILike(p.D8Thread, $"%{req.D8Thread.EscapeLikePattern()}%", "\\"));
 
         // Day 8.2.2: 合并 machine_application 5 个 EXISTS → 1 个 EXISTS
         //   性能依据: 5M machine_application 行下 5 个 EXISTS 走 5 次 product_id 索引扫描

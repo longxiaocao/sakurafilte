@@ -47,8 +47,8 @@ public class AdminDictService
             // ILIKE 转义: 用户输入 % _ 视为字面量, 防止 LIKE 注入 + 正确匹配 brand 名
             //   必须用 3 参重载传 ESCAPE '\\', 否则 PG 默认无 ESCAPE 子句, 下划线被当通配符
             //   例: brand='_day10_test_x' 用 q='_day10' 查询, 无 ESCAPE → ILIKE '%_day10%' 中 '_' 匹配任意字符, 命中错行
-            var escaped = kw.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
-            query = query.Where(b => EF.Functions.ILike(b.Brand, $"%{escaped}%", "\\"));
+            //   Day 10+ P0.1: 改用 LikeEscapeExtensions 统一工具方法 (DRY)
+            query = query.Where(b => EF.Functions.ILike(b.Brand, $"%{kw.EscapeLikePattern()}%", "\\"));
         }
         if (limit.HasValue && limit.Value > 0)
             query = query.Take(limit.Value);
@@ -79,8 +79,8 @@ public class AdminDictService
         {
             var kw = q.Trim();
             // 同 ListOemBrandsAsync: ILIKE 必须用 3 参重载 + ESCAPE '\\', 否则下划线被当通配符
-            var escaped = kw.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
-            query = query.Where(b => EF.Functions.ILike(b.Brand, $"%{escaped}%", "\\"));
+            //   Day 10+ P0.1: 改用 LikeEscapeExtensions 统一工具方法 (DRY)
+            query = query.Where(b => EF.Functions.ILike(b.Brand, $"%{kw.EscapeLikePattern()}%", "\\"));
         }
         return await query
             .OrderBy(b => b.SortOrder).ThenBy(b => b.Brand)
