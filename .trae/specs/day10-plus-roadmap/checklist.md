@@ -72,7 +72,7 @@
 
 ---
 
-## Phase 2: P2 字典扩展 — 🟡 5/6 完成 (Task 8 进行中)
+## Phase 2: P2 字典扩展 — ✅ 全部完成
 
 ### Task 6: P2.1 字典抽象层 ✅
 - [x] `IDictService<TItem>` 接口定义 (7 方法)
@@ -110,18 +110,23 @@
   - 验证: `cd spike-test && python _test_day10_oem_brands.py` 预期 10/10 PASS
 - [x] BaseDictService 多字段 OR 搜索 (ExtraSearchProperties 机制, BuildSearchPredicate 走方法组引用)
 
-### Task 8: P2.3 Type 排序 + 机器分类 🟡
-- [ ] `spike-test/_seed_dict_defaults.py` 跑通
-  - 验证: `cd spike-test && python _seed_dict_defaults.py`
-  - 验证: `psql -c "SELECT * FROM dict_type ORDER BY sort_order"` 预期 oil(1) fuel(2) air(3) cabin(4) others(99)
-- [ ] 前台产品页按 `dict_type.sort_order` 排序
-  - 验证: `curl http://localhost:5148/api/products/by-type | jq '.[].type'` 预期按 sort_order 排
-- [ ] machine brand 按 4 大类聚合
-  - 验证: `curl http://localhost:5148/api/machine-brands/aggregated` 返 `{ Agriculture, Commercial, Construction, others }`
-- [ ] 拖动 type 排序后, 前台立即生效
-  - 验证: E2E 改 sort_order + GET /by-type 验证顺序变化
-- [ ] E2E 验证排序持久化
-  - 验证: `cd spike-test && python _test_type_ordering.py` 预期 5/5 PASS
+### Task 8: P2.3 Type 排序 + 机器分类 ✅
+- [x] `spike-test/_seed_dict_defaults.py` 跑通
+  - 验证: `psql -c "SELECT * FROM dict_type ORDER BY sort_order"` 实际 oil(1) fuel(2) air(3) cabin(4) others(99) ✓
+- [x] 前台公开端点按 `dict_type.sort_order` 排序
+  - 验证: `curl http://localhost:5148/api/public/products/by-type` 返 5 个 group, 顺序 [oil, fuel, air, cabin, others] ✓
+- [x] machine brand 按 4 大类聚合
+  - 验证: `curl http://localhost:5148/api/public/machine-brands/aggregated` 返 `{ Agriculture, Commercial, Construction, others }` 4 大类齐全 ✓
+  - 验证: `totalCount=5` 与 4 大类累加一致 ✓
+- [x] dict_machine 表加 machine_category 列 (EF Migration 20260702133148_AddMachineCategory)
+  - 验证: `idx_dict_machine_category` 索引存在, 默认值 'others' ✓
+- [x] AdminMachinesView 加 category 编辑 (4 大类 el-select + 列表 tag)
+- [x] MachineDictService 加 `ListMachinesByCategoryAsync` + `UpdateMachineCategoryAsync` (白名单校验)
+- [x] 拖动 type 排序后, 前台立即生效
+  - 验证: E2E Case 4 改 sort_order → GET /by-type 顺序立即变化, 恢复原值成功 ✓
+- [x] E2E 验证排序持久化
+  - 验证: `cd spike-test && python _test_type_ordering.py` 实际 5/5 PASS ✓
+  - 验证: P2.2 回归 9/9, Day 10 回归 10/10 全部 PASS, 无破坏
 
 ---
 
@@ -263,14 +268,14 @@
 - [x] 无 Pylance error
 - [x] git 3+ commits pushed
 
-### Phase 2 末 🟡
-- [x] P2.1 + P2.2 完成, P2.3 进行中
+### Phase 2 末 ✅
+- [x] P2.1 + P2.2 + P2.3 全部完成
 - [x] 7 字典 + 抽象层
 - [x] Day 10 E2E 仍 10/10 (回归)
-- [x] 6 新 E2E 全部 10/10 (P2.2 9/9 已过)
+- [x] 6 新 E2E 全部 10/10 (P2.2 9/9 + P2.3 5/5)
 - [x] typeahead 联动产品表单 7 分区全覆盖
-- [ ] P2.3 Type 排序 + Machine 4 大类
-- [ ] Task 8 E2E `_test_type_ordering.py` 5/5
+- [x] P2.3 Type 排序 + Machine 4 大类
+- [x] Task 8 E2E `_test_type_ordering.py` 5/5
 
 ### Phase 3 末 ⏳
 - [ ] P3.1 + P3.2 + P3.3 + P3.5 全部勾选
@@ -373,9 +378,9 @@ cat d:\projects\sakurafilter\spike-test\_bench_results.json | jq .
 | Phase | 任务 | 状态 | 完成度 |
 |-------|------|------|--------|
 | Phase 1 | P0+P1 (5 任务) | ✅ | 5/5 (100%) |
-| Phase 2 | P2 (3 任务) | 🟡 | 2/3 (67%) |
+| Phase 2 | P2 (3 任务) | ✅ | 3/3 (100%) |
 | Phase 3 | P3 (4 任务) | ⏳ | 0/4 (0%) |
 | Phase 4 | P4+P5 (3 任务) | ⏳ | 0/3 (0%) |
-| **总计** | **15 任务** | **🟡** | **7/15 (47%)** |
+| **总计** | **15 任务** | **🟡** | **8/15 (53%)** |
 
 > 实时更新: 每次 Task 完成立即勾选 + 更新本表。

@@ -72,7 +72,7 @@
 
 ---
 
-## Phase 2: P2 字典扩展 (4 任务) — 🟡 Task 8 进行中
+## Phase 2: P2 字典扩展 (4 任务) — ✅ 全部完成
 
 ### Task 6: P2.1 字典抽象层 IDictService + BaseDictService (1 session) ✅
 
@@ -107,31 +107,24 @@
   - 文件: `frontend/src/views/admin/AdminProductFormView.vue` 7 个 `<el-autocomplete>`
 - [x] 验证: 7 个字典管理页 + 7 个 typeahead 全部联动, 拖拽排序全部 OK
 
-### Task 8: P2.3 Type 字典排序 + 机器分类 (0.5 session) 🟡
+### Task 8: P2.3 Type 字典排序 + 机器分类 (0.5 session) ✅
 
-- [ ] SubTask 8.1: `spike-test/_seed_dict_defaults.py` (Type: oil/fuel/air/cabin/others; Machine: Agriculture/Commercial/Construction/others)
-  - 实现:
-    ```python
-    # seed dict_type 默认值
-    defaults = [
-        ('oil', 1), ('fuel', 2), ('air', 3), ('cabin', 4), ('others', 99)
-    ]
-    for value, sort_order in defaults:
-        cur.execute("INSERT INTO dict_type (value, sort_order) VALUES (%s, %s) "
-                    "ON CONFLICT (value) DO UPDATE SET sort_order = EXCLUDED.sort_order",
-                    (value, sort_order))
-    ```
-- [ ] SubTask 8.2: 前台产品页 (P3.3) 按 `dict_type.sort_order` 排序展示
-  - API: `GET /api/products/by-type` 返 `List<TypeGroupDto>` 按 `dict_type.sort_order` 排
-  - SQL: `JOIN dict_type t ON t.value = p.type ORDER BY t.sort_order`
-- [ ] SubTask 8.3: machine brand 按 4 大类聚合 (依赖 P2.2 dict_machine)
-  - `dict_machine` 表加 `category` 字段 (enum), Migration
-  - API: `GET /api/machine-brands/aggregated` 返 `{ Agriculture: [...], Commercial: [...], Construction: [...], others: [...] }`
-  - AdminMachineView 拖拽 + 类别编辑
-- [ ] 验证: 前台产品页按 type 排序, machine brand 按 4 大类分组
-  - 命令: `cd spike-test && python _test_type_ordering.py`
-
-**执行下一步**: 修复 subagent_type 错误后,继续 SubTask 8.3 (machine brand 4 大类聚合) + SubTask 8.4 (E2E 验证拖动 type 排序后, 前台立即生效)。
+- [x] SubTask 8.1: `spike-test/_seed_dict_defaults.py` (Type: oil/fuel/air/cabin/others; Machine 4 大类自动归类)
+  - 实现: dict_type 5 行 seed (oil=1, fuel=2, air=3, cabin=4, others=99), ON CONFLICT DO UPDATE SET sort_order 幂等
+  - 实现: dict_machine 按 brand 关键词归类到 Agriculture/Commercial/Construction/others 4 大类
+- [x] SubTask 8.2: 前台公开端点 `GET /api/public/products/by-type` 按 `dict_type.sort_order` 排序
+  - 文件: `backend/src/SakuraFilter.Api/Controllers/PublicProductController.cs`
+  - 返 `{ total, groups: [{ type, sortOrder, productCount, products: [...] }] }` 按 sort_order 升序
+- [x] SubTask 8.3: machine brand 4 大类聚合 (`GET /api/public/machine-brands/aggregated`)
+  - EF Migration: `20260702133148_AddMachineCategory` (machine_category varchar(50) NOT NULL DEFAULT 'others' + idx_dict_machine_category 索引)
+  - Entity: `DictMachine.MachineCategory` + `DictMachineConfiguration.HasDefaultValue("others")`
+  - 文件: `backend/src/SakuraFilter.Api/Controllers/PublicMachineBrandsController.cs`
+  - 返 `{ byCategory: { Agriculture: [...], Commercial: [...], Construction: [...], others: [...] }, totalCount }`
+- [x] SubTask 8.4: `MachineDictService` 加 `ListMachinesByCategoryAsync` + `UpdateMachineCategoryAsync` 方法 (4 大类白名单校验)
+  - `MachineUpdateRequest` 扩展 `MachineCategory` 字段
+- [x] SubTask 8.5: `AdminMachinesView.vue` 加 category 编辑 (el-select 4 大类 + 列表 tag 显示)
+- [x] SubTask 8.6: E2E `spike-test/_test_type_ordering.py` 5/5 全绿
+- [x] 验证: dotnet build 0 错误 (19 warning 均为已存在), P2.3 E2E 5/5 PASS, P2.2 回归 9/9, Day 10 回归 10/10
 
 ---
 
@@ -370,10 +363,10 @@ Phase 4 (⏳):
 | 阶段 | 任务数 | session 数 | 状态 |
 |------|--------|----------|------|
 | Phase 1 (P0+P1) | 5 | 5 | ✅ 全部完成 |
-| Phase 2 (P2) | 3 | 4 | 🟡 5/6 完成, Task 8 进行中 |
+| Phase 2 (P2) | 3 | 4 | ✅ 全部完成 (P2.1+P2.2+P2.3) |
 | Phase 3 (P3) | 4 | 3 | ⏳ 待开始 |
 | Phase 4 (P4+P5) | 3 | 3 | ⏳ 待开始 |
-| **合计** | **15** | **15** | **7/15 完成 (47%)** |
+| **合计** | **15** | **15** | **8/15 完成 (53%)** |
 
 > 按 Day 10 节奏 1 session = 1 次连续 push + 全绿。
 
@@ -403,4 +396,4 @@ Phase 4 (⏳):
 | 6 | Task 14 (契约+视觉) | 中 (CI) | 中 | Phase 4 |
 | 7 | Task 15 (P5 打磨) | 低 (锦上添花) | 低 | Phase 4 最后 |
 
-最高优先级 (Next): **Task 8 收尾** (P2.3 Type 排序 + Machine 4 大类)。
+最高优先级 (Next): **Task 11 (P3.3 前台产品页)** — 依赖 Task 7 (字典 typeahead) + Task 8 (type 排序) 全部完成, 可立即启动。
