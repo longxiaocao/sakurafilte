@@ -1797,6 +1797,103 @@ app.MapPost("/api/admin/dict/engines/reorder", async (
     catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
 }).WithName("AdminReorderEngines");
 
+// ===== Day 11 P4.2: 字典 schema 契约端点 =====
+//   反射 8 个 Dict* entity + XrefOemBrand, 返每个 entity 的字段名 + 类型 + 是否可空
+//   前端 frontend/tests/contract/dict-schema.test.ts 用 zod 校验, 改字段不改前端 → CI fail
+//   WHY reflection: 不写硬编码 DTO, 自动跟随 EF Core Migration 的字段变更
+app.MapGet("/api/admin/dict/_schema", () =>
+{
+    // 8 个字典 (P1.3 OEM 品牌 + P2.2 7 个新字典)
+    //   - XrefOemBrand 是 OEM 品牌, 历史命名 (Day 10), 不重命名为 DictOemBrand 避免大改
+    //   - DictProductName1/2/Type/OemNo3 是单字段字典, 与 Day 10 XrefOemBrand 一致
+    //   - DictMedia/Machine/Engine 是多字段字典 (主字段 + ExtraSearchProperties)
+    var dictTypes = new[]
+    {
+        typeof(SakuraFilter.Core.Entities.XrefOemBrand),
+        typeof(SakuraFilter.Core.Entities.DictProductName1),
+        typeof(SakuraFilter.Core.Entities.DictProductName2),
+        typeof(SakuraFilter.Core.Entities.DictType),
+        typeof(SakuraFilter.Core.Entities.DictOemNo3),
+        typeof(SakuraFilter.Core.Entities.DictMedia),
+        typeof(SakuraFilter.Core.Entities.DictMachine),
+        typeof(SakuraFilter.Core.Entities.DictEngine)
+    };
+
+    // WHY 用 record 而非 Dictionary: 客户端反序列化时字段名固定, 改结构不改客户端代码会编译报错
+    //   Fields 顺序 = C# 编译顺序 (与 EF Core Migration 一致)
+    var schema = dictTypes.Select(t => new
+    {
+        Entity = t.Name,
+        Table = GetPgTableName(t),
+        Fields = t.GetProperties()
+            .Select(p => new
+            {
+                Name = p.Name,
+                CSharpType = ToCSharpTypeName(p.PropertyType),
+                Nullable = IsNullable(p),
+                HasColumn = p.GetCustomAttributes(typeof(System.ComponentModel.DataAnnotations.Schema.ColumnAttribute), false).Any()
+            })
+            .ToArray()
+    });
+
+    return Results.Ok(new
+    {
+        generatedAt = DateTime.UtcNow.ToString("O"),
+        count = dictTypes.Length,
+        dictionaries = schema
+    });
+})
+.WithName("AdminDictSchema");
+
+// 本地函数: C# Type → 契约客户端期望的类型字符串
+//   - DateTime → "datetime"
+//   - DateTime? → "datetime?"
+//   - string → "string"
+//   - long/int/bool → "long"/"int"/"bool"
+//   - decimal? → "decimal?"
+static string ToCSharpTypeName(Type t)
+{
+    var underlying = Nullable.GetUnderlyingType(t);
+    var baseName = underlying?.Name ?? t.Name;
+    var nullable = underlying != null ? "?" : "";
+    return baseName.ToLower() switch
+    {
+        "int32" => "int" + nullable,
+        "int64" => "long" + nullable,
+        "datetime" => "datetime" + nullable,
+        "boolean" => "bool" + nullable,
+        "decimal" => "decimal" + nullable,
+        "double" => "double" + nullable,
+        _ => baseName.ToLower() + nullable
+    };
+}
+
+static bool IsNullable(System.Reflection.PropertyInfo p)
+{
+    // Reference type 默认可空 (string)
+    if (!p.PropertyType.IsValueType) return true;
+    // Nullable<T> = 可空
+    return Nullable.GetUnderlyingType(p.PropertyType) != null;
+}
+
+static string GetPgTableName(Type t)
+{
+    // 提取 EF Core 表名 (P0.2 baseline: 字典表命名规则 dict_xxx)
+    // 简化映射: 客户端已知命名约定
+    return t.Name switch
+    {
+        "XrefOemBrand" => "xref_oem_brand",
+        "DictProductName1" => "dict_product_name1",
+        "DictProductName2" => "dict_product_name2",
+        "DictType" => "dict_type",
+        "DictOemNo3" => "dict_oem_no3",
+        "DictMedia" => "dict_media",
+        "DictMachine" => "dict_machine",
+        "DictEngine" => "dict_engine",
+        _ => t.Name.ToLower()
+    };
+}
+
 app.Run();
 
 // Day 9.2: dry-run JSON Schema 校验结果

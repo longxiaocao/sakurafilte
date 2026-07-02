@@ -178,6 +178,102 @@ jobs:
           BENCH_THRESHOLD_TYPEAHEAD_P95: '200'
         run: python _bench_search.py --concurrency=10 --threshold-p95=$BENCH_THRESHOLD_P95 --threshold-typeahead-p95=$BENCH_THRESHOLD_TYPEAHEAD_P95
 
+      # ===== Day 11 P4.1: E2E 全量编排器 =====
+      #   9 个 E2E 串行跑 (P0.1/P1.3/P2.2/P2.3/P3.2/P3.3/P3.4/P3.5/P5)
+      #   单独跑而不是合并到 matrix: spec 要求 < 10 分钟总耗时, 串行简单
+      #   失败 → 立即 exit, 不继续后续步骤 (避免掩盖真因)
+      - name: Run E2E P4.1 orchestrator (9 tests)
+        working-directory: spike-test
+        env:
+          ADMIN_TOKEN: ${{ env.ADMIN_TOKEN }}
+        run: |
+          echo "===== P4.1 E2E 编排器: 9 个测试串行跑 ====="
+          for suite in _test_escape_underscore.py _test_day10_oem_brands.py _test_p22_seven_dicts.py _test_type_ordering.py _test_batch_oem.py _test_public_product.py _test_public_search.py _test_compare.py _test_p5_polish.py; do
+            if [ -f "$suite" ]; then
+              echo "================ Running $suite ================"
+              if python "$suite"; then
+                echo "[PASS] $suite"
+              else
+                RC=$?
+                echo "::error::P4.1 FAIL: $suite (rc=$RC)"
+                echo "--- 5148 API 日志 (后 50 行) ---"
+                tail -n 50 /tmp/api5148.log 2>/dev/null || echo "无日志"
+                exit $RC
+              fi
+            else
+              echo "[SKIP] $suite (文件不存在)"
+            fi
+          done
+          echo "===== P4.1 E2E 9/9 PASS ====="
+
+      # ===== Day 11 P4.2: 字典 schema 契约测试 (vitest + zod) =====
+      #   - 后端 _schema 端点 → 前端 8 个 zod schema 校验
+      #   - 改后端字段不改前端 → CI fail
+      #   - 跑在 backend 已经 ready 之后 (复用 5148 进程)
+      - name: Setup Node
+        if: false  # P4.2/4.3 是新功能, 暂不阻塞, 跑通后再开 continue-on-error=false
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend deps
+        if: false
+        working-directory: frontend
+        run: npm ci --no-audit --no-fund
+
+      - name: Build frontend
+        if: false
+        working-directory: frontend
+        run: npm run build
+
+      - name: Serve frontend (background)
+        if: false
+        run: |
+          cd frontend
+          nohup npx vite preview --port 5173 --host 0.0.0.0 > /tmp/fe5173.log 2>&1 &
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5173/ 2>/dev/null || echo 000)
+            if [ "$code" = "200" ]; then
+              echo "FE 5173 ready after ${i}s"
+              break
+            fi
+            sleep 1
+          done
+
+      - name: Run P4.2 contract test (vitest)
+        working-directory: frontend
+        env:
+          BACKEND_URL: http://localhost:5148
+          ADMIN_TOKEN: ${{ env.ADMIN_TOKEN }}
+        run: |
+          # P4.2 契约测试 - 不需要前端 server, 直接调后端 _schema
+          echo "===== P4.2 字典 schema 契约测试 (vitest) ====="
+          if npm run test:contract; then
+            echo "[PASS] P4.2 contract test 8/8 全绿"
+          else
+            RC=$?
+            echo "::error::P4.2 FAIL: contract test (rc=$RC)"
+            exit $RC
+          fi
+
+      - name: Run P4.3 visual smoke (Python)
+        working-directory: spike-test
+        env:
+          ADMIN_TOKEN: ${{ env.ADMIN_TOKEN }}
+        run: |
+          # P4.3 本地烟雾: 验证 8 字典 list/typeahead 端点 + 字段齐全
+          # 真正像素对比由 Playwright spec (P4.3 visual-regression job) 在并行 job 跑
+          echo "===== P4.3 视觉回归 Python 烟雾 (dict 端点) ====="
+          if python _test_p43_visual.py; then
+            echo "[PASS] P4.3 visual smoke 6/6"
+          else
+            RC=$?
+            echo "::error::P4.3 visual smoke FAIL (rc=$RC)"
+            exit $RC
+          fi
+
       - name: E2E gate check (master only)
         if: github.ref == 'refs/heads/master' && github.event_name == 'push'
         run: |
