@@ -212,6 +212,25 @@ builder.Services.AddScoped<AdminProductImageService>();
 
 var app = builder.Build();
 
+// Day 9.11: EF Core Migrations 自动应用
+//   WHY: 启动时自动应用待执行迁移,无需手动 SQL,获得 __EFMigrationsHistory 版本追踪
+//   现有数据库: InitialCreate 已手动标记为已应用,Migrate 跳过执行,不会 ALTER 现有 schema
+//   全新部署: InitialCreate 执行 Up 创建所有表
+//   并发安全: Migrate 内部用 PostgreSQL advisory lock 保护,多实例并发安全
+//   异常处理: 失败立即抛出终止启动,避免带病运行
+try
+{
+    using var migrateScope = app.Services.CreateScope();
+    var migrateDb = migrateScope.ServiceProvider.GetRequiredService<ProductDbContext>();
+    migrateDb.Database.Migrate();
+    app.Logger.LogInformation("数据库迁移检查完成");
+}
+catch (Exception ex)
+{
+    app.Logger.LogError(ex, "数据库迁移失败,应用启动终止");
+    throw;
+}
+
 // Day 9.6: 启动 ETL 跨实例广播器 (PG LISTEN 后台 task)
 _ = Task.Run(async () =>
 {
