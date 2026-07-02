@@ -97,9 +97,16 @@ def pg_listen_count():
 
 # ========== Case 1: 验证 2 个 API 实例都 LISTEN ==========
 def test_dual_listen():
-    n = pg_listen_count()
-    assert n >= 2, f"应有 ≥ 2 个 LISTEN 进程 (5148 + 5149), 实际 {n}"
-    print(f"  ✓ PG 端确认 {n} 个 LISTEN etl_progress 进程 (5148 + 5149)")
+    # Day 9.12: LISTEN 是异步建立的 (EtlProgressBroadcaster.InitAsync 用 Task.Run + 等 500ms)
+    #   API 可达 ≠ LISTEN 已建立, 必须重试等待, 否则 CI Linux 启动慢时立即检查会失败
+    n = 0
+    for i in range(30):
+        n = pg_listen_count()
+        if n >= 2:
+            break
+        time.sleep(1)
+    assert n >= 2, f"应有 ≥ 2 个 LISTEN 进程 (5148 + 5149), 实际 {n} (等待 30s 仍未建立)"
+    print(f"  ✓ PG 端确认 {n} 个 LISTEN etl_progress 进程 (5148 + 5149, 等待 {i+1}s)")
 
 
 # ========== Case 2: PG NOTIFY 跨实例 SSE 收到 ==========
