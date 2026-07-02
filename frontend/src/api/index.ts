@@ -154,6 +154,28 @@ export const productApi = {
   }
 }
 
+// ===== P3.4 (Task 11.5): 公开搜索 (8 字段多框, 无需 token) =====
+//   GET /api/public/search?oemBrand=...&oemNo2=...&oemNo3=...&machineBrand=...&machineModel=...&modelName=...&engineBrand=...&engineType=...
+//   返: { total, page, pageSize, totalPages, elapsedMs, countMode, items: [{id, oemNoDisplay, oem2, productName1, type, d1Mm, h1Mm}] }
+import type { PublicEightRequest, PublicEightResponse } from './types'
+export const publicSearchApi = {
+  eightField(req: PublicEightRequest): Promise<PublicEightResponse> {
+    // 过滤 undefined / 空字符串, axios 不会把空串当未传, 显式构造 params
+    const params: Record<string, string | number> = {}
+    if (req.oemBrand) params.oemBrand = req.oemBrand
+    if (req.oemNo2) params.oemNo2 = req.oemNo2
+    if (req.oemNo3) params.oemNo3 = req.oemNo3
+    if (req.machineBrand) params.machineBrand = req.machineBrand
+    if (req.machineModel) params.machineModel = req.machineModel
+    if (req.modelName) params.modelName = req.modelName
+    if (req.engineBrand) params.engineBrand = req.engineBrand
+    if (req.engineType) params.engineType = req.engineType
+    params.page = req.page ?? 1
+    params.pageSize = req.pageSize ?? 20
+    return http.get('/public/search', { params }).then((r) => r.data)
+  }
+}
+
 // ===== 后台产品管理 (需 token) =====
 export const adminProductApi = {
   search(req: AdminSearchRequest): Promise<PageResp<ProductListItem>> {

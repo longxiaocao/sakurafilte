@@ -388,3 +388,37 @@ export interface BatchOemResponse {
   results: BatchOemResult[]
 }
 
+// ===== P3.4 (Task 11.5): 公开搜索 8 字段多框 =====
+export interface PublicEightRequest {
+  oemBrand?: string
+  oemNo2?: string
+  oemNo3?: string
+  machineBrand?: string
+  machineModel?: string
+  modelName?: string
+  engineBrand?: string
+  engineType?: string
+  page?: number
+  pageSize?: number
+}
+
+export interface PublicSearchHit {
+  id: number
+  oemNoDisplay: string
+  oem2?: string | null
+  productName1?: string | null
+  type?: string | null
+  d1Mm?: string | null
+  h1Mm?: string | null
+}
+
+export interface PublicEightResponse {
+  total: number
+  page: number
+  pageSize: number
+  totalPages: number
+  elapsedMs: number
+  countMode: string  // 'exact' | 'estimated'
+  items: PublicSearchHit[]
+}
+

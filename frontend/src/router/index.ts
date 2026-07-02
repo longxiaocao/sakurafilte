@@ -20,6 +20,13 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/SearchView.vue'),
     meta: { title: '产品搜索' }
   },
+  // ===== P3.4 (Task 11.5): 公开搜索页 8 字段多框 (公开, 无需 token) =====
+  {
+    path: '/public/search',
+    name: 'PublicSearch',
+    component: () => import('@/views/public/PublicSearchView.vue'),
+    meta: { title: '产品搜索 (8 字段)' }
+  },
   {
     path: '/product/:oem',
     name: 'ProductDetail',

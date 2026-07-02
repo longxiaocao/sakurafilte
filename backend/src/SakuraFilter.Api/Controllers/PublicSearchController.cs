@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SakuraFilter.Api.Services;
 using SakuraFilter.Infrastructure.Data;
 
 namespace SakuraFilter.Api.Controllers;
@@ -120,6 +121,167 @@ public class PublicSearchController : ControllerBase
             Results: results
         ));
     }
+
+    /// <summary>
+    /// P3.4 (Task 11.5): 公开搜索页 8 字段多框模糊搜索
+    /// URL: GET /api/public/search?oemBrand=...&oemNo2=...&oemNo3=...&machineBrand=...&machineModel=...&modelName=...&engineBrand=...&engineType=...
+    /// 规格 (新思路.xlsx R2/R8): 8 字段同时支持模糊搜索,任一字段命中即返回
+    ///  - 8 字段全部 optional, 全部空 → 400
+    ///  - 多字段 = AND 关系 (收窄范围)
+    ///  - 全部走 P0.1 ILIKE ESCAPE (防止下划线/百分号被 PG 当通配符)
+    ///  - xref 2 字段 (oemBrand + oemNo3) → 1 个 EXISTS 合并
+    ///  - machine 5 字段 → 1 个 EXISTS 合并 (避免 5 次 EXISTS 嵌套扫描)
+    ///  - 排除 is_discontinued=true
+    ///  - 性能: 1M 数据 + 5M xref + 1M apps 预计 50-300ms
+    /// </summary>
+    [HttpGet("")]
+    public async Task<IActionResult> EightField(
+        [FromQuery(Name = "oemBrand")]    string? oemBrand,
+        [FromQuery(Name = "oemNo2")]      string? oemNo2,
+        [FromQuery(Name = "oemNo3")]      string? oemNo3,
+        [FromQuery(Name = "machineBrand")] string? machineBrand,
+        [FromQuery(Name = "machineModel")] string? machineModel,
+        [FromQuery(Name = "modelName")]    string? modelName,
+        [FromQuery(Name = "engineBrand")]  string? engineBrand,
+        [FromQuery(Name = "engineType")]   string? engineType,
+        [FromQuery(Name = "page")]         int page = 1,
+        [FromQuery(Name = "pageSize")]     int pageSize = 20,
+        CancellationToken ct = default)
+    {
+        // 全部 trim + null 化 (空字符串也当作未填)
+        oemBrand    = oemBrand?.Trim();
+        oemNo2      = oemNo2?.Trim();
+        oemNo3      = oemNo3?.Trim();
+        machineBrand = machineBrand?.Trim();
+        machineModel = machineModel?.Trim();
+        modelName    = modelName?.Trim();
+        engineBrand  = engineBrand?.Trim();
+        engineType   = engineType?.Trim();
+
+        // 8 字段全部空 → 400
+        if (string.IsNullOrEmpty(oemBrand) && string.IsNullOrEmpty(oemNo2) && string.IsNullOrEmpty(oemNo3)
+            && string.IsNullOrEmpty(machineBrand) && string.IsNullOrEmpty(machineModel)
+            && string.IsNullOrEmpty(modelName) && string.IsNullOrEmpty(engineBrand)
+            && string.IsNullOrEmpty(engineType))
+        {
+            return BadRequest(new { error = "至少需要输入 1 个搜索字段" });
+        }
+
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, 100);
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+
+        // 起手: active products
+        var query = _db.Products.AsNoTracking().Where(p => !p.IsDiscontinued);
+
+        // 文本字段: 单值 ILIKE (走 P0.1 EscapeLikePattern + 3 参重载)
+        //   1) oem_no_2: 产品自身 OEM 2 字段
+        if (!string.IsNullOrEmpty(oemNo2))
+        {
+            var kw = oemNo2.EscapeLikePattern();
+            query = query.Where(p => p.Oem2 != null
+                && EF.Functions.ILike(p.Oem2, $"%{kw}%", "\\"));
+        }
+        //   2) oem_brand + oem_no_3: 走 1 个合并 EXISTS (xref 5.27M, 索引覆盖)
+        //      与 AdminProductService 638-655 行同样模式, 避免 2 次嵌套扫描
+        var brandKw = oemBrand;
+        var oem3Kw  = oemNo3;
+        if (!string.IsNullOrEmpty(brandKw) || !string.IsNullOrEmpty(oem3Kw))
+        {
+            var brandEsc = brandKw?.EscapeLikePattern();
+            var oem3Esc  = oem3Kw?.EscapeLikePattern();
+            // 局部变量提升闭包捕获, EF 翻译成 p.id = ANY (SELECT product_id FROM cross_references WHERE ...)
+            var bKw = brandEsc;
+            var o3Kw = oem3Esc;
+            query = query.Where(p => _db.CrossReferences.Any(x =>
+                x.ProductId == p.Id
+                && (bKw == null || (x.OemBrand != null && EF.Functions.ILike(x.OemBrand, $"%{bKw}%", "\\")))
+                && (o3Kw == null || (x.OemNo3 != null && EF.Functions.ILike(x.OemNo3, $"%{o3Kw}%", "\\")))
+            ));
+        }
+        //   3) machine 5 字段: 1 个合并 EXISTS
+        //      任一字段空 → 跳过该判断; 全部空 → 整个 EXISTS 不加入 (但已被前面 400 拦掉)
+        if (!string.IsNullOrEmpty(machineBrand) || !string.IsNullOrEmpty(machineModel)
+            || !string.IsNullOrEmpty(modelName) || !string.IsNullOrEmpty(engineBrand)
+            || !string.IsNullOrEmpty(engineType))
+        {
+            var mbEsc = machineBrand?.EscapeLikePattern();
+            var mmEsc = machineModel?.EscapeLikePattern();
+            var mnEsc = modelName?.EscapeLikePattern();
+            var ebEsc = engineBrand?.EscapeLikePattern();
+            var etEsc = engineType?.EscapeLikePattern();
+            var mb = mbEsc; var mm = mmEsc; var mn = mnEsc; var eb = ebEsc; var et = etEsc;
+            query = query.Where(p => _db.MachineApplications.Any(m =>
+                m.ProductId == p.Id
+                && (mb == null || (m.MachineBrand != null && EF.Functions.ILike(m.MachineBrand, $"%{mb}%", "\\")))
+                && (mm == null || (m.MachineModel != null && EF.Functions.ILike(m.MachineModel, $"%{mm}%", "\\")))
+                && (mn == null || (m.ModelName    != null && EF.Functions.ILike(m.ModelName,    $"%{mn}%", "\\")))
+                && (eb == null || (m.EngineBrand  != null && EF.Functions.ILike(m.EngineBrand,  $"%{eb}%", "\\")))
+                && (et == null || (m.EngineType   != null && EF.Functions.ILike(m.EngineType,   $"%{et}%", "\\")))
+            ));
+        }
+
+        // 分页 (offset, 不走 cursor — 公开搜索结果无需书签翻页)
+        //   WHY Skip 必须先于 Take: 顺序错会 page>1 时丢数据 (见 AdminProductService 754-757)
+        //   P3.4 count 超时降级: 8 字段 EXISTS + 大表 (1M products + 5M xref + 1M apps) 时
+        //     count 可能 5-10s (e.g. oem_brand='Mann' 命中 20% 数据, ILIKE '%Mann%' 走全表扫描).
+        //     用 5s 超时降级到 estimated count
+        //   注: SqlQueryRaw<long>(reltuples) 在 EF Core 8 + 含 ILike/EXISTS 的查询上下文下
+        //     会生成 `t.Value` 不存在的列引用 (PG 42703 字段不存在) — EF 把 raw SQL 套进
+        //     SELECT t.c1 AS "Value" 子查询, 而我们的 raw SQL 没有 Value 别名 → 报 42703
+        //   兜底: 走 _db.Products.LongCountAsync() (无过滤, 但远快于 EXISTS+ILike), 误差大,
+        //     仅作 "约 N 条" 提示用 — 显式 flag countMode='estimated' 让前端文案区分
+        long total;
+        bool countTimedOut = false;
+        try
+        {
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(5000);  // 5s 超时 — 1M+5M EXISTS 通常 < 2s, 5s 留 2x 缓冲
+            total = await query.LongCountAsync(cts.Token);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            // 走无过滤 COUNT(*) 兜底 — 1M 数据下 50ms, 远小于 5s, 给前端 "约 N 条" 提示用
+            //   实际与精确值的偏差会很大 (e.g. 1M 总数 vs 200k 精确), 但用户体验上 "加载快" 比 "数字准" 重要
+            total = await _db.Products.LongCountAsync(ct);
+            countTimedOut = true;
+        }
+        string countModeUsed = countTimedOut ? "estimated" : "exact";
+        var items = await query
+            .OrderByDescending(p => p.Id)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(p => new PublicSearchHit(
+                p.Id,
+                p.OemNoDisplay,
+                p.Oem2,
+                p.ProductName1,
+                p.Type,
+                p.D1Mm != null ? p.D1Mm.ToString() : null,
+                p.H1Mm != null ? p.H1Mm.ToString() : null
+            ))
+            .ToListAsync(ct);
+
+        sw.Stop();
+        var totalPages = (int)Math.Ceiling(total / (double)pageSize);
+
+        _logger.LogInformation("eight-field search: oemBrand={OemBrand} oemNo2={OemNo2} oemNo3={OemNo3} "
+            + "mb={Mb} mm={Mm} mn={Mn} eb={Eb} et={Et} → total={Total}({CountMode}) items={Items} elapsed={Elapsed}ms",
+            oemBrand, oemNo2, oemNo3,
+            machineBrand, machineModel, modelName, engineBrand, engineType,
+            total, countModeUsed, items.Count, sw.ElapsedMilliseconds);
+
+        return Ok(new PublicEightResponse(
+            Total: total,
+            Page: page,
+            PageSize: pageSize,
+            TotalPages: totalPages,
+            ElapsedMs: (int)sw.ElapsedMilliseconds,
+            CountMode: countModeUsed,
+            Items: items
+        ));
+    }
 }
 
 /// <summary>批量查询入参</summary>
@@ -141,4 +303,26 @@ public record BatchOemResponse(
     int Hits,
     int Miss,
     List<BatchOemResult> Results
+);
+
+/// <summary>P3.4 (Task 11.5): 公开搜索单条结果</summary>
+public record PublicSearchHit(
+    long Id,
+    string OemNoDisplay,
+    string? Oem2,
+    string? ProductName1,
+    string? Type,
+    string? D1Mm,
+    string? H1Mm
+);
+
+/// <summary>P3.4 (Task 11.5): 8 字段响应</summary>
+public record PublicEightResponse(
+    long Total,
+    int Page,
+    int PageSize,
+    int TotalPages,
+    int ElapsedMs,
+    string CountMode,
+    List<PublicSearchHit> Items
 );

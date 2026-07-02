@@ -119,7 +119,7 @@ def test_seed_dict_type():
 # ========== Case 2: GET /api/public/products/by-type ==========
 def test_by_type_order():
     """GET by-type 验证顺序 = oil(1) fuel(2) air(3) cabin(4) others(99)"""
-    code, body = http("GET", "/api/public/products/by-type")
+    code, body = http("GET", "/api/public/by-type")
     if code == 0:
         raise AssertionError(f"后端未启动或不可达: {body[:200]}")
     assert code == 200, f"by-type 期望 200, 实际 {code}, body={body[:300]}"
@@ -180,7 +180,7 @@ def test_drag_type_reorder():
     conn.commit()
     try:
         # 调 by-type 验证
-        code, body = http("GET", "/api/public/products/by-type")
+        code, body = http("GET", "/api/public/by-type")
         if code == 0:
             raise AssertionError(f"后端未启动: {body[:200]}")
         assert code == 200, f"by-type 期望 200, 实际 {code}"
