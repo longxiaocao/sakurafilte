@@ -7,6 +7,10 @@
   3) 字段完整性 (reasonCode/cancelReason/cancelledAt 等)
   4) 数据格式 (pct 0-100, code 在 5 枚举 + LEGACY)
   5) 空数据兜底 (不传 status 也能返回)
+
+Day 9.12: CI 兼容
+  - 跨平台路径 (用 os.path.dirname(__file__) 构建, 不再硬编码 D:/)
+  - 空数据库 SKIP (参考 _test_day95.py 模式)
 """
 import json
 import os
@@ -18,6 +22,11 @@ import psycopg2
 BASE = "http://localhost:5148"
 TOKEN = os.environ.get("ADMIN_TOKEN", "dev-admin-token-rotate-in-prod-MZK4R9P3X6V2N7Q1L5F0B8H3C")
 H_ADMIN = {"X-Admin-Token": TOKEN, "Content-Type": "application/json"}
+PG_CONF = dict(host="localhost", port=5432, dbname="spike_test_v3", user="postgres", password="784533")
+
+# Day 9.12: 跨平台基准路径
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
 
 PASS = 0
 FAIL = 0
@@ -40,6 +49,16 @@ def http(method, path, body=None, headers=None, timeout=5):
         return e.code, e.read().decode("utf-8")
 
 
+def db_cancelled_count():
+    """返回 etl_progress_log 中 cancelled 记录数"""
+    c = psycopg2.connect(**PG_CONF)
+    cur = c.cursor()
+    cur.execute("SELECT count(*) FROM etl_progress_log WHERE status = 'cancelled'")
+    n = cur.fetchone()[0]
+    c.close()
+    return n
+
+
 def case(name, fn):
     global PASS, FAIL
     print(f"\n--- {name} ---")
@@ -48,6 +67,9 @@ def case(name, fn):
         PASS += 1
         RESULTS.append((name, "PASS", None))
         print(f"[PASS] {name}")
+    except SkipTest as e:
+        RESULTS.append((name, "SKIP", str(e)))
+        print(f"[SKIP] {name}: {e}")
     except AssertionError as e:
         FAIL += 1
         RESULTS.append((name, "FAIL", str(e)))
@@ -58,9 +80,17 @@ def case(name, fn):
         print(f"[ERROR] {name}: {e}")
 
 
+class SkipTest(Exception):
+    """Day 9.12: 空数据库或 CI 环境不支持时跳过测试"""
+    pass
+
+
 # ========== Case 1: /api/admin/etl/history 返回 cancelled ==========
 def test_history_cancelled():
     """验证 /api/admin/etl/history?status=cancelled 返回 cancelled 记录"""
+    # Day 9.12: CI 空数据库无 cancelled 记录, SKIP (空数据库不是被测代码问题)
+    if db_cancelled_count() == 0:
+        raise SkipTest("CI 空数据库无 cancelled 记录, 跳过 (本地有数据时验证)")
     code, body = http("GET", "/api/admin/etl/history?status=cancelled&limit=10", headers=H_ADMIN)
     assert code == 200, f"期望 200, 实际 {code}, body={body[:200]}"
     obj = json.loads(body)
@@ -73,6 +103,9 @@ def test_history_cancelled():
 # ========== Case 2: /aggregate 按 reason_code 聚合 ==========
 def test_aggregate_reason_code():
     """验证 /api/admin/etl/history/aggregate 按 reason_code 聚合"""
+    # Day 9.12: CI 空数据库 SKIP
+    if db_cancelled_count() == 0:
+        raise SkipTest("CI 空数据库无 cancelled 记录, 跳过聚合测试")
     code, body = http("GET", "/api/admin/etl/history/aggregate", headers=H_ADMIN)
     assert code == 200, f"期望 200, 实际 {code}, body={body[:200]}"
     obj = json.loads(body)
@@ -98,6 +131,9 @@ def test_aggregate_reason_code():
 # ========== Case 3: 字段完整性 ==========
 def test_history_field_completeness():
     """验证 /history 返回的字段完整 (含 reasonCode/cancelReason/cancelledAt/durationSec)"""
+    # Day 9.12: CI 空数据库 SKIP
+    if db_cancelled_count() == 0:
+        raise SkipTest("CI 空数据库无 cancelled 记录, 跳过字段完整性测试")
     code, body = http("GET", "/api/admin/etl/history?status=cancelled&limit=5", headers=H_ADMIN)
     obj = json.loads(body)
     assert obj["count"] >= 1
@@ -150,7 +186,10 @@ def test_new_cancel_recorded():
     # 准备一个 100K 行正确字段的 JSONL (实测 100K 行 insert-only 约 5-8s)
     # WHY 必须用正确字段: EtlImportService 读 oem_no_normalized/oem_no_display/type
     #   之前用 oem_no 全部 'key not present' 报错, 2.9s 跑完 30K, cancel 永远来不及
-    jsonl_path = "D:/data/sakurafilter/_test_day98_audit_100k.jsonl"
+    # Day 9.12: 路径跨平台, 用 SCRIPT_DIR/output/ (CI Linux + Windows 都可写)
+    out_dir = os.path.join(SCRIPT_DIR, "output")
+    os.makedirs(out_dir, exist_ok=True)
+    jsonl_path = os.path.join(out_dir, "_test_day98_audit_100k.jsonl")
 
     # Day 9.8 v3: 文件存在也校验内容, 防止历史错误格式文件被复用
     # WHY: 30K 文件生成时字段名错 (oem_no) 写入磁盘, 后续测试若只检查 exists 就会用错文件
@@ -265,11 +304,9 @@ def test_new_cancel_recorded():
 # ========== Case 6: 前端组件存在性 + 入口可达性 ==========
 def test_frontend_component_built():
     """验证前端 EtlReasonCodePie.vue 组件存在 + 引用了正确 import"""
-    # 用 raw string 避免 \ 转义问题
-    pie_path = r"d:\projects\sakurafilter\frontend\src\components\EtlReasonCodePie.vue"
-    abs_pie = os.path.abspath(pie_path)
-    print(f"  [debug] pie_path raw: {pie_path}")
-    print(f"  [debug] pie_path abs: {abs_pie}")
+    # Day 9.12: 跨平台路径 (CI Linux + Windows)
+    pie_path = os.path.join(PROJECT_ROOT, "frontend", "src", "components", "EtlReasonCodePie.vue")
+    print(f"  [debug] pie_path: {pie_path}")
     print(f"  [debug] exists: {os.path.exists(pie_path)}")
     assert os.path.exists(pie_path), f"前端组件不存在: {pie_path}"
     with open(pie_path, "r", encoding="utf-8") as f:
@@ -278,7 +315,7 @@ def test_frontend_component_built():
     assert "<svg" in content and "circle" in content, "组件缺少 SVG 圆环"
     assert "USER_REQUEST" in content and "TIMEOUT" in content, "组件缺少 reason_code 映射"
     # 验证 AdminEtlView 引用了它
-    admin_path = r"d:\projects\sakurafilter\frontend\src\views\admin\AdminEtlView.vue"
+    admin_path = os.path.join(PROJECT_ROOT, "frontend", "src", "views", "admin", "AdminEtlView.vue")
     with open(admin_path, "r", encoding="utf-8") as f:
         admin = f.read()
     assert "EtlReasonCodePie" in admin, "AdminEtlView.vue 未引用 EtlReasonCodePie"
@@ -299,7 +336,11 @@ if __name__ == "__main__":
     case("6. 前端组件就绪", test_frontend_component_built)
 
     print(f"\n=== 总结: {PASS} PASS, {FAIL} FAIL ===")
+    skip_count = len([r for r in RESULTS if r[1] == "SKIP"])
+    if skip_count > 0:
+        print(f"  (其中 {skip_count} 个 SKIP: CI 空数据库或环境不支持)")
     for n, s, e in RESULTS:
-        marker = "✓" if s == "PASS" else "✗"
+        marker = "✓" if s == "PASS" else ("○" if s == "SKIP" else "✗")
         print(f"  {marker} [{s}] {n}" + (f"  ({e})" if e else ""))
+    # Day 9.12: SKIP 不影响 exit code (CI 空数据库不算失败)
     sys.exit(0 if FAIL == 0 else 1)

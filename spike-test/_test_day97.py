@@ -66,15 +66,20 @@ def sse_read_first_frame(host, port, path, timeout=2.5):
     return data, sock
 
 
-def pg_notify(payload):
-    """通过 PG 直接 NOTIFY etl_progress, 模拟 ETL 进度推送"""
-    conn = psycopg2.connect(host="localhost", port=5432, dbname="spike_test_v3", user="postgres", password="784533")
+def pg_notify(payload, conn=None):
+    """通过 PG 直接 NOTIFY etl_progress, 模拟 ETL 进度推送
+    Day 9.12: 支持传入持久连接, case 3b 用单连接避免每次重建连接干扰 QPS 测量
+    """
+    own_conn = conn is None
+    if own_conn:
+        conn = psycopg2.connect(host="localhost", port=5432, dbname="spike_test_v3", user="postgres", password="784533")
     cur = conn.cursor()
     # 转义单引号
     safe = payload.replace("'", "''")
     cur.execute(f"NOTIFY etl_progress, '{safe}'")
     conn.commit()
-    conn.close()
+    if own_conn:
+        conn.close()
 
 
 def pg_listen_count():
@@ -222,13 +227,17 @@ def test_api_publish_qps():
     t.start()
     time.sleep(0.5)
 
-    # 直接 NOTIFY 100 次, 但这次目的是测 broadcaster 转发速度
-    # 注意: broadcaster.OnNotification 是同步触发订阅者 callback,理论应 ms 级
+    # Day 9.12: 改用持久连接做 100 次 NOTIFY
+    #   WHY: 之前每次新建连接,psycopg2 connect ~100ms,100 次串行 = 10s,QPS 9.7 抖动
+    #        实际测的不是 broadcaster 转发速度,而是 psycopg2 连接开销
+    #        用持久连接后 PG NOTIFY 单次 < 1ms,QPS 应 1000+/s
     N = 100
+    persist_conn = psycopg2.connect(host="localhost", port=5432, dbname="spike_test_v3", user="postgres", password="784533")
     start = time.time()
     for i in range(N):
-        pg_notify(json.dumps({"qps": i, "ts": time.time()}))
+        pg_notify(json.dumps({"qps": i, "ts": time.time()}), conn=persist_conn)
     publish_elapsed = time.time() - start
+    persist_conn.close()
 
     # 等 B 收完
     time.sleep(2.0)
@@ -237,14 +246,14 @@ def test_api_publish_qps():
 
     all_b_data = b"".join(b_frames)
     data_count = all_b_data.count(b"data: ")
-    # 1000+ QPS: 100 NOTIFY 在 1s 内完成 (这是 publish 端 PG 直接 NOTIFY 的速度,不含 broadcaster 转发)
+    # 持久连接下 PG NOTIFY 单次 < 1ms, QPS 应 1000+/s
     qps = N / publish_elapsed
-    print(f"  [INFO] {N} NOTIFY 耗时 {publish_elapsed:.2f}s, PG 直发 {qps:.0f}/s")
+    print(f"  [INFO] {N} NOTIFY 耗时 {publish_elapsed:.3f}s, PG 直发 {qps:.0f}/s (持久连接)")
     # broadcaster 端应 100% 收到 (sse 测的是 broadcaster → SSE 客户端的传递,不是 PG 端)
     assert data_count >= 90, f"broadcaster 转发丢包: 应 ≥ 90, 实际 {data_count}"
-    # 100 NOTIFY PG 端 QPS ≥ 14 (psycopg2 串行 + 新连接的基线)
-    assert qps >= 10, f"PG NOTIFY 性能退化: {qps:.0f}/s < 10/s"
-    print(f"  ✓ PG NOTIFY {qps:.0f}/s, broadcaster 100% 转发 (期望 ≥ 10/s baseline)")
+    # 持久连接 QPS ≥ 100 (远低于实际 1000+/s 基线, 留 buffer 应对 CI Linux 容器抖动)
+    assert qps >= 100, f"PG NOTIFY 性能退化: {qps:.0f}/s < 100/s"
+    print(f"  ✓ PG NOTIFY {qps:.0f}/s (持久连接), broadcaster 100% 转发")
 
 
 # ========== Case 4: A 实例 ETL 真跑 + B 实例 SSE 收到 progress ==========

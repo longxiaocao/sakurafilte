@@ -82,8 +82,19 @@ jobs:
           # Day 9.7 需要双实例, CI 内启动第二个
           cd ../backend/src/SakuraFilter.Api
           dotnet run -c Release --no-build --urls "http://localhost:5149" &
-          sleep 3
           cd ../../spike-test
+          # Day 9.12: 循环等待 5149 实例可达 (最多 30s)
+          #   WHY: 之前固定 sleep 3s 不够, dotnet 启动 + Database.Migrate + LISTEN 需 5-8s
+          #        API 可达时 EtlProgressBroadcaster 已建立 LISTEN (HostedService.StartAsync 完成)
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5149/api/etl/status -H "X-Admin-Token: $ADMIN_TOKEN" 2>/dev/null || echo 000)
+            echo "[wait] instance B http code = $code (try $i/30)"
+            if [ "$code" = "200" ]; then
+              echo "Instance B ready after ${i}s"
+              break
+            fi
+            sleep 1
+          done
           python _test_day97.py
 
       - name: Run E2E Day 9.8 (ETL history audit + reason_code pie chart)
