@@ -6,6 +6,8 @@
 //   - 分页 (offset / cursor)
 //   - 排序白名单
 //   - 点击行 → 详情页
+// Task 9 (P3.1): 尺寸容差 UI — ±1 / ±5 / ±10mm 下拉, 默认 5,
+//   切换容差自动重新搜索, 显示结果数变化提示
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -15,11 +17,26 @@ import type { SearchResult, SearchHit } from '@/api/types'
 const router = useRouter()
 
 const q = ref('')
+// Task 9 (P3.1): 容差默认 5mm (后端 SearchRequest.Tolerance 默认值, 与 AdminProductsView 对齐)
+const tolerance = ref<1 | 5 | 10>(5)
 const loading = ref(false)
 const hits = ref<SearchHit[]>([])
 const total = ref(0)
 const provider = ref('')
 const lastError = ref('')
+// Task 9 (P3.1): 上一次容差 + 上一次总数, 用于"切换后命中 X 条, 较 ±N 多 Y 条"提示
+const prevTolerance = ref<1 | 5 | 10 | null>(null)
+const prevTotal = ref<number | null>(null)
+// Task 9 (P3.1): 容差切换提示文案, 例如 "切换后命中 50+ 条, 较 ±1mm 多 35 条"
+const toleranceHint = computed(() => {
+  if (prevTolerance.value === null || prevTotal.value === null) return ''
+  const cur = total.value
+  const prev = prevTotal.value
+  const diff = cur - prev
+  if (diff > 0) return `切换后命中 ${cur} 条, 较 ±${prevTolerance.value}mm 多 ${diff} 条`
+  if (diff < 0) return `切换后命中 ${cur} 条, 较 ±${prevTolerance.value}mm 少 ${-diff} 条`
+  return `切换后命中 ${cur} 条, 与 ±${prevTolerance.value}mm 相同`
+})
 
 async function doSearch() {
   if (!q.value.trim()) {
@@ -32,6 +49,8 @@ async function doSearch() {
   try {
     const { provider: p, result } = await searchApi.search({
       q: q.value.trim(),
+      // Task 9 (P3.1): 把容差传到后端 (后端 SearchRequest.Tolerance, PostgresSearchProvider 走 ±t 区间)
+      tolerance: tolerance.value,
       pageSize: 50
     })
     provider.value = p
@@ -49,6 +68,16 @@ async function doSearch() {
     loading.value = false
   }
 }
+
+// Task 9 (P3.1): 切换容差后自动重新搜索 (仅在已有关键词时触发, 空状态不打扰)
+//   策略: 缓存切换前的 (tolerance, total), 搜索完成后用 toleranceHint 提示差异
+watch(tolerance, async (_newVal, oldVal) => {
+  if (typeof oldVal !== 'number') return
+  if (!q.value.trim()) return
+  prevTolerance.value = oldVal
+  prevTotal.value = total.value
+  await doSearch()
+})
 
 function viewDetail(row: SearchHit) {
   // Day 9.2: 兼容 snake_case 和 PascalCase 字段
@@ -68,20 +97,55 @@ onMounted(() => {
 
 <template>
   <div class="p-3 max-w-screen-2xl mx-auto">
-    <div class="flex items-center gap-2 mb-3">
+    <div class="flex items-center gap-2 mb-3 flex-wrap">
       <el-input
         v-model="q"
         placeholder="搜索 OEM / 名称 / 车型..."
         clearable
         size="large"
+        style="max-width: 480px"
         @keyup.enter="doSearch"
       >
         <template #prefix>
           <el-icon><Search /></el-icon>
         </template>
       </el-input>
+      <!-- Task 9 (P3.1): 尺寸容差下拉, ±1/±5/±10, 用 el-popover 包裹加性能提示 -->
+      <el-popover
+        placement="bottom-start"
+        :width="260"
+        trigger="hover"
+        popper-class="tol-popover"
+      >
+        <template #reference>
+          <el-select
+            v-model="tolerance"
+            size="large"
+            style="width: 168px"
+          >
+            <el-option label="±1mm (精确)" :value="1" />
+            <el-option label="±5mm (推荐)" :value="5" />
+            <el-option label="±10mm (宽松)" :value="10" />
+          </el-select>
+        </template>
+        <div class="text-xs leading-relaxed">
+          <div class="font-medium mb-1">尺寸容差</div>
+          <div class="text-muted">
+            切换容差会显著影响搜索速度 (10mm 比 1mm 慢 5-10 倍),
+            默认 ±5mm 是大多数场景的平衡点。
+          </div>
+        </div>
+      </el-popover>
       <el-button type="primary" size="large" @click="doSearch" :loading="loading">搜索</el-button>
       <span v-if="provider" class="text-xs text-muted">provider: {{ provider }}</span>
+    </div>
+
+    <!-- Task 9 (P3.1): 容差切换结果数变化提示, 仅在切换后短暂出现 (computed 始终计算, 但 q 为空时不显示) -->
+    <div
+      v-if="toleranceHint && q"
+      class="text-xs text-muted mb-2"
+    >
+      {{ toleranceHint }}
     </div>
 
     <div v-if="lastError" class="text-red-600 text-sm mb-2">{{ lastError }}</div>
@@ -98,7 +162,7 @@ onMounted(() => {
 
     <div v-else class="hairline">
       <div class="hairline-b px-2 py-1 bg-neutral-50 text-xs text-muted flex items-center">
-        <span>共 {{ total }} 条结果</span>
+        <span>共 {{ total }} 条结果 (容差 ±{{ tolerance }}mm)</span>
         <span class="ml-2">(显示前 {{ hits.length }} 条)</span>
       </div>
       <el-table

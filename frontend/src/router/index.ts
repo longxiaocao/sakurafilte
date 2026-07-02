@@ -102,6 +102,15 @@ const routes: RouteRecordRaw[] = [
     name: 'AdminEngines',
     component: () => import('@/views/admin/AdminEnginesView.vue'),
     meta: { title: '发动机字典 (Engine)', requireAuth: true }
+  },
+  // ===== P3.5 (Task 12): 产品对比 UI 完整版 =====
+  //   URL: /admin/compare?ids=1,2,3,4,5,6
+  //   最多 6 个产品, 列可调序 (持久化到 localStorage), 打印友好
+  {
+    path: '/admin/compare',
+    name: 'AdminCompare',
+    component: () => import('@/views/admin/AdminCompareView.vue'),
+    meta: { title: '产品对比', requireAuth: true }
   }
 ]
 

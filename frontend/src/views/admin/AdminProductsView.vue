@@ -206,14 +206,9 @@ async function batchCompare() {
     ElMessage.warning('最多对比 6 个')
     return
   }
-  try {
-    const { count, items } = await adminProductApi.compare(selected.value.map((p) => p.id))
-    ElMessageBox.alert(
-      `对比 ${count} 个产品, 详情请到详情页查看。\n` + items.map((p) => `${p.id}: ${p.oemNoDisplay}`).join('\n'),
-      '批量对比结果',
-      { type: 'info' }
-    )
-  } catch (e: any) {}
+  // P3.5 (Task 12): 跳转到 /admin/compare?ids=1,2,3,4,5,6
+  const ids = selected.value.slice(0, 6).map((p) => p.id).join(',')
+  router.push(`/admin/compare?ids=${ids}`)
 }
 
 function parseChangedFields(raw?: string): { key: string; oldVal: any; newVal: any }[] {

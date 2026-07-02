@@ -33,7 +33,9 @@ const navItems = computed(() => [
         { label: '产品管理', path: '/admin/products', icon: 'Goods' },
         // Day 10+: 字典管理 (P1.3 OEM 品牌 + P2.2 7 个新字典) — 改为 el-dropdown 下拉
         { label: '字典管理', dropdown: 'dict', icon: 'Collection' },
-        { label: 'ETL 触发', path: '/admin/etl', icon: 'Loading' }
+        { label: 'ETL 触发', path: '/admin/etl', icon: 'Loading' },
+        // P3.5 (Task 12): 产品对比 (最多 6 个产品, 列可调序, 打印优化)
+        { label: '产品对比', path: '/admin/compare', icon: 'DataAnalysis' }
       ]
     : [])
 ])

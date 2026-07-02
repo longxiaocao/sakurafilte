@@ -378,6 +378,10 @@ public class DictMedia
 /// 用途: 后台产品表单分区 7 machine_brand/model/name 自动补全 (三合一)
 /// 设计: 主值字段 machine_brand, UNIQUE (machine_brand, machine_model, machine_name),
 ///       ExtraSearchProperties=[MachineModel, MachineName]
+/// P2.3: 新增 machine_category (4 大类: Agriculture/Commercial/Construction/others)
+///   - 用途: 前台按场景聚合品牌, /api/public/machine-brands/aggregated 端点用
+///   - 默认值 'others' (兼容老数据, 不强制回填)
+///   - max 50 (与 type 字典保持一致)
 /// </summary>
 public class DictMachine
 {
@@ -385,6 +389,7 @@ public class DictMachine
     [Column("machine_brand")] public string MachineBrand { get; set; } = "";
     [Column("machine_model")] public string? MachineModel { get; set; }
     [Column("machine_name")] public string? MachineName { get; set; }
+    [Column("machine_category")] public string MachineCategory { get; set; } = "others";
     [Column("sort_order")] public int SortOrder { get; set; }
     [Column("created_at")] public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     [Column("updated_at")] public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;

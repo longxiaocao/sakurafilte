@@ -24,6 +24,8 @@ AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddEndpointsApiExplorer();
+// P3.2 (Task 10): 注册 MVC 控制器 (PublicSearchController 等)
+builder.Services.AddControllers();
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new() { Title = "SakuraFilter API", Version = "0.4.0" });
@@ -315,6 +317,10 @@ app.UseSwaggerUI(c =>
 });
 
 app.MapGet("/", () => Results.Ok(new { name = "SakuraFilter API", version = "0.3.0", status = "running" }));
+
+// P3.2 (Task 10): 启用 MVC 控制器路由
+//   - PublicSearchController (/api/public/search/*) 由 Controller 内的 [Route] 自动注册
+app.MapControllers();
 
 // 搜索接口 (Day 4 阶段:走 ISearchProvider 抽象,Resilient 自动主备切换)
 app.MapPost("/api/search", async (SearchRequest req, ISearchProvider search, CancellationToken ct) =>
