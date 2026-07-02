@@ -26,7 +26,7 @@ HERE = Path(__file__).parent
 ADMIN_TOKEN = "dev-admin-token-rotate-in-prod-MZK4R9P3X6V2N7Q1L5F0B8H3C"
 BASE = "http://localhost:5148"
 
-# 测试用例: (脚本名, [额外 args], 期望 P0/P1/P2/P3 标签)
+# 测试用例: (脚本名, [额外 args], 期望 P0/P1/P2/P3/P4/P5 标签)
 TEST_SUITE = [
     ("_test_escape_underscore.py", [], "P0.1"),
     ("_test_day10_oem_brands.py", [], "P1.3"),
@@ -36,6 +36,7 @@ TEST_SUITE = [
     ("_test_public_product.py", [], "P3.3"),
     ("_test_public_search.py", [], "P3.4"),
     ("_test_compare.py", [BASE, ADMIN_TOKEN], "P3.5"),
+    ("_test_p5_polish.py", [], "P5"),
 ]
 
 

@@ -1,5 +1,6 @@
 /* Day 9: 全局样式 — Musk 风格极简 */
 /*   - 无阴影, 1px hairline 边框, 8px 网格, Inter 字体 */
+/* Day 10+ P5.3: 主题切换 (light/dark) — CSS 变量驱动 */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -11,6 +12,26 @@
   --color-accent: #2563eb;
   --color-bg: #ffffff;
   --color-bg-hover: #f9fafb;
+  --color-bg-elevated: #ffffff;
+  --color-bg-table-stripe: #fafafa;
+  --color-bg-diff: #fffbe6;
+  --color-bg-same: #f5f5f5;
+  --color-shadow: transparent;
+}
+
+/* P5.3 dark 主题: <html class="dark"> 时覆盖 CSS 变量 */
+html.dark {
+  --color-border: #2a2d35;
+  --color-text: #f5f5f7;
+  --color-text-muted: #8b8d94;
+  --color-accent: #60a5fa;
+  --color-bg: #0a0a0c;
+  --color-bg-hover: #18181b;
+  --color-bg-elevated: #131318;
+  --color-bg-table-stripe: #131318;
+  --color-bg-diff: #3d3520;
+  --color-bg-same: #1a1a1f;
+  --color-shadow: transparent;
 }
 
 html, body, #app {
@@ -73,7 +94,60 @@ body {
 }
 
 .el-button--default {
-  --el-button-border-color: var(--color-border);
+  --el-border-color: var(--color-border);
+  --el-color-border: var(--color-border);
+}
+
+/* P5.3 dark 模式: Element Plus 颜色变量覆盖 */
+html.dark {
+  --el-bg-color: var(--color-bg);
+  --el-bg-color-page: var(--color-bg);
+  --el-bg-color-overlay: var(--color-bg-elevated);
+  --el-text-color-primary: var(--color-text);
+  --el-text-color-regular: var(--color-text);
+  --el-text-color-secondary: var(--color-text-muted);
+  --el-text-color-placeholder: var(--color-text-muted);
+  --el-border-color: var(--color-border);
+  --el-border-color-light: var(--color-border);
+  --el-border-color-lighter: var(--color-border);
+  --el-fill-color: var(--color-bg-hover);
+  --el-fill-color-light: var(--color-bg-hover);
+  --el-fill-color-blank: var(--color-bg-elevated);
+  --el-color-primary: var(--color-accent);
+  --el-color-primary-light-3: var(--color-accent);
+  --el-color-primary-light-5: var(--color-accent);
+  --el-color-primary-light-7: var(--color-accent);
+  --el-color-primary-light-9: var(--color-bg-hover);
+}
+
+html.dark .el-card,
+html.dark .el-dialog,
+html.dark .el-drawer,
+html.dark .el-popper,
+html.dark .el-message,
+html.dark .el-message-box,
+html.dark .el-table,
+html.dark .el-table__inner-wrapper,
+html.dark .el-input__wrapper,
+html.dark .el-button {
+  background-color: var(--color-bg-elevated) !important;
+  color: var(--color-text) !important;
+  border-color: var(--color-border) !important;
+}
+
+html.dark .el-input__wrapper.is-focus {
+  box-shadow: 0 0 0 1px var(--color-accent) inset !important;
+}
+
+html.dark .el-table tr,
+html.dark .el-table th.el-table__cell {
+  background-color: var(--color-bg-elevated) !important;
+  color: var(--color-text) !important;
+  border-color: var(--color-border) !important;
+}
+
+html.dark .el-table--striped .el-table__body tr.el-table__row--striped td {
+  background-color: var(--color-bg-table-stripe) !important;
 }
 
 /* 表格紧凑 (高密度) */

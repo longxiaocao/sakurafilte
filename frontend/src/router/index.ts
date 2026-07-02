@@ -118,6 +118,15 @@ const routes: RouteRecordRaw[] = [
     name: 'AdminCompare',
     component: () => import('@/views/admin/AdminCompareView.vue'),
     meta: { title: '产品对比', requireAuth: true }
+  },
+  // ===== P5.4 (Task 15.4): 后台帮助/文档页 =====
+  //   5 模块: 快速开始 / 字典规范 / 批量导入 / 搜索容差 / FAQ
+  //   字段说明文案从 data/field-help.ts 复用
+  {
+    path: '/admin/help',
+    name: 'AdminHelp',
+    component: () => import('@/views/admin/AdminHelpView.vue'),
+    meta: { title: '后台帮助', requireAuth: true }
   }
 ]
 

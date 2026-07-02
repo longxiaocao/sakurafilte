@@ -4,11 +4,14 @@
 //   - 行内保存
 // Day 10: 分区 2 oemBrand 改为 el-autocomplete, 从 dictApi.oemBrands.typeahead 自动补全 (P1.3)
 // Day 10+ P2.2: 7 分区全部接入 typeahead (productName1/2/type/oemNo3/media/machine/engine)
-import { ref, reactive, onMounted, computed } from 'vue'
+// Day 10+ P5.1: 包装尺寸 L/W/H → Volume 自动计算 (m³), 母箱同理
+// Day 10+ P5.2: 尺寸/性能字段后挂 ? 图标, 鼠标悬停显示字段说明 (FieldHelpPopover)
+import { ref, reactive, onMounted, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { adminProductApi, imageApi, dictApi } from '@/api'
 import type { ProductDetail } from '@/api/types'
+import FieldHelpPopover from '@/components/FieldHelpPopover.vue'  // P5.2
 
 const route = useRoute()
 const router = useRouter()
@@ -52,6 +55,7 @@ const form = reactive<any>({
   cartonLengthMm: null,
   cartonWidthMm: null,
   cartonHeightMm: null,
+  volumePerCartonM3: null,  // P5.1 自动计算, 也可显式覆盖
   masterBoxQty: null,
   masterBoxWeightKgs: null,
   masterBoxLengthMm: null,
@@ -65,6 +69,28 @@ const loading = ref(false)
 const saving = ref(false)
 
 const images = ref<{ slot: number; imageKey: string; imageUrl: string }[]>([])
+
+// ===== P5.1: 包装/母箱体积自动计算 =====
+//   L * W * H / 1e9 m³ (mm → m → m³)
+//   任一为空 → null (不显示)
+//   后端 AdminProductService.DeriveVolume 是兜底, 这里只做实时预览
+function computeVolumeM3(l: number | null | undefined, w: number | null | undefined, h: number | null | undefined): number | null {
+  if (l == null || w == null || h == null) return null
+  if (l <= 0 || w <= 0 || h <= 0) return null
+  // 精度保留 6 位小数, 后端 decimal(18,6) 一致
+  return Math.round((l * w * h) / 1_000_000) / 1_000_000
+}
+
+const cartonVolume = computed(() => computeVolumeM3(form.cartonLengthMm, form.cartonWidthMm, form.cartonHeightMm))
+const masterBoxVolume = computed(() => computeVolumeM3(form.masterBoxLengthMm, form.masterBoxWidthMm, form.masterBoxHeightMm))
+
+const cartonVolumeText = computed(() => cartonVolume.value == null ? '' : cartonVolume.value.toFixed(6))
+const masterBoxVolumeText = computed(() => masterBoxVolume.value == null ? '' : masterBoxVolume.value.toFixed(6))
+
+// 监听 L/W/H 变化, 同步到 form.volumePerCartonM3 (避免只读 el-input 提交时空字段)
+watch(cartonVolume, (v) => {
+  form.volumePerCartonM3 = v == null ? null : v
+})
 
 async function load() {
   if (!isEdit.value) return
@@ -360,16 +386,68 @@ onMounted(load)
         <!-- 分区 6: 包装 -->
         <el-collapse-item title="⑤ 包装" name="6">
           <div class="grid grid-cols-4 gap-3">
-            <el-form-item label="箱/件"><el-input-number v-model="form.qtyPerCarton" :min="0" /></el-form-item>
-            <el-form-item label="重量 (kg)"><el-input-number v-model="form.weightKgs" :min="0" :precision="3" /></el-form-item>
-            <el-form-item label="箱长 (mm)"><el-input-number v-model="form.cartonLengthMm" :min="0" :precision="2" /></el-form-item>
-            <el-form-item label="箱宽 (mm)"><el-input-number v-model="form.cartonWidthMm" :min="0" :precision="2" /></el-form-item>
-            <el-form-item label="箱高 (mm)"><el-input-number v-model="form.cartonHeightMm" :min="0" :precision="2" /></el-form-item>
-            <el-form-item label="母箱数量"><el-input-number v-model="form.masterBoxQty" :min="0" /></el-form-item>
-            <el-form-item label="母箱重量 (kg)"><el-input-number v-model="form.masterBoxWeightKgs" :min="0" :precision="3" /></el-form-item>
-            <el-form-item label="母箱长 (mm)"><el-input-number v-model="form.masterBoxLengthMm" :min="0" :precision="2" /></el-form-item>
-            <el-form-item label="母箱宽 (mm)"><el-input-number v-model="form.masterBoxWidthMm" :min="0" :precision="2" /></el-form-item>
-            <el-form-item label="母箱高 (mm)"><el-input-number v-model="form.masterBoxHeightMm" :min="0" :precision="2" /></el-form-item>
+            <el-form-item label="箱/件">
+              <el-input-number v-model="form.qtyPerCarton" :min="0" />
+              <FieldHelpPopover field-key="qtyPerCarton" />
+            </el-form-item>
+            <el-form-item label="重量 (kg)">
+              <el-input-number v-model="form.weightKgs" :min="0" :precision="3" />
+              <FieldHelpPopover field-key="weightKgs" />
+            </el-form-item>
+            <el-form-item label="箱长 (mm)">
+              <el-input-number v-model="form.cartonLengthMm" :min="0" :precision="2" />
+              <FieldHelpPopover field-key="cartonLengthMm" />
+            </el-form-item>
+            <el-form-item label="箱宽 (mm)">
+              <el-input-number v-model="form.cartonWidthMm" :min="0" :precision="2" />
+              <FieldHelpPopover field-key="cartonWidthMm" />
+            </el-form-item>
+            <el-form-item label="箱高 (mm)">
+              <el-input-number v-model="form.cartonHeightMm" :min="0" :precision="2" />
+              <FieldHelpPopover field-key="cartonHeightMm" />
+            </el-form-item>
+            <!-- P5.1: 体积自动计算 (L*W*H/1e9 m³), 后端 DeriveVolume 兜底 -->
+            <el-form-item label="箱体积 (m³)">
+              <el-input
+                :model-value="cartonVolumeText"
+                readonly
+                placeholder="自动计算"
+                class="!w-32"
+              >
+                <template #append>只读</template>
+              </el-input>
+              <FieldHelpPopover field-key="volumePerCartonM3" />
+            </el-form-item>
+            <el-form-item label="母箱数量">
+              <el-input-number v-model="form.masterBoxQty" :min="0" />
+              <FieldHelpPopover field-key="masterBoxQty" />
+            </el-form-item>
+            <el-form-item label="母箱重 (kg)">
+              <el-input-number v-model="form.masterBoxWeightKgs" :min="0" :precision="3" />
+              <FieldHelpPopover field-key="masterBoxWeightKgs" />
+            </el-form-item>
+            <el-form-item label="母箱长 (mm)">
+              <el-input-number v-model="form.masterBoxLengthMm" :min="0" :precision="2" />
+              <FieldHelpPopover field-key="masterBoxLengthMm" />
+            </el-form-item>
+            <el-form-item label="母箱宽 (mm)">
+              <el-input-number v-model="form.masterBoxWidthMm" :min="0" :precision="2" />
+              <FieldHelpPopover field-key="masterBoxWidthMm" />
+            </el-form-item>
+            <el-form-item label="母箱高 (mm)">
+              <el-input-number v-model="form.masterBoxHeightMm" :min="0" :precision="2" />
+              <FieldHelpPopover field-key="masterBoxHeightMm" />
+            </el-form-item>
+            <el-form-item label="母箱体积 (m³)">
+              <el-input
+                :model-value="masterBoxVolumeText"
+                readonly
+                placeholder="自动计算"
+                class="!w-32"
+              >
+                <template #append>只读</template>
+              </el-input>
+            </el-form-item>
           </div>
         </el-collapse-item>
 

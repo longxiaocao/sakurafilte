@@ -327,3 +327,9 @@ warn: SakuraFilter.Api.Services.IndexReplayWorker[0]
       已转死信: 500 新建 + 0 复用, 共 500 条 (最后一次错误示例: stale)
 warn: SakuraFilter.Api.Services.IndexReplayWorker[0]
       已转死信: 500 新建 + 0 复用, 共 500 条 (最后一次错误示例: stale)
+warn: SakuraFilter.Api.Services.IndexReplayWorker[0]
+      已转死信: 500 新建 + 0 复用, 共 500 条 (最后一次错误示例: stale)
+info: SakuraFilter.Api.Controllers.PublicProductController[0]
+      GetBySlug: 200 slug=P0505921 id=505921
+warn: SakuraFilter.Api.Services.IndexReplayWorker[0]
+      已转死信: 500 新建 + 0 复用, 共 500 条 (最后一次错误示例: stale)

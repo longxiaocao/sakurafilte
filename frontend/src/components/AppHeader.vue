@@ -3,10 +3,12 @@ import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAdminAuth } from '@/composables/useAdminAuth'
+import { useThemeStore } from '@/stores/theme'  // P5.3
 
 const route = useRoute()
 const router = useRouter()
 const { isAdmin, setToken } = useAdminAuth()
+const theme = useThemeStore()  // P5.3
 
 const isAdminPath = computed(() => route.path.startsWith('/admin'))
 
@@ -35,7 +37,9 @@ const navItems = computed(() => [
         { label: '字典管理', dropdown: 'dict', icon: 'Collection' },
         { label: 'ETL 触发', path: '/admin/etl', icon: 'Loading' },
         // P3.5 (Task 12): 产品对比 (最多 6 个产品, 列可调序, 打印优化)
-        { label: '产品对比', path: '/admin/compare', icon: 'DataAnalysis' }
+        { label: '产品对比', path: '/admin/compare', icon: 'DataAnalysis' },
+        // P5.4 (Task 15): 帮助页 (字典规范 + 搜索 + 导入)
+        { label: '帮助', path: '/admin/help', icon: 'QuestionFilled' }
       ]
     : [])
 ])
@@ -145,6 +149,16 @@ const dictTrigger = 'click'
       </template>
     </nav>
     <div class="flex-1" />
+    <!-- P5.3 主题切换按钮 -->
+    <button
+      @click="theme.toggle()"
+      class="px-2 py-1 text-sm hairline hover:bg-neutral-100 flex items-center gap-1"
+      :title="theme.mode === 'dark' ? '切换到浅色' : '切换到深色'"
+      aria-label="主题切换"
+    >
+      <el-icon><Moon v-if="theme.mode === 'light'" /><Sunny v-else /></el-icon>
+      <span class="hidden sm:inline">{{ theme.mode === 'dark' ? '深色' : '浅色' }}</span>
+    </button>
     <button
       @click="toggleAdmin"
       class="px-2 py-1 text-sm hairline hover:bg-neutral-100 flex items-center gap-1"
