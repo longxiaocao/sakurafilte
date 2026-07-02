@@ -1,0 +1,166 @@
+# P4.3 视觉回归基准图更新 (手动触发)
+#   WHY: dict-pages.spec.ts 首次跑自动建 baseline, 后续跑像素 diff > 5% 失败
+#        UI 改版后需手动重生成 baseline, 避免每次 CI 因无 baseline 而跳过对比
+#   用法: GitHub Actions → "Visual Baseline Update" → Run workflow
+#   产物: frontend/tests/visual/__screenshots__/baselines/*.png 自动 commit + push
+#
+#   限制: CI 数据库为空 (无字典数据), baseline 记录的是空表格状态
+#        本地有数据时 baseline 可能不匹配, 建议本地跑 npm run test:visual:update 更新
+name: Visual Baseline Update
+
+on:
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: '更新原因 (如: UI 改版 / Element Plus 升级)'
+        required: false
+        default: 'manual update'
+
+env:
+  DOTNET_VERSION: '8.0.x'
+  NODE_VERSION: '20'
+  PYTHON_VERSION: '3.12'
+  ADMIN_TOKEN: 'dev-admin-token-rotate-in-prod-MZK4R9P3X6V2N7Q1L5F0B8H3C'
+
+permissions:
+  contents: write  # 允许 GITHUB_TOKEN push commit
+
+jobs:
+  update-baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: 784533
+          POSTGRES_DB: spike_test_v3
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Python deps
+        run: pip install psycopg2-binary
+
+      - name: Build backend
+        run: |
+          cd backend/src/SakuraFilter.Api
+          dotnet build -c Release --nologo
+
+      - name: EF Core Migrations baseline seed
+        working-directory: spike-test
+        run: python _ef_migrations_baseline.py
+
+      - name: Run API server (background)
+        run: |
+          cd backend/src/SakuraFilter.Api
+          dotnet run -c Release --no-build --urls "http://localhost:5148" > /tmp/api5148.log 2>&1 &
+          A_READY=0
+          for i in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5148/api/etl/status -H "X-Admin-Token: $ADMIN_TOKEN" 2>/dev/null || echo 000)
+            if [ "$code" = "200" ]; then
+              echo "API 5148 ready after ${i}s"
+              A_READY=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$A_READY" != "1" ]; then
+            echo "=== FAIL: API 5148 60s 内未就绪 ==="
+            head -n 100 /tmp/api5148.log || echo "无日志"
+            exit 1
+          fi
+
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci --no-audit --no-fund
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Serve frontend (background)
+        run: |
+          cd frontend
+          nohup npx vite preview --port 5173 --host 0.0.0.0 > /tmp/fe5173.log 2>&1 &
+          F_READY=0
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5173/ 2>/dev/null || echo 000)
+            if [ "$code" = "200" ]; then
+              echo "FE 5173 ready after ${i}s"
+              F_READY=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$F_READY" != "1" ]; then
+            echo "=== FAIL: FE 5173 30s 内未就绪 ==="
+            tail -n 50 /tmp/fe5173.log || echo "无日志"
+            exit 1
+          fi
+
+      - name: Install Playwright browsers
+        working-directory: frontend
+        run: npx playwright install chromium
+
+      - name: Delete old baselines
+        run: |
+          rm -f frontend/tests/visual/__screenshots__/baselines/*.png 2>/dev/null || true
+          echo "旧基准图已清除"
+
+      - name: Run visual tests (regenerate baselines)
+        working-directory: frontend
+        env:
+          BASE_URL: http://localhost:5173
+          ADMIN_TOKEN: ${{ env.ADMIN_TOKEN }}
+        run: |
+          echo "===== 重新生成 8 字典视觉基准图 ====="
+          npx playwright test tests/visual/dict-pages.spec.ts
+          echo "===== 基准图生成完成 ====="
+          ls -la tests/visual/__screenshots__/baselines/ || echo "无基准图目录"
+
+      - name: Commit + push baselines
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add frontend/tests/visual/__screenshots__/baselines/*.png
+          if git diff --cached --quiet; then
+            echo "无基准图变更, 跳过 commit"
+          else
+            git commit -m "chore(visual): 更新视觉回归基准图 (${{ github.event.inputs.reason }}) [skip ci]"
+            for i in $(seq 1 10); do
+              if git push; then
+                echo "[OK] 基准图已 push (try $i)"
+                break
+              else
+                echo "[RETRY] push 失败, 5s 后重试 $i/10..."
+                sleep 5
+              fi
+            done
+          fi

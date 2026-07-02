@@ -373,7 +373,7 @@ app.MapGet("/api/products/{oem}", async (string oem, ProductDbContext db, Cancel
 .WithOpenApi();
 
 // ETL 导入接口 (Day 5: 触发导入 + 查询进度)
-app.MapPost("/api/etl/import", async (ImportRequest req, EtlImportService etl, ILogger<Program> logger, CancellationToken ct) =>
+app.MapPost("/api/etl/import", (ImportRequest req, EtlImportService etl, ILogger<Program> logger, CancellationToken ct) =>
 {
     if (!File.Exists(req.JsonlPath))
         return Results.BadRequest(new { error = "文件不存在", path = req.JsonlPath });
@@ -400,7 +400,7 @@ app.MapGet("/api/etl/status", (EtlImportService etl) =>
 .WithOpenApi();
 
 // ETL 导入 xrefs
-app.MapPost("/api/etl/import-xrefs", async (ImportRequest req, EtlImportService etl, ILogger<Program> logger, CancellationToken ct) =>
+app.MapPost("/api/etl/import-xrefs", (ImportRequest req, EtlImportService etl, ILogger<Program> logger, CancellationToken ct) =>
 {
     if (!File.Exists(req.JsonlPath))
         return Results.BadRequest(new { error = "文件不存在", path = req.JsonlPath });
@@ -416,7 +416,7 @@ app.MapPost("/api/etl/import-xrefs", async (ImportRequest req, EtlImportService 
 .WithOpenApi();
 
 // ETL 导入 apps
-app.MapPost("/api/etl/import-apps", async (ImportRequest req, EtlImportService etl, ILogger<Program> logger, CancellationToken ct) =>
+app.MapPost("/api/etl/import-apps", (ImportRequest req, EtlImportService etl, ILogger<Program> logger, CancellationToken ct) =>
 {
     if (!File.Exists(req.JsonlPath))
         return Results.BadRequest(new { error = "文件不存在", path = req.JsonlPath });
