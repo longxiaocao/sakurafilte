@@ -176,13 +176,17 @@ def test_notify_storm():
     t.start()
     time.sleep(0.5)
 
-    # NOTIFY 100 次 (每次 payload 不同)
+    # Day 9.12: NOTIFY 100 次改用持久连接 (跟 Case 3b 一致)
+    #   WHY: 之前每次新建连接, CI Linux PG 在 docker 中每次 200-500ms,
+    #        100 次串行 = 20-50s, B 实例 SSE 只等 2.5s 收帧 → 漏包误判
     N = 100
+    persist_conn = psycopg2.connect(host="localhost", port=5432, dbname="spike_test_v3", user="postgres", password="784533")
     start = time.time()
     for i in range(N):
-        pg_notify(json.dumps({"storm": i, "ts": time.time()}))
+        pg_notify(json.dumps({"storm": i, "ts": time.time()}), conn=persist_conn)
     elapsed = time.time() - start
-    print(f"  [INFO] {N} 次 NOTIFY 耗时 {elapsed:.2f}s ({N/elapsed:.0f}/s)")
+    persist_conn.close()
+    print(f"  [INFO] {N} 次 NOTIFY 耗时 {elapsed:.3f}s ({N/elapsed:.0f}/s, 持久连接)")
 
     # 等 B 收完
     time.sleep(2.5)
