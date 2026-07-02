@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using SakuraFilter.Core.DTOs;
 using SakuraFilter.Core.Entities;
+using SakuraFilter.Core.Interfaces;
 using SakuraFilter.Infrastructure.Data;
 using System.Text.Json;
 
@@ -20,12 +21,18 @@ public class AdminProductService
     private readonly ProductDbContext _db;
     private readonly ILogger<AdminProductService> _logger;
     private readonly CursorHmac _cursorHmac;
+    private readonly IObjectStorage? _storage;  // P3.3: 用于图片预签名 URL (前台 + 后台详情)
 
-    public AdminProductService(ProductDbContext db, ILogger<AdminProductService> logger, CursorHmac cursorHmac)
+    public AdminProductService(
+        ProductDbContext db,
+        ILogger<AdminProductService> logger,
+        CursorHmac cursorHmac,
+        IObjectStorage? storage = null)
     {
         _db = db;
         _logger = logger;
         _cursorHmac = cursorHmac;
+        _storage = storage;
     }
 
     // ========== 新增产品 ==========
@@ -422,6 +429,26 @@ public class AdminProductService
                 m.CabinType, m.Capacity, m.EngineSerialNumber))
             .ToListAsync(ct);
 
+        // P3.3 (Task 11): 加载产品图片 (主图 slot 1 + 副图 slot 2-6)
+        var imageRows = await _db.ProductImages.AsNoTracking()
+            .Where(i => i.ProductId == id)
+            .OrderBy(i => i.Slot)
+            .ToListAsync(ct);
+        var imageInfos = new List<ProductImageInfo>(imageRows.Count);
+        foreach (var img in imageRows)
+        {
+            string url = "";
+            if (_storage != null && !string.IsNullOrEmpty(img.ImageKey))
+            {
+                try { url = await _storage.GetPresignedUrlAsync(img.ImageKey, 3600, ct); }
+                catch (Exception ex) { _logger.LogWarning(ex, "GetPresignedUrl failed: key={Key}", img.ImageKey); }
+            }
+            imageInfos.Add(new ProductImageInfo(
+                img.Id, img.ProductId, img.Slot, img.ImageKey, url,
+                img.FileSize, img.ContentType, img.Width, img.Height,
+                img.IsPrimary, img.UploadedAt, img.UploadedBy));
+        }
+
         return new ProductDetailDto(
             p.Id, p.OemNoDisplay, p.Oem2, p.Mr1,
             p.ProductName1, p.ProductName2, p.Type, p.IsPublished, p.Remark,
@@ -438,7 +465,7 @@ public class AdminProductService
             p.MasterBoxLengthMm, p.MasterBoxWidthMm, p.MasterBoxHeightMm,
             p.VolumePerCartonM3,
             p.IsDiscontinued, p.CreatedAt, p.UpdatedAt,
-            xrefs, apps, new List<ProductImageInfo>()
+            xrefs, apps, imageInfos
         );
     }
 

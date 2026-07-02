@@ -1,31 +1,92 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SakuraFilter.Api.Services;
+using SakuraFilter.Core.DTOs;
 using SakuraFilter.Infrastructure.Data;
 
 namespace SakuraFilter.Api.Controllers;
 
 /// <summary>
-/// P2.3 (Task 8.3): 公开产品页端点 (无需 token)
-/// 用途: 前台产品页按 dict_type.sort_order 排序展示分组
+/// 公开产品页端点 (无需 token)
 /// 设计:
-///   - JOIN dict_type t ON t.type = p.type, 按 t.sort_order 升序
-///   - 仅含 active (deleted_at IS NULL) 的 dict_type
-///   - 仅含 active (is_discontinued = false) 的 products
-///   - 4 大类: oil(1)/fuel(2)/air(3)/cabin(4)/others(99), others 永远排最后
+///   - P2.3 by-type: 按 dict_type.sort_order 分组聚合产品摘要
+///   - P3.3 by-slug: 单产品详情 (复用了 AdminProductService.GetByIdAsync 避免重写投影)
 /// </summary>
 [ApiController]
 [AllowAnonymous]
-[Route("api/public/products")]
+[Route("api/public")]
 public class PublicProductController : ControllerBase
 {
     private readonly ProductDbContext _db;
+    private readonly AdminProductService _adminService;
     private readonly ILogger<PublicProductController> _logger;
 
-    public PublicProductController(ProductDbContext db, ILogger<PublicProductController> logger)
+    public PublicProductController(
+        ProductDbContext db,
+        AdminProductService adminService,
+        ILogger<PublicProductController> logger)
     {
         _db = db;
+        _adminService = adminService;
         _logger = logger;
+    }
+
+    /// <summary>
+    /// P3.3 (Task 11): 单产品详情 (公开)
+    /// URL 格式: /api/public/product/{slug}
+    /// slug 格式 (按 R1 规格): {name1}-{name2}-{oemBrand}-{oemNo}
+    /// 解析策略: 取 slug 最后一段作为 oem (支持 OEM 自身含 - 的场景,如 "AB-123-X")
+    ///   - 1) OemNoDisplay 精确匹配
+    ///   - 2) Oem2 匹配 (alt OEM)
+    ///   - 3) Mr1 匹配
+    /// 排除 is_discontinued=true (前台不展示下架产品)
+    /// </summary>
+    [HttpGet("product/{slug}")]
+    public async Task<IActionResult> GetBySlug(string slug, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(slug))
+            return BadRequest(new { error = "slug 不能为空" });
+
+        // 解析 slug: 取最后一段作为 oem (支持 OEM 含 '-')
+        var oem = slug.Contains('-') ? slug[(slug.LastIndexOf('-') + 1)..] : slug;
+
+        long? productId = null;
+
+        // 1) OemNoDisplay 精确匹配
+        productId = await _db.Products.AsNoTracking()
+            .Where(p => p.OemNoDisplay == oem && !p.IsDiscontinued)
+            .Select(p => (long?)p.Id)
+            .FirstOrDefaultAsync(ct);
+
+        // 2) fallback: Oem2 匹配
+        if (productId == null)
+        {
+            productId = await _db.Products.AsNoTracking()
+                .Where(p => p.Oem2 == oem && !p.IsDiscontinued)
+                .Select(p => (long?)p.Id)
+                .FirstOrDefaultAsync(ct);
+        }
+
+        // 3) fallback: Mr1 匹配
+        if (productId == null)
+        {
+            productId = await _db.Products.AsNoTracking()
+                .Where(p => p.Mr1 == oem && !p.IsDiscontinued)
+                .Select(p => (long?)p.Id)
+                .FirstOrDefaultAsync(ct);
+        }
+
+        if (productId == null)
+        {
+            _logger.LogInformation("GetBySlug: 404 slug={Slug} oem={Oem}", slug, oem);
+            return NotFound(new { error = $"产品不存在: {slug}" });
+        }
+
+        // 复用 AdminProductService.GetByIdAsync: 投影逻辑统一
+        var detail = await _adminService.GetByIdAsync(productId.Value, ct);
+        _logger.LogInformation("GetBySlug: 200 slug={Slug} id={Id}", slug, productId);
+        return Ok(detail);
     }
 
     /// <summary>

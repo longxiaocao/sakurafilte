@@ -103,6 +103,8 @@ export interface MachineItem {
   machineBrand: string
   machineModel: string | null
   machineName: string | null
+  // P2.3: 4 大类 (Agriculture/Commercial/Construction/others)
+  machineCategory: 'Agriculture' | 'Commercial' | 'Construction' | 'others'
   sortOrder: number
   createdAt: string
   updatedAt: string
@@ -142,9 +144,13 @@ export const searchApi = {
 }
 
 // ===== 产品详情 (公开) =====
+// P3.3 (Task 11): 调公开端点 /public/product/{slug} (无 token)
+//   URL 格式 (R1 规格): {name1}-{name2}-{oemBrand}-{oemNo}
+//   后端 GetBySlug 内部解析 slug 末段为 oem
 export const productApi = {
-  getByOem(oem: string): Promise<ProductDetail> {
-    return http.get(`/products/${encodeURIComponent(oem)}`).then((r) => r.data)
+  getByOem(slug: string): Promise<ProductDetail> {
+    // 注意: 走 http 拦截器, 即使已登录后台 (有 token) 也可访问公开端点 (后端 [AllowAnonymous])
+    return http.get(`/public/product/${encodeURIComponent(slug)}`).then((r) => r.data)
   }
 }
 
@@ -451,7 +457,7 @@ export const dictApi = {
     create(machineBrand: string, machineModel?: string, machineName?: string, sortOrder?: number): Promise<MachineItem> {
       return http.post('/admin/dict/machines', { machineBrand, machineModel, machineName, sortOrder }).then((r) => r.data)
     },
-    update(id: number, body: { machineBrand?: string; machineModel?: string; machineName?: string; sortOrder?: number }): Promise<MachineItem> {
+    update(id: number, body: { machineBrand?: string; machineModel?: string; machineName?: string; machineCategory?: 'Agriculture' | 'Commercial' | 'Construction' | 'others'; sortOrder?: number }): Promise<MachineItem> {
       return http.put(`/admin/dict/machines/${id}`, body).then((r) => r.data)
     },
     delete(id: number): Promise<void> {

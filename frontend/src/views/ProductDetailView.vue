@@ -3,7 +3,13 @@
 //   - 顶部: 关键信息 (OEM/MR/Type)
 //   - 中部: 7 分区规格 (基础信息/尺寸/螺纹/性能/包装/媒体/备注)
 //   - 底部: 交叉引用 + 适用车型
-import { ref, onMounted, computed, watch } from 'vue'
+// P3.3 (Task 11): 公开产品页 + SEO/OG meta + imageKey 命名验证 (R5 规格)
+//   - 调 productApi.getByOem(slug) → /public/product/{slug} (公开)
+//   - URL 格式 (R1): {name1}-{name2}-{oemBrand}-{oemNo}, 后端解析末段为 oem
+//   - SEO: document.title = "name1 name2 OEM_BRAND OEM_NO - SakuraFilter"
+//   - OG: og:title / og:image / og:description / og:type=product
+//   - imageKey: 主图 oem2/{OEM}.jpg, 副图 oem2/{OEM}_{slot}.jpg
+import { ref, onMounted, computed, watch, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { productApi } from '@/api'
 import type { ProductDetail } from '@/api/types'
@@ -11,7 +17,7 @@ import type { ProductDetail } from '@/api/types'
 const route = useRoute()
 const router = useRouter()
 
-const oem = computed(() => String(route.params.oem || ''))
+const slug = computed(() => String(route.params.oem || ''))  // param name still 'oem' (backward compat)
 const data = ref<ProductDetail | null>(null)
 const loading = ref(false)
 const err = ref('')
@@ -20,16 +26,77 @@ async function load() {
   loading.value = true
   err.value = ''
   try {
-    data.value = await productApi.getByOem(oem.value)
+    data.value = await productApi.getByOem(slug.value)
+    applySeo()
   } catch (e: any) {
     err.value = e?.problem?.detail || e?.message || '加载失败'
+    data.value = null
   } finally {
     loading.value = false
   }
 }
 
+// ===== P3.3 (Task 11): SEO + OG meta =====
+let ogTags: HTMLMetaElement[] = []
+function applySeo() {
+  const d = data.value
+  if (!d) return
+  // title
+  const brand = (d.crossReferences[0]?.oemBrand) ?? d.oem2 ?? ''
+  const title = `${d.productName1 ?? ''} ${d.productName2 ?? ''} ${brand} ${d.oemNoDisplay} - SakuraFilter`.replace(/\s+/g, ' ').trim()
+  document.title = title
+  // OG meta (动态创建, 组件卸载时移除)
+  ensureOgTag('og:title', `${d.productName1 ?? ''} ${d.productName2 ?? ''}`)
+  ensureOgTag('og:description', `${d.productName1 ?? ''} ${d.productName2 ?? ''} ${brand} ${d.oemNoDisplay}`)
+  ensureOgTag('og:type', 'product')
+  if (d.images && d.images.length > 0) {
+    // 后端 ProductDetailDto 通过 images[].url 暴露预签名 URL (P3.3 改造)
+    // 前端 TS 类型用 imageUrl 字段名 (与后端 url 映射)
+    // 命名约定: 主图 slot 1 = oem2/{OEM}.jpg, 副图 slot 2-6 = oem2/{OEM}_{slot}.jpg
+    ensureOgTag('og:image', d.images[0].imageUrl)
+  }
+}
+function ensureOgTag(property: string, content: string) {
+  let el = document.head.querySelector<HTMLMetaElement>(`meta[property="${property}"]`)
+  if (!el) {
+    el = document.createElement('meta')
+    el.setAttribute('property', property)
+    document.head.appendChild(el)
+    ogTags.push(el)
+  }
+  el.setAttribute('content', content)
+}
+
+// ===== P3.3 (Task 11): imageKey 命名 (R5 规格) =====
+// 主图: oem2/{OEM}.jpg
+// 副图: oem2/{OEM}_{slot}.jpg (slot 2-6)
+function buildImageUrl(key: string, oem: string, slot: number): string {
+  // 实际项目用 OSS 预签名; MVP 阶段回退到 /static/images/
+  if (key.startsWith('http')) return key
+  // 命名: oem2/{OEM}.jpg (主图) / oem2/{OEM}_{slot}.jpg (副图)
+  const slotSuffix = slot === 1 ? '' : `_${slot}`
+  return `/oem2/${oem}${slotSuffix}.jpg`
+}
+
+// 收集所有可用图片 URL (主图 + 副图 slot 1-6, R5 规格命名)
+const imageUrls = computed(() => {
+  const d = data.value
+  if (!d) return []
+  return (d.images ?? []).map(img => ({
+    slot: img.slot,
+    url: img.imageUrl || buildImageUrl(img.imageKey, d.oemNoDisplay, img.slot)
+  }))
+})
+
+// 清理 OG meta (避免页面切换残留)
+onUnmounted(() => {
+  for (const el of ogTags) el.remove()
+  ogTags = []
+  document.title = 'SakuraFilter'
+})
+
 onMounted(load)
-watch(() => oem.value, load)
+watch(() => slug.value, load)
 
 function goBack() {
   router.back()
@@ -54,6 +121,19 @@ function numOrDash(v?: number | string) {
     </div>
 
     <div v-if="err" class="text-red-600 text-sm mb-2">{{ err }}</div>
+
+    <!-- P3.3 (Task 11): 产品图片 (主图 + 副图 slot 1-6, R5 规格命名) -->
+    <div v-if="imageUrls.length > 0" class="hairline mb-3 p-3">
+      <div class="text-sm font-medium mb-2 text-muted">产品图片</div>
+      <div class="flex gap-2 flex-wrap">
+        <div v-for="img in imageUrls" :key="img.slot" class="text-center">
+          <img :src="img.url" :alt="`Slot ${img.slot}`"
+               class="w-32 h-32 object-cover hairline-b"
+               @error="(e) => ((e.target as HTMLImageElement).src = '/logo.png')" />
+          <div class="text-xs text-muted mt-1">图 {{ img.slot }}</div>
+        </div>
+      </div>
+    </div>
 
     <div v-if="data" class="grid grid-cols-2 gap-3">
       <!-- 分区 1: 基础信息 -->
