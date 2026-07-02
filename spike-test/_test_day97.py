@@ -384,6 +384,23 @@ def test_etl_real_trigger():
     # broadcaster 推的是 Progress.ToJson(),字段是 status (不是 GetActiveTaskInfo 的 inProgress)
     # 至少应含 running 和 completed 两个状态
     assert b'"status":"running"' in all_b_data, f"B 实例收到帧但缺少 running 状态, 实际: {all_b_data[:500]}"
+    # Day 9.12 v8: ETL failed 时输出完整 lastError 到 ::error:: 注解
+    #   WHY: CI 上 ETL 在 inserting 阶段 failed, 但帧内容被 chunked encoding 截断,
+    #        看不到 lastError 字段, 无法定位失败根因
+    #   修复: failed 时主动查询 /api/etl/status 拿完整 lastError, 输出到注解
+    if b'"status":"failed"' in all_b_data:
+        try:
+            status_req = urllib.request.Request(
+                f"{INSTANCE_A}/api/etl/status",
+                headers=H_ADMIN
+            )
+            with urllib.request.urlopen(status_req, timeout=3) as resp:
+                status_data = json.loads(resp.read())
+            last_err = status_data.get("lastError") or "(lastError 为空)"
+            recent_errs = status_data.get("recentErrors") or []
+            print(f"::error::Day 9.7 ETL failed! lastError={last_err}, recentErrors={recent_errs[:3]}")
+        except Exception as ex:
+            print(f"::error::Day 9.7 ETL failed 且查询 status 失败: {ex}")
     assert b'"status":"completed"' in all_b_data, f"B 实例收到帧但缺少 completed 终态, 实际: {all_b_data[:500]}"
     print(f"  ✓ B 实例 SSE 收到 {data_count} 帧 (含 running+completed 状态, A 实例 5000 行 ETL 跨实例推送成功)")
 
