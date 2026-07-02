@@ -88,12 +88,21 @@ public class MachineDictService : BaseDictService<DictMachine>
         return rows.Select(b => new MachineTypeaheadItem(b.Id, b.MachineBrand, b.MachineModel, b.MachineName)).ToList();
     }
 
+    // Day 11 Phase 1 BUG FIX B: 加 category 参数 (之前 create 漏传, 与 update 不对称)
     public async Task<MachineItem> CreateMachineAsync(
-        string brand, string? model, string? name, int? sortOrder, CancellationToken ct = default)
+        string brand, string? model, string? name, int? sortOrder, string? category = null, CancellationToken ct = default)
     {
         var b = await CreateAsync(brand, sortOrder, ct);
         b.MachineModel = string.IsNullOrWhiteSpace(model) ? null : model.Trim();
         b.MachineName = string.IsNullOrWhiteSpace(name) ? null : name.Trim();
+        // Day 11 Phase 1 BUG FIX B: create 时也写 category (默认 "others")
+        if (!string.IsNullOrWhiteSpace(category))
+        {
+            var cat = category.Trim();
+            if (cat != "automobile" && cat != "engineering" && cat != "others")
+                throw new ArgumentException($"MachineCategory 必须是 automobile/engineering/others, 实际: {cat}");
+            b.MachineCategory = cat;
+        }
         await _db.SaveChangesAsync(ct);
         return new MachineItem(b.Id, b.MachineBrand, b.MachineModel, b.MachineName, b.MachineCategory, b.SortOrder,
             b.CreatedAt, b.UpdatedAt, b.DeletedAt, 0);
@@ -144,7 +153,8 @@ public record MachineItem(
 public record MachineTypeaheadItem(long Id, string MachineBrand, string? MachineModel, string? MachineName);
 public record MachineReorderItem(long Id, int SortOrder);
 public record MachineReorderRequest(List<MachineReorderItem> Items);
-public record MachineCreateRequest(string MachineBrand, string? MachineModel, string? MachineName, int? SortOrder);
+// Day 11 Phase 1 BUG FIX B: 补 MachineCategory 字段 (之前 create 漏传, update 有, 不对称)
+public record MachineCreateRequest(string MachineBrand, string? MachineModel, string? MachineName, int? SortOrder, string? MachineCategory = null);
 // P2.3: 加 MachineCategory 字段, 允许前端在 update 时一并改 category
 public record MachineUpdateRequest(
     string? MachineBrand, string? MachineModel, string? MachineName, int? SortOrder, string? MachineCategory = null);

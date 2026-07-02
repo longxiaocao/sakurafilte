@@ -272,9 +272,12 @@ export interface AdminSearchRequest {
 }
 
 // ===== ETL =====
+// Day 11 Phase 1 BUG FIX: 补 entityType 字段 (之前 UI 有选择器但 API 类型缺失, 后端硬编码 products)
 export interface EtlTriggerRequest {
   jsonlPath: string
   mode?: 'full-load' | 'insert-only' | 'upsert'
+  entityType?: 'products' | 'xrefs' | 'apps'  // 不传默认 products
+  cascade?: boolean  // 仅 products + full-load 生效, 默认 true
   dryRun?: boolean
 }
 

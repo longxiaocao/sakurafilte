@@ -937,7 +937,7 @@ app.MapPost("/api/admin/etl/trigger", async (
     CancellationToken ct) =>
 {
     logger.LogInformation("手动 ETL 触发 entity={Entity} mode={Mode} file={File} dryRun={Dry}",
-        req.JsonlPath, req.Mode, req.JsonlPath, req.DryRun);
+        req.EntityType ?? "products", req.Mode, req.JsonlPath, req.DryRun);
 
     if (req.DryRun)
     {
@@ -1038,7 +1038,15 @@ app.MapPost("/api/admin/etl/trigger", async (
         });
     }
 
-    var p = await etl.TriggerAsync("products", req.JsonlPath, req.Mode ?? "upsert", 0, ct);
+    // Day 11 Phase 1 BUG FIX A: 之前硬编码 "products", 前端 UI entity 选择器不生效
+    //   - DTO 已有 EntityType 字段 (ProductHistoryDto.cs:42), 但端点没用
+    //   - 修复: 用 req.EntityType ?? "products" 路由到对应 Import*Async
+    //   - 同时传 cascade 参数 (BUG FIX A: 之前 DTO 缺字段, 被静默丢弃)
+    var entityType = (req.EntityType ?? "products").Trim().ToLowerInvariant();
+    if (entityType != "products" && entityType != "xrefs" && entityType != "apps")
+        return Results.BadRequest(new { error = "EntityType 必须是 products/xrefs/apps", value = entityType });
+    var cascade = req.Cascade ?? true;  // 兼容旧调用 (不传 = true)
+    var p = await etl.TriggerAsync(entityType, req.JsonlPath, req.Mode ?? "upsert", 0, ct, cascade);
     return Results.Ok(p.ToJson());
 })
 .WithName("AdminTriggerEtl")
@@ -1716,7 +1724,7 @@ app.MapPost("/api/admin/dict/machines", async (
     MachineCreateRequest body, MachineDictService svc, HttpContext ctx, CancellationToken ct) =>
 {
     if (string.IsNullOrWhiteSpace(body.MachineBrand)) return Results.BadRequest(new { error = "machineBrand 不能为空" });
-    try { var item = await svc.CreateMachineAsync(body.MachineBrand, body.MachineModel, body.MachineName, body.SortOrder, ct);
+    try { var item = await svc.CreateMachineAsync(body.MachineBrand, body.MachineModel, body.MachineName, body.SortOrder, body.MachineCategory, ct);
         return Results.Created($"/api/admin/dict/machines/{item.Id}", item); }
     catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
     catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }

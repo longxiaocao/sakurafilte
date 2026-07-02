@@ -66,7 +66,8 @@ async function saveDialog() {
   const name = dialogForm.machineName.trim() || undefined
   try {
     if (dialogMode.value === 'create') {
-      await dictApi.machines.create(b, model, name, dialogForm.sortOrder); ElMessage.success('已新增')
+      // Day 11 Phase 1 BUG FIX B: create 时也传 machineCategory (之前漏传, 后端默认 "others")
+      await dictApi.machines.create(b, model, name, dialogForm.sortOrder, dialogForm.machineCategory); ElMessage.success('已新增')
     } else if (dialogForm.id != null) {
       // P2.3: 提交时把 machineCategory 一并 PUT
       await dictApi.machines.update(dialogForm.id, {

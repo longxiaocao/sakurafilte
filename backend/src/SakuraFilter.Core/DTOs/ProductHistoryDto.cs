@@ -39,7 +39,8 @@ public record ProductHistoryPageDto(
 ///   - Mode: full-load | insert-only | upsert (Day 7 设计, 三态统一)
 ///   - DryRun: true 时只校验不写库 (Day 8.4 增强)
 /// </summary>
-public record EtlTriggerRequest(string JsonlPath, string? Mode, bool DryRun = false, string? EntityType = null);
+// Day 11 Phase 1 BUG FIX A: 补 Cascade 字段 (之前前端 UI 有控件但 DTO 缺字段, 被静默丢弃)
+public record EtlTriggerRequest(string JsonlPath, string? Mode, bool DryRun = false, string? EntityType = null, bool? Cascade = null);
 
 /// <summary>
 /// ETL 进度响应 (含手动触发任务)

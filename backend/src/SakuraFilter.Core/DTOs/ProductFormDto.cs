@@ -101,14 +101,17 @@ public record MachineAppInput(
     string? EngineSerialNumber
 );
 
-/// <summary>产品图片信息 (Day 8.1: 分区 4, slot 1-6)</summary>
+/// <summary>产品图片信息 (Day 8.1: 分区 4, slot 1-6)
+/// Day 11 Phase 1 BUG FIX D: 字段名对齐前端 (Url→ImageUrl, FileSize→SizeBytes)
+///   之前后端返回 url, 前端类型是 imageUrl, 导致图片上传后破图
+/// </summary>
 public record ProductImageInfo(
     long Id,
     long ProductId,
     short Slot,
     string ImageKey,
-    string Url,        // 预签名 URL
-    long? FileSize,
+    string ImageUrl,        // 预签名 URL (与前端 types.ts 对齐)
+    long? SizeBytes,        // 文件大小字节 (与前端 types.ts 对齐)
     string? ContentType,
     int? Width,
     int? Height,

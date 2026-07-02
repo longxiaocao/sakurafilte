@@ -12,10 +12,12 @@ import type { EtlActiveTaskInfo, EtlProgress, EtlDryRunResult, EtlHistoryItem, E
 import EtlReasonCodePie from '@/components/EtlReasonCodePie.vue'
 
 // ===== 表单 =====
+// Day 11 Phase 1: cascade 默认 true (兼容旧行为), UI 可切换为 false 单独刷新主表
 const form = reactive({
   entity: 'products' as 'products' | 'xrefs' | 'apps',
   mode: 'upsert' as 'full-load' | 'insert-only' | 'upsert',
   dryRun: false,
+  cascade: true,  // 仅 products + full-load 生效
   jsonlPath: 'D:/data/sakurafilter/products.jsonl'
 })
 
@@ -51,6 +53,8 @@ async function doTrigger() {
     const r = await etlApi.trigger({
       jsonlPath: form.jsonlPath,
       mode: form.mode,
+      entityType: form.entity,  // Day 11 Phase 1 BUG FIX: 之前漏传, 后端硬编码 products
+      cascade: form.cascade,    // Day 11 Phase 1: cascade 安全锁
       dryRun: form.dryRun
     })
     ElMessage.success(form.dryRun ? 'dry-run 校验完成' : '已触发 ETL, 后台执行中')
@@ -419,6 +423,14 @@ function prettyJson(raw: string): string {
         <el-form-item label=" ">
           <div class="flex items-center gap-3">
             <el-checkbox v-model="form.dryRun">dry-run (仅校验文件)</el-checkbox>
+            <!-- Day 11 Phase 1: cascade 安全锁, 仅 products + full-load 显示 -->
+            <el-tooltip
+              v-if="form.entity === 'products' && form.mode === 'full-load' && !form.dryRun"
+              content="开启: TRUNCATE 同时清空 xrefs/apps (首次全量场景); 关闭: 仅清 products, 保留关联表 (单独刷新主表)"
+              placement="top"
+            >
+              <el-checkbox v-model="form.cascade">cascade (清空关联表)</el-checkbox>
+            </el-tooltip>
             <el-button
               type="primary"
               :loading="submitting"

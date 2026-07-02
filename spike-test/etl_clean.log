@@ -178,3 +178,81 @@
   "oem_normalized": 50000,
   "oem_display_kept": 50000
 }
+2026-07-03 06:35:59,617 [INFO] 读取: D:\projects\sakurafilter\spike-test\output\dirty_test\脏数据测试.xlsx
+2026-07-03 06:35:59,775 [INFO] Sheet 列表: ['产品区', 'OEM区', '机型区', '说明']
+2026-07-03 06:35:59,779 [INFO] 产品区: 5 行, 24 列
+2026-07-03 06:35:59,779 [INFO] sheet '产品区' 列名校验通过 (3 项必填列)
+2026-07-03 06:35:59,779 [INFO] === 产品区 源数据列溯源 ===
+2026-07-03 06:35:59,779 [INFO]   实际列 (24): ['OEM NO.2', 'Product Name 1', 'Product Name 2', 'product name 3', 'Remark', 'Dimension 1 (D1)', 'Dimension 2 (D2)', 'Dimension 3 (D3)', 'Height 1 (H1)', 'Height 2 (H2)', 'Height 3 (H3)', 'Thread 1 (D7)', 'Thread 2 (D8)', 'Media', 'Seal Material', 'Efficiency 1', 'Efficiency 2', 'Bypass Valve Setting (LR)', 'Bypass Valve Setting (HR)', 'Δ Collapse Pressure', 'Temperature Range', 'Bypass Pressure', '无关列1', '无关列2']
+2026-07-03 06:35:59,779 [INFO]   源新增字段 (2, 可能需补充读取逻辑): ['无关列1', '无关列2']
+2026-07-03 06:35:59,782 [INFO] OEM区: 4 行, 4 列
+2026-07-03 06:35:59,782 [INFO] sheet 'OEM区' 列名校验通过 (3 项必填列)
+2026-07-03 06:35:59,782 [INFO] === OEM区 源数据列溯源 ===
+2026-07-03 06:35:59,782 [INFO]   实际列 (4): ['OEM NO.2', ' OEM Brand', 'Product Name 1', 'OEM NO.3']
+2026-07-03 06:35:59,782 [INFO]   ✓ 期望字段全齐 (4 项)
+2026-07-03 06:35:59,784 [INFO] 机型区: 0 行, 8 列
+2026-07-03 06:35:59,784 [INFO] sheet '机型区' 列名校验通过 (6 项必填列)
+2026-07-03 06:35:59,784 [INFO] === 机型区 源数据列溯源 ===
+2026-07-03 06:35:59,784 [INFO]   实际列 (8): ['OEM NO.2', 'Machine Brand', 'Machine Model', 'Model Name', 'Engine Brand', 'Engine Type', 'Engine Energy', 'Production Date']
+2026-07-03 06:35:59,784 [INFO]   ✓ 期望字段全齐 (8 项)
+2026-07-03 06:35:59,784 [INFO] 对齐: xrefs 丢弃 0 条, apps 丢弃 0 条 (产品集 4 个 OEM)
+2026-07-03 06:35:59,785 [INFO] 写出: D:\projects\sakurafilter\spike-test\output\dirty_test\cleaned\products.jsonl (5 条)
+2026-07-03 06:35:59,786 [INFO] 写出: D:\projects\sakurafilter\spike-test\output\dirty_test\cleaned\xrefs.jsonl (4 条)
+2026-07-03 06:35:59,786 [INFO] 写出: D:\projects\sakurafilter\spike-test\output\dirty_test\cleaned\apps.jsonl (0 条)
+2026-07-03 06:35:59,786 [INFO] 汇总: D:\projects\sakurafilter\spike-test\output\dirty_test\cleaned\_clean_summary.json
+2026-07-03 06:35:59,786 [INFO] 最终统计: {
+  "products_read": 5,
+  "products_emitted": 5,
+  "xrefs_read": 4,
+  "xrefs_emitted": 4,
+  "apps_read": 0,
+  "apps_emitted": 0,
+  "apps_aligned_dropped": 0,
+  "xrefs_aligned_dropped": 0,
+  "dropped_header": 0,
+  "dropped_separator": 0,
+  "parsed_unit_suffix": 5,
+  "parsed_eu_decimal": 0,
+  "parsed_special_date": 0,
+  "oem_normalized": 5,
+  "oem_display_kept": 5
+}
+2026-07-03 06:36:06,008 [INFO] 读取: output\dirty_test\脏数据测试.xlsx
+2026-07-03 06:36:06,162 [INFO] Sheet 列表: ['产品区', 'OEM区', '机型区', '说明']
+2026-07-03 06:36:06,166 [INFO] 产品区: 5 行, 24 列
+2026-07-03 06:36:06,166 [INFO] sheet '产品区' 列名校验通过 (3 项必填列)
+2026-07-03 06:36:06,166 [INFO] === 产品区 源数据列溯源 ===
+2026-07-03 06:36:06,167 [INFO]   实际列 (24): ['OEM NO.2', 'Product Name 1', 'Product Name 2', 'product name 3', 'Remark', 'Dimension 1 (D1)', 'Dimension 2 (D2)', 'Dimension 3 (D3)', 'Height 1 (H1)', 'Height 2 (H2)', 'Height 3 (H3)', 'Thread 1 (D7)', 'Thread 2 (D8)', 'Media', 'Seal Material', 'Efficiency 1', 'Efficiency 2', 'Bypass Valve Setting (LR)', 'Bypass Valve Setting (HR)', 'Δ Collapse Pressure', 'Temperature Range', 'Bypass Pressure', '无关列1', '无关列2']
+2026-07-03 06:36:06,167 [INFO]   源新增字段 (2, 可能需补充读取逻辑): ['无关列1', '无关列2']
+2026-07-03 06:36:06,169 [INFO] OEM区: 4 行, 4 列
+2026-07-03 06:36:06,169 [INFO] sheet 'OEM区' 列名校验通过 (3 项必填列)
+2026-07-03 06:36:06,169 [INFO] === OEM区 源数据列溯源 ===
+2026-07-03 06:36:06,169 [INFO]   实际列 (4): ['OEM NO.2', ' OEM Brand', 'Product Name 1', 'OEM NO.3']
+2026-07-03 06:36:06,169 [INFO]   ✓ 期望字段全齐 (4 项)
+2026-07-03 06:36:06,171 [INFO] 机型区: 0 行, 8 列
+2026-07-03 06:36:06,171 [INFO] sheet '机型区' 列名校验通过 (6 项必填列)
+2026-07-03 06:36:06,171 [INFO] === 机型区 源数据列溯源 ===
+2026-07-03 06:36:06,171 [INFO]   实际列 (8): ['OEM NO.2', 'Machine Brand', 'Machine Model', 'Model Name', 'Engine Brand', 'Engine Type', 'Engine Energy', 'Production Date']
+2026-07-03 06:36:06,171 [INFO]   ✓ 期望字段全齐 (8 项)
+2026-07-03 06:36:06,171 [INFO] 对齐: xrefs 丢弃 0 条, apps 丢弃 0 条 (产品集 4 个 OEM)
+2026-07-03 06:36:06,172 [INFO] 写出: output\dirty_test\cleaned\products.jsonl (5 条)
+2026-07-03 06:36:06,172 [INFO] 写出: output\dirty_test\cleaned\xrefs.jsonl (4 条)
+2026-07-03 06:36:06,172 [INFO] 写出: output\dirty_test\cleaned\apps.jsonl (0 条)
+2026-07-03 06:36:06,173 [INFO] 汇总: output\dirty_test\cleaned\_clean_summary.json
+2026-07-03 06:36:06,173 [INFO] 最终统计: {
+  "products_read": 5,
+  "products_emitted": 5,
+  "xrefs_read": 4,
+  "xrefs_emitted": 4,
+  "apps_read": 0,
+  "apps_emitted": 0,
+  "apps_aligned_dropped": 0,
+  "xrefs_aligned_dropped": 0,
+  "dropped_header": 0,
+  "dropped_separator": 0,
+  "parsed_unit_suffix": 5,
+  "parsed_eu_decimal": 0,
+  "parsed_special_date": 0,
+  "oem_normalized": 5,
+  "oem_display_kept": 5
+}
