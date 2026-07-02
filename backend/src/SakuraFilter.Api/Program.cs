@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Routing.Constraints;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Minio;
+using Aliyun.OSS;
 using SakuraFilter.Api.Services;
 using SakuraFilter.Core.DTOs;
 using SakuraFilter.Core.Entities;
@@ -107,23 +108,53 @@ builder.Services.AddHttpClient("EtlAlert", c =>
 // Day 8.3: cursor HMAC 签名工具 (单例, 内部从 IConfiguration 读 Search:CursorHmacKey)
 builder.Services.AddSingleton<CursorHmac>();
 
-// Day 8.1: 注册 IObjectStorage (MinIO)
-//   WHY Singleton: IMinioClient 是线程安全单例, MinioStorage 无内部状态
+// P1.2 (Task 4): 注册 IObjectStorage, 按 Storage:Provider 配置切换 (minio / aliyun-oss)
+//   WHY Singleton: IMinioClient / OssClient 都是线程安全单例, *Storage 无内部状态
 //   WHY 不放 appsettings.Development: 默认值兜底, dev 可覆盖 endpoint/bucket
+//   Provider 切换说明:
+//     - "minio" (默认, 向后兼容 Day 8.1): 用本地 MinIO bucket
+//     - "aliyun-oss": 用阿里云 OSS + 可选 CDN 域名
+//   切换流程见 docs/cdn-switch.md (重启即生效, 无需 DB 迁移)
+var storageProvider = builder.Configuration["Storage:Provider"]?.ToLowerInvariant() ?? "minio";
 builder.Services.AddSingleton<IObjectStorage>(sp =>
 {
-    var config = builder.Configuration.GetSection("Minio");
-    var endpoint = config["Endpoint"] ?? "localhost:9000";
-    var useSSL = bool.TryParse(config["UseSSL"], out var ssl) && ssl;
+    var logger = sp.GetRequiredService<ILogger<Program>>();
+    if (storageProvider == "aliyun-oss")
+    {
+        var config = builder.Configuration.GetSection("Aliyun");
+        var endpoint = config["Endpoint"] ?? "oss-cn-hangzhou.aliyuncs.com";
+        var accessKeyId = config["AccessKeyId"] ?? "";
+        var accessKeySecret = config["AccessKeySecret"] ?? "";
+        // WHY 校验非空: 阿里云 SDK 空 AccessKey 启动时不报错, 第一次 PutObject 才抛 InvalidArgument
+        //   启动期校验可立即暴露配置错, 避免运行时才发现
+        if (string.IsNullOrEmpty(accessKeyId) || string.IsNullOrEmpty(accessKeySecret))
+        {
+            throw new InvalidOperationException(
+                "Aliyun:AccessKeyId / AccessKeySecret 不能为空, 配置 appsettings.json 或环境变量 Aliyun__AccessKeyId / Aliyun__AccessKeySecret");
+        }
+        var ossClient = new OssClient(endpoint, accessKeyId, accessKeySecret);
+        logger.LogInformation("[Storage] Provider=aliyun-oss, Endpoint={Endpoint}, Bucket={Bucket}, Cdn={Cdn}",
+            endpoint, config["BucketName"], config["CdnEndpoint"]);
+        return new AliyunOssStorage(
+            ossClient,
+            config["BucketName"] ?? "sakurafilter-prod",
+            config["PublicEndpoint"] ?? $"https://{config["BucketName"]}.{endpoint}",
+            config["CdnEndpoint"]);
+    }
+    // 默认 minio (Day 8.1 实现)
+    var minioConfig = builder.Configuration.GetSection("Minio");
+    var minioEndpoint = minioConfig["Endpoint"] ?? "localhost:9000";
+    var useSSL = bool.TryParse(minioConfig["UseSSL"], out var ssl) && ssl;
     var minioClient = new MinioClient()
-        .WithEndpoint(endpoint)
-        .WithCredentials(config["AccessKey"] ?? "minioadmin", config["SecretKey"] ?? "minioadmin")
+        .WithEndpoint(minioEndpoint)
+        .WithCredentials(minioConfig["AccessKey"] ?? "minioadmin", minioConfig["SecretKey"] ?? "minioadmin")
         .WithSSL(useSSL)
         .Build();
+    logger.LogInformation("[Storage] Provider=minio, Endpoint={Endpoint}, Bucket={Bucket}", minioEndpoint, minioConfig["BucketName"]);
     return new MinioStorage(
         minioClient,
-        config["BucketName"] ?? "sakurafilter",
-        config["PublicEndpoint"] ?? $"http://{endpoint}"
+        minioConfig["BucketName"] ?? "sakurafilter",
+        minioConfig["PublicEndpoint"] ?? $"http://{minioEndpoint}"
     );
 });
 

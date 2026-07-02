@@ -14,6 +14,9 @@ public interface IObjectStorage
     /// <summary>获取 URL(可签名)</summary>
     string GetUrl(string key, int expirySeconds = 3600);
 
+    /// <summary>异步获取预签名 URL(P1.2 新增, 用于前台产品页直接 OSS 读图, 避免后端中转带宽)</summary>
+    Task<string> GetPresignedUrlAsync(string key, int expirySeconds = 3600, CancellationToken ct = default);
+
     /// <summary>检查文件存在</summary>
     Task<bool> ExistsAsync(string key, CancellationToken ct = default);
 }

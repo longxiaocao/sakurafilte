@@ -49,6 +49,17 @@ public class MinioStorage : IObjectStorage
         return _client.PresignedGetObjectAsync(args).GetAwaiter().GetResult();
     }
 
+    public Task<string> GetPresignedUrlAsync(string key, int expirySeconds = 3600, CancellationToken ct = default)
+    {
+        // P1.2: 异步预签名 URL, MinIO SDK 内部已 async, 此处包一层 Task
+        //   与 AliyunOssStorage 行为一致, 业务层无感切换
+        var args = new PresignedGetObjectArgs()
+            .WithBucket(_bucket)
+            .WithObject(key)
+            .WithExpiry(expirySeconds);
+        return _client.PresignedGetObjectAsync(args);
+    }
+
     public async Task<bool> ExistsAsync(string key, CancellationToken ct = default)
     {
         try

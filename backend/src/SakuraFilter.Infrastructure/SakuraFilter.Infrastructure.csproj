@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
     <ProjectReference Include="..\SakuraFilter.Core\SakuraFilter.Core.csproj" />
@@ -11,6 +11,7 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
+    <PackageReference Include="Aliyun.OSS.SDK.NetCore" Version="2.14.0" />
     <PackageReference Include="Minio" Version="6.0.4" />
   </ItemGroup>
 
