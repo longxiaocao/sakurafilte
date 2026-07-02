@@ -61,18 +61,20 @@
 - [ ] Day 10 E2E `_test_day10_oem_brands.py` 10/10 仍通过
 - [ ] 抽象无 leaky: 子类不需 override 核心方法
 
-### Task 7: P2.2 5 个新字典
-- [ ] `dict_product_name1` Entity + Migration + Service + View + E2E
-- [ ] `dict_product_name2` Entity + Migration + Service + View + E2E
-- [ ] `dict_type` + 默认值 seed (oil/fuel/air/cabin/others)
-- [ ] `dict_oem_no3` Entity + Migration + Service + View + E2E
-- [ ] `dict_media` (Media Name + Model 二合一)
-- [ ] `dict_machine` (machine brand + model + name 三合一)
-- [ ] `dict_engine` (Engine brand + type)
-- [ ] 数据迁移脚本从 products/cross_references/machine_applications 提取
-- [ ] 6 个字典管理页拖拽排序 + typeahead
-- [ ] AdminProductFormView 7 分区 typeahead 全部联动
-- [ ] 6 个 E2E 全部全绿 (各 10/10)
+### Task 7: P2.2 7 个新字典
+- [x] `dict_product_name1` Entity + Migration + Service + View + E2E
+- [x] `dict_product_name2` Entity + Migration + Service + View + E2E
+- [x] `dict_type` + 默认值 seed (oil/fuel/air/cabin/others, 5 行)
+- [x] `dict_oem_no3` Entity + Migration + Service + View + E2E (5.27M 行 seed)
+- [x] `dict_media` (Media Name + Model 二合一, 5 行 seed)
+- [x] `dict_machine` (machine brand + model + name 三合一, 1000 行 seed)
+- [x] `dict_engine` (Engine brand + type, 5 行 seed)
+- [x] 数据迁移脚本从 products/cross_references/machine_applications 提取 (6 个 _seed_dict_*.py 全部跑通)
+- [x] 7 个字典管理页拖拽排序 + typeahead (el-dropdown 集成进 AppHeader)
+- [x] AdminProductFormView 7 分区 typeahead 全部联动 (productName1/2/type/oemNo3/media/machine/engine + oemBrand)
+- [x] E2E `_test_p22_seven_dicts.py` 9/9 全绿 (1 表结构 + 1 鉴权 + 7 字典 CRUD 生命周期)
+- [x] Day 10 回归 `_test_day10_oem_brands.py` 10/10 仍通过 (ILIKE 反射重写后兼容性验证)
+- [x] BaseDictService 多字段 OR 搜索 (ExtraSearchProperties 机制, BuildSearchPredicate 走方法组引用)
 
 ### Task 8: P2.3 Type 排序 + 机器分类
 - [ ] `spike-test/_seed_dict_defaults.py` 跑通

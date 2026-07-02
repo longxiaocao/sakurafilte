@@ -10,6 +10,18 @@ const { isAdmin, setToken } = useAdminAuth()
 
 const isAdminPath = computed(() => route.path.startsWith('/admin'))
 
+// Day 10: 字典管理下拉菜单 (P1.3 OEM 品牌 + P2.2 7 个新字典)
+const dictItems = [
+  { label: 'OEM 品牌', path: '/admin/dict/oem-brands' },
+  { label: '产品名 1', path: '/admin/dict/product-name1s' },
+  { label: '产品名 2', path: '/admin/dict/product-name2s' },
+  { label: '类型 (Type)', path: '/admin/dict/types' },
+  { label: 'OEM 3', path: '/admin/dict/oem-no3s' },
+  { label: '介质 (Media)', path: '/admin/dict/medias' },
+  { label: '机型 (Machine)', path: '/admin/dict/machines' },
+  { label: '发动机 (Engine)', path: '/admin/dict/engines' }
+]
+
 // Day 9.2: 修复 - "产品详情" 路由是 /product/:oem, 单独一个 nav 项无法满足参数化路径
 //   改方案: nav 中 "产品详情" 改为 "OEM 查询", 点击后弹 ElMessageBox.prompt 收 oem, 再跳详情
 //   避免之前直接 router.push('/product') 触发 "No match found" 警告
@@ -19,12 +31,16 @@ const navItems = computed(() => [
   ...(isAdminPath.value
     ? [
         { label: '产品管理', path: '/admin/products', icon: 'Goods' },
-        // Day 10: 字典管理 (P1.3) — 后续 P5 会扩展为多字典入口
-        { label: '品牌字典', path: '/admin/dict/oem-brands', icon: 'Collection' },
+        // Day 10+: 字典管理 (P1.3 OEM 品牌 + P2.2 7 个新字典) — 改为 el-dropdown 下拉
+        { label: '字典管理', dropdown: 'dict', icon: 'Collection' },
         { label: 'ETL 触发', path: '/admin/etl', icon: 'Loading' }
       ]
     : [])
 ])
+
+function goDict(path: string) {
+  router.push(path)
+}
 
 async function go(item: { path?: string; action?: string }) {
   if (item.action === 'oemLookup') {
@@ -74,24 +90,57 @@ async function toggleAdmin() {
     }
   }
 }
+
+// el-dropdown 触发方式: hover / click
+const dictTrigger = 'click'
 </script>
 
 <template>
   <header class="hairline-b bg-white flex items-center px-3 h-12 gap-3">
     <div class="font-medium text-base tracking-tight">SakuraFilter</div>
     <nav class="flex items-center gap-1 ml-3">
-      <button
-        v-for="item in navItems"
-        :key="item.label"
-        @click="go(item)"
-        :class="[
-          'px-2 py-1 text-sm hover:bg-neutral-100',
-          item.path && route.path === item.path ? 'text-accent font-medium' : 'text-neutral-700'
-        ]"
-      >
-        <el-icon class="mr-1"><component :is="item.icon" /></el-icon>
-        {{ item.label }}
-      </button>
+      <template v-for="item in navItems" :key="item.label">
+        <!-- Day 10+: 字典管理下拉 (P1.3 + P2.2 共 8 个) -->
+        <el-dropdown
+          v-if="item.dropdown === 'dict'"
+          :trigger="dictTrigger"
+          @command="(cmd: string) => goDict(cmd)"
+        >
+          <button
+            :class="[
+              'px-2 py-1 text-sm hover:bg-neutral-100',
+              route.path.startsWith('/admin/dict/') ? 'text-accent font-medium' : 'text-neutral-700'
+            ]"
+          >
+            <el-icon class="mr-1"><component :is="item.icon" /></el-icon>
+            {{ item.label }}
+            <el-icon class="ml-1"><ArrowDown /></el-icon>
+          </button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item
+                v-for="d in dictItems"
+                :key="d.path"
+                :command="d.path"
+                :disabled="route.path === d.path"
+              >
+                {{ d.label }}
+              </el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
+        <button
+          v-else
+          @click="go(item)"
+          :class="[
+            'px-2 py-1 text-sm hover:bg-neutral-100',
+            item.path && route.path === item.path ? 'text-accent font-medium' : 'text-neutral-700'
+          ]"
+        >
+          <el-icon class="mr-1"><component :is="item.icon" /></el-icon>
+          {{ item.label }}
+        </button>
+      </template>
     </nav>
     <div class="flex-1" />
     <button

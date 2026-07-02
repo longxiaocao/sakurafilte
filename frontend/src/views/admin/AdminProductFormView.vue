@@ -3,6 +3,7 @@
 //   - 7 分区布局 (与 ProductFormDto 一致)
 //   - 行内保存
 // Day 10: 分区 2 oemBrand 改为 el-autocomplete, 从 dictApi.oemBrands.typeahead 自动补全 (P1.3)
+// Day 10+ P2.2: 7 分区全部接入 typeahead (productName1/2/type/oemNo3/media/machine/engine)
 import { ref, reactive, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -145,6 +146,70 @@ async function queryOemBrands(q: string, cb: (items: { value: string; brand: str
   }
 }
 
+// Day 10+ P2.2: 7 分区 typeahead (复用 queryOemBrands 模板, 适配单/多字段字典)
+//   - 单字段字典: ProductName1, ProductName2, Type, OemNo3
+//   - 多字段字典: Media (2 字段), Machine (3 字段), Engine (2 字段)
+async function queryProductName1(q: string, cb: (items: { value: string }[]) => void) {
+  try {
+    const { items } = await dictApi.productName1s.typeahead(q || '', 20)
+    cb(items.map((it) => ({ value: it.productName1 })))
+  } catch { cb([]) }
+}
+async function queryProductName2(q: string, cb: (items: { value: string }[]) => void) {
+  try {
+    const { items } = await dictApi.productName2s.typeahead(q || '', 20)
+    cb(items.map((it) => ({ value: it.productName2 })))
+  } catch { cb([]) }
+}
+async function queryType(q: string, cb: (items: { value: string }[]) => void) {
+  try {
+    const { items } = await dictApi.types.typeahead(q || '', 20)
+    cb(items.map((it) => ({ value: it.type })))
+  } catch { cb([]) }
+}
+async function queryOemNo3(q: string, cb: (items: { value: string }[]) => void) {
+  try {
+    const { items } = await dictApi.oemNo3s.typeahead(q || '', 20)
+    cb(items.map((it) => ({ value: it.oemNo3 })))
+  } catch { cb([]) }
+}
+// Media: 显示 "name (model)" 让用户看清完整项
+async function queryMedia(q: string, cb: (items: { value: string; mediaName: string; mediaModel: string | null }[]) => void) {
+  try {
+    const { items } = await dictApi.medias.typeahead(q || '', 20)
+    cb(items.map((it) => ({
+      value: it.mediaModel ? `${it.mediaName} (${it.mediaModel})` : it.mediaName,
+      mediaName: it.mediaName,
+      mediaModel: it.mediaModel
+    })))
+  } catch { cb([]) }
+}
+// Machine: 显示 "brand / model / name"
+async function queryMachineBrand(q: string, cb: (items: { value: string; machineBrand: string }[]) => void) {
+  try {
+    const { items } = await dictApi.machines.typeahead(q || '', 20)
+    cb(items.map((it) => ({ value: it.machineBrand, machineBrand: it.machineBrand })))
+  } catch { cb([]) }
+}
+async function queryMachineModel(q: string, cb: (items: { value: string; machineModel: string | null }[]) => void) {
+  try {
+    const { items } = await dictApi.machines.typeahead(q || '', 20)
+    cb(items.map((it) => ({ value: it.machineModel || '', machineModel: it.machineModel })))
+  } catch { cb([]) }
+}
+async function queryEngineBrand(q: string, cb: (items: { value: string; engineBrand: string }[]) => void) {
+  try {
+    const { items } = await dictApi.engines.typeahead(q || '', 20)
+    cb(items.map((it) => ({ value: it.engineBrand, engineBrand: it.engineBrand })))
+  } catch { cb([]) }
+}
+async function queryEngineType(q: string, cb: (items: { value: string; engineType: string | null }[]) => void) {
+  try {
+    const { items } = await dictApi.engines.typeahead(q || '', 20)
+    cb(items.map((it) => ({ value: it.engineType || '', engineType: it.engineType })))
+  } catch { cb([]) }
+}
+
 async function uploadImage(slot: number, e: Event) {
   // Day 9.3: 前端 slot 范围校验, 与后端 AdminProductImageService.UploadAsync 一致
   if (slot < 1 || slot > 6 || !Number.isInteger(slot)) {
@@ -201,16 +266,18 @@ onMounted(load)
         <!-- 分区 1: 基础信息 -->
         <el-collapse-item title="① 基础信息" name="1">
           <div class="grid grid-cols-3 gap-3">
-            <el-form-item label="产品名 1"><el-input v-model="form.productName1" /></el-form-item>
-            <el-form-item label="产品名 2"><el-input v-model="form.productName2" /></el-form-item>
+            <!-- P2.2: productName1/2/type 全部 typeahead -->
+            <el-form-item label="产品名 1">
+              <el-autocomplete v-model="form.productName1" :fetch-suggestions="queryProductName1"
+                placeholder="输入自动补全" clearable size="small" :trigger-on-focus="true" :debounce="200" />
+            </el-form-item>
+            <el-form-item label="产品名 2">
+              <el-autocomplete v-model="form.productName2" :fetch-suggestions="queryProductName2"
+                placeholder="输入自动补全" clearable size="small" :trigger-on-focus="true" :debounce="200" />
+            </el-form-item>
             <el-form-item label="类型">
-              <el-select v-model="form.type" clearable>
-                <el-option label="oil" value="oil" />
-                <el-option label="fuel" value="fuel" />
-                <el-option label="air" value="air" />
-                <el-option label="cabin" value="cabin" />
-                <el-option label="others" value="others" />
-              </el-select>
+              <el-autocomplete v-model="form.type" :fetch-suggestions="queryType"
+                placeholder="oil/fuel/air/cabin/others" clearable size="small" :trigger-on-focus="true" :debounce="200" />
             </el-form-item>
             <el-form-item label="MR.1"><el-input v-model="form.mr1" /></el-form-item>
             <el-form-item label="OEM 2 (必填)"><el-input v-model="form.oem2" /></el-form-item>
@@ -241,7 +308,10 @@ onMounted(load)
                 <span>{{ item.brand }}</span>
               </template>
             </el-autocomplete>
-            <el-input v-model="x.oemNo3" placeholder="OEM 3" style="width: 240px" size="small" />
+            <!-- P2.2: OEM 3 typeahead -->
+            <el-autocomplete v-model="x.oemNo3" :fetch-suggestions="queryOemNo3"
+              placeholder="OEM 3 (输入自动补全)" style="width: 240px" clearable size="small"
+              :trigger-on-focus="true" :debounce="200" />
             <el-input v-model="x.productName1" placeholder="产品名" size="small" />
             <el-button text type="danger" @click="removeXref(i)">删除</el-button>
           </div>
@@ -269,7 +339,12 @@ onMounted(load)
         <!-- 分区 5: 性能 -->
         <el-collapse-item title="④ 性能" name="5">
           <div class="grid grid-cols-3 gap-3">
-            <el-form-item label="Media"><el-input v-model="form.media" /></el-form-item>
+            <!-- P2.2: Media 字段 typeahead (2 字段) -->
+            <el-form-item label="Media">
+              <el-autocomplete v-model="form.media" :fetch-suggestions="queryMedia"
+                placeholder="输入自动补全 (name/model OR 匹配)" clearable size="small"
+                :trigger-on-focus="true" :debounce="200" value-key="value" />
+            </el-form-item>
             <el-form-item label="MediaModel"><el-input v-model="form.mediaModel" /></el-form-item>
             <el-form-item label="效率 1"><el-input v-model="form.efficiency1" /></el-form-item>
             <el-form-item label="效率 2"><el-input v-model="form.efficiency2" /></el-form-item>
@@ -298,15 +373,25 @@ onMounted(load)
           </div>
         </el-collapse-item>
 
-        <!-- 分区 7: 车型 -->
+        <!-- 分区 7: 车型 (P2.2: machine/engine 字段全部 typeahead) -->
         <el-collapse-item :title="`⑥ 适用车型 (${form.machineApplications.length})`" name="7">
           <div v-for="(m, i) in form.machineApplications" :key="i" class="grid grid-cols-5 gap-2 mb-2">
-<el-input v-model="m.machineBrand" placeholder="品牌 (必填)" :class="{ 'app-required': isAppRowDirty(m) && !m.machineBrand?.trim() }" />
-<el-input v-model="m.machineModel" placeholder="型号 (必填)" :class="{ 'app-required': isAppRowDirty(m) && !m.machineModel?.trim() }" />
-            <el-input v-model="m.modelName" placeholder="名称" />
-            <el-input v-model="m.engineBrand" placeholder="发动机品牌" />
+            <!-- 机型品牌: typeahead -->
+            <el-autocomplete v-model="m.machineBrand" :fetch-suggestions="queryMachineBrand"
+              placeholder="品牌 (必填)" size="small" clearable :trigger-on-focus="true" :debounce="200"
+              :class="{ 'app-required': isAppRowDirty(m) && !m.machineBrand?.trim() }" />
+            <!-- 机型型号: typeahead (与 brand 联动共享查询) -->
+            <el-autocomplete v-model="m.machineModel" :fetch-suggestions="queryMachineModel"
+              placeholder="型号 (必填)" size="small" clearable :trigger-on-focus="true" :debounce="200"
+              :class="{ 'app-required': isAppRowDirty(m) && !m.machineModel?.trim() }" />
+            <el-input v-model="m.modelName" placeholder="名称" size="small" />
+            <!-- 发动机品牌: typeahead -->
+            <el-autocomplete v-model="m.engineBrand" :fetch-suggestions="queryEngineBrand"
+              placeholder="发动机品牌" size="small" clearable :trigger-on-focus="true" :debounce="200" />
             <div class="flex gap-1">
-              <el-input v-model="m.engineType" placeholder="发动机型号" />
+              <!-- 发动机型号: typeahead -->
+              <el-autocomplete v-model="m.engineType" :fetch-suggestions="queryEngineType"
+                placeholder="发动机型号" size="small" clearable :trigger-on-focus="true" :debounce="200" />
               <el-button text type="danger" @click="removeApp(i)">×</el-button>
             </div>
           </div>

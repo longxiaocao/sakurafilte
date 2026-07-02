@@ -59,6 +59,49 @@ const routes: RouteRecordRaw[] = [
     name: 'AdminOemBrands',
     component: () => import('@/views/admin/AdminOemBrandsView.vue'),
     meta: { title: 'OEM 品牌字典', requireAuth: true }
+  },
+  // ===== Day 10+ P2.2: 7 个新字典管理页 =====
+  {
+    path: '/admin/dict/product-name1s',
+    name: 'AdminProductName1s',
+    component: () => import('@/views/admin/AdminProductName1sView.vue'),
+    meta: { title: '产品名 1 字典', requireAuth: true }
+  },
+  {
+    path: '/admin/dict/product-name2s',
+    name: 'AdminProductName2s',
+    component: () => import('@/views/admin/AdminProductName2sView.vue'),
+    meta: { title: '产品名 2 字典', requireAuth: true }
+  },
+  {
+    path: '/admin/dict/types',
+    name: 'AdminTypes',
+    component: () => import('@/views/admin/AdminTypesView.vue'),
+    meta: { title: '类型字典 (Type)', requireAuth: true }
+  },
+  {
+    path: '/admin/dict/oem-no3s',
+    name: 'AdminOemNo3s',
+    component: () => import('@/views/admin/AdminOemNo3sView.vue'),
+    meta: { title: 'OEM 3 字典', requireAuth: true }
+  },
+  {
+    path: '/admin/dict/medias',
+    name: 'AdminMedias',
+    component: () => import('@/views/admin/AdminMediasView.vue'),
+    meta: { title: '介质字典 (Media)', requireAuth: true }
+  },
+  {
+    path: '/admin/dict/machines',
+    name: 'AdminMachines',
+    component: () => import('@/views/admin/AdminMachinesView.vue'),
+    meta: { title: '机型字典 (Machine)', requireAuth: true }
+  },
+  {
+    path: '/admin/dict/engines',
+    name: 'AdminEngines',
+    component: () => import('@/views/admin/AdminEnginesView.vue'),
+    meta: { title: '发动机字典 (Engine)', requireAuth: true }
   }
 ]
 

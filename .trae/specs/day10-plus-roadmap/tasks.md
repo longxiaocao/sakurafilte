@@ -56,15 +56,15 @@
 - [x] SubTask 6.4: 用 `IEntityTypeConfiguration<TItem>` 分文件配置, DbContext 集中注册
 - [x] 验证: Day 10 E2E 10/10 通过, 后续字典 P2.2 实现量 < 100 行/字典
 
-### Task 7: P2.2 5 个新字典 (复用 P2.1 抽象) (2 session)
-- [ ] SubTask 7.1: `dict_product_name1` Entity + Migration + Service + View + E2E (0.5 session)
-- [ ] SubTask 7.2: `dict_product_name2` Entity + Migration + Service + View + E2E (0.5 session)
-- [ ] SubTask 7.3: `dict_type` Entity + Migration + Service + View + E2E + 默认值 seed (0.5 session)
-- [ ] SubTask 7.4: `dict_oem_no3` Entity + Migration + Service + View + E2E (0.5 session)
-- [ ] SubTask 7.5: `dict_media` (Media Name + Model 二合一) + `dict_machine` (3 字段) + `dict_engine` (2 字段) (并行, 共 1 session)
-- [ ] SubTask 7.6: 数据迁移脚本 (从 products/cross_references/machine_applications 提取 distinct)
-- [ ] SubTask 7.7: typeahead 接入产品表单 (AdminProductFormView 7 分区全覆盖)
-- [ ] 验证: 6 个字典管理页 + 5+ 个 typeahead 全部联动, 拖拽排序全部 OK
+### Task 7: P2.2 7 个新字典 (复用 P2.1 抽象) (2 session)
+- [x] SubTask 7.1: `dict_product_name1` Entity + Migration + Service + View + E2E (0.5 session)
+- [x] SubTask 7.2: `dict_product_name2` Entity + Migration + Service + View + E2E (0.5 session)
+- [x] SubTask 7.3: `dict_type` Entity + Migration + Service + View + E2E + 默认值 seed (0.5 session)
+- [x] SubTask 7.4: `dict_oem_no3` Entity + Migration + Service + View + E2E (0.5 session)
+- [x] SubTask 7.5: `dict_media` (Media Name + Model 二合一) + `dict_machine` (3 字段) + `dict_engine` (2 字段) (并行, 共 1 session)
+- [x] SubTask 7.6: 数据迁移脚本 (从 products/cross_references/machine_applications 提取 distinct)
+- [x] SubTask 7.7: typeahead 接入产品表单 (AdminProductFormView 7 分区全覆盖)
+- [x] 验证: 7 个字典管理页 + 7 个 typeahead 全部联动, 拖拽排序全部 OK
 
 ### Task 8: P2.3 Type 字典排序 + 机器分类 (0.5 session)
 - [ ] SubTask 8.1: `spike-test/_seed_dict_defaults.py` (Type: oil/fuel/air/cabin/others; Machine: Agriculture/Commercial/Construction/others)

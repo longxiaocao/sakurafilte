@@ -35,7 +35,6 @@ public abstract class BaseDictService<TItem> : IDictService<TItem>
     protected abstract string SortOrderProperty { get; }
     /// <summary>EF Property 反射名: 软删字段 (固定 "DeletedAt")</summary>
     protected abstract string DeletedAtProperty { get; }
-
     /// <summary>子类暴露 DbSet (e.g. ctx => ctx.XrefOemBrands)</summary>
     protected abstract DbSet<TItem> Set(ProductDbContext ctx);
 
@@ -47,6 +46,13 @@ public abstract class BaseDictService<TItem> : IDictService<TItem>
     protected abstract DateTime? GetDeletedAt(TItem item);
     protected abstract void SetDeletedAt(TItem item, DateTime? deletedAt);
     protected abstract long GetId(TItem item);
+
+    /// <summary>
+    /// P2.2 扩展: 多字段字典 (Media/Machine/Engine) override 此属性
+    /// 追加额外的搜索字段, ListAsync/TypeaheadAsync 会用 OR 匹配所有字段
+    /// 默认空数组 = 仅匹配主 ValueProperty (单字段字典行为不变,Day 10 E2E 仍 10/10)
+    /// </summary>
+    protected virtual IReadOnlyList<string> ExtraSearchProperties => Array.Empty<string>();
 
     protected BaseDictService(
         ProductDbContext db,
@@ -88,8 +94,9 @@ public abstract class BaseDictService<TItem> : IDictService<TItem>
         {
             var kw = keyword.Trim();
             // Day 10+ P0.1: ILIKE 必须用 3 参重载 + ESCAPE '\\', 否则下划线/百分号被当通配符
-            query = query.Where(b => EF.Functions.ILike(
-                EF.Property<string>(b, ValueProperty), $"%{kw.EscapeLikePattern()}%", "\\"));
+            // P2.2: 多字段字典 OR 匹配 (主 ValueProperty + ExtraSearchProperties)
+            var pattern = $"%{kw.EscapeLikePattern()}%";
+            query = query.Where(BuildSearchPredicate(pattern));
         }
         if (limit.HasValue && limit.Value > 0)
             query = query.Take(limit.Value);
@@ -107,8 +114,9 @@ public abstract class BaseDictService<TItem> : IDictService<TItem>
         if (!string.IsNullOrWhiteSpace(q))
         {
             var kw = q.Trim();
-            query = query.Where(b => EF.Functions.ILike(
-                EF.Property<string>(b, ValueProperty), $"%{kw.EscapeLikePattern()}%", "\\"));
+            // P2.2: 多字段字典 OR 匹配 (与 ListAsync 一致)
+            var pattern = $"%{kw.EscapeLikePattern()}%";
+            query = query.Where(BuildSearchPredicate(pattern));
         }
         return await query
             .OrderBy(b => EF.Property<int>(b, SortOrderProperty))
@@ -264,5 +272,39 @@ public abstract class BaseDictService<TItem> : IDictService<TItem>
         if (s.Length > _maxLength)
             throw new ArgumentException($"value 长度不能超过 {_maxLength}");
         return s;
+    }
+
+    // P2.2: 多字段 OR 匹配 (主 ValueProperty + ExtraSearchProperties 全部 ILIKE)
+    //   单字段字典 (OemBrand) ExtraSearchProperties 为空, 走单 EF.Functions.ILike, 等同原行为
+    //   多字段字典 (Media/Machine/Engine) 返回 EF.Or(...) 表达式, EF Core 翻译为 SQL OR
+    //
+    // P0.1 修复教训: 必须用 3 参重载 EF.Functions.ILike(prop, pattern, "\\")
+    //   - 2 参重载 ILike(prop, pattern) 无 escape 参数, 下划线/百分号被当通配符
+    //   - 3 参重载 ILike(prop, pattern, escapeCharacter) 是非泛型 string 重载, 不可 MakeGenericMethod
+    //   早期实现用反射取 "ILike" 3 参重载再 MakeGenericMethod(typeof(string)) 抛 "is not a GenericMethodDefinition"
+    //   现改为直接引用方法组, 编译期保证类型正确
+    private System.Linq.Expressions.Expression<Func<TItem, bool>> BuildSearchPredicate(string pattern)
+    {
+        // 直接引用 NpgsqlDbFunctionsExtensions.ILike 3 参重载 (非泛型 string 重载)
+        //   签名: bool ILike(this DbFunctions _, string matchExpression, string pattern, string escapeCharacter)
+        //   位于 Microsoft.EntityFrameworkCore.NpgsqlDbFunctionsExtensions (Npgsql.EntityFrameworkCore.PostgreSQL 8.0+)
+        var ilikeMethod = ((Func<Microsoft.EntityFrameworkCore.DbFunctions, string, string, string, bool>)
+            Microsoft.EntityFrameworkCore.NpgsqlDbFunctionsExtensions.ILike).Method;
+        var efFunctionsConst = System.Linq.Expressions.Expression.Constant(
+            Microsoft.EntityFrameworkCore.EF.Functions, typeof(Microsoft.EntityFrameworkCore.DbFunctions));
+        var patternConst = System.Linq.Expressions.Expression.Constant(pattern);
+        var escapeConst = System.Linq.Expressions.Expression.Constant("\\");
+        var param = System.Linq.Expressions.Expression.Parameter(typeof(TItem), "b");
+        System.Linq.Expressions.Expression? combined = null;
+        foreach (var propName in new[] { ValueProperty }.Concat(ExtraSearchProperties).Distinct())
+        {
+            var propAccess = System.Linq.Expressions.Expression.Property(param, propName);
+            var matchExpr = System.Linq.Expressions.Expression.Call(
+                ilikeMethod, efFunctionsConst, propAccess, patternConst, escapeConst);
+            combined = combined == null
+                ? (System.Linq.Expressions.Expression)matchExpr
+                : System.Linq.Expressions.Expression.OrElse(combined, matchExpr);
+        }
+        return System.Linq.Expressions.Expression.Lambda<Func<TItem, bool>>(combined!, param);
     }
 }

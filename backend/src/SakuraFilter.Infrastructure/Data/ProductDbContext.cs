@@ -21,6 +21,14 @@ public class ProductDbContext : DbContext
     public DbSet<SearchIndexDeadLetter> SearchIndexDeadLetters => Set<SearchIndexDeadLetter>();
     public DbSet<EtlProgressLog> EtlProgressLogs => Set<EtlProgressLog>();  // Day 7.7
     public DbSet<XrefOemBrand> XrefOemBrands => Set<XrefOemBrand>();  // Day 10: P1.3 OEM 品牌字典
+    // Day 10+ P2.2: 6 个新字典 (复用 P2.1 IDictService + BaseDictService 抽象)
+    public DbSet<DictProductName1> DictProductName1s => Set<DictProductName1>();
+    public DbSet<DictProductName2> DictProductName2s => Set<DictProductName2>();
+    public DbSet<DictType> DictTypes => Set<DictType>();
+    public DbSet<DictOemNo3> DictOemNo3s => Set<DictOemNo3>();
+    public DbSet<DictMedia> DictMedias => Set<DictMedia>();           // 多字段 2
+    public DbSet<DictMachine> DictMachines => Set<DictMachine>();     // 多字段 3
+    public DbSet<DictEngine> DictEngines => Set<DictEngine>();         // 多字段 2
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {

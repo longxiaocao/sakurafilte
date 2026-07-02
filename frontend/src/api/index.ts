@@ -36,6 +36,95 @@ export interface OemBrandReorderItem {
   sortOrder: number
 }
 
+// ===== Day 10+ P2.2: 字典类型 (Product Name 1/2, Type, OEM 3, Media, Machine, Engine) =====
+export interface ProductName1Item {
+  id: number
+  productName1: string
+  sortOrder: number
+  createdAt: string
+  updatedAt: string
+  deletedAt: string | null
+  xrefCount: number
+}
+export interface ProductName1TypeaheadItem { id: number; productName1: string }
+export interface ProductName1ReorderItem { id: number; sortOrder: number }
+
+export interface ProductName2Item {
+  id: number
+  productName2: string
+  sortOrder: number
+  createdAt: string
+  updatedAt: string
+  deletedAt: string | null
+  xrefCount: number
+}
+export interface ProductName2TypeaheadItem { id: number; productName2: string }
+export interface ProductName2ReorderItem { id: number; sortOrder: number }
+
+export interface TypeItem {
+  id: number
+  type: string
+  sortOrder: number
+  createdAt: string
+  updatedAt: string
+  deletedAt: string | null
+  xrefCount: number
+}
+export interface TypeTypeaheadItem { id: number; type: string }
+export interface TypeReorderItem { id: number; sortOrder: number }
+
+export interface OemNo3Item {
+  id: number
+  oemNo3: string
+  sortOrder: number
+  createdAt: string
+  updatedAt: string
+  deletedAt: string | null
+  xrefCount: number
+}
+export interface OemNo3TypeaheadItem { id: number; oemNo3: string }
+export interface OemNo3ReorderItem { id: number; sortOrder: number }
+
+export interface MediaItem {
+  id: number
+  mediaName: string
+  mediaModel: string | null
+  sortOrder: number
+  createdAt: string
+  updatedAt: string
+  deletedAt: string | null
+  xrefCount: number
+}
+export interface MediaTypeaheadItem { id: number; mediaName: string; mediaModel: string | null }
+export interface MediaReorderItem { id: number; sortOrder: number }
+
+export interface MachineItem {
+  id: number
+  machineBrand: string
+  machineModel: string | null
+  machineName: string | null
+  sortOrder: number
+  createdAt: string
+  updatedAt: string
+  deletedAt: string | null
+  xrefCount: number
+}
+export interface MachineTypeaheadItem { id: number; machineBrand: string; machineModel: string | null; machineName: string | null }
+export interface MachineReorderItem { id: number; sortOrder: number }
+
+export interface EngineItem {
+  id: number
+  engineBrand: string
+  engineType: string | null
+  sortOrder: number
+  createdAt: string
+  updatedAt: string
+  deletedAt: string | null
+  xrefCount: number
+}
+export interface EngineTypeaheadItem { id: number; engineBrand: string; engineType: string | null }
+export interface EngineReorderItem { id: number; sortOrder: number }
+
 // ===== 搜索 (公开, 无需 token) =====
 export const searchApi = {
   search(req: SearchRequest): Promise<{ provider: string; result: SearchResult }> {
@@ -158,6 +247,7 @@ export const etlApi = {
 //   delete:      DELETE /api/admin/dict/oem-brands/:id            (软删除)
 //   restore:     POST   /api/admin/dict/oem-brands/:id/restore
 //   reorder:     POST   /api/admin/dict/oem-brands/reorder        { items: [{id, sortOrder}] }
+// ===== P2.2: 复用 BaseDictService 抽象, 7 个新字典走同 URL 模式 =====
 export const dictApi = {
   oemBrands: {
     list(q?: string, includeDeleted = false, limit?: number): Promise<{ count: number; items: OemBrandItem[] }> {
@@ -186,6 +276,216 @@ export const dictApi = {
     },
     reorder(items: OemBrandReorderItem[]): Promise<{ updated: number }> {
       return http.post('/admin/dict/oem-brands/reorder', { items }).then((r) => r.data)
+    }
+  },
+  // ===== P2.2: Product Name 1 =====
+  productName1s: {
+    list(q?: string, includeDeleted = false, limit?: number): Promise<{ count: number; items: ProductName1Item[] }> {
+      const params: Record<string, any> = {}
+      if (q) params.q = q
+      if (includeDeleted) params.includeDeleted = true
+      if (limit) params.limit = limit
+      return http.get('/admin/dict/product-name1s', { params }).then((r) => r.data)
+    },
+    typeahead(q?: string, limit = 20): Promise<{ count: number; items: ProductName1TypeaheadItem[] }> {
+      const params: Record<string, any> = { limit }
+      if (q) params.q = q
+      return http.get('/admin/dict/product-name1s/typeahead', { params }).then((r) => r.data)
+    },
+    create(productName1: string, sortOrder?: number): Promise<ProductName1Item> {
+      return http.post('/admin/dict/product-name1s', { productName1, sortOrder }).then((r) => r.data)
+    },
+    update(id: number, body: { productName1?: string; sortOrder?: number }): Promise<ProductName1Item> {
+      return http.put(`/admin/dict/product-name1s/${id}`, body).then((r) => r.data)
+    },
+    delete(id: number): Promise<void> {
+      return http.delete(`/admin/dict/product-name1s/${id}`).then((r) => r.data)
+    },
+    restore(id: number): Promise<ProductName1Item> {
+      return http.post(`/admin/dict/product-name1s/${id}/restore`).then((r) => r.data)
+    },
+    reorder(items: ProductName1ReorderItem[]): Promise<{ updated: number }> {
+      return http.post('/admin/dict/product-name1s/reorder', { items }).then((r) => r.data)
+    }
+  },
+  // ===== P2.2: Product Name 2 =====
+  productName2s: {
+    list(q?: string, includeDeleted = false, limit?: number): Promise<{ count: number; items: ProductName2Item[] }> {
+      const params: Record<string, any> = {}
+      if (q) params.q = q
+      if (includeDeleted) params.includeDeleted = true
+      if (limit) params.limit = limit
+      return http.get('/admin/dict/product-name2s', { params }).then((r) => r.data)
+    },
+    typeahead(q?: string, limit = 20): Promise<{ count: number; items: ProductName2TypeaheadItem[] }> {
+      const params: Record<string, any> = { limit }
+      if (q) params.q = q
+      return http.get('/admin/dict/product-name2s/typeahead', { params }).then((r) => r.data)
+    },
+    create(productName2: string, sortOrder?: number): Promise<ProductName2Item> {
+      return http.post('/admin/dict/product-name2s', { productName2, sortOrder }).then((r) => r.data)
+    },
+    update(id: number, body: { productName2?: string; sortOrder?: number }): Promise<ProductName2Item> {
+      return http.put(`/admin/dict/product-name2s/${id}`, body).then((r) => r.data)
+    },
+    delete(id: number): Promise<void> {
+      return http.delete(`/admin/dict/product-name2s/${id}`).then((r) => r.data)
+    },
+    restore(id: number): Promise<ProductName2Item> {
+      return http.post(`/admin/dict/product-name2s/${id}/restore`).then((r) => r.data)
+    },
+    reorder(items: ProductName2ReorderItem[]): Promise<{ updated: number }> {
+      return http.post('/admin/dict/product-name2s/reorder', { items }).then((r) => r.data)
+    }
+  },
+  // ===== P2.2: Type (固定 5 值: oil/fuel/air/cabin/others) =====
+  types: {
+    list(q?: string, includeDeleted = false, limit?: number): Promise<{ count: number; items: TypeItem[] }> {
+      const params: Record<string, any> = {}
+      if (q) params.q = q
+      if (includeDeleted) params.includeDeleted = true
+      if (limit) params.limit = limit
+      return http.get('/admin/dict/types', { params }).then((r) => r.data)
+    },
+    typeahead(q?: string, limit = 20): Promise<{ count: number; items: TypeTypeaheadItem[] }> {
+      const params: Record<string, any> = { limit }
+      if (q) params.q = q
+      return http.get('/admin/dict/types/typeahead', { params }).then((r) => r.data)
+    },
+    create(type: string, sortOrder?: number): Promise<TypeItem> {
+      return http.post('/admin/dict/types', { type, sortOrder }).then((r) => r.data)
+    },
+    update(id: number, body: { type?: string; sortOrder?: number }): Promise<TypeItem> {
+      return http.put(`/admin/dict/types/${id}`, body).then((r) => r.data)
+    },
+    delete(id: number): Promise<void> {
+      return http.delete(`/admin/dict/types/${id}`).then((r) => r.data)
+    },
+    restore(id: number): Promise<TypeItem> {
+      return http.post(`/admin/dict/types/${id}/restore`).then((r) => r.data)
+    },
+    reorder(items: TypeReorderItem[]): Promise<{ updated: number }> {
+      return http.post('/admin/dict/types/reorder', { items }).then((r) => r.data)
+    }
+  },
+  // ===== P2.2: OEM 3 =====
+  oemNo3s: {
+    list(q?: string, includeDeleted = false, limit?: number): Promise<{ count: number; items: OemNo3Item[] }> {
+      const params: Record<string, any> = {}
+      if (q) params.q = q
+      if (includeDeleted) params.includeDeleted = true
+      if (limit) params.limit = limit
+      return http.get('/admin/dict/oem-no3s', { params }).then((r) => r.data)
+    },
+    typeahead(q?: string, limit = 20): Promise<{ count: number; items: OemNo3TypeaheadItem[] }> {
+      const params: Record<string, any> = { limit }
+      if (q) params.q = q
+      return http.get('/admin/dict/oem-no3s/typeahead', { params }).then((r) => r.data)
+    },
+    create(oemNo3: string, sortOrder?: number): Promise<OemNo3Item> {
+      return http.post('/admin/dict/oem-no3s', { oemNo3, sortOrder }).then((r) => r.data)
+    },
+    update(id: number, body: { oemNo3?: string; sortOrder?: number }): Promise<OemNo3Item> {
+      return http.put(`/admin/dict/oem-no3s/${id}`, body).then((r) => r.data)
+    },
+    delete(id: number): Promise<void> {
+      return http.delete(`/admin/dict/oem-no3s/${id}`).then((r) => r.data)
+    },
+    restore(id: number): Promise<OemNo3Item> {
+      return http.post(`/admin/dict/oem-no3s/${id}/restore`).then((r) => r.data)
+    },
+    reorder(items: OemNo3ReorderItem[]): Promise<{ updated: number }> {
+      return http.post('/admin/dict/oem-no3s/reorder', { items }).then((r) => r.data)
+    }
+  },
+  // ===== P2.2: Media (2 字段: media_name + media_model) =====
+  medias: {
+    list(q?: string, includeDeleted = false, limit?: number): Promise<{ count: number; items: MediaItem[] }> {
+      const params: Record<string, any> = {}
+      if (q) params.q = q
+      if (includeDeleted) params.includeDeleted = true
+      if (limit) params.limit = limit
+      return http.get('/admin/dict/medias', { params }).then((r) => r.data)
+    },
+    typeahead(q?: string, limit = 20): Promise<{ count: number; items: MediaTypeaheadItem[] }> {
+      const params: Record<string, any> = { limit }
+      if (q) params.q = q
+      return http.get('/admin/dict/medias/typeahead', { params }).then((r) => r.data)
+    },
+    create(mediaName: string, mediaModel?: string, sortOrder?: number): Promise<MediaItem> {
+      return http.post('/admin/dict/medias', { mediaName, mediaModel, sortOrder }).then((r) => r.data)
+    },
+    update(id: number, body: { mediaName?: string; mediaModel?: string; sortOrder?: number }): Promise<MediaItem> {
+      return http.put(`/admin/dict/medias/${id}`, body).then((r) => r.data)
+    },
+    delete(id: number): Promise<void> {
+      return http.delete(`/admin/dict/medias/${id}`).then((r) => r.data)
+    },
+    restore(id: number): Promise<MediaItem> {
+      return http.post(`/admin/dict/medias/${id}/restore`).then((r) => r.data)
+    },
+    reorder(items: MediaReorderItem[]): Promise<{ updated: number }> {
+      return http.post('/admin/dict/medias/reorder', { items }).then((r) => r.data)
+    }
+  },
+  // ===== P2.2: Machine (3 字段: machine_brand + machine_model + machine_name) =====
+  machines: {
+    list(q?: string, includeDeleted = false, limit?: number): Promise<{ count: number; items: MachineItem[] }> {
+      const params: Record<string, any> = {}
+      if (q) params.q = q
+      if (includeDeleted) params.includeDeleted = true
+      if (limit) params.limit = limit
+      return http.get('/admin/dict/machines', { params }).then((r) => r.data)
+    },
+    typeahead(q?: string, limit = 20): Promise<{ count: number; items: MachineTypeaheadItem[] }> {
+      const params: Record<string, any> = { limit }
+      if (q) params.q = q
+      return http.get('/admin/dict/machines/typeahead', { params }).then((r) => r.data)
+    },
+    create(machineBrand: string, machineModel?: string, machineName?: string, sortOrder?: number): Promise<MachineItem> {
+      return http.post('/admin/dict/machines', { machineBrand, machineModel, machineName, sortOrder }).then((r) => r.data)
+    },
+    update(id: number, body: { machineBrand?: string; machineModel?: string; machineName?: string; sortOrder?: number }): Promise<MachineItem> {
+      return http.put(`/admin/dict/machines/${id}`, body).then((r) => r.data)
+    },
+    delete(id: number): Promise<void> {
+      return http.delete(`/admin/dict/machines/${id}`).then((r) => r.data)
+    },
+    restore(id: number): Promise<MachineItem> {
+      return http.post(`/admin/dict/machines/${id}/restore`).then((r) => r.data)
+    },
+    reorder(items: MachineReorderItem[]): Promise<{ updated: number }> {
+      return http.post('/admin/dict/machines/reorder', { items }).then((r) => r.data)
+    }
+  },
+  // ===== P2.2: Engine (2 字段: engine_brand + engine_type) =====
+  engines: {
+    list(q?: string, includeDeleted = false, limit?: number): Promise<{ count: number; items: EngineItem[] }> {
+      const params: Record<string, any> = {}
+      if (q) params.q = q
+      if (includeDeleted) params.includeDeleted = true
+      if (limit) params.limit = limit
+      return http.get('/admin/dict/engines', { params }).then((r) => r.data)
+    },
+    typeahead(q?: string, limit = 20): Promise<{ count: number; items: EngineTypeaheadItem[] }> {
+      const params: Record<string, any> = { limit }
+      if (q) params.q = q
+      return http.get('/admin/dict/engines/typeahead', { params }).then((r) => r.data)
+    },
+    create(engineBrand: string, engineType?: string, sortOrder?: number): Promise<EngineItem> {
+      return http.post('/admin/dict/engines', { engineBrand, engineType, sortOrder }).then((r) => r.data)
+    },
+    update(id: number, body: { engineBrand?: string; engineType?: string; sortOrder?: number }): Promise<EngineItem> {
+      return http.put(`/admin/dict/engines/${id}`, body).then((r) => r.data)
+    },
+    delete(id: number): Promise<void> {
+      return http.delete(`/admin/dict/engines/${id}`).then((r) => r.data)
+    },
+    restore(id: number): Promise<EngineItem> {
+      return http.post(`/admin/dict/engines/${id}/restore`).then((r) => r.data)
+    },
+    reorder(items: EngineReorderItem[]): Promise<{ updated: number }> {
+      return http.post('/admin/dict/engines/reorder', { items }).then((r) => r.data)
     }
   }
 }

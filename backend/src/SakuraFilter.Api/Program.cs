@@ -242,6 +242,14 @@ builder.Services.AddScoped<AdminProductService>();
 builder.Services.AddScoped<AdminProductImageService>();
 // Day 10+: 后台字典服务 (P1.3 OEM 品牌字典, P2.1 重构为 OemBrandDictService 继承 BaseDictService)
 builder.Services.AddScoped<OemBrandDictService>();
+// Day 10+ P2.2: 6 个新字典 (复用 P2.1 IDictService + BaseDictService 抽象)
+builder.Services.AddScoped<ProductName1DictService>();
+builder.Services.AddScoped<ProductName2DictService>();
+builder.Services.AddScoped<TypeDictService>();
+builder.Services.AddScoped<OemNo3DictService>();
+builder.Services.AddScoped<MediaDictService>();
+builder.Services.AddScoped<MachineDictService>();
+builder.Services.AddScoped<EngineDictService>();
 
 var app = builder.Build();
 
@@ -1371,6 +1379,417 @@ app.MapPost("/api/admin/dict/oem-brands/reorder", async (
     catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
 })
 .WithName("AdminReorderOemBrands");
+
+// =================== Day 10+ P2.2: 6 个新字典管理端点 ===================
+//   4 个单字段字典 (Product Name 1/2, Type, OEM 3): 完全复用 Day 10 OEM Brand 模式
+//   3 个多字段字典 (Media/Machine/Engine): DTO 含多个字段, 端点签名差异
+//   路径命名: 复数 kebab-case, 与 Day 10 一致
+//     - /api/admin/dict/product-name1s
+//     - /api/admin/dict/product-name2s
+//     - /api/admin/dict/types
+//     - /api/admin/dict/oem-no3s
+//     - /api/admin/dict/medias
+//     - /api/admin/dict/machines
+//     - /api/admin/dict/engines
+
+// ---------- 字典 1: Product Name 1 ----------
+app.MapGet("/api/admin/dict/product-name1s", async (
+    [Microsoft.AspNetCore.Mvc.FromQuery] string? q,
+    [Microsoft.AspNetCore.Mvc.FromQuery] bool? includeDeleted,
+    [Microsoft.AspNetCore.Mvc.FromQuery] int? limit,
+    ProductName1DictService svc, CancellationToken ct) =>
+{
+    var items = await svc.ListProductName1sAsync(q, includeDeleted ?? false, limit, ct);
+    return Results.Ok(new { count = items.Count, items });
+}).WithName("AdminListProductName1s");
+app.MapGet("/api/admin/dict/product-name1s/typeahead", async (
+    [Microsoft.AspNetCore.Mvc.FromQuery] string? q,
+    [Microsoft.AspNetCore.Mvc.FromQuery] int? limit,
+    ProductName1DictService svc, CancellationToken ct) =>
+{
+    var items = await svc.TypeaheadProductName1sAsync(q, limit, ct);
+    return Results.Ok(new { count = items.Count, items });
+}).WithName("AdminTypeaheadProductName1s");
+app.MapPost("/api/admin/dict/product-name1s", async (
+    ProductName1CreateRequest body, ProductName1DictService svc, HttpContext ctx, CancellationToken ct) =>
+{
+    if (string.IsNullOrWhiteSpace(body.ProductName1)) return Results.BadRequest(new { error = "productName1 不能为空" });
+    try { var item = await svc.CreateProductName1Async(body.ProductName1, body.SortOrder, ct);
+        return Results.Created($"/api/admin/dict/product-name1s/{item.Id}", item); }
+    catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+    catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+}).WithName("AdminCreateProductName1");
+app.MapPut("/api/admin/dict/product-name1s/{id:long}", async (
+    long id, ProductName1UpdateRequest body, ProductName1DictService svc, HttpContext ctx, CancellationToken ct) =>
+{
+    try { return Results.Ok(await svc.UpdateProductName1Async(id, body.ProductName1, body.SortOrder, ct)); }
+    catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+    catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+    catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+}).WithName("AdminUpdateProductName1");
+app.MapDelete("/api/admin/dict/product-name1s/{id:long}", async (
+    long id, ProductName1DictService svc, HttpContext ctx, CancellationToken ct) =>
+{
+    try { await svc.DeleteProductName1Async(id, ct); return Results.Ok(new { id, deleted = true }); }
+    catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+    catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+}).WithName("AdminDeleteProductName1");
+app.MapPost("/api/admin/dict/product-name1s/{id:long}/restore", async (
+    long id, ProductName1DictService svc, HttpContext ctx, CancellationToken ct) =>
+{
+    try { return Results.Ok(await svc.RestoreProductName1Async(id, ct)); }
+    catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+    catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+}).WithName("AdminRestoreProductName1");
+app.MapPost("/api/admin/dict/product-name1s/reorder", async (
+    ProductName1ReorderRequest body, ProductName1DictService svc, HttpContext ctx, CancellationToken ct) =>
+{
+    try { await svc.ReorderProductName1sAsync(body.Items, ct); return Results.Ok(new { updated = body.Items?.Count ?? 0 }); }
+    catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+    catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+}).WithName("AdminReorderProductName1s");
+
+// ---------- 字典 2: Product Name 2 ----------
+app.MapGet("/api/admin/dict/product-name2s", async (
+    [Microsoft.AspNetCore.Mvc.FromQuery] string? q,
+    [Microsoft.AspNetCore.Mvc.FromQuery] bool? includeDeleted,
+    [Microsoft.AspNetCore.Mvc.FromQuery] int? limit,
+    ProductName2DictService svc, CancellationToken ct) =>
+{
+    var items = await svc.ListProductName2sAsync(q, includeDeleted ?? false, limit, ct);
+    return Results.Ok(new { count = items.Count, items });
+}).WithName("AdminListProductName2s");
+app.MapGet("/api/admin/dict/product-name2s/typeahead", async (
+    [Microsoft.AspNetCore.Mvc.FromQuery] string? q,
+    [Microsoft.AspNetCore.Mvc.FromQuery] int? limit,
+    ProductName2DictService svc, CancellationToken ct) =>
+{
+    var items = await svc.TypeaheadProductName2sAsync(q, limit, ct);
+    return Results.Ok(new { count = items.Count, items });
+}).WithName("AdminTypeaheadProductName2s");
+app.MapPost("/api/admin/dict/product-name2s", async (
+    ProductName2CreateRequest body, ProductName2DictService svc, HttpContext ctx, CancellationToken ct) =>
+{
+    if (string.IsNullOrWhiteSpace(body.ProductName2)) return Results.BadRequest(new { error = "productName2 不能为空" });
+    try { var item = await svc.CreateProductName2Async(body.ProductName2, body.SortOrder, ct);
+        return Results.Created($"/api/admin/dict/product-name2s/{item.Id}", item); }
+    catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+    catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+}).WithName("AdminCreateProductName2");
+app.MapPut("/api/admin/dict/product-name2s/{id:long}", async (
+    long id, ProductName2UpdateRequest body, ProductName2DictService svc, HttpContext ctx, CancellationToken ct) =>
+{
+    try { return Results.Ok(await svc.UpdateProductName2Async(id, body.ProductName2, body.SortOrder, ct)); }
+    catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+    catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+    catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+}).WithName("AdminUpdateProductName2");
+app.MapDelete("/api/admin/dict/product-name2s/{id:long}", async (
+    long id, ProductName2DictService svc, HttpContext ctx, CancellationToken ct) =>
+{
+    try { await svc.DeleteProductName2Async(id, ct); return Results.Ok(new { id, deleted = true }); }
+    catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+    catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+}).WithName("AdminDeleteProductName2");
+app.MapPost("/api/admin/dict/product-name2s/{id:long}/restore", async (
+    long id, ProductName2DictService svc, HttpContext ctx, CancellationToken ct) =>
+{
+    try { return Results.Ok(await svc.RestoreProductName2Async(id, ct)); }
+    catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+    catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+}).WithName("AdminRestoreProductName2");
+app.MapPost("/api/admin/dict/product-name2s/reorder", async (
+    ProductName2ReorderRequest body, ProductName2DictService svc, HttpContext ctx, CancellationToken ct) =>
+{
+    try { await svc.ReorderProductName2sAsync(body.Items, ct); return Results.Ok(new { updated = body.Items?.Count ?? 0 }); }
+    catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+    catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+}).WithName("AdminReorderProductName2s");
+
+// ---------- 字典 3: Type (固定 5 值) ----------
+app.MapGet("/api/admin/dict/types", async (
+    [Microsoft.AspNetCore.Mvc.FromQuery] string? q,
+    [Microsoft.AspNetCore.Mvc.FromQuery] bool? includeDeleted,
+    [Microsoft.AspNetCore.Mvc.FromQuery] int? limit,
+    TypeDictService svc, CancellationToken ct) =>
+{
+    var items = await svc.ListTypesAsync(q, includeDeleted ?? false, limit, ct);
+    return Results.Ok(new { count = items.Count, items });
+}).WithName("AdminListTypes");
+app.MapGet("/api/admin/dict/types/typeahead", async (
+    [Microsoft.AspNetCore.Mvc.FromQuery] string? q,
+    [Microsoft.AspNetCore.Mvc.FromQuery] int? limit,
+    TypeDictService svc, CancellationToken ct) =>
+{
+    var items = await svc.TypeaheadTypesAsync(q, limit, ct);
+    return Results.Ok(new { count = items.Count, items });
+}).WithName("AdminTypeaheadTypes");
+app.MapPost("/api/admin/dict/types", async (
+    TypeCreateRequest body, TypeDictService svc, HttpContext ctx, CancellationToken ct) =>
+{
+    if (string.IsNullOrWhiteSpace(body.Type)) return Results.BadRequest(new { error = "type 不能为空" });
+    try { var item = await svc.CreateTypeAsync(body.Type, body.SortOrder, ct);
+        return Results.Created($"/api/admin/dict/types/{item.Id}", item); }
+    catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+    catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+}).WithName("AdminCreateType");
+app.MapPut("/api/admin/dict/types/{id:long}", async (
+    long id, TypeUpdateRequest body, TypeDictService svc, HttpContext ctx, CancellationToken ct) =>
+{
+    try { return Results.Ok(await svc.UpdateTypeAsync(id, body.Type, body.SortOrder, ct)); }
+    catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+    catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+    catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+}).WithName("AdminUpdateType");
+app.MapDelete("/api/admin/dict/types/{id:long}", async (
+    long id, TypeDictService svc, HttpContext ctx, CancellationToken ct) =>
+{
+    try { await svc.DeleteTypeAsync(id, ct); return Results.Ok(new { id, deleted = true }); }
+    catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+    catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+}).WithName("AdminDeleteType");
+app.MapPost("/api/admin/dict/types/{id:long}/restore", async (
+    long id, TypeDictService svc, HttpContext ctx, CancellationToken ct) =>
+{
+    try { return Results.Ok(await svc.RestoreTypeAsync(id, ct)); }
+    catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+    catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+}).WithName("AdminRestoreType");
+app.MapPost("/api/admin/dict/types/reorder", async (
+    TypeReorderRequest body, TypeDictService svc, HttpContext ctx, CancellationToken ct) =>
+{
+    try { await svc.ReorderTypesAsync(body.Items, ct); return Results.Ok(new { updated = body.Items?.Count ?? 0 }); }
+    catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+    catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+}).WithName("AdminReorderTypes");
+
+// ---------- 字典 4: OEM 3 ----------
+app.MapGet("/api/admin/dict/oem-no3s", async (
+    [Microsoft.AspNetCore.Mvc.FromQuery] string? q,
+    [Microsoft.AspNetCore.Mvc.FromQuery] bool? includeDeleted,
+    [Microsoft.AspNetCore.Mvc.FromQuery] int? limit,
+    OemNo3DictService svc, CancellationToken ct) =>
+{
+    var items = await svc.ListOemNo3sAsync(q, includeDeleted ?? false, limit, ct);
+    return Results.Ok(new { count = items.Count, items });
+}).WithName("AdminListOemNo3s");
+app.MapGet("/api/admin/dict/oem-no3s/typeahead", async (
+    [Microsoft.AspNetCore.Mvc.FromQuery] string? q,
+    [Microsoft.AspNetCore.Mvc.FromQuery] int? limit,
+    OemNo3DictService svc, CancellationToken ct) =>
+{
+    var items = await svc.TypeaheadOemNo3sAsync(q, limit, ct);
+    return Results.Ok(new { count = items.Count, items });
+}).WithName("AdminTypeaheadOemNo3s");
+app.MapPost("/api/admin/dict/oem-no3s", async (
+    OemNo3CreateRequest body, OemNo3DictService svc, HttpContext ctx, CancellationToken ct) =>
+{
+    if (string.IsNullOrWhiteSpace(body.OemNo3)) return Results.BadRequest(new { error = "oemNo3 不能为空" });
+    try { var item = await svc.CreateOemNo3Async(body.OemNo3, body.SortOrder, ct);
+        return Results.Created($"/api/admin/dict/oem-no3s/{item.Id}", item); }
+    catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+    catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+}).WithName("AdminCreateOemNo3");
+app.MapPut("/api/admin/dict/oem-no3s/{id:long}", async (
+    long id, OemNo3UpdateRequest body, OemNo3DictService svc, HttpContext ctx, CancellationToken ct) =>
+{
+    try { return Results.Ok(await svc.UpdateOemNo3Async(id, body.OemNo3, body.SortOrder, ct)); }
+    catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+    catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+    catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+}).WithName("AdminUpdateOemNo3");
+app.MapDelete("/api/admin/dict/oem-no3s/{id:long}", async (
+    long id, OemNo3DictService svc, HttpContext ctx, CancellationToken ct) =>
+{
+    try { await svc.DeleteOemNo3Async(id, ct); return Results.Ok(new { id, deleted = true }); }
+    catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+    catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+}).WithName("AdminDeleteOemNo3");
+app.MapPost("/api/admin/dict/oem-no3s/{id:long}/restore", async (
+    long id, OemNo3DictService svc, HttpContext ctx, CancellationToken ct) =>
+{
+    try { return Results.Ok(await svc.RestoreOemNo3Async(id, ct)); }
+    catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+    catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+}).WithName("AdminRestoreOemNo3");
+app.MapPost("/api/admin/dict/oem-no3s/reorder", async (
+    OemNo3ReorderRequest body, OemNo3DictService svc, HttpContext ctx, CancellationToken ct) =>
+{
+    try { await svc.ReorderOemNo3sAsync(body.Items, ct); return Results.Ok(new { updated = body.Items?.Count ?? 0 }); }
+    catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+    catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+}).WithName("AdminReorderOemNo3s");
+
+// ---------- 字典 5: Media (2 字段) ----------
+app.MapGet("/api/admin/dict/medias", async (
+    [Microsoft.AspNetCore.Mvc.FromQuery] string? q,
+    [Microsoft.AspNetCore.Mvc.FromQuery] bool? includeDeleted,
+    [Microsoft.AspNetCore.Mvc.FromQuery] int? limit,
+    MediaDictService svc, CancellationToken ct) =>
+{
+    var items = await svc.ListMediasAsync(q, includeDeleted ?? false, limit, ct);
+    return Results.Ok(new { count = items.Count, items });
+}).WithName("AdminListMedias");
+app.MapGet("/api/admin/dict/medias/typeahead", async (
+    [Microsoft.AspNetCore.Mvc.FromQuery] string? q,
+    [Microsoft.AspNetCore.Mvc.FromQuery] int? limit,
+    MediaDictService svc, CancellationToken ct) =>
+{
+    var items = await svc.TypeaheadMediasAsync(q, limit, ct);
+    return Results.Ok(new { count = items.Count, items });
+}).WithName("AdminTypeaheadMedias");
+app.MapPost("/api/admin/dict/medias", async (
+    MediaCreateRequest body, MediaDictService svc, HttpContext ctx, CancellationToken ct) =>
+{
+    if (string.IsNullOrWhiteSpace(body.MediaName)) return Results.BadRequest(new { error = "mediaName 不能为空" });
+    try { var item = await svc.CreateMediaAsync(body.MediaName, body.MediaModel, body.SortOrder, ct);
+        return Results.Created($"/api/admin/dict/medias/{item.Id}", item); }
+    catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+    catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+}).WithName("AdminCreateMedia");
+app.MapPut("/api/admin/dict/medias/{id:long}", async (
+    long id, MediaUpdateRequest body, MediaDictService svc, HttpContext ctx, CancellationToken ct) =>
+{
+    try { return Results.Ok(await svc.UpdateMediaAsync(id, body.MediaName, body.MediaModel, body.SortOrder, ct)); }
+    catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+    catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+    catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+}).WithName("AdminUpdateMedia");
+app.MapDelete("/api/admin/dict/medias/{id:long}", async (
+    long id, MediaDictService svc, HttpContext ctx, CancellationToken ct) =>
+{
+    try { await svc.DeleteMediaAsync(id, ct); return Results.Ok(new { id, deleted = true }); }
+    catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+    catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+}).WithName("AdminDeleteMedia");
+app.MapPost("/api/admin/dict/medias/{id:long}/restore", async (
+    long id, MediaDictService svc, HttpContext ctx, CancellationToken ct) =>
+{
+    try { return Results.Ok(await svc.RestoreMediaAsync(id, ct)); }
+    catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+    catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+}).WithName("AdminRestoreMedia");
+app.MapPost("/api/admin/dict/medias/reorder", async (
+    MediaReorderRequest body, MediaDictService svc, HttpContext ctx, CancellationToken ct) =>
+{
+    try { await svc.ReorderMediasAsync(body.Items, ct); return Results.Ok(new { updated = body.Items?.Count ?? 0 }); }
+    catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+    catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+}).WithName("AdminReorderMedias");
+
+// ---------- 字典 6: Machine (3 字段) ----------
+app.MapGet("/api/admin/dict/machines", async (
+    [Microsoft.AspNetCore.Mvc.FromQuery] string? q,
+    [Microsoft.AspNetCore.Mvc.FromQuery] bool? includeDeleted,
+    [Microsoft.AspNetCore.Mvc.FromQuery] int? limit,
+    MachineDictService svc, CancellationToken ct) =>
+{
+    var items = await svc.ListMachinesAsync(q, includeDeleted ?? false, limit, ct);
+    return Results.Ok(new { count = items.Count, items });
+}).WithName("AdminListMachines");
+app.MapGet("/api/admin/dict/machines/typeahead", async (
+    [Microsoft.AspNetCore.Mvc.FromQuery] string? q,
+    [Microsoft.AspNetCore.Mvc.FromQuery] int? limit,
+    MachineDictService svc, CancellationToken ct) =>
+{
+    var items = await svc.TypeaheadMachinesAsync(q, limit, ct);
+    return Results.Ok(new { count = items.Count, items });
+}).WithName("AdminTypeaheadMachines");
+app.MapPost("/api/admin/dict/machines", async (
+    MachineCreateRequest body, MachineDictService svc, HttpContext ctx, CancellationToken ct) =>
+{
+    if (string.IsNullOrWhiteSpace(body.MachineBrand)) return Results.BadRequest(new { error = "machineBrand 不能为空" });
+    try { var item = await svc.CreateMachineAsync(body.MachineBrand, body.MachineModel, body.MachineName, body.SortOrder, ct);
+        return Results.Created($"/api/admin/dict/machines/{item.Id}", item); }
+    catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+    catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+}).WithName("AdminCreateMachine");
+app.MapPut("/api/admin/dict/machines/{id:long}", async (
+    long id, MachineUpdateRequest body, MachineDictService svc, HttpContext ctx, CancellationToken ct) =>
+{
+    try { return Results.Ok(await svc.UpdateMachineAsync(id, body.MachineBrand, body.MachineModel, body.MachineName, body.SortOrder, ct)); }
+    catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+    catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+    catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+}).WithName("AdminUpdateMachine");
+app.MapDelete("/api/admin/dict/machines/{id:long}", async (
+    long id, MachineDictService svc, HttpContext ctx, CancellationToken ct) =>
+{
+    try { await svc.DeleteMachineAsync(id, ct); return Results.Ok(new { id, deleted = true }); }
+    catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+    catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+}).WithName("AdminDeleteMachine");
+app.MapPost("/api/admin/dict/machines/{id:long}/restore", async (
+    long id, MachineDictService svc, HttpContext ctx, CancellationToken ct) =>
+{
+    try { return Results.Ok(await svc.RestoreMachineAsync(id, ct)); }
+    catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+    catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+}).WithName("AdminRestoreMachine");
+app.MapPost("/api/admin/dict/machines/reorder", async (
+    MachineReorderRequest body, MachineDictService svc, HttpContext ctx, CancellationToken ct) =>
+{
+    try { await svc.ReorderMachinesAsync(body.Items, ct); return Results.Ok(new { updated = body.Items?.Count ?? 0 }); }
+    catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+    catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+}).WithName("AdminReorderMachines");
+
+// ---------- 字典 7: Engine (2 字段) ----------
+app.MapGet("/api/admin/dict/engines", async (
+    [Microsoft.AspNetCore.Mvc.FromQuery] string? q,
+    [Microsoft.AspNetCore.Mvc.FromQuery] bool? includeDeleted,
+    [Microsoft.AspNetCore.Mvc.FromQuery] int? limit,
+    EngineDictService svc, CancellationToken ct) =>
+{
+    var items = await svc.ListEnginesAsync(q, includeDeleted ?? false, limit, ct);
+    return Results.Ok(new { count = items.Count, items });
+}).WithName("AdminListEngines");
+app.MapGet("/api/admin/dict/engines/typeahead", async (
+    [Microsoft.AspNetCore.Mvc.FromQuery] string? q,
+    [Microsoft.AspNetCore.Mvc.FromQuery] int? limit,
+    EngineDictService svc, CancellationToken ct) =>
+{
+    var items = await svc.TypeaheadEnginesAsync(q, limit, ct);
+    return Results.Ok(new { count = items.Count, items });
+}).WithName("AdminTypeaheadEngines");
+app.MapPost("/api/admin/dict/engines", async (
+    EngineCreateRequest body, EngineDictService svc, HttpContext ctx, CancellationToken ct) =>
+{
+    if (string.IsNullOrWhiteSpace(body.EngineBrand)) return Results.BadRequest(new { error = "engineBrand 不能为空" });
+    try { var item = await svc.CreateEngineAsync(body.EngineBrand, body.EngineType, body.SortOrder, ct);
+        return Results.Created($"/api/admin/dict/engines/{item.Id}", item); }
+    catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+    catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+}).WithName("AdminCreateEngine");
+app.MapPut("/api/admin/dict/engines/{id:long}", async (
+    long id, EngineUpdateRequest body, EngineDictService svc, HttpContext ctx, CancellationToken ct) =>
+{
+    try { return Results.Ok(await svc.UpdateEngineAsync(id, body.EngineBrand, body.EngineType, body.SortOrder, ct)); }
+    catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+    catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+    catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+}).WithName("AdminUpdateEngine");
+app.MapDelete("/api/admin/dict/engines/{id:long}", async (
+    long id, EngineDictService svc, HttpContext ctx, CancellationToken ct) =>
+{
+    try { await svc.DeleteEngineAsync(id, ct); return Results.Ok(new { id, deleted = true }); }
+    catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+    catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+}).WithName("AdminDeleteEngine");
+app.MapPost("/api/admin/dict/engines/{id:long}/restore", async (
+    long id, EngineDictService svc, HttpContext ctx, CancellationToken ct) =>
+{
+    try { return Results.Ok(await svc.RestoreEngineAsync(id, ct)); }
+    catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+    catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+}).WithName("AdminRestoreEngine");
+app.MapPost("/api/admin/dict/engines/reorder", async (
+    EngineReorderRequest body, EngineDictService svc, HttpContext ctx, CancellationToken ct) =>
+{
+    try { await svc.ReorderEnginesAsync(body.Items, ct); return Results.Ok(new { updated = body.Items?.Count ?? 0 }); }
+    catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+    catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+}).WithName("AdminReorderEngines");
 
 app.Run();
 

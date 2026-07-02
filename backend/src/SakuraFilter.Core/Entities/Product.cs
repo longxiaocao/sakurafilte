@@ -291,3 +291,118 @@ public class EtlProgressLog
     //   不影响历史 ETL 日志 (nullable), 仅新生成的暂停任务会填
     [Column("checkpoint_id")] public long? CheckpointId { get; set; }
 }
+
+// ========== Day 10+ P2.2: 字典实体 (复用 P2.1 IDictService + BaseDictService 抽象) ==========
+// 设计:
+//   - 表名固定 dict_* 前缀, 与历史业务表 (products / cross_references / machine_applications) 区分
+//   - 统一字段: id / value / sort_order / created_at / updated_at / deleted_at
+//   - xrefCount 不存表, 服务层 GetXrefCountAsync 实时聚合来源表
+//   - 单字段字典 (ProductName1/2, Type, OemNo3) 与 Day 10 XrefOemBrand 一致
+//   - 多字段字典 (Media: 2 字段, Machine: 3 字段, Engine: 2 字段) 主值字段为 *Name/Brand
+//     UNIQUE 索引覆盖主字段, ExtraSearchProperties 让 List/Typeahead 走 OR 匹配所有字段
+
+/// <summary>
+/// 产品名 1 字典 (Day 10+ P2.2)
+/// 用途: 后台产品表单分区 1 product_name_1 自动补全, 来源 products.product_name_1
+/// </summary>
+public class DictProductName1
+{
+    public long Id { get; set; }
+    [Column("product_name_1")] public string ProductName1 { get; set; } = "";
+    [Column("sort_order")] public int SortOrder { get; set; }
+    [Column("created_at")] public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    [Column("updated_at")] public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    [Column("deleted_at")] public DateTime? DeletedAt { get; set; }
+}
+
+/// <summary>
+/// 产品名 2 字典 (Day 10+ P2.2)
+/// 用途: 后台产品表单分区 1 product_name_2 自动补全, 来源 products.product_name_2
+/// </summary>
+public class DictProductName2
+{
+    public long Id { get; set; }
+    [Column("product_name_2")] public string ProductName2 { get; set; } = "";
+    [Column("sort_order")] public int SortOrder { get; set; }
+    [Column("created_at")] public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    [Column("updated_at")] public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    [Column("deleted_at")] public DateTime? DeletedAt { get; set; }
+}
+
+/// <summary>
+/// Type 字典 (Day 10+ P2.2) - 固定 5 值: oil/fuel/air/cabin/others
+/// 用途: 后台产品表单分区 1 type 自动补全, 来源 products.type
+/// </summary>
+public class DictType
+{
+    public long Id { get; set; }
+    [Column("type")] public string Type { get; set; } = "";
+    [Column("sort_order")] public int SortOrder { get; set; }
+    [Column("created_at")] public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    [Column("updated_at")] public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    [Column("deleted_at")] public DateTime? DeletedAt { get; set; }
+}
+
+/// <summary>
+/// OEM 3 字典 (Day 10+ P2.2)
+/// 用途: 后台产品表单分区 2 oem_no_3 自动补全, 来源 cross_references.oem_no_3
+/// </summary>
+public class DictOemNo3
+{
+    public long Id { get; set; }
+    [Column("oem_no_3")] public string OemNo3 { get; set; } = "";
+    [Column("sort_order")] public int SortOrder { get; set; }
+    [Column("created_at")] public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    [Column("updated_at")] public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    [Column("deleted_at")] public DateTime? DeletedAt { get; set; }
+}
+
+/// <summary>
+/// Media 字典 (Day 10+ P2.2) - 2 字段: media_name + media_model
+/// 用途: 后台产品表单分区 4 media + media_model 自动补全 (二合一)
+/// 设计: 主值字段 media_name, UNIQUE (media_name, media_model), ExtraSearchProperties=[MediaModel]
+/// </summary>
+public class DictMedia
+{
+    public long Id { get; set; }
+    [Column("media_name")] public string MediaName { get; set; } = "";
+    [Column("media_model")] public string? MediaModel { get; set; }
+    [Column("sort_order")] public int SortOrder { get; set; }
+    [Column("created_at")] public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    [Column("updated_at")] public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    [Column("deleted_at")] public DateTime? DeletedAt { get; set; }
+}
+
+/// <summary>
+/// Machine 字典 (Day 10+ P2.2) - 3 字段: machine_brand + machine_model + machine_name
+/// 用途: 后台产品表单分区 7 machine_brand/model/name 自动补全 (三合一)
+/// 设计: 主值字段 machine_brand, UNIQUE (machine_brand, machine_model, machine_name),
+///       ExtraSearchProperties=[MachineModel, MachineName]
+/// </summary>
+public class DictMachine
+{
+    public long Id { get; set; }
+    [Column("machine_brand")] public string MachineBrand { get; set; } = "";
+    [Column("machine_model")] public string? MachineModel { get; set; }
+    [Column("machine_name")] public string? MachineName { get; set; }
+    [Column("sort_order")] public int SortOrder { get; set; }
+    [Column("created_at")] public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    [Column("updated_at")] public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    [Column("deleted_at")] public DateTime? DeletedAt { get; set; }
+}
+
+/// <summary>
+/// Engine 字典 (Day 10+ P2.2) - 2 字段: engine_brand + engine_type
+/// 用途: 后台产品表单分区 7 engine_brand/type 自动补全 (二合一)
+/// 设计: 主值字段 engine_brand, UNIQUE (engine_brand, engine_type), ExtraSearchProperties=[EngineType]
+/// </summary>
+public class DictEngine
+{
+    public long Id { get; set; }
+    [Column("engine_brand")] public string EngineBrand { get; set; } = "";
+    [Column("engine_type")] public string? EngineType { get; set; }
+    [Column("sort_order")] public int SortOrder { get; set; }
+    [Column("created_at")] public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    [Column("updated_at")] public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    [Column("deleted_at")] public DateTime? DeletedAt { get; set; }
+}
