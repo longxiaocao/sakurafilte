@@ -65,6 +65,13 @@ THREADS = ["3/4-16UNF", "M20x1.5", "M22x1.5", "M24x1.5", "M26x1.5",
            "M27x2", "1-12UNF", "1-14UNS", "13/16-16UN", "M30x1.5", "M36x1.5"]
 THREAD_WEIGHTS = [25, 20, 15, 10, 8, 5, 5, 4, 4, 3, 1]
 
+# WHY 新增: product_name_1/2 变体库 (Excel 规范分区 1 主信息区)
+#   - product_name_1: 产品主名, 业务规则"当 product1 和 product3 同时存在时只录入 product1" (前端优先显示)
+#   - product_name_2: 副名/修饰, 可空
+#   - dict_product_name1/2 字典来源这两个字段, 故需有 distinct 多样性
+NAME_VARIANTS = ["Standard", "Heavy Duty", "Premium", "Industrial", "Compact",
+                 "High Flow", "Long Life", "Pro", "Eco", "Heavy"]
+
 # 车型大类
 MACHINE_TYPES = ["Compressor", "Light vehicle", "Road paver", "Motor",
                  "Scrubber", "Power generator", "Compactor", "Sandblast",
@@ -125,10 +132,23 @@ def gen_product(idx: int) -> dict:
     type_ = random.choices(TYPES, TYPE_WEIGHTS)[0]
     d1, d2, d3 = gen_dim(), gen_dim(), gen_dim()
     h1, h2, h3 = gen_height(), gen_height(), gen_height()
+    # WHY 新增: product_name_1/2 模拟真实分布
+    #   - product_name_1: 70% 与 type 同步 (前端优先显示), 20% type+variant (更细分类), 10% None (没填)
+    #   - product_name_2: 25% variant 修饰, 75% None (可选字段, 多数空)
+    r1 = random.random()
+    if r1 < 0.70:
+        product_name_1 = type_
+    elif r1 < 0.90:
+        product_name_1 = f"{type_} {random.choice(NAME_VARIANTS)}"
+    else:
+        product_name_1 = None
+    product_name_2 = random.choice(NAME_VARIANTS) if random.random() < 0.25 else None
     return {
         "oem_no_display": oem_display,
         "oem_no_normalized": oem_norm,
         "remark": f"HiFi Filter {oem_display} {type_.title()}",
+        "product_name_1": product_name_1,
+        "product_name_2": product_name_2,
         "product_name_3": type_,
         "type": type_,  # ETL 已注入
         "d1_mm": d1, "d2_mm": d2, "d3_mm": d3,

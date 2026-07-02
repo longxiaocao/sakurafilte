@@ -109,3 +109,33 @@
 2026-07-01 07:56:17,004 [INFO] sheet '机型区' 列名校验通过 (6 项必填列)
 2026-07-01 07:56:17,005 [INFO] sheet '机型区' 列名校验通过 (6 项必填列)
 2026-07-01 07:56:23,413 [WARNING] sheet '机型区' 缺少必填列: ['Machine Brand']
+2026-07-03 05:33:14,467 [INFO] 读取: output\源数据.xlsx
+2026-07-03 05:33:14,679 [INFO] Sheet 列表: ['产品区', 'OEM区', '机型区']
+2026-07-03 05:33:22,871 [INFO] 产品区: 50000 行, 22 列
+2026-07-03 05:33:22,872 [INFO] sheet '产品区' 列名校验通过 (3 项必填列)
+2026-07-03 05:33:57,198 [INFO] OEM区: 623585 行, 4 列
+2026-07-03 05:33:57,198 [INFO] sheet 'OEM区' 列名校验通过 (3 项必填列)
+2026-07-03 05:35:41,275 [INFO] 机型区: 776309 行, 8 列
+2026-07-03 05:35:41,275 [INFO] sheet '机型区' 列名校验通过 (6 项必填列)
+2026-07-03 05:36:45,753 [INFO] 对齐: xrefs 丢弃 0 条, apps 丢弃 0 条 (产品集 50000 个 OEM)
+2026-07-03 05:36:46,203 [INFO] 写出: output\cleaned\products.jsonl (50000 条)
+2026-07-03 05:36:48,176 [INFO] 写出: output\cleaned\xrefs.jsonl (623585 条)
+2026-07-03 05:36:51,127 [INFO] 写出: output\cleaned\apps.jsonl (776309 条)
+2026-07-03 05:36:51,128 [INFO] 汇总: output\cleaned\_clean_summary.json
+2026-07-03 05:36:51,128 [INFO] 最终统计: {
+  "products_read": 50000,
+  "products_emitted": 50000,
+  "xrefs_read": 623585,
+  "xrefs_emitted": 623585,
+  "apps_read": 776309,
+  "apps_emitted": 776309,
+  "apps_aligned_dropped": 0,
+  "xrefs_aligned_dropped": 0,
+  "dropped_header": 0,
+  "dropped_separator": 0,
+  "parsed_unit_suffix": 50000,
+  "parsed_eu_decimal": 0,
+  "parsed_special_date": 465857,
+  "oem_normalized": 50000,
+  "oem_display_kept": 50000
+}

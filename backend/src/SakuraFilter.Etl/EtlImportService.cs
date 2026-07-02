@@ -745,7 +745,8 @@ public class EtlImportService
             //   之前: 100K 行取消要等 100s 才能停
             const int CancelCheckInterval = 1000;
             await using (var writer = await conn.BeginBinaryImportAsync(@"
-                COPY products_stage (oem_no_normalized, oem_no_display, type, product_name_3,
+                COPY products_stage (oem_no_normalized, oem_no_display, type,
+                    product_name_1, product_name_2, product_name_3,
                     remark, d1_mm, d2_mm, d3_mm, h1_mm, h2_mm, h3_mm,
                     d7_thread, d8_thread, media, sealing_material,
                     efficiency_1, efficiency_2, bypass_valve_lr, bypass_valve_hr,
@@ -769,6 +770,9 @@ public class EtlImportService
                         await writer.WriteAsync(oemNorm, NpgsqlDbType.Varchar, ct);
                         await writer.WriteAsync(doc.GetProperty("oem_no_display").GetString() ?? "", NpgsqlDbType.Varchar, ct);
                         await writer.WriteAsync(doc.GetProperty("type").GetString() ?? "UNKNOWN", NpgsqlDbType.Varchar, ct);
+                        // WHY 新增: product_name_1/2 写入 stage (分区 1 主信息区, 之前 COPY 漏读导致 products 表这两列全 NULL)
+                        await WriteNullableStringAsync(writer, GetStringOrNull(doc, "product_name_1"), ct);
+                        await WriteNullableStringAsync(writer, GetStringOrNull(doc, "product_name_2"), ct);
                         await WriteNullableStringAsync(writer, GetStringOrNull(doc, "product_name_3"), ct);
                         await WriteNullableStringAsync(writer, GetStringOrNull(doc, "remark"), ct);
                         await WriteNullableDecimalAsync(writer, GetDecimalOrNull(doc, "d1_mm"), ct);
@@ -844,13 +848,15 @@ public class EtlImportService
                 //      Day 7 修复: 同时清 cross_references/machine_applications 避免孤儿行 (无 FK 约束时不会失败)
                 "full-load" => @"
                     TRUNCATE products, cross_references, machine_applications RESTART IDENTITY CASCADE;
-                    INSERT INTO products (oem_no_normalized, oem_no_display, type, product_name_3,
+                    INSERT INTO products (oem_no_normalized, oem_no_display, type,
+                        product_name_1, product_name_2, product_name_3,
                         remark, d1_mm, d2_mm, d3_mm, h1_mm, h2_mm, h3_mm,
                         d7_thread, d8_thread, media, sealing_material,
                         efficiency_1, efficiency_2, bypass_valve_lr, bypass_valve_hr,
                         collapse_pressure_bar, temp_range, bypass_pressure, updated_at)
                     SELECT DISTINCT ON (oem_no_normalized)
-                        oem_no_normalized, oem_no_display, type, product_name_3,
+                        oem_no_normalized, oem_no_display, type,
+                        product_name_1, product_name_2, product_name_3,
                         remark, d1_mm, d2_mm, d3_mm, h1_mm, h2_mm, h3_mm,
                         d7_thread, d8_thread, media, sealing_material,
                         efficiency_1, efficiency_2, bypass_valve_lr, bypass_valve_hr,
@@ -858,13 +864,15 @@ public class EtlImportService
                     FROM products_stage
                     ORDER BY oem_no_normalized, ctid DESC;",
                 "insert-only" => @"
-                    INSERT INTO products (oem_no_normalized, oem_no_display, type, product_name_3,
+                    INSERT INTO products (oem_no_normalized, oem_no_display, type,
+                        product_name_1, product_name_2, product_name_3,
                         remark, d1_mm, d2_mm, d3_mm, h1_mm, h2_mm, h3_mm,
                         d7_thread, d8_thread, media, sealing_material,
                         efficiency_1, efficiency_2, bypass_valve_lr, bypass_valve_hr,
                         collapse_pressure_bar, temp_range, bypass_pressure, updated_at)
                     SELECT DISTINCT ON (oem_no_normalized)
-                        oem_no_normalized, oem_no_display, type, product_name_3,
+                        oem_no_normalized, oem_no_display, type,
+                        product_name_1, product_name_2, product_name_3,
                         remark, d1_mm, d2_mm, d3_mm, h1_mm, h2_mm, h3_mm,
                         d7_thread, d8_thread, media, sealing_material,
                         efficiency_1, efficiency_2, bypass_valve_lr, bypass_valve_hr,
@@ -873,13 +881,15 @@ public class EtlImportService
                     ORDER BY oem_no_normalized, ctid DESC
                     ON CONFLICT (oem_no_normalized) DO NOTHING;",
                 _ => @"
-                    INSERT INTO products (oem_no_normalized, oem_no_display, type, product_name_3,
+                    INSERT INTO products (oem_no_normalized, oem_no_display, type,
+                        product_name_1, product_name_2, product_name_3,
                         remark, d1_mm, d2_mm, d3_mm, h1_mm, h2_mm, h3_mm,
                         d7_thread, d8_thread, media, sealing_material,
                         efficiency_1, efficiency_2, bypass_valve_lr, bypass_valve_hr,
                         collapse_pressure_bar, temp_range, bypass_pressure, updated_at)
                     SELECT DISTINCT ON (oem_no_normalized)
-                        oem_no_normalized, oem_no_display, type, product_name_3,
+                        oem_no_normalized, oem_no_display, type,
+                        product_name_1, product_name_2, product_name_3,
                         remark, d1_mm, d2_mm, d3_mm, h1_mm, h2_mm, h3_mm,
                         d7_thread, d8_thread, media, sealing_material,
                         efficiency_1, efficiency_2, bypass_valve_lr, bypass_valve_hr,
@@ -889,6 +899,8 @@ public class EtlImportService
                     ON CONFLICT (oem_no_normalized) DO UPDATE SET
                         oem_no_display = EXCLUDED.oem_no_display,
                         type = EXCLUDED.type,
+                        product_name_1 = EXCLUDED.product_name_1,
+                        product_name_2 = EXCLUDED.product_name_2,
                         product_name_3 = EXCLUDED.product_name_3,
                         remark = EXCLUDED.remark,
                         d1_mm = EXCLUDED.d1_mm,
@@ -1694,6 +1706,8 @@ public class EtlImportService
                 oem_no_normalized VARCHAR(50),
                 oem_no_display VARCHAR(50),
                 type VARCHAR(50),
+                product_name_1 VARCHAR(100),
+                product_name_2 VARCHAR(100),
                 product_name_3 VARCHAR(100),
                 remark TEXT,
                 d1_mm NUMERIC(8,2), d2_mm NUMERIC(8,2), d3_mm NUMERIC(8,2),

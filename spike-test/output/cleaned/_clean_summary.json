@@ -1,20 +1,20 @@
 {
   "stats": {
-    "products_read": 2132,
-    "products_emitted": 2132,
-    "xrefs_read": 2017,
-    "xrefs_emitted": 2017,
-    "apps_read": 1650,
-    "apps_emitted": 1602,
-    "apps_aligned_dropped": 1547,
-    "xrefs_aligned_dropped": 1981,
+    "products_read": 50000,
+    "products_emitted": 50000,
+    "xrefs_read": 623585,
+    "xrefs_emitted": 623585,
+    "apps_read": 776309,
+    "apps_emitted": 776309,
+    "apps_aligned_dropped": 0,
+    "xrefs_aligned_dropped": 0,
     "dropped_header": 0,
     "dropped_separator": 0,
-    "parsed_unit_suffix": 2108,
+    "parsed_unit_suffix": 50000,
     "parsed_eu_decimal": 0,
-    "parsed_special_date": 396,
-    "oem_normalized": 2132,
-    "oem_display_kept": 2132
+    "parsed_special_date": 465857,
+    "oem_normalized": 50000,
+    "oem_display_kept": 50000
   },
   "sheets_processed": [
     "产品区",

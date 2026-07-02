@@ -182,6 +182,11 @@ def clean_products_sheet(df: pd.DataFrame) -> list[dict]:
             'oem_no_display': oem_display,
             'oem_no_normalized': oem_norm,
             'type': type_val,
+            # WHY 新增: Excel 规范分区 1 主信息区 Product Name 1/2 (产品主名/副名)
+            #   - 与 cross_references.product_name_1 区分: xref 自带的 product_name_1 是该 brand 对应名
+            #   - 业务规则: 当 product_name_1 和 product_name_3 同时存在时前端只显示 product_name_1
+            'product_name_1': clean_string(row.get('Product Name 1')),
+            'product_name_2': clean_string(row.get('Product Name 2')),
             'product_name_3': clean_string(row.get('product name 3')),
             'remark': clean_string(row.get('Remark')),
             'd1_mm': d1,
