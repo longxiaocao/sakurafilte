@@ -41,6 +41,10 @@ public class ProductDbContext : DbContext
             e.Property(p => p.Remark).HasColumnType("text");
             e.Property(p => p.ImageKey).HasMaxLength(500);
             e.Property(p => p.ImageStatus).HasMaxLength(20).HasDefaultValue("pending");
+            // Day 9.12 v8: is_published 默认 true (Product.cs C# 默认值)
+            //   WHY: ETL INSERT 不显式插入 is_published 列, PG 列无默认值时 23502 违反 NOT NULL
+            //        之前本地数据库有旧 SQL migration 建过 DEFAULT true,CI 上 Migrate 无默认值 → ETL failed
+            e.Property(p => p.IsPublished).HasDefaultValue(true);
             // Day 9.12 v7: OemNoNormalized 必须为 UNIQUE 索引
             //   WHY: EtlImportService.ImportProductsAsync INSERT 用 ON CONFLICT (oem_no_normalized) DO NOTHING/UPDATE
             //        无 UNIQUE 约束时 PG 报 42P10: there is no unique or exclusion constraint matching the ON CONFLICT specification
