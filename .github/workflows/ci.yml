@@ -108,17 +108,10 @@ jobs:
         working-directory: backend
         run: dotnet build --no-restore -c Release
 
-      - name: Apply migrations
-        working-directory: spike-test
-        run: |
-          # Day 9.4-9.5 关键 migration 全部应用
-          for f in 015_add_etl_cancel_audit.sql 016_add_history_paging_index.sql 017_add_etl_cancel_reason_code.sql; do
-            if [ -f "../backend/migrations/$f" ]; then
-              PGPASSWORD=784533 psql -h localhost -U postgres -d spike_test_v3 -f "../backend/migrations/$f" -v ON_ERROR_STOP=0 || true
-            fi
-          done
-          # 已落库的旧 schema 假定有, 这里只补新加的列
-          # 完整 bootstrap 由 _apply_migration_* 系列脚本承担 (见 spike-test/)
+      # Day 9.11: 删除 Apply migrations 步骤
+      #   WHY: Program.cs 启动时 Database.Migrate() 已自动应用 EF Core Migrations
+      #        InitialCreate 迁移包含完整 schema (9 表+索引),空数据库自动创建
+      #   旧 19 个 SQL 迁移保留为历史文档,Migrate 已覆盖其 schema 变更
 
       # Day 9.5: 跑 E2E 套件, 任意 case 失败 → exit 1 → CI 红
       # Day 9.6: E2E_REQUIRED 门禁
