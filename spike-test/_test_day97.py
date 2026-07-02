@@ -20,6 +20,9 @@ INSTANCE_B = "http://localhost:5149"
 TOKEN = os.environ.get("ADMIN_TOKEN", "dev-admin-token-rotate-in-prod-MZK4R9P3X6V2N7Q1L5F0B8H3C")
 H_ADMIN = {"X-Admin-Token": TOKEN, "Content-Type": "application/json"}
 
+# Day 9.12: 跨平台基准路径 (CI Linux + Windows)
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
 PASS = 0
 FAIL = 0
 RESULTS = []
@@ -262,12 +265,18 @@ def test_etl_real_trigger():
     关键: snapshot timer 是 500ms 拍一次, 真实 ETL 至少 5s → 10 帧 progress
     """
     # 用 5000 行 products 让 ETL 跑足够久 (5s+)
-    jsonl_path = "D:/data/sakurafilter/products_5k.jsonl"
+    # Day 9.12: 路径跨平台 (SCRIPT_DIR/output/) + 字段用 oem_no_normalized/oem_no_display
+    #   WHY 字段必须正确: EtlImportService 读 oem_no_normalized/oem_no_display/type
+    #     用错字段名 (oem_no) 会导致每行 'key not present', 5K 行 1s 内跑完, SSE 只有 1 帧
+    out_dir = os.path.join(SCRIPT_DIR, "output")
+    os.makedirs(out_dir, exist_ok=True)
+    jsonl_path = os.path.join(out_dir, "products_5k.jsonl")
     if not os.path.exists(jsonl_path):
-        with open(jsonl_path, "w") as f:
+        with open(jsonl_path, "w", encoding="utf-8") as f:
             for i in range(1, 5001):
                 f.write(json.dumps({
-                    "oem_no": f"DAY97-OEM-5K-{i}",
+                    "oem_no_normalized": f"DAY97-OEM-5K-{i}",
+                    "oem_no_display": f"DAY97-OEM-5K-{i}",
                     "product_name_1": f"Day 9.7 5K Test {i}",
                     "type": "Hydraulic",
                     "media": "Synthetic",

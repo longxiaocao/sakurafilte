@@ -35,8 +35,10 @@ frontend/node_modules/
 ## 大型测试数据 (避免污染仓库)
 # WHY: synthetic_*.jsonl 是合成压测数据 (100k 行 67-360MB),可由 generate_synthetic_data.py 重建
 # _test_*.jsonl 是临时测试数据,无需版本控制
+# products_*.jsonl 是 Day 9.7 SSE 测试 5K 行 ETL 数据,可由测试脚本重建
 # cleaned/ 是 ETL 清洗输出,体积大
 spike-test/output/synthetic_*.jsonl
 spike-test/output/_test_*.jsonl
+spike-test/output/products_*.jsonl
 spike-test/output/cleaned/
 spike-test/output/synthetic_*_1000k.*

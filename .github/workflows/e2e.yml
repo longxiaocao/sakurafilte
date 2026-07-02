@@ -81,21 +81,47 @@ jobs:
         run: |
           # Day 9.7 需要双实例, CI 内启动第二个
           cd ../backend/src/SakuraFilter.Api
-          dotnet run -c Release --no-build --urls "http://localhost:5149" &
+          dotnet run -c Release --no-build --urls "http://localhost:5149" > /tmp/api5149.log 2>&1 &
           cd ../../spike-test
           # Day 9.12: 循环等待 5149 实例可达 (最多 30s)
           #   WHY: 之前固定 sleep 3s 不够, dotnet 启动 + Database.Migrate + LISTEN 需 5-8s
           #        API 可达时 EtlProgressBroadcaster 已建立 LISTEN (HostedService.StartAsync 完成)
+          B_READY=0
           for i in $(seq 1 30); do
             code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5149/api/etl/status -H "X-Admin-Token: $ADMIN_TOKEN" 2>/dev/null || echo 000)
             echo "[wait] instance B http code = $code (try $i/30)"
             if [ "$code" = "200" ]; then
               echo "Instance B ready after ${i}s"
+              B_READY=1
               break
             fi
             sleep 1
           done
-          python _test_day97.py
+          if [ "$B_READY" != "1" ]; then
+            echo "=== FAIL: Instance B (5149) 30s 内未就绪 ==="
+            echo "--- 5149 API 日志 (前 80 行) ---"
+            head -n 80 /tmp/api5149.log || echo "无日志"
+            echo "--- 5148 API 进程 ---"
+            ps -ef | grep -E "dotnet|SakuraFilter" | grep -v grep || echo "无 dotnet 进程"
+            exit 1
+          fi
+          # Day 9.12: 测试失败时输出诊断信息 (LISTEN 进程数 + 双实例 API 日志)
+          if ! python _test_day97.py; then
+            echo "=== _test_day97.py 失败, 收集诊断信息 ==="
+            echo "--- PG LISTEN etl_progress 进程数 ---"
+            python -c "
+          import psycopg2
+          c = psycopg2.connect(host='localhost', port=5432, dbname='spike_test_v3', user='postgres', password='784533')
+          cur = c.cursor()
+          cur.execute(\"SELECT pid, query FROM pg_stat_activity WHERE query ILIKE '%LISTEN etl_progress%'\")
+          for r in cur.fetchall():
+              print(f'  pid={r[0]} query={r[1][:80]}')
+          c.close()
+          " || echo "查询失败"
+            echo "--- 5149 API 日志 (后 50 行) ---"
+            tail -n 50 /tmp/api5149.log || echo "无日志"
+            exit 1
+          fi
 
       - name: Run E2E Day 9.8 (ETL history audit + reason_code pie chart)
         working-directory: spike-test
