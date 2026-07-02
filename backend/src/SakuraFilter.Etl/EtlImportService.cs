@@ -813,7 +813,7 @@ public class EtlImportService
                 var msg = $"数据完整性校验失败: read={Progress.Read} stage={stageCount} errors={Progress.Errors} (期望 stage+errors=read)";
                 _logger.LogError(msg);
                 Progress.Fail(msg);
-                Progress.PersistLogAsync("products", mode);
+                _ = Progress.PersistLogAsync("products", mode);
                 return Progress;
             }
 
@@ -947,7 +947,7 @@ public class EtlImportService
                 var msg = $"数据完整性校验失败: affected={actualAffected} > stage={stageCount} (INSERT 影响行数不应超过 stage 行数)";
                 _logger.LogError(msg);
                 Progress.Fail(msg);
-                Progress.PersistLogAsync("products", mode);
+                _ = Progress.PersistLogAsync("products", mode);
                 return Progress;
             }
             var skippedCount = stageCount - actualAffected;
@@ -986,7 +986,7 @@ public class EtlImportService
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
             Progress.Cancel(_activeCancelReason ?? "用户取消", _activeCancelReasonCode ?? "OTHER");
-            Progress.PersistLogAsync("products", mode);  // 不 await: 写日志失败不阻塞取消信号
+            _ = Progress.PersistLogAsync("products", mode);  // 不 await: 写日志失败不阻塞取消信号
             _logger.LogInformation("ETL products 任务被用户取消, reason={Reason} code={Code}",
                 _activeCancelReason, _activeCancelReasonCode);
         }
@@ -1232,7 +1232,7 @@ public class EtlImportService
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
             Progress.Cancel(_activeCancelReason ?? "用户取消", _activeCancelReasonCode ?? "OTHER");
-            Progress.PersistLogAsync("xrefs", mode);
+            _ = Progress.PersistLogAsync("xrefs", mode);
             _logger.LogInformation("ETL xrefs 任务被用户取消, reason={Reason} code={Code}",
                 _activeCancelReason, _activeCancelReasonCode);
         }
@@ -1578,7 +1578,7 @@ public class EtlImportService
                 var msg = $"数据完整性校验失败: read={Progress.Read} stage={appStageCount} errors={Progress.Errors} missingOem={Progress.SkippedMissingOem} (期望 stage+errors+missingOem=read)";
                 _logger.LogError(msg);
                 Progress.Fail(msg);
-                Progress.PersistLogAsync("apps", mode);
+                _ = Progress.PersistLogAsync("apps", mode);
                 return Progress;
             }
 
@@ -1646,7 +1646,7 @@ public class EtlImportService
                 var msg = $"数据完整性校验失败: apps affected={appAffected} > stage={appStageCount}";
                 _logger.LogError(msg);
                 Progress.Fail(msg);
-                Progress.PersistLogAsync("apps", mode);
+                _ = Progress.PersistLogAsync("apps", mode);
                 return Progress;
             }
 
@@ -1667,7 +1667,7 @@ public class EtlImportService
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
             Progress.Cancel(_activeCancelReason ?? "用户取消", _activeCancelReasonCode ?? "OTHER");
-            Progress.PersistLogAsync("apps", mode);
+            _ = Progress.PersistLogAsync("apps", mode);
             _logger.LogInformation("ETL apps 任务被用户取消, reason={Reason} code={Code}",
                 _activeCancelReason, _activeCancelReasonCode);
         }
