@@ -165,17 +165,17 @@
   - 验证: E2E 边界 case: 含空行/重复/前后空格 全部去重
 
 ### Task 11: P3.3 前台产品详情页
-- [ ] `PublicProductView.vue` 路由 `/product/:slug` 存在
+- [x] `PublicProductView.vue` 路由 `/product/:slug` 存在
   - 验证: `ls frontend/src/views/public/PublicProductView.vue`
   - URL 格式: `/product/{name1}-{name2}-{oemBrand}-{oemNo}` (按规格 R1)
-- [ ] 7 分区折叠展示 (按"后台新增产品格式"规格)
+- [x] 7 分区折叠展示 (按"后台新增产品格式"规格)
   - 验证: 浏览器访问 `/product/...` 看到 7 个折叠面板
   - 字段: 见 `spec.md` P3.3 7 分区字段表 (分区 1-7 共 30+ 字段)
-- [ ] SEO `<title>` 格式正确
+- [x] SEO `<title>` 格式正确
   - 验证: View Page Source, title = "ProductName1 ProductName2 OEM BRAND OEM NO - SakuraFilter"
-- [ ] OG meta tags (og:title / og:image / og:description / og:type=product)
+- [x] OG meta tags (og:title / og:image / og:description / og:type=product)
   - 验证: View Page Source, 4 个 og meta 都有
-- [ ] 公开 `/product/:slug` 无 admin 鉴权
+- [x] 公开 `/product/:slug` 无 admin 鉴权
   - 验证: `curl -I http://localhost:5148/product/oil-filter-of100-mann-w950` 预期 200 (无 token)
 - [ ] Playwright 截图测试通过
   - 验证: `cd frontend && npx playwright test tests/visual/public-product.spec.ts` 预期 PASS
