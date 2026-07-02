@@ -50,11 +50,11 @@
 ## Phase 2: P2 字典扩展 (4 任务)
 
 ### Task 6: P2.1 字典抽象层 IDictService + BaseDictService (1 session)
-- [ ] SubTask 6.1: 设计 `IDictService<TItem>` 通用接口 (List/Typeahead/Create/Update/Delete/Restore/Reorder)
-- [ ] SubTask 6.2: `BaseDictService<TItem>` 抽象基类 (软删/排序/UNIQUE/xrefCount 统一)
-- [ ] SubTask 6.3: 重构 `OemBrandDictService` 继承 `BaseDictService<XrefOemBrand>` (Day 10 E2E 10/10 仍通过)
-- [ ] SubTask 6.4: 用 `IEntityTypeConfiguration<TItem>` 分文件配置, DbContext 集中注册
-- [ ] 验证: Day 10 E2E 10/10 通过, 后续字典 P2.2 实现量 < 100 行/字典
+- [x] SubTask 6.1: 设计 `IDictService<TItem>` 通用接口 (List/Typeahead/Create/Update/Delete/Restore/Reorder)
+- [x] SubTask 6.2: `BaseDictService<TItem>` 抽象基类 (软删/排序/UNIQUE/xrefCount 统一)
+- [x] SubTask 6.3: 重构 `OemBrandDictService` 继承 `BaseDictService<XrefOemBrand>` (Day 10 E2E 10/10 仍通过)
+- [x] SubTask 6.4: 用 `IEntityTypeConfiguration<TItem>` 分文件配置, DbContext 集中注册
+- [x] 验证: Day 10 E2E 10/10 通过, 后续字典 P2.2 实现量 < 100 行/字典
 
 ### Task 7: P2.2 5 个新字典 (复用 P2.1 抽象) (2 session)
 - [ ] SubTask 7.1: `dict_product_name1` Entity + Migration + Service + View + E2E (0.5 session)

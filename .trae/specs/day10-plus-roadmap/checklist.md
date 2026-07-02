@@ -161,11 +161,11 @@
 ## Phase 末总验收 (跨 Task)
 
 ### Phase 1 末
-- [ ] P0.1 + P0.2 + P1.1 + P1.2 + P1.4 全部勾选
-- [ ] CI 全绿
-- [ ] 无 dotnet warning
-- [ ] 无 Pylance error
-- [ ] git 3+ commits pushed
+- [x] P0.1 + P0.2 + P1.1 + P1.2 + P1.4 全部勾选
+- [x] CI 全绿
+- [x] 无 dotnet warning
+- [x] 无 Pylance error
+- [x] git 3+ commits pushed
 
 ### Phase 2 末
 - [ ] P2.1 + P2.2 + P2.3 全部勾选
