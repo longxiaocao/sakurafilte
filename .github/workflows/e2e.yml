@@ -165,6 +165,19 @@ jobs:
         #   Case 1-8 + 10 验证表结构/CRUD/排序/typeahead, EF Core Migrate 会建 xref_oem_brand 表
         run: python _test_day10_oem_brands.py
 
+      # Day 10+ P1.4: 搜索性能基准 (Task 5)
+      #   SLA 目标: search P95 < 200ms, typeahead P95 < 100ms (假设 Meili 主搜索在线)
+      #   CI 现状: Meili 未启, Resilient 兜底走 PG, Meili timeout 1s 是延迟地板
+      #           故 CI 阈值放宽到 3000ms, 仍能捕获 PG 侧严重退化
+      #           本地/Meili 启用时, 设 BENCH_THRESHOLD_P95=200 走严格 SLA
+      #   阈值超 → ::error:: 注解 + exit 1 (CI 红叉)
+      - name: Run Search Benchmark (P1.4)
+        working-directory: spike-test
+        env:
+          BENCH_THRESHOLD_P95: '3000'
+          BENCH_THRESHOLD_TYPEAHEAD_P95: '200'
+        run: python _bench_search.py --concurrency=10 --threshold-p95=$BENCH_THRESHOLD_P95 --threshold-typeahead-p95=$BENCH_THRESHOLD_TYPEAHEAD_P95
+
       - name: E2E gate check (master only)
         if: github.ref == 'refs/heads/master' && github.event_name == 'push'
         run: |

@@ -39,11 +39,11 @@
 - [x] 验证: 切换 provider 后图片 URL 可访问, 前台产品页不 404
 
 ### Task 5: P1.4 Search 性能基准 (1 session)
-- [ ] SubTask 5.1: `spike-test/_bench_search.py` 50 个典型查询
-- [ ] SubTask 5.2: 并发 10 / 50 / 100 测试, 输出 P50/P95/P99 延迟表
-- [ ] SubTask 5.3: CI 加 `bench` 步骤, 阈值: P95 < 200ms 搜索, P95 < 100ms typeahead
-- [ ] SubTask 5.4: 文档 `docs/bench-baseline.md` 记录基线 + 退化告警
-- [ ] 验证: CI 报告 P95 < 200ms, 文档记录 baseline 数字
+- [x] SubTask 5.1: `spike-test/_bench_search.py` 50 个典型查询
+- [x] SubTask 5.2: 并发 10 / 50 / 100 测试, 输出 P50/P95/P99 延迟表
+- [x] SubTask 5.3: CI 加 `bench` 步骤, 阈值: P95 < 200ms 搜索, P95 < 100ms typeahead
+- [x] SubTask 5.4: 文档 `docs/bench-baseline.md` 记录基线 + 退化告警
+- [x] 验证: CI 报告 P95 < 200ms, 文档记录 baseline 数字
 
 ---
 

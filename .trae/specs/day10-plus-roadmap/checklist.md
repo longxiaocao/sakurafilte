@@ -42,12 +42,12 @@
 - [x] 切回 MinIO 不影响已有图片
 
 ### Task 5: P1.4 Search 性能基准
-- [ ] `spike-test/_bench_search.py` 50 查询 / 10-100 并发
-- [ ] 输出 P50/P95/P99 延迟 JSON 报告
-- [ ] CI 加 `bench` 步骤, P95 > 200ms fail
-- [ ] `docs/bench-baseline.md` 记录 baseline 数字
-- [ ] typeahead P95 < 100ms
-- [ ] bench 与已有 E2E 隔离 (不污染测试环境)
+- [x] `spike-test/_bench_search.py` 50 查询 / 10-100 并发
+- [x] 输出 P50/P95/P99 延迟 JSON 报告
+- [x] CI 加 `bench` 步骤, P95 > 200ms fail
+- [x] `docs/bench-baseline.md` 记录 baseline 数字
+- [x] typeahead P95 < 100ms
+- [x] bench 与已有 E2E 隔离 (不污染测试环境, 只读 + 写 _bench_results.json)
 
 ---
 
