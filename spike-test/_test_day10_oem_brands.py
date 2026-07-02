@@ -429,7 +429,7 @@ def test_xref_count():
         FROM xref_oem_brand b
         WHERE b.deleted_at IS NULL
           AND b.brand NOT LIKE %s
-          AND EXISTS (SELECT 1 FROM products p WHERE p.deleted_at IS NULL)
+          AND EXISTS (SELECT 1 FROM products p WHERE p.is_discontinued = false)
         ORDER BY b.sort_order
         LIMIT 1
     """, (f"{BRAND_PREFIX}%",))
