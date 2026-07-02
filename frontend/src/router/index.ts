@@ -23,7 +23,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/product/:oem',
     name: 'ProductDetail',
-    component: () => import('@/views/ProductDetailView.vue'),
+    component: () => import('@/views/public/PublicProductView.vue'),
     meta: { title: '产品详情' }
   },
   {

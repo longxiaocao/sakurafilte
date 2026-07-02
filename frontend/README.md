@@ -47,7 +47,7 @@ frontend/
 │   │   └── http.ts      # Axios 实例 + 拦截器
 │   ├── views/           # 页面
 │   │   ├── SearchView.vue           # 前台产品搜索
-│   │   ├── ProductDetailView.vue    # 前台产品详情
+│   │   ├── public/PublicProductView.vue  # 前台产品详情 (7 分区折叠, P3.3)
 │   │   └── admin/
 │   │       ├── AdminProductsView.vue     # 后台产品管理
 │   │       ├── AdminProductFormView.vue  # 后台产品表单 (新增/编辑)
