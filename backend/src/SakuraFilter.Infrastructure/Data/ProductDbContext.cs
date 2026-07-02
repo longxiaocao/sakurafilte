@@ -45,6 +45,11 @@ public class ProductDbContext : DbContext
             //   WHY: ETL INSERT 不显式插入 is_published 列, PG 列无默认值时 23502 违反 NOT NULL
             //        之前本地数据库有旧 SQL migration 建过 DEFAULT true,CI 上 Migrate 无默认值 → ETL failed
             e.Property(p => p.IsPublished).HasDefaultValue(true);
+            // Day 9.12 v9: is_discontinued 默认 false, created_at 默认 now()
+            //   WHY: ETL INSERT 不插入这两列, PG 列 NOT NULL 无默认值 → 23502
+            //        CI 上逐个报错 (is_published → is_discontinued → created_at), 一次性全修复避免迭代
+            e.Property(p => p.IsDiscontinued).HasDefaultValue(false);
+            e.Property(p => p.CreatedAt).HasDefaultValueSql("now()");
             // Day 9.12 v7: OemNoNormalized 必须为 UNIQUE 索引
             //   WHY: EtlImportService.ImportProductsAsync INSERT 用 ON CONFLICT (oem_no_normalized) DO NOTHING/UPDATE
             //        无 UNIQUE 约束时 PG 报 42P10: there is no unique or exclusion constraint matching the ON CONFLICT specification
