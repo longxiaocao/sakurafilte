@@ -41,7 +41,11 @@ public class ProductDbContext : DbContext
             e.Property(p => p.Remark).HasColumnType("text");
             e.Property(p => p.ImageKey).HasMaxLength(500);
             e.Property(p => p.ImageStatus).HasMaxLength(20).HasDefaultValue("pending");
-            e.HasIndex(p => p.OemNoNormalized);
+            // Day 9.12 v7: OemNoNormalized 必须为 UNIQUE 索引
+            //   WHY: EtlImportService.ImportProductsAsync INSERT 用 ON CONFLICT (oem_no_normalized) DO NOTHING/UPDATE
+            //        无 UNIQUE 约束时 PG 报 42P10: there is no unique or exclusion constraint matching the ON CONFLICT specification
+            //        之前本地数据库有旧 SQL migration 建的 uq_products_oem_normalized,CI 上 Migrate 只建普通索引 → ETL failed
+            e.HasIndex(p => p.OemNoNormalized).IsUnique();
             e.HasIndex(p => p.OemNoDisplay);
             e.HasIndex(p => p.Type);
             // WHY: 复合索引 (type, dX_mm) 让"按 Type 过滤 + ±5mm 范围"走 Index Scan,实测 0.2ms
