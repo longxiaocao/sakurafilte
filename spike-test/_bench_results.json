@@ -4,61 +4,31 @@
     "queries": 50,
     "typeahead_queries": 7,
     "concurrency_list": [
-      1,
-      10,
-      50,
-      100
+      10
     ],
     "thresholds": {
-      "search_p95_ms": 10000.0,
-      "typeahead_p95_ms": 200.0
+      "search_p95_ms": 200.0,
+      "typeahead_p95_ms": 100.0
     },
-    "timestamp": "2026-07-02T19:16:17+0800"
+    "timestamp": "2026-07-02T19:48:36+0800"
   },
   "concurrency": {
-    "concurrency_1": {
-      "p50_ms": 1206.8,
-      "p95_ms": 3560.7,
-      "p99_ms": 3803.8,
-      "min_ms": 14.6,
-      "max_ms": 3803.8,
-      "count": 50,
-      "errors": 0
-    },
     "concurrency_10": {
-      "p50_ms": 1332.7,
-      "p95_ms": 7339.7,
-      "p99_ms": 8010.8,
-      "min_ms": 4.1,
-      "max_ms": 8010.8,
+      "p50_ms": 1495.6,
+      "p95_ms": 6973.6,
+      "p99_ms": 7811.0,
+      "min_ms": 5.2,
+      "max_ms": 7811.0,
       "count": 50,
       "errors": 0
-    },
-    "concurrency_50": {
-      "p50_ms": 5589.9,
-      "p95_ms": 10010.1,
-      "p99_ms": 10010.8,
-      "min_ms": 3.1,
-      "max_ms": 10010.8,
-      "count": 50,
-      "errors": 11
-    },
-    "concurrency_100": {
-      "p50_ms": 2788.9,
-      "p95_ms": 10012.6,
-      "p99_ms": 10016.9,
-      "min_ms": 13.1,
-      "max_ms": 10016.9,
-      "count": 50,
-      "errors": 9
     }
   },
   "typeahead": {
-    "p50_ms": 6.0,
-    "p95_ms": 7.9,
-    "p99_ms": 9.0,
-    "min_ms": 3.1,
-    "max_ms": 9.0,
+    "p50_ms": 3.4,
+    "p95_ms": 4.4,
+    "p99_ms": 5.3,
+    "min_ms": 1.9,
+    "max_ms": 5.3,
     "count": 49,
     "errors": 0,
     "concurrency": 10

@@ -240,8 +240,8 @@ if (rateLimitConfig.Enabled)
 // Day 8.1: 后台产品服务 (Scoped, 跟 DbContext 一致)
 builder.Services.AddScoped<AdminProductService>();
 builder.Services.AddScoped<AdminProductImageService>();
-// Day 10: 后台字典服务 (P1.3 OEM 品牌字典)
-builder.Services.AddScoped<AdminDictService>();
+// Day 10+: 后台字典服务 (P1.3 OEM 品牌字典, P2.1 重构为 OemBrandDictService 继承 BaseDictService)
+builder.Services.AddScoped<OemBrandDictService>();
 
 var app = builder.Build();
 
@@ -1277,7 +1277,7 @@ app.MapGet("/api/admin/dict/oem-brands", async (
     [Microsoft.AspNetCore.Mvc.FromQuery] string? q,
     [Microsoft.AspNetCore.Mvc.FromQuery] bool? includeDeleted,
     [Microsoft.AspNetCore.Mvc.FromQuery] int? limit,
-    AdminDictService svc, CancellationToken ct) =>
+    OemBrandDictService svc, CancellationToken ct) =>
 {
     var items = await svc.ListOemBrandsAsync(q, includeDeleted ?? false, limit, ct);
     return Results.Ok(new { count = items.Count, items });
@@ -1288,7 +1288,7 @@ app.MapGet("/api/admin/dict/oem-brands", async (
 app.MapGet("/api/admin/dict/oem-brands/typeahead", async (
     [Microsoft.AspNetCore.Mvc.FromQuery] string? q,
     [Microsoft.AspNetCore.Mvc.FromQuery] int? limit,
-    AdminDictService svc, CancellationToken ct) =>
+    OemBrandDictService svc, CancellationToken ct) =>
 {
     var items = await svc.TypeaheadOemBrandsAsync(q, limit, ct);
     return Results.Ok(new { count = items.Count, items });
@@ -1298,7 +1298,7 @@ app.MapGet("/api/admin/dict/oem-brands/typeahead", async (
 // 新增 OEM 品牌
 app.MapPost("/api/admin/dict/oem-brands", async (
     OemBrandCreateRequest body,
-    AdminDictService svc, HttpContext ctx, CancellationToken ct) =>
+    OemBrandDictService svc, HttpContext ctx, CancellationToken ct) =>
 {
     if (string.IsNullOrWhiteSpace(body.Brand))
         return Results.BadRequest(new { error = "brand 不能为空" });
@@ -1316,7 +1316,7 @@ app.MapPost("/api/admin/dict/oem-brands", async (
 app.MapPut("/api/admin/dict/oem-brands/{id:long}", async (
     long id,
     OemBrandUpdateRequest body,
-    AdminDictService svc, HttpContext ctx, CancellationToken ct) =>
+    OemBrandDictService svc, HttpContext ctx, CancellationToken ct) =>
 {
     try
     {
@@ -1331,7 +1331,7 @@ app.MapPut("/api/admin/dict/oem-brands/{id:long}", async (
 
 // 软删除 OEM 品牌
 app.MapDelete("/api/admin/dict/oem-brands/{id:long}", async (
-    long id, AdminDictService svc, HttpContext ctx, CancellationToken ct) =>
+    long id, OemBrandDictService svc, HttpContext ctx, CancellationToken ct) =>
 {
     try
     {
@@ -1345,7 +1345,7 @@ app.MapDelete("/api/admin/dict/oem-brands/{id:long}", async (
 
 // 恢复已删除 OEM 品牌
 app.MapPost("/api/admin/dict/oem-brands/{id:long}/restore", async (
-    long id, AdminDictService svc, HttpContext ctx, CancellationToken ct) =>
+    long id, OemBrandDictService svc, HttpContext ctx, CancellationToken ct) =>
 {
     try
     {
@@ -1360,7 +1360,7 @@ app.MapPost("/api/admin/dict/oem-brands/{id:long}/restore", async (
 // 批量重排序 (前端拖拽后调用)
 app.MapPost("/api/admin/dict/oem-brands/reorder", async (
     OemBrandReorderRequest body,
-    AdminDictService svc, HttpContext ctx, CancellationToken ct) =>
+    OemBrandDictService svc, HttpContext ctx, CancellationToken ct) =>
 {
     try
     {
