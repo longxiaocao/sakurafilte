@@ -61,6 +61,15 @@ jobs:
           cd backend/src/SakuraFilter.Api
           dotnet build -c Release --nologo
 
+      # Day 10+ P0.2: EF Core Migrations baseline seed
+      #   WHY: EF Core 8 + EFCore.NamingConventions 不改内置表名, 必须写到 PascalCase __EFMigrationsHistory.
+      #        CI 全新 PG 无 history 表, 必须手工 seed 4 个老 migration (本地 SQL migration 已应用过, 索引名/列名
+      #        与 EF Core 期望不一致, EF Core 上来就 DROP/ALTER 失败). 后续 EF Core Migrate 只跑新 migration.
+      #   默认参数: spike_test_v3 / 4 个老 migration (与 spike_test/_ef_migrations_baseline.py DEFAULT_MIGRATIONS 一致).
+      - name: Run EF Core Migrations baseline seed
+        working-directory: spike-test
+        run: python _ef_migrations_baseline.py
+
       - name: Run API server (background)
         run: |
           cd backend/src/SakuraFilter.Api
