@@ -20,6 +20,7 @@ public class ProductDbContext : DbContext
     public DbSet<SearchIndexPending> SearchIndexPending => Set<SearchIndexPending>();
     public DbSet<SearchIndexDeadLetter> SearchIndexDeadLetters => Set<SearchIndexDeadLetter>();
     public DbSet<EtlProgressLog> EtlProgressLogs => Set<EtlProgressLog>();  // Day 7.7
+    public DbSet<XrefOemBrand> XrefOemBrands => Set<XrefOemBrand>();  // Day 10: P1.3 OEM 品牌字典
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
@@ -167,6 +168,26 @@ public class ProductDbContext : DbContext
             e.Property(p => p.Status).HasMaxLength(20).IsRequired();
             e.HasIndex(p => new { p.EntityType, p.FinishedAt });
             e.HasIndex(p => p.Status);
+        });
+
+        // XrefOemBrand (Day 10: P1.3 OEM 品牌字典)
+        //   WHY brand UNIQUE: 后台 typeahead 去重 + 同名 upsert 时按 brand 查重
+        //   WHY deleted_at 部分索引: typeahead 查询只走未删除行, 索引小且快
+        mb.Entity<XrefOemBrand>(e =>
+        {
+            e.ToTable("xref_oem_brand");
+            e.HasKey(p => p.Id);
+            e.Property(p => p.Brand).HasMaxLength(100).IsRequired();
+            // Day 9.12 教训: NOT NULL 列必须显式 PG 默认值
+            e.Property(p => p.SortOrder).HasDefaultValue(0);
+            e.Property(p => p.CreatedAt).HasDefaultValueSql("now()");
+            e.Property(p => p.UpdatedAt).HasDefaultValueSql("now()");
+            e.HasIndex(p => p.Brand).IsUnique();
+            // typeahead 高频查询: 按 sort_order 升序 + 排除软删除
+            //   用 HasFilter 让 PG 只索引未删除行, 索引体积小, 列表查询 O(log N)
+            e.HasIndex(p => new { p.DeletedAt, p.SortOrder })
+                .HasDatabaseName("idx_xref_oem_brand_active")
+                .HasFilter("deleted_at IS NULL");
         });
     }
 }

@@ -53,6 +53,12 @@ const routes: RouteRecordRaw[] = [
     name: 'AdminEtl',
     component: () => import('@/views/admin/AdminEtlView.vue'),
     meta: { title: 'ETL 触发', requireAuth: true }
+  },
+  {
+    path: '/admin/dict/oem-brands',
+    name: 'AdminOemBrands',
+    component: () => import('@/views/admin/AdminOemBrandsView.vue'),
+    meta: { title: 'OEM 品牌字典', requireAuth: true }
   }
 ]
 

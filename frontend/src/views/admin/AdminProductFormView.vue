@@ -2,10 +2,11 @@
 // Day 9: 后台产品表单 (新增/编辑)
 //   - 7 分区布局 (与 ProductFormDto 一致)
 //   - 行内保存
+// Day 10: 分区 2 oemBrand 改为 el-autocomplete, 从 dictApi.oemBrands.typeahead 自动补全 (P1.3)
 import { ref, reactive, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { adminProductApi, imageApi } from '@/api'
+import { adminProductApi, imageApi, dictApi } from '@/api'
 import type { ProductDetail } from '@/api/types'
 
 const route = useRoute()
@@ -128,6 +129,22 @@ function removeApp(idx: number) {
   form.machineApplications.splice(idx, 1)
 }
 
+// Day 10: P1.3 OEM 品牌 typeahead
+//   el-autocomplete 调用约定: 返回 Promise<Array<{value, [任意字段]}>>
+//   - 我们用 { brand } 作为 value, 因为 v-model 直接绑 oemBrand 字符串
+//   - 后端 typeahead 已按 sort_order 排, 取前 20 条
+//   - 字典为空时返回 [], el-autocomplete 自动降级为自由输入
+async function queryOemBrands(q: string, cb: (items: { value: string; brand: string }[]) => void) {
+  try {
+    const { items } = await dictApi.oemBrands.typeahead(q || '', 20)
+    // 转成 el-autocomplete 期望的 { value } 格式
+    const mapped = items.map((it) => ({ value: it.brand, brand: it.brand }))
+    cb(mapped)
+  } catch (e) {
+    cb([])
+  }
+}
+
 async function uploadImage(slot: number, e: Event) {
   // Day 9.3: 前端 slot 范围校验, 与后端 AdminProductImageService.UploadAsync 一致
   if (slot < 1 || slot > 6 || !Number.isInteger(slot)) {
@@ -209,9 +226,23 @@ onMounted(load)
         <!-- 分区 2: 交叉引用 -->
         <el-collapse-item :title="`② 交叉引用 (${form.crossReferences.length})`" name="2">
           <div v-for="(x, i) in form.crossReferences" :key="i" class="flex gap-2 mb-2">
-            <el-input v-model="x.oemBrand" placeholder="品牌" style="width: 200px" />
-            <el-input v-model="x.oemNo3" placeholder="OEM 3" style="width: 240px" />
-            <el-input v-model="x.productName1" placeholder="产品名" />
+            <!-- Day 10: P1.3 自动补全 — 字典为空时降级为自由输入 -->
+            <el-autocomplete
+              v-model="x.oemBrand"
+              :fetch-suggestions="queryOemBrands"
+              placeholder="品牌 (输入自动补全)"
+              style="width: 200px"
+              clearable
+              size="small"
+              :trigger-on-focus="true"
+              :debounce="200"
+            >
+              <template #default="{ item }">
+                <span>{{ item.brand }}</span>
+              </template>
+            </el-autocomplete>
+            <el-input v-model="x.oemNo3" placeholder="OEM 3" style="width: 240px" size="small" />
+            <el-input v-model="x.productName1" placeholder="产品名" size="small" />
             <el-button text type="danger" @click="removeXref(i)">删除</el-button>
           </div>
           <el-button @click="addXref" size="small">+ 添加交叉引用</el-button>

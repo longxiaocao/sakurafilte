@@ -184,6 +184,26 @@ public class SystemSetting
 }
 
 /// <summary>
+/// 交叉引用 OEM 品牌字典 (Day 10: P1.3)
+/// 用途: 规格后台新增产品格式 分区 2 的 oem_brand 自动补全 + 前端拖拽排序
+/// 设计:
+///   - brand 唯一索引 (DbContext 加 .IsUnique())
+///   - sort_order 决定在前台 / 后台 typeahead 的展示顺序
+///   - deleted_at 软删除标记: 有值的行不进 typeahead, 但保留历史 xref.oem_brand 可追溯
+///     WHY 软删除: cross_references.oem_brand 是历史数据, 字典删了不等于 xref 也失效
+///   - 计数 count_by_brand 不存表: 需要时 SQL 实时聚合, 数据量小开销可忽略
+/// </summary>
+public class XrefOemBrand
+{
+    public long Id { get; set; }
+    [Column("brand")]       public string Brand { get; set; } = "";
+    [Column("sort_order")]  public int SortOrder { get; set; }  // 默认 0
+    [Column("created_at")]  public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    [Column("updated_at")]  public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    [Column("deleted_at")]  public DateTime? DeletedAt { get; set; }  // 软删除: 非 null 即隐藏
+}
+
+/// <summary>
 /// 搜索索引写入补偿队列 (Day 5)
 /// - Meili 写入失败时入队
 /// - IndexReplayWorker 每 10s 重试,指数退避

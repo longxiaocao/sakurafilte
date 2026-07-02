@@ -19,6 +19,8 @@ const navItems = computed(() => [
   ...(isAdminPath.value
     ? [
         { label: '产品管理', path: '/admin/products', icon: 'Goods' },
+        // Day 10: 字典管理 (P1.3) — 后续 P5 会扩展为多字典入口
+        { label: '品牌字典', path: '/admin/dict/oem-brands', icon: 'Collection' },
         { label: 'ETL 触发', path: '/admin/etl', icon: 'Loading' }
       ]
     : [])

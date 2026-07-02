@@ -209,6 +209,8 @@ if (rateLimitConfig.Enabled)
 // Day 8.1: 后台产品服务 (Scoped, 跟 DbContext 一致)
 builder.Services.AddScoped<AdminProductService>();
 builder.Services.AddScoped<AdminProductImageService>();
+// Day 10: 后台字典服务 (P1.3 OEM 品牌字典)
+builder.Services.AddScoped<AdminDictService>();
 
 var app = builder.Build();
 
@@ -1178,6 +1180,114 @@ app.MapGet("/api/admin/etl/history/aggregate", async (ProductDbContext db, Cance
 .WithName("AdminEtlHistoryAggregate")
 .RequireRateLimiting("etl");
 
+// =================== Day 10: 后台字典管理端点 (P1.3 OEM 品牌字典) ===================
+//   设计要点:
+//   - 全部走 /api/admin/dict/* 前缀, 鉴权中间件自动保护
+//   - 限流走 global 分区 (与产品管理一致, 默认 600/分钟)
+//   - 错误统一转 ProblemDetails (与 admin/products 端点风格一致)
+//   - list 支持 ?includeDeleted=true 看审计; 默认只看未删
+//   - typeahead 是独立端点, 返回精简字段, 给表单自动补全专用
+
+// 列出 OEM 品牌字典
+app.MapGet("/api/admin/dict/oem-brands", async (
+    [Microsoft.AspNetCore.Mvc.FromQuery] string? q,
+    [Microsoft.AspNetCore.Mvc.FromQuery] bool? includeDeleted,
+    [Microsoft.AspNetCore.Mvc.FromQuery] int? limit,
+    AdminDictService svc, CancellationToken ct) =>
+{
+    var items = await svc.ListOemBrandsAsync(q, includeDeleted ?? false, limit, ct);
+    return Results.Ok(new { count = items.Count, items });
+})
+.WithName("AdminListOemBrands");
+
+// Typeahead (后台产品表单分区 2 自动补全)
+app.MapGet("/api/admin/dict/oem-brands/typeahead", async (
+    [Microsoft.AspNetCore.Mvc.FromQuery] string? q,
+    [Microsoft.AspNetCore.Mvc.FromQuery] int? limit,
+    AdminDictService svc, CancellationToken ct) =>
+{
+    var items = await svc.TypeaheadOemBrandsAsync(q, limit, ct);
+    return Results.Ok(new { count = items.Count, items });
+})
+.WithName("AdminTypeaheadOemBrands");
+
+// 新增 OEM 品牌
+app.MapPost("/api/admin/dict/oem-brands", async (
+    OemBrandCreateRequest body,
+    AdminDictService svc, HttpContext ctx, CancellationToken ct) =>
+{
+    if (string.IsNullOrWhiteSpace(body.Brand))
+        return Results.BadRequest(new { error = "brand 不能为空" });
+    try
+    {
+        var item = await svc.CreateOemBrandAsync(body.Brand, body.SortOrder, ct);
+        return Results.Created($"/api/admin/dict/oem-brands/{item.Id}", item);
+    }
+    catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+    catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+})
+.WithName("AdminCreateOemBrand");
+
+// 更新 OEM 品牌
+app.MapPut("/api/admin/dict/oem-brands/{id:long}", async (
+    long id,
+    OemBrandUpdateRequest body,
+    AdminDictService svc, HttpContext ctx, CancellationToken ct) =>
+{
+    try
+    {
+        var item = await svc.UpdateOemBrandAsync(id, body.Brand, body.SortOrder, ct);
+        return Results.Ok(item);
+    }
+    catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+    catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+    catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+})
+.WithName("AdminUpdateOemBrand");
+
+// 软删除 OEM 品牌
+app.MapDelete("/api/admin/dict/oem-brands/{id:long}", async (
+    long id, AdminDictService svc, HttpContext ctx, CancellationToken ct) =>
+{
+    try
+    {
+        await svc.DeleteOemBrandAsync(id, ct);
+        return Results.Ok(new { id, deleted = true });
+    }
+    catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+    catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+})
+.WithName("AdminDeleteOemBrand");
+
+// 恢复已删除 OEM 品牌
+app.MapPost("/api/admin/dict/oem-brands/{id:long}/restore", async (
+    long id, AdminDictService svc, HttpContext ctx, CancellationToken ct) =>
+{
+    try
+    {
+        var item = await svc.RestoreOemBrandAsync(id, ct);
+        return Results.Ok(item);
+    }
+    catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+    catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+})
+.WithName("AdminRestoreOemBrand");
+
+// 批量重排序 (前端拖拽后调用)
+app.MapPost("/api/admin/dict/oem-brands/reorder", async (
+    OemBrandReorderRequest body,
+    AdminDictService svc, HttpContext ctx, CancellationToken ct) =>
+{
+    try
+    {
+        await svc.ReorderOemBrandsAsync(body.Items, ct);
+        return Results.Ok(new { updated = body.Items?.Count ?? 0 });
+    }
+    catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+    catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+})
+.WithName("AdminReorderOemBrands");
+
 app.Run();
 
 // Day 9.2: dry-run JSON Schema 校验结果
@@ -1207,3 +1317,7 @@ public record DeadLetterItem(long Id, long OriginalId, string Operation, int Ret
     string? LastError, DateTime CreatedAt, DateTime MovedAt, string PayloadPreview,
     int RecoveryCount, DateTime? LastRecoveryAt, string? LastRecoveryError,
     string Status, DateTime? RecoveredAt, long? RecoveredToPendingId);
+
+// Day 10: OEM 品牌字典请求体 (P1.3)
+public record OemBrandCreateRequest(string Brand, int? SortOrder);
+public record OemBrandUpdateRequest(string? Brand, int? SortOrder);

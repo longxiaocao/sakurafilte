@@ -15,6 +15,27 @@ import type {
   EtlReasonCodeAggregate
 } from './types'
 
+// ===== Day 10: 字典类型 (P1.3 OEM 品牌字典) =====
+export interface OemBrandItem {
+  id: number
+  brand: string
+  sortOrder: number
+  createdAt: string
+  updatedAt: string
+  deletedAt: string | null
+  xrefCount: number
+}
+
+export interface OemBrandTypeaheadItem {
+  id: number
+  brand: string
+}
+
+export interface OemBrandReorderItem {
+  id: number
+  sortOrder: number
+}
+
 // ===== 搜索 (公开, 无需 token) =====
 export const searchApi = {
   search(req: SearchRequest): Promise<{ provider: string; result: SearchResult }> {
@@ -116,6 +137,46 @@ export const etlApi = {
   },
   reasonCodeAggregate(): Promise<EtlReasonCodeAggregate> {
     return http.get('/admin/etl/history/aggregate').then((r) => r.data)
+  }
+}
+
+// ===== Day 10: 字典 API (P1.3 OEM 品牌字典) =====
+//   list:        GET    /api/admin/dict/oem-brands?q=&includeDeleted=&limit=
+//   typeahead:   GET    /api/admin/dict/oem-brands/typeahead?q=&limit=
+//   create:      POST   /api/admin/dict/oem-brands                { brand, sortOrder? }
+//   update:      PUT    /api/admin/dict/oem-brands/:id            { brand?, sortOrder? }
+//   delete:      DELETE /api/admin/dict/oem-brands/:id            (软删除)
+//   restore:     POST   /api/admin/dict/oem-brands/:id/restore
+//   reorder:     POST   /api/admin/dict/oem-brands/reorder        { items: [{id, sortOrder}] }
+export const dictApi = {
+  oemBrands: {
+    list(q?: string, includeDeleted = false, limit?: number): Promise<{ count: number; items: OemBrandItem[] }> {
+      const params: Record<string, any> = {}
+      if (q) params.q = q
+      if (includeDeleted) params.includeDeleted = true
+      if (limit) params.limit = limit
+      return http.get('/admin/dict/oem-brands', { params }).then((r) => r.data)
+    },
+    typeahead(q?: string, limit = 20): Promise<{ count: number; items: OemBrandTypeaheadItem[] }> {
+      const params: Record<string, any> = { limit }
+      if (q) params.q = q
+      return http.get('/admin/dict/oem-brands/typeahead', { params }).then((r) => r.data)
+    },
+    create(brand: string, sortOrder?: number): Promise<OemBrandItem> {
+      return http.post('/admin/dict/oem-brands', { brand, sortOrder }).then((r) => r.data)
+    },
+    update(id: number, body: { brand?: string; sortOrder?: number }): Promise<OemBrandItem> {
+      return http.put(`/admin/dict/oem-brands/${id}`, body).then((r) => r.data)
+    },
+    delete(id: number): Promise<void> {
+      return http.delete(`/admin/dict/oem-brands/${id}`).then((r) => r.data)
+    },
+    restore(id: number): Promise<OemBrandItem> {
+      return http.post(`/admin/dict/oem-brands/${id}/restore`).then((r) => r.data)
+    },
+    reorder(items: OemBrandReorderItem[]): Promise<{ updated: number }> {
+      return http.post('/admin/dict/oem-brands/reorder', { items }).then((r) => r.data)
+    }
   }
 }
 
