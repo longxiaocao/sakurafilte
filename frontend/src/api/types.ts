@@ -366,3 +366,25 @@ export interface EtlReasonCodeAggregate {
   total: number
   breakdown: EtlReasonCodeBreakdown[]
 }
+
+// ===== P3.2 (Task 10): 批量 OEM 查询 (公开) =====
+export interface BatchOemRequest {
+  oems: string[]
+}
+
+export interface BatchOemResult {
+  oem: string
+  hit: boolean
+  productId?: number | null
+  oemBrand?: string | null
+  productName1?: string | null
+  oem2?: string | null
+}
+
+export interface BatchOemResponse {
+  total: number
+  hits: number
+  miss: number
+  results: BatchOemResult[]
+}
+

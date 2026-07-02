@@ -1,5 +1,6 @@
 <script setup lang="ts">
 // Day 10+ P2.2: Machine 字典管理页 (3 字段: machine_brand + machine_model + machine_name)
+// P2.3: 新增 machine_category 编辑 (4 大类: Agriculture/Commercial/Construction/others)
 import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { dictApi, type MachineItem, type MachineReorderItem } from '@/api'
@@ -9,10 +10,21 @@ const loading = ref(false)
 const includeDeleted = ref(false)
 const searchKw = ref('')
 
+// P2.3: 4 大类常量, 给 <el-select> 用
+const CATEGORY_OPTIONS = ['Agriculture', 'Commercial', 'Construction', 'others'] as const
+type Category = (typeof CATEGORY_OPTIONS)[number]
+
 const dialogOpen = ref(false)
 const dialogMode = ref<'create' | 'edit'>('create')
-const dialogForm = reactive<{ id?: number; machineBrand: string; machineModel: string; machineName: string; sortOrder: number }>({
-  machineBrand: '', machineModel: '', machineName: '', sortOrder: 0
+const dialogForm = reactive<{
+  id?: number
+  machineBrand: string
+  machineModel: string
+  machineName: string
+  machineCategory: Category
+  sortOrder: number
+}>({
+  machineBrand: '', machineModel: '', machineName: '', machineCategory: 'others', sortOrder: 0
 })
 
 const draggingId = ref<number | null>(null)
@@ -31,6 +43,7 @@ function onSearch() { load() }
 function openCreate() {
   dialogMode.value = 'create'; dialogForm.id = undefined
   dialogForm.machineBrand = ''; dialogForm.machineModel = ''; dialogForm.machineName = ''
+  dialogForm.machineCategory = 'others'
   const maxSort = items.value.filter((x) => !x.deletedAt).reduce((m, x) => Math.max(m, x.sortOrder), 0)
   dialogForm.sortOrder = maxSort + 10
   dialogOpen.value = true
@@ -40,6 +53,8 @@ function openEdit(row: MachineItem) {
   dialogForm.machineBrand = row.machineBrand
   dialogForm.machineModel = row.machineModel ?? ''
   dialogForm.machineName = row.machineName ?? ''
+  // P2.3: 兜底 'others' (兼容老数据无 category 字段)
+  dialogForm.machineCategory = (row.machineCategory as Category) ?? 'others'
   dialogForm.sortOrder = row.sortOrder
   dialogOpen.value = true
 }
@@ -53,7 +68,11 @@ async function saveDialog() {
     if (dialogMode.value === 'create') {
       await dictApi.machines.create(b, model, name, dialogForm.sortOrder); ElMessage.success('已新增')
     } else if (dialogForm.id != null) {
-      await dictApi.machines.update(dialogForm.id, { machineBrand: b, machineModel: model, machineName: name, sortOrder: dialogForm.sortOrder })
+      // P2.3: 提交时把 machineCategory 一并 PUT
+      await dictApi.machines.update(dialogForm.id, {
+        machineBrand: b, machineModel: model, machineName: name,
+        sortOrder: dialogForm.sortOrder, machineCategory: dialogForm.machineCategory
+      })
       ElMessage.success('已更新')
     }
     dialogOpen.value = false; await load()
@@ -97,6 +116,15 @@ function rowClass(row: MachineItem): string {
   if (dragOverId.value === row.id) c.push('dict-row--dragover')
   return c.join(' ')
 }
+// P2.3: category 标签颜色 (4 大类各一色)
+function categoryTagType(cat?: string): 'success' | 'warning' | 'info' | 'primary' {
+  switch (cat) {
+    case 'Agriculture': return 'success'   // 绿 (农林)
+    case 'Commercial': return 'primary'   // 蓝 (商用)
+    case 'Construction': return 'warning' // 橙 (工程)
+    default: return 'info'                 // 灰 (others)
+  }
+}
 const total = computed(() => items.value.length)
 const activeCount = computed(() => items.value.filter((x) => !x.deletedAt).length)
 onMounted(load)
@@ -121,6 +149,8 @@ onMounted(load)
         <div class="cell-brand">品牌</div>
         <div class="cell-model">型号</div>
         <div class="cell-name">名称</div>
+        <!-- P2.3: 新增分类列 -->
+        <div class="cell-category">分类</div>
         <div class="cell-sort">排序</div>
         <div class="cell-xref">引用</div>
         <div class="cell-updated">更新</div>
@@ -136,6 +166,10 @@ onMounted(load)
         <div class="cell-brand">{{ row.machineBrand }}</div>
         <div class="cell-model">{{ row.machineModel || '—' }}</div>
         <div class="cell-name">{{ row.machineName || '—' }}</div>
+        <!-- P2.3: 显示分类 tag -->
+        <div class="cell-category">
+          <el-tag :type="categoryTagType(row.machineCategory)" size="small">{{ row.machineCategory || 'others' }}</el-tag>
+        </div>
         <div class="cell-sort">{{ row.sortOrder }}</div>
         <div class="cell-xref">{{ row.xrefCount }}</div>
         <div class="cell-updated">{{ fmtDate(row.updatedAt) }}</div>
@@ -166,6 +200,13 @@ onMounted(load)
           <el-input v-model="dialogForm.machineName" placeholder="例: Tractor X300 (可空)" maxlength="200" show-word-limit />
           <div class="text-xs text-muted mt-1">3 字段组成 UNIQUE 索引, 任一字段可空</div>
         </el-form-item>
+        <!-- P2.3: 分类下拉 (4 大类) -->
+        <el-form-item label="分类">
+          <el-select v-model="dialogForm.machineCategory" placeholder="选择 4 大类之一" style="width: 100%">
+            <el-option v-for="opt in CATEGORY_OPTIONS" :key="opt" :label="opt" :value="opt" />
+          </el-select>
+          <div class="text-xs text-muted mt-1">P2.3: 4 大类 (Agriculture/Commercial/Construction/others) 用于前台按场景聚合品牌</div>
+        </el-form-item>
         <el-form-item label="排序">
           <el-input-number v-model="dialogForm.sortOrder" :min="0" :step="10" style="width: 100%" />
         </el-form-item>
@@ -179,7 +220,8 @@ onMounted(load)
 </template>
 
 <style scoped>
-.dict-head, .dict-row { display: grid; grid-template-columns: 32px 60px 1fr 1.2fr 1.2fr 80px 100px 140px 80px 200px; align-items: center; font-size: 12px; border-bottom: 1px solid #e5e7eb; }
+/* P2.3: 加 1 列 (cell-category 80px), 总宽度 = 32+60+1fr+1.2fr+1.2fr+80+80+100+140+80+200 = 拖列 + 9 数据列 */
+.dict-head, .dict-row { display: grid; grid-template-columns: 32px 60px 1fr 1.2fr 1.2fr 100px 80px 100px 140px 80px 200px; align-items: center; font-size: 12px; border-bottom: 1px solid #e5e7eb; }
 .dict-head { font-weight: 500; color: #6b7280; background: #f9fafb; height: 32px; }
 .dict-row { height: 36px; background: #fff; transition: background-color 0.15s, border-top 0.1s; }
 .dict-head > div, .dict-row > div { padding: 0 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

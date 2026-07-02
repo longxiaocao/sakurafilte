@@ -41,8 +41,44 @@ public class MachineDictService : BaseDictService<DictMachine>
     {
         var rows = await ListAsync(q, includeDeleted, limit, ct);
         return rows.Select(b => new MachineItem(
-            b.Id, b.MachineBrand, b.MachineModel, b.MachineName, b.SortOrder,
+            b.Id, b.MachineBrand, b.MachineModel, b.MachineName, b.MachineCategory, b.SortOrder,
             b.CreatedAt, b.UpdatedAt, b.DeletedAt, 0)).ToList();
+    }
+
+    // P2.3: 按 category 过滤的 active machine 列表 (4 大类: Agriculture/Commercial/Construction/others)
+    public async Task<List<MachineItem>> ListMachinesByCategoryAsync(
+        string category, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(category))
+            return new List<MachineItem>();
+        var rows = await _db.DictMachines.AsNoTracking()
+            .Where(m => m.DeletedAt == null && m.MachineCategory == category)
+            .OrderBy(m => m.SortOrder)
+            .ThenBy(m => m.MachineBrand)
+            .ToListAsync(ct);
+        return rows.Select(b => new MachineItem(
+            b.Id, b.MachineBrand, b.MachineModel, b.MachineName, b.MachineCategory, b.SortOrder,
+            b.CreatedAt, b.UpdatedAt, b.DeletedAt, 0)).ToList();
+    }
+
+    // P2.3: 更新指定 machine 的 category 字段
+    public async Task UpdateMachineCategoryAsync(long id, string category, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(category))
+            throw new ArgumentException("category 不能为空");
+        if (category != "Agriculture" && category != "Commercial"
+            && category != "Construction" && category != "others")
+            throw new ArgumentException(
+                $"category 必须是 Agriculture/Commercial/Construction/others 之一, 实际: {category}");
+        var entity = await _db.DictMachines.FirstOrDefaultAsync(m => m.Id == id, ct)
+            ?? throw new KeyNotFoundException($"dict_machine id={id} 不存在");
+        if (entity.MachineCategory == category)
+            return;  // 幂等
+        entity.MachineCategory = category;
+        entity.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync(ct);
+        _logger.LogInformation("[dict_machine] 更新 category id={Id} brand={Brand} -> {Category}",
+            entity.Id, entity.MachineBrand, category);
     }
 
     public async Task<List<MachineTypeaheadItem>> TypeaheadMachinesAsync(
@@ -59,19 +95,32 @@ public class MachineDictService : BaseDictService<DictMachine>
         b.MachineModel = string.IsNullOrWhiteSpace(model) ? null : model.Trim();
         b.MachineName = string.IsNullOrWhiteSpace(name) ? null : name.Trim();
         await _db.SaveChangesAsync(ct);
-        return new MachineItem(b.Id, b.MachineBrand, b.MachineModel, b.MachineName, b.SortOrder,
+        return new MachineItem(b.Id, b.MachineBrand, b.MachineModel, b.MachineName, b.MachineCategory, b.SortOrder,
             b.CreatedAt, b.UpdatedAt, b.DeletedAt, 0);
     }
 
     public async Task<MachineItem> UpdateMachineAsync(
-        long id, string? brand, string? model, string? name, int? sortOrder, CancellationToken ct = default)
+        long id, string? brand, string? model, string? name, int? sortOrder, string? category, CancellationToken ct = default)
     {
         var b = await UpdateAsync(id, brand, sortOrder, ct);
         if (model != null) b.MachineModel = string.IsNullOrWhiteSpace(model) ? null : model.Trim();
         if (name != null) b.MachineName = string.IsNullOrWhiteSpace(name) ? null : name.Trim();
+        // P2.3: category 单独更新, 校验 4 大类
+        if (category != null)
+        {
+            if (category != "Agriculture" && category != "Commercial"
+                && category != "Construction" && category != "others")
+                throw new ArgumentException(
+                    $"category 必须是 Agriculture/Commercial/Construction/others 之一, 实际: {category}");
+            if (b.MachineCategory != category)
+            {
+                b.MachineCategory = category;
+                b.UpdatedAt = DateTime.UtcNow;
+            }
+        }
         await _db.SaveChangesAsync(ct);
         var cnt = await GetXrefCountAsync(b.MachineBrand, ct);
-        return new MachineItem(b.Id, b.MachineBrand, b.MachineModel, b.MachineName, b.SortOrder,
+        return new MachineItem(b.Id, b.MachineBrand, b.MachineModel, b.MachineName, b.MachineCategory, b.SortOrder,
             b.CreatedAt, b.UpdatedAt, b.DeletedAt, cnt);
     }
 
@@ -81,7 +130,7 @@ public class MachineDictService : BaseDictService<DictMachine>
     {
         var b = await RestoreAsync(id, ct);
         var cnt = await GetXrefCountAsync(b.MachineBrand, ct);
-        return new MachineItem(b.Id, b.MachineBrand, b.MachineModel, b.MachineName, b.SortOrder,
+        return new MachineItem(b.Id, b.MachineBrand, b.MachineModel, b.MachineName, b.MachineCategory, b.SortOrder,
             b.CreatedAt, b.UpdatedAt, b.DeletedAt, cnt);
     }
 
@@ -90,10 +139,12 @@ public class MachineDictService : BaseDictService<DictMachine>
 }
 
 public record MachineItem(
-    long Id, string MachineBrand, string? MachineModel, string? MachineName, int SortOrder,
+    long Id, string MachineBrand, string? MachineModel, string? MachineName, string MachineCategory, int SortOrder,
     DateTime CreatedAt, DateTime UpdatedAt, DateTime? DeletedAt, long XrefCount);
 public record MachineTypeaheadItem(long Id, string MachineBrand, string? MachineModel, string? MachineName);
 public record MachineReorderItem(long Id, int SortOrder);
 public record MachineReorderRequest(List<MachineReorderItem> Items);
 public record MachineCreateRequest(string MachineBrand, string? MachineModel, string? MachineName, int? SortOrder);
-public record MachineUpdateRequest(string? MachineBrand, string? MachineModel, string? MachineName, int? SortOrder);
+// P2.3: 加 MachineCategory 字段, 允许前端在 update 时一并改 category
+public record MachineUpdateRequest(
+    string? MachineBrand, string? MachineModel, string? MachineName, int? SortOrder, string? MachineCategory = null);

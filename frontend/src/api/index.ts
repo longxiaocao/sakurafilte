@@ -132,6 +132,12 @@ export const searchApi = {
   },
   health(): Promise<{ provider: string; healthy: boolean }> {
     return http.get('/search/health').then((r) => r.data)
+  },
+  // P3.2 (Task 10): 批量 OEM 查询 (Excel 多行粘贴)
+  //   POST /public/search/batch-oem { oems: [...] }
+  //   返: { total, hits, miss, results: [{ oem, hit, productId, oemBrand, productName1, oem2 }] }
+  batchOem(req: import('./types').BatchOemRequest): Promise<import('./types').BatchOemResponse> {
+    return http.post('/public/search/batch-oem', req).then((r) => r.data)
   }
 }
 

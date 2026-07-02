@@ -1713,7 +1713,7 @@ app.MapPost("/api/admin/dict/machines", async (
 app.MapPut("/api/admin/dict/machines/{id:long}", async (
     long id, MachineUpdateRequest body, MachineDictService svc, HttpContext ctx, CancellationToken ct) =>
 {
-    try { return Results.Ok(await svc.UpdateMachineAsync(id, body.MachineBrand, body.MachineModel, body.MachineName, body.SortOrder, ct)); }
+    try { return Results.Ok(await svc.UpdateMachineAsync(id, body.MachineBrand, body.MachineModel, body.MachineName, body.SortOrder, body.MachineCategory, ct)); }
     catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
     catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
     catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
