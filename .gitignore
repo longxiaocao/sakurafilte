@@ -25,6 +25,11 @@ __pycache__/
 !spike-test/pg_log.txt
 !spike-test/meili_*.log
 
+# Day 10+ P5 修复: spike-test/backend.out/err 是后端运行日志,不应 commit
+spike-test/backend.out
+spike-test/backend.err
+spike-test/backend_perf.err
+
 ## 操作系统
 .DS_Store
 Thumbs.db
