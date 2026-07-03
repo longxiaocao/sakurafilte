@@ -74,11 +74,11 @@ jobs:
         run: |
           cd backend/src/SakuraFilter.Api
           dotnet run -c Release --no-build --urls "http://localhost:5148" > /tmp/api5148.log 2>&1 &
-          # Day 9.12: 循环等待 5148 可达 (最多 60s)
-          #   WHY: 之前固定 sleep 5 不够, dotnet 启动 + Database.Migrate + LISTEN 需 5-10s
-          #        Linux CI runner 状态波动大, 偶发需 30s+
+          # Day 11 fix: 循环等待 5148 可达 (120s, 之前 60s 在 320fd1b/4a8ace7 偶发超时失败)
+          #   WHY: GH runner 状态波动大, dotnet 启动 + Database.Migrate + LISTEN 偶发 60s+ 才就绪
+          #        延长到 120s, 给慢启动留 2x 缓冲; 仍超时则输出 API 日志诊断
           A_READY=0
-          for i in $(seq 1 60); do
+          for i in $(seq 1 120); do
             code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5148/api/etl/status -H "X-Admin-Token: $ADMIN_TOKEN" 2>/dev/null || echo 000)
             if [ "$code" = "200" ]; then
               echo "API 5148 ready after ${i}s"
@@ -88,8 +88,8 @@ jobs:
             sleep 1
           done
           if [ "$A_READY" != "1" ]; then
-            echo "=== FAIL: API 5148 60s 内未就绪 ==="
-            echo "--- 5148 API 日志 (前 100 行) ---"
+            echo "::error::API 5148 在 120s 内未就绪 (320fd1b/4a8ace7 已知偶发超时)"
+            echo "::error::=== 5148 API 日志 (前 100 行) ==="
             head -n 100 /tmp/api5148.log || echo "无日志"
             exit 1
           fi
