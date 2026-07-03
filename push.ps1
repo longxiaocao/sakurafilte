@@ -17,7 +17,8 @@
 param(
     [string]$Branch = "master",
     [int]$MaxRetries = 30,
-    [int]$IntervalSec = 8
+    [int]$IntervalSec = 8,
+    [switch]$Force
 )
 
 $ErrorActionPreference = "Continue"
@@ -27,10 +28,16 @@ if (-not $originalRemote) {
     exit 1
 }
 
+# WHY: filter-branch 改写历史后必须 --force-with-lease (比 --force 安全, 拒绝覆盖他人提交)
+$forceArg = if ($Force) { "--force-with-lease" } else { "" }
+$pushArgs = @("push")
+if ($forceArg) { $pushArgs += $forceArg }
+
 Write-Host "===== GFW push 兜底脚本 =====" -ForegroundColor Cyan
 Write-Host "分支: $Branch"
 Write-Host "原 remote: $originalRemote"
 Write-Host "最大重试: $MaxRetries 次 (间隔 ${IntervalSec}s)"
+if ($Force) { Write-Host "模式: --force-with-lease (历史改写后必须)" -ForegroundColor Yellow }
 Write-Host ""
 
 # 步骤 1: 检查 SSH key
@@ -55,8 +62,12 @@ if ($sshKey) {
         Write-Host "[SSH] 尝试 SSH push: $sshRemote"
 
         # 临时切换 remote (不改 config, 用 push url)
-        Write-Host "git push $sshRemote $Branch"
-        $sshResult = git push $sshRemote $Branch 2>&1
+        $sshPushCmd = "git push $sshRemote $Branch"
+        if ($forceArg) { $sshPushCmd += " $forceArg" }
+        Write-Host $sshPushCmd
+        $sshArgs = @("push", $sshRemote, $Branch)
+        if ($forceArg) { $sshArgs += $forceArg }
+        $sshResult = git @sshArgs 2>&1
         if ($LASTEXITCODE -eq 0) {
             Write-Host "[SSH] push 成功!" -ForegroundColor Green
             Write-Host $sshResult
@@ -80,7 +91,9 @@ Write-Host "[HTTPS] 开始重试 (最多 $MaxRetries 次)..." -ForegroundColor C
 $ok = $false
 for ($i = 1; $i -le $MaxRetries; $i++) {
     Write-Host "  try $i / $MaxRetries ..." -NoNewline
-    $result = git push origin $Branch 2>&1
+    $httpsArgs = @("push", "origin", $Branch)
+    if ($forceArg) { $httpsArgs += $forceArg }
+    $result = git @httpsArgs 2>&1
     if ($LASTEXITCODE -eq 0) {
         Write-Host " 成功!" -ForegroundColor Green
         $ok = $true
