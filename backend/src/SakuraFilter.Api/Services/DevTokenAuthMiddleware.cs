@@ -16,13 +16,19 @@ namespace SakuraFilter.Api.Services;
 ///   - CurrentKey + PreviousKey(可选) 两个 token
 ///   - 轮转步骤: ops 配 PreviousKey = 旧 token + CurrentKey = 新 token → 部署 → 等前端刷新 → 清空 PreviousKey
 ///   - 用 PreviousKey 验证成功时记录 Warning, 提示运维过渡期尚未结束
+/// P7.1: 改造为 IAuthTokenStore 注入 — DB 中轮转后的值实时生效
+///   - 启动期: AuthTokenStore 异步 InitAsync 从 DB 加载 (覆盖 IConfiguration 兜底)
+///   - 轮转期: CLI rotate-token → 写 DB + NOTIFY → AuthTokenBroadcaster 触发 ReloadFromDb
+///   - 启动期 InitAsync 尚未完成时 (DB 慢), 用 IConfiguration 兜底值
+///   WHY 不全程走 IConfiguration: 写完 DB 后必须重启 API 才能用新 token, 失去零停机语义
 /// </summary>
 public class DevTokenAuthMiddleware
 {
     private readonly RequestDelegate _next;
     private readonly ILogger<DevTokenAuthMiddleware> _logger;
-    private readonly string _expectedToken;
-    private readonly string? _previousToken;  // Day 9.9: 双 key 轮换
+    private readonly IAuthTokenStore _tokenStore;
+    private readonly string _configFallbackToken;     // IConfiguration 兜底 (DB 不可用时)
+    private readonly string? _configFallbackPrevious; // 启动期 DB 尚未加载时
     private readonly bool _enabled;
     private readonly string[] _adminPrefixes;
     private readonly string[] _exemptExactPaths;
@@ -30,34 +36,37 @@ public class DevTokenAuthMiddleware
     public DevTokenAuthMiddleware(
         RequestDelegate next,
         IConfiguration config,
-        ILogger<DevTokenAuthMiddleware> logger)
+        ILogger<DevTokenAuthMiddleware> logger,
+        IAuthTokenStore tokenStore)
     {
         _next = next;
         _logger = logger;
+        _tokenStore = tokenStore;
 
         _enabled = config.GetValue<bool?>("Auth:Enabled") ?? true;
-        _expectedToken = config["Auth:DevStaticToken"]
+        // WHY 保留 IConfiguration 兜底: 启动期 InitAsync 未完成时 (DB 慢, 或 DB 不可用),
+        //   token 必须可用,否则 /api/admin/auth/status 也会被 401 挡住
+        _configFallbackToken = config["Auth:DevStaticToken"]
             ?? throw new InvalidOperationException(
                 "Auth:DevStaticToken 未配置, 启动失败. 必须在 appsettings.json 配置 ≥ 32 字符 token");
-        if (_enabled && _expectedToken.Length < 32)
+        if (_enabled && _configFallbackToken.Length < 32)
         {
             throw new InvalidOperationException(
-                $"Auth:DevStaticToken 长度 {_expectedToken.Length} < 32, 不安全");
+                $"Auth:DevStaticToken 长度 {_configFallbackToken.Length} < 32, 不安全");
         }
-        // Day 9.9: 加载 PreviousKey (可选, 轮换过渡期用)
-        _previousToken = config["Auth:DevStaticTokenPrevious"];
-        if (string.IsNullOrEmpty(_previousToken)) _previousToken = null;  // 空字符串视作未配置
-        if (_enabled && _previousToken is { Length: < 32 })
+        _configFallbackPrevious = config["Auth:DevStaticTokenPrevious"];
+        if (string.IsNullOrEmpty(_configFallbackPrevious)) _configFallbackPrevious = null;
+        if (_enabled && _configFallbackPrevious is { Length: < 32 })
         {
             throw new InvalidOperationException(
-                $"Auth:DevStaticTokenPrevious 长度 {_previousToken.Length} < 32, 不安全");
+                $"Auth:DevStaticTokenPrevious 长度 {_configFallbackPrevious.Length} < 32, 不安全");
         }
-        if (_previousToken is not null && _previousToken == _expectedToken)
+        if (_configFallbackPrevious is not null && _configFallbackPrevious == _configFallbackToken)
         {
             _logger.LogWarning("DevStaticToken 与 Previous 相同, Previous 忽略");
-            _previousToken = null;
+            _configFallbackPrevious = null;
         }
-        else if (_previousToken is not null)
+        else if (_configFallbackPrevious is not null)
         {
             _logger.LogWarning("DevTokenAuth 双 key 模式: PreviousKey 已配置, 过渡期内旧 token 仍可用");
         }
@@ -103,6 +112,13 @@ public class DevTokenAuthMiddleware
             return;
         }
 
+        // P7.1: 优先用 IAuthTokenStore 当前值 (从 DB 读, 实时反映轮转)
+        //   - DB 已加载 (LoadedFromDb=true) → 用 store.Current / store.Previous
+        //   - DB 尚未加载 (LoadedFromDb=false) → 用 IConfiguration 兜底
+        //   - 这保证启动期 + 轮转期 + DB 故障 三个场景都有合理值
+        var currentToken = _tokenStore.LoadedFromDb ? _tokenStore.Current : _configFallbackToken;
+        var previousToken = _tokenStore.LoadedFromDb ? _tokenStore.Previous : _configFallbackPrevious;
+
         // 验证 token (Header X-Admin-Token: <token>)
         // Day 9.9: 双 key — 先匹配 Current, 再匹配 Previous (过渡期)
         var tokenValid = false;
@@ -110,9 +126,9 @@ public class DevTokenAuthMiddleware
         if (ctx.Request.Headers.TryGetValue("X-Admin-Token", out var provided))
         {
             var tokenStr = provided.ToString();
-            if (string.Equals(tokenStr, _expectedToken, StringComparison.Ordinal))
+            if (string.Equals(tokenStr, currentToken, StringComparison.Ordinal))
                 tokenValid = true;
-            else if (_previousToken is not null && string.Equals(tokenStr, _previousToken, StringComparison.Ordinal))
+            else if (previousToken is not null && string.Equals(tokenStr, previousToken, StringComparison.Ordinal))
             {
                 tokenValid = true;
                 usingPrevious = true;

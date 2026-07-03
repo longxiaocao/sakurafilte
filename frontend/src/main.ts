@@ -7,7 +7,11 @@ import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 
 import App from './App.vue'
 import router from './router'
+import { installPerfInterceptor } from './utils/perf'
 import './styles/index.css'
+
+// P5.5: 启动前端性能埋点 (axios 拦截器, 批量上报到 /api/perf/ingest)
+installPerfInterceptor()
 
 const app = createApp(App)
 

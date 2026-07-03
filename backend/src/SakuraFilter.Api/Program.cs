@@ -110,6 +110,16 @@ builder.Services.AddHttpClient("EtlAlert", c =>
 // Day 8.3: cursor HMAC 签名工具 (单例, 内部从 IConfiguration 读 Search:CursorHmacKey)
 builder.Services.AddSingleton<CursorHmac>();
 
+// P5.5: 性能埋点指标聚合 (Singleton, 中间件和端点共享)
+builder.Services.AddSingleton<PerfMetrics>();
+
+// P7.1: Auth Token 轮转存储 (Singleton, 内存缓存 + DB 覆盖 + PG NOTIFY 重载)
+//   - DevTokenAuthMiddleware 当前仍直读 IConfiguration; 后续 PR 改造为注入 IAuthTokenStore
+//   - 现阶段 AuthTokenStore 启动时建表 + 从 DB 加载, /api/admin/auth/status 端点可查
+builder.Services.AddSingleton<IAuthTokenStore, AuthTokenStore>();
+builder.Services.AddSingleton<AuthTokenBroadcaster>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<AuthTokenBroadcaster>());
+
 // P1.2 (Task 4): 注册 IObjectStorage, 按 Storage:Provider 配置切换 (minio / aliyun-oss)
 //   WHY Singleton: IMinioClient / OssClient 都是线程安全单例, *Storage 无内部状态
 //   WHY 不放 appsettings.Development: 默认值兜底, dev 可覆盖 endpoint/bucket
@@ -287,12 +297,26 @@ _ = Task.Run(async () =>
     }
 });
 
+// P7.1: 启动 AuthTokenStore 初始化 (从 DB 加载, 覆盖 IConfiguration 兜底值)
+_ = Task.Run(async () =>
+{
+    try
+    {
+        await app.Services.GetRequiredService<IAuthTokenStore>().InitAsync();
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogWarning(ex, "AuthTokenStore 启动失败, 使用 IConfiguration 兜底");
+    }
+});
+
 // Day 8.4: 中间件 pipeline 顺序
 //   1) UseExceptionHandler 统一错误 (开发环境显示堆栈, 生产隐藏)
 //   2) UseCors 跨域 (要在鉴权前, 否则 preflight 失败)
 //   3) UseRateLimiter 限流 (鉴权前, 防匿名 DoS)
-//   4) DevTokenAuthMiddleware 自定义鉴权
-//   5) UseOpenAPI 文档 (所有环境可用, 替代原 Swagger)
+//   4) P5.5: ResponseTimeMiddleware 响应时间埋点 (在鉴权前,记录 401 等异常耗时)
+//   5) DevTokenAuthMiddleware 自定义鉴权
+//   6) UseOpenAPI 文档 (所有环境可用, 替代原 Swagger)
 if (app.Environment.IsDevelopment())
 {
     app.UseDeveloperExceptionPage();
@@ -302,6 +326,8 @@ if (rateLimitConfig.Enabled)
 {
     app.UseRateLimiter();
 }
+// P5.5: 响应时间埋点 (在鉴权前,记录 401 等异常耗时;中间件自身排除 /api/perf 防止递归)
+app.UseMiddleware<ResponseTimeMiddleware>();
 app.UseMiddleware<DevTokenAuthMiddleware>();
 
 // Day 8.4: Scalar UI 替代 Swagger (生产环境也可访问, 配防火墙策略控制)
@@ -317,6 +343,98 @@ app.UseSwaggerUI(c =>
 });
 
 app.MapGet("/", () => Results.Ok(new { name = "SakuraFilter API", version = "0.3.0", status = "running" }));
+
+// P5.5: 性能埋点查询端点 (返回最近 1000 条请求样本的 P50/P95/P99)
+//   暴露给前端 perf 监控 + 运维自查, 不需要鉴权 (只读统计)
+//   WHY 不放 /api/admin: 监控指标应公开, 监控代理(如 uptime robot)能直接访问
+//   端点本身被 ResponseTimeMiddleware 排除, 不会污染统计样本
+app.MapGet("/api/perf", (PerfMetrics metrics) =>
+    Results.Ok(metrics.GetSnapshot()))
+.WithName("PerfSnapshot")
+.WithOpenApi();
+
+// P5.5: 接收前端性能埋点批量上报
+//   格式: { samples: [{ path, method, statusCode, durationMs, ts }] }
+//   上限 100 条/批, 防恶意大批量上报
+//   WHY 接收前端埋点: 真实用户体验 (含网络/RTT/渲染) 比服务端时间更全
+//   写入 server 日志, 不入库 (高频写, 无业务价值); 运维可从日志聚合
+app.MapPost("/api/perf/ingest", (
+    FrontendPerfBatch body,
+    ILogger<Program> logger,
+    HttpContext ctx) =>
+{
+    if (body?.Samples is null || body.Samples.Count == 0)
+        return Results.BadRequest(new { error = "samples 不能为空" });
+    if (body.Samples.Count > 100)
+        return Results.BadRequest(new { error = "单次最多 100 条", given = body.Samples.Count });
+    var ua = ctx.Request.Headers.UserAgent.ToString();
+    foreach (var s in body.Samples)
+    {
+        // WHY structured log: 让日志聚合工具能直接查询慢请求
+        logger.LogInformation("[PERF-FE] {Method} {Path} {Status} {Duration}ms ts={Ts} ua={UA}",
+            s.Method ?? "?", s.Path ?? "?", s.StatusCode, s.DurationMs, s.Ts, ua);
+    }
+    return Results.Ok(new { received = body.Samples.Count });
+})
+.WithName("PerfIngest")
+.WithOpenApi();
+
+// P5.5: 健康检查分级
+//   /health/live   永远 200 (liveness probe — 进程是否存活, Docker K8s 用)
+//   /health/ready  检查 PG + Meili (readiness probe — 进程是否可服务流量)
+//   WHY 分级: liveness 失败 → 杀进程重启; readiness 失败 → 临时剔除 LB 流量池
+//   中间件排除这两个路径, 不会污染 perf 统计
+app.MapGet("/health/live", () => Results.Ok(new { status = "alive" }))
+    .WithName("HealthLive");
+app.MapGet("/health/ready", async (
+    ProductDbContext db,
+    SakuraFilter.Search.ISearchProvider search,
+    CancellationToken ct) =>
+{
+    var checks = new List<object>();
+    var pgOk = false;
+    try
+    {
+        pgOk = await db.Database.CanConnectAsync(ct);
+    }
+    catch { pgOk = false; }
+    checks.Add(new { name = "postgres", healthy = pgOk });
+    var meiliOk = false;
+    try
+    {
+        meiliOk = await search.HealthCheckAsync(ct);
+    }
+    catch { meiliOk = false; }
+    checks.Add(new { name = "search", healthy = meiliOk });
+    var allOk = pgOk && meiliOk;
+    return Results.Json(
+        new { status = allOk ? "ready" : "degraded", checks },
+        statusCode: allOk ? 200 : 503);
+})
+.WithName("HealthReady");
+
+// P7.1: Auth Token 状态查询端点
+//   暴露 current/previous 长度 + 轮转时间 + 操作人 (不暴露完整 token)
+//   用于: 运维验证 rotate 是否生效 + CI E2E 验证
+app.MapGet("/api/admin/auth/status", (IAuthTokenStore store) =>
+{
+    var current = store.Current;
+    var previous = store.Previous;
+    return Results.Ok(new
+    {
+        // WHY 只暴露长度: token 不应进日志/响应, 即便是 admin 接口
+        currentLen = current?.Length ?? 0,
+        currentPrefix = current is { Length: >= 4 } ? current[..4] : null,
+        previousLen = previous?.Length ?? 0,
+        previousPrefix = previous is { Length: >= 4 } ? previous[..4] : null,
+        lastRotatedAt = store.LastRotatedAt,
+        lastRotatedBy = store.LastRotatedBy,
+        loadedFromDb = store.LoadedFromDb,
+        hasPrevious = !string.IsNullOrEmpty(previous)
+    });
+})
+.WithName("AdminAuthStatus")
+.RequireRateLimiting("global");
 
 // P3.2 (Task 10): 启用 MVC 控制器路由
 //   - PublicSearchController (/api/public/search/*) 由 Controller 内的 [Route] 自动注册
@@ -1950,3 +2068,9 @@ public record DeadLetterItem(long Id, long OriginalId, string Operation, int Ret
 // Day 10: OEM 品牌字典请求体 (P1.3)
 public record OemBrandCreateRequest(string Brand, int? SortOrder);
 public record OemBrandUpdateRequest(string? Brand, int? SortOrder);
+
+// P5.5: 前端性能埋点批量上报 DTO
+//   ts: 客户端时间戳 (ISO8601 string, 简化绑定, 后端不强制解析)
+//   字段全部 nullable + 服务层 ?? 兜底 (与 AdminProductSearchRequest 一致)
+public record FrontendPerfSample(string? Path, string? Method, int? StatusCode, double? DurationMs, string? Ts);
+public record FrontendPerfBatch(List<FrontendPerfSample>? Samples);

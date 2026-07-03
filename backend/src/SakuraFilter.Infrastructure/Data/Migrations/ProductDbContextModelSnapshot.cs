@@ -151,6 +151,14 @@ namespace SakuraFilter.Infrastructure.Data.Migrations
                         .HasColumnType("character varying(200)")
                         .HasColumnName("machine_brand");
 
+                    b.Property<string>("MachineCategory")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasDefaultValue("others")
+                        .HasColumnName("machine_category");
+
                     b.Property<string>("MachineModel")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)")
@@ -175,6 +183,10 @@ namespace SakuraFilter.Infrastructure.Data.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_dict_machine");
+
+                    b.HasIndex("DeletedAt", "MachineCategory")
+                        .HasDatabaseName("idx_dict_machine_category")
+                        .HasFilter("deleted_at IS NULL");
 
                     b.HasIndex("DeletedAt", "SortOrder")
                         .HasDatabaseName("idx_dict_machine_active")
