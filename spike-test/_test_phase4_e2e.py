@@ -184,7 +184,7 @@ if code == 201 and isinstance(r, dict):
 
 # ===== Step 7: 产品图片字段名验证 (BUG FIX D) =====
 print("\n" + "=" * 60)
-print("Step 7: 产品图片字段名验证 (BUG FIX D: imageUrl 而非 url)")
+print("Step 7: 产品图片上传 + 字段名验证 (BUG FIX D: imageUrl 而非 url)")
 print("=" * 60)
 # 先找一个产品 id
 pg = psycopg2.connect(host='localhost', port=5432, dbname='spike_test_v3', user='postgres', password='784533')
@@ -194,22 +194,71 @@ row = cur.fetchone()
 pg.close()
 if row:
     pid = row[0]
-    code, r = api("GET", f"/api/admin/products/{pid}/images")
-    if code == 200 and isinstance(r, list) and len(r) > 0:
-        # 验证字段名是 imageUrl 而非 url
-        first_img = r[0]
-        has_image_url = "imageUrl" in first_img
-        has_url = "url" in first_img
-        record("7.1 图片字段名 imageUrl (非 url)", has_image_url and not has_url,
+
+    # 改进 2: 先上传 1 张测试图片, 再验证字段名
+    import base64
+    # 1x1 像素 PNG (透明)
+    png_b64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+    png_bytes = base64.b64decode(png_b64)
+
+    # multipart/form-data 上传
+    boundary = "----TestBoundary1234567890"
+    body = b"--" + boundary.encode() + b"\r\n"
+    body += b'Content-Disposition: form-data; name="file"; filename="test.png"\r\n'
+    body += b"Content-Type: image/png\r\n\r\n"
+    body += png_bytes + b"\r\n"
+    body += b"--" + boundary.encode() + b"--\r\n"
+
+    req = urllib.request.Request(
+        f"{BASE}/api/admin/products/{pid}/images/1",
+        data=body,
+        headers={"Content-Type": f"multipart/form-data; boundary={boundary}", "X-Admin-Token": TOKEN},
+        method="POST"
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            upload_code = resp.status
+            upload_resp = json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        upload_code = e.code
+        try:
+            upload_resp = json.loads(e.read())
+        except:
+            upload_resp = {}
+
+    record("7.1 上传测试图片", upload_code == 200 or upload_code == 201,
+           f"HTTP {upload_code}")
+
+    if upload_code in (200, 201):
+        # 验证返回的字段名
+        has_image_url = "imageUrl" in upload_resp
+        has_url = "url" in upload_resp
+        has_size_bytes = "sizeBytes" in upload_resp
+        has_file_size = "fileSize" in upload_resp
+        record("7.2 图片字段名 imageUrl (非 url)", has_image_url and not has_url,
                f"imageUrl={'有' if has_image_url else '无'} url={'有' if has_url else '无'}")
-        record("7.2 图片字段名 sizeBytes (非 fileSize)", "sizeBytes" in first_img,
-               f"sizeBytes={'有' if 'sizeBytes' in first_img else '无'}")
+        record("7.3 图片字段名 sizeBytes (非 fileSize)", has_size_bytes and not has_file_size,
+               f"sizeBytes={'有' if has_size_bytes else '无'} fileSize={'有' if has_file_size else '无'}")
+
+        # 验证 list 端点也返回正确字段名
+        code, r = api("GET", f"/api/admin/products/{pid}/images")
+        if code == 200 and isinstance(r, list) and len(r) > 0:
+            first_img = r[0]
+            list_has_image_url = "imageUrl" in first_img
+            list_has_size_bytes = "sizeBytes" in first_img
+            record("7.4 list 端点字段名一致", list_has_image_url and list_has_size_bytes,
+                   f"imageUrl={'有' if list_has_image_url else '无'} sizeBytes={'有' if list_has_size_bytes else '无'}")
+        else:
+            record("7.4 list 端点字段名一致", False, f"list 返回空或错误 (HTTP {code})")
     else:
-        record("7.1 图片字段名验证", False, f"无图片数据 (HTTP {code})")
-        record("7.2 图片字段名验证", False, "跳过")
+        record("7.2 图片字段名 imageUrl", False, "上传失败, 跳过")
+        record("7.3 图片字段名 sizeBytes", False, "上传失败, 跳过")
+        record("7.4 list 端点字段名一致", False, "上传失败, 跳过")
 else:
-    record("7.1 图片字段名验证", False, "无产品数据")
-    record("7.2 图片字段名验证", False, "跳过")
+    record("7.1 上传测试图片", False, "无产品数据")
+    record("7.2 图片字段名 imageUrl", False, "跳过")
+    record("7.3 图片字段名 sizeBytes", False, "跳过")
+    record("7.4 list 端点字段名一致", False, "跳过")
 
 # ===== Step 8: ETL 历史 + 聚合 =====
 print("\n" + "=" * 60)

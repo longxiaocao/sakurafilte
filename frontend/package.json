@@ -10,7 +10,8 @@
     "type-check": "vue-tsc --noEmit",
     "test:contract": "vitest run",
     "test:visual": "playwright test",
-    "test:visual:update": "playwright test --update-snapshots"
+    "test:visual:update": "playwright test --update-snapshots",
+    "gen:types": "python ../spike-test/_gen_types.py"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.1",

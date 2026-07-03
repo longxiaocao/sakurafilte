@@ -425,3 +425,51 @@ export interface PublicEightResponse {
   items: PublicSearchHit[]
 }
 
+// ===== Day 11 改进 1: 自动生成的 Request DTO (re-export) =====
+// WHY: 手工 types.ts 历史遗漏 38 个 Request/Reorder/Input DTO,
+//   导致前端调用 dictApi.machines.create() 等接口时参数无类型保护 (BUG B 根因).
+//   现从 generated-types.ts re-export, 与后端 Swagger 契约保持自动同步.
+//   重名的 interface (如 EtlTriggerRequest) 保留手工版 (含精确字面量类型,
+//   如 mode: 'full-load' | 'insert-only' | 'upsert', 比生成的 string 更严格).
+//   开发者新增 DTO 时, 优先在 generated-types.ts 检查是否已自动生成.
+export type {
+  CancelRequest,
+  CompareRequest,
+  EngineCreateRequest,
+  EngineReorderItem,
+  EngineReorderRequest,
+  EngineUpdateRequest,
+  ImportRequest,
+  MachineAppInput,
+  MachineCreateRequest,
+  MachineReorderItem,
+  MachineReorderRequest,
+  MachineUpdateRequest,
+  MediaCreateRequest,
+  MediaReorderItem,
+  MediaReorderRequest,
+  MediaUpdateRequest,
+  OemBrandCreateRequest,
+  OemBrandReorderItem,
+  OemBrandReorderRequest,
+  OemBrandUpdateRequest,
+  OemNo3CreateRequest,
+  OemNo3ReorderItem,
+  OemNo3ReorderRequest,
+  OemNo3UpdateRequest,
+  ProductFormDto,
+  ProductName1CreateRequest,
+  ProductName1ReorderItem,
+  ProductName1ReorderRequest,
+  ProductName1UpdateRequest,
+  ProductName2CreateRequest,
+  ProductName2ReorderItem,
+  ProductName2ReorderRequest,
+  ProductName2UpdateRequest,
+  TypeCreateRequest,
+  TypeReorderItem,
+  TypeReorderRequest,
+  TypeUpdateRequest,
+  XrefInput
+} from './generated-types'
+
