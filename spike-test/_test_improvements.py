@@ -1,12 +1,19 @@
-"""验证三项改进"""
+"""验证三项改进
+Day 11+ v2: 路径改用 SCRIPT_DIR 自动算 repo root, 跨平台兼容
+"""
 import json
 import time
 import urllib.request
 import urllib.error
+from pathlib import Path
 
 BASE = "http://localhost:5148"
 TOKEN = "dev-admin-token-rotate-in-prod-MZK4R9P3X6V2N7Q1L5F0B8H3C"
 HEADERS = {"Content-Type": "application/json", "X-Admin-Token": TOKEN}
+
+# 跨平台路径 (CI 是 Linux, 本地是 Windows)
+SCRIPT_DIR = Path(__file__).resolve().parent
+CLEANED = SCRIPT_DIR / "output" / "cleaned"
 
 
 def get_status():
@@ -34,7 +41,7 @@ def wait_idle():
 # 测试 1: 改进 1 - 统一端点 entityType 参数 (用 100 行小文件)
 print("===== 测试 1: 统一端点 entityType=xrefs =====")
 wait_idle()
-test_xrefs = r"d:\projects\sakurafilter\spike-test\output\cleaned\xrefs_100.jsonl"
+test_xrefs = str(CLEANED / "xrefs_100.jsonl")
 try:
     code, resp = trigger("/api/etl/import", {"jsonlPath": test_xrefs, "mode": "insert-only", "entityType": "xrefs"})
     print(f"  触发统一端点: HTTP {code}")
@@ -74,7 +81,7 @@ apps_before = cur.fetchone()[0]
 print(f"  导入前: xrefs={xrefs_before:,} apps={apps_before:,}")
 
 wait_idle()
-test_products = r"d:\projects\sakurafilter\spike-test\output\cleaned\products.jsonl"
+test_products = str(CLEANED / "products.jsonl")
 try:
     code, resp = trigger("/api/etl/import", {
         "jsonlPath": test_products, "mode": "full-load", "entityType": "products", "cascade": False
