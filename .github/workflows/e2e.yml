@@ -71,9 +71,12 @@ jobs:
         run: python _ef_migrations_baseline.py
 
       - name: Run API server (background)
+        id: api-server
         run: |
           cd backend/src/SakuraFilter.Api
           dotnet run -c Release --no-build --urls "http://localhost:5148" > /tmp/api5148.log 2>&1 &
+          API_PID=$!
+          echo "API PID: $API_PID"
           # Day 11 fix: 循环等待 5148 可达 (120s, 之前 60s 在 320fd1b/4a8ace7 偶发超时失败)
           #   WHY: GH runner 状态波动大, dotnet 启动 + Database.Migrate + LISTEN 偶发 60s+ 才就绪
           #        延长到 120s, 给慢启动留 2x 缓冲; 仍超时则输出 API 日志诊断
@@ -88,11 +91,27 @@ jobs:
             sleep 1
           done
           if [ "$A_READY" != "1" ]; then
-            echo "::error::API 5148 在 120s 内未就绪 (320fd1b/4a8ace7 已知偶发超时)"
-            echo "::error::=== 5148 API 日志 (前 100 行) ==="
-            head -n 100 /tmp/api5148.log || echo "无日志"
+            # Day 11 fix v2: 失败时把 API 日志关键行作为 ::error:: 注解 (无需 admin 日志权限)
+            #   上传完整日志为 artifact (api-server-log) 供后续排错
+            echo "::error::API 5148 在 120s 内未就绪 (PID=$API_PID 仍存活=$(kill -0 $API_PID 2>/dev/null && echo yes || echo no))"
+            echo "::error::=== API 日志最后 30 行 (含 ANSI 转义) ==="
+            tail -n 30 /tmp/api5148.log | sed 's/\x1b\[[0-9;]*[a-zA-Z]//g' | while IFS= read -r line; do
+              echo "::error file=/tmp/api5148.log::$line"
+            done
+            echo "::error::=== 关键错误关键字 (Error/Exception/Failed) ==="
+            grep -iE "(error|exception|failed|cannot|connection refused)" /tmp/api5148.log 2>/dev/null | head -20 | while IFS= read -r line; do
+              echo "::error::$line"
+            done || echo "::notice::未发现关键错误关键字"
             exit 1
           fi
+
+      - name: Upload API log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-server-log
+          path: /tmp/api5148.log
+          if-no-files-found: ignore
 
       - name: Run E2E Day 9.5 (cancel enum + alert filter + cursor HMAC)
         working-directory: spike-test
