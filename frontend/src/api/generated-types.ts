@@ -47,6 +47,18 @@ export interface EtlTriggerRequest {
   cascade?: boolean | null
 }
 
+export interface FrontendPerfBatch {
+  samples?: FrontendPerfSample[] | null
+}
+
+export interface FrontendPerfSample {
+  path?: string | null
+  method?: string | null
+  statusCode?: number | null
+  durationMs?: number | null
+  ts?: string | null
+}
+
 export interface ImportRequest {
   jsonlPath?: string | null
   mode?: string | null
@@ -289,4 +301,4 @@ export interface XrefInput {
   oemBrand?: string | null
   oemNo3?: string | null
 }
-// 共生成 41 个 interface (跳过 0 个框架内置 schema)
+// 共生成 43 个 interface (跳过 0 个框架内置 schema)
