@@ -1,14 +1,16 @@
 # P3.5 (Task 12): 对比 API 端到端验证
 #   验证 /api/admin/products/compare 接受 1-6 个 ID, 正确返回 ProductDetail 列表
 #   用法: python _test_compare.py [base_url] [token]
-#     默认 base_url=http://localhost:5082, token=devtoken
+#     Day 11 fix: 默认 base_url=http://localhost:5148 (当前 API), token=ADMIN_TOKEN env
+#     历史原因: 早期版本跑在 5082, 但 e2e.yml 只起 5148 实例 → 必 fail
+import os
 import sys
 import json
 import urllib.request
 import urllib.error
 
-BASE = sys.argv[1] if len(sys.argv) > 1 else "http://localhost:5082"
-TOKEN = sys.argv[2] if len(sys.argv) > 2 else "devtoken"
+BASE = sys.argv[1] if len(sys.argv) > 1 else "http://localhost:5148"
+TOKEN = sys.argv[2] if len(sys.argv) > 2 else os.environ.get("ADMIN_TOKEN", "dev-admin-token-rotate-in-prod-MZK4R9P3X6V2N7Q1L5F0B8H3C")
 
 
 def req(method, path, body=None):
