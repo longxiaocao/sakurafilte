@@ -91,10 +91,18 @@ jobs:
       - name: Install Python deps
         run: pip install psycopg2-binary
       - name: Download prebuilt backend
+        # WHY: path 去掉 /bin 后缀
+        #   setup job upload 路径是 backend/src/SakuraFilter.Api/bin
+        #   → zip 顶层目录 = backend/src/SakuraFilter.Api/bin/
+        #   → download 到 path: backend/src/SakuraFilter.Api
+        #   → 解压后产物 = backend/src/SakuraFilter.Api/bin/Release/net8.0/SakuraFilter.Api ✅
+        #   之前 path: backend/src/SakuraFilter.Api/bin
+        #   → 解压后 = backend/src/SakuraFilter.Api/bin/backend/src/SakuraFilter.Api/bin/... ❌ 路径重复
+        #   → dotnet run --no-build 找不到 SakuraFilter.Api → Win32Exception 2 (No such file or directory)
         uses: actions/download-artifact@v4
         with:
           name: backend-build
-          path: backend/src/SakuraFilter.Api/bin
+          path: backend/src/SakuraFilter.Api
 
       # 启动 API server (120s 超时, 失败时输出日志诊断)
       - name: Run API server (background)
@@ -265,10 +273,18 @@ jobs:
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
       - name: Download prebuilt backend
+        # WHY: path 去掉 /bin 后缀
+        #   setup job upload 路径是 backend/src/SakuraFilter.Api/bin
+        #   → zip 顶层目录 = backend/src/SakuraFilter.Api/bin/
+        #   → download 到 path: backend/src/SakuraFilter.Api
+        #   → 解压后产物 = backend/src/SakuraFilter.Api/bin/Release/net8.0/SakuraFilter.Api ✅
+        #   之前 path: backend/src/SakuraFilter.Api/bin
+        #   → 解压后 = backend/src/SakuraFilter.Api/bin/backend/src/SakuraFilter.Api/bin/... ❌ 路径重复
+        #   → dotnet run --no-build 找不到 SakuraFilter.Api → Win32Exception 2 (No such file or directory)
         uses: actions/download-artifact@v4
         with:
           name: backend-build
-          path: backend/src/SakuraFilter.Api/bin
+          path: backend/src/SakuraFilter.Api
       - name: Install frontend deps
         working-directory: frontend
         run: npm ci --no-audit --no-fund
