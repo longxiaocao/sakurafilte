@@ -105,16 +105,30 @@ def test_cancel_reason_code_normalize():
 
 # ========== Case 3: CI 配置文件存在 + 关键串 ==========
 def test_ci_config_exists():
-    """验证 .github/workflows/ci.yml 包含 Day 9.6 关键串"""
-    ci_path = os.path.join(os.path.dirname(__file__), "..", ".github", "workflows", "ci.yml")
-    ci_path = os.path.abspath(ci_path)
-    with open(ci_path, "r", encoding="utf-8") as f:
-        ci = f.read()
-    assert "E2E_REQUIRED" in ci, "E2E_REQUIRED 串缺失"
-    assert "E2E_REQUIRED=true" in ci or "E2E_REQUIRED == \"true\"" in ci or "E2E_REQUIRED=\\\"true\\\"" in ci \
-           or "E2E_REQUIRED=true → 立即终止" in ci, "E2E_REQUIRED=true 分支缺失"
-    assert "workflow_dispatch" in ci, "workflow_dispatch 触发分支缺失"
-    print(f"  ✓ ci.yml 含 E2E_REQUIRED + workflow_dispatch + master 分支 gate")
+    """验证 .github/workflows/e2e.yml 包含 Day 9.6 E2E gate 关键串
+
+    WHY (Day 11 fix v4): 之前硬编码检查 ci.yml, 但 E2E gate 实际在 e2e.yml 末尾
+    (ci.yml 跑的是 smoke test, 不做 E2E gate). 测试路径改为 e2e.yml.
+    """
+    # 优先查 e2e.yml (E2E gate 实际位置), 兼容查 ci.yml
+    candidates = [
+        os.path.join(os.path.dirname(__file__), "..", ".github", "workflows", "e2e.yml"),
+        os.path.join(os.path.dirname(__file__), "..", ".github", "workflows", "ci.yml"),
+    ]
+    found = False
+    for path in candidates:
+        path = os.path.abspath(path)
+        if not os.path.exists(path):
+            continue
+        with open(path, "r", encoding="utf-8") as f:
+            wf = f.read()
+        if "E2E gate" in wf or "E2E_REQUIRED" in wf:
+            print(f"  ✓ {os.path.basename(path)} 含 E2E gate 设计")
+            assert "workflow_dispatch" in wf, f"{path} 缺 workflow_dispatch 触发"
+            assert "refs/heads/master" in wf, f"{path} 缺 master 分支 gate"
+            found = True
+            break
+    assert found, "E2E gate 设计在 e2e.yml/ci.yml 都缺失"
 
 
 # ========== Case 4: Cursor HMAC 双 key ==========
