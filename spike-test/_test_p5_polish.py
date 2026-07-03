@@ -22,11 +22,15 @@ import urllib.request
 from pathlib import Path
 
 BASE = "http://localhost:5148"
-ADMIN_TOKEN = "dev-admin-token-rotate-in-prod-MZK4R9P3X6V2N7Q1L5F0B8H3C"
-FRONTEND = Path("d:/projects/sakurafilter/frontend")
+ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN", "dev-admin-token-rotate-in-prod-MZK4R9P3X6V2N7Q1L5F0B8H3C")
+# Day 11 fix v4: 用 SCRIPT_DIR 自动算 repo root, 替代硬编码 d:/projects/sakurafilter
+#   之前 CI 上 NotFound, 因 CI checkout 路径是 /home/runner/work/sakurafilte/...
+SCRIPT_DIR = Path(__file__).resolve().parent
+REPO_ROOT = SCRIPT_DIR.parent
+FRONTEND = REPO_ROOT / "frontend"
 SRC = FRONTEND / "src"
 DIST = FRONTEND / "dist"
-SPIKE = Path("d:/projects/sakurafilter/spike-test")
+SPIKE = SCRIPT_DIR
 
 PASS = 0
 FAIL = 0
