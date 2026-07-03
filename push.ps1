@@ -86,7 +86,9 @@ for ($i = 1; $i -le $MaxRetries; $i++) {
         $ok = $true
         break
     } else {
-        $errShort = ($result | Select-Object -First 1).Trim()
+        # WHY: git push 2>&1 失败时返回 ErrorRecord 而非 string, 无 Trim() 方法, 需先 Out-String
+        $errLine = $result | Select-Object -First 1 | Out-String
+        $errShort = $errLine.Trim()
         if ($errShort.Length -gt 80) { $errShort = $errShort.Substring(0, 80) + "..." }
         Write-Host " 失败 ($errShort)" -ForegroundColor Red
         if ($i -lt $MaxRetries) {
