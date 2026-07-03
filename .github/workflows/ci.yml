@@ -1,75 +1,49 @@
-name: CI
+# SakuraFilter CI workflow
+#   3 个独立 job 并行执行 (最大化 speed):
+#     1. backend       — dotnet build + 启动 stack + 集成 smoke test
+#     2. frontend      — npm ci + type-check + build
+#     3. types-drift   — 启动 backend + Swagger 拉取 + 对比 generated-types.ts
+#
+#   设计原则 (源自 project_memory):
+#     - services 用 loop-based health check + 60s timeout,避免 5148 慢启动假阴性
+#     - 后端 health check 走认证端点 /api/etl/status (需 X-Admin-Token), 避免 401 误报
+#     - 失败诊断用 ::error:: 注解, GitHub UI 可见, 不依赖 admin 日志权限
+#     - working-directory 与 cd 路径显式标注, 避免 set -e 触发 0 秒失败
+#     - 后端编译用 Release 配置匹配 Docker 生产
 
-# Day 9.4: 接入 vue-tsc 静态检查 + 关键目录 lint
-# WHY: 上轮 AdminProductsView.vue 缺 historyFilter/historyLoading 声明
-#      (template 引用 19 处 script 完全没声明) 浪费 30min 排查
-#      vue-tsc --noEmit 会一次性把所有 "template 用了 script 未声明" 类 bug 抓出来
-# 覆盖:
-#   - frontend type check (vue-tsc)
-#   - backend build check (dotnet build)
-# 后续可加:
-#   - playwright e2e
-#   - etl regression test
+name: CI
 
 on:
   push:
-    branches: [master, main, develop]
+    branches: [master, main]
   pull_request:
-    branches: [master, main, develop]
+    branches: [master, main]
+  workflow_dispatch:
+
+# WHY: 取消旧 run 避免冗余 (尤其 PR 频繁 push 时), 但保留 master 触发的最新 1 个
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' && github.ref != 'refs/heads/main' }}
+
+env:
+  # WHY: 与 docker-compose.yml / appsettings.json 对齐, 后端 auth 中间件校验
+  ADMIN_TOKEN: dev-admin-token-rotate-in-prod-MZK4R9P3X6V2N7Q1L5F0B8H3C
+  CURSOR_HMAC_KEY: dev-cursor-hmac-key-rotate-in-prod-XYZ7K3P9Q2M5V8N1B4D6F0G2H
+  # 后端服务内部端口 (与 ASPNETCORE_URLS 一致)
+  BACKEND_PORT: 5148
+  DOTNET_VERSION: 8.0.x
+  NODE_VERSION: 20
+  PYTHON_VERSION: 3.12
 
 jobs:
-  frontend-typecheck:
-    name: Frontend Type Check
-    runs-on: windows-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Install dependencies
-        working-directory: frontend
-        run: npm ci --no-audit --no-fund
-
-      # Day 9.4: vue-tsc --noEmit, 0 错误才通过
-      # 这一个步骤就能抓出 "template 引用 script 未声明" 类 bug
-      - name: Type check (vue-tsc)
-        working-directory: frontend
-        run: npx vue-tsc --noEmit
-
-  backend-build:
-    name: Backend Build
-    runs-on: windows-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '8.0.x'
-
-      - name: Restore
-        working-directory: backend
-        run: dotnet restore
-
-      - name: Build
-        working-directory: backend
-        run: dotnet build --no-restore -c Release
-
-  # Day 9.5: 后端 integration test 跑 E2E 套件
-  #   WHY: 后端 build 只验证编译, 不会发现 "运行期 500 / cursor 越权 / cancel 落库丢失" 类问题
-  #   覆盖: Day 9.4 E2E (29 用例: cancel 落库 / cursor 分页 / SSE / dry-run 50 行)
-  #   数据库: 用 GitHub Actions service container 起 PostgreSQL 16
-  backend-integration:
-    name: Backend Integration Test
+  # ============================================================
+  # Job 1: 后端编译 + 启动 + 集成 smoke test
+  # ============================================================
+  backend:
+    name: Backend Build & Smoke Test
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
+
     services:
       postgres:
         image: postgres:16
@@ -81,97 +55,315 @@ jobs:
           - 5432:5432
         options: >-
           --health-cmd "pg_isready -U postgres"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    steps:
-      - uses: actions/checkout@v4
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+        # WHY: postgres 健康检查 20x5s = 100s 窗口, 匹配 EF Core 慢启动
 
-      - name: Setup .NET
+      minio:
+        image: minio/minio
+        env:
+          MINIO_ROOT_USER: minioadmin
+          MINIO_ROOT_PASSWORD: minioadmin
+        ports:
+          - 9000:9000
+          - 9001:9001
+        options: >-
+          --health-cmd "curl -f http://localhost:9000/minio/health/live"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+
+      meilisearch:
+        image: getmeili/meilisearch:v1.12
+        env:
+          MEILI_NO_ANALYTICS: "true"
+        ports:
+          - 7700:7700
+        options: >-
+          --health-cmd "wget --spider -q http://localhost:7700/health"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET ${{ env.DOTNET_VERSION }}
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      - name: Setup Python
+      - name: Restore backend
+        working-directory: backend
+        run: dotnet restore SakuraFilter.sln
+
+      - name: Build backend (Release)
+        working-directory: backend
+        # WHY: --no-restore 避免重复 restore, -c Release 匹配 Docker 生产
+        run: dotnet build SakuraFilter.sln -c Release --no-restore
+
+      - name: Publish backend
+        working-directory: backend
+        run: dotnet publish src/SakuraFilter.Api/SakuraFilter.Api.csproj -c Release --no-build -o /tmp/backend-publish
+
+      - name: Setup Python ${{ env.PYTHON_VERSION }}
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
 
-      - name: Install psycopg2
-        run: pip install psycopg2-binary
-
-      - name: Restore
-        working-directory: backend
-        run: dotnet restore
-
-      - name: Build
-        working-directory: backend
-        run: dotnet build --no-restore -c Release
-
-      # Day 9.11: 删除 Apply migrations 步骤
-      #   WHY: Program.cs 启动时 Database.Migrate() 已自动应用 EF Core Migrations
-      #        InitialCreate 迁移包含完整 schema (9 表+索引),空数据库自动创建
-      #   旧 19 个 SQL 迁移保留为历史文档,Migrate 已覆盖其 schema 变更
-
-      # Day 9.5: 跑 E2E 套件, 任意 case 失败 → exit 1 → CI 红
-      # Day 9.6: E2E_REQUIRED 门禁
-      #   - master 分支: 默认开 (PR merge 前必须全绿)
-      #   - feature 分支: 默认关 (跑过即记录, 避免数据集未 ready 永久红)
-      #   - 工作流 dispatch 或 E2E_REQUIRED=true: 强制开
-      # WHY 区分: master 是基线, 必须严格; feature 还在迭代, 数据集可能未 seed
-      - name: Run E2E regression
+      - name: Install test dependencies
         working-directory: spike-test
-        env:
-          E2E_REQUIRED: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && 'true' || (github.event_name == 'workflow_dispatch' && 'true' || 'false') }}
-          ADMIN_TOKEN: 'dev-admin-token-rotate-in-prod-MZK4R9P3X6V2N7Q1L5F0B8H3C'
         run: |
-          # 启动后端 (后台, 等几秒健康检查)
-          cd ../backend/src/SakuraFilter.Api
-          nohup dotnet run --no-build -c Release --urls http://localhost:5148 > /tmp/api.log 2>&1 &
-          API_PID=$!
-          echo "API PID: $API_PID"
-          # Day 9.12: 循环等待 5148 可达 (最多 60s) + 失败诊断
-          #   WHY: 之前 30s 不够 + 无失败检查, 5148 没起来直接跑测试会失败
-          A_READY=0
-          for i in $(seq 1 60); do
-            code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5148/api/etl/status -H "X-Admin-Token: $ADMIN_TOKEN" 2>/dev/null || echo 000)
-            if [ "$code" = "200" ]; then
-              echo "API 5148 ready after ${i}s"
-              A_READY=1
-              break
+          python -m pip install --upgrade pip
+          # WHY: _test_ci_smoke.py 仅用 urllib (内置) + json (内置), 无需 requests
+          # 但 _test_improvements.py 用 psycopg2 直连 DB — 本 job 改用 _test_ci_smoke 避开
+
+      - name: Start backend
+        working-directory: /tmp/backend-publish
+        env:
+          ASPNETCORE_ENVIRONMENT: Development
+          ASPNETCORE_URLS: http://localhost:${{ env.BACKEND_PORT }}
+          ConnectionStrings__Postgres: "Host=localhost;Port=5432;Database=spike_test_v3;Username=postgres;Password=784533"
+          MeiliSearch__Endpoint: "http://localhost:7700"
+          MeiliSearch__ApiKey: ""
+          Minio__Endpoint: "localhost:9000"
+          Minio__AccessKey: "minioadmin"
+          Minio__SecretKey: "minioadmin"
+          Minio__PublicEndpoint: "http://localhost:9000"
+          Storage__Provider: "minio"
+          Auth__DevStaticToken: ${{ env.ADMIN_TOKEN }}
+          Search__CursorHmacKey: ${{ env.CURSOR_HMAC_KEY }}
+          Cors__AllowedOrigins__0: "http://localhost"
+        run: |
+          nohup dotnet SakuraFilter.Api.dll > /tmp/backend.log 2>&1 &
+          echo "Backend PID: $!"
+
+      - name: Wait for backend health (loop-based, 60s timeout)
+        env:
+          ADMIN_TOKEN: ${{ env.ADMIN_TOKEN }}
+        run: |
+          # WHY: 项目 memory 强调 — 5148 慢启动可能 30s+,
+          #   单次 curl 会 0s 失败; 用循环重试 + ::error:: 注解暴露真实错误
+          for i in $(seq 1 30); do
+            if curl -sf -H "X-Admin-Token: $ADMIN_TOKEN" \
+                    http://localhost:${{ env.BACKEND_PORT }}/api/etl/status > /tmp/health.json 2>/dev/null; then
+              echo "Backend ready after ${i} attempts"
+              cat /tmp/health.json
+              exit 0
+            fi
+            echo "wait $i..."
+            sleep 2
+          done
+          echo "::error::Backend failed to start within 60s"
+          echo "::error::=== backend.log (last 50 lines) ==="
+          tail -50 /tmp/backend.log
+          exit 1
+
+      - name: Verify Swagger available
+        run: |
+          for i in $(seq 1 10); do
+            if curl -sf http://localhost:${{ env.BACKEND_PORT }}/swagger/v1/swagger.json > /tmp/swagger.json; then
+              echo "Swagger OK, $(wc -c < /tmp/swagger.json) bytes"
+              exit 0
             fi
             sleep 1
           done
-          if [ "$A_READY" != "1" ]; then
-            echo "=== FAIL: API 5148 60s 内未就绪 ==="
-            echo "--- 5148 API 日志 (前 100 行) ---"
-            head -n 100 /tmp/api.log || echo "无日志"
-            exit 1
+          echo "::error::Swagger unavailable"
+          exit 1
+
+      - name: Run CI smoke test
+        env:
+          ADMIN_TOKEN: ${{ env.ADMIN_TOKEN }}
+        run: |
+          # WHY: 用 _test_ci_smoke.py (跨平台 + 无数据依赖) 而非 _test_improvements.py
+          #   后者含 d:\\ 硬编码路径 + psycopg2 依赖 + gitignored jsonl 文件
+          cd spike-test
+          python _test_ci_smoke.py
+          TEST_EXIT=$?
+          if [ $TEST_EXIT -ne 0 ]; then
+            echo "::error::_test_ci_smoke.py exited $TEST_EXIT"
+            tail -100 /tmp/backend.log
+            exit $TEST_EXIT
           fi
-          # 跑 E2E 套件
-          # Day 9.12 v7: 修复 cd 路径错误 (同 e2e.yml Day 9.7 step)
-          #   WHY: cwd 在 checkout/backend/src/SakuraFilter.Api
-          #        cd ../../spike-test = backend/spike-test (不存在) → set -e 退出
-          #        正确路径: ../../../spike-test = checkout/spike-test
-          cd ../../../spike-test
-          ALL_PASS=0
-          for suite in _test_day95.py _test_day94.py; do
-            if [ -f "$suite" ]; then
-              echo "================ Running $suite ================"
-              if python "$suite"; then
-                echo "[PASS] $suite"
-              else
-                RC=$?
-                echo "[FAIL] $suite (rc=$RC)"
-                ALL_PASS=1
-                if [ "$E2E_REQUIRED" = "true" ]; then
-                  echo "E2E_REQUIRED=true → 立即终止"
-                  exit $RC
-                fi
-              fi
+          echo "::notice::All CI smoke tests passed"
+
+      - name: Upload backend log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-log
+          path: /tmp/backend.log
+          if-no-files-found: ignore
+
+  # ============================================================
+  # Job 2: 前端编译 + type-check + build
+  # ============================================================
+  frontend:
+    name: Frontend Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: npm ci
+        working-directory: frontend
+        run: npm ci --no-audit --no-fund
+
+      - name: Type check
+        working-directory: frontend
+        # WHY: vue-tsc --noEmit 走 vue-tsc -b 同等效果但更轻, 直接捕获类型错误
+        run: npm run type-check
+        continue-on-error: false
+
+      - name: Build
+        working-directory: frontend
+        # WHY: build 内含 vue-tsc -b 二次校验, 防止 type-check 与 build 不一致
+        run: npm run build
+
+      - name: Verify dist artifacts
+        working-directory: frontend
+        run: |
+          test -d dist || (echo "::error::dist/ not generated" && exit 1)
+          test -f dist/index.html || (echo "::error::dist/index.html missing" && exit 1)
+          echo "dist/ OK: $(find dist -type f | wc -l) files"
+
+  # ============================================================
+  # Job 3: OpenAPI 契约漂移检查
+  #   WHY: 后端 DTO 改动后, 手工 types.ts 可能遗漏, 导致前端调用静默失败
+  #   做法: 启动 backend → 拉 Swagger → 生成 types → diff with committed
+  # ============================================================
+  types-drift:
+    name: OpenAPI Types Drift Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: spike_test_v3
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: 784533
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+
+      minio:
+        image: minio/minio
+        env:
+          MINIO_ROOT_USER: minioadmin
+          MINIO_ROOT_PASSWORD: minioadmin
+        ports:
+          - 9000:9000
+        options: >-
+          --health-cmd "curl -f http://localhost:9000/minio/health/live"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+
+      meilisearch:
+        image: getmeili/meilisearch:v1.12
+        env:
+          MEILI_NO_ANALYTICS: "true"
+        ports:
+          - 7700:7700
+        options: >-
+          --health-cmd "wget --spider -q http://localhost:7700/health"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET ${{ env.DOTNET_VERSION }}
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Setup Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Restore & publish backend
+        working-directory: backend
+        run: |
+          dotnet restore SakuraFilter.sln
+          dotnet publish src/SakuraFilter.Api/SakuraFilter.Api.csproj -c Release -o /tmp/backend-publish
+
+      - name: Start backend
+        working-directory: /tmp/backend-publish
+        env:
+          ASPNETCORE_ENVIRONMENT: Development
+          ASPNETCORE_URLS: http://localhost:${{ env.BACKEND_PORT }}
+          ConnectionStrings__Postgres: "Host=localhost;Port=5432;Database=spike_test_v3;Username=postgres;Password=784533"
+          MeiliSearch__Endpoint: "http://localhost:7700"
+          MeiliSearch__ApiKey: ""
+          Minio__Endpoint: "localhost:9000"
+          Minio__AccessKey: "minioadmin"
+          Minio__SecretKey: "minioadmin"
+          Minio__PublicEndpoint: "http://localhost:9000"
+          Storage__Provider: "minio"
+          Auth__DevStaticToken: ${{ env.ADMIN_TOKEN }}
+          Search__CursorHmacKey: ${{ env.CURSOR_HMAC_KEY }}
+        run: |
+          nohup dotnet SakuraFilter.Api.dll > /tmp/backend-drift.log 2>&1 &
+          echo "Backend PID: $!"
+
+      - name: Wait for backend (60s loop)
+        env:
+          ADMIN_TOKEN: ${{ env.ADMIN_TOKEN }}
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf -H "X-Admin-Token: $ADMIN_TOKEN" \
+                    http://localhost:${{ env.BACKEND_PORT }}/api/etl/status > /dev/null 2>&1; then
+              echo "Backend ready (drift check)"
+              exit 0
             fi
+            sleep 2
           done
-          if [ "$ALL_PASS" != "0" ] && [ "$E2E_REQUIRED" != "true" ]; then
-            echo "E2E 有失败 (但 E2E_REQUIRED=false, 记录日志但不 fail job)"
+          echo "::error::Backend not ready for drift check"
+          tail -50 /tmp/backend-drift.log
+          exit 1
+
+      - name: Generate types from Swagger
+        run: |
+          python spike-test/_gen_types.py
+
+      - name: Diff against committed types
+        run: |
+          if git diff --exit-code frontend/src/api/generated-types.ts > /tmp/types-diff.txt; then
+            echo "OK: no drift detected"
+            exit 0
           fi
-          echo "E2E finished. E2E_REQUIRED=$E2E_REQUIRED"
+          echo "::error::OpenAPI types drift detected"
+          echo "::error::=== First 50 diff lines ==="
+          head -50 /tmp/types-diff.txt
+          echo "::error::Hint: run 'python spike-test/_gen_types.py' locally and commit the result"
+          exit 1
+
+      - name: Upload drift log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: types-drift-diff
+          path: /tmp/types-diff.txt
+          if-no-files-found: ignore
