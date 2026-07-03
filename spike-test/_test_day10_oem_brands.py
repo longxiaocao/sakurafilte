@@ -279,15 +279,20 @@ def test_create_validation():
     assert code4 == 400, f"空白 brand 应 400, 实际 {code4}, body={body4[:200]}"
     print(f"  ✓ 空白 brand → 400")
     # 5) 默认 sortOrder = max+10
-    #    拿当前 max
-    conn = psycopg2.connect(host="localhost", port=5432, dbname="spike_test_v3",
-                            user="postgres", password="784533")
-    cur = conn.cursor()
-    cur.execute(
-        "SELECT COALESCE(MAX(sort_order), 0) FROM xref_oem_brand WHERE deleted_at IS NULL"
-    )
-    max_so = cur.fetchone()[0]
-    conn.close()
+    #    Day 11 fix v5: 改用 dotnet list API 查 max, 不直接连 DB
+    #    WHY: CI 跑 P4.1 时 dotnet 在 spike_dump2_xxx db 上算 max, 但测试 hardcoded 连
+    #         spike_test_v3 → 两个 db 状态不同 → max 不一致, 失败 (应 60 实 100)
+    #    list 返的 items 含 sortOrder, 遍历找 max (deletedAt=null 才是"未删")
+    code_list, body_list = http("GET",
+        "/api/admin/dict/oem-brands?limit=500&includeDeleted=true", headers=H_ADMIN)
+    assert code_list == 200, f"list 失败: {code_list}, body={body_list[:200]}"
+    items_list = json.loads(body_list).get("items", [])
+    max_so = 0
+    for it in items_list:
+        if it.get("deletedAt") is None:  # 未软删
+            if it.get("sortOrder", 0) > max_so:
+                max_so = it["sortOrder"]
+    print(f"  [debug] max_so (from API)={max_so}, total items={len(items_list)}")
     # 再 create 一个 (给 maxSo+10 留位置)
     b2 = make_brand("sodo")
     code5, body5 = http("POST", "/api/admin/dict/oem-brands",
