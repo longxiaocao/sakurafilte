@@ -344,7 +344,7 @@ def test_p71_cli_rotate_and_status_changes():
 
 # ========== P5.5.9 前端性能监控面板 ==========
 def test_p55_perf_panel_view_exists():
-    """P5.5.9: AdminPerfView.vue 存在 + 含 P50/P95/P99 + 自动刷新"""
+    """P5.5.9: AdminPerfView.vue 存在 + 含 P50/P95/P99 + 自动刷新 + 告警条"""
     f = SRC / "views" / "admin" / "AdminPerfView.vue"
     assert f.is_file(), f"缺 AdminPerfView.vue: {f}"
     content = f.read_text(encoding="utf-8")
@@ -360,6 +360,11 @@ def test_p55_perf_panel_view_exists():
     # 副作用清理 (规则 5.2: useEffect/watch 必须含清理函数)
     assert "onBeforeUnmount" in content and "stopTimer" in content, \
         "缺定时器清理 (规则 5.2 副作用清理)"
+    # P5.5+: 告警条 (P95≥500ms 或 ErrorRate≥5% 触发)
+    assert "alerts" in content, "缺告警计算 alerts computed"
+    assert "hasCritical" in content, "缺 hasCritical 告警分级"
+    assert "role=\"alert\"" in content or "role='alert'" in content, \
+        "缺 role=alert (A11y 无障碍)"
 
 
 def test_p55_perf_panel_route_registered():

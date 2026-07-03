@@ -137,6 +137,29 @@ const errorColor = computed(() => {
   return 'text-red-600'
 })
 
+// P5.5+: 告警计算 — P95>500ms 或 ErrorRate>5% 触发
+//   WHY 纯前端计算: 后端 /api/perf 已提供原始指标, 告警逻辑无状态, 前端算即可
+//   WHY 阈值 500ms/5%: 与 P5.5 中间件颜色分级一致, 运维直观
+const alerts = computed<{ level: 'warning' | 'critical'; msg: string }[]>(() => {
+  const list: { level: 'warning' | 'critical'; msg: string }[] = []
+  const p = perf.value
+  if (!p) return list
+  if (p.p95Ms >= 1000) {
+    list.push({ level: 'critical', msg: `P95 = ${p.p95Ms.toFixed(0)}ms (≥1000ms 严重)` })
+  } else if (p.p95Ms >= 500) {
+    list.push({ level: 'warning', msg: `P95 = ${p.p95Ms.toFixed(0)}ms (≥500ms 警告)` })
+  }
+  if (p.errorRate >= 10) {
+    list.push({ level: 'critical', msg: `错误率 = ${p.errorRate.toFixed(1)}% (≥10% 严重)` })
+  } else if (p.errorRate >= 5) {
+    list.push({ level: 'warning', msg: `错误率 = ${p.errorRate.toFixed(1)}% (≥5% 警告)` })
+  }
+  return list
+})
+
+const hasAlert = computed(() => alerts.value.length > 0)
+const hasCritical = computed(() => alerts.value.some(a => a.level === 'critical'))
+
 const readyText = computed(() => {
   if (readyOk.value === null) return '检测中'
   if (readyOk.value) return '就绪'
@@ -201,6 +224,32 @@ function fmtTime(ts: string | null): string {
     </div>
 
     <p v-if="error" class="text-xs text-red-600 mb-2">{{ error }}</p>
+
+    <!-- P5.5+: 告警条 — P95≥500ms 或 ErrorRate≥5% 时显示 -->
+    <div
+      v-if="hasAlert"
+      :class="[
+        'hairline p-3 mb-3',
+        hasCritical ? 'bg-red-50 dark:bg-red-950/20' : 'bg-yellow-50 dark:bg-yellow-950/20'
+      ]"
+      role="alert"
+      aria-live="assertive"
+    >
+      <div class="flex items-center gap-2 mb-1">
+        <span class="text-base font-medium" :class="hasCritical ? 'text-red-700' : 'text-yellow-700'">
+          {{ hasCritical ? '⚠ 严重告警' : '⚠ 警告' }}
+        </span>
+      </div>
+      <ul class="text-xs space-y-1">
+        <li
+          v-for="(a, i) in alerts"
+          :key="i"
+          :class="a.level === 'critical' ? 'text-red-700' : 'text-yellow-700'"
+        >
+          • {{ a.msg }}
+        </li>
+      </ul>
+    </div>
 
     <!-- 性能指标卡片 -->
     <section class="hairline p-4 mb-3">
