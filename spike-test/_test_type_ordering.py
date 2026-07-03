@@ -87,33 +87,54 @@ def db_conn():
 
 # ========== Case 1: seed dict_type 5 行 + 验证排序 ==========
 def test_seed_dict_type():
-    """seed 5 行 dict_type (ON CONFLICT DO UPDATE SET sort_order), 验证最终 sort_order 正确"""
+    """seed 5 行 dict_type (ON CONFLICT DO UPDATE SET sort_order) + 推后 sort_order=0 历史脏数据
+    Day 11 fix v2: 调 _seed_dict_defaults.seed_dict_type 走完整流程
+    WHY: 历史 40+ 行 dict_type sort_order=0, 即便 P2.3 五类已 seed 1/2/3/4/99,
+         验证 "全部 active type 按 sort_order 排序" 时, sort_order=0 的行混在 P2.3 之后
+         → 实际返 46 行, 而 expected 只有 5 行 → 列表长度比较失败
+    修复: 用完整 seed_dict_type (含脏数据推后), 然后只校验前 5 个
+    """
+    import _seed_dict_defaults as seed_mod
     conn = db_conn()
     cur = conn.cursor()
-    # 用 _seed_dict_defaults.py 的 P2.3 排序逻辑
-    defaults = [("oil", 1), ("fuel", 2), ("air", 3), ("cabin", 4), ("others", 99)]
-    for v, so in defaults:
-        cur.execute("""
-            INSERT INTO dict_type (type, sort_order, created_at, updated_at)
-            VALUES (%s, %s, now(), now())
-            ON CONFLICT (type) DO UPDATE SET sort_order = EXCLUDED.sort_order, updated_at = now()
-        """, (v, so))
+    res = seed_mod.seed_dict_type(cur, conn)
     conn.commit()
-    # 验证最终 sort_order
+    # 验证 P2.3 五类的 sort_order 正确
+    cur.execute("""
+        SELECT type, sort_order FROM dict_type
+        WHERE deleted_at IS NULL AND type IN ('oil', 'fuel', 'air', 'cabin', 'others')
+        ORDER BY sort_order, type
+    """)
+    p23_rows = cur.fetchall()
+    actual_order = [r[0] for r in p23_rows]
+    actual_sortorder = [r[1] for r in p23_rows]
+    assert actual_order == EXPECTED_TYPE_ORDER, \
+        f"dict_type P2.3 五类顺序错误, 期望 {EXPECTED_TYPE_ORDER}, 实际 {actual_order}"
+    assert actual_sortorder == EXPECTED_TYPE_SORTORDER, \
+        f"dict_type P2.3 五类 sort_order 错误, 期望 {EXPECTED_TYPE_SORTORDER}, 实际 {actual_sortorder}"
+    # 验证: 5 类排在前 5 位 (历史 type 已被推后到 100+)
     cur.execute("""
         SELECT type, sort_order FROM dict_type
         WHERE deleted_at IS NULL
         ORDER BY sort_order, type
     """)
-    rows = cur.fetchall()
-    actual_order = [r[0] for r in rows]
-    actual_sortorder = [r[1] for r in rows]
-    assert actual_order == EXPECTED_TYPE_ORDER, \
-        f"dict_type 顺序错误, 期望 {EXPECTED_TYPE_ORDER}, 实际 {actual_order}"
-    assert actual_sortorder == EXPECTED_TYPE_SORTORDER, \
-        f"dict_type sort_order 错误, 期望 {EXPECTED_TYPE_SORTORDER}, 实际 {actual_sortorder}"
+    all_rows = cur.fetchall()
+    assert all_rows[0][1] == 1, f"前 5 个 sort_order 应从 1 开始, 实际 {all_rows[0][1]}"
+    assert [r[0] for r in all_rows[:5]] == EXPECTED_TYPE_ORDER, \
+        f"前 5 个 type 顺序错误, 期望 {EXPECTED_TYPE_ORDER}, 实际 {[r[0] for r in all_rows[:5]]}"
+    # 验证: 所有非 P2.3 的 sort_order > 99
+    cur.execute("""
+        SELECT COUNT(*) FROM dict_type
+        WHERE deleted_at IS NULL AND sort_order > 0 AND sort_order < 100
+          AND type NOT IN ('oil', 'fuel', 'air', 'cabin', 'others')
+    """)
+    in_p23_band = cur.fetchone()[0]
+    assert in_p23_band == 0, f"P2.3 排序区间 (1-99) 不应有其他 type, 实际 {in_p23_band} 条"
     conn.close()
-    print(f"  ✓ dict_type 5 行 seed + 排序 = {actual_order}")
+    print(f"  ✓ P2.3 五类 sort_order={actual_sortorder}, "
+          f"前 5 个顺序 = {actual_order}, "
+          f"被推后 {res['moved_zero']} 条历史脏数据, "
+          f"总 active type = {len(all_rows)}")
 
 
 # ========== Case 2: GET /api/public/products/by-type ==========

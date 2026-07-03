@@ -75,7 +75,16 @@ def classify_brand(brand: str) -> str:
 
 
 def seed_dict_type(cur, conn) -> dict:
-    """dict_type seed 5 个默认值, ON CONFLICT (type) DO UPDATE SET sort_order"""
+    """dict_type seed 5 个默认值, ON CONFLICT (type) DO UPDATE SET sort_order
+
+    Day 11 fix v1: 推后 sort_order=0 的历史脏数据
+    WHY: 历史 40+ 行 dict_type sort_order=0 (EF Core HasDefaultValue(0) 默认),
+         后端 by-type 端点 ORDER BY sort_order ASC 把它们排到前 5 个,
+         导致 case 2 期望 ["oil","fuel","air","cabin","others"] 失败
+         实际返 ["ACTIVATED CARBON FILTER", "Air", "AIR DRYER", "AIR FILTER", "AIR/OIL SEPARATOR"]
+    策略: 把 sort_order=0 的非 P2.3 行推后到 100+ (按 id ASC 分配),
+         保证 P2.3 五类 (sort_order 1/2/3/4/99) 永远排前面
+    """
     cur.execute("SELECT COUNT(*) FROM dict_type")
     before = cur.fetchone()[0]
     inserted = 0
@@ -99,12 +108,25 @@ def seed_dict_type(cur, conn) -> dict:
             updated += 1
         else:
             unchanged += 1
+    # 2) 推后 sort_order=0 的历史脏数据 (非 P2.3 五类)
+    #    用 100 + id 保证 id 小的行 sort_order 也小, 顺序稳定
+    #    排除 5 个 P2.3 canonical type, 排除 deleted_at IS NOT NULL
+    p23_types = tuple(t for t, _ in DEFAULTS_TYPE)
+    cur.execute("""
+        UPDATE dict_type
+        SET sort_order = 100 + id, updated_at = now()
+        WHERE deleted_at IS NULL
+          AND sort_order = 0
+          AND type NOT IN %s
+    """, (p23_types,))
+    moved = cur.rowcount
     conn.commit()
     cur.execute("SELECT COUNT(*) FROM dict_type")
     after = cur.fetchone()[0]
     return {
         "before": before, "after": after,
         "inserted": inserted, "updated": updated, "unchanged": unchanged,
+        "moved_zero": moved,  # 推后 sort_order=0 的历史行数
     }
 
 
@@ -154,6 +176,7 @@ def main():
     print(f"  inserted (new)      = {res_type['inserted']}")
     print(f"  updated (sortOrder) = {res_type['updated']}")
     print(f"  unchanged           = {res_type['unchanged']}")
+    print(f"  moved sort_order=0  = {res_type['moved_zero']} (历史脏数据推后到 100+)")
     # 验证最终排序
     cur.execute("""
         SELECT type, sort_order FROM dict_type
