@@ -103,6 +103,11 @@ jobs:
         with:
           name: backend-build
           path: backend/src/SakuraFilter.Api
+      - name: chmod API binary
+        # WHY: download-artifact 解压的文件默认 0644, Linux 容器内 +x 位未设置
+        #   → dotnet run --no-build fork+exec 触发 Win32Exception 13 (EACCES)
+        #   修复: 给 SakuraFilter.Api 主程序加可执行位
+        run: chmod +x backend/src/SakuraFilter.Api/bin/Release/net8.0/SakuraFilter.Api
 
       # 启动 API server (120s 超时, 失败时输出日志诊断)
       - name: Run API server (background)
@@ -285,6 +290,11 @@ jobs:
         with:
           name: backend-build
           path: backend/src/SakuraFilter.Api
+      - name: chmod API binary
+        # WHY: download-artifact 解压的文件默认 0644, Linux 容器内 +x 位未设置
+        #   → dotnet run --no-build fork+exec 触发 Win32Exception 13 (EACCES)
+        #   修复: 给 SakuraFilter.Api 主程序加可执行位
+        run: chmod +x backend/src/SakuraFilter.Api/bin/Release/net8.0/SakuraFilter.Api
       - name: Install frontend deps
         working-directory: frontend
         run: npm ci --no-audit --no-fund
