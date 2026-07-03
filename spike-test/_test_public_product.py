@@ -85,13 +85,19 @@ class _SkipCase(Exception):
 
 def find_active_product():
     """prep 阶段: 从 DB 找一个 active product, 缓存 SAMPLE_OEM/SAMPLE_TYPE
-    优先选有 cross_references + machine_applications 的 (case 1 需要 len > 0)
+    Day 11 fix v2: 二次校验 — DB 查到的产品必须能调 by-slug API 拿到 200
+
+    WHY: 之前只查 PG `is_discontinued=false`, 但 by-slug 端点还会用
+         OemNoDisplay/Oem2/Mr1 三个字段匹配, 任何一个 NULL/不匹配都 404
+         CI 跑完 Day 9.7 后 products 表有 5000 行 DAY97-OEM-5K-* (is_discontinued=false),
+         但 OemNoDisplay 字段没正确映射或含特殊字符 → by-slug 404
+         必须用 by-slug API 二次过滤, 选能公开访问的产品
     """
     global SAMPLE_OEM, SAMPLE_TYPE, _HAS_PRODUCT
     try:
         conn = psycopg2.connect(**PG)
         cur = conn.cursor()
-        # 优先: 有 xref + app 的 active product
+        # Step 1: 优先选有 xref + app 的 active product
         cur.execute("""
             SELECT p.id, p.oem_no_display, p.type
             FROM products p
@@ -99,25 +105,36 @@ def find_active_product():
               AND EXISTS (SELECT 1 FROM cross_references x WHERE x.product_id = p.id)
               AND EXISTS (SELECT 1 FROM machine_applications m WHERE m.product_id = p.id)
             ORDER BY p.id
-            LIMIT 1
+            LIMIT 20
         """)
-        row = cur.fetchone()
-        if row is None:
-            # fallback: 任意 active product
+        candidates = cur.fetchall()
+        if not candidates:
             cur.execute("""
                 SELECT id, oem_no_display, type FROM products
                 WHERE is_discontinued = false
-                ORDER BY id LIMIT 1
+                ORDER BY id LIMIT 20
             """)
-            row = cur.fetchone()
+            candidates = cur.fetchall()
         conn.close()
-        if row is not None:
-            SAMPLE_OEM = row[1]
-            SAMPLE_TYPE = row[2] or "Air"
-            _HAS_PRODUCT = True
-            print(f"  [prep] active product found: oem={SAMPLE_OEM}, type={SAMPLE_TYPE}")
-        else:
+        if not candidates:
             print(f"  [prep] DB 无 active product, 所有依赖产品的 case 将 SKIP")
+            return
+
+        # Step 2: 对每个 candidate 调 by-slug API 验证 (最多 20 个)
+        for (pid, oem, ptype) in candidates:
+            if not oem:
+                continue  # OemNoDisplay NULL 必 404
+            code, body = http("GET", f"/api/public/product/{oem}", timeout=10)
+            if code == 200:
+                obj = json.loads(body)
+                # 二次校验: 响应必须有 oemNoDisplay 字段
+                if obj.get("oemNoDisplay") == oem:
+                    SAMPLE_OEM = oem
+                    SAMPLE_TYPE = obj.get("type") or ptype or "Air"
+                    _HAS_PRODUCT = True
+                    print(f"  [prep] active product (by-slug OK): oem={SAMPLE_OEM}, type={SAMPLE_TYPE}")
+                    return
+        print(f"  [prep] {len(candidates)} candidates 全 404, 所有依赖产品的 case 将 SKIP")
     except Exception as e:
         print(f"  [prep] DB 查询失败: {e}, 用 hardcoded SAMPLE_OEM={SAMPLE_OEM}")
 
