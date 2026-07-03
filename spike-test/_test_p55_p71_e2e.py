@@ -342,6 +342,55 @@ def test_p71_cli_rotate_and_status_changes():
     assert code == 200, f"还原后旧 token 应 200, 实际 {code}: {body}"
 
 
+# ========== P5.5.9 前端性能监控面板 ==========
+def test_p55_perf_panel_view_exists():
+    """P5.5.9: AdminPerfView.vue 存在 + 含 P50/P95/P99 + 自动刷新"""
+    f = SRC / "views" / "admin" / "AdminPerfView.vue"
+    assert f.is_file(), f"缺 AdminPerfView.vue: {f}"
+    content = f.read_text(encoding="utf-8")
+    # 关键符号
+    for kw in ("PerfSnapshot", "p50Ms", "p95Ms", "p99Ms", "errorRate",
+               "autoRefresh", "refreshSec", "fetchPerf", "fetchHealth",
+               "onBeforeUnmount", "stopTimer"):
+        assert kw in content, f"AdminPerfView 缺关键符号: {kw}"
+    # 健康探针 + Token 轮转状态
+    assert "/health/live" in content, "缺 Liveness 探针"
+    assert "/health/ready" in content, "缺 Readiness 探针"
+    assert "/admin/auth/status" in content, "缺 Token 轮转状态"
+    # 副作用清理 (规则 5.2: useEffect/watch 必须含清理函数)
+    assert "onBeforeUnmount" in content and "stopTimer" in content, \
+        "缺定时器清理 (规则 5.2 副作用清理)"
+
+
+def test_p55_perf_panel_route_registered():
+    """P5.5.9: 路由 /admin/perf 已注册"""
+    router = SRC / "router" / "index.ts"
+    assert router.is_file(), f"缺 router/index.ts: {router}"
+    content = router.read_text(encoding="utf-8")
+    assert "/admin/perf" in content, "缺 /admin/perf 路由"
+    assert "AdminPerf" in content, "缺 AdminPerf 路由 name"
+    assert "AdminPerfView" in content, "缺 AdminPerfView 组件 import"
+    assert "requireAuth: true" in content, "性能监控页应需鉴权"
+
+
+def test_p55_perf_panel_nav_item():
+    """P5.5.9: AppHeader 有'性能'菜单项"""
+    header = SRC / "components" / "AppHeader.vue"
+    assert header.is_file(), f"缺 AppHeader.vue: {header}"
+    content = header.read_text(encoding="utf-8")
+    assert "/admin/perf" in content, "AppHeader 缺 /admin/perf 菜单项"
+    assert "性能" in content, "AppHeader 缺 '性能' 文案"
+
+
+def test_p55_health_proxy_configured():
+    """P5.5.9: vite.config.ts 含 /health 代理 (健康探针端点不在 /api 下)"""
+    vite = REPO_ROOT / "frontend" / "vite.config.ts"
+    assert vite.is_file(), f"缺 vite.config.ts: {vite}"
+    content = vite.read_text(encoding="utf-8")
+    assert "'/health'" in content or '"/health"' in content, \
+        "vite.config.ts 缺 /health 代理配置"
+
+
 # ========== 汇总 ==========
 def main():
     tests = [
@@ -354,6 +403,10 @@ def main():
         ("P5.5.6 main.ts 集成拦截器", test_p55_perf_installed_in_main),
         ("P5.5.7 中间件排除 /api/perf", test_p55_middleware_excludes_perf),
         ("P5.5.8 跑请求后 P95 增长", test_p55_p95_increases_after_traffic),
+        ("P5.5.9a AdminPerfView 组件", test_p55_perf_panel_view_exists),
+        ("P5.5.9b 路由 /admin/perf 注册", test_p55_perf_panel_route_registered),
+        ("P5.5.9c AppHeader 性能菜单项", test_p55_perf_panel_nav_item),
+        ("P5.5.9d vite /health 代理", test_p55_health_proxy_configured),
         ("P7.1.1 /api/admin/auth/status", test_p71_auth_status_requires_token),
         ("P7.1.2 CLI status", test_p71_cli_status),
         ("P7.1.3 CLI dry-run", test_p71_cli_dry_run),
