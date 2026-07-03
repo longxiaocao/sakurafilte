@@ -73,10 +73,7 @@ jobs:
           cd backend/src/SakuraFilter.Api
           dotnet build -c Release --nologo
 
-      - name: EF Core Migrations baseline seed
-        working-directory: spike-test
-        run: python _ef_migrations_baseline.py
-
+      # Day 11 fix v3: visual-update 同 e2e.yml 修复 — CI 全新 DB 不跑 baseline seed
       - name: Run API server (background)
         run: |
           cd backend/src/SakuraFilter.Api

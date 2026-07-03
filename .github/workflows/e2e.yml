@@ -61,15 +61,14 @@ jobs:
           cd backend/src/SakuraFilter.Api
           dotnet build -c Release --nologo
 
-      # Day 10+ P0.2: EF Core Migrations baseline seed
-      #   WHY: EF Core 8 + EFCore.NamingConventions 不改内置表名, 必须写到 PascalCase __EFMigrationsHistory.
-      #        CI 全新 PG 无 history 表, 必须手工 seed 4 个老 migration (本地 SQL migration 已应用过, 索引名/列名
-      #        与 EF Core 期望不一致, EF Core 上来就 DROP/ALTER 失败). 后续 EF Core Migrate 只跑新 migration.
-      #   默认参数: spike_test_v3 / 4 个老 migration (与 spike_test/_ef_migrations_baseline.py DEFAULT_MIGRATIONS 一致).
-      - name: Run EF Core Migrations baseline seed
-        working-directory: spike-test
-        run: python _ef_migrations_baseline.py
-
+      # Day 11 fix v3: CI 全新 PG 直接 EF Core Migrate 跑全 (不跑 baseline seed)
+      #   WHY: baseline seed 把 InitialCreate 等老 migration 标记为已应用 → EF Core 跳过
+      #        但 CI 全新 DB 实际没有 etl_progress_log / products 等基础表
+      #        后续 migration (AddEtlCheckpointId / AddDictP22SevenDicts / AddMachineCategory)
+      #        引用这些表 → 42P01: 关系 "etl_progress_log" 不存在 → 启动失败
+      #   本地: spike_test_v3 已有 18 个 SQL migration 数据, 必须 baseline seed
+      #   CI: services.postgres 创建的空白 DB, 无历史, 让 EF Core 跑全即可 (4.2s ready)
+      #   验证: spike-test/_ci_ef_only_test.py (本地空白 DB + EF Core Migrate → 1s ready)
       - name: Run API server (background)
         id: api-server
         run: |
