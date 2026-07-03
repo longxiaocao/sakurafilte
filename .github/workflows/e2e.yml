@@ -1,10 +1,12 @@
-# Day 9.9: CI E2E gate — master push 强制, PR fail-soft
-#   WHY: 之前 .github/workflows 不存在, Day 9.6 声称设了 CI gate 但未落盘
+# Day 11+: CI E2E multi-job — master push 强制, PR fail-soft
+#   WHY: 单 job 跑完 2+ 小时, 反馈太慢. 拆为 setup + e2e + frontend-contract 3 个并行 job
 #   设计:
-#     - master push: E2E 全过才允许合并 (gate)
-#     - PR: E2E 失败不阻塞 (fail-soft), 仅报告
+#     - master push: 3 job 全过才允许合并 (gate)
+#     - PR: 失败不阻塞 (fail-soft)
 #     - PostgreSQL service container (离线, 无外部依赖)
-#     - .NET build + Python E2E (Day 9.5/9.6/9.7/9.8)
+#     - setup job: dotnet build + nuget cache restore (其他 job 共享)
+#     - e2e job: P4.1 9 编排 + 9.5/9.6/9.7/9.8 + Day10 + benchmark
+#     - frontend-contract job: P4.2 vitest + zod + P4.3 visual smoke
 name: E2E Tests
 
 on:
@@ -12,23 +14,51 @@ on:
     branches: [master]
   pull_request:
     branches: [master]
-  # Day 11 fix v4: 加 workflow_dispatch 手动触发 (Day 9.6 E2E_REQUIRED gate 设计要求)
-  #   用法: GitHub Actions → E2E Tests → Run workflow
-  #   WHY: master push 已自动跑, 但调试 / 复现特定 case 时需要手动触发
   workflow_dispatch:
 
 env:
   DOTNET_VERSION: '8.0.x'
   PYTHON_VERSION: '3.12'
+  NODE_VERSION: '20'
   ADMIN_TOKEN: 'dev-admin-token-rotate-in-prod-MZK4R9P3X6V2N7Q1L5F0B8H3C'
   PG_PASSWORD: '784533'
+  BACKEND_URL: 'http://localhost:5148'
 
 jobs:
-  e2e:
+  # ===== 共享 build job =====
+  # WHY: e2e + frontend-contract 都需 dotnet build output, 用 cache + setup 共享减少 1-2 分钟构建时间
+  setup:
     runs-on: ubuntu-latest
-    # Day 9.6: PR 模式 fail-soft (不阻塞合并)
-    continue-on-error: ${{ github.event_name == 'pull_request' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+      - name: Build backend
+        run: |
+          cd backend/src/SakuraFilter.Api
+          dotnet build -c Release --nologo
+      - name: Upload build output (for other jobs to skip rebuild)
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-build
+          path: backend/src/SakuraFilter.Api/bin
+          retention-days: 1
+          if-no-files-found: warn
 
+  # ===== E2E 主 job: P4.1 9 编排 + ETL 跨实例 + benchmark =====
+  e2e:
+    needs: setup
+    runs-on: ubuntu-latest
+    continue-on-error: ${{ github.event_name == 'pull_request' }}
     services:
       postgres:
         image: postgres:16
@@ -46,33 +76,23 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
-
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-
       - name: Install Python deps
         run: pip install psycopg2-binary
+      - name: Download prebuilt backend
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-build
+          path: backend/src/SakuraFilter.Api/bin
 
-      - name: Build backend
-        run: |
-          cd backend/src/SakuraFilter.Api
-          dotnet build -c Release --nologo
-
-      # Day 11 fix v3: CI 全新 PG 直接 EF Core Migrate 跑全 (不跑 baseline seed)
-      #   WHY: baseline seed 把 InitialCreate 等老 migration 标记为已应用 → EF Core 跳过
-      #        但 CI 全新 DB 实际没有 etl_progress_log / products 等基础表
-      #        后续 migration (AddEtlCheckpointId / AddDictP22SevenDicts / AddMachineCategory)
-      #        引用这些表 → 42P01: 关系 "etl_progress_log" 不存在 → 启动失败
-      #   本地: spike_test_v3 已有 18 个 SQL migration 数据, 必须 baseline seed
-      #   CI: services.postgres 创建的空白 DB, 无历史, 让 EF Core 跑全即可 (4.2s ready)
-      #   验证: spike-test/_ci_ef_only_test.py (本地空白 DB + EF Core Migrate → 1s ready)
+      # 启动 API server (120s 超时, 失败时输出日志诊断)
       - name: Run API server (background)
         id: api-server
         run: |
@@ -80,9 +100,6 @@ jobs:
           dotnet run -c Release --no-build --urls "http://localhost:5148" > /tmp/api5148.log 2>&1 &
           API_PID=$!
           echo "API PID: $API_PID"
-          # Day 11 fix: 循环等待 5148 可达 (120s, 之前 60s 在 320fd1b/4a8ace7 偶发超时失败)
-          #   WHY: GH runner 状态波动大, dotnet 启动 + Database.Migrate + LISTEN 偶发 60s+ 才就绪
-          #        延长到 120s, 给慢启动留 2x 缓冲; 仍超时则输出 API 日志诊断
           A_READY=0
           for i in $(seq 1 120); do
             code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5148/api/etl/status -H "X-Admin-Token: $ADMIN_TOKEN" 2>/dev/null || echo 000)
@@ -94,17 +111,11 @@ jobs:
             sleep 1
           done
           if [ "$A_READY" != "1" ]; then
-            # Day 11 fix v2: 失败时把 API 日志关键行作为 ::error:: 注解 (无需 admin 日志权限)
-            #   上传完整日志为 artifact (api-server-log) 供后续排错
             echo "::error::API 5148 在 120s 内未就绪 (PID=$API_PID 仍存活=$(kill -0 $API_PID 2>/dev/null && echo yes || echo no))"
-            echo "::error::=== API 日志最后 30 行 (含 ANSI 转义) ==="
+            echo "::error::=== API 日志最后 30 行 ==="
             tail -n 30 /tmp/api5148.log | sed 's/\x1b\[[0-9;]*[a-zA-Z]//g' | while IFS= read -r line; do
               echo "::error file=/tmp/api5148.log::$line"
             done
-            echo "::error::=== 关键错误关键字 (Error/Exception/Failed) ==="
-            grep -iE "(error|exception|failed|cannot|connection refused)" /tmp/api5148.log 2>/dev/null | head -20 | while IFS= read -r line; do
-              echo "::error::$line"
-            done || echo "::notice::未发现关键错误关键字"
             exit 1
           fi
 
@@ -116,6 +127,7 @@ jobs:
           path: /tmp/api5148.log
           if-no-files-found: ignore
 
+      # Day 9.5/9.6/9.7/9.8 跨实例 ETL 测试
       - name: Run E2E Day 9.5 (cancel enum + alert filter + cursor HMAC)
         working-directory: spike-test
         run: python _test_day95.py
@@ -127,23 +139,13 @@ jobs:
       - name: Run E2E Day 9.7 (cross-instance SSE NOTIFY/LISTEN)
         working-directory: spike-test
         run: |
-          # Day 9.7 需要双实例, CI 内启动第二个
-          # Day 9.12 v7: 修复 cd 路径错误
-          #   WHY: working-directory=spike-test, cd ../backend/src/SakuraFilter.Api 后
-          #        cwd=checkout/backend/src/SakuraFilter.Api
-          #        cd ../../spike-test 只回退 2 级到 backend/, 进 spike-test = backend/spike-test (不存在)
-          #        set -e 触发 cd 失败 → step 立即退出 (0 秒失败, 无 ::error:: 注解输出)
-          #        必须回退 3 级: ../../../spike-test = checkout/spike-test
+          # Day 9.7 需要双实例, CI 内启动第二个 (5149)
           cd ../backend/src/SakuraFilter.Api
           dotnet run -c Release --no-build --urls "http://localhost:5149" > /tmp/api5149.log 2>&1 &
           cd ../../../spike-test
-          # Day 9.12: 循环等待 5149 实例可达 (最多 30s)
-          #   WHY: 之前固定 sleep 3s 不够, dotnet 启动 + Database.Migrate + LISTEN 需 5-8s
-          #        API 可达时 EtlProgressBroadcaster 已建立 LISTEN (HostedService.StartAsync 完成)
           B_READY=0
           for i in $(seq 1 30); do
             code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5149/api/etl/status -H "X-Admin-Token: $ADMIN_TOKEN" 2>/dev/null || echo 000)
-            echo "[wait] instance B http code = $code (try $i/30)"
             if [ "$code" = "200" ]; then
               echo "Instance B ready after ${i}s"
               B_READY=1
@@ -152,16 +154,13 @@ jobs:
             sleep 1
           done
           if [ "$B_READY" != "1" ]; then
-            echo "=== FAIL: Instance B (5149) 30s 内未就绪 ==="
-            echo "--- 5149 API 日志 (前 80 行) ---"
-            head -n 80 /tmp/api5149.log || echo "无日志"
-            echo "--- 5148 API 进程 ---"
-            ps -ef | grep -E "dotnet|SakuraFilter" | grep -v grep || echo "无 dotnet 进程"
+            echo "::error::Instance B (5149) 30s 内未就绪"
+            tail -n 80 /tmp/api5149.log
             exit 1
           fi
-          # Day 9.12: 测试失败时输出诊断信息 (LISTEN 进程数 + 双实例 API 日志)
           if ! python _test_day97.py; then
-            echo "=== _test_day97.py 失败, 收集诊断信息 ==="
+            RC=$?
+            echo "::error::Day 9.7 FAIL (rc=$RC)"
             echo "--- PG LISTEN etl_progress 进程数 ---"
             python -c "
           import psycopg2
@@ -171,10 +170,9 @@ jobs:
           for r in cur.fetchall():
               print(f'  pid={r[0]} query={r[1][:80]}')
           c.close()
-          " || echo "查询失败"
-            echo "--- 5149 API 日志 (后 50 行) ---"
-            tail -n 50 /tmp/api5149.log || echo "无日志"
-            exit 1
+          "
+            tail -n 50 /tmp/api5149.log
+            exit $RC
           fi
 
       - name: Run E2E Day 9.8 (ETL history audit + reason_code pie chart)
@@ -183,16 +181,9 @@ jobs:
 
       - name: Run E2E Day 10 (OEM Brand 字典 CRUD + 排序 + typeahead)
         working-directory: spike-test
-        # Day 10: P1.3 OEM Brand 字典 — CI 空白 PG 无历史数据, Case 9 (xrefCount) 会自动 skip
-        #   Case 1-8 + 10 验证表结构/CRUD/排序/typeahead, EF Core Migrate 会建 xref_oem_brand 表
         run: python _test_day10_oem_brands.py
 
-      # Day 10+ P1.4: 搜索性能基准 (Task 5)
-      #   SLA 目标: search P95 < 200ms, typeahead P95 < 100ms (假设 Meili 主搜索在线)
-      #   CI 现状: Meili 未启, Resilient 兜底走 PG, Meili timeout 1s 是延迟地板
-      #           故 CI 阈值放宽到 3000ms, 仍能捕获 PG 侧严重退化
-      #           本地/Meili 启用时, 设 BENCH_THRESHOLD_P95=200 走严格 SLA
-      #   阈值超 → ::error:: 注解 + exit 1 (CI 红叉)
+      # 搜索性能基准 (P95 阈值 CI 放宽到 3000ms)
       - name: Run Search Benchmark (P1.4)
         working-directory: spike-test
         env:
@@ -200,10 +191,7 @@ jobs:
           BENCH_THRESHOLD_TYPEAHEAD_P95: '200'
         run: python _bench_search.py --concurrency=10 --threshold-p95=$BENCH_THRESHOLD_P95 --threshold-typeahead-p95=$BENCH_THRESHOLD_TYPEAHEAD_P95
 
-      # ===== Day 11 P4.1: E2E 全量编排器 =====
-      #   9 个 E2E 串行跑 (P0.1/P1.3/P2.2/P2.3/P3.2/P3.3/P3.4/P3.5/P5)
-      #   单独跑而不是合并到 matrix: spec 要求 < 10 分钟总耗时, 串行简单
-      #   失败 → 立即 exit, 不继续后续步骤 (避免掩盖真因)
+      # Day 11+ P4.1: 9 个 E2E 串行
       - name: Run E2E P4.1 orchestrator (9 tests)
         working-directory: spike-test
         env:
@@ -218,7 +206,6 @@ jobs:
               else
                 RC=$?
                 echo "::error::P4.1 FAIL: $suite (rc=$RC)"
-                echo "--- 5148 API 日志 (后 50 行) ---"
                 tail -n 50 /tmp/api5148.log 2>/dev/null || echo "无日志"
                 exit $RC
               fi
@@ -228,47 +215,92 @@ jobs:
           done
           echo "===== P4.1 E2E 9/9 PASS ====="
 
-      # ===== Day 11 P4.2: 字典 schema 契约测试 (vitest + zod) =====
-      #   - 后端 _schema 端点 → 前端 8 个 zod schema 校验
-      #   - 改后端字段不改前端 → CI fail
-      #   - 跑在 backend 已经 ready 之后 (复用 5148 进程)
+      - name: E2E gate check (master only)
+        if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+        run: |
+          echo "E2E gate passed — all tests green on master push"
+
+  # ===== Frontend Contract job: P4.2 vitest + zod + P4.3 visual smoke =====
+  #   WHY: P4.2/P4.3 不需要 P4.1 9 测试, 独立并行跑 → 反馈更快 (Vitest 比 Python 9 测试快 5 倍)
+  #   需要 API server 才能跑 (调后端 _schema 端点), 每个 job 独立起 5148
+  frontend-contract:
+    needs: setup
+    runs-on: ubuntu-latest
+    continue-on-error: ${{ github.event_name == 'pull_request' }}
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: 784533
+          POSTGRES_DB: spike_test_v3
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install Python deps
+        run: pip install psycopg2-binary
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
-
+      - name: Download prebuilt backend
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-build
+          path: backend/src/SakuraFilter.Api/bin
       - name: Install frontend deps
         working-directory: frontend
         run: npm ci --no-audit --no-fund
 
-      - name: Build frontend
-        if: false
-        working-directory: frontend
-        run: npm run build
-
-      - name: Serve frontend (background)
-        if: false
+      # 启动 API (frontend-contract job 专用 5148)
+      - name: Run API server (background)
+        id: api-server-fc
         run: |
-          cd frontend
-          nohup npx vite preview --port 5173 --host 0.0.0.0 > /tmp/fe5173.log 2>&1 &
-          for i in $(seq 1 30); do
-            code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5173/ 2>/dev/null || echo 000)
+          cd backend/src/SakuraFilter.Api
+          dotnet run -c Release --no-build --urls "http://localhost:5148" > /tmp/api5148_fc.log 2>&1 &
+          API_PID=$!
+          A_READY=0
+          for i in $(seq 1 120); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5148/api/etl/status -H "X-Admin-Token: $ADMIN_TOKEN" 2>/dev/null || echo 000)
             if [ "$code" = "200" ]; then
-              echo "FE 5173 ready after ${i}s"
+              echo "API 5148 (fc) ready after ${i}s"
+              A_READY=1
               break
             fi
             sleep 1
           done
+          if [ "$A_READY" != "1" ]; then
+            echo "::error::API 5148 (fc) 120s 内未就绪"
+            tail -n 30 /tmp/api5148_fc.log | sed 's/\x1b\[[0-9;]*[a-zA-Z]//g' | while IFS= read -r line; do
+              echo "::error file=/tmp/api5148_fc.log::$line"
+            done
+            exit 1
+          fi
 
+      # P4.2 契约测试 (vitest + zod) — 字典 schema 端点 → 8 个 zod 校验
       - name: Run P4.2 contract test (vitest)
         working-directory: frontend
         env:
-          BACKEND_URL: http://localhost:5148
+          BACKEND_URL: ${{ env.BACKEND_URL }}
           ADMIN_TOKEN: ${{ env.ADMIN_TOKEN }}
         run: |
-          # P4.2 契约测试 - 不需要前端 server, 直接调后端 _schema
           echo "===== P4.2 字典 schema 契约测试 (vitest) ====="
           if npm run test:contract; then
             echo "[PASS] P4.2 contract test 8/8 全绿"
@@ -278,13 +310,13 @@ jobs:
             exit $RC
           fi
 
+      # P4.3 视觉烟雾 (Python 调后端 8 字典端点 + 字段完整)
+      #   真正像素对比由未来 Playwright spec 跑 (本 job 不实现)
       - name: Run P4.3 visual smoke (Python)
         working-directory: spike-test
         env:
           ADMIN_TOKEN: ${{ env.ADMIN_TOKEN }}
         run: |
-          # P4.3 本地烟雾: 验证 8 字典 list/typeahead 端点 + 字段齐全
-          # 真正像素对比由 Playwright spec (P4.3 visual-regression job) 在并行 job 跑
           echo "===== P4.3 视觉回归 Python 烟雾 (dict 端点) ====="
           if python _test_p43_visual.py; then
             echo "[PASS] P4.3 visual smoke 6/6"
@@ -293,8 +325,3 @@ jobs:
             echo "::error::P4.3 visual smoke FAIL (rc=$RC)"
             exit $RC
           fi
-
-      - name: E2E gate check (master only)
-        if: github.ref == 'refs/heads/master' && github.event_name == 'push'
-        run: |
-          echo "E2E gate passed — all tests green on master push"
