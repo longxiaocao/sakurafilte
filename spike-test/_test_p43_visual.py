@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Day 11 P4.3 视觉回归本地验证 (Python 烟雾版)
+r"""Day 11 P4.3 视觉回归本地验证 (Python 烟雾版)
    - 不依赖 Playwright + chromium (避免 GFW 慢下载 + 150MB 体积)
    - 验证每个字典管理页的:
      1) GET /api/admin/dict/{name} → 200 + items[] 字段定义
@@ -7,15 +7,25 @@
      3) 关键字段 (Id/Brand/SortOrder/DeletedAt) 存在
    - 实际像素对比由 CI 跑 frontend/tests/visual/dict-pages.spec.ts (Playwright + pixelmatch)
    - 此脚本是 local fast gate, CI 是真 visual gate
+   Day 11+ v2: 路径改用 SCRIPT_DIR 自动算 repo root, 跨平台兼容 (CI 是 Linux)
+   - 之前硬编码 d:\projects\sakurafilter\..., CI 必然 NotFound
 """
 import json
 import os
 import sys
 import urllib.error
 import urllib.request
+from pathlib import Path
 
 BASE = "http://localhost:5148"
 ADMIN_TOKEN = "dev-admin-token-rotate-in-prod-MZK4R9P3X6V2N7Q1L5F0B8H3C"
+
+# 跨平台: 用脚本文件位置自动算 repo root (CI checkout 路径非 d:\)
+SCRIPT_DIR = Path(__file__).resolve().parent
+REPO_ROOT = SCRIPT_DIR.parent
+WORKFLOWS = REPO_ROOT / ".github" / "workflows"
+FRONTEND = REPO_ROOT / "frontend"
+TESTS_VISUAL = FRONTEND / "tests" / "visual"
 
 # 8 个字典 (P1.3 + P2.2) - (路由段, 主字段)
 #   URL 用复数形式 (与 /api/admin/dict/{plural} 实际端点匹配)
@@ -140,34 +150,35 @@ def test_typeahead_endpoints():
 # ========== 4. CI 配置存在 + Playwright spec 文件存在 ==========
 def test_ci_and_spec_files():
     """P4.3 CI 闭环: workflows/e2e.yml 引用 P4.2/4.3 步骤 + tests/visual/*.spec.ts 存在"""
-    e2e_yaml = r"d:\projects\sakurafilter\.github\workflows\e2e.yml"
-    if not os.path.exists(e2e_yaml):
+    e2e_yaml = WORKFLOWS / "e2e.yml"
+    if not e2e_yaml.is_file():
         raise AssertionError(f"缺 e2e.yml: {e2e_yaml}")
-    content = open(e2e_yaml, encoding="utf-8").read()
+    content = e2e_yaml.read_text(encoding="utf-8")
     assert "test:contract" in content or "vitest" in content.lower() or "P4.2" in content, \
         "e2e.yml 缺 P4.2 contract 步骤"
     assert "playwright" in content.lower() or "P4.3" in content or "test:visual" in content, \
         "e2e.yml 缺 P4.3 visual 步骤"
 
     for spec in ["dict-pages.spec.ts", "compare-6.spec.ts", "public-product.spec.ts"]:
-        path = f"d:/projects/sakurafilter/frontend/tests/visual/{spec}"
-        assert os.path.exists(path), f"缺 spec: {path}"
+        path = TESTS_VISUAL / spec
+        assert path.is_file(), f"缺 spec: {path}"
     print(f"  ✓ e2e.yml 含 P4.2/4.3 步骤 + 3 个 visual spec 文件齐全")
 
 
 # ========== 5. Playwright 依赖 (package.json + playwright.config.ts) ==========
 def test_dependencies():
     """P4.3 依赖: package.json 含 @playwright/test + pixelmatch + zod"""
-    pkg = json.load(open(r"d:\projects\sakurafilter\frontend\package.json", encoding="utf-8"))
+    pkg_json = FRONTEND / "package.json"
+    if not pkg_json.is_file():
+        raise AssertionError(f"缺 package.json: {pkg_json}")
+    pkg = json.loads(pkg_json.read_text(encoding="utf-8"))
     devdeps = pkg.get("devDependencies", {})
     for dep in ["@playwright/test", "pixelmatch", "pngjs", "vitest", "zod"]:
         assert dep in devdeps, f"package.json 缺 devDep: {dep}"
     for script in ["test:contract", "test:visual"]:
         assert script in pkg.get("scripts", {}), f"package.json 缺 script: {script}"
-    assert os.path.exists(r"d:\projects\sakurafilter\frontend\playwright.config.ts"), \
-        "缺 playwright.config.ts"
-    assert os.path.exists(r"d:\projects\sakurafilter\frontend\vitest.config.ts"), \
-        "缺 vitest.config.ts"
+    assert (FRONTEND / "playwright.config.ts").is_file(), "缺 playwright.config.ts"
+    assert (FRONTEND / "vitest.config.ts").is_file(), "缺 vitest.config.ts"
     print(f"  ✓ 依赖 + 配置齐全 (zod/vitest/playwright/pixelmatch)")
 
 
