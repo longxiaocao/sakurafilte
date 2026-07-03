@@ -47,10 +47,14 @@ jobs:
           cd backend/src/SakuraFilter.Api
           dotnet build -c Release --nologo
       - name: Upload build output (for other jobs to skip rebuild)
+        # WHY: dotnet run --no-build 需要 obj/ 目录 (含 source 时间戳和 ref assembly),
+        #      之前只传 bin/ → dotnet run 启动 fork+exec 时找不到 .cache 文件 → Win32Exception 13 (EACCES)
         uses: actions/upload-artifact@v4
         with:
           name: backend-build
-          path: backend/src/SakuraFilter.Api/bin
+          path: |
+            backend/src/SakuraFilter.Api/bin
+            backend/src/SakuraFilter.Api/obj
           retention-days: 1
           if-no-files-found: warn
 
