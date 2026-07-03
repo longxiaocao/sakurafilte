@@ -6,6 +6,7 @@ import path from 'node:path'
 //   - @ 别名: @/ -> src/
 //   - 开发服务器: 5173 (CORS 白名单)
 //   - API 代理: /api -> http://localhost:5148 (后端 Kestrel)
+//   P5.5+: /health 代理 (健康探针端点不在 /api 前缀下, 需独立代理)
 export default defineConfig({
   plugins: [vue()],
   resolve: {
@@ -18,6 +19,10 @@ export default defineConfig({
     host: '0.0.0.0',
     proxy: {
       '/api': {
+        target: 'http://localhost:5148',
+        changeOrigin: true
+      },
+      '/health': {
         target: 'http://localhost:5148',
         changeOrigin: true
       }

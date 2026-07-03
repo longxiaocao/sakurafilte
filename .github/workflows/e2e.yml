@@ -208,14 +208,14 @@ jobs:
           BENCH_THRESHOLD_TYPEAHEAD_P95: '200'
         run: python _bench_search.py --concurrency=10 --threshold-p95=$BENCH_THRESHOLD_P95 --threshold-typeahead-p95=$BENCH_THRESHOLD_TYPEAHEAD_P95
 
-      # Day 11+ P4.1: 9 个 E2E 串行
-      - name: Run E2E P4.1 orchestrator (9 tests)
+      # Day 11+ P4.1: 9 个 E2E 串行 + P5.5/P7.1 防回归
+      - name: Run E2E P4.1 orchestrator (9 tests + P5.5/P7.1)
         working-directory: spike-test
         env:
           ADMIN_TOKEN: ${{ env.ADMIN_TOKEN }}
         run: |
-          echo "===== P4.1 E2E 编排器: 9 个测试串行跑 ====="
-          for suite in _test_escape_underscore.py _test_day10_oem_brands.py _test_p22_seven_dicts.py _test_type_ordering.py _test_batch_oem.py _test_public_product.py _test_public_search.py _test_compare.py _test_p5_polish.py; do
+          echo "===== P4.1 E2E 编排器: 9 个测试 + P5.5/P7.1 串行跑 ====="
+          for suite in _test_escape_underscore.py _test_day10_oem_brands.py _test_p22_seven_dicts.py _test_type_ordering.py _test_batch_oem.py _test_public_product.py _test_public_search.py _test_compare.py _test_p5_polish.py _test_p55_p71_e2e.py; do
             if [ -f "$suite" ]; then
               echo "================ Running $suite ================"
               if python "$suite"; then
@@ -230,7 +230,7 @@ jobs:
               echo "[SKIP] $suite (文件不存在)"
             fi
           done
-          echo "===== P4.1 E2E 9/9 PASS ====="
+          echo "===== P4.1 + P5.5/P7.1 E2E 10/10 PASS ====="
 
       - name: E2E gate check (master only)
         if: github.ref == 'refs/heads/master' && github.event_name == 'push'

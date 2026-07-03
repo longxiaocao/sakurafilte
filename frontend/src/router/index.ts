@@ -127,6 +127,15 @@ const routes: RouteRecordRaw[] = [
     name: 'AdminHelp',
     component: () => import('@/views/admin/AdminHelpView.vue'),
     meta: { title: '后台帮助', requireAuth: true }
+  },
+  // ===== P5.5+: 后端性能监控面板 =====
+  //   P50/P95/P99/ErrorRate + 健康探针 + Token 轮转状态
+  //   调 /api/perf (公开) + /api/admin/auth/status (需 token) + /health/* (公开)
+  {
+    path: '/admin/perf',
+    name: 'AdminPerf',
+    component: () => import('@/views/admin/AdminPerfView.vue'),
+    meta: { title: '性能监控', requireAuth: true }
   }
 ]
 

@@ -25,6 +25,17 @@ __pycache__/
 !spike-test/pg_log.txt
 !spike-test/meili_*.log
 
+## 本地开发缓存 (D盘重定向, 不提交)
+.dev-cache/
+
+## CI 临时文件
+fc_jobs.json
+runs.json
+jobs.json
+annotations.json
+job_log.bin
+job_meta.json
+
 # Day 10+ P5 修复: spike-test/backend.out/err 是后端运行日志,不应 commit
 spike-test/backend.out
 spike-test/backend.err
@@ -40,6 +51,7 @@ frontend/node_modules/
 ## 前端构建产物 (npm run build 生成, 可重建)
 # WHY: dist/ 含 hash 命名的 JS/CSS, 每次 build 都变, 提交会污染历史
 frontend/dist/
+frontend/tsconfig.tsbuildinfo
 
 ## 大型测试数据 (避免污染仓库)
 # WHY: synthetic_*.jsonl 是合成压测数据 (100k 行 67-360MB),可由 generate_synthetic_data.py 重建
