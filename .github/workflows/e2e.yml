@@ -355,3 +355,32 @@ jobs:
             echo "::error::P4.3 visual smoke FAIL (rc=$RC)"
             exit $RC
           fi
+
+      # P5.5 + P7.1: 性能埋点 + X-Admin-Token 自动轮转 E2E
+      #   - P5.5: /api/perf 端点 + 前后端 perf 拦截器 + 健康探针
+      #   - P7.1: token rotate CLI + DB 存储 + PG NOTIFY 多实例同步
+      #   包含 13 个测试用例, 需要 build CLI (dotnet build) 才能跑 P7.1.x
+      - name: Run P5.5 + P7.1 E2E (perf + token rotation)
+        working-directory: spike-test
+        env:
+          ADMIN_TOKEN: ${{ env.ADMIN_TOKEN }}
+        run: |
+          echo "===== P5.5 + P7.1 E2E (perf instrumentation + token rotation) ====="
+          # WHY 先 build CLI: P7.1.x 测试依赖 SakuraFilter.Cli.exe (rotate-token 命令)
+          echo "[build] SakuraFilter.Cli (Release)"
+          cd ../backend/src/SakuraFilter.Cli
+          dotnet build -c Release --nologo
+          if [ $? -ne 0 ]; then
+            echo "::error::SakuraFilter.Cli build 失败"
+            exit 1
+          fi
+          cd ../../../spike-test
+          # WHY 复制 CLI 到 Api bin: E2E 测试用 BACKEND/src/SakuraFilter.Cli/bin/... 路径
+          #   (与本地约定一致 — Api 与 Cli 是兄弟 project)
+          if python _test_p55_p71_e2e.py; then
+            echo "[PASS] P5.5+P7.1 E2E 13/13"
+          else
+            RC=$?
+            echo "::error::P5.5+P7.1 E2E FAIL (rc=$RC)"
+            exit $RC
+          fi
