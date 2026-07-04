@@ -20,6 +20,12 @@ const pageSize = ref(50)
 const hasMore = ref(false)
 const countModeUsed = ref('exact')
 
+// E2E UI.1 修复: 列设置 — 默认隐藏次要列, 降低信息密度 (24 列 → 13 列)
+//   WHY: 24 列超出运维一眼扫读上限 (≤8 列为佳), 次要列 (D3/D4/H3/H4/D7/D8/Media 等) 默认隐藏
+//   核心列 (13): selection/ID/OEM/OEM2/类型/D1/D2/H1/H2/发布/停售/更新/操作
+//   次要列 (11): MR1/D3/D4/H3/H4/D7/D8/Media/MediaModel/箱件/kg
+const showAllColumns = ref(false)
+
 // 筛选条件 (精简版, 完整 17 字段版在抽屉)
 const filter = reactive<AdminSearchRequest>({
   page: 1,
@@ -283,6 +289,8 @@ onBeforeUnmount(() => {
       <el-button size="small" @click="openAdv">高级筛选</el-button>
       <span class="text-xs text-muted">count: {{ countModeUsed }}</span>
       <div class="flex-1" />
+      <!-- E2E UI.1 修复: 列设置开关 — 默认隐藏次要列, 点击显示全部 24 列 -->
+      <el-switch v-model="showAllColumns" size="small" active-text="全部列" inactive-text="核心列" inline-prompt />
       <el-button size="small" @click="batchCompare" :disabled="selected.length < 2">批量对比 ({{ selected.length }})</el-button>
       <el-button type="primary" size="small" @click="newProduct">新增产品</el-button>
     </div>
@@ -299,23 +307,23 @@ onBeforeUnmount(() => {
         <el-table-column type="selection" width="36" />
         <el-table-column prop="id" label="ID" width="60" />
         <el-table-column prop="oemNoDisplay" label="OEM" width="160" fixed />
-        <el-table-column prop="mr1" label="MR.1" width="100" show-overflow-tooltip />
+        <el-table-column v-if="showAllColumns" prop="mr1" label="MR.1" width="100" show-overflow-tooltip />
         <el-table-column prop="oem2" label="OEM 2" width="120" show-overflow-tooltip />
         <el-table-column prop="type" label="类型" width="60" />
         <el-table-column prop="d1Mm" label="D1" width="50" align="right" />
         <el-table-column prop="d2Mm" label="D2" width="50" align="right" />
-        <el-table-column prop="d3Mm" label="D3" width="50" align="right" />
-        <el-table-column prop="d4Mm" label="D4" width="50" align="right" />
+        <el-table-column v-if="showAllColumns" prop="d3Mm" label="D3" width="50" align="right" />
+        <el-table-column v-if="showAllColumns" prop="d4Mm" label="D4" width="50" align="right" />
         <el-table-column prop="h1Mm" label="H1" width="50" align="right" />
         <el-table-column prop="h2Mm" label="H2" width="50" align="right" />
-        <el-table-column prop="h3Mm" label="H3" width="50" align="right" />
-        <el-table-column prop="h4Mm" label="H4" width="50" align="right" />
-        <el-table-column prop="d7Thread" label="D7" width="70" />
-        <el-table-column prop="d8Thread" label="D8" width="70" />
-        <el-table-column prop="media" label="Media" width="100" show-overflow-tooltip />
-        <el-table-column prop="mediaModel" label="MediaModel" width="100" show-overflow-tooltip />
-        <el-table-column prop="qtyPerCarton" label="箱/件" width="60" align="right" />
-        <el-table-column prop="weightKgs" label="kg" width="60" align="right" />
+        <el-table-column v-if="showAllColumns" prop="h3Mm" label="H3" width="50" align="right" />
+        <el-table-column v-if="showAllColumns" prop="h4Mm" label="H4" width="50" align="right" />
+        <el-table-column v-if="showAllColumns" prop="d7Thread" label="D7" width="70" />
+        <el-table-column v-if="showAllColumns" prop="d8Thread" label="D8" width="70" />
+        <el-table-column v-if="showAllColumns" prop="media" label="Media" width="100" show-overflow-tooltip />
+        <el-table-column v-if="showAllColumns" prop="mediaModel" label="MediaModel" width="100" show-overflow-tooltip />
+        <el-table-column v-if="showAllColumns" prop="qtyPerCarton" label="箱/件" width="60" align="right" />
+        <el-table-column v-if="showAllColumns" prop="weightKgs" label="kg" width="60" align="right" />
         <el-table-column prop="isPublished" label="发布" width="50">
           <template #default="{ row }">
             <el-tag v-if="row.isPublished" type="success" size="small">✓</el-tag>
