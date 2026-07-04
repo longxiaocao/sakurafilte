@@ -431,3 +431,72 @@ jobs:
             echo "::error::P5.5+P7.1 E2E FAIL (rc=$RC)"
             exit $RC
           fi
+
+      # P0-E2E-1: TypeScript 严格编译验证 (vue-tsc --noEmit)
+      #   WHY: 31 个 .vue/.ts 文件从未在 CI 验证类型, 可能存在类型漂移
+      #        type-check 0 错误通过才能继续 Playwright
+      - name: P0-E2E-1 TypeScript type-check (vue-tsc --noEmit)
+        working-directory: frontend
+        run: |
+          echo "===== P0-E2E-1 TypeScript 严格编译验证 ====="
+          if npm run type-check; then
+            echo "[PASS] type-check 0 错误"
+          else
+            RC=$?
+            echo "::error::type-check FAIL (rc=$RC), 存在 TypeScript 类型错误"
+            exit $RC
+          fi
+
+      # P0-E2E-2: Playwright 功能性 smoke (CI 空库友好)
+      #   WHY: 视觉回归 (visual/) 依赖数据, CI 空库会失败
+      #        功能性 smoke 只验证页面加载 + 路由 + 组件渲染, 15 个测试不依赖数据
+      #   覆盖: /search, /product/:oem, /admin/products, 8 字典页, /admin/etl, /admin/perf, /admin/help, /admin/compare
+      - name: Install Playwright chromium
+        working-directory: frontend
+        run: npx playwright install chromium --with-deps
+
+      - name: Start Vite dev server (background)
+        run: |
+          cd frontend
+          npm run dev > /tmp/vite5173.log 2>&1 &
+          VITE_PID=$!
+          V_READY=0
+          for i in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5173 2>/dev/null || echo 000)
+            if [ "$code" = "200" ]; then
+              echo "Vite 5173 ready after ${i}s"
+              V_READY=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$V_READY" != "1" ]; then
+            echo "::error::Vite 5173 60s 内未就绪"
+            tail -n 30 /tmp/vite5173.log || true
+            exit 1
+          fi
+
+      - name: Run P0-E2E-2 Playwright smoke (15 tests)
+        working-directory: frontend
+        env:
+          BASE_URL: http://localhost:5173
+          ADMIN_TOKEN: ${{ env.ADMIN_TOKEN }}
+        run: |
+          echo "===== P0-E2E-2 Playwright 功能性 smoke (15 tests) ====="
+          if npx playwright test tests/functional/smoke.spec.ts; then
+            echo "[PASS] Playwright smoke 15/15 全绿"
+          else
+            RC=$?
+            echo "::error::Playwright smoke FAIL (rc=$RC)"
+            # 上传失败诊断截图
+            exit $RC
+          fi
+
+      - name: Upload Playwright report (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ github.run_id }}
+          path: frontend/playwright-report/
+          retention-days: 7
+          if-no-files-found: ignore
