@@ -13,6 +13,24 @@ obj/
 ## Trae IDE
 .trae/
 
+## 环境变量 (含密钥/Token/连接串, 严禁提交)
+#   WHY: .env 包含 DB 密码/JWT SigningKey/Admin Token 等敏感信息, 泄露会导致系统被攻破
+#   使用 .env.example 提供占位符模板, 实际值由部署环境注入
+.env
+.env.local
+.env.*.local
+!.env.example
+
+## 临时调试文件 (SQL/JSON 快照, 不应提交)
+spike-test/_check_*.sql
+spike-test/_login.json
+spike-test/_*.tmp
+
+## E2E / 主题测试截图 (可重建, 不提交)
+#   WHY: 每次 E2E 跑都会重新生成, 提交会污染历史
+spike-test/e2e-screenshots/
+spike-test/theme-screenshots/
+
 ## Python
 __pycache__/
 *.pyc

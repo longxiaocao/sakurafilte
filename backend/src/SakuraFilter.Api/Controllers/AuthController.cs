@@ -52,8 +52,8 @@ public class AuthController : ControllerBase
     ///
     ///     POST /api/auth/login
     ///     {
-    ///       "username": "admin",
-    ///       "password": "Admin@2026"
+    ///       "username": "<your_username>",
+    ///       "password": "<your_password>"
     ///     }
     ///
     /// 成功响应 (200):
