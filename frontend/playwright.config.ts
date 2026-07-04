@@ -7,6 +7,8 @@ import { defineConfig, devices } from '@playwright/test'
 
 export default defineConfig({
   testDir: './tests',
+  // P0-E2E 修复: 只匹配 .spec.ts, 排除 vitest 的 .test.ts (避免 Playwright 误扫 contract 目录)
+  testMatch: '**/*.spec.ts',
   fullyParallel: false,  // 共享一个 dev server, 顺序跑
   workers: 1,
   reporter: [['list'], ['html', { open: 'never', outputFolder: 'playwright-report' }]],

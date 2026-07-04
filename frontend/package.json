@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "type-check": "vue-tsc --noEmit",
     "test:contract": "vitest run",
-    "test:visual": "playwright test",
+    "test:visual": "playwright test tests/visual/",
     "test:visual:update": "playwright test --update-snapshots",
     "gen:types": "python ../spike-test/_gen_types.py"
   },
