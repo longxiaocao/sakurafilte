@@ -458,7 +458,7 @@ app.MapGet("/api/perf", (PerfMetrics metrics) =>
 //        属性只读内存状态 (_primaryAvailable), 不触发网络探活, /metrics 响应快且不增加 Meili 负载
 //   WHY 不走 ResponseTimeMiddleware 排除: /metrics 是低频抓取 (15s/次), 不影响统计
 //   返回 Prometheus exposition format (text/plain; version=0.0.4)
-app.MapGet("/metrics", (IServiceProvider sp) =>
+app.MapGet("/metrics", async (IServiceProvider sp) =>
 {
     var sb = new System.Text.StringBuilder();
     var search = sp.GetService<ISearchProvider>();
@@ -469,6 +469,48 @@ app.MapGet("/metrics", (IServiceProvider sp) =>
         sb.AppendLine("# TYPE sakurafilter_meili_circuit_breaker gauge");
         sb.AppendLine($"sakurafilter_meili_circuit_breaker {circuitOpen}");
     }
+
+    // P3-5.3: ETL 当前进度 (已读取行数)
+    //   WHY 直接读 EtlImportService.Progress.Read: 服务为单例, Progress.Read 内部用 Interlocked 线程安全
+    //   不引入新抽象 (IEtlProgressSnapshot): 单例直接访问即可, 避免过度设计
+    //   无活动任务时 Read=0, 指标值恒为 0 (符合 Prometheus gauge 语义)
+    try
+    {
+        var etl = sp.GetService<EtlImportService>();
+        if (etl != null)
+        {
+            var read = etl.Progress.Read;
+            sb.AppendLine("# HELP sakurafilter_etl_progress_read ETL 当前任务已读取行数 (无活动任务时为 0)");
+            sb.AppendLine("# TYPE sakurafilter_etl_progress_read gauge");
+            sb.AppendLine($"sakurafilter_etl_progress_read {read}");
+        }
+    }
+    catch (Exception ex)
+    {
+        // 采集失败不影响其他指标输出, 仅在注释行记录根因 (Prometheus 忽略 # 开头行)
+        sb.AppendLine($"# ETL progress collect error: {ex.Message}");
+    }
+
+    // P3-5.3: 死信队列深度 (status='active' 行数)
+    //   WHY CreateScope: ProductDbContext 是 scoped 服务, /metrics 端点由 DI 容器解析 IServiceProvider
+    //        是 singleton 上下文, 直接注入 scoped 服务会抛 InvalidOperationException
+    //   WHY CountAsync + Status 过滤: 命中 idx_dead_letter_active_recovery 部分索引 (WHERE status='active')
+    //        避免全表扫描, 1M 行死信表实测 <50ms
+    //   WHY try-catch 包裹: PG 连接异常时不应导致整个 /metrics 端点 500, 影响其他指标采集
+    try
+    {
+        using var scope = sp.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ProductDbContext>();
+        var depth = await db.SearchIndexDeadLetters.CountAsync(d => d.Status == "active");
+        sb.AppendLine("# HELP sakurafilter_dead_letter_depth 死信队列当前深度 (status=active 行数, 等待人工/worker 处理)");
+        sb.AppendLine("# TYPE sakurafilter_dead_letter_depth gauge");
+        sb.AppendLine($"sakurafilter_dead_letter_depth {depth}");
+    }
+    catch (Exception ex)
+    {
+        sb.AppendLine($"# Dead letter depth collect error: {ex.Message}");
+    }
+
     return Results.Text(sb.ToString(), "text/plain; version=0.0.4");
 })
 .WithName("Metrics")
