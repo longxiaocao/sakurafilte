@@ -49,7 +49,7 @@ const oldAutoHits = computed(() => {
 })
 
 // ===== 需求 2: 详情页布局方案对比 =====
-const layoutOption = ref<'A' | 'B' | 'C'>('A')
+const layoutOption = ref<'A' | 'B' | 'C' | 'D'>('D')
 
 // 演示数据
 const demoProduct = {
@@ -92,13 +92,14 @@ function goReal(route: string) {
 
 // 方案对比表数据
 const planComparison = [
-  { dimension: '布局风格', planA: '卡片网格 (2 列)', planB: '时间线折叠', planC: '左右分栏' },
-  { dimension: '信息密度', planA: '中', planB: '高', planC: '高' },
-  { dimension: '视觉呼吸感', planA: '强', planB: '弱', planC: '中' },
-  { dimension: '移动端友好', planA: '优 (自动 1 列)', planB: '良', planC: '差 (分栏需重写)' },
-  { dimension: '实现复杂度', planA: '低 (已实现)', planB: '中', planC: '高' },
-  { dimension: '适用场景', planA: '通用展示', planB: '长内容产品', planC: '快速浏览对比' },
-  { dimension: '推荐度', planA: '★★★★★', planB: '★★★★', planC: '★★★' }
+  { dimension: '布局风格', planD: '工业极简融合风', planA: '卡片网格 (2 列)', planB: '时间线折叠', planC: '左右分栏' },
+  { dimension: '信息密度', planD: '高 (Hero 突出关键)', planA: '中', planB: '高', planC: '高' },
+  { dimension: '视觉呼吸感', planD: '强 (大字号+大留白)', planA: '强', planB: '弱', planC: '中' },
+  { dimension: '设计感', planD: '★★★★★ (Linear/Vercel)', planA: '★★★', planB: '★★', planC: '★★' },
+  { dimension: '移动端友好', planD: '优 (3 档响应)', planA: '优 (自动 1 列)', planB: '良', planC: '差 (分栏需重写)' },
+  { dimension: '图片灯箱', planD: '✓ (el-image 预览)', planA: '✗', planB: '✗', planC: '✗' },
+  { dimension: '实现复杂度', planD: '中 (已实现)', planA: '低', planB: '中', planC: '高' },
+  { dimension: '推荐度', planD: '★★★★★', planA: '★★★★', planB: '★★★', planC: '★★' }
 ]
 </script>
 
@@ -191,7 +192,8 @@ const planComparison = [
         <div class="flex items-center gap-2 mb-4 flex-wrap">
           <span class="text-sm text-muted">方案选择:</span>
           <el-radio-group v-model="layoutOption" size="small">
-            <el-radio-button label="A">A. 卡片网格 (已实现)</el-radio-button>
+            <el-radio-button label="D">D. 工业极简融合风 (已实现, 推荐)</el-radio-button>
+            <el-radio-button label="A">A. 卡片网格</el-radio-button>
             <el-radio-button label="B">B. 时间线折叠</el-radio-button>
             <el-radio-button label="C">C. 左右分栏</el-radio-button>
           </el-radio-group>
@@ -200,8 +202,40 @@ const planComparison = [
           </el-button>
         </div>
 
-        <!-- 方案 A: 卡片网格 (当前实现) -->
-        <div v-if="layoutOption === 'A'" class="hairline p-4 bg-[var(--color-bg-elevated)]">
+        <!-- 方案 D: 工业极简融合风 (当前实现) -->
+        <div v-if="layoutOption === 'D'" class="hairline p-4 bg-[var(--color-bg-elevated)]">
+          <h3 class="text-sm font-medium mb-3 pb-2 hairline-b">
+            方案 D: 工业极简融合风
+            <span class="text-xs text-muted ml-2">(Linear/Vercel/Stripe 风格 + Musk 极简)</span>
+          </h3>
+          <!-- Hero 区迷你预览 -->
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 mb-4">
+            <div class="lg:col-span-5">
+              <div class="hairline aspect-square bg-[var(--color-bg)] flex items-center justify-center text-muted text-xs">
+                主图大图 + 灯箱
+              </div>
+            </div>
+            <div class="lg:col-span-7">
+              <div class="text-2xl font-medium tracking-tight">{{ demoProduct.productName1 }}</div>
+              <div class="text-xs text-muted mt-1 font-mono">{{ demoProduct.oem2 }} · {{ demoProduct.mr1 }} · {{ demoProduct.oemNoDisplay }}</div>
+              <div class="grid grid-cols-4 gap-2 mt-4">
+                <div v-for="spec in [{l:'D1',v:'95mm'},{l:'H1',v:'120mm'},{l:'Media',v:'Paper'},{l:'Type',v:'Oil'}]" :key="spec.l"
+                  class="hairline p-2">
+                  <div class="text-[10px] uppercase tracking-wider text-muted">{{ spec.l }}</div>
+                  <div class="text-sm font-medium mt-1 font-mono">{{ spec.v }}</div>
+                </div>
+              </div>
+              <div class="flex gap-4 mt-3 text-xs">
+                <span><strong class="text-lg font-mono">2</strong> 替代</span>
+                <span><strong class="text-lg font-mono">2</strong> 车型</span>
+              </div>
+            </div>
+          </div>
+          <div class="text-xs text-muted">设计语言: 大字号对比 + 大留白 + 1px hairline + tabular-nums + uppercase tracking-wider</div>
+        </div>
+
+        <!-- 方案 A: 卡片网格 -->
+        <div v-else-if="layoutOption === 'A'" class="hairline p-4 bg-[var(--color-bg-elevated)]">
           <h3 class="text-sm font-medium mb-3 pb-2 hairline-b">方案 A: 卡片网格 (2 列 + 表格跨整行)</h3>
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
             <section class="hairline p-3">
@@ -278,15 +312,16 @@ const planComparison = [
 
         <!-- 方案对比表 -->
         <div class="hairline mt-4 p-4 bg-[var(--color-bg-elevated)]">
-          <h3 class="text-sm font-medium mb-3">三版方案对比</h3>
+          <h3 class="text-sm font-medium mb-3">四版方案对比</h3>
           <el-table :data="planComparison" size="small" border>
             <el-table-column prop="dimension" label="对比维度" width="120" />
+            <el-table-column prop="planD" label="方案 D (工业极简)" width="180" />
             <el-table-column prop="planA" label="方案 A (卡片网格)" />
             <el-table-column prop="planB" label="方案 B (时间线)" />
             <el-table-column prop="planC" label="方案 C (左右分栏)" />
           </el-table>
           <div class="text-xs text-muted mt-3">
-            推荐: <strong class="text-accent">方案 A</strong> (已实现, 平衡信息密度与视觉呼吸感, 移动端自适应最优)
+            推荐: <strong class="text-accent">方案 D 工业极简融合风</strong> (已实现, 工业风 + Musk 极简 + 设计感强)
           </div>
         </div>
       </el-tab-pane>
@@ -423,7 +458,7 @@ const planComparison = [
         <div class="hairline p-3">
           <div class="font-medium mb-2 text-accent">推荐保留 (已实现)</div>
           <ul class="text-muted space-y-1 list-disc pl-4">
-            <li>方案 A 卡片网格布局</li>
+            <li>方案 D 工业极简融合风详情页</li>
             <li>搜索框 searched 标志位</li>
             <li>登录页本地映射验证</li>
             <li>CSS 变量主题系统</li>
@@ -441,7 +476,8 @@ const planComparison = [
         <div class="hairline p-3">
           <div class="font-medium mb-2 text-accent">可选方案 (按需)</div>
           <ul class="text-muted space-y-1 list-disc pl-4">
-            <li>方案 B 时间线 (长内容产品)</li>
+            <li>方案 A 卡片网格 (备选)</li>
+            <li>方案 B 时间线 (长内容)</li>
             <li>方案 C 左右分栏 (快速浏览)</li>
             <li>暗色模式自动跟随系统</li>
             <li>多语言切换 (i18n)</li>
