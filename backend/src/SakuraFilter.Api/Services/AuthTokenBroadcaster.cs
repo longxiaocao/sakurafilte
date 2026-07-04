@@ -25,8 +25,9 @@ public class AuthTokenBroadcaster : IHostedService, IAsyncDisposable
     {
         _services = services;
         _logger = logger;
+        // P0-3 修复: 移除硬编码密码兜底, 配置缺失直接抛异常
         _pgConn = config.GetConnectionString("Postgres")
-            ?? "Host=localhost;Port=5432;Database=spike_test_v3;Username=postgres;Password=784533";
+            ?? throw new InvalidOperationException("ConnectionStrings:Postgres 未配置 (检查 appsettings.json 或环境变量 ConnectionStrings__Postgres)");
     }
 
     public Task StartAsync(CancellationToken cancellationToken)

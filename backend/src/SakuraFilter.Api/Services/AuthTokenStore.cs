@@ -58,8 +58,9 @@ public class AuthTokenStore : IAuthTokenStore
         // 从 IConfiguration 拿兜底值 (appsettings.json)
         var fallbackCurrent = config["Auth:DevStaticToken"] ?? "";
         var fallbackPrevious = config["Auth:DevStaticTokenPrevious"];
+        // P0-3 修复: 移除硬编码密码兜底, 配置缺失直接抛异常
         _pgConn = config.GetConnectionString("Postgres")
-            ?? "Host=localhost;Port=5432;Database=spike_test_v3;Username=postgres;Password=784533";
+            ?? throw new InvalidOperationException("ConnectionStrings:Postgres 未配置 (检查 appsettings.json 或环境变量 ConnectionStrings__Postgres)");
         _snapshot = new TokenSnapshot(fallbackCurrent, string.IsNullOrEmpty(fallbackPrevious) ? null : fallbackPrevious, null, null, false);
     }
 

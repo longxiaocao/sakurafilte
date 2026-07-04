@@ -98,8 +98,11 @@ public abstract class BaseDictService<TItem> : IDictService<TItem>
             var pattern = $"%{kw.EscapeLikePattern()}%";
             query = query.Where(BuildSearchPredicate(pattern));
         }
-        if (limit.HasValue && limit.Value > 0)
-            query = query.Take(limit.Value);
+        // P0-1 修复: 默认 limit=200, 防止全表加载 OOM
+        // WHY: caller 不传 limit 时全表加载, dict_oem_no3 527万行会导致 11s+ 超时/OOM
+        // 兜底逻辑: null/0/负数 → 200; 合法值 → 尊重 caller
+        var effectiveLimit = (limit.HasValue && limit.Value > 0) ? limit.Value : 200;
+        query = query.Take(effectiveLimit);
         return await query.ToListAsync(ct);
     }
 

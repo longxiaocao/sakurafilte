@@ -53,8 +53,9 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 // PostgreSQL
+// P0-3 修复: 移除硬编码密码兜底, 配置缺失直接抛异常 (生产环境用环境变量 ConnectionStrings__Postgres 覆盖)
 var pgConn = builder.Configuration.GetConnectionString("Postgres")
-    ?? "Host=localhost;Port=5432;Database=spike_test_v3;Username=postgres;Password=784533";
+    ?? throw new InvalidOperationException("ConnectionStrings:Postgres 未配置 (检查 appsettings.json 或环境变量 ConnectionStrings__Postgres)");
 builder.Services.AddDbContext<ProductDbContext>(opt => opt.UseNpgsql(pgConn));
 
 // 搜索抽象 (主 Meili + 兜底 PG + 弹性包装)
