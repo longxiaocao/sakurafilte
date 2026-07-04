@@ -6,7 +6,7 @@
 // Day 10+ P2.2: 7 分区全部接入 typeahead (productName1/2/type/oemNo3/media/machine/engine)
 // Day 10+ P5.1: 包装尺寸 L/W/H → Volume 自动计算 (m³), 母箱同理
 // Day 10+ P5.2: 尺寸/性能字段后挂 ? 图标, 鼠标悬停显示字段说明 (FieldHelpPopover)
-import { ref, reactive, onMounted, computed, watch } from 'vue'
+import { ref, reactive, onMounted, computed, watch, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { adminProductApi, imageApi, dictApi } from '@/api'
@@ -19,6 +19,10 @@ const router = useRouter()
 const isEdit = computed(() => !!route.params.id)
 const productId = computed(() => (route.params.id ? Number(route.params.id) : 0))
 const activeNames = ref(['1', '3', '5', '6'])
+
+// P2-7 修复 v2: 保存乐观锁冲突后的 reload timer 引用, 卸载时清理
+//   WHY: 用户在 1.5s 内导航离开后, 旧 timer 仍会触发 window.location.reload() 造成意外跳转
+let reloadTimer: ReturnType<typeof setTimeout> | null = null
 
 const form = reactive<any>({
   productName1: '',
@@ -158,7 +162,9 @@ async function save() {
       if (title.includes('已被修改') || detail.includes('已被其他用户修改') || detail.includes('lost update')) {
         ElMessage.error('数据已被其他管理员修改, 请刷新后重试')
         // 自动重新加载最新数据, 避免用户手动刷新
-        setTimeout(() => window.location.reload(), 1500)
+        // P2-7 修复 v2: 保存 timer 引用, 卸载时清理, 避免用户导航离开后意外 reload
+        if (reloadTimer !== null) clearTimeout(reloadTimer)
+        reloadTimer = setTimeout(() => window.location.reload(), 1500)
       } else {
         ElMessage.error('产品已存在，请检查 OEM 号')
       }
@@ -301,6 +307,14 @@ function isAppRowDirty(m: any): boolean {
 }
 
 onMounted(load)
+
+// P2-7 修复 v2: 组件卸载时清理 reloadTimer, 避免用户导航离开后意外 reload
+onBeforeUnmount(() => {
+  if (reloadTimer !== null) {
+    clearTimeout(reloadTimer)
+    reloadTimer = null
+  }
+})
 </script>
 
 <template>

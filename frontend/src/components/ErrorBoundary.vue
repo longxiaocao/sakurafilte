@@ -4,7 +4,7 @@
 //   - 提供友好降级 UI (重试 / 复制错误 / 联系管理员)
 //   - 错误日志持久化到 localStorage 供后续排查
 //   - 全局注册: main.ts 中 <ErrorBoundary> 包裹 <RouterView>
-import { ref, onErrorCaptured } from 'vue'
+import { ref, onErrorCaptured, onUnmounted } from 'vue'
 
 interface ErrorInfo {
   message: string
@@ -15,6 +15,8 @@ interface ErrorInfo {
 
 const error = ref<ErrorInfo | null>(null)
 const copied = ref(false)
+// P2-7 修复 v2: 保存 copyError 的 setTimeout 引用, 组件卸载时清理, 避免对已销毁 ref 写入
+let copyResetTimer: ReturnType<typeof setTimeout> | null = null
 
 onErrorCaptured((err: any) => {
   const info: ErrorInfo = {
@@ -53,13 +55,23 @@ function copyError() {
   const text = `[SakuraFilter Error]\n时间: ${error.value.timestamp}\nURL: ${error.value.url}\n消息: ${error.value.message}\n堆栈:\n${error.value.stack}`
   navigator.clipboard?.writeText(text).then(() => {
     copied.value = true
-    setTimeout(() => (copied.value = false), 2000)
+    // P2-7 修复 v2: 保存 timer 引用, 卸载时清理
+    if (copyResetTimer !== null) clearTimeout(copyResetTimer)
+    copyResetTimer = setTimeout(() => (copied.value = false), 2000)
   })
 }
 
 function fullReload() {
   window.location.reload()
 }
+
+// P2-7 修复 v2: 组件卸载时清理 copyResetTimer, 避免对已销毁 ref 写入
+onUnmounted(() => {
+  if (copyResetTimer !== null) {
+    clearTimeout(copyResetTimer)
+    copyResetTimer = null
+  }
+})
 </script>
 
 <template>

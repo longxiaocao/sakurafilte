@@ -187,28 +187,39 @@ export function installPerfInterceptor() {
 
   // 页面卸载时强制 flush (sendBeacon 路径) + 清理 flushTimer
   if (typeof window !== 'undefined') {
-    window.addEventListener('beforeunload', () => {
+    // P2-7 修复 v2: 保存 handler 引用, 卸载时 removeEventListener, 避免内存泄漏
+    beforeUnloadHandler = () => {
       void flush()
       // P2-7 修复: 卸载时清理 flushTimer, 防止 HMR/测试场景的幽灵定时器
       if (flushTimer !== null) {
         window.clearTimeout(flushTimer)
         flushTimer = null
       }
-    })
+    }
+    window.addEventListener('beforeunload', beforeUnloadHandler)
     // 定时器已通过 scheduleFlush 自启
   }
 }
+
+// P2-7 修复 v2: 模块级保存 beforeunload handler 引用, 供 uninstallPerfInterceptor 移除
+let beforeUnloadHandler: (() => void) | null = null
 
 /**
  * P2-7 修复: 卸载 perf 拦截器 (HMR/测试场景使用)
  * - 清理 flushTimer
  * - 移除 axios interceptors (需保存 id)
+ * - P2-7 修复 v2: 移除 beforeunload 事件监听器
  * 注意: 生产 SPA 不需要调用, 仅开发/测试用
  */
 export function uninstallPerfInterceptor() {
   if (flushTimer !== null) {
     window.clearTimeout(flushTimer)
     flushTimer = null
+  }
+  // P2-7 修复 v2: 移除 beforeunload 监听器, 避免内存泄漏
+  if (beforeUnloadHandler !== null && typeof window !== 'undefined') {
+    window.removeEventListener('beforeunload', beforeUnloadHandler)
+    beforeUnloadHandler = null
   }
   if (installed && interceptorIds.request !== -1 && interceptorIds.response !== -1) {
     http.interceptors.request.eject(interceptorIds.request)
