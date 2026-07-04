@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessageBox } from 'element-plus'
 import { useAdminAuth } from '@/composables/useAdminAuth'
 import { useThemeStore } from '@/stores/theme'  // P5.3
 
@@ -53,11 +53,12 @@ function goDict(path: string) {
 async function go(item: { path?: string; action?: string }) {
   if (item.action === 'oemLookup') {
     // Day 9.2: 用 ElMessageBox.prompt 取代原生 prompt() (后者在嵌入式浏览器/受限环境不支持)
+    // 修复: 友好提示 + 占位符示例, 避免用户输入不完整 OEM 后跳详情页 404
     try {
-      const { value: oem } = await ElMessageBox.prompt('请输入 OEM 编号', 'OEM 查询', {
+      const { value: oem } = await ElMessageBox.prompt('请输入完整 OEM 编号', 'OEM 查询', {
         inputPattern: /^.+$/,
         inputErrorMessage: 'OEM 不能为空',
-        inputPlaceholder: '例: 11427622448',
+        inputPlaceholder: '请输入完整 OEM 编号 (如 P00050000 或 11427622448)',
         confirmButtonText: '查询',
         cancelButtonText: '取消'
       })
@@ -74,28 +75,16 @@ async function go(item: { path?: string; action?: string }) {
   }
 }
 
-async function toggleAdmin() {
+function toggleAdmin() {
   if (isAdminPath.value) {
+    // 退出后台: 清除 token 并回前台搜索页
     setToken('')
     router.push('/search')
   } else {
-    // Day 9.2: 用 ElMessageBox.prompt 取代原生 prompt() (后者在 Playwright/headless 等环境抛 "prompt() is not supported")
-    try {
-      const { value: token } = await ElMessageBox.prompt('请输入 X-Admin-Token', '进入后台', {
-        inputType: 'password',
-        inputPlaceholder: '后台 token (与后端 Auth:DevStaticToken 一致)',
-        inputValue: localStorage.getItem('sakura_admin_token') || '',
-        confirmButtonText: '进入',
-        cancelButtonText: '取消'
-      })
-      if (token && token.trim()) {
-        setToken(token.trim())
-        ElMessage.success('已进入后台')
-        router.push('/admin/products')
-      }
-    } catch {
-      // 用户取消
-    }
+    // 进入后台: 跳转登录页 (需求 4: 用登录页替换 TOKEN 弹窗)
+    //   未登录时路由守卫会自动重定向到 /login?redirect=xxx
+    //   已登录 (token 仍有效) 时 LoginView 会直接放行或允许重新登录
+    router.push('/login')
   }
 }
 
@@ -104,7 +93,7 @@ const dictTrigger = 'click'
 </script>
 
 <template>
-  <header class="hairline-b bg-white flex items-center px-3 h-12 gap-3">
+  <header class="hairline-b bg-[var(--color-bg)] flex items-center px-3 h-12 gap-3">
     <div class="font-medium text-base tracking-tight">SakuraFilter</div>
     <nav class="flex items-center gap-1 ml-3">
       <template v-for="item in navItems" :key="item.label">

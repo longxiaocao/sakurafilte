@@ -33,6 +33,16 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/public/PublicProductView.vue'),
     meta: { title: '产品详情' }
   },
+  // ===== 需求 4: 后台登录页 (替换 TOKEN 直接输入弹窗) =====
+  //   - 公开路由 (requireAuth 不设置, 默认 falsy)
+  //   - 登录页内本地映射验证, 成功后写入 useAdminAuthStore.token
+  //   - 支持 redirect 查询参数回跳
+  {
+    path: '/login',
+    name: 'Login',
+    component: () => import('@/views/LoginView.vue'),
+    meta: { title: '后台登录' }
+  },
   {
     path: '/admin',
     redirect: '/admin/products'
@@ -145,12 +155,14 @@ const router = createRouter({
 })
 
 // 鉴权守卫
+//   需求 4: 未登录访问 /admin/* 时重定向到 /login?redirect=xxx
+//   登录页 LoginView 验证成功后回跳到 redirect 目标
 router.beforeEach((to, _from, next) => {
   if (to.meta.requireAuth) {
     const auth = useAdminAuthStore()
     if (!auth.token) {
-      ElMessage.warning('请先输入 X-Admin-Token 进入后台')
-      next('/search')
+      ElMessage.warning('请先登录')
+      next({ path: '/login', query: { redirect: to.fullPath } })
       return
     }
   }
