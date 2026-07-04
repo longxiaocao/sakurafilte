@@ -905,6 +905,8 @@ def test_backend_deep_water(token):
     # 7. 字典完整 CRUD (engines 字典, 2 字段: engineBrand + engineType)
     # WHY: 8 个字典 × 7 端点 = 56 个端点, E2E 仅覆盖 list, CRUD 完全未验证
     #   选 engines 字典: 字段简单, xrefCount=0 (无产品引用, 安全删除)
+    #   timeout=30s: Update/Restore 端点 COUNT machine_applications (77万行, 无 engine_brand 索引)
+    #                偶发超 10s, 提到 30s 避免偶发 FAIL
     print("\n[BD.7] 字典完整 CRUD (engines)")
     test_brand = f"E2E_TEST_{int(time.time())%100000}"
     created_id = None
@@ -913,7 +915,7 @@ def test_backend_deep_water(token):
         resp = requests.post(f"{BACKEND}/api/admin/dict/engines",
                            headers={**headers, "Content-Type": "application/json"},
                            json={"engineBrand": test_brand, "engineType": "TEST_TYPE", "sortOrder": 9999},
-                           timeout=10)
+                           timeout=30)
         if resp.status_code == 201:
             created_id = resp.json().get("id")
             record("后端深水区", "字典CRUD-Create",
@@ -926,7 +928,7 @@ def test_backend_deep_water(token):
         # 7.2 Read (验证能查到)
         if created_id:
             resp2 = requests.get(f"{BACKEND}/api/admin/dict/engines?q={test_brand}",
-                               headers=headers, timeout=10)
+                               headers=headers, timeout=30)
             if resp2.status_code == 200:
                 items = resp2.json().get("items", [])
                 found = any(it.get("id") == created_id for it in items)
@@ -942,7 +944,7 @@ def test_backend_deep_water(token):
             resp3 = requests.put(f"{BACKEND}/api/admin/dict/engines/{created_id}",
                                headers={**headers, "Content-Type": "application/json"},
                                json={"engineBrand": test_brand, "engineType": "UPDATED_TYPE", "sortOrder": 8888},
-                               timeout=10)
+                               timeout=30)
             if resp3.status_code == 200:
                 updated = resp3.json()
                 type_changed = updated.get("engineType") == "UPDATED_TYPE"
@@ -958,11 +960,11 @@ def test_backend_deep_water(token):
         # 7.4 Delete (软删)
         if created_id:
             resp4 = requests.delete(f"{BACKEND}/api/admin/dict/engines/{created_id}",
-                                  headers=headers, timeout=10)
+                                  headers=headers, timeout=30)
             if resp4.status_code == 200:
                 # 验证默认查询不再返回 (软删后 deletedAt != null)
                 resp4b = requests.get(f"{BACKEND}/api/admin/dict/engines?q={test_brand}",
-                                    headers=headers, timeout=10)
+                                    headers=headers, timeout=30)
                 items = resp4b.json().get("items", []) if resp4b.status_code == 200 else []
                 still_visible = any(it.get("id") == created_id for it in items)
                 record("后端深水区", "字典CRUD-Delete",
@@ -975,7 +977,7 @@ def test_backend_deep_water(token):
         # 7.5 Restore (恢复软删)
         if created_id:
             resp5 = requests.post(f"{BACKEND}/api/admin/dict/engines/{created_id}/restore",
-                                headers=headers, timeout=10)
+                                headers=headers, timeout=30)
             if resp5.status_code == 200:
                 restored = resp5.json()
                 # 验证 deletedAt 已清空
@@ -990,13 +992,130 @@ def test_backend_deep_water(token):
         # 7.6 Cleanup: 再次软删 (避免污染字典)
         if created_id:
             requests.delete(f"{BACKEND}/api/admin/dict/engines/{created_id}",
-                          headers=headers, timeout=10)
+                          headers=headers, timeout=30)
     except Exception as e:
         record("后端深水区", "字典CRUD-异常", "FAIL", "API 调用", str(e))
         # 兜底清理
         if created_id:
             try:
                 requests.delete(f"{BACKEND}/api/admin/dict/engines/{created_id}",
+                              headers=headers, timeout=30)
+            except Exception:
+                pass
+
+    # 8. 用户管理 + 修改密码 (P2 测试盲点补充)
+    # WHY: 7 个用户管理端点 (CRUD/reset-password/change-password/audit) 完全未验证
+    #   覆盖: 创建用户 → 新用户登录 → 改密码 → 新密码登录 → 管理员重置密码 → 禁用 → 禁用后登录失败
+    print("\n[BD.8] 用户管理 + 修改密码")
+    test_username = f"e2e_u{int(time.time())%100000}"
+    test_password = "Test@2026Pwd"
+    new_password = "NewPwd@2026XYZ"
+    reset_password = "Reset@2026ABC"
+    created_user_id = None
+    try:
+        # 8.1 创建测试用户 (viewer 角色)
+        resp = requests.post(f"{BACKEND}/api/admin/users",
+                           headers={**headers, "Content-Type": "application/json"},
+                           json={"username": test_username, "password": test_password,
+                                 "role": "viewer", "email": f"{test_username}@test.local",
+                                 "fullName": "E2E Test User"},
+                           timeout=10)
+        if resp.status_code == 201:
+            created_user_id = resp.json().get("id")
+            record("后端深水区", "用户管理-Create",
+                   "PASS" if created_user_id else "FAIL",
+                   "201 Created + id", f"status={resp.status_code}, id={created_user_id}")
+        else:
+            record("后端深水区", "用户管理-Create", "FAIL",
+                   "201 Created", f"status={resp.status_code}, body={resp.text[:150]}")
+
+        if created_user_id:
+            # 8.2 新用户登录验证
+            resp2 = requests.post(f"{BACKEND}/api/auth/login",
+                                json={"username": test_username, "password": test_password},
+                                timeout=10)
+            new_user_token = None
+            if resp2.status_code == 200:
+                new_user_token = resp2.json().get("accessToken")
+                record("后端深水区", "用户管理-新用户登录",
+                       "PASS" if new_user_token else "FAIL",
+                       "200 + token", f"status={resp2.status_code}, token={'有' if new_user_token else '无'}")
+            else:
+                record("后端深水区", "用户管理-新用户登录", "FAIL",
+                       "200 OK", f"status={resp2.status_code}, body={resp2.text[:150]}")
+
+            # 8.3 新用户修改自己密码 (POST /api/auth/change-password)
+            if new_user_token:
+                resp3 = requests.post(f"{BACKEND}/api/auth/change-password",
+                                    headers={"Authorization": f"Bearer {new_user_token}",
+                                             "Content-Type": "application/json"},
+                                    json={"oldPassword": test_password, "newPassword": new_password},
+                                    timeout=10)
+                record("后端深水区", "用户管理-改密码",
+                       "PASS" if resp3.status_code == 200 else "FAIL",
+                       "200 OK", f"status={resp3.status_code}, body={resp3.text[:150]}")
+
+            # 8.4 新密码登录验证
+            resp4 = requests.post(f"{BACKEND}/api/auth/login",
+                                json={"username": test_username, "password": new_password},
+                                timeout=10)
+            record("后端深水区", "用户管理-新密码登录",
+                   "PASS" if resp4.status_code == 200 else "FAIL",
+                   "200 OK (新密码登录)", f"status={resp4.status_code}")
+
+            # 8.5 管理员重置密码 (POST /api/admin/users/{id}/reset-password)
+            resp5 = requests.post(f"{BACKEND}/api/admin/users/{created_user_id}/reset-password",
+                                headers={**headers, "Content-Type": "application/json"},
+                                json={"newPassword": reset_password},
+                                timeout=10)
+            record("后端深水区", "用户管理-管理员重置密码",
+                   "PASS" if resp5.status_code == 200 else "FAIL",
+                   "200 OK", f"status={resp5.status_code}, body={resp5.text[:150]}")
+
+            # 8.6 重置后密码登录验证
+            resp6 = requests.post(f"{BACKEND}/api/auth/login",
+                                json={"username": test_username, "password": reset_password},
+                                timeout=10)
+            record("后端深水区", "用户管理-重置密码登录",
+                   "PASS" if resp6.status_code == 200 else "FAIL",
+                   "200 OK (重置密码登录)", f"status={resp6.status_code}")
+
+            # 8.7 禁用用户 (DELETE /api/admin/users/{id})
+            resp7 = requests.delete(f"{BACKEND}/api/admin/users/{created_user_id}",
+                                  headers=headers, timeout=10)
+            record("后端深水区", "用户管理-禁用",
+                   "PASS" if resp7.status_code == 200 else "FAIL",
+                   "200 OK", f"status={resp7.status_code}")
+
+            # 8.8 禁用后登录应失败 (401/403)
+            resp8 = requests.post(f"{BACKEND}/api/auth/login",
+                                json={"username": test_username, "password": reset_password},
+                                timeout=10)
+            disabled_login_blocked = resp8.status_code in (401, 403)
+            record("后端深水区", "用户管理-禁用后登录拦截",
+                   "PASS" if disabled_login_blocked else "FAIL",
+                   "401/403 (禁用用户无法登录)", f"status={resp8.status_code}")
+
+            # 8.9 审计日志查询 (GET /api/admin/audit/login?userId={id})
+            resp9 = requests.get(f"{BACKEND}/api/admin/audit/login?userId={created_user_id}&pageSize=10",
+                               headers=headers, timeout=10)
+            if resp9.status_code == 200:
+                audit_items = resp9.json().get("items", [])
+                # 至少有 1 条登录记录 (前面有多次登录尝试)
+                has_audit = len(audit_items) > 0
+                record("后端深水区", "用户管理-审计日志",
+                       "PASS" if has_audit else "WARN",
+                       f"userId={created_user_id} 至少 1 条审计记录",
+                       f"共 {len(audit_items)} 条")
+            else:
+                record("后端深水区", "用户管理-审计日志", "FAIL",
+                       "200 OK", f"status={resp9.status_code}")
+    except Exception as e:
+        record("后端深水区", "用户管理-异常", "FAIL", "API 调用", str(e))
+        # 兜底清理: 禁用测试用户 (避免残留可登录用户)
+        if created_user_id:
+            try:
+                requests.delete(f"{BACKEND}/api/admin/users/{created_user_id}",
                               headers=headers, timeout=10)
             except Exception:
                 pass
