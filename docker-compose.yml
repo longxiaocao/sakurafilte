@@ -10,6 +10,7 @@
 #     - meilisearch  Meilisearch 搜索引擎
 #     - backend     .NET 8 后端 API
 #     - frontend    Vue 3 前端 (nginx)
+#     - grafana     Grafana 监控面板 (P3-10.3)
 #
 #   离线部署:
 #     1. 在有网环境 docker compose pull + docker compose build
@@ -88,6 +89,8 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    # P3-10.4: image 字段供 Docker Swarm 模式部署使用 (docker stack deploy 需要 image, 不能用 build)
+    image: sakurafilter-backend:latest
     environment:
       - ConnectionStrings__Postgres=Host=postgres;Port=5432;Database=${DB_NAME:-spike_test_v3};Username=${DB_USER:-postgres};Password=${DB_PASSWORD:-784533}
       - MeiliSearch__Endpoint=http://meilisearch:7700
@@ -124,6 +127,19 @@ services:
       timeout: 5s
       retries: 3
       start_period: 60s
+    # P3-10.4: 滚动更新配置 (需 Docker Swarm 模式生效, 单机 compose 不生效)
+    #   WHY start-first: 新实例先启动再停旧实例, 实现零停机
+    #   WHY failure_action rollback: healthcheck 失败自动回滚, 依赖 P1-10.2 健康检查
+    deploy:
+      replicas: 2
+      update_config:
+        order: start-first
+        failure_action: rollback
+        parallelism: 1
+        delay: 10s
+      rollback_config:
+        parallelism: 1
+        order: start-first
 
   frontend:
     build:
@@ -147,6 +163,32 @@ services:
       retries: 3
       start_period: 10s
 
+  # P3-10.3: Grafana 监控面板 (自动导入 dashboard + datasource)
+  #   首次启动后通过 provisioning 自动加载:
+  #     - datasources: Prometheus(backend /metrics) + PostgreSQL(ETL dashboard)
+  #     - dashboards: ETL 运维面板 (sakurafilter-etl-day710)
+  grafana:
+    image: grafana/grafana:11.0.0
+    container_name: sakurafilter-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      # PostgreSQL 数据源凭据 (供 ETL dashboard provisioning 使用)
+      - POSTGRES_DB=${DB_NAME:-spike_test_v3}
+      - POSTGRES_USER=${DB_USER:-postgres}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-784533}
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/provisioning:/etc/grafana/provisioning
+      - ./monitoring/dashboards:/var/lib/grafana/dashboards
+    depends_on:
+      - backend
+    logging: *default-logging
+    restart: unless-stopped
+
 volumes:
   pg_data:
   minio_data:
@@ -154,3 +196,5 @@ volumes:
   # P1-10.1: 日志持久化卷
   backend_logs:
   frontend_logs:
+  # P3-10.3: Grafana 数据持久化
+  grafana_data:
