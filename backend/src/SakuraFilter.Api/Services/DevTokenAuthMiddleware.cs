@@ -114,6 +114,17 @@ public class DevTokenAuthMiddleware
             return;
         }
 
+        // JWT 认证体系: 检测到 Authorization: Bearer 时跳过 X-Admin-Token 校验
+        //   WHY: JWT 与 DevToken 双轨并存期, Bearer 请求由 JwtBearer 中间件处理
+        //        此处放行让 UseAuthorization 接管, 避免 Bearer 请求被 X-Admin-Token 401 拦截
+        //   后续 JWT 全量切换后, DevToken 仅保留 ETL/集成备用
+        var authHeader = ctx.Request.Headers.Authorization.ToString();
+        if (authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+        {
+            await _next(ctx);
+            return;
+        }
+
         // P7.1: 优先用 IAuthTokenStore 当前值 (从 DB 读, 实时反映轮转)
         //   - DB 已加载 (LoadedFromDb=true) → 用 store.Current / store.Previous
         //   - DB 尚未加载 (LoadedFromDb=false) → 用 IConfiguration 兜底

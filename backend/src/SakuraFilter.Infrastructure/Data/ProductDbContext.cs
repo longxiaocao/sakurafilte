@@ -30,6 +30,11 @@ public class ProductDbContext : DbContext
     public DbSet<DictMachine> DictMachines => Set<DictMachine>();     // 多字段 3
     public DbSet<DictEngine> DictEngines => Set<DictEngine>();         // 多字段 2
 
+    // JWT 认证体系 (3 张表: users / refresh_tokens / login_audit_logs)
+    public DbSet<User> Users => Set<User>();
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<LoginAuditLog> LoginAuditLogs => Set<LoginAuditLog>();
+
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
         base.OnConfiguring(optionsBuilder);

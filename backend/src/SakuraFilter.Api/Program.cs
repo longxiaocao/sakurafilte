@@ -3,8 +3,12 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.Routing.Constraints;
 using Microsoft.AspNetCore.HttpOverrides;        // P1-3: ForwardedHeaders
 using Microsoft.AspNetCore.Diagnostics;           // P1-5: IExceptionHandlerFeature
+using Microsoft.AspNetCore.Authentication.JwtBearer;  // JWT: JwtBearerDefaults
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Microsoft.IdentityModel.Tokens;             // JWT: SymmetricSecurityKey/TokenValidationParameters
+using System.Security.Claims;                     // JWT: ClaimTypes
+using System.Text;                                // JWT: Encoding.UTF8
 using Minio;
 using Aliyun.OSS;
 using Npgsql;  // P0-1.3: PostgresException SqlState == "23505" 用于 409 映射
@@ -53,6 +57,61 @@ builder.Services.AddSwaggerGen(c =>
             Array.Empty<string>()
         }
     });
+    // JWT 认证体系: Bearer token 安全定义 (与 X-Admin-Token 并存, 前端可任选)
+    c.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Type = Microsoft.OpenApi.Models.SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT",
+        In = Microsoft.OpenApi.Models.ParameterLocation.Header,
+        Description = "JWT Bearer token. 格式: Bearer {token} (登录 /api/auth/login 获取)"
+    });
+    c.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
+    {
+        {
+            new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+            {
+                Reference = new Microsoft.OpenApi.Models.OpenApiReference
+                {
+                    Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
+            },
+            Array.Empty<string>()
+        }
+    });
+});
+
+// JWT 认证体系: 注册 JwtTokenService (单例) + UserService (Scoped)
+builder.Services.AddSingleton<JwtTokenService>();
+builder.Services.AddScoped<UserService>();
+
+// JWT 认证体系: 配置 JwtBearer 认证 + 角色策略
+//   - SigningKey 从配置读 (环境变量 Jwt__SigningKey 覆盖, 启动期校验 ≥ 32 字符)
+//   - ClockSkew 30s: 容忍时钟漂移 (分布式部署服务器时钟不同步)
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = builder.Configuration["Jwt:Issuer"],
+            ValidAudience = builder.Configuration["Jwt:Audience"],
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(
+                builder.Configuration["Jwt:SigningKey"]
+                    ?? throw new InvalidOperationException("Jwt:SigningKey not configured"))),
+            ClockSkew = TimeSpan.FromSeconds(30)
+        };
+    });
+builder.Services.AddAuthorization(options =>
+{
+    // 角色策略: Admin 仅 admin, Operator 允许 admin+operator
+    options.AddPolicy("Admin", p => p.RequireRole("admin"));
+    options.AddPolicy("Operator", p => p.RequireRole("admin", "operator"));
 });
 
 // PostgreSQL
@@ -323,6 +382,26 @@ else
     noMigrateLogger.LogWarning("Db:AutoMigrateOnStartup=false,跳过自动迁移 (生产配置,需手动执行 dotnet ef database update)");
 }
 
+// JWT 认证体系: 启动期 seed 默认用户 (admin/operator)
+//   - 在迁移之后执行, 确保 users 表已存在
+//   - 仅当 Users 表为空时执行 (首次部署)
+//   - 密码从环境变量 INITIAL_ADMIN_PASSWORD / INITIAL_OPERATOR_PASSWORD 读取 (禁止硬编码)
+//   - 环境变量未设置时跳过并记 Warning, 不阻塞启动
+using (var seedScope = app.Services.CreateScope())
+{
+    var userService = seedScope.ServiceProvider.GetRequiredService<UserService>();
+    var seedLogger = seedScope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    try
+    {
+        await userService.SeedDefaultUsersAsync(CancellationToken.None);
+    }
+    catch (Exception ex)
+    {
+        // 不阻塞启动: seed 失败时仅记错, 后续可通过 CLI 手动创建用户
+        seedLogger.LogError(ex, "默认用户 seed 失败, 不阻塞启动 (后续可手动创建)");
+    }
+}
+
 // P2-7.1: 老环境 (已有数据但无 __EFMigrationsHistory) 自动 seed
 //   WHY: 检测到 __EFMigrationsHistory 不存在时,创建并标记 InitialCreate 为已应用
 //        失败不阻塞启动 — 让后续 MigrateAsync 自行处理 (EF 会按需创建表)
@@ -423,6 +502,12 @@ if (rateLimitConfig.Enabled)
 {
     app.UseRateLimiter();
 }
+// JWT 认证体系: UseAuthentication/UseAuthorization
+//   - 放在 UseCors + UseRateLimiter 之后 (限流先防匿名 DoS, 再做认证)
+//   - 放在 ResponseTimeMiddleware/DevTokenAuthMiddleware 之前 (让后续中间件可读 ctx.User)
+//   - DevTokenAuthMiddleware 已改造: 检测到 Authorization: Bearer 时跳过 X-Admin-Token 校验
+app.UseAuthentication();
+app.UseAuthorization();
 // P5.5: 响应时间埋点 (在鉴权前,记录 401 等异常耗时;中间件自身排除 /api/perf 防止递归)
 app.UseMiddleware<ResponseTimeMiddleware>();
 app.UseMiddleware<DevTokenAuthMiddleware>();
@@ -1080,7 +1165,11 @@ app.MapPost("/api/admin/products", async (ProductFormDto form, AdminProductServi
 {
     try
     {
-        var user = ctx.Request.Headers["X-User"].FirstOrDefault() ?? "system";
+        // JWT 认证体系: 优先读 JWT claims (sub/NameIdentifier), 兜底 X-User header (兼容旧 X-Admin-Token 调用方)
+        var user = ctx.User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                   ?? ctx.User.FindFirst("sub")?.Value
+                   ?? ctx.Request.Headers["X-User"].FirstOrDefault()
+                   ?? "system";
         var p = await svc.CreateAsync(form, user, ct);
         return Results.Created($"/api/admin/products/{p.Id}", p);
     }
@@ -1196,7 +1285,11 @@ app.MapPut("/api/admin/products/{id:long}", async (long id, ProductFormDto form,
 {
     try
     {
-        var user = ctx.Request.Headers["X-User"].FirstOrDefault() ?? "system";
+        // JWT 认证体系: 优先读 JWT claims (sub/NameIdentifier), 兜底 X-User header (兼容旧 X-Admin-Token 调用方)
+        var user = ctx.User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                   ?? ctx.User.FindFirst("sub")?.Value
+                   ?? ctx.Request.Headers["X-User"].FirstOrDefault()
+                   ?? "system";
         var p = await svc.UpdateAsync(id, form, user, ct);
         return Results.Ok(p);
     }
@@ -1221,7 +1314,11 @@ app.MapDelete("/api/admin/products/{id:long}", async (long id, AdminProductServi
 {
     try
     {
-        var user = ctx.Request.Headers["X-User"].FirstOrDefault() ?? "system";
+        // JWT 认证体系: 优先读 JWT claims (sub/NameIdentifier), 兜底 X-User header (兼容旧 X-Admin-Token 调用方)
+        var user = ctx.User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                   ?? ctx.User.FindFirst("sub")?.Value
+                   ?? ctx.Request.Headers["X-User"].FirstOrDefault()
+                   ?? "system";
         await svc.DeleteAsync(id, user, ct);
         return Results.Ok(new { id, discontinued = true });
     }
@@ -1235,7 +1332,11 @@ app.MapPost("/api/admin/products/{id:long}/restore", async (long id, AdminProduc
 {
     try
     {
-        var user = ctx.Request.Headers["X-User"].FirstOrDefault() ?? "system";
+        // JWT 认证体系: 优先读 JWT claims (sub/NameIdentifier), 兜底 X-User header (兼容旧 X-Admin-Token 调用方)
+        var user = ctx.User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                   ?? ctx.User.FindFirst("sub")?.Value
+                   ?? ctx.Request.Headers["X-User"].FirstOrDefault()
+                   ?? "system";
         await svc.RestoreAsync(id, user, ct);
         return Results.Ok(new { id, restored = true });
     }
@@ -1253,7 +1354,11 @@ app.MapPost("/api/admin/products/{id:long}/images/{slot:int}", async (
     var form = await req.ReadFormAsync(ct);
     var file = form.Files.GetFile("file");
     if (file == null) return Results.BadRequest(new { error = "缺 file 字段" });
-    var user = req.Headers["X-User"].FirstOrDefault() ?? "system";
+    // JWT 认证体系: 优先读 JWT claims (sub/NameIdentifier), 兜底 X-User header (兼容旧 X-Admin-Token 调用方)
+    var user = ctx.User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+               ?? ctx.User.FindFirst("sub")?.Value
+               ?? req.Headers["X-User"].FirstOrDefault()
+               ?? "system";
     try
     {
         using var stream = file.OpenReadStream();

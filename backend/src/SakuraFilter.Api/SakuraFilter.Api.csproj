@@ -17,6 +17,9 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="8.0.10" />
     <!-- Day 8.4: 暂用 Swashbuckle Swagger (有缓存),生产部署时换 Scalar.AspNetCore -->
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
+    <!-- JWT 认证体系: BCrypt 密码哈希 + JwtBearer 令牌验证 -->
+    <PackageReference Include="BCrypt.Net-Next" Version="4.0.3" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.10" />
   </ItemGroup>
 
   <ItemGroup>
