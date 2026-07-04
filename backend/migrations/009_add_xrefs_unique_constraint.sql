@@ -1,3 +1,5 @@
+-- 一次性脚本,不可重跑 (P2-7.1 标注)
+-- 原用途: cross_references 表去重 (DELETE 重复行) + 加部分唯一索引 (Day 6 ETL 幂等导入)
 -- 009_add_xrefs_unique_constraint.sql
 -- Day 6: 为 xrefs/apps 加 UNIQUE,支持 ETL 幂等导入(去重)
 -- WHY: 当前 ETL 重跑会无限膨胀 (xrefs 当前 12.5M,多次跑会更大)

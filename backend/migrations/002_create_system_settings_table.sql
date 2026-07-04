@@ -1,3 +1,5 @@
+-- 一次性脚本,不可重跑 (P2-7.1 标注)
+-- 原用途: 创建 system_settings 表并插入种子数据 (Day 4 HistoryCleanupService 依赖)
 -- 002_create_system_settings_table.sql
 -- Day 4 补充: system_settings 表 (HistoryCleanupService 依赖)
 -- 默认永久保留策略,通过此表可由客户在后台配置

@@ -1,3 +1,5 @@
+-- 一次性脚本,不可重跑 (P2-7.1 标注)
+-- 原用途: search_index_dead_letter 加 status 列 + UPDATE 回填 active + 加索引 (Day 7.10.1 死信状态持久化修复)
 -- Day 7.10.1 Bug Fix: 死信恢复元数据持久化
 --   WHY: Day 7.10 初版的 DeadLetterRecoveryService 删除了 dead_letter 行后再设置
 --         recovery_count, EF Core SaveChanges 时清空变更, 导致恢复计数永远丢失。

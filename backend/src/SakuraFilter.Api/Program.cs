@@ -284,23 +284,73 @@ builder.Services.AddScoped<EngineDictService>();
 
 var app = builder.Build();
 
-// Day 9.11: EF Core Migrations 自动应用
-//   WHY: 启动时自动应用待执行迁移,无需手动 SQL,获得 __EFMigrationsHistory 版本追踪
+// P2-7.2: 启动迁移安全化 (生产默认 false,开发 true)
+//   WHY: 原 Day 9.11 无条件 Migrate() 在生产有风险 — DDL 长事务阻塞请求 + 失败立即抛异常终止启动
+//        改为开关控制,生产关闭自动迁移,由 CI/CD 显式执行 dotnet ef database update
+//        开发开启,获得"改模型即可重跑"的便利
 //   现有数据库: InitialCreate 已手动标记为已应用,Migrate 跳过执行,不会 ALTER 现有 schema
 //   全新部署: InitialCreate 执行 Up 创建所有表
 //   并发安全: Migrate 内部用 PostgreSQL advisory lock 保护,多实例并发安全
-//   异常处理: 失败立即抛出终止启动,避免带病运行
-try
+var autoMigrate = builder.Configuration.GetValue<bool>("Db:AutoMigrateOnStartup");
+if (autoMigrate)
 {
     using var migrateScope = app.Services.CreateScope();
-    var migrateDb = migrateScope.ServiceProvider.GetRequiredService<ProductDbContext>();
-    migrateDb.Database.Migrate();
-    app.Logger.LogInformation("数据库迁移检查完成");
+    var db = migrateScope.ServiceProvider.GetRequiredService<ProductDbContext>();
+    db.Database.SetCommandTimeout(60);  // P2-7.2: 长 DDL 操作超时保护 (CREATE INDEX ON 1M 行可能 > 30s)
+    var migrateLogger = migrateScope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+
+    // P2-7.1: 老环境 (已有数据但无 __EFMigrationsHistory) 自动 seed
+    //   WHY: 老环境表已存在但无 __EFMigrationsHistory,直接 Migrate 会重跑 InitialCreate 触发 CREATE TABLE 报错
+    await EnsureEfmigrationsHistorySeededAsync(db, migrateLogger);
+
+    // P2-7.2: 检查 pending migrations,无 pending 时跳过 (避免无谓事务)
+    var pendingMigrations = await db.Database.GetPendingMigrationsAsync();
+    if (pendingMigrations.Any())
+    {
+        migrateLogger.LogInformation("检测到 {Count} 个 pending migrations: {Migrations}",
+            pendingMigrations.Count(), string.Join(", ", pendingMigrations));
+        await db.Database.MigrateAsync();
+        migrateLogger.LogInformation("迁移完成");
+    }
+    else
+    {
+        migrateLogger.LogInformation("无 pending migrations,跳过迁移");
+    }
 }
-catch (Exception ex)
+else
 {
-    app.Logger.LogError(ex, "数据库迁移失败,应用启动终止");
-    throw;
+    var noMigrateLogger = app.Services.GetRequiredService<ILogger<Program>>();
+    noMigrateLogger.LogWarning("Db:AutoMigrateOnStartup=false,跳过自动迁移 (生产配置,需手动执行 dotnet ef database update)");
+}
+
+// P2-7.1: 老环境 (已有数据但无 __EFMigrationsHistory) 自动 seed
+//   WHY: 检测到 __EFMigrationsHistory 不存在时,创建并标记 InitialCreate 为已应用
+//        失败不阻塞启动 — 让后续 MigrateAsync 自行处理 (EF 会按需创建表)
+static async Task EnsureEfmigrationsHistorySeededAsync(ProductDbContext db, ILogger logger)
+{
+    try
+    {
+        var exists = await db.Database.ExecuteSqlRawAsync(
+            "SELECT 1 FROM information_schema.tables WHERE table_name = '__EFMigrationsHistory'") > 0;
+        if (!exists)
+        {
+            logger.LogInformation("__EFMigrationsHistory 表不存在,创建并标记 InitialCreate 为已应用 (老环境兼容)");
+            await db.Database.ExecuteSqlRawAsync(@"
+                CREATE TABLE IF NOT EXISTS ""__EFMigrationsHistory"" (
+                    ""MigrationId"" character varying(150) NOT NULL,
+                    ""ProductVersion"" character varying(32) NOT NULL,
+                    CONSTRAINT ""PK___EFMigrationsHistory"" PRIMARY KEY (""MigrationId"")
+                );");
+            await db.Database.ExecuteSqlRawAsync(@"
+                INSERT INTO ""__EFMigrationsHistory"" (""MigrationId"", ""ProductVersion"")
+                VALUES ('InitialCreate', '8.0.0')
+                ON CONFLICT DO NOTHING;");
+        }
+    }
+    catch (Exception ex)
+    {
+        logger.LogWarning(ex, "EnsureEfmigrationsHistorySeededAsync 失败,继续执行迁移 (EF 会自行处理)");
+    }
 }
 
 // Day 9.6: 启动 ETL 跨实例广播器 (PG LISTEN 后台 task)

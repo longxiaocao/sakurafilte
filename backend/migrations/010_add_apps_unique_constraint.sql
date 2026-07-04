@@ -1,3 +1,5 @@
+-- 一次性脚本,不可重跑 (P2-7.1 标注)
+-- 原用途: machine_applications 表去重 (DELETE 重复行) + 加部分唯一索引 (Day 6 ETL 幂等导入)
 -- 010_add_apps_unique_constraint.sql
 -- Day 6: machine_applications 加 UNIQUE(product_id, brand, model)
 -- WHY: ETL 重复跑需要幂等去重
