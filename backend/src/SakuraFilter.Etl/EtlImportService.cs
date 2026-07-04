@@ -503,11 +503,14 @@ public class EtlImportService
     /// <summary>设置 _pausedFlag=1, 请求当前 ETL 暂停 (admin 调 Pause API 时)</summary>
     public bool PauseActiveTask()
     {
-        if (_activeCts == null || _activeCts.IsCancellationRequested)
-            return false;
-        Interlocked.Exchange(ref _pausedFlag, 1);
-        _logger.LogInformation("ETL 任务暂停信号已发送 entity={Entity}", _activeTaskEntity);
-        return true;
+        lock (_ctsLock)
+        {
+            if (_activeCts == null || _activeCts.IsCancellationRequested)
+                return false;
+            Interlocked.Exchange(ref _pausedFlag, 1);
+            _logger.LogInformation("ETL 任务暂停信号已发送 entity={Entity}", _activeTaskEntity);
+            return true;
+        }
     }
 
     /// <summary>内部: 批次循环检测 _pausedFlag, 命中则请求暂停</summary>
@@ -1036,10 +1039,17 @@ public class EtlImportService
         //        其他异常才走 Fail
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
-            Progress.Cancel(_activeCancelReason ?? "用户取消", _activeCancelReasonCode ?? "OTHER");
+            string reason;
+            string reasonCode;
+            lock (_ctsLock)
+            {
+                reason = _activeCancelReason ?? "用户取消";
+                reasonCode = _activeCancelReasonCode ?? "OTHER";
+            }
+            Progress.Cancel(reason, reasonCode);
             _ = Progress.PersistLogAsync("products", mode);  // 不 await: 写日志失败不阻塞取消信号
             _logger.LogInformation("ETL products 任务被用户取消, reason={Reason} code={Code}",
-                _activeCancelReason, _activeCancelReasonCode);
+                reason, reasonCode);
         }
         catch (Exception ex)
         {
@@ -1282,10 +1292,17 @@ public class EtlImportService
         // Day 9.4: 区分取消与失败 (同 products, 见 ImportProductsAsync 注释)
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
-            Progress.Cancel(_activeCancelReason ?? "用户取消", _activeCancelReasonCode ?? "OTHER");
+            string reason;
+            string reasonCode;
+            lock (_ctsLock)
+            {
+                reason = _activeCancelReason ?? "用户取消";
+                reasonCode = _activeCancelReasonCode ?? "OTHER";
+            }
+            Progress.Cancel(reason, reasonCode);
             _ = Progress.PersistLogAsync("xrefs", mode);
             _logger.LogInformation("ETL xrefs 任务被用户取消, reason={Reason} code={Code}",
-                _activeCancelReason, _activeCancelReasonCode);
+                reason, reasonCode);
         }
         catch (Exception ex)
         {
@@ -1717,10 +1734,17 @@ public class EtlImportService
         // Day 9.4: 区分取消与失败 (同 products, 见 ImportProductsAsync 注释)
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
-            Progress.Cancel(_activeCancelReason ?? "用户取消", _activeCancelReasonCode ?? "OTHER");
+            string reason;
+            string reasonCode;
+            lock (_ctsLock)
+            {
+                reason = _activeCancelReason ?? "用户取消";
+                reasonCode = _activeCancelReasonCode ?? "OTHER";
+            }
+            Progress.Cancel(reason, reasonCode);
             _ = Progress.PersistLogAsync("apps", mode);
             _logger.LogInformation("ETL apps 任务被用户取消, reason={Reason} code={Code}",
-                _activeCancelReason, _activeCancelReasonCode);
+                reason, reasonCode);
         }
         catch (Exception ex)
         {
