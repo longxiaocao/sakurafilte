@@ -47,9 +47,36 @@ public class AuthController : ControllerBase
     /// 出参: { accessToken, refreshToken, expiresIn, user: { id, username, role } }
     /// 失败返回 401 (统一错误信息, 不暴露具体原因)
     /// </summary>
+    /// <remarks>
+    /// 示例请求:
+    ///
+    ///     POST /api/auth/login
+    ///     {
+    ///       "username": "admin",
+    ///       "password": "Admin@2026"
+    ///     }
+    ///
+    /// 成功响应 (200):
+    ///
+    ///     {
+    ///       "accessToken": "eyJhbGciOiJIUzI1NiIs...",
+    ///       "refreshToken": "3F0fPsvbU4c05XvxVBU1...",
+    ///       "expiresIn": 1800,
+    ///       "user": { "id": 1, "username": "admin", "role": "admin" }
+    ///     }
+    ///
+    /// 失败响应:
+    /// - 401: 用户名或密码错误 (统一错误码 ERR_AUTH_FAILED)
+    /// - 423: 账户已锁定 (ERR_USER_LOCKED, 5 次失败后锁 15 分钟)
+    /// - 429: 请求过于频繁 (限流 5 次/分钟/IP)
+    /// </remarks>
     [HttpPost("login")]
     [AllowAnonymous]
     [EnableRateLimiting("auth")]  // 安全加固阶段4: 登录防暴力破解 (5 次/分钟/IP)
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status423Locked)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
     public async Task<IActionResult> Login([FromBody] LoginRequest req, CancellationToken ct)
     {
         // 安全加固阶段4: FluentValidation 输入校验 (在业务逻辑前执行)

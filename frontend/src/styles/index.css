@@ -20,18 +20,30 @@
 }
 
 /* P5.3 dark 主题: <html class="dark"> 时覆盖 CSS 变量 */
+/* P2.7: Vercel 风格细腻梯度 — 三层背景 (bg / bg-elevated / bg-hover) 层次分明 */
 html.dark {
   --color-border: #2a2d35;
   --color-text: #f5f5f7;
   --color-text-muted: #8b8d94;
   --color-accent: #60a5fa;
+  /* P2.7: bg 最深 (#0a0a0c) - 主背景, 突出内容区 */
   --color-bg: #0a0a0c;
+  /* P2.7: bg-hover 中间 (#18181b) - hover/分页/次要区域 */
   --color-bg-hover: #18181b;
+  /* P2.7: bg-elevated 中间偏亮 (#131318) - 卡片/弹窗/表格 */
   --color-bg-elevated: #131318;
-  --color-bg-table-stripe: #131318;
+  /* P2.7: 表格条纹背景, 比 elevated 略亮一档 */
+  --color-bg-table-stripe: #16161a;
+  /* P2.7: 对比高亮 (diff 新增行) - 暖色调 */
   --color-bg-diff: #3d3520;
+  /* P2.7: 对比相同行 - 略亮于 bg */
   --color-bg-same: #1a1a1f;
   --color-shadow: transparent;
+  /* P2.7: 新增层级变量 (用于下拉菜单/Tooltip/Modal 等更高层级) */
+  --color-bg-overlay: #1c1c22;
+  --color-bg-input: #0f0f12;
+  --color-border-strong: #3a3d45;
+  --color-border-subtle: #1f1f24;
 }
 
 html, body, #app {
@@ -69,6 +81,95 @@ body {
   }
   .bg-hover:hover {
     background: var(--color-bg-hover);
+  }
+
+  /* P1.1 微交互动效工具类 (Vercel/Linear 风格) */
+  /* 用法: 在按钮/卡片/链接上加 .micro-hover 类, 自动获得 hover 反馈 */
+  .micro-hover {
+    transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .micro-hover:hover {
+    background: var(--color-bg-hover);
+    border-color: var(--color-accent);
+  }
+
+  /* 卡片悬浮效果 (轻微抬起, 不破坏 Musk 无阴影原则) */
+  .micro-card {
+    transition: border-color 0.15s ease, transform 0.15s ease;
+  }
+  .micro-card:hover {
+    border-color: var(--color-accent);
+    transform: translateY(-1px);
+  }
+
+  /* 按钮点击反馈 (轻微缩小) */
+  .micro-press {
+    transition: transform 0.1s ease;
+  }
+  .micro-press:active {
+    transform: scale(0.97);
+  }
+
+  /* 链接 hover 颜色过渡 */
+  .micro-link {
+    transition: color 0.15s ease;
+  }
+  .micro-link:hover {
+    color: var(--color-accent);
+  }
+
+  /* 列表项 hover 高亮 (左侧 1px 强调线) */
+  .micro-row {
+    transition: background 0.15s ease, border-color 0.15s ease;
+    border-left: 2px solid transparent;
+  }
+  .micro-row:hover {
+    background: var(--color-bg-hover);
+    border-left-color: var(--color-accent);
+  }
+
+  /* 数字字段过渡 (容差切换时数字变化柔和) */
+  .micro-num {
+    transition: color 0.2s ease;
+  }
+}
+
+/* P1.1 全局过渡: 让所有交互元素默认有过渡 (避免硬切换) */
+button,
+a,
+input,
+select,
+textarea,
+.el-button,
+.el-input__wrapper,
+.el-select .el-input__wrapper {
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 焦点可见性: 键盘导航时显示明确焦点环 (A11y) */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* Element Plus 按钮点击反馈增强 */
+.el-button:active {
+  transform: scale(0.98);
+}
+
+/* el-table 行 hover 效果 (Vercel 风格: 左侧强调线) */
+.el-table__row {
+  transition: background 0.15s ease;
+}
+
+/* prefers-reduced-motion: 尊重用户偏好, 关闭所有动画 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }
 

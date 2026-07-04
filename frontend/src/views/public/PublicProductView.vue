@@ -12,6 +12,7 @@ import { ref, onMounted, computed, watch, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { productApi } from '@/api'
 import type { ProductDetail } from '@/api/types'
+import SkeletonCard from '@/components/SkeletonCard.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -146,26 +147,38 @@ function numOrDash(v?: number | string) {
 
 <template>
   <!-- 工业极简融合风: 大字号 + 大留白 + 1px hairline + 数字驱动 -->
-  <div class="p-4 md:p-8 max-w-7xl mx-auto" v-loading="loading">
+  <div class="p-4 md:p-8 max-w-7xl mx-auto">
     <!-- 顶部细条: 返回 + OEM + 状态徽章 -->
     <div class="flex items-center gap-3 mb-6 text-xs text-muted">
-      <button @click="goBack" class="hover:text-[var(--color-accent)] flex items-center gap-1">
-        <span>←</span> 返回
+      <button
+        @click="goBack"
+        class="hover:text-[var(--color-accent)] flex items-center gap-1"
+        aria-label="返回上一页"
+      >
+        <span aria-hidden="true">←</span> 返回
       </button>
-      <span class="text-[var(--color-border)]">/</span>
+      <span class="text-[var(--color-border)]" aria-hidden="true">/</span>
       <span v-if="data" class="font-mono">{{ data.oemNoDisplay }}</span>
       <template v-if="data">
-        <span class="text-[var(--color-border)]">·</span>
+        <span class="text-[var(--color-border)]" aria-hidden="true">·</span>
         <span>{{ data.type }}</span>
         <span v-if="data.isPublished" class="hairline px-2 py-0.5 text-[10px] uppercase tracking-wider">已发布</span>
         <span v-if="data.isDiscontinued" class="hairline px-2 py-0.5 text-[10px] uppercase tracking-wider text-muted">已停售</span>
       </template>
     </div>
 
-    <div v-if="err" class="text-red-600 text-sm mb-6 hairline-l border-l-red-600 pl-3">{{ err }}</div>
+    <div
+      v-if="err"
+      class="text-red-600 text-sm mb-6 hairline-l border-l-red-600 pl-3"
+      role="alert"
+      aria-live="assertive"
+    >{{ err }}</div>
+
+    <!-- P1.2 骨架屏: 加载期间展示详情骨架, 提升感知性能 -->
+    <SkeletonCard v-if="loading && !data" variant="detail" />
 
     <!-- ===== Hero 区: 左图 5/12 + 右关键信息 7/12 ===== -->
-    <section v-if="data" class="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 mb-12">
+    <section v-if="data" class="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 mb-12" role="region" aria-label="产品关键信息">
       <!-- 左: 主图 + 缩略图列表 -->
       <div class="lg:col-span-5">
         <div class="hairline bg-[var(--color-bg-elevated)] aspect-square flex items-center justify-center overflow-hidden">

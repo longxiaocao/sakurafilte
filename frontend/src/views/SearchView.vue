@@ -17,6 +17,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { searchApi } from '@/api'
 import type { SearchResult, SearchHit, BatchOemResult } from '@/api/types'
+import EmptyState from '@/components/EmptyState.vue'
 
 const router = useRouter()
 
@@ -227,10 +228,12 @@ onBeforeUnmount(() => {
             clearable
             size="large"
             style="max-width: 480px"
+            aria-label="搜索关键词输入框"
+            role="searchbox"
             @keyup.enter="doSearch"
           >
             <template #prefix>
-              <el-icon><Search /></el-icon>
+              <el-icon aria-hidden="true"><Search /></el-icon>
             </template>
           </el-input>
           <!-- Task 9 (P3.1): 尺寸容差下拉, ±1/±5/±10, 用 el-popover 包裹加性能提示 -->
@@ -245,6 +248,7 @@ onBeforeUnmount(() => {
                 v-model="tolerance"
                 size="large"
                 style="width: 168px"
+                aria-label="尺寸容差选择 (±1/±5/±10 毫米)"
               >
                 <el-option label="±1mm (精确)" :value="1" />
                 <el-option label="±5mm (推荐)" :value="5" />
@@ -259,38 +263,61 @@ onBeforeUnmount(() => {
               </div>
             </div>
           </el-popover>
-          <el-button type="primary" size="large" @click="doSearch" :loading="loading">搜索</el-button>
-          <span v-if="provider" class="text-xs text-muted">provider: {{ provider }}</span>
+          <el-button
+            type="primary"
+            size="large"
+            @click="doSearch"
+            :loading="loading"
+            aria-label="执行搜索"
+          >搜索</el-button>
+          <span v-if="provider" class="text-xs text-muted" aria-label="搜索引擎提供方">provider: {{ provider }}</span>
         </div>
 
         <!-- Task 9 (P3.1): 容差切换结果数变化提示, 仅在切换后短暂出现 -->
         <div
           v-if="toleranceHint && q"
           class="text-xs text-muted mb-2"
+          role="status"
+          aria-live="polite"
         >
           {{ toleranceHint }}
         </div>
 
-        <div v-if="lastError" class="text-red-600 text-sm mb-2">{{ lastError }}</div>
+        <div v-if="lastError" class="text-red-600 text-sm mb-2" role="alert" aria-live="assertive">{{ lastError }}</div>
 
-        <div v-if="!q" class="py-12 text-center text-muted">
-          <el-icon class="text-4xl mb-2"><Search /></el-icon>
-          <div>输入关键词开始搜索</div>
-          <div class="text-xs mt-2">支持 OEM 编号、产品名、车型等</div>
+        <div v-if="!q" class="py-12 text-center text-muted" role="status" aria-label="等待搜索输入">
+          <EmptyState
+            type="empty"
+            title="输入关键词开始搜索"
+            description="支持 OEM 编号、产品名、车型等"
+          />
         </div>
 
         <!-- 修复: 已输入未搜索的中间状态, 避免立即显示"暂无结果" -->
-        <div v-else-if="q && !searched" class="py-12 text-center text-muted">
-          <el-icon class="text-4xl mb-2"><Search /></el-icon>
-          <div>点击搜索按钮或按回车查询</div>
-          <div class="text-xs mt-2">当前关键词: {{ q }}</div>
+        <div v-else-if="q && !searched" class="py-12 text-center text-muted" role="status">
+          <EmptyState
+            type="empty"
+            title="点击搜索按钮或按回车查询"
+            :description="`当前关键词: ${q}`"
+          />
         </div>
 
-        <div v-else-if="searched && hits.length === 0 && !loading" class="py-12 text-center text-muted">
-          暂无结果
+        <div
+          v-else-if="searched && hits.length === 0 && !loading"
+          class="py-12 text-center text-muted"
+          role="status"
+          aria-live="polite"
+          aria-label="搜索无结果"
+        >
+          <EmptyState
+            type="no-result"
+            :description="`未找到与 ${q} 相关的产品, 请尝试其他关键词`"
+            action-text="清空重试"
+            @action="q = ''; searched = false"
+          />
         </div>
 
-        <div v-else class="hairline">
+        <div v-else class="hairline" role="region" aria-label="搜索结果列表">
           <div class="hairline-b px-2 py-1 bg-[var(--color-bg-hover)] text-xs text-muted flex items-center">
             <span>共 {{ total }} 条结果 (容差 ±{{ tolerance }}mm)</span>
             <span class="ml-2">(显示前 {{ hits.length }} 条)</span>

@@ -5,11 +5,14 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAdminAuth } from '@/composables/useAdminAuth'
 import { useThemeStore } from '@/stores/theme'  // P5.3
 import { authApi } from '@/api'
+import { useI18n } from 'vue-i18n'  // P2.6
+import { setLocale } from '@/i18n'  // P2.6
 
 const route = useRoute()
 const router = useRouter()
 const { isAdmin, user, refreshToken, clearAuth } = useAdminAuth()
 const theme = useThemeStore()  // P5.3
+const { locale, t } = useI18n()  // P2.6
 
 const isAdminPath = computed(() => route.path.startsWith('/admin'))
 
@@ -119,12 +122,22 @@ async function handleLogout() {
 // el-dropdown 触发方式: hover / click
 const dictTrigger = 'click'
 const userTrigger = 'click'
+
+// P2.6: 语言切换 (中英双语)
+function toggleLocale() {
+  const next = locale.value === 'zh-CN' ? 'en-US' : 'zh-CN'
+  setLocale(next)
+  ElMessage.success(next === 'zh-CN' ? '已切换到中文' : 'Switched to English')
+}
 </script>
 
 <template>
-  <header class="hairline-b bg-[var(--color-bg)] flex items-center px-3 h-12 gap-3">
+  <header
+    class="hairline-b bg-[var(--color-bg)] flex items-center px-3 h-12 gap-3"
+    role="banner"
+  >
     <div class="font-medium text-base tracking-tight">SakuraFilter</div>
-    <nav class="flex items-center gap-1 ml-3">
+    <nav class="flex items-center gap-1 ml-3" aria-label="主导航">
       <template v-for="item in navItems" :key="item.label">
         <!-- Day 10+: 字典管理下拉 (P1.3 + P2.2 共 8 个) -->
         <el-dropdown
@@ -137,10 +150,12 @@ const userTrigger = 'click'
               'px-2 py-1 text-sm hover:bg-neutral-100',
               route.path.startsWith('/admin/dict/') ? 'text-accent font-medium' : 'text-neutral-700'
             ]"
+            :aria-label="`展开${item.label}下拉菜单`"
+            :aria-expanded="false"
           >
-            <el-icon class="mr-1"><component :is="item.icon" /></el-icon>
+            <el-icon class="mr-1" aria-hidden="true"><component :is="item.icon" /></el-icon>
             {{ item.label }}
-            <el-icon class="ml-1"><ArrowDown /></el-icon>
+            <el-icon class="ml-1" aria-hidden="true"><ArrowDown /></el-icon>
           </button>
           <template #dropdown>
             <el-dropdown-menu>
@@ -162,8 +177,10 @@ const userTrigger = 'click'
             'px-2 py-1 text-sm hover:bg-neutral-100',
             item.path && route.path === item.path ? 'text-accent font-medium' : 'text-neutral-700'
           ]"
+          :aria-label="item.label"
+          :aria-current="item.path && route.path === item.path ? 'page' : undefined"
         >
-          <el-icon class="mr-1"><component :is="item.icon" /></el-icon>
+          <el-icon class="mr-1" aria-hidden="true"><component :is="item.icon" /></el-icon>
           {{ item.label }}
         </button>
       </template>
@@ -175,9 +192,20 @@ const userTrigger = 'click'
       class="px-2 py-1 text-sm hairline hover:bg-neutral-100 flex items-center gap-1"
       :title="theme.mode === 'dark' ? '切换到浅色' : '切换到深色'"
       aria-label="主题切换"
+      :aria-pressed="theme.mode === 'dark'"
     >
-      <el-icon><Moon v-if="theme.mode === 'light'" /><Sunny v-else /></el-icon>
+      <el-icon aria-hidden="true"><Moon v-if="theme.mode === 'light'" /><Sunny v-else /></el-icon>
       <span class="hidden sm:inline">{{ theme.mode === 'dark' ? '深色' : '浅色' }}</span>
+    </button>
+    <!-- P2.6: 语言切换按钮 (中英双语) -->
+    <button
+      @click="toggleLocale"
+      class="px-2 py-1 text-sm hairline hover:bg-neutral-100 flex items-center gap-1"
+      :aria-label="`切换语言, 当前 ${locale === 'zh-CN' ? '中文' : 'English'}`"
+      title="切换语言"
+    >
+      <el-icon aria-hidden="true"><Promotion /></el-icon>
+      <span class="hidden sm:inline">{{ locale === 'zh-CN' ? '中' : 'EN' }}</span>
     </button>
     <!-- JWT 改造: 用户菜单 (已登录显示 el-dropdown, 未登录显示进入后台按钮) -->
     <el-dropdown
@@ -185,8 +213,12 @@ const userTrigger = 'click'
       :trigger="userTrigger"
       @command="onUserCommand"
     >
-      <button class="px-2 py-1 text-sm hairline hover:bg-neutral-100 flex items-center gap-1">
-        <el-icon><User /></el-icon>
+      <button
+        class="px-2 py-1 text-sm hairline hover:bg-neutral-100 flex items-center gap-1"
+        :aria-label="`用户菜单: ${user.username}, 角色 ${user.role}`"
+        :aria-expanded="false"
+      >
+        <el-icon aria-hidden="true"><User /></el-icon>
         <span>{{ user.username }}</span>
         <el-tag
           size="small"
@@ -195,7 +227,7 @@ const userTrigger = 'click'
         >
           {{ user.role }}
         </el-tag>
-        <el-icon class="ml-1"><ArrowDown /></el-icon>
+        <el-icon class="ml-1" aria-hidden="true"><ArrowDown /></el-icon>
       </button>
       <template #dropdown>
         <el-dropdown-menu>
@@ -208,8 +240,9 @@ const userTrigger = 'click'
       v-else
       @click="toggleAdmin"
       class="px-2 py-1 text-sm hairline hover:bg-neutral-100 flex items-center gap-1"
+      :aria-label="isAdminPath ? '退出后台' : '进入后台登录'"
     >
-      <el-icon><Lock v-if="!isAdminPath" /><Unlock v-else /></el-icon>
+      <el-icon aria-hidden="true"><Lock v-if="!isAdminPath" /><Unlock v-else /></el-icon>
       {{ isAdminPath ? '退出后台' : '进入后台' }}
     </button>
   </header>

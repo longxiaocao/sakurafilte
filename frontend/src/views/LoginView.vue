@@ -62,13 +62,17 @@ async function handleLogin() {
 
 <template>
   <div class="login-page min-h-screen flex items-center justify-center p-4 bg-[var(--color-bg)]">
-    <div class="login-card w-full max-w-sm hairline p-8 bg-[var(--color-bg-elevated)]">
+    <div
+      class="login-card w-full max-w-sm hairline p-8 bg-[var(--color-bg-elevated)]"
+      role="main"
+      aria-label="登录表单区域"
+    >
       <div class="text-center mb-6">
         <h1 class="text-2xl font-medium tracking-tight">SakuraFilter</h1>
         <p class="text-sm text-muted mt-1">后台管理系统</p>
       </div>
 
-      <form class="space-y-4" @submit.prevent="handleLogin">
+      <form class="space-y-4" @submit.prevent="handleLogin" aria-label="管理员登录">
         <div>
           <label class="block text-sm mb-1" for="login-username">用户名</label>
           <el-input
@@ -78,6 +82,8 @@ async function handleLogin() {
             size="large"
             :prefix-icon="User"
             autocomplete="username"
+            aria-label="用户名输入框"
+            aria-required="true"
           />
         </div>
         <div>
@@ -91,15 +97,26 @@ async function handleLogin() {
             show-password
             :prefix-icon="Lock"
             autocomplete="current-password"
+            aria-label="密码输入框"
+            aria-required="true"
             @keyup.enter="handleLogin"
           />
         </div>
-        <el-alert v-if="errorMsg" :title="errorMsg" type="error" :closable="false" />
+        <el-alert
+          v-if="errorMsg"
+          :title="errorMsg"
+          type="error"
+          :closable="false"
+          role="alert"
+          aria-live="assertive"
+        />
         <el-button
           type="primary"
           size="large"
           class="w-full"
           :loading="loading"
+          :aria-busy="loading"
+          aria-label="提交登录"
           @click="handleLogin"
         >
           登录

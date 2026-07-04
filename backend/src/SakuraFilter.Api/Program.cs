@@ -37,7 +37,42 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddControllers();
 builder.Services.AddSwaggerGen(c =>
 {
-    c.SwaggerDoc("v1", new() { Title = "SakuraFilter API", Version = "0.4.0" });
+    c.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo
+    {
+        Title = "SakuraFilter API",
+        Version = "1.0.0",
+        Description = "工业/汽车滤清器产品管理平台 API\r\n\r\n" +
+                      "## 模块说明\r\n" +
+                      "- **认证**: JWT 登录/刷新/登出/用户管理\r\n" +
+                      "- **公开搜索**: 前台产品搜索/详情 (无需认证)\r\n" +
+                      "- **后台产品管理**: CRUD (需 admin 角色)\r\n" +
+                      "- **字典管理**: 8 类字典 CRUD (需认证)\r\n" +
+                      "- **ETL**: 数据导入/状态/进度 (X-Admin-Token)\r\n" +
+                      "- **运维**: 健康检查/指标/性能告警\r\n\r\n" +
+                      "## 认证方式\r\n" +
+                      "1. **JWT Bearer** (推荐): 登录 /api/auth/login 获取 token, 放入 Authorization: Bearer {token}\r\n" +
+                      "2. **X-Admin-Token** (ETL/CI 备用): 放入 X-Admin-Token: {token}",
+        Contact = new Microsoft.OpenApi.Models.OpenApiContact
+        {
+            Name = "SakuraFilter Team",
+            Email = "admin@sakurafilter.dev"
+        },
+        License = new Microsoft.OpenApi.Models.OpenApiLicense
+        {
+            Name = "Proprietary"
+        }
+    });
+
+    // P1.3: Tag 分组排序 (按业务模块分组, 便于 Swagger UI 浏览)
+    c.TagActionsBy(api =>
+    {
+        if (!string.IsNullOrEmpty(api.GroupName)) return new[] { api.GroupName };
+        api.ActionDescriptor.RouteValues.TryGetValue("controller", out var c);
+        return new[] { c ?? "Default" };
+    });
+    c.DocInclusionPredicate((_, _) => true);
+
+    // X-Admin-Token (ETL/CI 专用)
     c.AddSecurityDefinition("X-Admin-Token", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
     {
         Name = "X-Admin-Token",
