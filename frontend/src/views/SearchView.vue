@@ -18,8 +18,10 @@ import { ElMessage } from 'element-plus'
 import { searchApi } from '@/api'
 import type { SearchResult, SearchHit, BatchOemResult } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
+import { useI18n } from 'vue-i18n'
 
 const router = useRouter()
+const { t } = useI18n()
 
 const q = ref('')
 // 修复: searched 标志位 — 区分"已输入未搜索"与"已搜索无结果"两种状态
@@ -224,11 +226,11 @@ onBeforeUnmount(() => {
         <div class="flex items-center gap-2 mb-3 flex-wrap">
           <el-input
             v-model="q"
-            placeholder="搜索 OEM / 名称 / 车型..."
+            :placeholder="t('search.placeholder')"
             clearable
             size="large"
             style="max-width: 480px"
-            aria-label="搜索关键词输入框"
+            :aria-label="t('common.search')"
             role="searchbox"
             @keyup.enter="doSearch"
           >
@@ -248,19 +250,16 @@ onBeforeUnmount(() => {
                 v-model="tolerance"
                 size="large"
                 style="width: 168px"
-                aria-label="尺寸容差选择 (±1/±5/±10 毫米)"
+                :aria-label="t('search.tolerance')"
               >
-                <el-option label="±1mm (精确)" :value="1" />
-                <el-option label="±5mm (推荐)" :value="5" />
-                <el-option label="±10mm (宽松)" :value="10" />
+                <el-option :label="t('search.tolerance1')" :value="1" />
+                <el-option :label="t('search.tolerance5')" :value="5" />
+                <el-option :label="t('search.tolerance10')" :value="10" />
               </el-select>
             </template>
             <div class="text-xs leading-relaxed">
-              <div class="font-medium mb-1">尺寸容差</div>
-              <div class="text-muted">
-                切换容差会显著影响搜索速度 (10mm 比 1mm 慢 5-10 倍),
-                默认 ±5mm 是大多数场景的平衡点。
-              </div>
+              <div class="font-medium mb-1">{{ t('search.tolerance') }}</div>
+              <div class="text-muted">{{ t('search.toleranceDesc') }}</div>
             </div>
           </el-popover>
           <el-button
@@ -268,9 +267,9 @@ onBeforeUnmount(() => {
             size="large"
             @click="doSearch"
             :loading="loading"
-            aria-label="执行搜索"
-          >搜索</el-button>
-          <span v-if="provider" class="text-xs text-muted" aria-label="搜索引擎提供方">provider: {{ provider }}</span>
+            :aria-label="t('common.search')"
+          >{{ t('common.search') }}</el-button>
+          <span v-if="provider" class="text-xs text-muted" :aria-label="t('search.provider', { provider })">{{ t('search.provider', { provider }) }}</span>
         </div>
 
         <!-- Task 9 (P3.1): 容差切换结果数变化提示, 仅在切换后短暂出现 -->
@@ -285,11 +284,11 @@ onBeforeUnmount(() => {
 
         <div v-if="lastError" class="text-red-600 text-sm mb-2" role="alert" aria-live="assertive">{{ lastError }}</div>
 
-        <div v-if="!q" class="py-12 text-center text-muted" role="status" aria-label="等待搜索输入">
+        <div v-if="!q" class="py-12 text-center text-muted" role="status" :aria-label="t('search.startSearch')">
           <EmptyState
             type="empty"
-            title="输入关键词开始搜索"
-            description="支持 OEM 编号、产品名、车型等"
+            :title="t('search.startSearch')"
+            :description="t('search.startSearchDesc')"
           />
         </div>
 
@@ -297,8 +296,8 @@ onBeforeUnmount(() => {
         <div v-else-if="q && !searched" class="py-12 text-center text-muted" role="status">
           <EmptyState
             type="empty"
-            title="点击搜索按钮或按回车查询"
-            :description="`当前关键词: ${q}`"
+            :title="t('search.clickToSearch')"
+            :description="t('search.currentKeyword', { q })"
           />
         </div>
 
@@ -307,20 +306,20 @@ onBeforeUnmount(() => {
           class="py-12 text-center text-muted"
           role="status"
           aria-live="polite"
-          aria-label="搜索无结果"
+          :aria-label="t('common.noResult')"
         >
           <EmptyState
             type="no-result"
-            :description="`未找到与 ${q} 相关的产品, 请尝试其他关键词`"
-            action-text="清空重试"
+            :description="t('search.noResult', { q })"
+            :action-text="t('search.clearRetry')"
             @action="q = ''; searched = false"
           />
         </div>
 
-        <div v-else class="hairline" role="region" aria-label="搜索结果列表">
+        <div v-else class="hairline" role="region" :aria-label="t('common.search')">
           <div class="hairline-b px-2 py-1 bg-[var(--color-bg-hover)] text-xs text-muted flex items-center">
-            <span>共 {{ total }} 条结果 (容差 ±{{ tolerance }}mm)</span>
-            <span class="ml-2">(显示前 {{ hits.length }} 条)</span>
+            <span>{{ t('search.resultCount', { total, tol: tolerance }) }}</span>
+            <span class="ml-2">{{ t('search.showingFirst', { n: hits.length }) }}</span>
           </div>
           <el-table
             :data="hits"

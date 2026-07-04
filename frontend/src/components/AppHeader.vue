@@ -123,7 +123,7 @@ async function handleLogout() {
 const dictTrigger = 'click'
 const userTrigger = 'click'
 
-// P2.6: 语言切换 (中英双语)
+// P2.6: 语言切换 (中英双语, ElConfigProvider 响应式跟随, 无需刷新)
 function toggleLocale() {
   const next = locale.value === 'zh-CN' ? 'en-US' : 'zh-CN'
   setLocale(next)

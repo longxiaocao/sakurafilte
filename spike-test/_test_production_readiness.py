@@ -185,9 +185,32 @@ def test_frontend():
         record("C6-首屏体积", "GET / 体积", status, "P2", f"{size_kb:.1f} KB (建议 < 100KB)")
 
     # C7. CSS 变量驱动主题 (light/dark)
-    code, _, body = http_request(f"{FRONTEND}/")
-    if code == 200 and b"--color-bg" in body:
-        record("C7-主题变量", "CSS 变量驱动", "PASS", "P2", "检测到 --color-bg 变量")
+    # WHY: Vue SPA 首页 HTML 是空壳, CSS 变量定义在打包后的样式文件中
+    # 检测策略: 优先用 Playwright 检测挂载后 DOM 的计算样式; 回退到检测源 CSS 文件
+    css_var_detected = False
+    css_var_detail = ""
+    try:
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page()
+            page.goto(f"{FRONTEND}/login", wait_until="networkidle", timeout=15000)
+            val = page.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--color-bg')")
+            browser.close()
+            if val and val.strip():
+                css_var_detected = True
+                css_var_detail = f"挂载后 DOM --color-bg={val.strip()}"
+    except Exception as e:
+        # 回退方案: 检测 Vite dev server 暴露的源 CSS 文件
+        try:
+            code2, _, css_body = http_request(f"{FRONTEND}/src/styles/index.css")
+            if code2 == 200 and b"--color-bg" in css_body:
+                css_var_detected = True
+                css_var_detail = "源 CSS 文件 /src/styles/index.css 含 --color-bg 定义"
+        except Exception:
+            pass
+    if css_var_detected:
+        record("C7-主题变量", "CSS 变量驱动", "PASS", "P2", css_var_detail)
     else:
         record("C7-主题变量", "CSS 变量驱动", "WARN", "P2", "未检测到 CSS 变量定义")
 
@@ -198,10 +221,41 @@ def test_frontend():
     else:
         record("C8-响应式", "viewport meta", "FAIL", "P2", "缺少 viewport meta")
 
-    # C9. 无障碍 aria-label
-    code, _, body = http_request(f"{FRONTEND}/")
-    if code == 200 and (b'aria-label' in body or b'role=' in body):
-        record("C9-无障碍A11y", "aria-label/role", "PASS", "P3", "检测到 ARIA 标记")
+    # C9. 无障碍 aria-label / role
+    # WHY: Vue SPA 首页 HTML 是空壳, ARIA 标记在挂载后的 DOM 中
+    # 检测策略: 优先用 Playwright 检测挂载后 DOM; 回退到检测多个源 Vue 文件
+    aria_detected = False
+    aria_detail = ""
+    try:
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page()
+            page.goto(f"{FRONTEND}/login", wait_until="networkidle", timeout=15000)
+            stats = page.evaluate("""() => {
+                const html = document.documentElement.outerHTML;
+                return {
+                    ariaCount: (html.match(/aria-label/g) || []).length,
+                    roleCount: (html.match(/role=/g) || []).length
+                }
+            }""")
+            browser.close()
+            if stats and (stats.get('ariaCount', 0) > 0 or stats.get('roleCount', 0) > 0):
+                aria_detected = True
+                aria_detail = f"挂载后 DOM 检测到 {stats['ariaCount']} 个 aria-label + {stats['roleCount']} 个 role="
+    except Exception:
+        pass
+    if not aria_detected:
+        # 回退方案: 检测源 Vue 组件文件
+        try:
+            code2, _, vue_body = http_request(f"{FRONTEND}/src/views/LoginView.vue")
+            if code2 == 200 and (b'aria-label' in vue_body or b'role=' in vue_body):
+                aria_detected = True
+                aria_detail = "源 Vue 组件 LoginView.vue 含 ARIA 标记"
+        except Exception:
+            pass
+    if aria_detected:
+        record("C9-无障碍A11y", "aria-label/role", "PASS", "P3", aria_detail)
     else:
         record("C9-无障碍A11y", "aria-label/role", "WARN", "P3", "未见 ARIA 标记, 需补充")
 
@@ -229,11 +283,16 @@ def test_security(token):
         record("D1-安全响应头", "必需响应头", "FAIL", "P0", f"缺失: {missing}")
 
     # D2. HSTS (生产环境)
+    # WHY: HSTS 仅在生产 HTTPS 环境下生效, 开发环境 (HTTP) 不应配置 HSTS
+    # 检测策略: HTTPS 环境要求 HSTS, HTTP 环境记为 SKIP (开发环境预期)
     hsts = headers.get("Strict-Transport-Security", "")
+    is_https = FRONTEND.startswith("https://") or BACKEND.startswith("https://")
     if hsts:
         record("D2-HSTS", "Strict-Transport-Security", "PASS", "P1", hsts)
+    elif is_https:
+        record("D2-HSTS", "Strict-Transport-Security", "FAIL", "P1", "HTTPS 环境必须开启 HSTS")
     else:
-        record("D2-HSTS", "Strict-Transport-Security", "WARN", "P1", "生产环境需开启, 当前为开发环境")
+        record("D2-HSTS", "Strict-Transport-Security", "SKIP", "P1", "开发环境 (HTTP) 无需 HSTS, 生产环境 (HTTPS) 必须开启")
 
     # D3. XSS 反射测试
     xss_payload = "<script>alert('xss')</script>"
@@ -305,24 +364,72 @@ def test_security(token):
         record("D7-越权访问", "无 token 访问 /api/admin/users", "FAIL", "P0", f"HTTP {code}")
 
     # D8. 角色越权 (viewer 尝试 admin 操作)
-    # 先创建 viewer 用户并获取 token
+    # WHY: 检测脚本可能多次运行, viewer 用户已存在时会返回 409 Conflict
+    # WHY: D6 暴力破解测试会触发登录限流 (FixedWindow 1 分钟), D8 需等待窗口过期
+    # 策略: 先等待限流窗口过期; 再尝试登录获取 token; 登录失败则创建; 创建冲突(409)则重置密码后重新登录
+    print("  ℹ [D8-角色越权] 等待 65 秒让 D6 限流窗口过期...")
+    time.sleep(65)
     viewer_token = None
+    viewer_username = "audit_viewer"
+    viewer_password = "Test@2026"
     try:
         if token:
-            code, _, body = http_request(
-                f"{BACKEND}/api/admin/users", method="POST",
-                headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-                body={"username": "audit_viewer", "password": "Test@2026", "role": "viewer"}
+            # 步骤1: 先尝试登录 (用户可能已存在)
+            code2, _, body2 = http_request(
+                f"{BACKEND}/api/auth/login", method="POST",
+                headers={"Content-Type": "application/json"},
+                body={"username": viewer_username, "password": viewer_password}
             )
-            if code in (200, 201):
-                # 登录获取 viewer token
-                code2, _, body2 = http_request(
-                    f"{BACKEND}/api/auth/login", method="POST",
-                    headers={"Content-Type": "application/json"},
-                    body={"username": "audit_viewer", "password": "Test@2026"}
+            if code2 == 200:
+                viewer_token = json.loads(body2).get("accessToken")
+
+            # 步骤2: 登录失败则尝试创建
+            if not viewer_token:
+                code, _, body = http_request(
+                    f"{BACKEND}/api/admin/users", method="POST",
+                    headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+                    body={"username": viewer_username, "password": viewer_password, "role": "viewer",
+                          "email": "viewer@test.com", "fullName": "Audit Viewer"}
                 )
-                if code2 == 200:
-                    viewer_token = json.loads(body2).get("accessToken")
+                if code in (200, 201):
+                    # 创建成功, 登录获取 token
+                    code2, _, body2 = http_request(
+                        f"{BACKEND}/api/auth/login", method="POST",
+                        headers={"Content-Type": "application/json"},
+                        body={"username": viewer_username, "password": viewer_password}
+                    )
+                    if code2 == 200:
+                        viewer_token = json.loads(body2).get("accessToken")
+                elif code == 409:
+                    # 步骤3: 用户已存在但密码不对, 用 admin 重置密码后登录
+                    # 先获取用户列表找到 audit_viewer 的 id
+                    code3, _, body3 = http_request(
+                        f"{BACKEND}/api/admin/users?page=1&pageSize=200",
+                        headers={"Authorization": f"Bearer {token}"}
+                    )
+                    if code3 == 200:
+                        users_data = json.loads(body3)
+                        users_list = users_data.get("items") or users_data.get("data") or []
+                        viewer_id = None
+                        for u in users_list:
+                            if u.get("username") == viewer_username:
+                                viewer_id = u.get("id")
+                                break
+                        if viewer_id:
+                            # 重置密码
+                            http_request(
+                                f"{BACKEND}/api/admin/users/{viewer_id}/reset-password", method="POST",
+                                headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+                                body={"newPassword": viewer_password}
+                            )
+                            # 重新登录
+                            code2, _, body2 = http_request(
+                                f"{BACKEND}/api/auth/login", method="POST",
+                                headers={"Content-Type": "application/json"},
+                                body={"username": viewer_username, "password": viewer_password}
+                            )
+                            if code2 == 200:
+                                viewer_token = json.loads(body2).get("accessToken")
     except Exception:
         pass
 
