@@ -902,6 +902,105 @@ def test_backend_deep_water(token):
     except Exception as e:
         record("后端深水区", "字典reorder-鉴权", "FAIL", "API 调用", str(e))
 
+    # 7. 字典完整 CRUD (engines 字典, 2 字段: engineBrand + engineType)
+    # WHY: 8 个字典 × 7 端点 = 56 个端点, E2E 仅覆盖 list, CRUD 完全未验证
+    #   选 engines 字典: 字段简单, xrefCount=0 (无产品引用, 安全删除)
+    print("\n[BD.7] 字典完整 CRUD (engines)")
+    test_brand = f"E2E_TEST_{int(time.time())%100000}"
+    created_id = None
+    try:
+        # 7.1 Create
+        resp = requests.post(f"{BACKEND}/api/admin/dict/engines",
+                           headers={**headers, "Content-Type": "application/json"},
+                           json={"engineBrand": test_brand, "engineType": "TEST_TYPE", "sortOrder": 9999},
+                           timeout=10)
+        if resp.status_code == 201:
+            created_id = resp.json().get("id")
+            record("后端深水区", "字典CRUD-Create",
+                   "PASS" if created_id else "FAIL",
+                   "201 Created + id", f"status={resp.status_code}, id={created_id}")
+        else:
+            record("后端深水区", "字典CRUD-Create", "FAIL",
+                   "201 Created", f"status={resp.status_code}, body={resp.text[:150]}")
+
+        # 7.2 Read (验证能查到)
+        if created_id:
+            resp2 = requests.get(f"{BACKEND}/api/admin/dict/engines?q={test_brand}",
+                               headers=headers, timeout=10)
+            if resp2.status_code == 200:
+                items = resp2.json().get("items", [])
+                found = any(it.get("id") == created_id for it in items)
+                record("后端深水区", "字典CRUD-Read",
+                       "PASS" if found else "FAIL",
+                       f"查询到 id={created_id}", f"found={found}, count={len(items)}")
+            else:
+                record("后端深水区", "字典CRUD-Read", "FAIL",
+                       "200 OK", f"status={resp2.status_code}")
+
+        # 7.3 Update (修改 engineType)
+        if created_id:
+            resp3 = requests.put(f"{BACKEND}/api/admin/dict/engines/{created_id}",
+                               headers={**headers, "Content-Type": "application/json"},
+                               json={"engineBrand": test_brand, "engineType": "UPDATED_TYPE", "sortOrder": 8888},
+                               timeout=10)
+            if resp3.status_code == 200:
+                updated = resp3.json()
+                type_changed = updated.get("engineType") == "UPDATED_TYPE"
+                sort_changed = updated.get("sortOrder") == 8888
+                record("后端深水区", "字典CRUD-Update",
+                       "PASS" if (type_changed and sort_changed) else "FAIL",
+                       "engineType=UPDATED_TYPE, sortOrder=8888",
+                       f"type={updated.get('engineType')}, sort={updated.get('sortOrder')}")
+            else:
+                record("后端深水区", "字典CRUD-Update", "FAIL",
+                       "200 OK", f"status={resp3.status_code}")
+
+        # 7.4 Delete (软删)
+        if created_id:
+            resp4 = requests.delete(f"{BACKEND}/api/admin/dict/engines/{created_id}",
+                                  headers=headers, timeout=10)
+            if resp4.status_code == 200:
+                # 验证默认查询不再返回 (软删后 deletedAt != null)
+                resp4b = requests.get(f"{BACKEND}/api/admin/dict/engines?q={test_brand}",
+                                    headers=headers, timeout=10)
+                items = resp4b.json().get("items", []) if resp4b.status_code == 200 else []
+                still_visible = any(it.get("id") == created_id for it in items)
+                record("后端深水区", "字典CRUD-Delete",
+                       "PASS" if not still_visible else "WARN",
+                       "软删后默认查询不可见", f"deleted={resp4.json().get('deleted')}, still_visible={still_visible}")
+            else:
+                record("后端深水区", "字典CRUD-Delete", "FAIL",
+                       "200 OK", f"status={resp4.status_code}")
+
+        # 7.5 Restore (恢复软删)
+        if created_id:
+            resp5 = requests.post(f"{BACKEND}/api/admin/dict/engines/{created_id}/restore",
+                                headers=headers, timeout=10)
+            if resp5.status_code == 200:
+                restored = resp5.json()
+                # 验证 deletedAt 已清空
+                deleted_at = restored.get("deletedAt")
+                record("后端深水区", "字典CRUD-Restore",
+                       "PASS" if deleted_at is None else "FAIL",
+                       "deletedAt=null", f"deletedAt={deleted_at}")
+            else:
+                record("后端深水区", "字典CRUD-Restore", "FAIL",
+                       "200 OK", f"status={resp5.status_code}")
+
+        # 7.6 Cleanup: 再次软删 (避免污染字典)
+        if created_id:
+            requests.delete(f"{BACKEND}/api/admin/dict/engines/{created_id}",
+                          headers=headers, timeout=10)
+    except Exception as e:
+        record("后端深水区", "字典CRUD-异常", "FAIL", "API 调用", str(e))
+        # 兜底清理
+        if created_id:
+            try:
+                requests.delete(f"{BACKEND}/api/admin/dict/engines/{created_id}",
+                              headers=headers, timeout=10)
+            except Exception:
+                pass
+
 def test_scenario_6_login_ui(page, login_resp):
     """场景 6: 登录页 UI 流程 (P2 测试盲点补充)
     WHY: 之前 E2E 通过 API 登录 + 注入 localStorage, 完全跳过 /login 页面
