@@ -26,6 +26,8 @@ const STORAGE_KEY = 'sakurafilter_perf_buffer'
 let buffer: PerfSample[] = []
 let flushTimer: number | null = null
 let installed = false
+// P2-7: 保存 interceptor id 用于 uninstall 时 eject
+let interceptorIds: { request: number; response: number } = { request: -1, response: -1 }
 
 function loadFromStorage(): PerfSample[] {
   try {
@@ -73,6 +75,8 @@ async function flush() {
     }
   }
   // 降级: 普通 fetch (异步, 不 await — 不阻塞 UI)
+  // P2-4 说明: 此处绕过 http.ts 是为了 keepalive: true (模拟 sendBeacon), http.ts 的 axios 不支持 keepalive
+  //   ingest 端点在 DevTokenAuthMiddleware.ExemptPaths 中已豁免 X-Admin-Token (P5.5 设计), 故无需注入 token
   if (!ok) {
     try {
       fetch(INGEST_PATH, {
@@ -142,13 +146,14 @@ export function installPerfInterceptor() {
   // 从 sessionStorage 恢复未发送的 buffer (页面刷新后)
   buffer = loadFromStorage()
 
-  http.interceptors.request.use((cfg) => {
+  // P2-7: 保存 interceptor id 用于 uninstall 时 eject
+  interceptorIds.request = http.interceptors.request.use((cfg) => {
     // WHY 用 internal property: 避免污染用户数据
     ;(cfg as any).__t0 = performance.now()
     return cfg
   })
 
-  http.interceptors.response.use(
+  interceptorIds.response = http.interceptors.response.use(
     (r) => {
       const t0 = (r.config as any).__t0
       if (typeof t0 === 'number') {
@@ -180,11 +185,35 @@ export function installPerfInterceptor() {
     }
   )
 
-  // 页面卸载时强制 flush (sendBeacon 路径)
+  // 页面卸载时强制 flush (sendBeacon 路径) + 清理 flushTimer
   if (typeof window !== 'undefined') {
     window.addEventListener('beforeunload', () => {
       void flush()
+      // P2-7 修复: 卸载时清理 flushTimer, 防止 HMR/测试场景的幽灵定时器
+      if (flushTimer !== null) {
+        window.clearTimeout(flushTimer)
+        flushTimer = null
+      }
     })
     // 定时器已通过 scheduleFlush 自启
   }
+}
+
+/**
+ * P2-7 修复: 卸载 perf 拦截器 (HMR/测试场景使用)
+ * - 清理 flushTimer
+ * - 移除 axios interceptors (需保存 id)
+ * 注意: 生产 SPA 不需要调用, 仅开发/测试用
+ */
+export function uninstallPerfInterceptor() {
+  if (flushTimer !== null) {
+    window.clearTimeout(flushTimer)
+    flushTimer = null
+  }
+  if (installed && interceptorIds.request !== -1 && interceptorIds.response !== -1) {
+    http.interceptors.request.eject(interceptorIds.request)
+    http.interceptors.response.eject(interceptorIds.response)
+    interceptorIds = { request: -1, response: -1 }
+  }
+  installed = false
 }

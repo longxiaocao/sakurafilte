@@ -47,6 +47,10 @@ public class PublicProductController : ControllerBase
     {
         if (string.IsNullOrWhiteSpace(slug))
             return BadRequest(new { error = "slug 不能为空" });
+        // P2-3 修复: slug 长度校验, 防止恶意超长输入浪费 DB 资源
+        //   WHY: slug 切分后 oem 用于 3 次 WHERE 等值匹配 (列长 50), 无上限会接受 10MB 输入
+        if (slug.Length > 200)
+            return BadRequest(new { error = "slug 长度不能超过 200" });
 
         // 解析 slug: 取最后一段作为 oem (支持 OEM 含 '-')
         var oem = slug.Contains('-') ? slug[(slug.LastIndexOf('-') + 1)..] : slug;

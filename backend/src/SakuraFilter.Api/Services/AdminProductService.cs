@@ -574,7 +574,14 @@ public class AdminProductService
         if (!string.IsNullOrWhiteSpace(req.Mr1))
             query = query.Where(p => p.Mr1 != null && EF.Functions.ILike(p.Mr1, $"%{req.Mr1.EscapeLikePattern()}%", "\\"));
         if (!string.IsNullOrWhiteSpace(req.Oem2))
-            query = query.Where(p => p.OemNoDisplay.Contains(req.Oem2) || (p.Oem2 != null && p.Oem2.Contains(req.Oem2)));
+        {
+            // P2-1 修复: Contains → ILike + EscapeLikePattern, 防止 _ 和 % 被当通配符
+            //   WHY: string.Contains 翻译为 LIKE '%x%' 无 ESCAPE, 用户输入 100_ 会误命中 100A/100B
+            var kwOem2 = req.Oem2.EscapeLikePattern();
+            query = query.Where(p =>
+                EF.Functions.ILike(p.OemNoDisplay, $"%{kwOem2}%", "\\")
+                || (p.Oem2 != null && EF.Functions.ILike(p.Oem2, $"%{kwOem2}%", "\\")));
+        }
         // Day 8.2.2: 合并 xref 2 个 EXISTS (OemBrand + Oem3Batch) → 1 个 EXISTS
         //   性能依据: 1M 数据下 6 个独立 EXISTS → 2-5s, 合并后 1 个 EXISTS 走同一索引扫描
         //   1M xref 行 OemBrand 等值 + Oem3 等值 + product_id = p.id 索引覆盖
@@ -929,8 +936,30 @@ public class AdminProductService
     {
         if (string.IsNullOrWhiteSpace(form.Oem2))
             throw new ArgumentException("Oem2 (主号) 必填");
-        if (form.Oem2.Length > 50)
-            throw new ArgumentException("Oem2 不能超过 50 字符");
+        // P2-2 修复: 补充关键字段长度校验, 防止超长输入触发 PG 22001 而非 400
+        //   WHY: 之前仅校验 Oem2, 其他字段超长时 PG 报 string_data_right_truncation 返回 500
+        //   校验范围与 ProductDbContext HasMaxLength 对齐
+        var checks = new (string Label, string? Value, int Max)[]
+        {
+            ("Oem2", form.Oem2, 50),
+            ("ProductName1", form.ProductName1, 100),
+            ("ProductName2", form.ProductName2, 100),
+            ("Type", form.Type, 50),
+            ("Mr1", form.Mr1, 100),
+            ("Media", form.Media, 100),
+            ("MediaModel", form.MediaModel, 100),
+            ("D7Thread", form.D7Thread, 100),
+            ("D8Thread", form.D8Thread, 100),
+            ("Efficiency1", form.Efficiency1, 100),
+            ("Efficiency2", form.Efficiency2, 100),
+            ("SealingMaterial", form.SealingMaterial, 100),
+            ("TempRange", form.TempRange, 100),
+        };
+        foreach (var (label, value, max) in checks)
+        {
+            if (!string.IsNullOrEmpty(value) && value.Length > max)
+                throw new ArgumentException($"{label} 不能超过 {max} 字符 (当前 {value.Length})");
+        }
     }
 
     private static string NormalizeOem(string oem)

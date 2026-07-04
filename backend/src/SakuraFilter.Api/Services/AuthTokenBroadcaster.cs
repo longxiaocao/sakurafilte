@@ -100,6 +100,9 @@ public class AuthTokenBroadcaster : IHostedService, IAsyncDisposable
                 {
                     await _listenConn.WaitAsync(ct);
                 }
+                // P2-5 修复: 正常退出路径 (WaitAsync 返回但连接非 Open) 也需 Dispose 旧连接, 防止泄漏
+                try { _listenConn?.Dispose(); } catch { }
+                _listenConn = null;
             }
             catch (OperationCanceledException)
             {
@@ -110,6 +113,8 @@ public class AuthTokenBroadcaster : IHostedService, IAsyncDisposable
                 IsListening = false;
                 _logger.LogWarning(ex, "[AuthTokenBroadcaster] 连接失败, 5s 后重试");
                 try { _listenConn?.Dispose(); } catch { }
+                // P2-5 修复: Dispose 后置 null, 防止外部访问已 Dispose 对象 (ObjectDisposedException)
+                _listenConn = null;
                 try { await Task.Delay(TimeSpan.FromSeconds(5), ct); } catch { return; }
             }
         }
