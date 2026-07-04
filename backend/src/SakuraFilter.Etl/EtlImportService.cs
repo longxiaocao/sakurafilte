@@ -20,14 +20,14 @@ namespace SakuraFilter.Etl;
 /// - skipped_null_field:  必填字段 (oem_brand/oem_no_3/machine_brand/machine_model) 为空 (源数据脏)
 ///   这种拆分让 silent skip 一眼可见,避免 apps 列名 bug 那种浪费 30min 排查的事故
 ///
-/// last 5 错误环形缓冲 (Day 7.6):
+/// last 20 错误环形缓冲 (Day 7.6 / P2-9.2):
 ///   - 之前 lastError 只保留 1 条,失败风暴时只能看最后一条
-///   - 环形缓冲保留 5 条 (时间+消息),便于诊断 Meili 失败根因 (ConnectionRefused / schema 错 / payload 损坏)
-///   - 容量 5 是经验值:太多掩盖最新错误,太少无法看分布
+///   - 环形缓冲保留 20 条 (时间+消息),便于诊断 Meili 失败根因 (ConnectionRefused / schema 错 / payload 损坏)
+///   - P2-9.2: 容量从 5 扩到 20, 便于排查批量错误 (5 条太少, 失败风暴时只够看最新几条)
 /// </summary>
 public class EtlProgress
 {
-    private const int MaxRecentErrors = 5;
+    private const int MaxRecentErrors = 20;
     private readonly object _errorsLock = new();
     private readonly Queue<(DateTime At, string Message)> _recentErrors = new();
     private readonly ILogger? _logger;       // Day 7.7: 落库失败时记日志
@@ -49,6 +49,7 @@ public class EtlProgress
     private long _skippedNullField;          // Day 7.5: 必填字段为 null
     private long _skippedDuplicate;          // Day 7.6: DISTINCT ON 去重掉的行
     private long _errors;
+    private int _typeMismatches;  // P2-9.3: 类型不匹配计数 (GetDecimalOrNull/GetBoolOrFalse 静默失败时累加)
     private long _indexed;       // 直接成功写入 Meili
     private long _indexPending;  // 失败入队待补偿
     private long _rowsTotal;     // Day 9.2: 文件总行数 (启动时估读,用于前端进度条)
@@ -87,6 +88,8 @@ public class EtlProgress
     public long SkippedNullField => Interlocked.Read(ref _skippedNullField);
     public long SkippedDuplicate => Interlocked.Read(ref _skippedDuplicate);
     public long Errors => Interlocked.Read(ref _errors);
+    // P2-9.3: 类型不匹配计数 (GetDecimalOrNull/GetBoolOrFalse 遇到非预期类型时累加,只计数不抛异常)
+    public int TypeMismatches => Interlocked.CompareExchange(ref _typeMismatches, 0, 0);
     public long Indexed => Interlocked.Read(ref _indexed);
     public long IndexPending => Interlocked.Read(ref _indexPending);
     public long RowsTotal => Interlocked.Read(ref _rowsTotal);
@@ -234,6 +237,9 @@ public class EtlProgress
         Interlocked.Increment(ref _errors);
         PushError(message);
     }
+    // P2-9.3: 类型不匹配计数 (GetDecimalOrNull/GetBoolOrFalse 静默返回 null/false 时调用)
+    //   WHY 只计数+LogDebug: 保持 ETL 容错性, 不抛异常, 不影响已有数据写入
+    public void IncrTypeMismatch() => Interlocked.Increment(ref _typeMismatches);
     public void IncrIndexed() => Interlocked.Increment(ref _indexed);
     public void IncrIndexPending() => Interlocked.Increment(ref _indexPending);
     public void IncrIndexedBy(long n) => Interlocked.Add(ref _indexed, n);
@@ -261,6 +267,7 @@ public class EtlProgress
         Interlocked.Exchange(ref _skippedNullField, 0);
         Interlocked.Exchange(ref _skippedDuplicate, 0);
         Interlocked.Exchange(ref _errors, 0);
+        Interlocked.Exchange(ref _typeMismatches, 0);  // P2-9.3
         Interlocked.Exchange(ref _indexed, 0);
         Interlocked.Exchange(ref _indexPending, 0);
         Interlocked.Exchange(ref _rowsTotal, 0);
@@ -283,6 +290,7 @@ public class EtlProgress
         skippedNullField = SkippedNullField,
         skippedDuplicate = SkippedDuplicate,  // Day 7.6
         errors = Errors,
+        typeMismatches = TypeMismatches,  // P2-9.3: 类型不匹配计数 (前端可展示数据质量告警)
         indexed = Indexed,
         indexPending = IndexPending,
         elapsedSec = Elapsed?.TotalSeconds,
@@ -427,6 +435,48 @@ public class EtlImportService
 
         var normalizedMode = NormalizeMode(mode);
         var normalizedEntity = entityType?.Trim().ToLowerInvariant() ?? "";
+
+        // P2-9.4: 文件大小校验 (>5GB 拒绝, 防止 OOM/超长 ETL)
+        //   WHY 5GB: 1M 行 ~200MB, 5GB ≈ 2500 万行, 超过此规模应拆分文件
+        var fileInfo = new FileInfo(jsonlPath);
+        if (fileInfo.Length > 5L * 1024 * 1024 * 1024)
+        {
+            throw new InvalidOperationException(
+                $"JSONL 文件过大 ({fileInfo.Length / 1024.0 / 1024.0 / 1024.0:F2}GB),上限 5GB");
+        }
+
+        // P2-9.4: 空文件快速路径 (仅对已知 entityType 生效, 直接 Finish 不占 advisory lock)
+        //   WHY 快速路径: 空文件无数据可导, 占 advisory lock 会阻塞其他 ETL 任务
+        var isValidEntity = normalizedEntity is "products" or "product"
+            or "xrefs" or "xref" or "cross_references"
+            or "apps" or "machine_applications";
+        if (isValidEntity && fileInfo.Length == 0)
+        {
+            _logger.LogInformation("JSONL 文件为空,跳过导入 (快速路径) entity={Entity} mode={Mode}",
+                normalizedEntity, normalizedMode);
+            Progress.Reset();
+            Progress.SetRowsTotal(0);
+            Progress.Start(jsonlPath);
+            Progress.Finish(normalizedEntity, normalizedMode);
+            return Progress;
+        }
+
+        // P2-9.4: UTF-16 BOM 预检 (拒绝 UTF-16, StreamReader 默认 UTF-8 会乱码导致 JSON 解析失败)
+        //   UTF-8 BOM (EF BB BF) 允许, StreamReader 会自动跳过
+        if (fileInfo.Length > 0)
+        {
+            var bom = new byte[3];
+            await using (var fs = File.OpenRead(jsonlPath))
+            {
+                var read = await fs.ReadAsync(bom, 0, 3, ct);
+                if (read >= 2 &&
+                    ((bom[0] == 0xFF && bom[1] == 0xFE) ||  // UTF-16 LE
+                     (bom[0] == 0xFE && bom[1] == 0xFF)))   // UTF-16 BE
+                {
+                    throw new InvalidOperationException("JSONL 文件编码为 UTF-16,请转换为 UTF-8 后重试");
+                }
+            }
+        }
 
         // P1.1: Resume 触发时重置 _pausedFlag, 避免继承上一次 ETL 的暂停状态
         if (startLineNo > 0) ClearPausedFlag();
@@ -831,8 +881,10 @@ public class EtlImportService
                     }
                     catch (Exception ex)
                     {
+                        // P2-9.2: 错误行日志含原始内容预览 (截断 200 字符), 便于定位数据问题
+                        var preview = line.Length > 200 ? line[..200] : line;
                         Progress.IncrErrorsWith($"products 行 {lineNo}: {ex.Message}");  // Day 7.6
-                        _logger.LogWarning("行 {LineNo} 解析失败: {Error}", lineNo, ex.Message);
+                        _logger.LogError(ex, "products 行 {LineNo} 解析失败: {Msg} | content={Preview}", lineNo, ex.Message, preview);
                     }
                 }
                 await writer.CompleteAsync(ct);
@@ -1255,7 +1307,7 @@ public class EtlImportService
                     //   此前 3-tuple + 后续用 cumulative Progress 算 dup, 公式错误 (dup 翻倍)
                     //   正确 dup = stageCount - affected (本批) — 与 ImportAppsAsync 一致
                     var (batchMissing, batchErrors, xrefStageCount, batchAffected) = await ProcessXrefBatchAsync(
-                        conn, batchLines, oemMap, mode, isFirstBatch, ct);
+                        conn, batchLines, oemMap, mode, isFirstBatch, lastCommittedBatchId, ct);
                     lastCommittedBatchId += batchLines.Count;
                     Progress.IncrReadBy(batchLines.Count);
                     // dup = stageCount - affected (DISTINCT ON 去重 + ON CONFLICT 跳过)
@@ -1280,7 +1332,7 @@ public class EtlImportService
             {
                 // P1.1 (Task 3) 修复: 同样 4-tuple
                 var (batchMissing, batchErrors, xrefStageCount, batchAffected) = await ProcessXrefBatchAsync(
-                    conn, batchLines, oemMap, mode, isFirstBatch, ct);
+                    conn, batchLines, oemMap, mode, isFirstBatch, lastCommittedBatchId, ct);
                 lastCommittedBatchId += batchLines.Count;
                 Progress.IncrReadBy(batchLines.Count);
                 var dup = xrefStageCount - batchAffected;
@@ -1329,6 +1381,7 @@ public class EtlImportService
         Dictionary<string, long> oemMap,
         string mode,
         bool isFirstBatch,
+        long batchStartLineNo,  // P2-9.2: 批次起始全局行号 (用于错误日志定位)
         CancellationToken ct)
     {
         long missing = 0;
@@ -1357,6 +1410,7 @@ public class EtlImportService
                 COPY xrefs_stage (product_id, product_name_1, oem_brand, oem_no_3) FROM STDIN (FORMAT BINARY)
             ", ct))
             {
+                var idx = 0;
                 foreach (var jsonLine in batchLines)
                 {
                     try
@@ -1377,10 +1431,15 @@ public class EtlImportService
                     }
                     catch (Exception ex)
                     {
+                        // P2-9.2: 补全局行号 + 原始内容预览 (截断 200 字符), 便于定位数据问题
+                        var globalLineNo = batchStartLineNo + idx + 1;
+                        var preview = jsonLine.Length > 200 ? jsonLine[..200] : jsonLine;
                         errors++;
-                        Progress.IncrErrors();
-                        _logger.LogWarning("xrefs 批次内行解析失败: {Error}", ex.Message);
+                        Progress.IncrErrorsWith($"xrefs 行 {globalLineNo}: {ex.Message}");
+                        _logger.LogError(ex, "xrefs 行 {GlobalLineNo} (batch={BatchStart}, idx={Idx}) 解析失败: {Msg} | content={Preview}",
+                            globalLineNo, batchStartLineNo, idx, ex.Message, preview);
                     }
+                    idx++;
                 }
                 await writer.CompleteAsync(ct);
             }
@@ -1627,8 +1686,10 @@ public class EtlImportService
                     }
                     catch (Exception ex)
                     {
+                        // P2-9.2: 错误行日志含原始内容预览 (截断 200 字符), 便于定位数据问题
+                        var preview = line.Length > 200 ? line[..200] : line;
                         Progress.IncrErrorsWith($"apps 行 {lineNo}: {ex.Message}");  // Day 7.6
-                        _logger.LogWarning("apps 行 {LineNo} 解析失败: {Error}", lineNo, ex.Message);
+                        _logger.LogError(ex, "apps 行 {LineNo} 解析失败: {Msg} | content={Preview}", lineNo, ex.Message, preview);
                     }
                 }
                 await writer.CompleteAsync(ct);
@@ -1789,10 +1850,20 @@ public class EtlImportService
     private static string? GetStringOrNull(JsonElement e, string prop) =>
         e.TryGetProperty(prop, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
 
-    private static decimal? GetDecimalOrNull(JsonElement e, string prop)
+    // P2-9.3: 改为实例方法以访问 Progress/_logger; prop 兼作 fieldName 用于日志
+    private decimal? GetDecimalOrNull(JsonElement e, string prop, string? fieldName = null)
     {
         if (!e.TryGetProperty(prop, out var v) || v.ValueKind == JsonValueKind.Null) return null;
-        return v.ValueKind == JsonValueKind.Number ? v.GetDecimal() : null;
+        if (v.ValueKind == JsonValueKind.Number) return v.GetDecimal();
+        // P2-9.3: 字符串类型尝试解析为 decimal (业务数据常见: "3.14" 而非 JSON number)
+        if (v.ValueKind == JsonValueKind.String &&
+            decimal.TryParse(v.GetString(), out var result))
+            return result;
+        // P2-9.3: 类型不匹配计数 (非 Number/可解析 String), 只计数不抛异常保持 ETL 容错
+        Progress.IncrTypeMismatch();
+        _logger.LogDebug("字段 {Field} 类型不匹配,期望 decimal 实际 {Kind}={Value}",
+            fieldName ?? prop, v.ValueKind, v.ToString());
+        return null;
     }
 
     private static DateTime? GetDateOrNull(JsonElement e, string prop)
@@ -1803,11 +1874,27 @@ public class EtlImportService
         return DateTime.TryParse(s, out var dt) ? dt : null;
     }
 
-    private static bool GetBoolOrFalse(JsonElement e, string prop)
+    // P2-9.3: 改为实例方法; 支持 "yes"/"1"/"true" 字符串 (业务数据常见); 类型不匹配计数
+    private bool GetBoolOrFalse(JsonElement e, string prop, string? fieldName = null)
     {
         if (!e.TryGetProperty(prop, out var v) || v.ValueKind == JsonValueKind.Null) return false;
-        return v.ValueKind == JsonValueKind.True
-            || (v.ValueKind == JsonValueKind.String && bool.TryParse(v.GetString(), out var b) && b);
+        if (v.ValueKind == JsonValueKind.True) return true;
+        if (v.ValueKind == JsonValueKind.False) return false;
+        // P2-9.3: 字符串类型支持 "yes"/"1"/"true" (业务数据常见)
+        if (v.ValueKind == JsonValueKind.String)
+        {
+            var lower = v.GetString()?.ToLowerInvariant().Trim();
+            if (lower == "true" || lower == "yes" || lower == "1") return true;
+            if (lower == "false" || lower == "no" || lower == "0") return false;
+        }
+        // P2-9.3: 数字类型 (非 0 为 true)
+        if (v.ValueKind == JsonValueKind.Number)
+            return v.TryGetInt64(out var i) && i != 0;
+        // P2-9.3: 类型不匹配计数 (无法识别为 bool 的值)
+        Progress.IncrTypeMismatch();
+        _logger.LogDebug("字段 {Field} 类型不匹配,期望 bool 实际 {Kind}={Value}",
+            fieldName ?? prop, v.ValueKind, v.ToString());
+        return false;
     }
 
     private static async Task WriteNullableStringAsync(NpgsqlBinaryImporter w, string? s, CancellationToken ct)
