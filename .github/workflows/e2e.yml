@@ -248,6 +248,118 @@ jobs:
             exit $RC
           fi
 
+      # P1 改-1: P1 健康检查防回归 (/health/ready 拆分 Meili/PG 探测 + BackgroundService 心跳)
+      #   WHY: P1-5.1/P1-6.1 修复后需 CI 防回归, 避免 /health/ready 退回 503 / 心跳丢失
+      - name: Run P1 health regression
+        working-directory: spike-test
+        env:
+          ADMIN_TOKEN: ${{ env.ADMIN_TOKEN }}
+        run: |
+          echo "===== P1 健康检查防回归 ====="
+          if python _test_p1_health.py; then
+            echo "[PASS] P1 健康检查防回归 全绿"
+          else
+            RC=$?
+            echo "::error::P1 健康检查回归失败 (rc=$RC)"
+            exit $RC
+          fi
+
+      # P1 改-2: P1 并发安全防回归 (PauseActiveTask 加锁 + _activeCancelReason 读加锁)
+      #   WHY: P1-2.2/P1-2.3 修复后需 CI 防回归, 防止 ETL cancel reason 落库错误/死锁回归
+      - name: Run P1 concurrency regression
+        working-directory: spike-test
+        env:
+          ADMIN_TOKEN: ${{ env.ADMIN_TOKEN }}
+        run: |
+          echo "===== P1 并发安全防回归 ====="
+          if python _test_p1_concurrency.py; then
+            echo "[PASS] P1 并发安全防回归 全绿"
+          else
+            RC=$?
+            echo "::error::P1 并发安全回归失败 (rc=$RC)"
+            exit $RC
+          fi
+
+      # P1 改-3: P1 性能防回归 (OSS 预签名 URL 并行化, 详情接口 6 张图 < 300ms)
+      #   WHY: P1-4.1/P1-4.2 修复后需 CI 防回归, 防止 URL 生成退回串行导致 P95 飙升
+      - name: Run P1 perf regression
+        working-directory: spike-test
+        env:
+          ADMIN_TOKEN: ${{ env.ADMIN_TOKEN }}
+        run: |
+          echo "===== P1 性能防回归 ====="
+          if python _test_p1_perf.py; then
+            echo "[PASS] P1 性能防回归 全绿"
+          else
+            RC=$?
+            echo "::error::P1 性能回归失败 (rc=$RC)"
+            exit $RC
+          fi
+
+      # P2 改-1: P2 迁移安全防回归 (AutoMigrate=false 跳过 + SetCommandTimeout(60) + pending 检查)
+      #   WHY: P2-7.1/P2-7.2 修复后需 CI 防回归, 防止生产启动时迁移超时/误执行
+      - name: Run P2 migration regression
+        working-directory: spike-test
+        env:
+          ADMIN_TOKEN: ${{ env.ADMIN_TOKEN }}
+        run: |
+          echo "===== P2 迁移安全防回归 ====="
+          if python _test_p2_migration.py; then
+            echo "[PASS] P2 迁移安全防回归 全绿"
+          else
+            RC=$?
+            echo "::error::P2 迁移安全回归失败 (rc=$RC)"
+            exit $RC
+          fi
+
+      # P2 改-2: P2 ETL 健壮性防回归 (错误行日志补全 + 类型校验 + 文件预检)
+      #   WHY: P2-9.2/P2-9.3/P2-9.4 修复后需 CI 防回归, 防止 ETL 错误行丢失上下文/类型漂移
+      - name: Run P2 ETL robustness regression
+        working-directory: spike-test
+        env:
+          ADMIN_TOKEN: ${{ env.ADMIN_TOKEN }}
+        run: |
+          echo "===== P2 ETL 健壮性防回归 ====="
+          if python _test_p2_etl_robust.py; then
+            echo "[PASS] P2 ETL 健壮性防回归 全绿"
+          else
+            RC=$?
+            echo "::error::P2 ETL 健壮性回归失败 (rc=$RC)"
+            exit $RC
+          fi
+
+      # P3 改-1: P3 可观测性防回归 (CorrelationId 中间件 + /metrics 端点)
+      #   WHY: P3-5.2/P3-5.3 修复后需 CI 防回归, 防止 CorrelationId 丢失/metrics 端点 404
+      - name: Run P3 observability regression
+        working-directory: spike-test
+        env:
+          ADMIN_TOKEN: ${{ env.ADMIN_TOKEN }}
+        run: |
+          echo "===== P3 可观测性防回归 ====="
+          if python _test_p3_observability.py; then
+            echo "[PASS] P3 可观测性防回归 全绿"
+          else
+            RC=$?
+            echo "::error::P3 可观测性回归失败 (rc=$RC)"
+            exit $RC
+          fi
+
+      # P3 改-2: P3 可用性防回归 (熔断启动探活 + 立即降级, Meili 不可用首次搜索 < 100ms)
+      #   WHY: P3-6.2/P3-6.3 修复后需 CI 防回归, 防止 Meili 故障时首请求超时秒级阻塞
+      - name: Run P3 availability regression
+        working-directory: spike-test
+        env:
+          ADMIN_TOKEN: ${{ env.ADMIN_TOKEN }}
+        run: |
+          echo "===== P3 可用性防回归 ====="
+          if python _test_p3_availability.py; then
+            echo "[PASS] P3 可用性防回归 全绿"
+          else
+            RC=$?
+            echo "::error::P3 可用性回归失败 (rc=$RC)"
+            exit $RC
+          fi
+
       # P0 改-2: 安全门禁 — 扫描 .cs 文件中硬编码凭据 (替代 detect-secrets, 避免新依赖)
       #   WHY: P0-3 修复后需自动防护, 防止 Password=xxx 再次引入
       - name: Security gate (hardcoded credentials scan)
