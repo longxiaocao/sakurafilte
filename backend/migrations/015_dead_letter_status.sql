@@ -19,19 +19,19 @@ ALTER TABLE search_index_dead_letter
 UPDATE search_index_dead_letter SET status = 'active' WHERE status IS NULL OR status = '';
 
 -- 索引: worker 扫描 "active + recovery_count < max" 的候选 (替代旧 idx_dead_letter_recovery)
-CREATE INDEX IF NOT EXISTS idx_dead_letter_active_recovery
+CREATE INDEX IF NOT EXISTS ix_dead_letter_active_recovery
     ON search_index_dead_letter (status, recovery_count, last_recovery_at)
     WHERE status = 'active';
 
 -- 索引: cleanup 仅清 recovered, 按 recovered_at 排序
-CREATE INDEX IF NOT EXISTS idx_dead_letter_recovered_at
+CREATE INDEX IF NOT EXISTS ix_dead_letter_recovered_at
     ON search_index_dead_letter (recovered_at)
     WHERE status = 'recovered';
 
 -- 索引: IndexReplayWorker 转入死信时, 查找同 payload 的最近 recovered 记录
 --   WHY: 同一文档的多次死信 (原始id + payload 相同) 应共享 recovery_count
 --   payload 是 jsonb, 哈希后建索引
-CREATE INDEX IF NOT EXISTS idx_dead_letter_payload_hash
+CREATE INDEX IF NOT EXISTS ix_dead_letter_payload_hash
     ON search_index_dead_letter (operation, md5(payload::text), status);
 
 COMMENT ON COLUMN search_index_dead_letter.status IS
