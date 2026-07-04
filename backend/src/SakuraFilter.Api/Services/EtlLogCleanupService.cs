@@ -56,7 +56,8 @@ public class EtlLogCleanupService : BackgroundService
                 _logger.LogError(ex, "ETL 日志清理任务异常,下一轮重试");
             }
 
-            await Task.Delay(TimeSpan.FromHours(24), stoppingToken);
+            // P1-5.1: 用 WaitWithHeartbeatAsync 分段上报心跳,避免 24h 等待期间被 /health/ready 误判为 stale
+            await _hostedStatus.WaitWithHeartbeatAsync(nameof(EtlLogCleanupService), TimeSpan.FromHours(24), stoppingToken);
         }
     }
 

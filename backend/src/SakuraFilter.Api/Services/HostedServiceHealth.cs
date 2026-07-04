@@ -63,3 +63,34 @@ public class HostedServiceStatus : IHostedServiceStatus
             .ToList();
     }
 }
+
+/// <summary>
+/// 心跳扩展方法 (P1-5.1)
+/// WHY: 长延迟服务 (24h 轮询的清理类服务) 在等待期间会被 /health/ready 误判为 stale,
+///      提供此扩展让长 Task.Delay 分段上报心跳
+/// </summary>
+public static class HostedServiceStatusExtensions
+{
+    /// <summary>
+    /// 等待指定时间,期间定期上报心跳 (默认 4 分钟一次,避免 5min stale 阈值)
+    /// </summary>
+    public static async Task WaitWithHeartbeatAsync(
+        this IHostedServiceStatus status,
+        string serviceName,
+        TimeSpan delay,
+        CancellationToken ct = default,
+        TimeSpan? heartbeatInterval = null)
+    {
+        var interval = heartbeatInterval ?? TimeSpan.FromMinutes(4);
+        var deadline = DateTime.UtcNow + delay;
+        while (DateTime.UtcNow < deadline)
+        {
+            status.ReportAlive(serviceName);
+            var remaining = deadline - DateTime.UtcNow;
+            var wait = remaining < interval ? remaining : interval;
+            if (wait <= TimeSpan.Zero) break;
+            try { await Task.Delay(wait, ct); }
+            catch (OperationCanceledException) { return; }
+        }
+    }
+}

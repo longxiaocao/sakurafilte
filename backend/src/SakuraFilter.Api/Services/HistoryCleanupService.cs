@@ -52,7 +52,8 @@ public class HistoryCleanupService : BackgroundService
 
             // 简化:每 24h 跑一次 (后续可换 Cronos / NCrontab 解析 cron 表达式)
             // WHY: 不引入 cron 解析依赖,24h 间隔满足 1 天 1 次的需求
-            await Task.Delay(TimeSpan.FromHours(24), stoppingToken);
+            // P1-5.1: 用 WaitWithHeartbeatAsync 分段上报心跳,避免 24h 等待期间被 /health/ready 误判为 stale
+            await _hostedStatus.WaitWithHeartbeatAsync(nameof(HistoryCleanupService), TimeSpan.FromHours(24), stoppingToken);
         }
     }
 
