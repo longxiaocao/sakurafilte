@@ -209,7 +209,7 @@ function onAuditPageChange(p: number) {
   loadAudit()
 }
 
-// Tab 切换首次加载审计数据
+// Tab 切换时按需加载审计数据 (兜底: onMounted 已预加载, 此处仅首次切换且未加载成功时重试)
 function onTabChange(tab: string) {
   if (tab === 'audit' && audit.value.length === 0 && !auditLoading.value) {
     loadAudit()
@@ -238,7 +238,12 @@ function fmtDate(iso?: string): string {
 // 当前用户是否为 admin (UI 守卫: 仅 admin 可见 CRUD 按钮)
 const canManage = computed(() => auth.isAdmin())
 
-onMounted(loadUsers)
+// WHY onMounted 同时预加载审计数据: el-tabs tab-change 事件在某些 Element Plus 版本下可能不触发,
+//   预加载避免用户切到审计 Tab 时看到空数据 (审计数据量小, 预加载成本可接受)
+onMounted(() => {
+  loadUsers()
+  loadAudit()
+})
 </script>
 
 <template>

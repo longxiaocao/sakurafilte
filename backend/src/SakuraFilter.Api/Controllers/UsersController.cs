@@ -160,7 +160,19 @@ public class UsersController : ControllerBase
         if (req.Role != null) user.Role = req.Role;
         if (req.Email != null) user.Email = req.Email;
         if (req.FullName != null) user.FullName = req.FullName;
-        if (req.IsActive.HasValue) user.IsActive = req.IsActive.Value;
+        if (req.IsActive.HasValue)
+        {
+            // WHY 重新激活/解锁: 管理员把 IsActive=true 通常表示恢复访问意图,
+            //   场景1: 用户被禁用 (IsActive=false → true) → 应重置锁定
+            //   场景2: 用户被锁定 (LockedUntil != null, IsActive=true) → 应重置锁定
+            //   不重置会导致用户仍被锁定, 与管理员意图不符
+            if (req.IsActive.Value && (user.LockedUntil != null || !user.IsActive))
+            {
+                user.FailedLoginCount = 0;
+                user.LockedUntil = null;
+            }
+            user.IsActive = req.IsActive.Value;
+        }
         user.UpdatedAt = DateTimeOffset.UtcNow;
 
         await _db.SaveChangesAsync(ct);
