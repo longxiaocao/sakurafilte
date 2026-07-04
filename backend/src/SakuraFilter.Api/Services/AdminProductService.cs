@@ -43,205 +43,243 @@ public class AdminProductService
         var oemNormalized = NormalizeOem(form.Oem2);
         var oemDisplay = form.Oem2.Trim();
 
-        // 唯一性检查 (oem_no_normalized 唯一索引)
-        var exists = await _db.Products.AnyAsync(p => p.OemNoNormalized == oemNormalized, ct);
-        if (exists)
-            throw new InvalidOperationException($"产品已存在 (oem_no_normalized={oemNormalized})");
-
-        var product = new Product
+        // P0-1.3: 开启事务, 保证 Product + xref + machine_application + history 四表原子写入
+        //   WHY: 之前 3 次 SaveChangesAsync 之间任一失败会留孤儿数据 (e.g. product 已写但 xref 失败)
+        //   并发场景下 AnyAsync 检查与 SaveChangesAsync 之间有 TOCTOU 窗口, 第二个请求触发 23505 唯一约束冲突
+        //   → 端点层 catch DbUpdateException + 23505 → 返回 409 Conflict (见 Program.cs)
+        //   业务异常 (InvalidOperationException/ArgumentException) 还未写数据, 直接抛出无需显式回滚
+        //   (await using 会自动 rollback 未 commit 的事务)
+        await using var tx = await _db.Database.BeginTransactionAsync(ct);
+        try
         {
-            OemNoDisplay = oemDisplay,
-            OemNoNormalized = oemNormalized,
-            // 分区 1
-            ProductName1 = form.ProductName1?.Trim(),
-            ProductName2 = form.ProductName2?.Trim(),
-            Type = string.IsNullOrWhiteSpace(form.Type) ? DeriveTypeFromName(form.ProductName1) : form.Type.Trim(),
-            Mr1 = form.Mr1?.Trim(),
-            Oem2 = form.Oem2?.Trim(),
-            IsPublished = form.IsPublished,
-            Remark = form.Remark?.Trim(),
-            // 分区 3
-            D1Mm = form.D1Mm, D2Mm = form.D2Mm, D3Mm = form.D3Mm, D4Mm = form.D4Mm,
-            H1Mm = form.H1Mm, H2Mm = form.H2Mm, H3Mm = form.H3Mm, H4Mm = form.H4Mm,
-            D7Thread = form.D7Thread?.Trim(), D8Thread = form.D8Thread?.Trim(),
-            NoCheckValves = form.NoCheckValves, NoBypassValves = form.NoBypassValves,
-            // 分区 5
-            Media = form.Media?.Trim(), MediaModel = form.MediaModel?.Trim(),
-            BypassValveLr = form.BypassValveLr, BypassValveHr = form.BypassValveHr,
-            Efficiency1 = form.Efficiency1?.Trim(), Efficiency2 = form.Efficiency2?.Trim(),
-            BypassPressure = form.BypassPressure,
-            CollapsePressureBar = form.CollapsePressureBar,
-            SealingMaterial = form.SealingMaterial?.Trim(), TempRange = form.TempRange?.Trim(),
-            // 分区 6
-            QtyPerCarton = form.QtyPerCarton, WeightKgs = form.WeightKgs,
-            CartonLengthMm = form.CartonLengthMm, CartonWidthMm = form.CartonWidthMm, CartonHeightMm = form.CartonHeightMm,
-            MasterBoxQty = form.MasterBoxQty, MasterBoxWeightKgs = form.MasterBoxWeightKgs,
-            MasterBoxLengthMm = form.MasterBoxLengthMm, MasterBoxWidthMm = form.MasterBoxWidthMm, MasterBoxHeightMm = form.MasterBoxHeightMm,
-            VolumePerCartonM3 = DeriveVolume(form.CartonLengthMm, form.CartonWidthMm, form.CartonHeightMm),
-            // 元数据
-            CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow
-        };
-        _db.Products.Add(product);
-        await _db.SaveChangesAsync(ct);
+            // 唯一性检查 (oem_no_normalized 唯一索引) - 仍保留, 提供业务友好错误
+            //   注意: READ COMMITTED 下此检查不能消除并发竞态, 仅为常见路径提供 409 而非 500
+            var exists = await _db.Products.AnyAsync(p => p.OemNoNormalized == oemNormalized, ct);
+            if (exists)
+                throw new InvalidOperationException($"产品已存在 (oem_no_normalized={oemNormalized})");
 
-        // 分区 2: xref
-        foreach (var x in form.CrossReferences)
-        {
-            _db.CrossReferences.Add(new CrossReference
+            var product = new Product
             {
-                ProductId = product.Id,
-                ProductName1 = x.ProductName1?.Trim(),
-                OemBrand = x.OemBrand?.Trim(),
-                OemNo3 = x.OemNo3?.Trim(),
-                CreatedAt = DateTime.UtcNow
-            });
-        }
-        // 分区 7: 车型
-        foreach (var m in form.MachineApplications)
-        {
-            _db.MachineApplications.Add(MapToMachineApp(product.Id, m));
-        }
-        if (form.CrossReferences.Count > 0 || form.MachineApplications.Count > 0)
-            await _db.SaveChangesAsync(ct);
+                OemNoDisplay = oemDisplay,
+                OemNoNormalized = oemNormalized,
+                // 分区 1
+                ProductName1 = form.ProductName1?.Trim(),
+                ProductName2 = form.ProductName2?.Trim(),
+                Type = string.IsNullOrWhiteSpace(form.Type) ? DeriveTypeFromName(form.ProductName1) : form.Type.Trim(),
+                Mr1 = form.Mr1?.Trim(),
+                Oem2 = form.Oem2?.Trim(),
+                IsPublished = form.IsPublished,
+                Remark = form.Remark?.Trim(),
+                // 分区 3
+                D1Mm = form.D1Mm, D2Mm = form.D2Mm, D3Mm = form.D3Mm, D4Mm = form.D4Mm,
+                H1Mm = form.H1Mm, H2Mm = form.H2Mm, H3Mm = form.H3Mm, H4Mm = form.H4Mm,
+                D7Thread = form.D7Thread?.Trim(), D8Thread = form.D8Thread?.Trim(),
+                NoCheckValves = form.NoCheckValves, NoBypassValves = form.NoBypassValves,
+                // 分区 5
+                Media = form.Media?.Trim(), MediaModel = form.MediaModel?.Trim(),
+                BypassValveLr = form.BypassValveLr, BypassValveHr = form.BypassValveHr,
+                Efficiency1 = form.Efficiency1?.Trim(), Efficiency2 = form.Efficiency2?.Trim(),
+                BypassPressure = form.BypassPressure,
+                CollapsePressureBar = form.CollapsePressureBar,
+                SealingMaterial = form.SealingMaterial?.Trim(), TempRange = form.TempRange?.Trim(),
+                // 分区 6
+                QtyPerCarton = form.QtyPerCarton, WeightKgs = form.WeightKgs,
+                CartonLengthMm = form.CartonLengthMm, CartonWidthMm = form.CartonWidthMm, CartonHeightMm = form.CartonHeightMm,
+                MasterBoxQty = form.MasterBoxQty, MasterBoxWeightKgs = form.MasterBoxWeightKgs,
+                MasterBoxLengthMm = form.MasterBoxLengthMm, MasterBoxWidthMm = form.MasterBoxWidthMm, MasterBoxHeightMm = form.MasterBoxHeightMm,
+                VolumePerCartonM3 = DeriveVolume(form.CartonLengthMm, form.CartonWidthMm, form.CartonHeightMm),
+                // 元数据
+                CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow
+            };
+            _db.Products.Add(product);
+            await _db.SaveChangesAsync(ct);  // 拿到 product.Id
 
-        // 历史
-        _db.ProductHistory.Add(new ProductHistory
-        {
-            ProductId = product.Id,
-            ChangeType = "create",
-            ChangedBy = createdBy,
-            ChangedAt = DateTime.UtcNow,
-            ChangedFields = JsonSerializer.Serialize(new { action = "manual_create", oem = oemDisplay })
-        });
-        await _db.SaveChangesAsync(ct);
-
-        _logger.LogInformation("产品创建成功 id={Id} oem={Oem} xref={Xref} apps={Apps}",
-            product.Id, oemDisplay, form.CrossReferences.Count, form.MachineApplications.Count);
-        return await GetByIdAsync(product.Id, ct);
-    }
-
-    // ========== 更新产品 ==========
-    public async Task<ProductDetailDto> UpdateAsync(long id, ProductFormDto form, string? updatedBy, CancellationToken ct = default)
-    {
-        var product = await _db.Products.FirstOrDefaultAsync(p => p.Id == id, ct)
-            ?? throw new KeyNotFoundException($"产品 id={id} 不存在");
-
-        var changed = new Dictionary<string, object>();
-        void Track<T>(string key, T oldVal, T? newVal)
-        {
-            if (!EqualityComparer<T?>.Default.Equals(oldVal, newVal)) changed[key] = newVal!;
-        }
-
-        // 分区 1
-        Track(nameof(product.ProductName1), product.ProductName1, form.ProductName1?.Trim());
-        product.ProductName1 = form.ProductName1?.Trim();
-        Track(nameof(product.ProductName2), product.ProductName2, form.ProductName2?.Trim());
-        product.ProductName2 = form.ProductName2?.Trim();
-        if (!string.IsNullOrWhiteSpace(form.Type))
-        {
-            Track(nameof(product.Type), product.Type, form.Type.Trim());
-            product.Type = form.Type.Trim();
-        }
-        Track(nameof(product.Mr1), product.Mr1, form.Mr1?.Trim());
-        product.Mr1 = form.Mr1?.Trim();
-        if (!string.IsNullOrWhiteSpace(form.Oem2))
-        {
-            Track(nameof(product.Oem2), product.Oem2, form.Oem2.Trim());
-            product.Oem2 = form.Oem2.Trim();
-        }
-        Track(nameof(product.IsPublished), product.IsPublished, form.IsPublished);
-        product.IsPublished = form.IsPublished;
-        Track(nameof(product.Remark), product.Remark, form.Remark?.Trim());
-        product.Remark = form.Remark?.Trim();
-
-        // 分区 3
-        Track(nameof(product.D1Mm), product.D1Mm, form.D1Mm); product.D1Mm = form.D1Mm;
-        Track(nameof(product.D2Mm), product.D2Mm, form.D2Mm); product.D2Mm = form.D2Mm;
-        Track(nameof(product.D3Mm), product.D3Mm, form.D3Mm); product.D3Mm = form.D3Mm;
-        Track(nameof(product.D4Mm), product.D4Mm, form.D4Mm); product.D4Mm = form.D4Mm;
-        Track(nameof(product.H1Mm), product.H1Mm, form.H1Mm); product.H1Mm = form.H1Mm;
-        Track(nameof(product.H2Mm), product.H2Mm, form.H2Mm); product.H2Mm = form.H2Mm;
-        Track(nameof(product.H3Mm), product.H3Mm, form.H3Mm); product.H3Mm = form.H3Mm;
-        Track(nameof(product.H4Mm), product.H4Mm, form.H4Mm); product.H4Mm = form.H4Mm;
-        Track(nameof(product.D7Thread), product.D7Thread, form.D7Thread?.Trim()); product.D7Thread = form.D7Thread?.Trim();
-        Track(nameof(product.D8Thread), product.D8Thread, form.D8Thread?.Trim()); product.D8Thread = form.D8Thread?.Trim();
-        Track(nameof(product.NoCheckValves), product.NoCheckValves, form.NoCheckValves); product.NoCheckValves = form.NoCheckValves;
-        Track(nameof(product.NoBypassValves), product.NoBypassValves, form.NoBypassValves); product.NoBypassValves = form.NoBypassValves;
-
-        // 分区 5
-        Track(nameof(product.Media), product.Media, form.Media?.Trim()); product.Media = form.Media?.Trim();
-        Track(nameof(product.MediaModel), product.MediaModel, form.MediaModel?.Trim()); product.MediaModel = form.MediaModel?.Trim();
-        Track(nameof(product.BypassValveLr), product.BypassValveLr, form.BypassValveLr); product.BypassValveLr = form.BypassValveLr;
-        Track(nameof(product.BypassValveHr), product.BypassValveHr, form.BypassValveHr); product.BypassValveHr = form.BypassValveHr;
-        Track(nameof(product.Efficiency1), product.Efficiency1, form.Efficiency1?.Trim()); product.Efficiency1 = form.Efficiency1?.Trim();
-        Track(nameof(product.Efficiency2), product.Efficiency2, form.Efficiency2?.Trim()); product.Efficiency2 = form.Efficiency2?.Trim();
-        Track(nameof(product.BypassPressure), product.BypassPressure, form.BypassPressure); product.BypassPressure = form.BypassPressure;
-        Track(nameof(product.CollapsePressureBar), product.CollapsePressureBar, form.CollapsePressureBar); product.CollapsePressureBar = form.CollapsePressureBar;
-        Track(nameof(product.SealingMaterial), product.SealingMaterial, form.SealingMaterial?.Trim()); product.SealingMaterial = form.SealingMaterial?.Trim();
-        Track(nameof(product.TempRange), product.TempRange, form.TempRange?.Trim()); product.TempRange = form.TempRange?.Trim();
-
-        // 分区 6
-        Track(nameof(product.QtyPerCarton), product.QtyPerCarton, form.QtyPerCarton); product.QtyPerCarton = form.QtyPerCarton;
-        Track(nameof(product.WeightKgs), product.WeightKgs, form.WeightKgs); product.WeightKgs = form.WeightKgs;
-        Track(nameof(product.CartonLengthMm), product.CartonLengthMm, form.CartonLengthMm); product.CartonLengthMm = form.CartonLengthMm;
-        Track(nameof(product.CartonWidthMm), product.CartonWidthMm, form.CartonWidthMm); product.CartonWidthMm = form.CartonWidthMm;
-        Track(nameof(product.CartonHeightMm), product.CartonHeightMm, form.CartonHeightMm); product.CartonHeightMm = form.CartonHeightMm;
-        Track(nameof(product.MasterBoxQty), product.MasterBoxQty, form.MasterBoxQty); product.MasterBoxQty = form.MasterBoxQty;
-        Track(nameof(product.MasterBoxWeightKgs), product.MasterBoxWeightKgs, form.MasterBoxWeightKgs); product.MasterBoxWeightKgs = form.MasterBoxWeightKgs;
-        Track(nameof(product.MasterBoxLengthMm), product.MasterBoxLengthMm, form.MasterBoxLengthMm); product.MasterBoxLengthMm = form.MasterBoxLengthMm;
-        Track(nameof(product.MasterBoxWidthMm), product.MasterBoxWidthMm, form.MasterBoxWidthMm); product.MasterBoxWidthMm = form.MasterBoxWidthMm;
-        Track(nameof(product.MasterBoxHeightMm), product.MasterBoxHeightMm, form.MasterBoxHeightMm); product.MasterBoxHeightMm = form.MasterBoxHeightMm;
-        var newVol = DeriveVolume(product.CartonLengthMm, product.CartonWidthMm, product.CartonHeightMm);
-        Track(nameof(product.VolumePerCartonM3), product.VolumePerCartonM3, newVol);
-        product.VolumePerCartonM3 = newVol;
-
-        product.UpdatedAt = DateTime.UtcNow;
-        await _db.SaveChangesAsync(ct);
-
-        // xref: 全量替换 (后台表单语义 = 全量编辑)
-        if (form.CrossReferences != null)
-        {
-            var oldXref = await _db.CrossReferences.Where(x => x.ProductId == id).ToListAsync(ct);
-            if (oldXref.Count > 0) _db.CrossReferences.RemoveRange(oldXref);
+            // 分区 2: xref
             foreach (var x in form.CrossReferences)
             {
                 _db.CrossReferences.Add(new CrossReference
                 {
-                    ProductId = id,
+                    ProductId = product.Id,
                     ProductName1 = x.ProductName1?.Trim(),
                     OemBrand = x.OemBrand?.Trim(),
                     OemNo3 = x.OemNo3?.Trim(),
                     CreatedAt = DateTime.UtcNow
                 });
             }
-        }
-        // machine_application: 全量替换
-        if (form.MachineApplications != null)
-        {
-            var oldApps = await _db.MachineApplications.Where(m => m.ProductId == id).ToListAsync(ct);
-            if (oldApps.Count > 0) _db.MachineApplications.RemoveRange(oldApps);
+            // 分区 7: 车型
             foreach (var m in form.MachineApplications)
             {
-                _db.MachineApplications.Add(MapToMachineApp(id, m));
+                _db.MachineApplications.Add(MapToMachineApp(product.Id, m));
             }
-        }
+            if (form.CrossReferences.Count > 0 || form.MachineApplications.Count > 0)
+                await _db.SaveChangesAsync(ct);
 
-        // 历史
-        if (changed.Count > 0 || form.CrossReferences?.Count > 0 || form.MachineApplications?.Count > 0)
-        {
+            // 历史
             _db.ProductHistory.Add(new ProductHistory
             {
-                ProductId = id,
-                ChangeType = "update",
-                ChangedBy = updatedBy,
+                ProductId = product.Id,
+                ChangeType = "create",
+                ChangedBy = createdBy,
                 ChangedAt = DateTime.UtcNow,
-                ChangedFields = JsonSerializer.Serialize(changed)
+                ChangedFields = JsonSerializer.Serialize(new { action = "manual_create", oem = oemDisplay })
             });
-        }
-        await _db.SaveChangesAsync(ct);
+            await _db.SaveChangesAsync(ct);
 
-        _logger.LogInformation("产品更新 id={Id} 变更字段 {Count}", id, changed.Count);
-        return await GetByIdAsync(id, ct);
+            await tx.CommitAsync(ct);
+
+            _logger.LogInformation("产品创建成功 id={Id} oem={Oem} xref={Xref} apps={Apps}",
+                product.Id, oemDisplay, form.CrossReferences.Count, form.MachineApplications.Count);
+            return await GetByIdAsync(product.Id, ct);
+        }
+        catch (Exception ex) when (ex is not InvalidOperationException && ex is not ArgumentException)
+        {
+            // 业务异常 (产品已存在 / 校验失败) 直接抛出: await using 会自动 rollback 未 commit 的事务
+            // 其他异常 (含 DbUpdateException 23505) 显式回滚 + 记日志 + 重抛, 由端点层映射为合适 HTTP 状态码
+            await tx.RollbackAsync(ct);
+            _logger.LogError(ex, "产品创建事务回滚 oem={Oem}", oemDisplay);
+            throw;
+        }
+    }
+
+    // ========== 更新产品 ==========
+    public async Task<ProductDetailDto> UpdateAsync(long id, ProductFormDto form, string? updatedBy, CancellationToken ct = default)
+    {
+        // P0-1.3: 开启事务, 保证 products + xref + machine_application + history 四表原子更新
+        //   WHY: 之前 2 次 SaveChangesAsync 之间任一失败会导致部分字段更新 + 子表数据丢失
+        //   并发场景下若 xref 唯一索引冲突也会触发 23505, 由端点层映射为 409
+        await using var tx = await _db.Database.BeginTransactionAsync(ct);
+        try
+        {
+            var product = await _db.Products.FirstOrDefaultAsync(p => p.Id == id, ct)
+                ?? throw new KeyNotFoundException($"产品 id={id} 不存在");
+
+            var changed = new Dictionary<string, object>();
+            void Track<T>(string key, T oldVal, T? newVal)
+            {
+                if (!EqualityComparer<T?>.Default.Equals(oldVal, newVal)) changed[key] = newVal!;
+            }
+
+            // 分区 1
+            Track(nameof(product.ProductName1), product.ProductName1, form.ProductName1?.Trim());
+            product.ProductName1 = form.ProductName1?.Trim();
+            Track(nameof(product.ProductName2), product.ProductName2, form.ProductName2?.Trim());
+            product.ProductName2 = form.ProductName2?.Trim();
+            if (!string.IsNullOrWhiteSpace(form.Type))
+            {
+                Track(nameof(product.Type), product.Type, form.Type.Trim());
+                product.Type = form.Type.Trim();
+            }
+            Track(nameof(product.Mr1), product.Mr1, form.Mr1?.Trim());
+            product.Mr1 = form.Mr1?.Trim();
+            if (!string.IsNullOrWhiteSpace(form.Oem2))
+            {
+                Track(nameof(product.Oem2), product.Oem2, form.Oem2.Trim());
+                product.Oem2 = form.Oem2.Trim();
+            }
+            Track(nameof(product.IsPublished), product.IsPublished, form.IsPublished);
+            product.IsPublished = form.IsPublished;
+            Track(nameof(product.Remark), product.Remark, form.Remark?.Trim());
+            product.Remark = form.Remark?.Trim();
+
+            // 分区 3
+            Track(nameof(product.D1Mm), product.D1Mm, form.D1Mm); product.D1Mm = form.D1Mm;
+            Track(nameof(product.D2Mm), product.D2Mm, form.D2Mm); product.D2Mm = form.D2Mm;
+            Track(nameof(product.D3Mm), product.D3Mm, form.D3Mm); product.D3Mm = form.D3Mm;
+            Track(nameof(product.D4Mm), product.D4Mm, form.D4Mm); product.D4Mm = form.D4Mm;
+            Track(nameof(product.H1Mm), product.H1Mm, form.H1Mm); product.H1Mm = form.H1Mm;
+            Track(nameof(product.H2Mm), product.H2Mm, form.H2Mm); product.H2Mm = form.H2Mm;
+            Track(nameof(product.H3Mm), product.H3Mm, form.H3Mm); product.H3Mm = form.H3Mm;
+            Track(nameof(product.H4Mm), product.H4Mm, form.H4Mm); product.H4Mm = form.H4Mm;
+            Track(nameof(product.D7Thread), product.D7Thread, form.D7Thread?.Trim()); product.D7Thread = form.D7Thread?.Trim();
+            Track(nameof(product.D8Thread), product.D8Thread, form.D8Thread?.Trim()); product.D8Thread = form.D8Thread?.Trim();
+            Track(nameof(product.NoCheckValves), product.NoCheckValves, form.NoCheckValves); product.NoCheckValves = form.NoCheckValves;
+            Track(nameof(product.NoBypassValves), product.NoBypassValves, form.NoBypassValves); product.NoBypassValves = form.NoBypassValves;
+
+            // 分区 5
+            Track(nameof(product.Media), product.Media, form.Media?.Trim()); product.Media = form.Media?.Trim();
+            Track(nameof(product.MediaModel), product.MediaModel, form.MediaModel?.Trim()); product.MediaModel = form.MediaModel?.Trim();
+            Track(nameof(product.BypassValveLr), product.BypassValveLr, form.BypassValveLr); product.BypassValveLr = form.BypassValveLr;
+            Track(nameof(product.BypassValveHr), product.BypassValveHr, form.BypassValveHr); product.BypassValveHr = form.BypassValveHr;
+            Track(nameof(product.Efficiency1), product.Efficiency1, form.Efficiency1?.Trim()); product.Efficiency1 = form.Efficiency1?.Trim();
+            Track(nameof(product.Efficiency2), product.Efficiency2, form.Efficiency2?.Trim()); product.Efficiency2 = form.Efficiency2?.Trim();
+            Track(nameof(product.BypassPressure), product.BypassPressure, form.BypassPressure); product.BypassPressure = form.BypassPressure;
+            Track(nameof(product.CollapsePressureBar), product.CollapsePressureBar, form.CollapsePressureBar); product.CollapsePressureBar = form.CollapsePressureBar;
+            Track(nameof(product.SealingMaterial), product.SealingMaterial, form.SealingMaterial?.Trim()); product.SealingMaterial = form.SealingMaterial?.Trim();
+            Track(nameof(product.TempRange), product.TempRange, form.TempRange?.Trim()); product.TempRange = form.TempRange?.Trim();
+
+            // 分区 6
+            Track(nameof(product.QtyPerCarton), product.QtyPerCarton, form.QtyPerCarton); product.QtyPerCarton = form.QtyPerCarton;
+            Track(nameof(product.WeightKgs), product.WeightKgs, form.WeightKgs); product.WeightKgs = form.WeightKgs;
+            Track(nameof(product.CartonLengthMm), product.CartonLengthMm, form.CartonLengthMm); product.CartonLengthMm = form.CartonLengthMm;
+            Track(nameof(product.CartonWidthMm), product.CartonWidthMm, form.CartonWidthMm); product.CartonWidthMm = form.CartonWidthMm;
+            Track(nameof(product.CartonHeightMm), product.CartonHeightMm, form.CartonHeightMm); product.CartonHeightMm = form.CartonHeightMm;
+            Track(nameof(product.MasterBoxQty), product.MasterBoxQty, form.MasterBoxQty); product.MasterBoxQty = form.MasterBoxQty;
+            Track(nameof(product.MasterBoxWeightKgs), product.MasterBoxWeightKgs, form.MasterBoxWeightKgs); product.MasterBoxWeightKgs = form.MasterBoxWeightKgs;
+            Track(nameof(product.MasterBoxLengthMm), product.MasterBoxLengthMm, form.MasterBoxLengthMm); product.MasterBoxLengthMm = form.MasterBoxLengthMm;
+            Track(nameof(product.MasterBoxWidthMm), product.MasterBoxWidthMm, form.MasterBoxWidthMm); product.MasterBoxWidthMm = form.MasterBoxWidthMm;
+            Track(nameof(product.MasterBoxHeightMm), product.MasterBoxHeightMm, form.MasterBoxHeightMm); product.MasterBoxHeightMm = form.MasterBoxHeightMm;
+            var newVol = DeriveVolume(product.CartonLengthMm, product.CartonWidthMm, product.CartonHeightMm);
+            Track(nameof(product.VolumePerCartonM3), product.VolumePerCartonM3, newVol);
+            product.VolumePerCartonM3 = newVol;
+
+            product.UpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync(ct);
+
+            // xref: 全量替换 (后台表单语义 = 全量编辑)
+            if (form.CrossReferences != null)
+            {
+                var oldXref = await _db.CrossReferences.Where(x => x.ProductId == id).ToListAsync(ct);
+                if (oldXref.Count > 0) _db.CrossReferences.RemoveRange(oldXref);
+                foreach (var x in form.CrossReferences)
+                {
+                    _db.CrossReferences.Add(new CrossReference
+                    {
+                        ProductId = id,
+                        ProductName1 = x.ProductName1?.Trim(),
+                        OemBrand = x.OemBrand?.Trim(),
+                        OemNo3 = x.OemNo3?.Trim(),
+                        CreatedAt = DateTime.UtcNow
+                    });
+                }
+            }
+            // machine_application: 全量替换
+            if (form.MachineApplications != null)
+            {
+                var oldApps = await _db.MachineApplications.Where(m => m.ProductId == id).ToListAsync(ct);
+                if (oldApps.Count > 0) _db.MachineApplications.RemoveRange(oldApps);
+                foreach (var m in form.MachineApplications)
+                {
+                    _db.MachineApplications.Add(MapToMachineApp(id, m));
+                }
+            }
+
+            // 历史
+            if (changed.Count > 0 || form.CrossReferences?.Count > 0 || form.MachineApplications?.Count > 0)
+            {
+                _db.ProductHistory.Add(new ProductHistory
+                {
+                    ProductId = id,
+                    ChangeType = "update",
+                    ChangedBy = updatedBy,
+                    ChangedAt = DateTime.UtcNow,
+                    ChangedFields = JsonSerializer.Serialize(changed)
+                });
+            }
+            await _db.SaveChangesAsync(ct);
+
+            await tx.CommitAsync(ct);
+
+            _logger.LogInformation("产品更新 id={Id} 变更字段 {Count}", id, changed.Count);
+            return await GetByIdAsync(id, ct);
+        }
+        catch (Exception ex) when (ex is not KeyNotFoundException && ex is not ArgumentException && ex is not InvalidOperationException)
+        {
+            // 业务异常 (产品不存在 / 校验失败) 直接抛出: await using 会自动 rollback 未 commit 的事务
+            // 其他异常 (含 DbUpdateException 23505) 显式回滚 + 记日志 + 重抛, 由端点层映射为合适 HTTP 状态码
+            await tx.RollbackAsync(ct);
+            _logger.LogError(ex, "产品更新事务回滚 id={Id}", id);
+            throw;
+        }
     }
 
     // ========== 软删除 ==========

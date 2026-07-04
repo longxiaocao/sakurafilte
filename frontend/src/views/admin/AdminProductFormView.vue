@@ -138,7 +138,15 @@ async function save() {
       ElMessage.success('已创建')
     }
     router.push('/admin/products')
-  } catch (e: any) {} finally {
+  } catch (e: any) {
+    // P0-1.3: 识别 409 (产品已存在), 给出用户友好提示
+    //   后端并发场景下 AnyAsync 检查与 SaveChangesAsync 之间有 TOCTOU 窗口,
+    //   第二个请求触发 23505 唯一约束冲突, 端点映射为 409 Conflict
+    //   拦截器已展示后端原始 title/detail, 这里补充更友好的行动指引
+    if (e?.response?.status === 409 || e?.problem?.status === 409) {
+      ElMessage.error('产品已存在，请检查 OEM 号')
+    }
+  } finally {
     saving.value = false
   }
 }

@@ -18,6 +18,7 @@
 import json
 import os
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -301,9 +302,161 @@ def case_overwrite_upload(product_id, oem_normalized):
     print(f"         若旧 key 仍存在, 检查后端日志是否有 '旧图删除失败' 警告")
 
 
+# ========== P0-1.3 Case 4: 并发创建相同 OEM 第二个应返回 409 ==========
+def case_concurrent_create_409():
+    """并发创建相同 OEM, 至少一个应返回 409 (验证 23505 → 409 映射)"""
+    print("\n" + "=" * 60)
+    print("Case 4: 并发创建相同 OEM 第二个应返回 409")
+    print("=" * 60)
+    # 用时间戳生成唯一 OEM, 避免与已有数据冲突
+    oem = f"P013-CONC-{int(time.time())}"
+    payload = {
+        "oem2": oem,
+        "isPublished": True,
+        "crossReferences": [],
+        "machineApplications": []
+    }
+    body = json.dumps(payload).encode("utf-8")
+
+    # 用 threading 并发发送两个请求 (模拟 TOCTOU 竞态)
+    results = []
+    lock = threading.Lock()
+
+    def send():
+        req = urllib.request.Request(
+            f"{BASE}/api/admin/products",
+            data=body,
+            headers={**H_ADMIN, "Content-Type": "application/json", "X-User": "p013-test"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=15) as r:
+                with lock:
+                    results.append((r.status, json.loads(r.read())))
+        except urllib.error.HTTPError as e:
+            try:
+                with lock:
+                    results.append((e.code, json.loads(e.read())))
+            except Exception:
+                with lock:
+                    results.append((e.code, {}))
+
+    t1 = threading.Thread(target=send)
+    t2 = threading.Thread(target=send)
+    t1.start(); t2.start()
+    t1.join(); t2.join()
+
+    statuses = sorted([r[0] for r in results])
+    # 期望: 至少一个 201 (成功) + 至少一个 409 (冲突)
+    #   高并发下两个都 409 也可接受 (理论极端情况), 但必须没有 500
+    has_409 = 409 in statuses
+    no_500 = 500 not in statuses
+    record(has_409 and no_500,
+           f"并发创建 OEM={oem} 至少一个返回 409 且无 500: statuses={statuses}")
+    if not no_500:
+        print(f"  [ERROR] 出现 500, 检查后端是否正确处理 23505: results={results}")
+
+    # 清理: 软删除成功创建的产品 (避免污染测试数据)
+    for status, resp in results:
+        if status == 201 and isinstance(resp, dict) and "id" in resp:
+            req = urllib.request.Request(
+                f"{BASE}/api/admin/products/{resp['id']}",
+                headers=H_ADMIN, method="DELETE",
+            )
+            try:
+                urllib.request.urlopen(req, timeout=10)
+            except Exception:
+                pass
+
+
+# ========== P0-1.3 Case 5: 正常创建验证四表一致性 ==========
+def case_normal_create_three_table_consistency():
+    """正常创建含 xref + apps 的产品, 验证 products + cross_references + machine_applications + product_history 四表都有记录"""
+    print("\n" + "=" * 60)
+    print("Case 5: 正常创建验证四表一致性 (products + xref + apps + history)")
+    print("=" * 60)
+    oem = f"P013-NORM-{int(time.time())}"
+    payload = {
+        "oem2": oem,
+        "productName1": "P013TestProduct",
+        "type": "oil",
+        "isPublished": True,
+        "crossReferences": [
+            {"oemBrand": "Bosch", "oemNo3": "P013X1", "productName1": "BoschFilter"}
+        ],
+        "machineApplications": [
+            {"machineBrand": "Toyota", "machineModel": "Corolla"}
+        ]
+    }
+    body = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+        f"{BASE}/api/admin/products",
+        data=body,
+        headers={**H_ADMIN, "Content-Type": "application/json", "X-User": "p013-test"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=15) as r:
+            status = r.status
+            resp = json.loads(r.read())
+    except urllib.error.HTTPError as e:
+        status = e.code
+        try:
+            resp = json.loads(e.read())
+        except Exception:
+            resp = {}
+
+    record(status == 201, f"创建产品返回 201 (实际 {status}): resp={resp}")
+    if status != 201:
+        print(f"  [SKIP] 创建失败, 跳过四表校验")
+        return
+
+    product_id = resp.get("id")
+    print(f"  创建产品 id={product_id} oem={oem}")
+
+    # DB 校验: 四表都有记录 (验证事务已 commit)
+    c = get_db()
+    cur = c.cursor()
+
+    # 1. products 主表
+    cur.execute("SELECT id, oem_no_normalized FROM products WHERE id = %s", (product_id,))
+    row = cur.fetchone()
+    record(row is not None, f"products 表有记录 (id={product_id})")
+
+    # 2. cross_references 交叉引用表
+    cur.execute("SELECT count(*) FROM cross_references WHERE product_id = %s", (product_id,))
+    xref_count = cur.fetchone()[0]
+    record(xref_count == 1, f"cross_references 表有 1 条记录 (实际 {xref_count})")
+
+    # 3. machine_applications 车型表
+    cur.execute("SELECT count(*) FROM machine_applications WHERE product_id = %s", (product_id,))
+    apps_count = cur.fetchone()[0]
+    record(apps_count == 1, f"machine_applications 表有 1 条记录 (实际 {apps_count})")
+
+    # 4. product_history 变更历史表 (change_type='create')
+    cur.execute(
+        "SELECT count(*) FROM product_history WHERE product_id = %s AND change_type = 'create'",
+        (product_id,)
+    )
+    hist_count = cur.fetchone()[0]
+    record(hist_count == 1, f"product_history 表有 1 条 change_type='create' 记录 (实际 {hist_count})")
+
+    c.close()
+
+    # 清理: 软删除产品 (留下历史记录, 不影响其他测试)
+    req = urllib.request.Request(
+        f"{BASE}/api/admin/products/{product_id}",
+        headers=H_ADMIN, method="DELETE",
+    )
+    try:
+        urllib.request.urlopen(req, timeout=10)
+    except Exception:
+        pass
+
+
 def main():
     print("=" * 60)
-    print("P0-1.2 图片上传服务事务重构 一致性验证")
+    print("P0-1.2 图片上传 + P0-1.3 三表事务一致性 验证")
     print("=" * 60)
 
     # 健康检查
@@ -327,10 +480,14 @@ def main():
     product_id, oem_normalized = row
     print(f"  测试产品: id={product_id} oem_no_normalized={oem_normalized}")
 
-    # 执行用例
+    # 执行用例 (P0-1.2 图片上传)
     case_s3_failure_rollback()
     case_normal_upload(product_id, oem_normalized)
     case_overwrite_upload(product_id, oem_normalized)
+
+    # 执行用例 (P0-1.3 三表事务一致性)
+    case_concurrent_create_409()
+    case_normal_create_three_table_consistency()
 
     # 汇总
     print("\n" + "=" * 60)

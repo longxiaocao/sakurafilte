@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Minio;
 using Aliyun.OSS;
+using Npgsql;  // P0-1.3: PostgresException SqlState == "23505" 用于 409 映射
 using SakuraFilter.Api.Services;
 using SakuraFilter.Core.DTOs;
 using SakuraFilter.Core.Entities;
@@ -920,6 +921,18 @@ app.MapPost("/api/admin/products", async (ProductFormDto form, AdminProductServi
         var p = await svc.CreateAsync(form, user, ct);
         return Results.Created($"/api/admin/products/{p.Id}", p);
     }
+    // P0-1.3: 并发场景下 AnyAsync 检查与 SaveChangesAsync 之间有 TOCTOU 窗口,
+    //   第二个请求触发 23505 唯一约束冲突, 映射为 409 Conflict 而非 500
+    catch (DbUpdateException ex) when (
+        ex.InnerException is PostgresException pgEx && pgEx.SqlState == "23505")
+    {
+        return Results.Conflict(new ProblemDetails
+        {
+            Title = "产品已存在",
+            Status = StatusCodes.Status409Conflict,
+            Detail = $"OEM 号已存在: {pgEx.Detail}"
+        });
+    }
     catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
     catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
 })
@@ -1023,6 +1036,17 @@ app.MapPut("/api/admin/products/{id:long}", async (long id, ProductFormDto form,
         var user = ctx.Request.Headers["X-User"].FirstOrDefault() ?? "system";
         var p = await svc.UpdateAsync(id, form, user, ct);
         return Results.Ok(p);
+    }
+    // P0-1.3: 并发场景下若 xref 唯一索引冲突触发 23505, 映射为 409 Conflict
+    catch (DbUpdateException ex) when (
+        ex.InnerException is PostgresException pgEx && pgEx.SqlState == "23505")
+    {
+        return Results.Conflict(new ProblemDetails
+        {
+            Title = "产品已存在",
+            Status = StatusCodes.Status409Conflict,
+            Detail = $"OEM 号已存在: {pgEx.Detail}"
+        });
     }
     catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
     catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
