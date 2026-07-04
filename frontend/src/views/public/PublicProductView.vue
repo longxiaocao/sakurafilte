@@ -118,9 +118,10 @@ function numOrDash(v?: number | string) {
 </script>
 
 <template>
-  <div class="p-3 max-w-screen-2xl mx-auto" v-loading="loading">
+  <!-- 需求 2: 卡片式布局 + 1px hairline 边框 + 7 分区宽度统一 (max-w-6xl) -->
+  <div class="p-3 max-w-6xl mx-auto" v-loading="loading">
     <!-- 顶部导航 + 关键标识 -->
-    <div class="flex items-center gap-2 mb-3">
+    <div class="flex items-center gap-2 mb-4 pb-3 hairline-b">
       <el-button @click="goBack" size="small">
         <el-icon><ArrowLeft /></el-icon> 返回
       </el-button>
@@ -132,11 +133,15 @@ function numOrDash(v?: number | string) {
 
     <div v-if="err" class="text-red-600 text-sm mb-2">{{ err }}</div>
 
-    <!-- P3.3 (Task 11): 7 分区折叠 (默认全展开) -->
-    <el-collapse v-if="data" v-model="activeNames" class="public-product-collapse">
+    <!-- 7 分区卡片网格: 2 列布局 (大屏) / 1 列 (小屏); 表格/图片类分区跨 2 列 -->
+    <div v-if="data" class="grid grid-cols-1 lg:grid-cols-2 gap-4">
       <!-- 分区 1: 基础信息 -->
-      <el-collapse-item name="p1" title="分区 1 · 基础信息">
-        <div class="grid grid-cols-2 gap-y-1 text-sm">
+      <section class="hairline p-4 bg-[var(--color-bg-elevated)]">
+        <header class="flex items-center justify-between mb-3 pb-2 hairline-b">
+          <h2 class="text-sm font-medium">基础信息</h2>
+          <span class="text-xs text-muted">7 项</span>
+        </header>
+        <div class="grid grid-cols-2 gap-y-2 text-sm">
           <div class="text-muted">Product Name 1</div><div>{{ data.productName1 || '—' }}</div>
           <div class="text-muted">Product Name 2</div><div>{{ data.productName2 || '—' }}</div>
           <div class="text-muted">Type</div><div>{{ data.type || '—' }}</div>
@@ -149,10 +154,14 @@ function numOrDash(v?: number | string) {
             <el-tag v-else type="info" size="small">否</el-tag>
           </div>
         </div>
-      </el-collapse-item>
+      </section>
 
-      <!-- 分区 2: 替代 (cross_references) -->
-      <el-collapse-item name="p2" :title="`分区 2 · 替代 OEM (${data.crossReferences?.length ?? 0})`">
+      <!-- 分区 2: 替代 OEM (跨整行, 表格宽) -->
+      <section class="hairline p-4 bg-[var(--color-bg-elevated)] lg:col-span-2">
+        <header class="flex items-center justify-between mb-3 pb-2 hairline-b">
+          <h2 class="text-sm font-medium">替代 OEM</h2>
+          <span class="text-xs text-muted">{{ data.crossReferences?.length ?? 0 }} 条</span>
+        </header>
         <el-table v-if="data.crossReferences && data.crossReferences.length > 0"
           :data="data.crossReferences" size="small" max-height="320">
           <el-table-column prop="oemBrand" label="OEM Brand" width="160" />
@@ -160,11 +169,14 @@ function numOrDash(v?: number | string) {
           <el-table-column prop="productName1" label="Product Name 1" />
         </el-table>
         <div v-else class="text-muted text-sm">暂无替代 OEM</div>
-      </el-collapse-item>
+      </section>
 
       <!-- 分区 3: 尺寸 -->
-      <el-collapse-item name="p3" title="分区 3 · 尺寸 (mm)">
-        <div class="grid grid-cols-4 gap-y-1 text-sm">
+      <section class="hairline p-4 bg-[var(--color-bg-elevated)]">
+        <header class="flex items-center justify-between mb-3 pb-2 hairline-b">
+          <h2 class="text-sm font-medium">尺寸 (mm)</h2>
+        </header>
+        <div class="grid grid-cols-4 gap-y-2 text-sm">
           <div class="text-muted">D1</div><div>{{ numOrDash(data.d1Mm) }}</div>
           <div class="text-muted">D2</div><div>{{ numOrDash(data.d2Mm) }}</div>
           <div class="text-muted">D3</div><div>{{ numOrDash(data.d3Mm) }}</div>
@@ -178,24 +190,31 @@ function numOrDash(v?: number | string) {
           <div class="text-muted">单向阀数</div><div>{{ numOrDash(data.noCheckValves) }}</div>
           <div class="text-muted">旁通阀数</div><div>{{ numOrDash(data.noBypassValves) }}</div>
         </div>
-      </el-collapse-item>
+      </section>
 
-      <!-- 分区 4: 图片 (主图 + 5 副图, R5 命名 oem2/{OEM}_{slot}.jpg) -->
-      <el-collapse-item name="p4" :title="`分区 4 · 图片 (${imageUrls.length})`">
+      <!-- 分区 4: 图片 (跨整行, 主图 + 5 副图, R5 命名 oem2/{OEM}_{slot}.jpg) -->
+      <section class="hairline p-4 bg-[var(--color-bg-elevated)] lg:col-span-2">
+        <header class="flex items-center justify-between mb-3 pb-2 hairline-b">
+          <h2 class="text-sm font-medium">图片</h2>
+          <span class="text-xs text-muted">{{ imageUrls.length }} 张</span>
+        </header>
         <div v-if="imageUrls.length > 0" class="flex gap-3 flex-wrap">
           <div v-for="img in imageUrls" :key="img.slot" class="text-center">
             <img :src="img.url" :alt="`Slot ${img.slot}`"
-                 class="w-32 h-32 object-cover hairline-b"
+                 class="w-32 h-32 object-cover hairline"
                  @error="(e) => ((e.target as HTMLImageElement).src = '/logo.png')" />
             <div class="text-xs text-muted mt-1">图 {{ img.slot }}</div>
           </div>
         </div>
         <div v-else class="text-muted text-sm">暂无图片 (按 R5 命名: oem2/{OEM}.jpg)</div>
-      </el-collapse-item>
+      </section>
 
       <!-- 分区 5: 性能 -->
-      <el-collapse-item name="p5" title="分区 5 · 性能">
-        <div class="grid grid-cols-2 gap-y-1 text-sm">
+      <section class="hairline p-4 bg-[var(--color-bg-elevated)]">
+        <header class="flex items-center justify-between mb-3 pb-2 hairline-b">
+          <h2 class="text-sm font-medium">性能</h2>
+        </header>
+        <div class="grid grid-cols-2 gap-y-2 text-sm">
           <div class="text-muted">Media Name</div><div>{{ data.media || '—' }}</div>
           <div class="text-muted">Media Model</div><div>{{ data.mediaModel || '—' }}</div>
           <div class="text-muted">Bypass Valve LR</div><div>{{ numOrDash(data.bypassValveLr) }}</div>
@@ -206,11 +225,14 @@ function numOrDash(v?: number | string) {
           <div class="text-muted">Seal Material</div><div>{{ data.sealingMaterial || '—' }}</div>
           <div class="text-muted">Temperature Range</div><div>{{ data.tempRange || '—' }}</div>
         </div>
-      </el-collapse-item>
+      </section>
 
       <!-- 分区 6: 包装 -->
-      <el-collapse-item name="p6" title="分区 6 · 包装">
-        <div class="grid grid-cols-2 gap-y-1 text-sm">
+      <section class="hairline p-4 bg-[var(--color-bg-elevated)]">
+        <header class="flex items-center justify-between mb-3 pb-2 hairline-b">
+          <h2 class="text-sm font-medium">包装</h2>
+        </header>
+        <div class="grid grid-cols-2 gap-y-2 text-sm">
           <div class="text-muted">Each Carton QTY</div><div>{{ numOrDash(data.qtyPerCarton) }}</div>
           <div class="text-muted">Each Carton Weight (KGS)</div><div>{{ numOrDash(data.weightKgs) }}</div>
           <div class="text-muted">Carton Length (mm)</div><div>{{ numOrDash(data.cartonLengthMm) }}</div>
@@ -219,10 +241,14 @@ function numOrDash(v?: number | string) {
           <div class="text-muted">Volume / CTN (m³)</div>
           <div><strong>{{ numOrDash(data.volumePerCartonM3) }}</strong> <span class="text-xs text-muted">(自动)</span></div>
         </div>
-      </el-collapse-item>
+      </section>
 
-      <!-- 分区 7: 适配车型 (machine_application) -->
-      <el-collapse-item name="p7" :title="`分区 7 · 适配车型 (${data.machineApplications?.length ?? 0})`">
+      <!-- 分区 7: 适配车型 (跨整行) -->
+      <section class="hairline p-4 bg-[var(--color-bg-elevated)] lg:col-span-2">
+        <header class="flex items-center justify-between mb-3 pb-2 hairline-b">
+          <h2 class="text-sm font-medium">适配车型</h2>
+          <span class="text-xs text-muted">{{ data.machineApplications?.length ?? 0 }} 条</span>
+        </header>
         <el-table v-if="data.machineApplications && data.machineApplications.length > 0"
           :data="data.machineApplications" size="small" max-height="360">
           <el-table-column prop="machineBrand" label="品牌" width="120" />
@@ -235,24 +261,13 @@ function numOrDash(v?: number | string) {
           <el-table-column prop="power" label="功率" width="80" />
         </el-table>
         <div v-else class="text-muted text-sm">暂无适配车型</div>
-      </el-collapse-item>
-    </el-collapse>
+      </section>
+    </div>
 
     <!-- 备注 (分区 2 派生) -->
-    <div v-if="data?.remark" class="hairline mt-3 p-3">
+    <div v-if="data?.remark" class="hairline mt-4 p-4 bg-[var(--color-bg-elevated)]">
       <div class="text-sm font-medium mb-1 text-muted">备注</div>
       <div class="text-sm">{{ data.remark }}</div>
     </div>
   </div>
 </template>
-
-<style scoped>
-.public-product-collapse :deep(.el-collapse-item__header) {
-  font-size: 14px;
-  font-weight: 500;
-  padding-left: 12px;
-}
-.public-product-collapse :deep(.el-collapse-item__content) {
-  padding: 8px 16px 16px 16px;
-}
-</style>
