@@ -250,18 +250,18 @@ onMounted(load)
   grid-template-columns: 32px 60px 1fr 80px 100px 140px 80px 200px;
   align-items: center;
   font-size: 12px;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--color-border);
 }
-.dict-head { font-weight: 500; color: #6b7280; background: #f9fafb; height: 32px; }
-.dict-row { height: 36px; background: #fff; transition: background-color 0.15s, border-top 0.1s; cursor: default; }
+.dict-head { font-weight: 500; color: var(--color-text-muted); background: var(--color-bg-hover); height: 32px; }
+.dict-row { height: 36px; background: var(--color-bg-elevated); transition: background-color 0.15s, border-top 0.1s; cursor: default; }
 .dict-head > div, .dict-row > div { padding: 0 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cell-drag { text-align: center; }
-.drag-handle { cursor: move; color: #9ca3af; font-size: 16px; user-select: none; display: inline-block; padding: 0 4px; }
-.drag-handle:hover { color: #2563eb; }
+.drag-handle { cursor: move; color: var(--color-text-muted); font-size: 16px; user-select: none; display: inline-block; padding: 0 4px; }
+.drag-handle:hover { color: var(--color-accent); }
 .cell-id, .cell-sort, .cell-xref { text-align: right; }
-.dict-row:hover { background: #f9fafb; }
+.dict-row:hover { background: var(--color-bg-hover); }
 .dict-row--dragging { opacity: 0.4; }
-.dict-row--dragover { border-top: 2px solid #2563eb !important; background: #eff6ff; }
-.dict-row--deleted { color: #9ca3af; background: #fafafa; }
-.dict-empty { padding: 24px 0; text-align: center; color: #9ca3af; font-size: 12px; }
+.dict-row--dragover { border-top: 2px solid var(--color-accent) !important; background: var(--color-bg-hover); }
+.dict-row--deleted { color: var(--color-text-muted); background: var(--color-bg-hover); }
+.dict-empty { padding: 24px 0; text-align: center; color: var(--color-text-muted); font-size: 12px; }
 </style>

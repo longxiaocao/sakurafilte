@@ -300,7 +300,7 @@ onUnmounted(() => {
       <div class="hairline-b px-2 py-1 bg-[var(--color-bg-hover)] text-xs text-muted flex items-center justify-between">
         <div class="flex items-center gap-3">
           <span>
-            共 <strong class="text-black">{{ total.toLocaleString() }}</strong> 条结果
+            共 <strong class="text-[var(--color-text)]">{{ total.toLocaleString() }}</strong> 条结果
             <span v-if="countMode === 'estimated'" class="text-orange-500 ml-1">(估计值, 实际可能更少)</span>
           </span>
           <span>耗时 {{ elapsedMs }} ms</span>

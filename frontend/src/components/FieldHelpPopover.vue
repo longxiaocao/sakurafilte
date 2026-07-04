@@ -37,7 +37,7 @@ const help = computed(() => getFieldHelp(props.fieldKey))
       </div>
       <div class="text-muted">{{ help.description }}</div>
       <div v-if="help.example" class="mt-1 text-xs text-muted">
-        示例: <code class="bg-neutral-100 dark:bg-neutral-800 px-1">{{ help.example }}</code>
+        示例: <code class="bg-[var(--color-bg-hover)] px-1">{{ help.example }}</code>
       </div>
     </div>
   </el-popover>

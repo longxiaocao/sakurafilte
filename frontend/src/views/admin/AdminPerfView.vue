@@ -197,7 +197,7 @@ function fmtTime(ts: string | null): string {
       <div class="flex items-center gap-2">
         <button
           @click="toggleAutoRefresh"
-          class="px-2 py-1 text-sm hairline hover:bg-neutral-100"
+          class="px-2 py-1 text-sm hairline hover:bg-[var(--color-bg-hover)]"
           :aria-label="autoRefresh ? '暂停自动刷新' : '开启自动刷新'"
         >
           {{ autoRefresh ? '⏸ 暂停' : '▶ 自动' }}
@@ -205,7 +205,7 @@ function fmtTime(ts: string | null): string {
         <select
           v-model="refreshSec"
           @change="changeInterval(refreshSec)"
-          class="px-2 py-1 text-sm hairline bg-white dark:bg-neutral-900"
+          class="px-2 py-1 text-sm hairline bg-[var(--color-bg-elevated)]"
           aria-label="刷新间隔"
         >
           <option :value="3">3s</option>
@@ -216,7 +216,7 @@ function fmtTime(ts: string | null): string {
         <button
           @click="refreshAll"
           :disabled="loading"
-          class="px-3 py-1 text-sm hairline hover:bg-neutral-100 disabled:opacity-50"
+          class="px-3 py-1 text-sm hairline hover:bg-[var(--color-bg-hover)] disabled:opacity-50"
         >
           {{ loading ? '刷新中…' : '↻ 刷新' }}
         </button>

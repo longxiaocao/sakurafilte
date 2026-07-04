@@ -66,7 +66,7 @@ const helpPreview = computed(() => helpPreviewKeys
 
     <el-anchor
       :offset="60"
-      class="help-anchor hairline p-2 mb-3 bg-white dark:bg-neutral-900"
+      class="help-anchor hairline p-2 mb-3 bg-[var(--color-bg-elevated)]"
     >
       <el-anchor-link href="#quickstart" title="快速开始" />
       <el-anchor-link href="#dict" title="字典使用规范" />
@@ -78,8 +78,8 @@ const helpPreview = computed(() => helpPreviewKeys
     <!-- 1. 快速开始 -->
     <section id="quickstart" class="hairline p-4 mb-3">
       <h2 class="text-base font-medium mb-2">1. 快速开始 (5 步入门)</h2>
-      <ol class="text-sm leading-7 list-decimal pl-5 text-neutral-700 dark:text-neutral-300">
-        <li>点击右上 "进入后台", 输入 <code class="bg-neutral-100 dark:bg-neutral-800 px-1">X-Admin-Token</code> (与后端 <code>Auth:DevStaticToken</code> 一致)</li>
+      <ol class="text-sm leading-7 list-decimal pl-5 text-[var(--color-text-muted)]">
+        <li>点击右上 "进入后台", 输入 <code class="bg-[var(--color-bg-hover)] px-1">X-Admin-Token</code> (与后端 <code>Auth:DevStaticToken</code> 一致)</li>
         <li>字典管理 → 8 个字典先 seed 数据 (首次部署): 走 spike-test/_seed_dict_*.py 6 个脚本</li>
         <li>ETL 触发 → 选择 "products.xlsx" / "xrefs.xlsx" / "apps.xlsx" + 模式 (full-load / insert-only / upsert), 点 "触发"</li>
         <li>产品管理 → 用 8 字段 / OEM 查询 / 批量粘贴查询, 命中产品进入详情</li>
@@ -171,7 +171,7 @@ const helpPreview = computed(() => helpPreviewKeys
       <h2 class="text-base font-medium mb-2">5. 常见问题 (FAQ)</h2>
       <el-collapse>
         <el-collapse-item v-for="(f, i) in faqs" :key="i" :title="`Q${i + 1}. ${f.q}`" :name="String(i)">
-          <div class="text-sm text-neutral-700 dark:text-neutral-300 pl-2 leading-6">
+          <div class="text-sm text-[var(--color-text-muted)] pl-2 leading-6">
             {{ f.a }}
           </div>
         </el-collapse-item>

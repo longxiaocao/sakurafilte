@@ -147,7 +147,7 @@ function toggleLocale() {
         >
           <button
             :class="[
-              'px-2 py-1 text-sm hover:bg-neutral-100',
+              'px-2 py-1 text-sm hover:bg-[var(--color-bg-hover)]',
               route.path.startsWith('/admin/dict/') ? 'text-accent font-medium' : 'text-neutral-700'
             ]"
             :aria-label="`展开${item.label}下拉菜单`"
@@ -174,7 +174,7 @@ function toggleLocale() {
           v-else
           @click="go(item)"
           :class="[
-            'px-2 py-1 text-sm hover:bg-neutral-100',
+            'px-2 py-1 text-sm hover:bg-[var(--color-bg-hover)]',
             item.path && route.path === item.path ? 'text-accent font-medium' : 'text-neutral-700'
           ]"
           :aria-label="item.label"
@@ -189,7 +189,7 @@ function toggleLocale() {
     <!-- P5.3 主题切换按钮 -->
     <button
       @click="theme.toggle()"
-      class="px-2 py-1 text-sm hairline hover:bg-neutral-100 flex items-center gap-1"
+      class="px-2 py-1 text-sm hairline hover:bg-[var(--color-bg-hover)] flex items-center gap-1"
       :title="theme.mode === 'dark' ? '切换到浅色' : '切换到深色'"
       aria-label="主题切换"
       :aria-pressed="theme.mode === 'dark'"
@@ -200,7 +200,7 @@ function toggleLocale() {
     <!-- P2.6: 语言切换按钮 (中英双语) -->
     <button
       @click="toggleLocale"
-      class="px-2 py-1 text-sm hairline hover:bg-neutral-100 flex items-center gap-1"
+      class="px-2 py-1 text-sm hairline hover:bg-[var(--color-bg-hover)] flex items-center gap-1"
       :aria-label="`切换语言, 当前 ${locale === 'zh-CN' ? '中文' : 'English'}`"
       title="切换语言"
     >
@@ -214,7 +214,7 @@ function toggleLocale() {
       @command="onUserCommand"
     >
       <button
-        class="px-2 py-1 text-sm hairline hover:bg-neutral-100 flex items-center gap-1"
+        class="px-2 py-1 text-sm hairline hover:bg-[var(--color-bg-hover)] flex items-center gap-1"
         :aria-label="`用户菜单: ${user.username}, 角色 ${user.role}`"
         :aria-expanded="false"
       >
@@ -239,7 +239,7 @@ function toggleLocale() {
     <button
       v-else
       @click="toggleAdmin"
-      class="px-2 py-1 text-sm hairline hover:bg-neutral-100 flex items-center gap-1"
+      class="px-2 py-1 text-sm hairline hover:bg-[var(--color-bg-hover)] flex items-center gap-1"
       :aria-label="isAdminPath ? '退出后台' : '进入后台登录'"
     >
       <el-icon aria-hidden="true"><Lock v-if="!isAdminPath" /><Unlock v-else /></el-icon>

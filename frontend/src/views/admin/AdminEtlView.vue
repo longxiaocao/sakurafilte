@@ -478,7 +478,7 @@ function prettyJson(raw: string): string {
         </div>
       </template>
 
-      <div v-if="!task.activeTask" class="text-gray-500 text-sm">
+      <div v-if="!task.activeTask" class="text-[var(--color-text-muted)] text-sm">
         当前无活跃任务。 等待触发或查看历史任务。
       </div>
 
@@ -493,7 +493,7 @@ function prettyJson(raw: string): string {
             :status="status === 'failed' ? 'exception' : status === 'completed' ? 'success' : undefined"
           />
           <el-progress v-else :percentage="0" :stroke-width="14" :indeterminate="true" />
-          <div class="text-xs text-gray-500 mt-1">
+          <div class="text-xs text-[var(--color-text-muted)] mt-1">
             rows: {{ fmt(task.activeTask.rowsProcessed) }} /
             {{ task.activeTask.rowsTotal !== null ? fmt(task.activeTask.rowsTotal) : '?' }}
             · elapsed: {{ task.activeTask.elapsedSec ?? 0 }}s
@@ -616,7 +616,7 @@ function prettyJson(raw: string): string {
         </div>
         <!-- 历史表 -->
         <div class="audit-table">
-          <div class="text-xs text-gray-500 mb-2">最近 20 条 cancelled 记录</div>
+          <div class="text-xs text-[var(--color-text-muted)] mb-2">最近 20 条 cancelled 记录</div>
           <el-table :data="historyItems" size="small" max-height="380" border stripe>
             <el-table-column prop="id" label="#" width="60" />
             <el-table-column prop="entityType" label="entity" width="90" />
@@ -642,7 +642,7 @@ function prettyJson(raw: string): string {
             </el-table-column>
             <el-table-column label="取消时间" width="170">
               <template #default="{ row }">
-                <span class="text-xs text-gray-500">{{ (row.cancelledAt || row.finishedAt).slice(0, 19) }}</span>
+                <span class="text-xs text-[var(--color-text-muted)]">{{ (row.cancelledAt || row.finishedAt).slice(0, 19) }}</span>
               </template>
             </el-table-column>
           </el-table>

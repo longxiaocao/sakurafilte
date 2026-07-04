@@ -1,6 +1,8 @@
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ['./index.html', './src/**/*.{vue,js,ts,jsx,tsx}'],
+  // P2.6: 使用 class 策略驱动暗色模式 (html.dark 类切换), 配合 stores/theme.ts
+  darkMode: 'class',
   // Day 9: Musk 风格 — 关闭阴影/圆角, 1px hairline 边框, 8px 网格
   theme: {
     extend: {

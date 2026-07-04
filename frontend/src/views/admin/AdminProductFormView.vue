@@ -490,7 +490,7 @@ onMounted(load)
             <div v-for="slot in 6" :key="slot" class="hairline p-2">
               <div class="text-xs text-muted mb-1">Slot {{ slot }}</div>
               <div v-if="images[slot - 1]" class="mb-2">
-                <img :src="images[slot - 1].imageUrl" class="w-full h-32 object-contain bg-neutral-50" />
+                <img :src="images[slot - 1].imageUrl" class="w-full h-32 object-contain bg-[var(--color-bg-hover)]" />
                 <el-button text type="danger" size="small" @click="removeImage(slot)" class="mt-1 w-full">删除</el-button>
               </div>
               <div v-else>

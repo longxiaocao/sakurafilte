@@ -409,7 +409,7 @@ onBeforeUnmount(() => {
     <!-- Day 9.2: 顶部加筛选 (changeType / since / until / limit) -->
     <el-drawer v-model="historyOpen" title="变更历史" size="700px" direction="rtl" :close-on-click-modal="false">
       <!-- 筛选条 -->
-      <div class="px-3 py-2 hairline-b bg-neutral-50">
+      <div class="px-3 py-2 hairline-b bg-[var(--color-bg-hover)]">
         <div class="grid grid-cols-4 gap-2 items-end">
           <div>
             <div class="text-xs text-muted mb-1">类型</div>

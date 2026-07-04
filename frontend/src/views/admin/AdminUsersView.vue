@@ -450,25 +450,26 @@ onMounted(() => {
 
 <style scoped>
 /* Musk 风格: 1px hairline + 高密度 + 无阴影 */
+/* P2.6: 颜色全部改用 CSS 变量, 支持黑夜模式 */
 .user-head,
 .user-row {
   display: grid;
   grid-template-columns: 60px 1fr 160px 200px 80px 140px 140px 240px;
   align-items: center;
   font-size: 12px;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--color-border);
 }
 .user-head {
   font-weight: 500;
-  color: #6b7280;
-  background: #f9fafb;
+  color: var(--color-text-muted);
+  background: var(--color-bg-hover);
   height: 32px;
 }
 .user-row {
   height: 40px;
-  background: #fff;
+  background: var(--color-bg-elevated);
 }
-.user-row:hover { background: #f9fafb; }
+.user-row:hover { background: var(--color-bg-hover); }
 .user-head > div,
 .user-row > div {
   padding: 0 8px;
@@ -480,7 +481,7 @@ onMounted(() => {
 .user-empty {
   padding: 24px 0;
   text-align: center;
-  color: #9ca3af;
+  color: var(--color-text-muted);
   font-size: 12px;
 }
 
@@ -491,19 +492,19 @@ onMounted(() => {
   grid-template-columns: 60px 1fr 160px 140px 2fr 80px 1fr;
   align-items: center;
   font-size: 12px;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--color-border);
 }
 .audit-head {
   font-weight: 500;
-  color: #6b7280;
-  background: #f9fafb;
+  color: var(--color-text-muted);
+  background: var(--color-bg-hover);
   height: 32px;
 }
 .audit-row {
   height: 36px;
-  background: #fff;
+  background: var(--color-bg-elevated);
 }
-.audit-row:hover { background: #f9fafb; }
+.audit-row:hover { background: var(--color-bg-hover); }
 .audit-head > div,
 .audit-row > div {
   padding: 0 8px;
