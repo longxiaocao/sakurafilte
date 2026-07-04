@@ -7,11 +7,17 @@
 //     1. cd frontend && npm i -D @playwright/test
 //     2. npx playwright install chromium
 //     3. 启动后端: dotnet run --project ../backend/src/SakuraFilter.Api (或用 start-dev.bat)
+// P0-E2E-1 修复: ESM 模式下 __dirname 不存在, 用 fileURLToPath 兼容
+//            同时修复 token 默认值与其他 spec 统一 (旧值 devtoken 已失效)
 import { test, expect } from '@playwright/test'
-import path from 'path'
+import path, { dirname } from 'path'
+import { fileURLToPath } from 'url'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
 
 const BASE = process.env.BASE_URL || 'http://localhost:5173'
-const ADMIN_TOKEN = process.env.ADMIN_TOKEN || 'devtoken'
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN || 'dev-admin-token-rotate-in-prod-MZK4R9P3X6V2N7Q1L5F0B8H3C'
 
 test.describe('P3.5 产品对比 UI', () => {
   test('6 列 grid 布局 + 差异高亮 + 列调序', async ({ page }) => {

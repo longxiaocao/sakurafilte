@@ -1,9 +1,14 @@
 // Day 11 P4.3 (Task 14.3): Playwright 视觉回归 — 前台产品详情页 (P3.3)
+// P0-E2E-1 修复: ESM 模式下 __dirname 不存在, 用 fileURLToPath 兼容
 import { test, expect } from '@playwright/test'
-import path from 'path'
+import path, { dirname } from 'path'
+import { fileURLToPath } from 'url'
 import fs from 'fs'
 import pixelmatch from 'pixelmatch'
 import { PNG } from 'pngjs'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
 
 const BASE = process.env.BASE_URL || 'http://localhost:5173'
 const DIFF_THRESHOLD = 0.05

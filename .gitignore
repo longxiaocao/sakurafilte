@@ -53,6 +53,15 @@ frontend/node_modules/
 frontend/dist/
 frontend/tsconfig.tsbuildinfo
 
+## Playwright 临时产物 (可重建, 不提交)
+# WHY: test-results/ 是失败时的诊断截图, playwright-report/ 是 HTML 报告
+#      current/ 是本次截图, *.diff.png 是差异图, 都可重建
+#      baselines/ 是视觉回归基准, 必须提交 (用于 CI 比对)
+frontend/test-results/
+frontend/playwright-report/
+frontend/tests/visual/__screenshots__/current/
+frontend/tests/visual/__screenshots__/*.diff.png
+
 ## 大型测试数据 (避免污染仓库)
 # WHY: synthetic_*.jsonl 是合成压测数据 (100k 行 67-360MB),可由 generate_synthetic_data.py 重建
 # _test_*.jsonl 是临时测试数据,无需版本控制

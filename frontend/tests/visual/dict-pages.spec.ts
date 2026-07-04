@@ -12,26 +12,32 @@
 //     - 用最简 selector: .el-table (Element Plus 表格统一 class)
 //     - 等数据加载 (.el-table__row 出现) 再截图
 //     - 注入 admin token 到 localStorage
+// P0-E2E-1 修复: ESM 模式下 __dirname 不存在, 用 fileURLToPath 兼容
 import { test, expect } from '@playwright/test'
-import path from 'path'
+import path, { dirname } from 'path'
+import { fileURLToPath } from 'url'
 import fs from 'fs'
 import pixelmatch from 'pixelmatch'
 import { PNG } from 'pngjs'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
 
 const BASE = process.env.BASE_URL || 'http://localhost:5173'
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || 'dev-admin-token-rotate-in-prod-MZK4R9P3X6V2N7Q1L5F0B8H3C'
 const DIFF_THRESHOLD = 0.05  // 5% 像素差 视为视觉退化
 
 // 8 个字典 (P1.3 OEM 品牌 + P2.2 7 个新字典)
+// P0-E2E-1 修复: 路径与 router/index.ts 对齐 (7 个字典用复数 s)
 const DICTS: Array<{ name: string; path: string; label: string }> = [
-  { name: 'oem-brands',    path: '/admin/dict/oem-brands',    label: 'OEM 品牌' },
-  { name: 'product-name1', path: '/admin/dict/product-name1', label: '产品名 1' },
-  { name: 'product-name2', path: '/admin/dict/product-name2', label: '产品名 2' },
-  { name: 'type',          path: '/admin/dict/type',          label: '类型' },
-  { name: 'oem-no3',       path: '/admin/dict/oem-no3',       label: 'OEM 3' },
-  { name: 'media',         path: '/admin/dict/media',         label: '介质' },
-  { name: 'machine',       path: '/admin/dict/machine',       label: '机器' },
-  { name: 'engine',        path: '/admin/dict/engine',        label: '发动机' }
+  { name: 'oem-brands',    path: '/admin/dict/oem-brands',     label: 'OEM 品牌' },
+  { name: 'product-name1', path: '/admin/dict/product-name1s', label: '产品名 1' },
+  { name: 'product-name2', path: '/admin/dict/product-name2s', label: '产品名 2' },
+  { name: 'type',          path: '/admin/dict/types',          label: '类型' },
+  { name: 'oem-no3',       path: '/admin/dict/oem-no3s',       label: 'OEM 3' },
+  { name: 'media',         path: '/admin/dict/medias',         label: '介质' },
+  { name: 'machine',       path: '/admin/dict/machines',       label: '机器' },
+  { name: 'engine',        path: '/admin/dict/engines',        label: '发动机' }
 ]
 
 const BASELINE_DIR = path.join(__dirname, '__screenshots__', 'baselines')
@@ -51,10 +57,11 @@ for (const dict of DICTS) {
     // 2. 打开页面
     await page.goto(`${BASE}${dict.path}`, { waitUntil: 'networkidle', timeout: 15000 })
 
-    // 3. 等 Element Plus 表格渲染 (.el-table)
-    await page.waitForSelector('.el-table', { timeout: 10000 })
-    // 等至少 1 行数据
-    await page.waitForSelector('.el-table__row', { timeout: 10000 }).catch(() => null)
+    // 3. 等自定义表格渲染 (.dict-head 表头 + .dict-row 数据行)
+    //   P0-E2E-1 修复: 前端用自定义 div grid 而非 el-table, 选择器改为 .dict-row
+    await page.waitForSelector('.dict-head', { timeout: 10000 })
+    // 等至少 1 行数据 (无数据时也允许继续, 截图会反映空状态)
+    await page.waitForSelector('.dict-row', { timeout: 10000 }).catch(() => null)
     // 给数据加载留 500ms
     await page.waitForTimeout(500)
 
