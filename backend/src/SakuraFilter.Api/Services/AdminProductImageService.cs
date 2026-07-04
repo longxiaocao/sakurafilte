@@ -37,6 +37,14 @@ public class AdminProductImageService
     }
 
     // ========== 上传单张图 ==========
+    // P0-1.2 事务重构: 顺序改为 "DB 事务占位 → S3 上传 → DB 提交 → 异步删旧"
+    //   WHY: 旧顺序 "S3 上传 → 异步删旧 → DB 提交" 存在两类数据一致性缺陷:
+    //     1) S3 上传成功后 DB 失败 → S3 孤儿对象 (无 DB 记录指向它, 无法回收)
+    //     2) 覆盖上传时异步删旧图在 DB 提交前启动, 若 DB 失败 → 旧图已删 + 新图未入库,
+    //        用户图片完全丢失
+    //   新顺序保证:
+    //     - S3 失败 → DB 事务回滚, 不留孤儿对象
+    //     - DB 提交成功后才删旧文件, 旧图无引用才删, 不会丢用户图片
     public async Task<ProductImageInfo> UploadAsync(
         long productId, short slot, Stream stream, string contentType,
         string? uploadedBy, CancellationToken ct = default)
@@ -64,57 +72,89 @@ public class AdminProductImageService
             _ => "bin"
         };
         var key = BuildKey(product.OemNoNormalized, slot, ext);
+        var sizeBytes = stream.Length;  // 提前缓存: S3 上传后 stream 可能不可再读
 
-        // 上传到对象存储
-        await _storage.UploadAsync(key, stream, contentType, ct);
+        // ===== 1. DB 事务占位: 先写 DB (覆盖旧记录 / 新增记录 / 主图同步), 但不提交 =====
+        await using var tx = await _db.Database.BeginTransactionAsync(ct);
 
-        // 查旧图 (覆盖上传) → 先删旧文件
         var old = await _db.ProductImages.FirstOrDefaultAsync(i => i.ProductId == productId && i.Slot == slot, ct);
+        // 记录旧 key, DB 提交成功后再异步删 (避免 DB 失败时旧图已被删 → 用户图片丢失)
+        var oldKeyToDelete = old?.ImageKey;
+
+        ProductImage saved;
         if (old != null)
         {
-            // 异步删除旧文件 (失败不阻塞, 旧文件后台 GC)
-            _ = Task.Run(async () =>
-            {
-                try { await _storage.DeleteAsync(old.ImageKey); }
-                catch (Exception ex) { _logger.LogWarning(ex, "旧图删除失败 key={Key}", old.ImageKey); }
-            });
+            // 覆盖上传: 更新已有记录指向新 key
             old.ImageKey = key;
-            old.FileSize = stream.Length;
+            old.FileSize = sizeBytes;
             old.ContentType = contentType;
             old.UploadedAt = DateTime.UtcNow;
             old.UploadedBy = uploadedBy;
             old.IsPrimary = slot == 1;
             old.DisplayOrder = slot;
-            await _db.SaveChangesAsync(ct);
-            return ToInfo(old, await GetUrlAsync(key));
+            saved = old;
         }
         else
         {
-            var img = new ProductImage
+            // 新增上传: 创建 ProductImage 记录
+            saved = new ProductImage
             {
                 ProductId = productId,
                 Slot = slot,
                 ImageKey = key,
-                FileSize = stream.Length,
+                FileSize = sizeBytes,
                 ContentType = contentType,
                 IsPrimary = slot == 1,
                 DisplayOrder = slot,
                 UploadedAt = DateTime.UtcNow,
                 UploadedBy = uploadedBy
             };
-            _db.ProductImages.Add(img);
-            await _db.SaveChangesAsync(ct);
-
-            // 主图同步到 product.image_key
-            if (slot == 1)
-            {
-                product.ImageKey = key;
-                product.ImageStatus = "ready";
-                product.UpdatedAt = DateTime.UtcNow;
-                await _db.SaveChangesAsync(ct);
-            }
-            return ToInfo(img, await GetUrlAsync(key));
+            _db.ProductImages.Add(saved);
         }
+
+        // 主图 (slot=1) 同步写 products.image_key, 兼容旧字段
+        // WHY ImageStatus=pending: 上传后等待后续校验/发布流程置 ready (P0 仅保证事务一致, 状态机后续任务维护)
+        if (slot == 1)
+        {
+            product.ImageKey = key;
+            product.ImageStatus = "pending";
+            product.UpdatedAt = DateTime.UtcNow;
+        }
+
+        // 事务内保存: 新增场景拿到 saved.Id, 但事务尚未提交 (S3 失败可整体回滚)
+        await _db.SaveChangesAsync(ct);
+
+        // ===== 2. S3 上传: 失败则回滚 DB 事务, 不留孤儿对象 =====
+        try
+        {
+            await _storage.UploadAsync(key, stream, contentType, ct);
+        }
+        catch (Exception ex)
+        {
+            await tx.RollbackAsync(ct);
+            _logger.LogError(ex, "S3 上传失败, DB 事务已回滚 productId={ProductId} slot={Slot} key={Key}", productId, slot, key);
+            throw;
+        }
+
+        // ===== 3. DB 提交: S3 上传成功后正式提交事务 =====
+        await tx.CommitAsync(ct);
+
+        // ===== 4. 异步删旧文件 (DB 提交后): 仅当旧 key 存在且与新 key 不同 =====
+        //   WHY 不同: 同 key (相同 ext) 时 S3 已覆盖, 无需再删
+        //   WHY 提交后: DB 已确认新图生效, 旧图无引用, 删除不会导致用户图片丢失
+        //   WHY 异步: 删旧不阻塞响应, 失败仅 LogWarning (旧文件后台 GC 或人工清理)
+        if (!string.IsNullOrEmpty(oldKeyToDelete) && oldKeyToDelete != key)
+        {
+            var staleKey = oldKeyToDelete;
+            _ = Task.Run(async () =>
+            {
+                try { await _storage.DeleteAsync(staleKey); }
+                catch (Exception ex) { _logger.LogWarning(ex, "旧图删除失败 key={Key}", staleKey); }
+            });
+        }
+
+        _logger.LogInformation("产品图上传成功 productId={ProductId} slot={Slot} key={Key}", productId, slot, key);
+        return ToInfo(saved, await GetUrlAsync(key));
     }
 
     // ========== 删除单张图 ==========
