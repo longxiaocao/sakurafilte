@@ -396,6 +396,35 @@ public class EtlImportService
         if (!File.Exists(jsonlPath))
             throw new FileNotFoundException($"JSONL 文件不存在: {jsonlPath}");
 
+        // P0-3.3: defense in depth — 即使绕过 HTTP 端点校验直接调 TriggerAsync, 也校验白名单
+        //   - _options.AllowedImportDirs 为空时不拦截 (dev 兼容); 非空时严格校验
+        //   - WHY 二次校验: HTTP 端点校验只覆盖 4 个端点, CLI/脚本/未来新端点直接调本方法时仍受保护
+        var allowedDirs = _options.AllowedImportDirs;
+        if (allowedDirs is { Length: > 0 })
+        {
+            string normalized;
+            try { normalized = Path.GetFullPath(jsonlPath); }
+            catch (Exception) { throw new ArgumentException($"jsonlPath 路径非法: {jsonlPath}"); }
+            var inWhitelist = false;
+            foreach (var dir in allowedDirs)
+            {
+                if (string.IsNullOrEmpty(dir)) continue;
+                string normalizedDir;
+                try { normalizedDir = Path.GetFullPath(dir); }
+                catch (Exception) { continue; }
+                if (normalized.StartsWith(normalizedDir, StringComparison.OrdinalIgnoreCase) &&
+                    (normalized.Length == normalizedDir.Length ||
+                     normalized[normalizedDir.Length] == Path.DirectorySeparatorChar ||
+                     normalized[normalizedDir.Length] == Path.AltDirectorySeparatorChar))
+                {
+                    inWhitelist = true;
+                    break;
+                }
+            }
+            if (!inWhitelist)
+                throw new ArgumentException($"jsonlPath 不在允许目录内: {jsonlPath}");
+        }
+
         var normalizedMode = NormalizeMode(mode);
         var normalizedEntity = entityType?.Trim().ToLowerInvariant() ?? "";
 

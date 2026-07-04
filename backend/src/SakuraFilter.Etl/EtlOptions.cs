@@ -19,6 +19,13 @@ public class EtlOptions
 
     /// <summary>Meili 索引补偿单批处理大小</summary>
     public int IndexReplayBatchSize { get; set; } = 500;
+
+    /// <summary>
+    /// P0-3.3: ETL 导入 jsonlPath 允许目录白名单 (绝对路径数组)
+    ///   - 为空时不拦截 (dev 兼容); 生产环境必须配置, 防止路径遍历读取任意文件
+    ///   - 校验逻辑: Path.GetFullPath 规范化后, 用 OrdinalIgnoreCase 前缀匹配目录边界
+    /// </summary>
+    public string[] AllowedImportDirs { get; set; } = Array.Empty<string>();
 }
 
 /// <summary>

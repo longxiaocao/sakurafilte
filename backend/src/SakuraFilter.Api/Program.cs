@@ -165,9 +165,14 @@ builder.Services.AddSingleton<IObjectStorage>(sp =>
     var minioConfig = builder.Configuration.GetSection("Minio");
     var minioEndpoint = minioConfig["Endpoint"] ?? "localhost:9000";
     var useSSL = bool.TryParse(minioConfig["UseSSL"], out var ssl) && ssl;
+    // P0-3.2 修复: 移除硬编码 minioadmin 兜底, 配置缺失直接抛异常 (生产用环境变量 Minio__AccessKey / Minio__SecretKey 覆盖)
+    var minioAccessKey = minioConfig["AccessKey"]
+        ?? throw new InvalidOperationException("Minio:AccessKey 未配置 (检查 appsettings.json 或环境变量 Minio__AccessKey)");
+    var minioSecretKey = minioConfig["SecretKey"]
+        ?? throw new InvalidOperationException("Minio:SecretKey 未配置 (检查 appsettings.json 或环境变量 Minio__SecretKey)");
     var minioClient = new MinioClient()
         .WithEndpoint(minioEndpoint)
-        .WithCredentials(minioConfig["AccessKey"] ?? "minioadmin", minioConfig["SecretKey"] ?? "minioadmin")
+        .WithCredentials(minioAccessKey, minioSecretKey)
         .WithSSL(useSSL)
         .Build();
     logger.LogInformation("[Storage] Provider=minio, Endpoint={Endpoint}, Bucket={Bucket}", minioEndpoint, minioConfig["BucketName"]);
@@ -530,6 +535,45 @@ app.MapGet("/api/products/{oem}", async (string oem, ProductDbContext db, Cancel
 .WithName("GetProductByOem")
 .WithOpenApi();
 
+// P0-3.3 修复: ETL 路径遍历防护 — 校验 jsonlPath 是否在 Etl:AllowedImportDirs 白名单内
+//   - 配置为空时仅告警放行 (dev 兼容; 生产环境必须配置白名单, 否则视为防护未启用)
+//   - Path.GetFullPath 规范化后用 OrdinalIgnoreCase 前缀匹配, 防止 ".." 逃逸
+//   - requireJsonlExtension=true 时额外校验 .jsonl 扩展名 (dry-run 端点用, 防止读取非 jsonl 大文件)
+//   - 返回 null 表示通过, 非 null 表示错误消息
+string? ValidateJsonlPath(string jsonlPath, bool requireJsonlExtension = false)
+{
+    if (string.IsNullOrWhiteSpace(jsonlPath))
+        return "jsonlPath 不能为空";
+    if (requireJsonlExtension && !jsonlPath.EndsWith(".jsonl", StringComparison.OrdinalIgnoreCase))
+        return "jsonlPath 必须是 .jsonl 文件";
+    var allowedDirs = builder.Configuration.GetSection("Etl:AllowedImportDirs").Get<string[]>()
+        ?? Array.Empty<string>();
+    if (allowedDirs.Length == 0)
+    {
+        // dev 兼容: 未配置白名单时不拦截, 生产环境必须配置 Etl:AllowedImportDirs
+        return null;
+    }
+    string normalized;
+    try { normalized = Path.GetFullPath(jsonlPath); }
+    catch (Exception) { return $"jsonlPath 路径非法: {jsonlPath}"; }
+    foreach (var dir in allowedDirs)
+    {
+        if (string.IsNullOrEmpty(dir)) continue;
+        string normalizedDir;
+        try { normalizedDir = Path.GetFullPath(dir); }
+        catch (Exception) { continue; }
+        // 前缀匹配 + 目录边界校验 (防止 c:\foo 误匹配 c:\foobar)
+        if (normalized.StartsWith(normalizedDir, StringComparison.OrdinalIgnoreCase) &&
+            (normalized.Length == normalizedDir.Length ||
+             normalized[normalizedDir.Length] == Path.DirectorySeparatorChar ||
+             normalized[normalizedDir.Length] == Path.AltDirectorySeparatorChar))
+        {
+            return null;
+        }
+    }
+    return "jsonlPath 不在允许目录内";
+}
+
 // ETL 导入接口 (Day 5: 触发导入 + 查询进度)
 // Day 11 改进 1: 统一入口, EntityType 参数路由到 products/xrefs/apps
 //   - 兼容: 不传 EntityType = products (旧调用)
@@ -537,6 +581,9 @@ app.MapGet("/api/products/{oem}", async (string oem, ProductDbContext db, Cancel
 //   - cascade: 仅 products full-load 时生效 (改进 2: CASCADE 安全锁)
 app.MapPost("/api/etl/import", (ImportRequest req, EtlImportService etl, ILogger<Program> logger, CancellationToken ct) =>
 {
+    // P0-3.3: 路径白名单校验 (必须在 File.Exists 之前, 防止路径遍历)
+    if (ValidateJsonlPath(req.JsonlPath) is { } pathErr)
+        return Results.BadRequest(new { error = pathErr });
     if (!File.Exists(req.JsonlPath))
         return Results.BadRequest(new { error = "文件不存在", path = req.JsonlPath });
 
@@ -571,6 +618,9 @@ app.MapGet("/api/etl/status", (EtlImportService etl) =>
 // ETL 导入 xrefs
 app.MapPost("/api/etl/import-xrefs", (ImportRequest req, EtlImportService etl, ILogger<Program> logger, CancellationToken ct) =>
 {
+    // P0-3.3: 路径白名单校验 (必须在 File.Exists 之前, 防止路径遍历)
+    if (ValidateJsonlPath(req.JsonlPath) is { } pathErr)
+        return Results.BadRequest(new { error = pathErr });
     if (!File.Exists(req.JsonlPath))
         return Results.BadRequest(new { error = "文件不存在", path = req.JsonlPath });
     if (etl.Progress.Status == "running")
@@ -587,6 +637,9 @@ app.MapPost("/api/etl/import-xrefs", (ImportRequest req, EtlImportService etl, I
 // ETL 导入 apps
 app.MapPost("/api/etl/import-apps", (ImportRequest req, EtlImportService etl, ILogger<Program> logger, CancellationToken ct) =>
 {
+    // P0-3.3: 路径白名单校验 (必须在 File.Exists 之前, 防止路径遍历)
+    if (ValidateJsonlPath(req.JsonlPath) is { } pathErr)
+        return Results.BadRequest(new { error = pathErr });
     if (!File.Exists(req.JsonlPath))
         return Results.BadRequest(new { error = "文件不存在", path = req.JsonlPath });
     if (etl.Progress.Status == "running")
@@ -1096,6 +1149,10 @@ app.MapPost("/api/admin/etl/trigger", async (
 {
     logger.LogInformation("手动 ETL 触发 entity={Entity} mode={Mode} file={File} dryRun={Dry}",
         req.EntityType ?? "products", req.Mode, req.JsonlPath, req.DryRun);
+
+    // P0-3.3: 路径白名单校验 (dry-run 额外校验 .jsonl 扩展名, 防止读取非 jsonl 大文件)
+    if (ValidateJsonlPath(req.JsonlPath, requireJsonlExtension: req.DryRun) is { } pathErr)
+        return Results.BadRequest(new { error = pathErr });
 
     if (req.DryRun)
     {
