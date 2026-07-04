@@ -12,8 +12,70 @@ import type {
   EtlProgress,
   EtlActiveTaskInfo,
   EtlHistoryItem,
-  EtlReasonCodeAggregate
+  EtlReasonCodeAggregate,
+  LoginResponse,
+  AuthUser,
+  UserListResp,
+  UserCreateRequest,
+  UserUpdateRequest,
+  LoginAuditResp
 } from './types'
+
+// ===== JWT 鉴权 API (commit aff3ac3 后端 JWT 体系) =====
+//   login:        POST   /api/auth/login              { username, password }
+//   refresh:      POST   /api/auth/refresh            { refreshToken }
+//   logout:       POST   /api/auth/logout             { refreshToken }   (需 Authorization)
+//   me:           GET    /api/auth/me                                                  (需 Authorization)
+//   changePassword: POST /api/auth/change-password    { oldPassword, newPassword }   (需 Authorization)
+export const authApi = {
+  login(username: string, password: string): Promise<LoginResponse> {
+    return http.post('/auth/login', { username, password }).then((r) => r.data)
+  },
+  refresh(refreshToken: string): Promise<LoginResponse> {
+    return http.post('/auth/refresh', { refreshToken }).then((r) => r.data)
+  },
+  logout(refreshToken: string): Promise<void> {
+    return http.post('/auth/logout', { refreshToken }).then((r) => r.data)
+  },
+  me(): Promise<AuthUser> {
+    return http.get('/auth/me').then((r) => r.data)
+  },
+  changePassword(oldPassword: string, newPassword: string): Promise<void> {
+    return http.post('/auth/change-password', { oldPassword, newPassword }).then((r) => r.data)
+  }
+}
+
+// ===== 后台用户管理 API (admin 角色) =====
+//   list:           GET    /api/admin/users?page=&pageSize=
+//   create:         POST   /api/admin/users                  { username, password, role, email?, fullName? }
+//   getById:        GET    /api/admin/users/{id}
+//   update:         PATCH  /api/admin/users/{id}             { role?, email?, fullName?, isActive? }
+//   remove:         DELETE /api/admin/users/{id}             (软删除)
+//   resetPassword:  POST   /api/admin/users/{id}/reset-password  { newPassword }
+//   auditLogin:     GET    /api/admin/audit/login?page=&pageSize=
+export const usersApi = {
+  list(page = 1, pageSize = 20): Promise<UserListResp> {
+    return http.get('/admin/users', { params: { page, pageSize } }).then((r) => r.data)
+  },
+  create(data: UserCreateRequest): Promise<AuthUser> {
+    return http.post('/admin/users', data).then((r) => r.data)
+  },
+  getById(id: number): Promise<AuthUser> {
+    return http.get(`/admin/users/${id}`).then((r) => r.data)
+  },
+  update(id: number, data: UserUpdateRequest): Promise<AuthUser> {
+    return http.patch(`/admin/users/${id}`, data).then((r) => r.data)
+  },
+  remove(id: number): Promise<void> {
+    return http.delete(`/admin/users/${id}`).then((r) => r.data)
+  },
+  resetPassword(id: number, newPassword: string): Promise<void> {
+    return http.post(`/admin/users/${id}/reset-password`, { newPassword }).then((r) => r.data)
+  },
+  auditLogin(page = 1, pageSize = 20): Promise<LoginAuditResp> {
+    return http.get('/admin/audit/login', { params: { page, pageSize } }).then((r) => r.data)
+  }
+}
 
 // ===== Day 10: 字典类型 (P1.3 OEM 品牌字典) =====
 export interface OemBrandItem {

@@ -1,14 +1,15 @@
 <script setup lang="ts">
-// 需求 4: 后台登录界面 (替换 TOKEN 直接输入弹窗)
-//   - 用户名 + 密码本地映射验证 (离线工具, 无后端用户系统)
-//   - 验证成功后写入 useAdminAuthStore.token (与 axios 拦截器/路由守卫保持兼容)
+// 后台登录界面 (JWT 改造版)
+//   - 调用后端 POST /api/auth/login, 写入 useAdminAuthStore (JWT 全字段)
 //   - 支持 redirect 查询参数, 登录后回跳到原目标页
+//   - 错误码 ERR_AUTH_FAILED → "用户名或密码错误"
 //   - 主题切换兼容: 全部使用 CSS 变量, 跟随 <html class="dark">
 import { reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { User, Lock } from '@element-plus/icons-vue'
 import { useAdminAuthStore } from '@/composables/useAdminAuth'
+import { authApi } from '@/api'
 
 const router = useRouter()
 const route = useRoute()
@@ -21,14 +22,12 @@ const form = reactive({
 const loading = ref(false)
 const errorMsg = ref('')
 
-// 本地用户名/密码映射 (离线工具, 无后端用户系统)
-// WHY: 项目要求完全离线、无密钥, 用本地映射替代后端鉴权
-//   token 与后端 Auth:DevStaticToken 保持一致, 由 useAdminAuthStore 持久化到 localStorage
-//   生产环境如需多用户/多 token 轮转, 可扩展为后端 API 验证
-const LOCAL_USERS = [
-  { username: 'admin', password: 'admin123', token: 'dev-admin-token-rotate-in-prod-MZK4R9P3X6V2N7Q1L5F0B8H3C' },
-  { username: 'operator', password: 'op123456', token: 'dev-admin-token-rotate-in-prod-MZK4R9P3X6V2N7Q1L5F0B8H3C' }
-]
+// 后端 errorCode → 友好提示映射
+const AUTH_ERROR_MAP: Record<string, string> = {
+  ERR_AUTH_FAILED: '用户名或密码错误',
+  ERR_USER_DISABLED: '账号已被禁用, 请联系管理员',
+  ERR_USER_LOCKED: '账号已锁定, 请稍后重试'
+}
 
 async function handleLogin() {
   // 输入校验: 前端兜底, 避免空请求
@@ -39,18 +38,21 @@ async function handleLogin() {
   loading.value = true
   errorMsg.value = ''
   try {
-    // 模拟网络延迟, 提供 loading 反馈 (本地验证本身无延迟)
-    await new Promise((r) => setTimeout(r, 300))
-    const user = LOCAL_USERS.find(
-      (u) => u.username === form.username && u.password === form.password
-    )
-    if (user) {
-      auth.setToken(user.token)
-      ElMessage.success('登录成功')
-      const redirect = (route.query.redirect as string) || '/admin/products'
-      router.push(redirect)
+    const payload = await authApi.login(form.username, form.password)
+    auth.setAuth(payload)
+    ElMessage.success('登录成功')
+    const redirect = (route.query.redirect as string) || '/admin/products'
+    router.push(redirect)
+  } catch (e: any) {
+    // 后端 ProblemDetails.errorCode 优先, title 兜底
+    const errorCode = e?.response?.data?.errorCode
+    const title = e?.response?.data?.title
+    if (errorCode && AUTH_ERROR_MAP[errorCode]) {
+      errorMsg.value = AUTH_ERROR_MAP[errorCode]
+    } else if (title) {
+      errorMsg.value = title
     } else {
-      errorMsg.value = '用户名或密码错误'
+      errorMsg.value = '登录失败, 请稍后重试'
     }
   } finally {
     loading.value = false
@@ -105,8 +107,7 @@ async function handleLogin() {
       </form>
 
       <div class="mt-6 text-center text-xs text-muted">
-        <div>默认账号: admin / admin123</div>
-        <div class="mt-1">operator / op123456</div>
+        <div>默认账号: admin / (部署时配置)</div>
       </div>
     </div>
   </div>

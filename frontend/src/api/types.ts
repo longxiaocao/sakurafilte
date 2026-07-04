@@ -1,6 +1,95 @@
-// Day 9: API 类型契约 (OpenAPI 风格)
+// ===== Day 9: API 类型契约 (OpenAPI 风格) =====
 //   这些 DTO 与后端 SakuraFilter.Core DTOs 一一对应
 //   后续可用 openapi-typescript 自动生成, 暂手写
+
+// ===== JWT 鉴权 (commit aff3ac3 后端 JWT 体系) =====
+export interface LoginRequest {
+  username: string
+  password: string
+}
+
+// 角色字面量与后端 UserRole enum 一致
+export type UserRole = 'admin' | 'operator' | 'viewer'
+
+export interface AuthUser {
+  id: number
+  username: string
+  role: UserRole
+  email?: string
+  fullName?: string
+}
+
+export interface LoginResponse {
+  accessToken: string
+  refreshToken: string
+  expiresIn: number  // 秒
+  user: AuthUser
+}
+
+// 后台用户管理列表项 (admin 视角)
+export interface UserListItem extends AuthUser {
+  isActive: boolean
+  lastLoginAt?: string
+  createdAt: string
+}
+
+export interface UserListResp {
+  total: number
+  page: number
+  pageSize: number
+  items: UserListItem[]
+}
+
+export interface UserCreateRequest {
+  username: string
+  password: string
+  role: UserRole
+  email?: string
+  fullName?: string
+}
+
+export interface UserUpdateRequest {
+  role?: UserRole
+  email?: string
+  fullName?: string
+  isActive?: boolean
+}
+
+export interface ResetPasswordRequest {
+  newPassword: string
+}
+
+export interface ChangePasswordRequest {
+  oldPassword: string
+  newPassword: string
+}
+
+export interface RefreshRequest {
+  refreshToken: string
+}
+
+export interface LogoutRequest {
+  refreshToken: string
+}
+
+// 登录审计日志 (login_audit_logs 表)
+export interface LoginAuditLog {
+  id: number
+  userId?: number
+  username: string
+  loginAt: string
+  ip?: string
+  userAgent?: string
+  success: boolean
+  failureReason?: string
+}
+
+export interface LoginAuditResp {
+  total: number
+  page: number
+  pageSize: number
+  items: LoginAuditLog[]
+}
 
 // ===== 通用 =====
 export interface PageResp<T> {

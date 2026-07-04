@@ -71,6 +71,22 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/admin/AdminEtlView.vue'),
     meta: { title: 'ETL 触发', requireAuth: true }
   },
+  // ===== JWT 改造: 用户管理页 (仅 admin 角色) =====
+  //   - requireRole='admin' 由路由守卫强制检查
+  //   - UI 在 AppHeader 中仅 admin 角色显示入口
+  {
+    path: '/admin/users',
+    name: 'AdminUsers',
+    component: () => import('@/views/admin/AdminUsersView.vue'),
+    meta: { title: '用户管理', requireAuth: true, requireRole: 'admin' }
+  },
+  // ===== JWT 改造: 修改密码页 (登录用户均可访问) =====
+  {
+    path: '/change-password',
+    name: 'ChangePassword',
+    component: () => import('@/views/ChangePasswordView.vue'),
+    meta: { title: '修改密码', requireAuth: true }
+  },
   {
     path: '/admin/dict/oem-brands',
     name: 'AdminOemBrands',
@@ -164,15 +180,24 @@ const router = createRouter({
   routes
 })
 
-// 鉴权守卫
-//   需求 4: 未登录访问 /admin/* 时重定向到 /login?redirect=xxx
-//   登录页 LoginView 验证成功后回跳到 redirect 目标
+// 鉴权守卫 (JWT 改造版)
+//   - 未登录访问 requireAuth 路由: 跳 /login?redirect=xxx
+//   - token 已过期但 refreshToken 仍在: 允许进入, 由 axios 拦截器在首个 401 时自动 refresh
+//     (避免在守卫里同步触发 refresh, 复杂度高且阻塞导航)
+//   - requireRole='admin' 但当前用户非 admin: 跳 /admin/products + warning
 router.beforeEach((to, _from, next) => {
   if (to.meta.requireAuth) {
     const auth = useAdminAuthStore()
+    // token 完全缺失 → 未登录
     if (!auth.token) {
       ElMessage.warning('请先登录')
       next({ path: '/login', query: { redirect: to.fullPath } })
+      return
+    }
+    // 角色检查 (仅当 store 已加载 user 时生效; 旧 dev token 无 user 时跳过, 由后端 403 兜底)
+    if (to.meta.requireRole === 'admin' && auth.user && !auth.isAdmin()) {
+      ElMessage.warning('仅管理员可访问用户管理页')
+      next({ path: '/admin/products' })
       return
     }
   }

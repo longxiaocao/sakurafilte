@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessageBox } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAdminAuth } from '@/composables/useAdminAuth'
 import { useThemeStore } from '@/stores/theme'  // P5.3
+import { authApi } from '@/api'
 
 const route = useRoute()
 const router = useRouter()
-const { isAdmin, setToken } = useAdminAuth()
+const { isAdmin, user, refreshToken, clearAuth } = useAdminAuth()
 const theme = useThemeStore()  // P5.3
 
 const isAdminPath = computed(() => route.path.startsWith('/admin'))
@@ -35,6 +36,8 @@ const navItems = computed(() => [
         { label: '产品管理', path: '/admin/products', icon: 'Goods' },
         // Day 10+: 字典管理 (P1.3 OEM 品牌 + P2.2 7 个新字典) — 改为 el-dropdown 下拉
         { label: '字典管理', dropdown: 'dict', icon: 'Collection' },
+        // JWT 改造: 用户管理 (仅 admin 角色显示)
+        ...(isAdmin() ? [{ label: '用户管理', path: '/admin/users', icon: 'User' }] : []),
         { label: 'ETL 触发', path: '/admin/etl', icon: 'Loading' },
         // P3.5 (Task 12): 产品对比 (最多 6 个产品, 列可调序, 打印优化)
         { label: '产品对比', path: '/admin/compare', icon: 'DataAnalysis' },
@@ -75,21 +78,47 @@ async function go(item: { path?: string; action?: string }) {
   }
 }
 
+// JWT 改造: 已登录显示用户菜单, 未登录跳 /login
 function toggleAdmin() {
   if (isAdminPath.value) {
-    // 退出后台: 清除 token 并回前台搜索页
-    setToken('')
+    // 退出后台: 跳前台搜索页 (不清除 token, 用户仍处于登录态)
     router.push('/search')
   } else {
-    // 进入后台: 跳转登录页 (需求 4: 用登录页替换 TOKEN 弹窗)
-    //   未登录时路由守卫会自动重定向到 /login?redirect=xxx
-    //   已登录 (token 仍有效) 时 LoginView 会直接放行或允许重新登录
+    // 进入后台: 跳转登录页 (路由守卫会处理已登录用户的回跳)
     router.push('/login')
   }
 }
 
+// 用户下拉菜单 command 路由
+function onUserCommand(cmd: string) {
+  if (cmd === 'changePassword') {
+    router.push('/change-password')
+  } else if (cmd === 'logout') {
+    handleLogout()
+  }
+}
+
+async function handleLogout() {
+  try {
+    await ElMessageBox.confirm('确定退出登录吗?', '确认', { type: 'warning' })
+  } catch {
+    return
+  }
+  try {
+    if (refreshToken.value) {
+      await authApi.logout(refreshToken.value)
+    }
+  } catch {
+    // 即使后端 logout 失败也前端清场
+  }
+  clearAuth()
+  ElMessage.success('已退出登录')
+  router.push('/login')
+}
+
 // el-dropdown 触发方式: hover / click
 const dictTrigger = 'click'
+const userTrigger = 'click'
 </script>
 
 <template>
@@ -150,7 +179,33 @@ const dictTrigger = 'click'
       <el-icon><Moon v-if="theme.mode === 'light'" /><Sunny v-else /></el-icon>
       <span class="hidden sm:inline">{{ theme.mode === 'dark' ? '深色' : '浅色' }}</span>
     </button>
+    <!-- JWT 改造: 用户菜单 (已登录显示 el-dropdown, 未登录显示进入后台按钮) -->
+    <el-dropdown
+      v-if="isAdminPath && user"
+      :trigger="userTrigger"
+      @command="onUserCommand"
+    >
+      <button class="px-2 py-1 text-sm hairline hover:bg-neutral-100 flex items-center gap-1">
+        <el-icon><User /></el-icon>
+        <span>{{ user.username }}</span>
+        <el-tag
+          size="small"
+          :type="user.role === 'admin' ? 'danger' : user.role === 'operator' ? 'primary' : 'info'"
+          class="ml-1"
+        >
+          {{ user.role }}
+        </el-tag>
+        <el-icon class="ml-1"><ArrowDown /></el-icon>
+      </button>
+      <template #dropdown>
+        <el-dropdown-menu>
+          <el-dropdown-item command="changePassword">修改密码</el-dropdown-item>
+          <el-dropdown-item command="logout" divided>退出登录</el-dropdown-item>
+        </el-dropdown-menu>
+      </template>
+    </el-dropdown>
     <button
+      v-else
       @click="toggleAdmin"
       class="px-2 py-1 text-sm hairline hover:bg-neutral-100 flex items-center gap-1"
     >
