@@ -65,6 +65,10 @@ const form = reactive<any>({
   machineApplications: []
 })
 
+// E2E BD.3 修复 v2: 乐观锁并发令牌 (PG xmin), GET 时保存, PUT 时带回
+//   后端用此值覆盖实体加载时的 xmin, 检测"先读后写"并发丢失更新
+const rowVersion = ref<number>(0)
+
 const loading = ref(false)
 const saving = ref(false)
 
@@ -122,6 +126,8 @@ async function load() {
     form.crossReferences = p.crossReferences.map((x) => ({ ...x }))
     form.machineApplications = p.machineApplications.map((m) => ({ ...m }))
     images.value = p.images || []
+    // E2E BD.3 修复 v2: 保存 GET 时的 RowVersion (xmin), PUT 时带回实现乐观锁
+    rowVersion.value = p.rowVersion ?? 0
   } catch (e: any) {} finally {
     loading.value = false
   }
@@ -131,7 +137,8 @@ async function save() {
   saving.value = true
   try {
     if (isEdit.value) {
-      await adminProductApi.update(productId.value, form, 'admin')
+      // E2E BD.3 修复 v2: 带回 GET 时的 RowVersion, 后端用此值检测并发冲突
+      await adminProductApi.update(productId.value, { ...form, rowVersion: rowVersion.value }, 'admin')
       ElMessage.success('已保存')
     } else {
       await adminProductApi.create(form, 'admin')
@@ -144,7 +151,17 @@ async function save() {
     //   第二个请求触发 23505 唯一约束冲突, 端点映射为 409 Conflict
     //   拦截器已展示后端原始 title/detail, 这里补充更友好的行动指引
     if (e?.response?.status === 409 || e?.problem?.status === 409) {
-      ElMessage.error('产品已存在，请检查 OEM 号')
+      // E2E BD.3 修复: 区分两种 409 — OEM 重复 vs 乐观锁冲突 (数据已被他人修改)
+      //   后端 ProblemDetails.title 区分: "产品已存在" / "数据已被修改"
+      const title = e?.response?.data?.title || e?.problem?.title || ''
+      const detail = e?.response?.data?.detail || e?.problem?.detail || ''
+      if (title.includes('已被修改') || detail.includes('已被其他用户修改') || detail.includes('lost update')) {
+        ElMessage.error('数据已被其他管理员修改, 请刷新后重试')
+        // 自动重新加载最新数据, 避免用户手动刷新
+        setTimeout(() => window.location.reload(), 1500)
+      } else {
+        ElMessage.error('产品已存在，请检查 OEM 号')
+      }
     }
   } finally {
     saving.value = false

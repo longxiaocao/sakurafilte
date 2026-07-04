@@ -186,6 +186,8 @@ export interface ProductFormDto {
   mr1?: string | null
   isPublished?: boolean | null
   remark?: string | null
+  // E2E BD.3 修复 v2: 乐观锁并发令牌 (PG xmin), PUT 时带回
+  rowVersion?: number | null
   d1Mm?: number | null
   d2Mm?: number | null
   d3Mm?: number | null

@@ -1,9 +1,9 @@
 {
   "test_name": "SakuraFilter 毁灭性 E2E 测试",
-  "test_time": "2026-07-04 22:46:04",
+  "test_time": "2026-07-04 23:13:51",
   "summary": {
-    "PASS": 42,
-    "FAIL": 1,
+    "PASS": 43,
+    "FAIL": 0,
     "WARN": 2,
     "SKIP": 0
   },
@@ -30,14 +30,14 @@
       "check": "API创建产品",
       "status": "PASS",
       "expected": "201 Created",
-      "actual": "status=201, id=50006",
+      "actual": "status=201, id=50008",
       "evidence": ""
     },
     {
       "scenario": "1-产品生命周期",
       "check": "列表页产品可见",
       "status": "PASS",
-      "expected": "列表包含 E2E202607046315",
+      "expected": "列表包含 E2E202607047982",
       "actual": "找到",
       "evidence": ""
     },
@@ -101,7 +101,7 @@
       "scenario": "2-搜索一致性",
       "check": "前台OEM搜索",
       "status": "PASS",
-      "expected": "搜索结果包含 E2E202607046315",
+      "expected": "搜索结果包含 E2E202607047982",
       "actual": "找到",
       "evidence": ""
     },
@@ -246,7 +246,7 @@
       "check": "dict_oem_no3查询性能",
       "status": "PASS",
       "expected": "<500ms",
-      "actual": "23ms",
+      "actual": "4ms",
       "evidence": ""
     },
     {
@@ -254,7 +254,7 @@
       "check": "公开搜索正常响应",
       "status": "PASS",
       "expected": "<2s 响应",
-      "actual": "16ms, total=0",
+      "actual": "25ms, total=0",
       "evidence": ""
     },
     {
@@ -334,7 +334,7 @@
       "check": "列表查询性能",
       "status": "PASS",
       "expected": "<1s",
-      "actual": "53ms",
+      "actual": "50ms",
       "evidence": ""
     },
     {
@@ -342,15 +342,15 @@
       "check": "详情查询(含关联)",
       "status": "PASS",
       "expected": "<500ms + 关联加载",
-      "actual": "19ms, xref=True, machine=True",
+      "actual": "26ms, xref=True, machine=True",
       "evidence": ""
     },
     {
       "scenario": "后端深水区",
       "check": "乐观锁机制",
-      "status": "FAIL",
-      "expected": "Product 实体应有 RowVersion/Timestamp",
-      "actual": "无乐观锁, 存在 lost update 风险 (代码审查确认)",
+      "status": "PASS",
+      "expected": "第二次 PUT 返回 409 Conflict",
+      "actual": "r1=200, r2=409 (xmin 乐观锁生效)",
       "evidence": ""
     },
     {

@@ -153,6 +153,18 @@ public class AdminProductService
             var product = await _db.Products.FirstOrDefaultAsync(p => p.Id == id, ct)
                 ?? throw new KeyNotFoundException($"产品 id={id} 不存在");
 
+            // E2E BD.3 修复 v2: 用前端带回的 RowVersion 覆盖 EF Core 的 OriginalValue
+            //   WHY: EF Core IsRowVersion() 在 UPDATE 时用 OriginalValue["RowVersion"] 做 WHERE 条件
+            //        但 FirstOrDefaultAsync 加载的是当前最新 xmin, 永远不会冲突
+            //        用前端 GET 时的 RowVersion (可能过期) 覆盖 OriginalValue, 才能检测"先读后写"并发
+            //   注意: 必须用 Entry().OriginalValues 而非直接赋值 product.RowVersion
+            //        直接赋值会被 Change Tracker 视为 Modified, 导致 SET 中包含 xmin (PG 不允许 UPDATE xmin)
+            //        OriginalValues 只影响 WHERE 条件, 不影响 SET
+            if (form.RowVersion.HasValue)
+            {
+                _db.Entry(product).OriginalValues["RowVersion"] = form.RowVersion.Value;
+            }
+
             var changed = new Dictionary<string, object>();
             void Track<T>(string key, T oldVal, T? newVal)
             {
@@ -271,6 +283,15 @@ public class AdminProductService
 
             _logger.LogInformation("产品更新 id={Id} 变更字段 {Count}", id, changed.Count);
             return await GetByIdAsync(id, ct);
+        }
+        catch (DbUpdateConcurrencyException ex)
+        {
+            // E2E BD.3 修复: 乐观锁冲突 — 产品已被其他管理员修改, 当前请求的 RowVersion 已过期
+            //   WHY: EF Core [Timestamp] + IsRowVersion() 在 UPDATE 时检查 row_version, 不匹配抛此异常
+            //        映射为 InvalidOperationException 让端点层 catch 返回 409 Conflict (而非 500)
+            await tx.RollbackAsync(ct);
+            _logger.LogWarning(ex, "产品更新乐观锁冲突 id={Id} (数据已被其他管理员修改)", id);
+            throw new InvalidOperationException($"产品 id={id} 已被其他用户修改, 请刷新后重试 (lost update prevented)");
         }
         catch (Exception ex) when (ex is not KeyNotFoundException && ex is not ArgumentException && ex is not InvalidOperationException)
         {
@@ -496,6 +517,7 @@ public class AdminProductService
         return new ProductDetailDto(
             p.Id, p.OemNoDisplay, p.Oem2, p.Mr1,
             p.ProductName1, p.ProductName2, p.Type, p.IsPublished, p.Remark,
+            p.RowVersion,  // E2E BD.3 修复 v2: 暴露 xmin 给前端, PUT 时带回实现乐观锁
             p.D1Mm, p.D2Mm, p.D3Mm, p.D4Mm,
             p.H1Mm, p.H2Mm, p.H3Mm, p.H4Mm,
             p.D7Thread, p.D8Thread, p.NoCheckValves, p.NoBypassValves,
@@ -956,6 +978,7 @@ public class AdminProductService
             result.Add(new ProductDetailDto(
                 p.Id, p.OemNoDisplay, p.Oem2, p.Mr1,
                 p.ProductName1, p.ProductName2, p.Type, p.IsPublished, p.Remark,
+                p.RowVersion,  // E2E BD.3 修复 v2: 暴露 xmin 给前端
                 p.D1Mm, p.D2Mm, p.D3Mm, p.D4Mm,
                 p.H1Mm, p.H2Mm, p.H3Mm, p.H4Mm,
                 p.D7Thread, p.D8Thread, p.NoCheckValves, p.NoBypassValves,

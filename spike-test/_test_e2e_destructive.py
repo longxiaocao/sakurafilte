@@ -733,10 +733,70 @@ def test_backend_deep_water(token):
         record("后端深水区", "详情查询性能", "FAIL", "API 调用", str(e))
 
     # 3. 并发锁检测 (代码审查已知无乐观锁)
-    print("\n[BD.3] 并发锁检测")
-    record("后端深水区", "乐观锁机制",
-           "FAIL", "Product 实体应有 RowVersion/Timestamp",
-           "无乐观锁, 存在 lost update 风险 (代码审查确认)")
+    print("\n[BD.3] 并发锁检测 (实际并发更新测试)")
+    # WHY: 之前是代码审查判定 FAIL, 现已添加 [Timestamp] + xmin 系统列 + DbUpdateConcurrencyException 捕获
+    #      实际测试: 并发发送两次 PUT 请求, 第二次应返回 409 Conflict
+    try:
+        # 先获取一个产品 id (用场景 1 创建的或列表第一个)
+        list_resp = requests.get(f"{BACKEND}/api/admin/products?page=1&pageSize=1",
+                                headers=headers, timeout=10)
+        if list_resp.status_code == 200:
+            items = list_resp.json().get("items") or list_resp.json().get("data", {}).get("items", [])
+            if items:
+                pid = items[0].get("id")
+                # 获取详情拿原始数据
+                detail_resp = requests.get(f"{BACKEND}/api/admin/products/{pid}",
+                                          headers=headers, timeout=10)
+                if detail_resp.status_code == 200:
+                    product_data = detail_resp.json()
+                    # E2E BD.3 修复 v2: 获取 GET 时的 RowVersion (xmin), 两次 PUT 都带同一个旧 RowVersion
+                    #   模拟两个管理员同时编辑: A 和 B 都 GET → 都拿到 V1 → A PUT 成功 (V1→V2) → B PUT 应失败 (V1 已过期)
+                    orig_rv = product_data.get("rowVersion")
+                    # 构造 ProductFormDto (从详情反向映射), 带 RowVersion 触发乐观锁检查
+                    form_data = {
+                        "oem2": product_data.get("oem2") or product_data.get("oemNoDisplay"),
+                        "productName1": product_data.get("productName1"),
+                        "type": product_data.get("type") or "filter",
+                        "isPublished": product_data.get("isPublished", True),
+                        "d1Mm": 99.9,  # 修改一个字段触发 UPDATE
+                        "rowVersion": orig_rv,  # 带 GET 时的 RowVersion, 后端用此值覆盖 OriginalValues
+                        "crossReferences": [],
+                        "machineApplications": []
+                    }
+                    # 管理员 A 先 PUT (应成功, xmin 从 V1 → V2)
+                    r1 = requests.put(f"{BACKEND}/api/admin/products/{pid}",
+                                     headers={**headers, "Content-Type": "application/json"},
+                                     json=form_data, timeout=10)
+                    # 管理员 B 后 PUT (应失败 409, 因为 form_data.rowVersion=V1 已过期)
+                    #   注意: B 不重新 GET, 仍用最初 GET 时的 RowVersion (模拟 B 不知道 A 已修改)
+                    r2 = requests.put(f"{BACKEND}/api/admin/products/{pid}",
+                                     headers={**headers, "Content-Type": "application/json"},
+                                     json=form_data, timeout=10)
+                    # 期望: r1=200, r2=409 (乐观锁冲突)
+                    if r1.status_code == 200 and r2.status_code == 409:
+                        record("后端深水区", "乐观锁机制",
+                               "PASS", "第二次 PUT 返回 409 Conflict",
+                               f"r1={r1.status_code}, r2={r2.status_code} (xmin 乐观锁生效)")
+                    elif r1.status_code == 200 and r2.status_code == 200:
+                        record("后端深水区", "乐观锁机制",
+                               "FAIL", "第二次 PUT 应返回 409",
+                               f"r1={r1.status_code}, r2={r2.status_code} (两次都成功, lost update 风险)")
+                    else:
+                        # 可能 r1 失败 (字段校验), 记录实际状态
+                        record("后端深水区", "乐观锁机制",
+                               "WARN", "r1=200, r2=409",
+                               f"r1={r1.status_code}, r2={r2.status_code}, r2_body={r2.text[:100]}")
+                else:
+                    record("后端深水区", "乐观锁机制", "WARN",
+                           "获取产品详情", f"status={detail_resp.status_code}")
+            else:
+                record("后端深水区", "乐观锁机制", "WARN",
+                       "产品列表有数据", "列表为空, 无法测试并发更新")
+        else:
+            record("后端深水区", "乐观锁机制", "WARN",
+                   "获取产品列表", f"status={list_resp.status_code}")
+    except Exception as e:
+        record("后端深水区", "乐观锁机制", "FAIL", "API 调用", str(e))
 
     # 4. Token 轮转检测
     print("\n[BD.4] Token 轮转检测")

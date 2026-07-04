@@ -20,6 +20,12 @@ public record ProductFormDto
     public bool IsPublished { get; init; } = true;
     public string? Remark { get; init; }
 
+    // E2E BD.3 修复 v2: 乐观锁并发令牌 (uint, 来自 GET /api/admin/products/{id} 的 RowVersion 字段)
+    //   WHY: 跨请求乐观锁必须由前端带回 GET 时的 RowVersion (xmin), 否则每次 PUT 重新加载实体,
+    //        xmin 总是最新的, 永远不会冲突 (无法检测"先读后写"并发丢失更新)
+    //   安全性: 内部管理系统, 管理员无动机篡改; 即便篡改也只是跳过乐观锁, 不会破坏数据
+    public uint? RowVersion { get; init; }
+
     // ============ 分区 3: 尺寸 (mm) ============
     public decimal? D1Mm { get; init; }
     public decimal? D2Mm { get; init; }
@@ -147,6 +153,8 @@ public record ProductDetailDto(
     string Type,
     bool IsPublished,
     string? Remark,
+    // E2E BD.3 修复 v2: 暴露 RowVersion (xmin) 给前端, PUT 时带回实现跨请求乐观锁
+    uint RowVersion,
     decimal? D1Mm, decimal? D2Mm, decimal? D3Mm, decimal? D4Mm,
     decimal? H1Mm, decimal? H2Mm, decimal? H3Mm, decimal? H4Mm,
     string? D7Thread, string? D8Thread,

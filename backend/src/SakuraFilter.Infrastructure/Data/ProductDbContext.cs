@@ -69,6 +69,11 @@ public class ProductDbContext : DbContext
             //        CI 上逐个报错 (is_published → is_discontinued → created_at), 一次性全修复避免迭代
             e.Property(p => p.IsDiscontinued).HasDefaultValue(false);
             e.Property(p => p.CreatedAt).HasDefaultValueSql("now()");
+            // E2E BD.3 修复 v2: 乐观锁 xmin (uint, PG 系统列 xid)
+            //   WHY: 不能用 byte[] + [Timestamp], 因为 PG xmin 类型是 xid (uint32), Npgsql 抛 InvalidCastException
+            //   方案: uint 类型 + Fluent API IsRowVersion(), EF Core 在 UPDATE 时 SET WHERE xmin = @orig
+            //   防止 ApplyConfigurationsFromAssembly 加载的 IEntityTypeConfiguration<Product> 覆盖
+            e.Property(p => p.RowVersion).IsRowVersion().IsConcurrencyToken();
             // Day 9.12 v7: OemNoNormalized 必须为 UNIQUE 索引
             //   WHY: EtlImportService.ImportProductsAsync INSERT 用 ON CONFLICT (oem_no_normalized) DO NOTHING/UPDATE
             //        无 UNIQUE 约束时 PG 报 42P10: there is no unique or exclusion constraint matching the ON CONFLICT specification

@@ -1377,7 +1377,20 @@ app.MapPut("/api/admin/products/{id:long}", async (long id, ProductFormDto form,
             Detail = $"OEM 号已存在: {pgEx.Detail}"
         });
     }
+    // E2E BD.3 修复: 乐观锁冲突 — 产品已被其他管理员修改, 返回 409 + 明确提示刷新
+    //   WHY: AdminProductService.UpdateAsync 捕获 DbUpdateConcurrencyException 后抛 InvalidOperationException
+    //        端点需区别于其他 InvalidOperationException (校验失败等) 单独返回 409 Conflict
+    catch (InvalidOperationException ex) when (ex.Message.Contains("已被其他用户修改") || ex.Message.Contains("lost update"))
+    {
+        return Results.Conflict(new ProblemDetails
+        {
+            Title = "数据已被修改",
+            Status = StatusCodes.Status409Conflict,
+            Detail = ex.Message
+        });
+    }
     catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+    catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
     catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
 })
 .WithName("AdminUpdateProduct");

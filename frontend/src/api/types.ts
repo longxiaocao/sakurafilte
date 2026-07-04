@@ -203,6 +203,8 @@ export interface ProductDetail {
   type?: string
   isPublished: boolean
   remark?: string
+  // E2E BD.3 修复 v2: 乐观锁并发令牌 (PG xmin), PUT 时带回实现跨请求冲突检测
+  rowVersion: number
   d1Mm?: number
   d2Mm?: number
   d3Mm?: number

@@ -76,6 +76,18 @@ public class Product
     [Column("created_at")] public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     [Column("updated_at")] public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
+    // 乐观锁并发控制 (E2E BD.3 修复 v2)
+    //   WHY: 之前无并发令牌, 两个管理员同时编辑同一产品时, 后提交者会覆盖前者的修改 (lost update)
+    //   方案: 使用 PostgreSQL 系统列 xmin 作为并发令牌 (Npgsql 官方推荐, 无需新增列, 无需触发器)
+    //   EF Core 在 UPDATE 时自动 SET WHERE xmin = @original_xmin, 不匹配抛 DbUpdateConcurrencyException
+    //   端点层捕获后返回 409 Conflict, 前端提示"数据已被修改, 请刷新后重试"
+    //   注意 1: xmin 是 PG 系统列 (每个表自动有), 不能 INSERT/UPDATE, 只能 SELECT
+    //   注意 2: xmin 类型为 xid (uint32), 必须用 uint, 不能用 byte[] (否则 Npgsql 抛 InvalidCastException)
+    //           EF Core [Timestamp] 特性强制 byte[], 不能用! 改用 Fluent API IsRowVersion()
+    //   参考: https://www.npgsql.org/efcore/versioning?tabs=without-attribute
+    [Column("xmin")]
+    public uint RowVersion { get; set; }
+
     // 导航属性
     public ICollection<CrossReference> CrossReferences { get; set; } = new List<CrossReference>();
     public ICollection<MachineApplication> MachineApplications { get; set; } = new List<MachineApplication>();
