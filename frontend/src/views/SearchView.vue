@@ -21,6 +21,9 @@ import type { SearchResult, SearchHit, BatchOemResult } from '@/api/types'
 const router = useRouter()
 
 const q = ref('')
+// 修复: searched 标志位 — 区分"已输入未搜索"与"已搜索无结果"两种状态
+//   WHY: 用户输入关键词但未点搜索时, hits.length===0 + !loading 会立即显示"暂无结果", 体验差
+const searched = ref(false)
 // Task 9 (P3.1): 容差默认 5mm (后端 SearchRequest.Tolerance 默认值, 与 AdminProductsView 对齐)
 const tolerance = ref<1 | 5 | 10>(5)
 const loading = ref(false)
@@ -50,8 +53,12 @@ async function doSearch() {
   if (!q.value.trim()) {
     hits.value = []
     total.value = 0
+    // 修复: 空查询时重置 searched, 让"输入关键词开始搜索"占位符重新显示
+    searched.value = false
     return
   }
+  // 修复: 标记已执行搜索, 用于区分"已输入未搜索"与"已搜索无结果"
+  searched.value = true
   // P2-8.1: 取消上一次未完成的搜索请求
   searchAbort?.abort()
   const myAbort = new AbortController()
@@ -92,6 +99,17 @@ watch(tolerance, async (_newVal, oldVal) => {
   prevTolerance.value = oldVal
   prevTotal.value = total.value
   await doSearch()
+})
+
+// 修复: 用户修改关键词时重置 searched, 让"已输入未搜索"中间状态重新显示
+//   WHY: 用户改了关键词后, 旧结果不再适用, 需要提示重新搜索
+//   注意: doSearch 不修改 q, 此 watch 不会与 doSearch 内的 searched=true 循环
+watch(q, (newVal) => {
+  searched.value = false
+  if (!newVal) {
+    hits.value = []
+    total.value = 0
+  }
 })
 
 function viewDetail(row: SearchHit) {
@@ -261,12 +279,19 @@ onBeforeUnmount(() => {
           <div class="text-xs mt-2">支持 OEM 编号、产品名、车型等</div>
         </div>
 
-        <div v-else-if="hits.length === 0 && !loading" class="py-12 text-center text-muted">
+        <!-- 修复: 已输入未搜索的中间状态, 避免立即显示"暂无结果" -->
+        <div v-else-if="q && !searched" class="py-12 text-center text-muted">
+          <el-icon class="text-4xl mb-2"><Search /></el-icon>
+          <div>点击搜索按钮或按回车查询</div>
+          <div class="text-xs mt-2">当前关键词: {{ q }}</div>
+        </div>
+
+        <div v-else-if="searched && hits.length === 0 && !loading" class="py-12 text-center text-muted">
           暂无结果
         </div>
 
         <div v-else class="hairline">
-          <div class="hairline-b px-2 py-1 bg-neutral-50 text-xs text-muted flex items-center">
+          <div class="hairline-b px-2 py-1 bg-[var(--color-bg-hover)] text-xs text-muted flex items-center">
             <span>共 {{ total }} 条结果 (容差 ±{{ tolerance }}mm)</span>
             <span class="ml-2">(显示前 {{ hits.length }} 条)</span>
           </div>

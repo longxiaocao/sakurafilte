@@ -297,7 +297,7 @@ onUnmounted(() => {
     <!-- 结果区 -->
     <div v-else>
       <!-- 结果头: 数量 + 耗时 + countMode + 翻页 -->
-      <div class="hairline-b px-2 py-1 bg-neutral-50 text-xs text-muted flex items-center justify-between">
+      <div class="hairline-b px-2 py-1 bg-[var(--color-bg-hover)] text-xs text-muted flex items-center justify-between">
         <div class="flex items-center gap-3">
           <span>
             共 <strong class="text-black">{{ total.toLocaleString() }}</strong> 条结果
