@@ -4,7 +4,7 @@
 //   - 关键字段筛选 + 分页
 //   - 行操作: 编辑 / 软删 / 恢复 / 查看历史
 //   - 批量对比
-import { ref, reactive, onMounted, watch } from 'vue'
+import { ref, reactive, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { adminProductApi } from '@/api'
@@ -83,19 +83,30 @@ watch(historyFilter, () => saveHistoryFilter(), { deep: true })
 // 批量选择
 const selected = ref<ProductListItem[]>([])
 
+// P2-8.1: 列表请求取消控制器
+//   快速翻页/筛选切换时取消上一次未完成请求, 避免并发竞争导致旧结果覆盖新结果
+let loadAbort: AbortController | null = null
+
 async function load() {
+  // P2-8.1: 取消上一次未完成的列表请求
+  loadAbort?.abort()
+  const myAbort = new AbortController()
+  loadAbort = myAbort
   loading.value = true
   try {
     const req = { ...filter, page: page.value, pageSize: pageSize.value }
-    const data = await adminProductApi.search(req)
+    const data = await adminProductApi.search(req, { signal: myAbort.signal })
     items.value = data.items
     total.value = data.total
     hasMore.value = !!data.hasMore
     countModeUsed.value = data.countModeUsed || 'exact'
   } catch (e: any) {
-    // 错误已被拦截器处理
+    // P2-8.1: 请求被取消时静默返回 (用户主动翻页/筛选切换/卸载组件触发)
+    if (e?.code === 'ERR_CANCELED' || e?.name === 'CanceledError') return
+    // 其他错误已被拦截器处理
   } finally {
-    loading.value = false
+    // P2-8.1: 仅当前请求未被新请求取代时才重置 loading, 避免旧请求 finally 覆盖新请求的 loading 状态
+    if (loadAbort === myAbort) loading.value = false
   }
 }
 
@@ -246,6 +257,11 @@ function onSizeChange(s: number) {
 }
 
 onMounted(load)
+
+// P2-8.1: 组件卸载时取消未完成的列表请求, 防止内存泄漏与卸载后状态写入
+onBeforeUnmount(() => {
+  loadAbort?.abort()
+})
 </script>
 
 <template>

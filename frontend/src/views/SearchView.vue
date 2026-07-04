@@ -12,7 +12,7 @@
 //   - 解析: tab/换行/逗号/分号 分隔, trim + 去重
 //   - 边界: 中文/斜杠/引号/空行/重复 健壮处理
 //   - 展示: 表格 + 进度条 + 排序
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { searchApi } from '@/api'
@@ -42,12 +42,20 @@ const toleranceHint = computed(() => {
   return `切换后命中 ${cur} 条, 与 ±${prevTolerance.value}mm 相同`
 })
 
+// P2-8.1: 搜索请求取消控制器
+//   快速切换容差时取消上一次未完成请求, 避免并发竞争导致旧结果覆盖新结果
+let searchAbort: AbortController | null = null
+
 async function doSearch() {
   if (!q.value.trim()) {
     hits.value = []
     total.value = 0
     return
   }
+  // P2-8.1: 取消上一次未完成的搜索请求
+  searchAbort?.abort()
+  const myAbort = new AbortController()
+  searchAbort = myAbort
   loading.value = true
   lastError.value = ''
   try {
@@ -56,7 +64,7 @@ async function doSearch() {
       // Task 9 (P3.1): 把容差传到后端 (后端 SearchRequest.Tolerance, PostgresSearchProvider 走 ±t 区间)
       tolerance: tolerance.value,
       pageSize: 50
-    })
+    }, { signal: myAbort.signal })
     provider.value = p
     // Day 9.2: 修复 - 后端字段是 items (PascalCase), 不是 hits
     //   兼容 fallback: 万一后端返回 hits 也能用
@@ -64,12 +72,15 @@ async function doSearch() {
     hits.value = items
     total.value = result?.total ?? 0
   } catch (e: any) {
+    // P2-8.1: 请求被取消时静默返回 (用户主动切换容差/卸载组件触发)
+    if (e?.code === 'ERR_CANCELED' || e?.name === 'CanceledError') return
     lastError.value = e?.message || '搜索失败'
     // Day 9.2: 出错时清空, 防止 undefined.length 报错
     hits.value = []
     total.value = 0
   } finally {
-    loading.value = false
+    // P2-8.1: 仅当前请求未被新请求取代时才重置 loading, 避免旧请求 finally 覆盖新请求的 loading 状态
+    if (searchAbort === myAbort) loading.value = false
   }
 }
 
@@ -177,6 +188,11 @@ function viewProductById(row: BatchOemResult) {
 
 onMounted(() => {
   // 默认显示空状态
+})
+
+// P2-8.1: 组件卸载时取消未完成的搜索请求, 防止内存泄漏与卸载后状态写入
+onBeforeUnmount(() => {
+  searchAbort?.abort()
 })
 </script>
 

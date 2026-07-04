@@ -129,8 +129,9 @@ export interface EngineReorderItem { id: number; sortOrder: number }
 
 // ===== 搜索 (公开, 无需 token) =====
 export const searchApi = {
-  search(req: SearchRequest): Promise<{ provider: string; result: SearchResult }> {
-    return http.post('/search', req).then((r) => r.data)
+  // P2-8.1: 增加 signal 透传, 支持调用方取消请求 (快速切换容差时取消上一次未完成请求)
+  search(req: SearchRequest, config?: { signal?: AbortSignal }): Promise<{ provider: string; result: SearchResult }> {
+    return http.post('/search', req, { signal: config?.signal }).then((r) => r.data)
   },
   health(): Promise<{ provider: string; healthy: boolean }> {
     return http.get('/search/health').then((r) => r.data)
@@ -178,8 +179,9 @@ export const publicSearchApi = {
 
 // ===== 后台产品管理 (需 token) =====
 export const adminProductApi = {
-  search(req: AdminSearchRequest): Promise<PageResp<ProductListItem>> {
-    return http.get('/admin/products/search', { params: req }).then((r) => r.data)
+  // P2-8.1: 增加 signal 透传, 支持调用方取消请求 (AdminProductsView 列表快速翻页/筛选切换时取消上一次)
+  search(req: AdminSearchRequest, config?: { signal?: AbortSignal }): Promise<PageResp<ProductListItem>> {
+    return http.get('/admin/products/search', { params: req, signal: config?.signal }).then((r) => r.data)
   },
   get(id: number): Promise<ProductDetail> {
     return http.get(`/admin/products/${id}`).then((r) => r.data)
