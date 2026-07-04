@@ -20,6 +20,9 @@
     <!-- JWT 认证体系: BCrypt 密码哈希 + JwtBearer 令牌验证 -->
     <PackageReference Include="BCrypt.Net-Next" Version="4.0.3" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.10" />
+    <!-- 安全加固阶段4: FluentValidation 输入校验 + HtmlSanitizer (Ganss.Xss) HTML 消毒 -->
+    <PackageReference Include="FluentValidation.AspNetCore" Version="11.3.0" />
+    <PackageReference Include="HtmlSanitizer" Version="8.0.0" />
   </ItemGroup>
 
   <ItemGroup>

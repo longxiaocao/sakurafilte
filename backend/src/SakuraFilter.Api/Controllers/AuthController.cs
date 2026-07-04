@@ -1,7 +1,10 @@
 using System.Security.Claims;
+using FluentValidation;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using SakuraFilter.Api.Services;
+using SakuraFilter.Api.Services.Validators;
 
 namespace SakuraFilter.Api.Controllers;
 
@@ -21,12 +24,21 @@ public class AuthController : ControllerBase
     private readonly UserService _userService;
     private readonly JwtTokenService _jwt;
     private readonly ILogger<AuthController> _logger;
+    private readonly IValidator<LoginRequest> _loginValidator;
+    private readonly IValidator<ChangePasswordRequest> _changePasswordValidator;
 
-    public AuthController(UserService userService, JwtTokenService jwt, ILogger<AuthController> logger)
+    public AuthController(
+        UserService userService,
+        JwtTokenService jwt,
+        ILogger<AuthController> logger,
+        IValidator<LoginRequest> loginValidator,
+        IValidator<ChangePasswordRequest> changePasswordValidator)
     {
         _userService = userService;
         _jwt = jwt;
         _logger = logger;
+        _loginValidator = loginValidator;
+        _changePasswordValidator = changePasswordValidator;
     }
 
     /// <summary>
@@ -37,10 +49,19 @@ public class AuthController : ControllerBase
     /// </summary>
     [HttpPost("login")]
     [AllowAnonymous]
+    [EnableRateLimiting("auth")]  // 安全加固阶段4: 登录防暴力破解 (5 次/分钟/IP)
     public async Task<IActionResult> Login([FromBody] LoginRequest req, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(req.Username) || string.IsNullOrWhiteSpace(req.Password))
-            return BadRequest(new { error = "用户名和密码不能为空" });
+        // 安全加固阶段4: FluentValidation 输入校验 (在业务逻辑前执行)
+        var validation = await _loginValidator.ValidateAsync(req, ct);
+        if (!validation.IsValid)
+        {
+            return BadRequest(new
+            {
+                error = "输入参数校验失败",
+                details = validation.Errors.Select(e => new { field = e.PropertyName, message = e.ErrorMessage })
+            });
+        }
 
         var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
         var ua = Request.Headers.UserAgent.ToString();
@@ -153,10 +174,16 @@ public class AuthController : ControllerBase
     [Authorize]
     public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest req, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(req.OldPassword) || string.IsNullOrWhiteSpace(req.NewPassword))
-            return BadRequest(new { error = "旧密码和新密码不能为空" });
-        if (req.NewPassword.Length < 8)
-            return BadRequest(new { error = "新密码长度不能少于 8 位" });
+        // 安全加固阶段4: FluentValidation 输入校验 (密码强度 + 长度)
+        var validation = await _changePasswordValidator.ValidateAsync(req, ct);
+        if (!validation.IsValid)
+        {
+            return BadRequest(new
+            {
+                error = "输入参数校验失败",
+                details = validation.Errors.Select(e => new { field = e.PropertyName, message = e.ErrorMessage })
+            });
+        }
 
         var userIdStr = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? User.FindFirst("sub")?.Value;
         if (!long.TryParse(userIdStr, out var userId))

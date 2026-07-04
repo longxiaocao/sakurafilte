@@ -9,6 +9,8 @@ using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;             // JWT: SymmetricSecurityKey/TokenValidationParameters
 using System.Security.Claims;                     // JWT: ClaimTypes
 using System.Text;                                // JWT: Encoding.UTF8
+using FluentValidation;                           // 安全加固阶段4: AddValidatorsFromAssemblyContaining
+using FluentValidation.AspNetCore;                // 安全加固阶段4: AddFluentValidationAutoValidation
 using Minio;
 using Aliyun.OSS;
 using Npgsql;  // P0-1.3: PostgresException SqlState == "23505" 用于 409 映射
@@ -86,6 +88,11 @@ builder.Services.AddSwaggerGen(c =>
 // JWT 认证体系: 注册 JwtTokenService (单例) + UserService (Scoped)
 builder.Services.AddSingleton<JwtTokenService>();
 builder.Services.AddScoped<UserService>();
+// 安全加固阶段4: FluentValidation 自动验证 (注册程序集内所有 AbstractValidator<T>)
+builder.Services.AddFluentValidationAutoValidation();
+builder.Services.AddValidatorsFromAssemblyContaining<Program>();
+// 安全加固阶段4: XSS 消毒服务 (单例, Ganss.Xss.HtmlSanitizer 线程安全)
+builder.Services.AddSingleton<XssSanitizer>();
 
 // JWT 认证体系: 配置 JwtBearer 认证 + 角色策略
 //   - SigningKey 从配置读 (环境变量 Jwt__SigningKey 覆盖, 启动期校验 ≥ 32 字符)
@@ -318,6 +325,19 @@ if (rateLimitConfig.Enabled)
                     QueueLimit = 0,
                     AutoReplenishment = true
                 }));
+        // 安全加固阶段4: 登录防暴力破解 (按 IP 分区, 5 次/分钟)
+        //   WHY 按 IP: 同一 IP 可能为多用户共享 (NAT), 5 次/分钟对正常用户足够, 暴力破解会被限流
+        //   WHY 不按用户: 登录前不知道用户是谁, 只能按 IP
+        options.AddPolicy("auth", ctx =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = rateLimitConfig.AuthPermitsPerMinute,
+                    Window = TimeSpan.FromMinutes(1),
+                    QueueLimit = 0,
+                    AutoReplenishment = true
+                }));
     });
 }
 
@@ -462,11 +482,14 @@ _ = Task.Run(async () =>
 //   0) P3-5.2: CorrelationIdMiddleware (管道最前面, 确保后续所有日志带 CorrelationId)
 //   1) UseForwardedHeaders 反向代理 IP 透传 (P1-3: 限流才有效)
 //   2) UseExceptionHandler 统一错误 (P1-5: 生产隐藏堆栈, 开发显示)
-//   3) UseCors 跨域 (要在鉴权前, 否则 preflight 失败)
-//   4) UseRateLimiter 限流 (鉴权前, 防匿名 DoS)
-//   5) P5.5: ResponseTimeMiddleware 响应时间埋点 (在鉴权前,记录 401 等异常耗时)
-//   6) DevTokenAuthMiddleware 自定义鉴权
-//   7) UseSwagger/UseSwaggerUI (P1-6: 仅开发环境暴露)
+//   3) 安全加固阶段4: UseHsts + UseHttpsRedirection (仅生产环境)
+//   4) UseCors 跨域 (要在鉴权前, 否则 preflight 失败)
+//   5) 安全加固阶段4: SecurityHeadersMiddleware 安全响应头
+//   6) UseRateLimiter 限流 (鉴权前, 防匿名 DoS)
+//   7) UseAuthentication/UseAuthorization JWT 认证
+//   8) DevTokenAuthMiddleware 自定义鉴权 (X-Admin-Token)
+//   9) P5.5: ResponseTimeMiddleware 响应时间埋点 (管道末端, 记录完整请求耗时)
+//   10) UseSwagger/UseSwaggerUI (P1-6: 仅开发环境暴露)
 // P3-5.2: CorrelationId 中间件 (管道最前面, 透传 X-Correlation-Id 并注入 logger scope)
 //   - 未传 header 时生成 GUID (32 字符无连字符, 兼容日志聚合工具)
 //   - 通过 BeginScope 让后续中间件/Service 的日志自动带 CorrelationId 字段
@@ -497,20 +520,35 @@ else
         });
     });
 }
+// 安全加固阶段4: HSTS + HTTPS 重定向 (仅生产环境)
+//   WHY 不在开发环境: 会破坏 http://localhost:5148 本地调试 (HTTPS 证书未配)
+//   HSTS: 强制浏览器后续均走 HTTPS (max-age=365 天, 含子域名)
+//   HTTPS Redirection: HTTP 请求 307 重定向到 HTTPS
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHsts();
+    app.UseHttpsRedirection();
+}
 app.UseCors("SakuraFilterCors");
+// 安全加固阶段4: 安全响应头中间件 (在 Cors 之后, Authentication 之前)
+//   WHY 在 Authentication 前: 安全头需对所有响应生效 (含 401/403), 不依赖认证状态
+app.UseMiddleware<SecurityHeadersMiddleware>();
 if (rateLimitConfig.Enabled)
 {
     app.UseRateLimiter();
 }
 // JWT 认证体系: UseAuthentication/UseAuthorization
 //   - 放在 UseCors + UseRateLimiter 之后 (限流先防匿名 DoS, 再做认证)
-//   - 放在 ResponseTimeMiddleware/DevTokenAuthMiddleware 之前 (让后续中间件可读 ctx.User)
+//   - 放在 DevTokenAuthMiddleware/ResponseTimeMiddleware 之前 (让后续中间件可读 ctx.User)
 //   - DevTokenAuthMiddleware 已改造: 检测到 Authorization: Bearer 时跳过 X-Admin-Token 校验
 app.UseAuthentication();
 app.UseAuthorization();
-// P5.5: 响应时间埋点 (在鉴权前,记录 401 等异常耗时;中间件自身排除 /api/perf 防止递归)
-app.UseMiddleware<ResponseTimeMiddleware>();
+// 安全加固阶段4: 中间件顺序调整 - DevTokenAuth 在 ResponseTime 前
+//   WHY DevTokenAuth 先: 自定义鉴权 (X-Admin-Token) 可能短路返回 401, ResponseTime 仍能记录该 401
+//   管道顺序: Authentication → Authorization → DevTokenAuthMiddleware → ResponseTimeMiddleware
 app.UseMiddleware<DevTokenAuthMiddleware>();
+// P5.5: 响应时间埋点 (管道末端, 记录完整请求耗时; 中间件自身排除 /api/perf 防止递归)
+app.UseMiddleware<ResponseTimeMiddleware>();
 
 // P1-6 修复: Swagger 仅开发环境暴露, 生产环境关闭防止接口泄露
 //   WHY: Swagger UI 暴露所有端点签名, 攻击者可枚举 API 进行精准攻击

@@ -1,7 +1,9 @@
+using FluentValidation;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SakuraFilter.Api.Services;
+using SakuraFilter.Api.Services.Validators;
 using SakuraFilter.Core.Entities;
 using SakuraFilter.Infrastructure.Data;
 
@@ -24,12 +26,21 @@ public class UsersController : ControllerBase
     private readonly UserService _userService;
     private readonly ProductDbContext _db;
     private readonly ILogger<UsersController> _logger;
+    private readonly IValidator<CreateUserRequest> _createValidator;
+    private readonly IValidator<UpdateUserRequest> _updateValidator;
 
-    public UsersController(UserService userService, ProductDbContext db, ILogger<UsersController> logger)
+    public UsersController(
+        UserService userService,
+        ProductDbContext db,
+        ILogger<UsersController> logger,
+        IValidator<CreateUserRequest> createValidator,
+        IValidator<UpdateUserRequest> updateValidator)
     {
         _userService = userService;
         _db = db;
         _logger = logger;
+        _createValidator = createValidator;
+        _updateValidator = updateValidator;
     }
 
     /// <summary>
@@ -69,12 +80,16 @@ public class UsersController : ControllerBase
     [HttpPost("")]
     public async Task<IActionResult> Create([FromBody] CreateUserRequest req, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(req.Username) || string.IsNullOrWhiteSpace(req.Password))
-            return BadRequest(new { error = "用户名和密码不能为空" });
-        if (req.Password.Length < 8)
-            return BadRequest(new { error = "密码长度不能少于 8 位" });
-        if (req.Username.Length > 64)
-            return BadRequest(new { error = "用户名长度不能超过 64" });
+        // 安全加固阶段4: FluentValidation 输入校验 (用户名/密码强度/角色/邮箱格式)
+        var validation = await _createValidator.ValidateAsync(req, ct);
+        if (!validation.IsValid)
+        {
+            return BadRequest(new
+            {
+                error = "输入参数校验失败",
+                details = validation.Errors.Select(e => new { field = e.PropertyName, message = e.ErrorMessage })
+            });
+        }
 
         try
         {
@@ -128,13 +143,19 @@ public class UsersController : ControllerBase
     [HttpPatch("{id:long}")]
     public async Task<IActionResult> Update(long id, [FromBody] UpdateUserRequest req, CancellationToken ct)
     {
+        // 安全加固阶段4: FluentValidation 输入校验 (角色/邮箱格式/姓名长度, 允许字段为空表示不更新)
+        var validation = await _updateValidator.ValidateAsync(req, ct);
+        if (!validation.IsValid)
+        {
+            return BadRequest(new
+            {
+                error = "输入参数校验失败",
+                details = validation.Errors.Select(e => new { field = e.PropertyName, message = e.ErrorMessage })
+            });
+        }
+
         var user = await _userService.GetByIdAsync(id, ct);
         if (user == null) return NotFound(new { error = $"用户不存在: {id}" });
-
-        // 校验角色值
-        var validRoles = new[] { "admin", "operator", "viewer" };
-        if (!string.IsNullOrEmpty(req.Role) && !validRoles.Contains(req.Role))
-            return BadRequest(new { error = $"非法角色: {req.Role}, 必须为 admin/operator/viewer" });
 
         if (req.Role != null) user.Role = req.Role;
         if (req.Email != null) user.Email = req.Email;

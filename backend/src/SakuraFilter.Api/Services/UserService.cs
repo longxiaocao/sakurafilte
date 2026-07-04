@@ -25,16 +25,18 @@ public class UserService
     private readonly ProductDbContext _db;
     private readonly JwtTokenService _jwt;
     private readonly ILogger<UserService> _logger;
+    private readonly XssSanitizer _xssSanitizer;
 
     // 锁定策略常量
     private const int MaxFailedLoginCount = 5;
     private static readonly TimeSpan LockDuration = TimeSpan.FromMinutes(15);
 
-    public UserService(ProductDbContext db, JwtTokenService jwt, ILogger<UserService> logger)
+    public UserService(ProductDbContext db, JwtTokenService jwt, ILogger<UserService> logger, XssSanitizer xssSanitizer)
     {
         _db = db;
         _jwt = jwt;
         _logger = logger;
+        _xssSanitizer = xssSanitizer;
     }
 
     /// <summary>
@@ -143,6 +145,12 @@ public class UserService
         var exists = await _db.Users.AnyAsync(u => u.Username == username, ct);
         if (exists)
             throw new InvalidOperationException($"用户名已存在: {username}");
+
+        // 安全加固阶段4: XSS 消毒 Email/FullName (纯文本字段, 移除所有 HTML 标签)
+        //   WHY 不消毒 Username: Validator 限制为 [a-zA-Z0-9_-], 无注入风险
+        //   WHY 不消毒 Password: 直接 BCrypt 哈希, HTML 字符不影响安全性
+        email = _xssSanitizer.SanitizePlainText(email);
+        fullName = _xssSanitizer.SanitizePlainText(fullName);
 
         // WHY cost=12: BCrypt 默认 cost=10, 12 提供更强抗暴力破解 (单次验证 ~250ms, 可接受)
         var hash = BCrypt.Net.BCrypt.HashPassword(password, workFactor: 12);
