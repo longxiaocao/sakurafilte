@@ -146,6 +146,16 @@ const routes: RouteRecordRaw[] = [
     name: 'AdminPerf',
     component: () => import('@/views/admin/AdminPerfView.vue'),
     meta: { title: '性能监控', requireAuth: true }
+  },
+  // ===== 需求 6: 前端优化 Demo 演示页 =====
+  //   - 整合展示需求 1-5 的所有优化点
+  //   - 提供产品详情页 3 种布局方案对比 (A/B/C)
+  //   - 公开路由 (无需 token), 用于演示和决策参考
+  {
+    path: '/demo',
+    name: 'Demo',
+    component: () => import('@/views/DemoView.vue'),
+    meta: { title: '前端优化 Demo' }
   }
 ]
 
