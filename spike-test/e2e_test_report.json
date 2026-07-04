@@ -1,6 +1,6 @@
 {
   "test_name": "SakuraFilter 毁灭性 E2E 测试",
-  "test_time": "2026-07-05 06:51:06",
+  "test_time": "2026-07-05 07:23:05",
   "summary": {
     "PASS": 45,
     "FAIL": 0,
@@ -30,14 +30,14 @@
       "check": "API创建产品",
       "status": "PASS",
       "expected": "201 Created",
-      "actual": "status=201, id=50011",
+      "actual": "status=201, id=50012",
       "evidence": ""
     },
     {
       "scenario": "1-产品生命周期",
       "check": "列表页产品可见",
       "status": "PASS",
-      "expected": "列表包含 E2E202607055414",
+      "expected": "列表包含 E2E202607057332",
       "actual": "找到",
       "evidence": ""
     },
@@ -101,7 +101,7 @@
       "scenario": "2-搜索一致性",
       "check": "前台OEM搜索",
       "status": "PASS",
-      "expected": "搜索结果包含 E2E202607055414",
+      "expected": "搜索结果包含 E2E202607057332",
       "actual": "找到",
       "evidence": ""
     },
@@ -246,7 +246,7 @@
       "check": "dict_oem_no3查询性能",
       "status": "PASS",
       "expected": "<500ms",
-      "actual": "4ms",
+      "actual": "14ms",
       "evidence": ""
     },
     {
@@ -254,7 +254,7 @@
       "check": "公开搜索正常响应",
       "status": "PASS",
       "expected": "<2s 响应",
-      "actual": "21ms, total=0",
+      "actual": "44ms, total=0",
       "evidence": ""
     },
     {
@@ -334,7 +334,7 @@
       "check": "列表查询性能",
       "status": "PASS",
       "expected": "<1s",
-      "actual": "54ms",
+      "actual": "39ms",
       "evidence": ""
     },
     {
@@ -342,7 +342,7 @@
       "check": "详情查询(含关联)",
       "status": "PASS",
       "expected": "<500ms + 关联加载",
-      "actual": "20ms, xref=True, machine=True",
+      "actual": "6ms, xref=True, machine=True",
       "evidence": ""
     },
     {

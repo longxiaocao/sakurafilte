@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace SakuraFilter.Api.Services;
@@ -29,21 +30,37 @@ public static class ProblemDetailsFactory
     private const string ErrForbidden = "ERR_FORBIDDEN";
     private const string ErrCancelled = "ERR_CANCELLED";
     private const string ErrInternal = "ERR_INTERNAL";
+    // P2-7 修复 v2: DB 异常错误码 (让前端可区分乐观锁冲突/唯一约束/外键/其他 DB 错误)
+    private const string ErrDbConflict = "ERR_DB_CONFLICT";        // 唯一约束/乐观锁冲突
+    private const string ErrDbConstraint = "ERR_DB_CONSTRAINT";    // 外键/非空约束
+    private const string ErrDbTimeout = "ERR_DB_TIMEOUT";          // 超时/死锁
 
     /// <summary>
     /// 把异常类型映射为 HTTP 状态码 (Day 8.4 MVP 范围)
     /// P0-2: 5xx 兜底分支需传 logger 记录原始异常, 不再把 ex.Message 写入 detail
+    /// P2-7 修复 v2: 增强 EF Core 异常映射 (DbUpdateException/DbUpdateConcurrencyException)
+    ///   WHY: 之前 DbUpdateException 落到 500 兜底, 用户体验差且无 errorCode 区分
+    ///        增强后: 唯一约束冲突 → 409, 乐观锁冲突 → 409, 外键约束 → 400
     /// </summary>
     public static IResult FromException(HttpContext ctx, Exception ex, ILogger? logger = null)
     {
         // P0-2: 5xx 异常先记日志 (含完整 ex.Message + 堆栈), 供运维排查
+        // P2-7 修复 v2: 排除 DbUpdateException/DbUpdateConcurrencyException (业务可恢复, 记 Warning 即可)
         if (ex is not ArgumentException
             and not KeyNotFoundException
             and not InvalidOperationException
             and not UnauthorizedAccessException
-            and not OperationCanceledException)
+            and not OperationCanceledException
+            and not DbUpdateConcurrencyException
+            and not DbUpdateException)
         {
             logger?.LogError(ex, "未处理异常 path={Path} method={Method}",
+                ctx.Request.Path, ctx.Request.Method);
+        }
+        // P2-7 修复 v2: DB 异常记 Warning (业务可恢复, 非 5xx 致命错误)
+        else if (ex is DbUpdateConcurrencyException or DbUpdateException)
+        {
+            logger?.LogWarning(ex, "DB 异常 path={Path} method={Method}",
                 ctx.Request.Path, ctx.Request.Method);
         }
 
@@ -84,6 +101,29 @@ public static class ProblemDetailsFactory
                 instance: ctx.Request.Path,
                 extensions: new Dictionary<string, object?> { ["errorCode"] = ErrCancelled }),
 
+            // P2-7 修复 v2: 乐观锁冲突 (xmin 不匹配或并发更新) → 409 Conflict
+            DbUpdateConcurrencyException => Results.Problem(
+                title: "数据已被修改",
+                detail: "数据已被其他用户修改, 请刷新后重试",
+                statusCode: StatusCodes.Status409Conflict,
+                instance: ctx.Request.Path,
+                extensions: new Dictionary<string, object?> { ["errorCode"] = ErrDbConflict }),
+
+            // P2-7 修复 v2: DbUpdateException 按 InnerException SqlState 细分
+            //   23505 unique_violation → 409 (唯一约束冲突)
+            //   23503 foreign_key_violation → 400 (外键约束)
+            //   23502 not_null_violation → 400 (非空约束)
+            //   40P01 deadlock_detected → 408 (死锁, 建议重试)
+            DbUpdateException due => Results.Problem(
+                title: "数据约束冲突",
+                detail: GetDbUpdateDetail(due),
+                statusCode: GetDbUpdateStatusCode(due),
+                instance: ctx.Request.Path,
+                extensions: new Dictionary<string, object?>
+                {
+                    ["errorCode"] = GetDbUpdateErrorCode(due)
+                }),
+
             // P0-2 修复: 5xx 兜底不再泄露 ex.Message, 仅返回通用提示
             _ => Results.Problem(
                 title: "Internal Server Error",
@@ -91,6 +131,47 @@ public static class ProblemDetailsFactory
                 statusCode: StatusCodes.Status500InternalServerError,
                 instance: ctx.Request.Path,
                 extensions: new Dictionary<string, object?> { ["errorCode"] = ErrInternal })
+        };
+    }
+
+    // P2-7 修复 v2: 根据 DbUpdateException 的 InnerException SqlState 提取友好提示
+    private static string GetDbUpdateDetail(DbUpdateException due)
+    {
+        // Npgsql PostgresException 有 SqlState 属性
+        var pgEx = due.InnerException as Npgsql.PostgresException;
+        return pgEx?.SqlState switch
+        {
+            "23505" => "数据已存在 (唯一约束冲突)",
+            "23503" => "关联数据不存在 (外键约束冲突)",
+            "23502" => "必填字段为空 (非空约束冲突)",
+            "40P01" => "数据库死锁, 请重试",
+            _ => "数据保存失败, 请检查输入"
+        };
+    }
+
+    // P2-7 修复 v2: 根据 SqlState 映射 HTTP 状态码
+    private static int GetDbUpdateStatusCode(DbUpdateException due)
+    {
+        var pgEx = due.InnerException as Npgsql.PostgresException;
+        return pgEx?.SqlState switch
+        {
+            "23505" => StatusCodes.Status409Conflict,           // unique_violation → 409
+            "23503" => StatusCodes.Status400BadRequest,         // foreign_key_violation → 400
+            "23502" => StatusCodes.Status400BadRequest,         // not_null_violation → 400
+            "40P01" => StatusCodes.Status408RequestTimeout,    // deadlock_detected → 408
+            _ => StatusCodes.Status400BadRequest
+        };
+    }
+
+    // P2-7 修复 v2: 根据 SqlState 映射 errorCode
+    private static string GetDbUpdateErrorCode(DbUpdateException due)
+    {
+        var pgEx = due.InnerException as Npgsql.PostgresException;
+        return pgEx?.SqlState switch
+        {
+            "23505" => ErrDbConflict,
+            "40P01" => ErrDbTimeout,
+            _ => ErrDbConstraint
         };
     }
 }
