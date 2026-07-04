@@ -105,6 +105,11 @@ builder.Services.AddHostedService<IndexReplayWorker>();
 
 // 后台服务:ETL 失败告警 (Day 7.9,默认关闭,alert.enabled=true 时启用,需配 webhook_url)
 builder.Services.AddHostedService<EtlAlertService>();
+// P6: 性能阈值告警 (基于 P5.5 PerfMetrics, 默认开启, 阈值通过 system_settings 在线调整)
+//   - 监控 P95/错误率/最大耗时, 超阈值时记日志 + 内存 FIFO 最近 100 条
+//   - 5min 抑制窗口防刷屏, /api/admin/perf/alerts 端点查询当前告警
+builder.Services.AddSingleton<PerfAlertService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<PerfAlertService>());
 builder.Services.AddHttpClient("EtlAlert", c =>
 {
     c.Timeout = TimeSpan.FromSeconds(5);  // 告警推送快进快出,失败可重试
@@ -378,6 +383,14 @@ app.MapGet("/", () => Results.Ok(new { name = "SakuraFilter API", version = "0.3
 app.MapGet("/api/perf", (PerfMetrics metrics) =>
     Results.Ok(metrics.GetSnapshot()))
 .WithName("PerfSnapshot")
+.WithOpenApi();
+
+// P6: 性能告警查询 (需 X-Admin-Token, 走 DevTokenAuthMiddleware 鉴权)
+//   返回最近 100 条告警 (按时间倒序), 运维面板用
+//   WHY 放 /api/admin: 告警含系统健康信号, 不应公开 (与 /api/perf 区分)
+app.MapGet("/api/admin/perf/alerts", (PerfAlertService alerts, int? limit) =>
+    Results.Ok(alerts.GetRecentAlerts(limit ?? 50)))
+.WithName("PerfAlerts")
 .WithOpenApi();
 
 // P5.5: 接收前端性能埋点批量上报

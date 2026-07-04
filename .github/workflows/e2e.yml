@@ -264,6 +264,21 @@ jobs:
           fi
           echo "[PASS] .cs 文件中无硬编码凭据"
 
+      # P3 改-4: P1/P2/P3 防回归 (grep 验证 15 个修复模式)
+      #   WHY: P0 用 API 验证, P1/P2/P3 多为代码层修复 (无 API 表面), 用 grep 模式验证
+      #   覆盖: P1-1/2/3/4/5/6 + P2-1/2/3/4/5/7 + P3-1/2 = 15 个修复点
+      - name: Run P1/P2/P3 regression (15 fixes pattern scan)
+        working-directory: spike-test
+        run: |
+          echo "===== P1/P2/P3 修复防回归 (15 修复模式) ====="
+          if python _test_regression.py --scan; then
+            echo "[PASS] P1/P2/P3 修复防回归 15/15 全绿"
+          else
+            RC=$?
+            echo "::error::P1/P2/P3 防回归 FAIL (rc=$RC), 存在修复模式回归"
+            exit $RC
+          fi
+
       - name: E2E gate check (master only)
         if: github.ref == 'refs/heads/master' && github.event_name == 'push'
         run: |

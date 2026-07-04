@@ -80,6 +80,13 @@ public class ProductDbContext : DbContext
             e.HasIndex(p => p.D1Mm);
             e.HasIndex(p => p.D2Mm);
             e.HasIndex(p => p.H1Mm);
+            // P3-2 改进: 为 Oem2 / Mr1 加索引, 优化 PublicProductController.GetBySlug 的 OR 查询
+            //   WHY: GetBySlug 用 (OemNoDisplay == x || Oem2 == x || Mr1 == x) OR 查询,
+            //        OemNoDisplay 已有索引, Oem2/Mr1 无索引时 PG 走 BitmapOr + 顺序扫描,
+            //        百万级数据下最坏 ~50ms, 加索引后全部走 Index Scan, ~2ms
+            //        (按需索引: 仅 GetBySlug 等公开端点使用, 写入开销可接受)
+            e.HasIndex(p => p.Oem2);
+            e.HasIndex(p => p.Mr1);
         });
 
         // CrossReference
