@@ -19,6 +19,14 @@
 
 version: '3.8'
 
+# P1-10.1: 日志持久化配置锚点 (json-file 驱动 + 轮转, 防止日志撑爆磁盘)
+#   WHY 锚点: 5 个服务复用同一份配置, 避免重复
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "5"
+
 services:
   postgres:
     image: postgres:16
@@ -36,6 +44,7 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
+    logging: *default-logging
 
   minio:
     image: minio/minio
@@ -54,6 +63,7 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
+    logging: *default-logging
 
   meilisearch:
     image: getmeili/meilisearch:v1.12
@@ -65,6 +75,14 @@ services:
     volumes:
       - meili_data:/meili_data
     restart: unless-stopped
+    logging: *default-logging
+    # P1-10.2: 健康检查 (Meilisearch 内置 /health 端点)
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7700/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
 
   backend:
     build:
@@ -86,12 +104,26 @@ services:
       - ASPNETCORE_ENVIRONMENT=Production
     ports:
       - "5148:5148"
+    # P1-10.1: 日志持久化卷 (容器重启后日志不丢失)
+    volumes:
+      - backend_logs:/app/logs
     depends_on:
       postgres:
         condition: service_healthy
       minio:
         condition: service_healthy
+      meilisearch:
+        condition: service_healthy
     restart: unless-stopped
+    logging: *default-logging
+    # P1-10.2: 健康检查 (liveness probe, start_period 60s 给 EF Core Migration 留时间)
+    #   WHY 5148: ASPNETCORE_URLS=http://+:5148 (见 backend/Dockerfile)
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5148/health/live"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
 
   frontend:
     build:
@@ -99,11 +131,26 @@ services:
       dockerfile: Dockerfile
     ports:
       - "80:80"
+    # P1-10.1: nginx 日志持久化卷
+    volumes:
+      - frontend_logs:/var/log/nginx
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     restart: unless-stopped
+    logging: *default-logging
+    # P1-10.2: 健康检查 (nginx 根路径)
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
 volumes:
   pg_data:
   minio_data:
   meili_data:
+  # P1-10.1: 日志持久化卷
+  backend_logs:
+  frontend_logs:
