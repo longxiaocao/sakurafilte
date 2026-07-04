@@ -1,0 +1,238 @@
+{
+  "timestamp": "2026-07-04T20:51:58",
+  "summary": {
+    "PASS": 27,
+    "FAIL": 0,
+    "WARN": 3,
+    "SKIP": 1,
+    "total": 31,
+    "pass_rate": 87.1
+  },
+  "severity": {
+    "P0": 0,
+    "P1": 0,
+    "P2": 0,
+    "P3": 0
+  },
+  "verdict": "⚠️  有条件交付",
+  "reason": "通过率 87.1% < 90%, 建议修复 P1 警告后再交付",
+  "details": [
+    {
+      "category": "0-预检",
+      "name": "后端 localhost:5148",
+      "status": "PASS",
+      "severity": "P0",
+      "detail": "端口可达"
+    },
+    {
+      "category": "0-预检",
+      "name": "前端 localhost:5173",
+      "status": "PASS",
+      "severity": "P0",
+      "detail": "端口可达"
+    },
+    {
+      "category": "A1-健康检查",
+      "name": "GET /health/ready",
+      "status": "PASS",
+      "severity": "P0",
+      "detail": "HTTP 200"
+    },
+    {
+      "category": "A2-公开搜索",
+      "name": "GET /api/public/search",
+      "status": "PASS",
+      "severity": "P1",
+      "detail": "返回 0 条结果, total=0"
+    },
+    {
+      "category": "A3-公开详情",
+      "name": "GET /api/public/product/P00050000",
+      "status": "PASS",
+      "severity": "P1",
+      "detail": "返回产品详情"
+    },
+    {
+      "category": "A4-按类型搜索",
+      "name": "GET /api/public/by-type",
+      "status": "PASS",
+      "severity": "P1",
+      "detail": "类型筛选返回 0 条"
+    },
+    {
+      "category": "A5-JWT登录",
+      "name": "POST /api/auth/login",
+      "status": "PASS",
+      "severity": "P0",
+      "detail": "token 长度 321, expires=1800s"
+    },
+    {
+      "category": "B1-ETL状态",
+      "name": "GET /api/etl/status",
+      "status": "PASS",
+      "severity": "P1",
+      "detail": "status=idle"
+    },
+    {
+      "category": "B2-ETL指标",
+      "name": "GET /metrics (etl_*)",
+      "status": "PASS",
+      "severity": "P2",
+      "detail": "Prometheus 指标含 etl_ 前缀"
+    },
+    {
+      "category": "C1-首页加载",
+      "name": "GET /",
+      "status": "PASS",
+      "severity": "P0",
+      "detail": "HTTP 200"
+    },
+    {
+      "category": "C2-搜索页",
+      "name": "GET /public/search",
+      "status": "PASS",
+      "severity": "P1",
+      "detail": "HTTP 200"
+    },
+    {
+      "category": "C3-详情页",
+      "name": "GET /product/P00050000",
+      "status": "PASS",
+      "severity": "P1",
+      "detail": "HTTP 200"
+    },
+    {
+      "category": "C4-Demo页",
+      "name": "GET /demo",
+      "status": "PASS",
+      "severity": "P2",
+      "detail": "HTTP 200"
+    },
+    {
+      "category": "C5-登录页",
+      "name": "GET /login",
+      "status": "PASS",
+      "severity": "P1",
+      "detail": "HTTP 200"
+    },
+    {
+      "category": "C6-首屏体积",
+      "name": "GET / 体积",
+      "status": "PASS",
+      "severity": "P2",
+      "detail": "0.5 KB (建议 < 100KB)"
+    },
+    {
+      "category": "C7-主题变量",
+      "name": "CSS 变量驱动",
+      "status": "WARN",
+      "severity": "P2",
+      "detail": "未检测到 CSS 变量定义"
+    },
+    {
+      "category": "C8-响应式",
+      "name": "viewport meta",
+      "status": "PASS",
+      "severity": "P2",
+      "detail": "已配置响应式视口"
+    },
+    {
+      "category": "C9-无障碍A11y",
+      "name": "aria-label/role",
+      "status": "WARN",
+      "severity": "P3",
+      "detail": "未见 ARIA 标记, 需补充"
+    },
+    {
+      "category": "D1-安全响应头",
+      "name": "必需响应头",
+      "status": "PASS",
+      "severity": "P0",
+      "detail": "含 5 项: X-Content-Type-Options, X-Frame-Options, Content-Security-Policy, Referrer-Policy, Permissions-Policy"
+    },
+    {
+      "category": "D2-HSTS",
+      "name": "Strict-Transport-Security",
+      "status": "WARN",
+      "severity": "P1",
+      "detail": "生产环境需开启, 当前为开发环境"
+    },
+    {
+      "category": "D3-XSS反射",
+      "name": "搜索端点 XSS 注入",
+      "status": "PASS",
+      "severity": "P0",
+      "detail": "XSS payload 未被反射"
+    },
+    {
+      "category": "D4-SQL注入",
+      "name": "搜索端点 SQL 注入",
+      "status": "PASS",
+      "severity": "P0",
+      "detail": "HTTP 400"
+    },
+    {
+      "category": "D5-路径遍历",
+      "name": "ETL 路径遍历防护",
+      "status": "PASS",
+      "severity": "P0",
+      "detail": "HTTP 400 拦截"
+    },
+    {
+      "category": "D6-暴力破解",
+      "name": "登录限流 (5次/分)",
+      "status": "PASS",
+      "severity": "P0",
+      "detail": "第 5 次触发 HTTP 429"
+    },
+    {
+      "category": "D7-越权访问",
+      "name": "无 token 访问 /api/admin/users",
+      "status": "PASS",
+      "severity": "P0",
+      "detail": "HTTP 401"
+    },
+    {
+      "category": "D8-角色越权",
+      "name": "viewer 访问管理端点",
+      "status": "SKIP",
+      "severity": "P0",
+      "detail": "无法准备 viewer 用户"
+    },
+    {
+      "category": "D9-JWT篡改",
+      "name": "签名验证",
+      "status": "PASS",
+      "severity": "P0",
+      "detail": "篡改 token 返回 401"
+    },
+    {
+      "category": "D10-堆栈泄露",
+      "name": "错误响应",
+      "status": "PASS",
+      "severity": "P1",
+      "detail": "响应不含敏感堆栈"
+    },
+    {
+      "category": "D11-CORS",
+      "name": "Access-Control-Allow-Origin",
+      "status": "PASS",
+      "severity": "P1",
+      "detail": "未配置 CORS (默认拒绝跨域)"
+    },
+    {
+      "category": "D12-Cookie安全",
+      "name": "Set-Cookie 属性",
+      "status": "PASS",
+      "severity": "P1",
+      "detail": "无 Cookie, 使用 Bearer Token"
+    },
+    {
+      "category": "D13-Refresh保护",
+      "name": "伪造 refresh token",
+      "status": "PASS",
+      "severity": "P0",
+      "detail": "HTTP 401"
+    }
+  ]
+}
