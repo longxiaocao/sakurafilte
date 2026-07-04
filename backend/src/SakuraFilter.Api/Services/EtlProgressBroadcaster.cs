@@ -128,9 +128,14 @@ public class EtlProgressBroadcaster : IEtlProgressBroadcaster, IAsyncDisposable
                 await using var conn = await _dataSource.OpenConnectionAsync();
                 // PG NOTIFY payload 限 8KB, 大消息应被截断
                 var safe = payload.Length > 7900 ? payload[..7900] : payload;
-                // 转义单引号 (NOTIFY payload 是字符串字面量)
-                var escaped = safe.Replace("'", "''");
-                await using var cmd = new NpgsqlCommand($"NOTIFY {Channel}, '{escaped}'", conn);
+                // P3-1 修复: 改用参数化 pg_notify(channel, payload), 由驱动负责引号/转义
+                //   WHY 不用 NOTIFY channel, 'payload' 字符串拼接:
+                //     - payload 内含单引号时即使 Replace("'","''") 仍可能在某些 PG 字符集下出错
+                //     - 与 AuthTokenStore/Cli 的 pg_notify 参数化方式保持一致
+                //     - 8KB 截断逻辑保留, 但参数化后无需手动转义
+                await using var cmd = new NpgsqlCommand("SELECT pg_notify(@channel, @payload)", conn);
+                cmd.Parameters.AddWithValue("channel", Channel);
+                cmd.Parameters.AddWithValue("payload", safe);
                 await cmd.ExecuteNonQueryAsync();
             }
             catch (Exception ex)
