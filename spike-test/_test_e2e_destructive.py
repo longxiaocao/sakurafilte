@@ -836,6 +836,122 @@ def test_backend_deep_water(token):
     except Exception as e:
         record("后端深水区", "上传限制配置", "WARN", "配置检查", str(e))
 
+def test_scenario_6_login_ui(page, login_resp):
+    """场景 6: 登录页 UI 流程 (P2 测试盲点补充)
+    WHY: 之前 E2E 通过 API 登录 + 注入 localStorage, 完全跳过 /login 页面
+        LoginView.vue 的表单提交、redirect 回跳、错误提示渲染均无验证
+    覆盖: 表单加载 / 错误密码提示 / 正确凭据跳转 / redirect 参数回跳
+    """
+    print("\n" + "=" * 60)
+    print("  场景 6: 登录页 UI 流程")
+    print("=" * 60)
+
+    # 6.1 登录页表单加载
+    print("\n[6.1] 登录页表单加载")
+    try:
+        # 清除 localStorage, 确保未登录状态 (否则路由守卫会跳过 /login)
+        page.evaluate("() => localStorage.clear()")
+        page.goto(f"{FRONTEND}/login", wait_until="networkidle", timeout=15000)
+        time.sleep(2)
+        has_form = page.query_selector("form") is not None
+        has_username = page.query_selector("#login-username") is not None
+        has_password = page.query_selector("#login-password") is not None
+        has_button = page.query_selector("button.el-button--primary") is not None
+        record("6-登录页UI", "表单加载",
+               "PASS" if (has_form and has_username and has_password and has_button) else "FAIL",
+               "用户名/密码/登录按钮存在",
+               f"form={has_form}, username={has_username}, password={has_password}, button={has_button}")
+        page.screenshot(path=str(SCREENSHOT_DIR / "07-login-page.png"), full_page=True)
+    except Exception as e:
+        record("6-登录页UI", "表单加载", "FAIL", "页面加载", str(e))
+
+    # 6.2 错误密码提示
+    # WHY: 验证 ERR_AUTH_FAILED 错误码 → i18n 映射 → el-alert 渲染
+    print("\n[6.2] 错误密码提示")
+    try:
+        # 修复: el-input 把 id 绑定到内部 <input> 元素, 选择器用 input#login-username
+        username_input = page.query_selector("input#login-username")
+        password_input = page.query_selector("input#login-password")
+        if username_input and password_input:
+            username_input.fill("admin")
+            password_input.fill("WrongPassword123")
+            login_btn = page.query_selector("button.el-button--primary")
+            if login_btn:
+                login_btn.click()
+                time.sleep(2)
+                page.screenshot(path=str(SCREENSHOT_DIR / "07-login-error.png"), full_page=True)
+                has_error = page.evaluate("""() => {
+                    const alert = document.querySelector('.el-alert--error, [role="alert"]');
+                    return !!alert && alert.offsetParent !== null;
+                }""")
+                record("6-登录页UI", "错误密码提示",
+                       "PASS" if has_error else "WARN",
+                       "显示错误提示", "检测到" if has_error else "未检测到")
+        else:
+            record("6-登录页UI", "错误密码提示", "FAIL", "输入框存在", "未找到输入框")
+    except Exception as e:
+        record("6-登录页UI", "错误密码提示", "FAIL", "操作", str(e))
+
+    # 6.3 正确凭据登录跳转
+    print("\n[6.3] 正确凭据登录跳转")
+    try:
+        # 修复: 重新加载 /login 页面, 清除 6.2 错误密码的残留状态 (errorMsg + 可能的 loading)
+        page.goto(f"{FRONTEND}/login", wait_until="networkidle", timeout=15000)
+        time.sleep(2)
+        username_input = page.query_selector("input#login-username")
+        password_input = page.query_selector("input#login-password")
+        if username_input and password_input:
+            username_input.fill("admin")
+            password_input.fill(ADMIN_PASS)
+            login_btn = page.query_selector("button.el-button--primary")
+            if login_btn:
+                login_btn.click()
+                # 修复: 等待跳转完成 (router.push 异步, 3s 可能不够)
+                try:
+                    page.wait_for_url("**/admin/products**", timeout=8000)
+                except Exception:
+                    pass
+                current_url = page.url
+                page.screenshot(path=str(SCREENSHOT_DIR / "07-login-success.png"), full_page=True)
+                has_redirect = "/admin/products" in current_url
+                record("6-登录页UI", "正确凭据登录跳转",
+                       "PASS" if has_redirect else "FAIL",
+                       "跳转到 /admin/products", f"url={current_url}")
+        else:
+            record("6-登录页UI", "正确凭据登录跳转", "FAIL", "输入框存在", "未找到输入框")
+    except Exception as e:
+        record("6-登录页UI", "正确凭据登录跳转", "FAIL", "操作", str(e))
+
+    # 6.4 redirect 参数回跳
+    # WHY: LoginView.vue:46 `const redirect = (route.query.redirect as string) || '/admin/products'`
+    print("\n[6.4] redirect 参数回跳")
+    try:
+        page.evaluate("() => localStorage.clear()")
+        page.goto(f"{FRONTEND}/login?redirect=/admin/etl", wait_until="networkidle", timeout=15000)
+        time.sleep(2)
+        username_input = page.query_selector("input#login-username")
+        password_input = page.query_selector("input#login-password")
+        if username_input and password_input:
+            username_input.fill("admin")
+            password_input.fill(ADMIN_PASS)
+            login_btn = page.query_selector("button.el-button--primary")
+            if login_btn:
+                login_btn.click()
+                time.sleep(3)
+                current_url = page.url
+                page.screenshot(path=str(SCREENSHOT_DIR / "07-login-redirect.png"), full_page=True)
+                has_redirect = "/admin/etl" in current_url
+                record("6-登录页UI", "redirect 参数回跳",
+                       "PASS" if has_redirect else "WARN",
+                       "跳转到 /admin/etl", f"url={current_url}")
+        else:
+            record("6-登录页UI", "redirect 参数回跳", "FAIL", "输入框存在", "未找到输入框")
+    except Exception as e:
+        record("6-登录页UI", "redirect 参数回跳", "FAIL", "操作", str(e))
+
+    # 恢复主流程登录态 (供后续 UI/UX 审计使用)
+    inject_auth_to_browser(page, login_resp)
+
 def main():
     global TODAY
     TODAY = time.strftime("%Y%m%d")
@@ -868,6 +984,9 @@ def main():
         test_scenario_3_etl_resilience(page, token)
         test_scenario_4_dict_management(page, token)
         test_scenario_5_resilience(page, token)
+
+        # P2 测试盲点补充: 登录页 UI 流程 (在 UI/UX 审计前执行, 完成后恢复登录态)
+        test_scenario_6_login_ui(page, login_resp)
 
         # UI/UX 审计
         test_ui_ux_audit(page, token)
