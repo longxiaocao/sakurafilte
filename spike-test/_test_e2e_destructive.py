@@ -836,6 +836,72 @@ def test_backend_deep_water(token):
     except Exception as e:
         record("后端深水区", "上传限制配置", "WARN", "配置检查", str(e))
 
+    # 6. 字典拖拽排序 reorder API (P2 测试盲点补充)
+    # WHY: 8 个 reorder 端点 (types/oem-brands/oem-no3s/...) 完全未验证
+    #   选 types 字典 (基础字典, 数据稳定), 交换前两项 sortOrder, 验证后再恢复
+    print("\n[BD.6] 字典 reorder API (types)")
+    try:
+        # 6.1 获取前两项原始顺序
+        resp = requests.get(f"{BACKEND}/api/admin/dict/types?limit=10",
+                          headers=headers, timeout=10)
+        if resp.status_code != 200:
+            record("后端深水区", "字典reorder-获取列表", "FAIL",
+                   "200 OK", f"status={resp.status_code}")
+        else:
+            items = resp.json().get("items", [])
+            if len(items) < 2:
+                record("后端深水区", "字典reorder-数据准备", "WARN",
+                       "≥2 项可交换", f"仅 {len(items)} 项")
+            else:
+                id1, sort1 = items[0]["id"], items[0]["sortOrder"]
+                id2, sort2 = items[1]["id"], items[1]["sortOrder"]
+                # 6.2 交换前两项 sortOrder
+                swap_body = {"items": [
+                    {"id": id1, "sortOrder": sort2},
+                    {"id": id2, "sortOrder": sort1}
+                ]}
+                resp2 = requests.post(f"{BACKEND}/api/admin/dict/types/reorder",
+                                    headers={**headers, "Content-Type": "application/json"},
+                                    json=swap_body, timeout=10)
+                if resp2.status_code != 200:
+                    record("后端深水区", "字典reorder-交换", "FAIL",
+                           "200 OK", f"status={resp2.status_code}, body={resp2.text[:150]}")
+                else:
+                    updated = resp2.json().get("updated", 0)
+                    # 6.3 验证顺序已交换
+                    resp3 = requests.get(f"{BACKEND}/api/admin/dict/types?limit=10",
+                                       headers=headers, timeout=10)
+                    new_items = resp3.json().get("items", []) if resp3.status_code == 200 else []
+                    new_sort1 = next((it["sortOrder"] for it in new_items if it["id"] == id1), None)
+                    new_sort2 = next((it["sortOrder"] for it in new_items if it["id"] == id2), None)
+                    swapped = (new_sort1 == sort2 and new_sort2 == sort1)
+                    record("后端深水区", "字典reorder-顺序验证",
+                           "PASS" if (swapped and updated == 2) else "FAIL",
+                           f"id1={id1} sortOrder {sort1}→{sort2}, id2={id2} {sort2}→{sort1}, updated=2",
+                           f"new_sort1={new_sort1}, new_sort2={new_sort2}, updated={updated}")
+                    # 6.4 恢复原始顺序 (清理)
+                    restore_body = {"items": [
+                        {"id": id1, "sortOrder": sort1},
+                        {"id": id2, "sortOrder": sort2}
+                    ]}
+                    requests.post(f"{BACKEND}/api/admin/dict/types/reorder",
+                                headers={**headers, "Content-Type": "application/json"},
+                                json=restore_body, timeout=10)
+    except Exception as e:
+        record("后端深水区", "字典reorder-异常", "FAIL", "API 调用", str(e))
+
+    # 6.5 字典 reorder 鉴权检查 (未登录访问应 401)
+    print("\n[BD.6.5] 字典 reorder 鉴权 (无 token 应 401)")
+    try:
+        resp = requests.post(f"{BACKEND}/api/admin/dict/types/reorder",
+                           headers={"Content-Type": "application/json"},
+                           json={"items": []}, timeout=10)
+        record("后端深水区", "字典reorder-鉴权",
+               "PASS" if resp.status_code == 401 else "WARN",
+               "401 Unauthorized", f"status={resp.status_code}")
+    except Exception as e:
+        record("后端深水区", "字典reorder-鉴权", "FAIL", "API 调用", str(e))
+
 def test_scenario_6_login_ui(page, login_resp):
     """场景 6: 登录页 UI 流程 (P2 测试盲点补充)
     WHY: 之前 E2E 通过 API 登录 + 注入 localStorage, 完全跳过 /login 页面
