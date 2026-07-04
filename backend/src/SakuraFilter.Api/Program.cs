@@ -122,6 +122,11 @@ builder.Services.AddSingleton<CursorHmac>();
 // P5.5: 性能埋点指标聚合 (Singleton, 中间件和端点共享)
 builder.Services.AddSingleton<PerfMetrics>();
 
+// P1-5.1: 后台服务心跳状态 (Singleton, 8 个 BackgroundService 共享上报)
+//   - /health/ready 暴露 stale 列表 (超过 5min 未心跳视为卡死)
+//   - 仅暴露状态, 不参与 allOk 判定 (不剔除流量)
+builder.Services.AddSingleton<IHostedServiceStatus, HostedServiceStatus>();
+
 // P7.1: Auth Token 轮转存储 (Singleton, 内存缓存 + DB 覆盖 + PG NOTIFY 重载)
 //   - DevTokenAuthMiddleware 当前仍直读 IConfiguration; 后续 PR 改造为注入 IAuthTokenStore
 //   - 现阶段 AuthTokenStore 启动时建表 + 从 DB 加载, /api/admin/auth/status 端点可查
@@ -427,35 +432,73 @@ app.MapPost("/api/perf/ingest", (
 
 // P5.5: 健康检查分级
 //   /health/live   永远 200 (liveness probe — 进程是否存活, Docker K8s 用)
-//   /health/ready  检查 PG + Meili (readiness probe — 进程是否可服务流量)
+//   /health/ready  检查 PG + Meili + 兜底 + 后台服务心跳 (readiness probe — 进程是否可服务流量)
 //   WHY 分级: liveness 失败 → 杀进程重启; readiness 失败 → 临时剔除 LB 流量池
 //   中间件排除这两个路径, 不会污染 perf 统计
+// P1-6.1: /health/ready 拆分 Meili/PG 探测
+//   - Meili 故障但 PG 兜底可用 → 200 + degraded (流量不剔除, 用户体验略降但服务可用)
+//   - Meili + PG 兜底都故障 → 503 + unhealthy (流量剔除)
+//   - WHY: 之前 Meili 故障直接 503 剔除流量, 但 PG 兜底仍能服务, 浪费容量
+// P1-5.1: 增加 backgroundServices 心跳检查项
+//   - 8 个 BackgroundService 卡死时 stale 列表暴露具体服务名
+//   - 仅暴露状态, 不影响 allOk 判定 (避免误剔流量)
 app.MapGet("/health/live", () => Results.Ok(new { status = "alive" }))
     .WithName("HealthLive");
 app.MapGet("/health/ready", async (
     ProductDbContext db,
     SakuraFilter.Search.ISearchProvider search,
+    IHostedServiceStatus hostedStatus,
     CancellationToken ct) =>
 {
     var checks = new List<object>();
+
+    // 1) PG (主存储)
     var pgOk = false;
-    try
-    {
-        pgOk = await db.Database.CanConnectAsync(ct);
-    }
+    try { pgOk = await db.Database.CanConnectAsync(ct); }
     catch { pgOk = false; }
     checks.Add(new { name = "postgres", healthy = pgOk });
+
+    // 2) Meili (主搜索) + PG 兜底 (拆分探活, 不走熔断/重试)
+    var resilient = search as ResilientSearchProvider;
     var meiliOk = false;
-    try
+    var fallbackOk = false;
+    if (resilient is not null)
     {
-        meiliOk = await search.HealthCheckAsync(ct);
+        try { meiliOk = await resilient.IsPrimaryHealthyAsync(ct); }
+        catch { meiliOk = false; }
+        try { fallbackOk = await resilient.IsFallbackHealthyAsync(ct); }
+        catch { fallbackOk = false; }
     }
-    catch { meiliOk = false; }
-    checks.Add(new { name = "search", healthy = meiliOk });
-    var allOk = pgOk && meiliOk;
+    else
+    {
+        // 兜底: 不是 ResilientSearchProvider 时退回原 HealthCheckAsync
+        try { meiliOk = await search.HealthCheckAsync(ct); }
+        catch { meiliOk = false; }
+        fallbackOk = meiliOk;
+    }
+    checks.Add(new { name = "meili", healthy = meiliOk });
+    checks.Add(new { name = "fallback", healthy = fallbackOk });
+
+    // 3) 后台服务心跳 (P1-5.1)
+    //   WHY 不参与 allOk: 后台服务卡死不立即影响请求处理, 但需要运维可见
+    //   5min 阈值: 最长轮询服务 (HistoryCleanup 24h) 也覆盖不到 — 24h 服务应改用更长阈值
+    //   TODO: 后续可按服务配置不同阈值 (高频 5min, 低频 30min)
+    var staleServices = hostedStatus.GetStaleServices(TimeSpan.FromMinutes(5));
+    var bgHealthy = staleServices.Count == 0;
+    checks.Add(new { name = "backgroundServices", healthy = bgHealthy, stale = staleServices });
+
+    // 4) 综合判定
+    //   allOk: PG 可用 + (Meili 或 PG 兜底) 可用 → 流量保留
+    //   degraded: allOk 但 Meili 不可用 (走 PG 兜底, typo 容错丢失)
+    //   unhealthy: PG 不可用 或 搜索全断 → 流量剔除
+    var allOk = pgOk && (meiliOk || fallbackOk);
+    var degraded = allOk && !meiliOk;
+    var status = !allOk ? "unhealthy" : (degraded ? "degraded" : "healthy");
+    var statusCode = allOk ? 200 : 503;
+
     return Results.Json(
-        new { status = allOk ? "ready" : "degraded", checks },
-        statusCode: allOk ? 200 : 503);
+        new { status, checks },
+        statusCode: statusCode);
 })
 .WithName("HealthReady");
 

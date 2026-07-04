@@ -15,6 +15,7 @@ public class HistoryCleanupService : BackgroundService
 {
     private readonly IServiceProvider _sp;
     private readonly ILogger<HistoryCleanupService> _logger;
+    private readonly IHostedServiceStatus _hostedStatus;
 
     // 默认配置 (启动时若 system_settings 中无则插入)
     private static readonly (string Key, string Value, string Description)[] Defaults = new[]
@@ -25,10 +26,11 @@ public class HistoryCleanupService : BackgroundService
         ("history.cleanup_cron", "0 3 * * *", "执行时间 (Cron, 服务器本地时区)"),
     };
 
-    public HistoryCleanupService(IServiceProvider sp, ILogger<HistoryCleanupService> logger)
+    public HistoryCleanupService(IServiceProvider sp, ILogger<HistoryCleanupService> logger, IHostedServiceStatus hostedStatus)
     {
         _sp = sp;
         _logger = logger;
+        _hostedStatus = hostedStatus;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -38,6 +40,7 @@ public class HistoryCleanupService : BackgroundService
 
         while (!stoppingToken.IsCancellationRequested)
         {
+            _hostedStatus.ReportAlive(nameof(HistoryCleanupService));
             try
             {
                 await RunOnceAsync(stoppingToken);

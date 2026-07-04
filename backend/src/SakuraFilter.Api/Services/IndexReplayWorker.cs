@@ -22,6 +22,7 @@ public class IndexReplayWorker : BackgroundService
     private readonly IServiceProvider _sp;
     private readonly ILogger<IndexReplayWorker> _logger;
     private readonly EtlOptions _options;
+    private readonly IHostedServiceStatus _hostedStatus;
     private static readonly int[] BackoffSeconds = { 60, 120, 300, 600, 1800 };
     // Day 7.9: PollInterval / BatchSize 改读 EtlOptions.IndexReplayPollSeconds / IndexReplayBatchSize
     // WHY: 与 EtlOptions 校验联动,配错启动即失败
@@ -31,11 +32,13 @@ public class IndexReplayWorker : BackgroundService
     public IndexReplayWorker(
         IServiceProvider sp,
         ILogger<IndexReplayWorker> logger,
-        IOptions<EtlOptions> etlOptions)
+        IOptions<EtlOptions> etlOptions,
+        IHostedServiceStatus hostedStatus)
     {
         _sp = sp;
         _logger = logger;
         _options = etlOptions.Value;
+        _hostedStatus = hostedStatus;
     }
 
     private TimeSpan PollInterval => TimeSpan.FromSeconds(_options.IndexReplayPollSeconds);
@@ -48,6 +51,7 @@ public class IndexReplayWorker : BackgroundService
 
         while (!stoppingToken.IsCancellationRequested)
         {
+            _hostedStatus.ReportAlive(nameof(IndexReplayWorker));
             try
             {
                 await ProcessPendingAsync(stoppingToken);

@@ -20,6 +20,7 @@ public class DeadLetterCleanupService : BackgroundService
 {
     private readonly IServiceProvider _sp;
     private readonly ILogger<DeadLetterCleanupService> _logger;
+    private readonly IHostedServiceStatus _hostedStatus;
 
     // 默认配置 (启动时若 system_settings 中无则插入)
     private static readonly (string Key, string Value, string Description)[] Defaults = new[]
@@ -29,10 +30,11 @@ public class DeadLetterCleanupService : BackgroundService
         ("dead_letter.cleanup_batch_size", "2000", "单批删除上限"),
     };
 
-    public DeadLetterCleanupService(IServiceProvider sp, ILogger<DeadLetterCleanupService> logger)
+    public DeadLetterCleanupService(IServiceProvider sp, ILogger<DeadLetterCleanupService> logger, IHostedServiceStatus hostedStatus)
     {
         _sp = sp;
         _logger = logger;
+        _hostedStatus = hostedStatus;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -43,6 +45,7 @@ public class DeadLetterCleanupService : BackgroundService
         // 简单 24h 循环 (与其它 cleanup 服务保持一致,避免引入 cron 解析依赖)
         while (!stoppingToken.IsCancellationRequested)
         {
+            _hostedStatus.ReportAlive(nameof(DeadLetterCleanupService));
             try
             {
                 await RunOnceAsync(stoppingToken);

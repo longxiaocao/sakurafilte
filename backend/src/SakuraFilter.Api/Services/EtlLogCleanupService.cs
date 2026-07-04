@@ -21,6 +21,7 @@ public class EtlLogCleanupService : BackgroundService
 {
     private readonly IServiceProvider _sp;
     private readonly ILogger<EtlLogCleanupService> _logger;
+    private readonly IHostedServiceStatus _hostedStatus;
 
     // 默认配置 (启动时若 system_settings 中无则插入)
     private static readonly (string Key, string Value, string Description)[] Defaults = new[]
@@ -30,10 +31,11 @@ public class EtlLogCleanupService : BackgroundService
         ("etl_log.cleanup_batch_size", "5000", "单批删除上限"),
     };
 
-    public EtlLogCleanupService(IServiceProvider sp, ILogger<EtlLogCleanupService> logger)
+    public EtlLogCleanupService(IServiceProvider sp, ILogger<EtlLogCleanupService> logger, IHostedServiceStatus hostedStatus)
     {
         _sp = sp;
         _logger = logger;
+        _hostedStatus = hostedStatus;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -44,6 +46,7 @@ public class EtlLogCleanupService : BackgroundService
         // 简单 24h 循环 (与 HistoryCleanupService 保持一致,避免引入 cron 解析依赖)
         while (!stoppingToken.IsCancellationRequested)
         {
+            _hostedStatus.ReportAlive(nameof(EtlLogCleanupService));
             try
             {
                 await RunOnceAsync(stoppingToken);

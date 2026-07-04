@@ -77,6 +77,34 @@ public class ResilientSearchProvider : ISearchProvider
         return primary || fallback;  // 任一可用即健康
     }
 
+    // P1-6.1: 单独探活方法 (不重试, 不触发熔断)
+    //   WHY: /health/ready 需要分别暴露 meili / fallback 状态,
+    //        原 HealthCheckAsync 会把两者结果合并, 无法区分降级 vs 全面故障
+    //   不走 _pipeline: 避免 Polly 熔断器/重试污染探活结果
+    public async Task<bool> IsPrimaryHealthyAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            return await _primary.HealthCheckAsync(ct);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    public async Task<bool> IsFallbackHealthyAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            return await _fallback.HealthCheckAsync(ct);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     public async Task<SearchResult> SearchAsync(SearchRequest req, CancellationToken ct = default)
     {
         if (!_primaryAvailable)

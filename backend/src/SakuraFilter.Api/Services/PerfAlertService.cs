@@ -26,6 +26,7 @@ public class PerfAlertService : BackgroundService
     private readonly IServiceProvider _sp;
     private readonly ILogger<PerfAlertService> _logger;
     private readonly PerfMetrics _metrics;
+    private readonly IHostedServiceStatus _hostedStatus;
 
     // 默认配置 (启动时若 system_settings 中无则插入)
     private static readonly (string Key, string Value, string Description)[] Defaults = new[]
@@ -52,11 +53,13 @@ public class PerfAlertService : BackgroundService
     public PerfAlertService(
         IServiceProvider sp,
         ILogger<PerfAlertService> logger,
-        PerfMetrics metrics)
+        PerfMetrics metrics,
+        IHostedServiceStatus hostedStatus)
     {
         _sp = sp;
         _logger = logger;
         _metrics = metrics;
+        _hostedStatus = hostedStatus;
     }
 
     /// <summary>查询最近告警列表 (供 /api/admin/perf/alerts 端点调用)</summary>
@@ -73,6 +76,7 @@ public class PerfAlertService : BackgroundService
         int pollSec = 60;
         while (!stoppingToken.IsCancellationRequested)
         {
+            _hostedStatus.ReportAlive(nameof(PerfAlertService));
             try
             {
                 pollSec = await RunOnceAsync(stoppingToken);

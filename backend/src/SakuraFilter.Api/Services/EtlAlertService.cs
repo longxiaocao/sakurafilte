@@ -27,6 +27,7 @@ public class EtlAlertService : BackgroundService
     private readonly IServiceProvider _sp;
     private readonly ILogger<EtlAlertService> _logger;
     private readonly IHttpClientFactory _httpFactory;
+    private readonly IHostedServiceStatus _hostedStatus;
 
     // 默认配置 (启动时若 system_settings 中无则插入)
     private static readonly (string Key, string Value, string Description)[] Defaults = new[]
@@ -43,11 +44,13 @@ public class EtlAlertService : BackgroundService
     public EtlAlertService(
         IServiceProvider sp,
         ILogger<EtlAlertService> logger,
-        IHttpClientFactory httpFactory)
+        IHttpClientFactory httpFactory,
+        IHostedServiceStatus hostedStatus)
     {
         _sp = sp;
         _logger = logger;
         _httpFactory = httpFactory;
+        _hostedStatus = hostedStatus;
     }
 
     // Day 7.10: 失败退避状态
@@ -75,6 +78,7 @@ public class EtlAlertService : BackgroundService
         int pollSec = 60;
         while (!stoppingToken.IsCancellationRequested)
         {
+            _hostedStatus.ReportAlive(nameof(EtlAlertService));
             try
             {
                 pollSec = await RunOnceAsync(stoppingToken);

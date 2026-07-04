@@ -32,6 +32,7 @@ public class DeadLetterRecoveryService : BackgroundService
 {
     private readonly IServiceProvider _sp;
     private readonly ILogger<DeadLetterRecoveryService> _logger;
+    private readonly IHostedServiceStatus _hostedStatus;
 
     // Day 7.10.1: advisory lock key (与 admin /recover-batch 端点共享)
     //   WHY: 32-bit signed int, 任意 4 字节常量即可, 这里用 "DRL" 字符串哈希
@@ -50,10 +51,11 @@ public class DeadLetterRecoveryService : BackgroundService
         ("dead_letter.recovery_batch_size", "50", "单批移回 pending 的条数上限,避免一次推太多"),
     };
 
-    public DeadLetterRecoveryService(IServiceProvider sp, ILogger<DeadLetterRecoveryService> logger)
+    public DeadLetterRecoveryService(IServiceProvider sp, ILogger<DeadLetterRecoveryService> logger, IHostedServiceStatus hostedStatus)
     {
         _sp = sp;
         _logger = logger;
+        _hostedStatus = hostedStatus;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -68,6 +70,7 @@ public class DeadLetterRecoveryService : BackgroundService
         int pollMinutes = 5;
         while (!stoppingToken.IsCancellationRequested)
         {
+            _hostedStatus.ReportAlive(nameof(DeadLetterRecoveryService));
             try
             {
                 pollMinutes = await RunOnceAsync(stoppingToken);

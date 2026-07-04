@@ -15,16 +15,18 @@ public class AuthTokenBroadcaster : IHostedService, IAsyncDisposable
 {
     private readonly IServiceProvider _services;
     private readonly ILogger<AuthTokenBroadcaster> _logger;
+    private readonly IHostedServiceStatus _hostedStatus;
     private readonly string _pgConn;
     private NpgsqlConnection? _listenConn;
     private CancellationTokenSource? _cts;
     private Task? _listenTask;
     public bool IsListening { get; private set; }
 
-    public AuthTokenBroadcaster(IServiceProvider services, ILogger<AuthTokenBroadcaster> logger, IConfiguration config)
+    public AuthTokenBroadcaster(IServiceProvider services, ILogger<AuthTokenBroadcaster> logger, IConfiguration config, IHostedServiceStatus hostedStatus)
     {
         _services = services;
         _logger = logger;
+        _hostedStatus = hostedStatus;
         // P0-3 修复: 移除硬编码密码兜底, 配置缺失直接抛异常
         _pgConn = config.GetConnectionString("Postgres")
             ?? throw new InvalidOperationException("ConnectionStrings:Postgres 未配置 (检查 appsettings.json 或环境变量 ConnectionStrings__Postgres)");
@@ -62,6 +64,7 @@ public class AuthTokenBroadcaster : IHostedService, IAsyncDisposable
     {
         while (!ct.IsCancellationRequested)
         {
+            _hostedStatus.ReportAlive(nameof(AuthTokenBroadcaster));
             try
             {
                 _listenConn = new NpgsqlConnection(_pgConn);
