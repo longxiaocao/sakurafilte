@@ -44,12 +44,20 @@ public class OemBrandDictService : BaseDictService<XrefOemBrand>
         string? q, bool includeDeleted, int? limit, CancellationToken ct = default)
     {
         var rows = await ListAsync(q, includeDeleted, limit, ct);
-        // 批量查 xref 计数 (1 次 SQL 而非 N+1)
+        // P1-1 修复: 批量查 xref 计数 (1 次 GroupBy SQL 而非 N+1 循环 COUNT)
+        //   原方案: foreach 内 GetXrefCountAsync, 200 条触发 200 次 COUNT(*) on cross_references
+        //   新方案: 1 次 GroupBy 聚合, 200 次 SQL 降为 1 次
+        var brands = rows.Select(r => r.Brand).Distinct().ToList();
         var counts = new Dictionary<string, long>();
-        foreach (var r in rows)
+        if (brands.Count > 0)
         {
-            var v = r.Brand;
-            if (!counts.ContainsKey(v)) counts[v] = await GetXrefCountAsync(v, ct);
+            var brandCounts = await _db.CrossReferences.AsNoTracking()
+                .Where(x => brands.Contains(x.OemBrand))
+                .GroupBy(x => x.OemBrand)
+                .Select(g => new { Brand = g.Key, Cnt = g.LongCount() })
+                .ToListAsync(ct);
+            foreach (var bc in brandCounts)
+                counts[bc.Brand] = bc.Cnt;
         }
         return rows.Select(b => new OemBrandItem(
             b.Id, b.Brand, b.SortOrder, b.CreatedAt, b.UpdatedAt, b.DeletedAt,

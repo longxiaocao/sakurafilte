@@ -149,16 +149,32 @@ public class IndexReplayWorker : BackgroundService
         //   WHY: 之前方案删除死信行后, 新入队的死信 recovery_count=0, max 限位失效
         //   现在死信行 status='recovered' 保留, 新失败时检查同 payload 最近 dead_letter
         //   找到则更新其 status='active' + retry_count/last_error, 不新增行
+        // P1-1 修复: 批量预拉候选, 避免 N+1 (原 foreach 内 FirstOrDefaultAsync, 500 条触发 500 次 SQL)
+        //   新方案: 1 次 SQL 拉所有候选 → 内存按 (Operation, Payload) 精确匹配 → 500 次 SQL 降为 1 次
+        var candidateOps = exhausted.Select(p => p.Operation).Distinct().ToList();
+        var candidatePayloads = exhausted.Select(p => p.Payload).Distinct().ToList();
+        var candidates = await db.SearchIndexDeadLetters
+            .Where(d => d.Status == "recovered"
+                        && candidateOps.Contains(d.Operation)
+                        && candidatePayloads.Contains(d.Payload))
+            .ToListAsync(ct);
+        // 内存按 (Operation, Payload) 分组取最近 RecoveredAt 的一条 (精确匹配, 避免 Contains 交叉)
+        var existingDict = new Dictionary<(string, string), SearchIndexDeadLetter>();
+        foreach (var d in candidates)
+        {
+            var key = (d.Operation, d.Payload);
+            if (!existingDict.TryGetValue(key, out var existing)
+                || (d.RecoveredAt ?? DateTime.MinValue) > (existing.RecoveredAt ?? DateTime.MinValue))
+            {
+                existingDict[key] = d;
+            }
+        }
+
         var deadLetters = new List<SearchIndexDeadLetter>();
         foreach (var p in exhausted)
         {
-            // 查找同 operation + payload 的最近 recovered 死信
-            var existingDead = await db.SearchIndexDeadLetters
-                .Where(d => d.Operation == p.Operation && d.Payload == p.Payload && d.Status == "recovered")
-                .OrderByDescending(d => d.RecoveredAt)
-                .FirstOrDefaultAsync(ct);
-
-            if (existingDead != null)
+            // 从内存字典查找同 operation + payload 的最近 recovered 死信 (O(1) 查找)
+            if (existingDict.TryGetValue((p.Operation, p.Payload), out var existingDead))
             {
                 // 复用: 更新 retry_count + last_error + status 重置为 active
                 //   RecoveryCount 保持不变 (入死信不递增, 恢复时才 +1)

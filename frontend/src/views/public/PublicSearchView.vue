@@ -239,6 +239,15 @@ onMounted(() => {
   syncFormFromUrl()
   if (filledCount.value > 0) doSearch()
 })
+
+// P1-4 修复: 组件卸载时清理 debounceTimer, 防止内存泄漏 (规则 5.2 副作用清理)
+//   WHY: watch 内 setTimeout 若未清理, 组件卸载后仍会触发 doSearch, 访问已销毁的响应式状态
+onUnmounted(() => {
+  if (debounceTimer) {
+    window.clearTimeout(debounceTimer)
+    debounceTimer = null
+  }
+})
 </script>
 
 <template>

@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.Routing.Constraints;
+using Microsoft.AspNetCore.HttpOverrides;        // P1-3: ForwardedHeaders
+using Microsoft.AspNetCore.Diagnostics;           // P1-5: IExceptionHandlerFeature
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Minio;
@@ -312,15 +314,37 @@ _ = Task.Run(async () =>
 });
 
 // Day 8.4: 中间件 pipeline 顺序
-//   1) UseExceptionHandler 统一错误 (开发环境显示堆栈, 生产隐藏)
-//   2) UseCors 跨域 (要在鉴权前, 否则 preflight 失败)
-//   3) UseRateLimiter 限流 (鉴权前, 防匿名 DoS)
-//   4) P5.5: ResponseTimeMiddleware 响应时间埋点 (在鉴权前,记录 401 等异常耗时)
-//   5) DevTokenAuthMiddleware 自定义鉴权
-//   6) UseOpenAPI 文档 (所有环境可用, 替代原 Swagger)
+//   1) UseForwardedHeaders 反向代理 IP 透传 (P1-3: 限流才有效)
+//   2) UseExceptionHandler 统一错误 (P1-5: 生产隐藏堆栈, 开发显示)
+//   3) UseCors 跨域 (要在鉴权前, 否则 preflight 失败)
+//   4) UseRateLimiter 限流 (鉴权前, 防匿名 DoS)
+//   5) P5.5: ResponseTimeMiddleware 响应时间埋点 (在鉴权前,记录 401 等异常耗时)
+//   6) DevTokenAuthMiddleware 自定义鉴权
+//   7) UseSwagger/UseSwaggerUI (P1-6: 仅开发环境暴露)
+// P1-3 修复: ForwardedHeaders 透传反向代理的客户端 IP, 否则限流把所有请求当代理 IP
+app.UseForwardedHeaders(new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+});
+
+// P1-5 修复: 生产环境用 UseExceptionHandler + ProblemDetailsFactory, 不泄露堆栈
 if (app.Environment.IsDevelopment())
 {
     app.UseDeveloperExceptionPage();
+}
+else
+{
+    app.UseExceptionHandler(handler =>
+    {
+        handler.Run(async ctx =>
+        {
+            var ex = ctx.Features.Get<IExceptionHandlerFeature>()?.Error;
+            var logger = ctx.RequestServices.GetService<ILogger<Program>>();
+            // ProblemDetailsFactory 内部会记日志 (P0-2 修复) + 返回通用 500 提示
+            var result = ProblemDetailsFactory.FromException(ctx, ex ?? new Exception("未知异常"), logger);
+            await result.ExecuteAsync(ctx);
+        });
+    });
 }
 app.UseCors("SakuraFilterCors");
 if (rateLimitConfig.Enabled)
@@ -331,17 +355,19 @@ if (rateLimitConfig.Enabled)
 app.UseMiddleware<ResponseTimeMiddleware>();
 app.UseMiddleware<DevTokenAuthMiddleware>();
 
-// Day 8.4: Scalar UI 替代 Swagger (生产环境也可访问, 配防火墙策略控制)
-//   端点: /scalar (Scalar UI) + /openapi/v1.json (原始 OpenAPI 文档, 给前端生成 TS 类型用)
-//   Day 8.4 实际回退: 环境无外网, 用已缓存的 Swashbuckle 6.6.2 (Swagger UI)
-//   生产部署时: nuget 装 Scalar.AspNetCore → 改用 MapScalarApiReference
-app.UseSwagger();
-app.UseSwaggerUI(c =>
+// P1-6 修复: Swagger 仅开发环境暴露, 生产环境关闭防止接口泄露
+//   WHY: Swagger UI 暴露所有端点签名, 攻击者可枚举 API 进行精准攻击
+//   生产环境用 OpenAPI.json + 防火墙白名单替代 (如需文档)
+if (app.Environment.IsDevelopment())
 {
-    c.SwaggerEndpoint("/swagger/v1/swagger.json", "SakuraFilter v1");
-    c.DocumentTitle = "SakuraFilter API (Day 8.4)";
-    c.DocExpansion(Swashbuckle.AspNetCore.SwaggerUI.DocExpansion.List);
-});
+    app.UseSwagger();
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "SakuraFilter v1");
+        c.DocumentTitle = "SakuraFilter API (Day 8.4)";
+        c.DocExpansion(Swashbuckle.AspNetCore.SwaggerUI.DocExpansion.List);
+    });
+}
 
 app.MapGet("/", () => Results.Ok(new { name = "SakuraFilter API", version = "0.3.0", status = "running" }));
 

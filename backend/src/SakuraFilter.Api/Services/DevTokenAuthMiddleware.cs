@@ -1,4 +1,6 @@
 using System.Threading.Tasks;
+using System.Security.Cryptography;   // P1-2: CryptographicOperations.FixedTimeEquals
+using System.Text;                    // P1-2: Encoding.UTF8
 using Microsoft.AspNetCore.Http;
 
 namespace SakuraFilter.Api.Services;
@@ -121,14 +123,18 @@ public class DevTokenAuthMiddleware
 
         // 验证 token (Header X-Admin-Token: <token>)
         // Day 9.9: 双 key — 先匹配 Current, 再匹配 Previous (过渡期)
+        // P1-2 修复: 改用 CryptographicOperations.FixedTimeEquals 防止时序攻击
+        //   WHY: string.Equals 短路返回, 攻击者可通过响应时间差异逐字节猜 token
+        //   FixedTimeEquals 固定耗时比较, 防止时序侧信道攻击
         var tokenValid = false;
         var usingPrevious = false;
         if (ctx.Request.Headers.TryGetValue("X-Admin-Token", out var provided))
         {
             var tokenStr = provided.ToString();
-            if (string.Equals(tokenStr, currentToken, StringComparison.Ordinal))
+            var providedBytes = Encoding.UTF8.GetBytes(tokenStr);
+            if (CryptographicOperations.FixedTimeEquals(providedBytes, Encoding.UTF8.GetBytes(currentToken)))
                 tokenValid = true;
-            else if (previousToken is not null && string.Equals(tokenStr, previousToken, StringComparison.Ordinal))
+            else if (previousToken is not null && CryptographicOperations.FixedTimeEquals(providedBytes, Encoding.UTF8.GetBytes(previousToken)))
             {
                 tokenValid = true;
                 usingPrevious = true;
