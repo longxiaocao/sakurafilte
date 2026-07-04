@@ -191,12 +191,14 @@ public class AdminProductImageService
             .Where(i => i.ProductId == productId)
             .OrderBy(i => i.Slot)
             .ToListAsync(ct);
-        var result = new List<ProductImageInfo>();
-        foreach (var i in imgs)
-        {
-            var url = await GetUrlAsync(i.ImageKey);
-            result.Add(ToInfo(i, url));
-        }
+        // P1-4.2: 并行生成预签名 URL (Task.WhenAll), 6 张图从串行 600ms+ 降到并行 200ms 内
+        //   WHY: 原 foreach 串行 await, 单张 ~100ms × 6 = 600ms+; 并行后总耗时 ≈ max(单张) ≈ 100-200ms
+        //   GetUrlAsync 内已有 try-catch (失败返回空串), 单张失败不影响其他图
+        //   空集合安全: Task.WhenAll(空 IEnumerable) 返回空数组, 不抛 NRE
+        var urls = await Task.WhenAll(imgs.Select(i => GetUrlAsync(i.ImageKey)));
+        var result = new List<ProductImageInfo>(imgs.Count);
+        for (int i = 0; i < imgs.Count; i++)
+            result.Add(ToInfo(imgs[i], urls[i]));
         return result;
     }
 

@@ -473,16 +473,22 @@ public class AdminProductService
             .OrderBy(i => i.Slot)
             .ToListAsync(ct);
         var imageInfos = new List<ProductImageInfo>(imageRows.Count);
-        foreach (var img in imageRows)
+        // P1-4.1: 并行生成预签名 URL (Task.WhenAll), 6 张图从串行 600ms+ 降到并行 200ms 内
+        //   WHY: 原 foreach 串行 await, 单张 ~100ms × 6 = 600ms+; 并行后总耗时 ≈ max(单张) ≈ 100-200ms
+        //   per-image try-catch 保留: 单张 OSS 失败不影响其他图, 与原 foreach 语义一致
+        //   空集合安全: Task.WhenAll(空 IEnumerable) 返回空数组, 不抛 NRE
+        async Task<string> GetUrlSafe(string? key)
         {
-            string url = "";
-            if (_storage != null && !string.IsNullOrEmpty(img.ImageKey))
-            {
-                try { url = await _storage.GetPresignedUrlAsync(img.ImageKey, 3600, ct); }
-                catch (Exception ex) { _logger.LogWarning(ex, "GetPresignedUrl failed: key={Key}", img.ImageKey); }
-            }
+            if (_storage == null || string.IsNullOrEmpty(key)) return "";
+            try { return await _storage.GetPresignedUrlAsync(key, 3600, ct); }
+            catch (Exception ex) { _logger.LogWarning(ex, "GetPresignedUrl failed: key={Key}", key); return ""; }
+        }
+        var urls = await Task.WhenAll(imageRows.Select(img => GetUrlSafe(img.ImageKey)));
+        for (int i = 0; i < imageRows.Count; i++)
+        {
+            var img = imageRows[i];
             imageInfos.Add(new ProductImageInfo(
-                img.Id, img.ProductId, img.Slot, img.ImageKey, url,
+                img.Id, img.ProductId, img.Slot, img.ImageKey, urls[i],
                 img.FileSize, img.ContentType, img.Width, img.Height,
                 img.IsPrimary, img.UploadedAt, img.UploadedBy));
         }
