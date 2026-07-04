@@ -380,6 +380,7 @@ _ = Task.Run(async () =>
 });
 
 // Day 8.4: 中间件 pipeline 顺序
+//   0) P3-5.2: CorrelationIdMiddleware (管道最前面, 确保后续所有日志带 CorrelationId)
 //   1) UseForwardedHeaders 反向代理 IP 透传 (P1-3: 限流才有效)
 //   2) UseExceptionHandler 统一错误 (P1-5: 生产隐藏堆栈, 开发显示)
 //   3) UseCors 跨域 (要在鉴权前, 否则 preflight 失败)
@@ -387,6 +388,11 @@ _ = Task.Run(async () =>
 //   5) P5.5: ResponseTimeMiddleware 响应时间埋点 (在鉴权前,记录 401 等异常耗时)
 //   6) DevTokenAuthMiddleware 自定义鉴权
 //   7) UseSwagger/UseSwaggerUI (P1-6: 仅开发环境暴露)
+// P3-5.2: CorrelationId 中间件 (管道最前面, 透传 X-Correlation-Id 并注入 logger scope)
+//   - 未传 header 时生成 GUID (32 字符无连字符, 兼容日志聚合工具)
+//   - 通过 BeginScope 让后续中间件/Service 的日志自动带 CorrelationId 字段
+app.UseMiddleware<CorrelationIdMiddleware>();
+
 // P1-3 修复: ForwardedHeaders 透传反向代理的客户端 IP, 否则限流把所有请求当代理 IP
 app.UseForwardedHeaders(new ForwardedHeadersOptions
 {
@@ -444,6 +450,28 @@ app.MapGet("/", () => Results.Ok(new { name = "SakuraFilter API", version = "0.3
 app.MapGet("/api/perf", (PerfMetrics metrics) =>
     Results.Ok(metrics.GetSnapshot()))
 .WithName("PerfSnapshot")
+.WithOpenApi();
+
+// P3-5.3: Prometheus 兼容 /metrics 端点 (无需鉴权, 供 Prometheus/grafana 抓取)
+//   WHY 不用 prometheus-net.AspNetCore: 本地 NuGet 缓存无此包, 自建简化版避免新依赖
+//   WHY 用 IsCircuitBreakerOpen 属性而非 IsPrimaryHealthyAsync:
+//        属性只读内存状态 (_primaryAvailable), 不触发网络探活, /metrics 响应快且不增加 Meili 负载
+//   WHY 不走 ResponseTimeMiddleware 排除: /metrics 是低频抓取 (15s/次), 不影响统计
+//   返回 Prometheus exposition format (text/plain; version=0.0.4)
+app.MapGet("/metrics", (IServiceProvider sp) =>
+{
+    var sb = new System.Text.StringBuilder();
+    var search = sp.GetService<ISearchProvider>();
+    if (search is ResilientSearchProvider rsp)
+    {
+        var circuitOpen = rsp.IsCircuitBreakerOpen ? 1 : 0;
+        sb.AppendLine("# HELP sakurafilter_meili_circuit_breaker Meili search circuit breaker state (1=open/failing, 0=closed/healthy)");
+        sb.AppendLine("# TYPE sakurafilter_meili_circuit_breaker gauge");
+        sb.AppendLine($"sakurafilter_meili_circuit_breaker {circuitOpen}");
+    }
+    return Results.Text(sb.ToString(), "text/plain; version=0.0.4");
+})
+.WithName("Metrics")
 .WithOpenApi();
 
 // P6: 性能告警查询 (需 X-Admin-Token, 走 DevTokenAuthMiddleware 鉴权)
@@ -2243,6 +2271,20 @@ static string GetPgTableName(Type t)
         "DictEngine" => "dict_engine",
         _ => t.Name.ToLower()
     };
+}
+
+// P3-6.2: 启动后探活 Meili, 不可用则立即降级 (避免首次搜索等 1s 超时)
+//   WHY 在 app.Run() 前: 此时所有 DI 服务已就绪, 探活一次 Meili 即可决定初始降级状态
+//   WHY 不阻塞启动: IsPrimaryHealthyAsync 内部 catch 异常返回 false, 最坏情况等 Meili 超时 (1s)
+//   Initialize 只设 _primaryAvailable, 不触发 Polly 熔断器状态变更
+using (var initScope = app.Services.CreateScope())
+{
+    var search = initScope.ServiceProvider.GetRequiredService<ISearchProvider>();
+    if (search is ResilientSearchProvider rsp)
+    {
+        var meiliOk = await rsp.IsPrimaryHealthyAsync();
+        rsp.Initialize(meiliOk);
+    }
 }
 
 app.Run();

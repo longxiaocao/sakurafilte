@@ -105,6 +105,25 @@ public class ResilientSearchProvider : ISearchProvider
         }
     }
 
+    // P3-5.3: 暴露熔断状态供 /metrics 端点读取 (1=open/failing, 0=closed/healthy)
+    //   WHY 只读属性: /metrics 端点轮询读取, 不应触发探活 (探活走 IsPrimaryHealthyAsync)
+    public bool IsCircuitBreakerOpen => !_primaryAvailable;
+
+    /// <summary>
+    /// 启动时初始化 (P3-6.2)
+    /// 如果 primary 不可用,立即标记为降级,避免首次搜索等 1s 超时
+    /// WHY 只设置 _primaryAvailable: 不触发熔断器状态变更 (熔断器由 Polly 内部统计驱动),
+    ///      仅标记降级让 SearchAsync 首次请求直接走 PG 兜底
+    /// </summary>
+    public void Initialize(bool primaryAvailable)
+    {
+        _primaryAvailable = primaryAvailable;
+        if (!primaryAvailable)
+        {
+            _logger.LogWarning("启动探活: Meili 不可用,立即降级到 PG 兜底");
+        }
+    }
+
     public async Task<SearchResult> SearchAsync(SearchRequest req, CancellationToken ct = default)
     {
         if (!_primaryAvailable)
@@ -125,6 +144,15 @@ public class ResilientSearchProvider : ISearchProvider
         catch (Exception ex) when (ex is BrokenCircuitException or TimeoutException or OperationCanceledException)
         {
             _logger.LogWarning(ex, "Meili 搜索失败,降级到 PG 兜底");
+            return await _fallback.SearchAsync(req, ct);
+        }
+        catch (HttpRequestException ex) when (ex.InnerException is System.Net.Sockets.SocketException)
+        {
+            // P3-6.3: Meili 连接拒绝 (SocketException),立即降级不等重试
+            //   WHY 显式设 _primaryAvailable=false: SocketException 通常是 Meili 进程未启动,
+            //        重试无意义,直接标记降级让后续请求走 PG,避免每次都等 1s 超时
+            _primaryAvailable = false;
+            _logger.LogWarning(ex, "Meili 连接拒绝 (SocketException),立即降级到 PG 兜底");
             return await _fallback.SearchAsync(req, ct);
         }
         catch (Exception ex)
