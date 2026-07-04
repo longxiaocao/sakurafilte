@@ -22,5 +22,11 @@ public class DictOemNo3Configuration : IEntityTypeConfiguration<DictOemNo3>
         e.HasIndex(p => new { p.DeletedAt, p.SortOrder })
             .HasDatabaseName("idx_dict_oem_no3_active")
             .HasFilter("deleted_at IS NULL");
+        // P0改-3: 排序专用部分索引, 优化 ListAsync ORDER BY sort_order, oem_no_3
+        //   WHY: 527万行 ORDER BY sort_order 原 1.6s (Bitmap Heap Scan + Sort), 加此索引后 0.16ms (Index Scan)
+        //   查询模式: WHERE deleted_at IS NULL ORDER BY sort_order, oem_no_3 LIMIT 200
+        e.HasIndex(p => new { p.SortOrder, p.OemNo3 })
+            .HasDatabaseName("idx_dict_oem_no3_sort")
+            .HasFilter("deleted_at IS NULL");
     }
 }

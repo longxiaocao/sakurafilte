@@ -232,6 +232,38 @@ jobs:
           done
           echo "===== P4.1 + P5.5/P7.1 E2E 10/10 PASS ====="
 
+      # P0 改-1: P0 防回归 (BaseDictService 默认 limit + ProblemDetails 不泄露 + 无硬编码密码)
+      #   WHY: P0 修复后需 CI 防回归, 避免 dict_oem_no3 OOM/ex.Message 泄露/硬编码密码再次引入
+      - name: Run P0 fixes regression (防 OOM + 异常泄露 + 硬编码密码)
+        working-directory: spike-test
+        env:
+          ADMIN_TOKEN: ${{ env.ADMIN_TOKEN }}
+        run: |
+          echo "===== P0 修复防回归 ====="
+          if python _test_p0_fixes.py; then
+            echo "[PASS] P0 修复防回归 3/3 全绿"
+          else
+            RC=$?
+            echo "::error::P0 防回归 FAIL (rc=$RC)"
+            exit $RC
+          fi
+
+      # P0 改-2: 安全门禁 — 扫描 .cs 文件中硬编码凭据 (替代 detect-secrets, 避免新依赖)
+      #   WHY: P0-3 修复后需自动防护, 防止 Password=xxx 再次引入
+      - name: Security gate (hardcoded credentials scan)
+        run: |
+          echo "===== 安全门禁: 扫描硬编码凭据 ====="
+          # 扫描 .cs 文件中的硬编码密码模式 (Password=xxx / pwd=xxx, 排除 appsettings.json 配置源)
+          HITS=$(grep -rE '(Password|password|pwd)=[^"[:space:]]+' backend/src --include="*.cs" | grep -v 'throw new' | grep -v 'GetConnectionString' || true)
+          if [ -n "$HITS" ]; then
+            echo "::error::发现硬编码凭据 (.cs 文件):"
+            echo "$HITS" | while IFS= read -r line; do
+              echo "::error::$line"
+            done
+            exit 1
+          fi
+          echo "[PASS] .cs 文件中无硬编码凭据"
+
       - name: E2E gate check (master only)
         if: github.ref == 'refs/heads/master' && github.event_name == 'push'
         run: |
