@@ -172,6 +172,15 @@ const routes: RouteRecordRaw[] = [
     name: 'Demo',
     component: () => import('@/views/DemoView.vue'),
     meta: { title: '前端优化 Demo' }
+  },
+  // ===== 404 catch-all 兜底路由 =====
+  //   - 必须放在最后, 匹配所有未命中的路径
+  //   - 提供返回搜索/上一页的引导按钮, 避免白屏
+  {
+    path: '/:pathMatch(.*)*',
+    name: 'NotFound',
+    component: () => import('@/views/NotFoundView.vue'),
+    meta: { title: '页面不存在' }
   }
 ]
 

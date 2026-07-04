@@ -1440,6 +1440,15 @@ app.MapPost("/api/admin/products/{id:long}/images/{slot:int}", async (
     }
     catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
     catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+    catch (InvalidOperationException ex) when (ex.Message.Contains("图片超过最大尺寸") || ex.Message.Contains("超过最大"))
+    {
+        // WHY: 图片上传场景下, 业务层抛出"超过最大尺寸"类异常时, 应映射为 413 而非默认 500,
+        //      便于前端区分"载荷过大"与"服务器内部错误"
+        return Results.Problem(
+            detail: ex.Message,
+            statusCode: StatusCodes.Status413RequestEntityTooLarge,
+            title: "Payload Too Large");
+    }
     catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
 })
 .WithName("AdminUploadProductImage")

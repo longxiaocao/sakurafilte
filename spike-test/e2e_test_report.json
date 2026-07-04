@@ -1,0 +1,373 @@
+{
+  "test_name": "SakuraFilter 毁灭性 E2E 测试",
+  "test_time": "2026-07-04 22:46:04",
+  "summary": {
+    "PASS": 42,
+    "FAIL": 1,
+    "WARN": 2,
+    "SKIP": 0
+  },
+  "total": 45,
+  "results": [
+    {
+      "scenario": "1-产品生命周期",
+      "check": "创建页表单加载",
+      "status": "PASS",
+      "expected": "表单存在",
+      "actual": "表单存在",
+      "evidence": ""
+    },
+    {
+      "scenario": "1-产品生命周期",
+      "check": "7分区表单完整性",
+      "status": "PASS",
+      "expected": "≥3 个分区可见",
+      "actual": "检测到 3 个分区",
+      "evidence": ""
+    },
+    {
+      "scenario": "1-产品生命周期",
+      "check": "API创建产品",
+      "status": "PASS",
+      "expected": "201 Created",
+      "actual": "status=201, id=50006",
+      "evidence": ""
+    },
+    {
+      "scenario": "1-产品生命周期",
+      "check": "列表页产品可见",
+      "status": "PASS",
+      "expected": "列表包含 E2E202607046315",
+      "actual": "找到",
+      "evidence": ""
+    },
+    {
+      "scenario": "1-产品生命周期",
+      "check": "详情页-OEM号",
+      "status": "PASS",
+      "expected": "包含OEM号",
+      "actual": "存在",
+      "evidence": ""
+    },
+    {
+      "scenario": "1-产品生命周期",
+      "check": "详情页-产品名",
+      "status": "PASS",
+      "expected": "包含产品名",
+      "actual": "存在",
+      "evidence": ""
+    },
+    {
+      "scenario": "1-产品生命周期",
+      "check": "详情页-D1尺寸",
+      "status": "PASS",
+      "expected": "包含D1尺寸",
+      "actual": "存在",
+      "evidence": ""
+    },
+    {
+      "scenario": "1-产品生命周期",
+      "check": "详情页-D2尺寸",
+      "status": "PASS",
+      "expected": "包含D2尺寸",
+      "actual": "存在",
+      "evidence": ""
+    },
+    {
+      "scenario": "1-产品生命周期",
+      "check": "API编辑产品",
+      "status": "PASS",
+      "expected": "200 OK",
+      "actual": "status=200",
+      "evidence": ""
+    },
+    {
+      "scenario": "1-产品生命周期",
+      "check": "变更历史记录",
+      "status": "PASS",
+      "expected": "历史记录 ≥1 条",
+      "actual": "共 2 条",
+      "evidence": ""
+    },
+    {
+      "scenario": "1-产品生命周期",
+      "check": "图片上传(API可用性)",
+      "status": "PASS",
+      "expected": "产品详情可获取",
+      "actual": "status=200",
+      "evidence": ""
+    },
+    {
+      "scenario": "2-搜索一致性",
+      "check": "前台OEM搜索",
+      "status": "PASS",
+      "expected": "搜索结果包含 E2E202607046315",
+      "actual": "找到",
+      "evidence": ""
+    },
+    {
+      "scenario": "2-搜索一致性",
+      "check": "公开搜索8字段",
+      "status": "PASS",
+      "expected": "≥6 个 input 框, ≥3 个匹配 placeholder",
+      "actual": "inputCount=8, matchedCount=5",
+      "evidence": ""
+    },
+    {
+      "scenario": "2-搜索一致性",
+      "check": "详情页交叉引用渲染",
+      "status": "PASS",
+      "expected": "交叉引用区域存在",
+      "actual": "存在",
+      "evidence": ""
+    },
+    {
+      "scenario": "2-搜索一致性",
+      "check": "详情页机型适配渲染",
+      "status": "PASS",
+      "expected": "机型适配区域存在",
+      "actual": "存在",
+      "evidence": ""
+    },
+    {
+      "scenario": "2-搜索一致性",
+      "check": "Meili健康检查",
+      "status": "PASS",
+      "expected": "200 OK",
+      "actual": "status=200",
+      "evidence": ""
+    },
+    {
+      "scenario": "3-ETL容错",
+      "check": "ETL状态接口",
+      "status": "PASS",
+      "expected": "200 OK",
+      "actual": "status=200",
+      "evidence": ""
+    },
+    {
+      "scenario": "3-ETL容错",
+      "check": "ETL页面UI",
+      "status": "PASS",
+      "expected": "进度/触发控件存在",
+      "actual": "存在",
+      "evidence": ""
+    },
+    {
+      "scenario": "3-ETL容错",
+      "check": "SSE端点可达性",
+      "status": "PASS",
+      "expected": "端点存在",
+      "actual": "status=200",
+      "evidence": ""
+    },
+    {
+      "scenario": "4-字典管理",
+      "check": "OEM品牌-表格加载",
+      "status": "PASS",
+      "expected": "表格存在",
+      "actual": "存在",
+      "evidence": ""
+    },
+    {
+      "scenario": "4-字典管理",
+      "check": "OEM品牌-拖拽手柄",
+      "status": "PASS",
+      "expected": "拖拽手柄存在",
+      "actual": "存在",
+      "evidence": ""
+    },
+    {
+      "scenario": "4-字典管理",
+      "check": "类型-表格加载",
+      "status": "PASS",
+      "expected": "表格存在",
+      "actual": "存在",
+      "evidence": ""
+    },
+    {
+      "scenario": "4-字典管理",
+      "check": "类型-拖拽手柄",
+      "status": "PASS",
+      "expected": "拖拽手柄存在",
+      "actual": "存在",
+      "evidence": ""
+    },
+    {
+      "scenario": "4-字典管理",
+      "check": "机器-表格加载",
+      "status": "PASS",
+      "expected": "表格存在",
+      "actual": "存在",
+      "evidence": ""
+    },
+    {
+      "scenario": "4-字典管理",
+      "check": "机器-拖拽手柄",
+      "status": "PASS",
+      "expected": "拖拽手柄存在",
+      "actual": "存在",
+      "evidence": ""
+    },
+    {
+      "scenario": "4-字典管理",
+      "check": "介质-表格加载",
+      "status": "PASS",
+      "expected": "表格存在",
+      "actual": "存在",
+      "evidence": ""
+    },
+    {
+      "scenario": "4-字典管理",
+      "check": "介质-拖拽手柄",
+      "status": "PASS",
+      "expected": "拖拽手柄存在",
+      "actual": "存在",
+      "evidence": ""
+    },
+    {
+      "scenario": "4-字典管理",
+      "check": "引擎-表格加载",
+      "status": "PASS",
+      "expected": "表格存在",
+      "actual": "存在",
+      "evidence": ""
+    },
+    {
+      "scenario": "4-字典管理",
+      "check": "引擎-拖拽手柄",
+      "status": "PASS",
+      "expected": "拖拽手柄存在",
+      "actual": "存在",
+      "evidence": ""
+    },
+    {
+      "scenario": "4-字典管理",
+      "check": "dict_oem_no3查询性能",
+      "status": "PASS",
+      "expected": "<500ms",
+      "actual": "23ms",
+      "evidence": ""
+    },
+    {
+      "scenario": "5-系统韧性",
+      "check": "公开搜索正常响应",
+      "status": "PASS",
+      "expected": "<2s 响应",
+      "actual": "16ms, total=0",
+      "evidence": ""
+    },
+    {
+      "scenario": "5-系统韧性",
+      "check": "前端无白屏/JS错误",
+      "status": "PASS",
+      "expected": "无白屏/JS错误",
+      "actual": "正常",
+      "evidence": ""
+    },
+    {
+      "scenario": "5-系统韧性",
+      "check": "404页面处理",
+      "status": "PASS",
+      "expected": "404 提示存在",
+      "actual": "存在",
+      "evidence": ""
+    },
+    {
+      "scenario": "UI/UX审计",
+      "check": "列表页列数",
+      "status": "WARN",
+      "expected": "≤8 列 (信息密度合理)",
+      "actual": "24 列 (列数过多需优化)",
+      "evidence": ""
+    },
+    {
+      "scenario": "UI/UX审计",
+      "check": "横向滚动条",
+      "status": "PASS",
+      "expected": "无横向滚动",
+      "actual": "无",
+      "evidence": ""
+    },
+    {
+      "scenario": "UI/UX审计",
+      "check": "空状态提示",
+      "status": "PASS",
+      "expected": "友好的空状态提示",
+      "actual": "存在",
+      "evidence": ""
+    },
+    {
+      "scenario": "UI/UX审计",
+      "check": "骨架屏/Loading",
+      "status": "WARN",
+      "expected": "加载状态存在",
+      "actual": "未检测到 (可能加载太快)",
+      "evidence": ""
+    },
+    {
+      "scenario": "UI/UX审计",
+      "check": "表单分区引导",
+      "status": "PASS",
+      "expected": "折叠面板或分区引导",
+      "actual": "collapse=True, sections=0",
+      "evidence": ""
+    },
+    {
+      "scenario": "UI/UX审计",
+      "check": "操作按钮存在",
+      "status": "PASS",
+      "expected": "操作按钮存在",
+      "actual": "找到",
+      "evidence": ""
+    },
+    {
+      "scenario": "UI/UX审计",
+      "check": "二次确认弹窗",
+      "status": "PASS",
+      "expected": "点击停售弹出确认框",
+      "actual": "弹出",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "列表查询性能",
+      "status": "PASS",
+      "expected": "<1s",
+      "actual": "53ms",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "详情查询(含关联)",
+      "status": "PASS",
+      "expected": "<500ms + 关联加载",
+      "actual": "19ms, xref=True, machine=True",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "乐观锁机制",
+      "status": "FAIL",
+      "expected": "Product 实体应有 RowVersion/Timestamp",
+      "actual": "无乐观锁, 存在 lost update 风险 (代码审查确认)",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "Token鉴权",
+      "status": "PASS",
+      "expected": "200 OK",
+      "actual": "status=200",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "上传限制配置",
+      "status": "PASS",
+      "expected": "Kestrel 10MB 限制已配置",
+      "actual": "appsettings.json 已修复",
+      "evidence": ""
+    }
+  ]
+}
