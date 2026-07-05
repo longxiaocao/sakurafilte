@@ -1,10 +1,10 @@
 {
   "test_name": "SakuraFilter 毁灭性 E2E 测试",
-  "test_time": "2026-07-05 21:17:07",
+  "test_time": "2026-07-05 22:28:19",
   "summary": {
-    "PASS": 151,
+    "PASS": 150,
     "FAIL": 0,
-    "WARN": 4,
+    "WARN": 5,
     "SKIP": 0
   },
   "total": 155,
@@ -20,9 +20,9 @@
     {
       "scenario": "1-产品生命周期",
       "check": "7分区表单完整性",
-      "status": "PASS",
+      "status": "WARN",
       "expected": "≥3 个分区可见",
-      "actual": "检测到 3 个分区",
+      "actual": "检测到 2 个分区",
       "evidence": ""
     },
     {
@@ -30,14 +30,14 @@
       "check": "API创建产品",
       "status": "PASS",
       "expected": "201 Created",
-      "actual": "status=201, id=49998",
+      "actual": "status=201, id=50009",
       "evidence": ""
     },
     {
       "scenario": "1-产品生命周期",
       "check": "列表页产品可见",
       "status": "PASS",
-      "expected": "列表包含 E2E202607056993",
+      "expected": "列表包含 E2E202607051267",
       "actual": "找到",
       "evidence": ""
     },
@@ -86,7 +86,7 @@
       "check": "变更历史记录",
       "status": "PASS",
       "expected": "历史记录 ≥1 条",
-      "actual": "共 2 条",
+      "actual": "共 5 条",
       "evidence": ""
     },
     {
@@ -101,7 +101,7 @@
       "scenario": "2-搜索一致性",
       "check": "前台OEM搜索",
       "status": "PASS",
-      "expected": "搜索结果包含 E2E202607056993",
+      "expected": "搜索结果包含 E2E202607051267",
       "actual": "找到",
       "evidence": ""
     },
@@ -246,7 +246,7 @@
       "check": "dict_oem_no3查询性能",
       "status": "WARN",
       "expected": "<500ms",
-      "actual": "2054ms",
+      "actual": "2047ms",
       "evidence": ""
     },
     {
@@ -254,7 +254,7 @@
       "check": "公开搜索正常响应",
       "status": "WARN",
       "expected": "<2s 响应",
-      "actual": "2043ms, total=0",
+      "actual": "2045ms, total=0",
       "evidence": ""
     },
     {
@@ -366,7 +366,7 @@
       "check": "列表查询性能",
       "status": "WARN",
       "expected": "<1s, 200 OK",
-      "actual": "status=200, 2099ms",
+      "actual": "status=200, 2097ms",
       "evidence": ""
     },
     {
@@ -374,7 +374,7 @@
       "check": "详情查询(含关联)",
       "status": "WARN",
       "expected": "<500ms + 关联加载",
-      "actual": "2054ms, xref=True, machine=True",
+      "actual": "2061ms, xref=True, machine=True",
       "evidence": ""
     },
     {
@@ -422,14 +422,14 @@
       "check": "字典CRUD-Create",
       "status": "PASS",
       "expected": "201 Created + id",
-      "actual": "status=201, id=80",
+      "actual": "status=201, id=82",
       "evidence": ""
     },
     {
       "scenario": "后端深水区",
       "check": "字典CRUD-Read",
       "status": "PASS",
-      "expected": "查询到 id=80",
+      "expected": "查询到 id=82",
       "actual": "found=True, count=1",
       "evidence": ""
     },
@@ -462,7 +462,7 @@
       "check": "用户管理-Create",
       "status": "PASS",
       "expected": "201 Created + id",
-      "actual": "status=201, id=50",
+      "actual": "status=201, id=52",
       "evidence": ""
     },
     {
@@ -494,7 +494,7 @@
       "check": "用户管理-管理员重置密码",
       "status": "PASS",
       "expected": "200 OK",
-      "actual": "status=200, body={\"id\":50,\"success\":true}",
+      "actual": "status=200, body={\"id\":52,\"success\":true}",
       "evidence": ""
     },
     {
@@ -525,7 +525,7 @@
       "scenario": "后端深水区",
       "check": "用户管理-审计日志",
       "status": "PASS",
-      "expected": "userId=50 至少 1 条审计记录",
+      "expected": "userId=52 至少 1 条审计记录",
       "actual": "共 3 条",
       "evidence": ""
     },
@@ -542,7 +542,7 @@
       "check": "搜索8字段-oemBrand",
       "status": "PASS",
       "expected": "total > 0",
-      "actual": "total=23, elapsed=715ms",
+      "actual": "total=23, elapsed=595ms",
       "evidence": ""
     },
     {
@@ -550,7 +550,7 @@
       "check": "搜索8字段-oemNo3",
       "status": "PASS",
       "expected": "total > 0",
-      "actual": "total=22, elapsed=1005ms",
+      "actual": "total=22, elapsed=1041ms",
       "evidence": ""
     },
     {
@@ -558,7 +558,7 @@
       "check": "搜索8字段-machineBrand",
       "status": "PASS",
       "expected": "total > 0",
-      "actual": "total=23, elapsed=1668ms",
+      "actual": "total=23, elapsed=1536ms",
       "evidence": ""
     },
     {
@@ -566,7 +566,7 @@
       "check": "搜索8字段-machineModel",
       "status": "PASS",
       "expected": "total > 0",
-      "actual": "total=22, elapsed=1846ms",
+      "actual": "total=22, elapsed=1739ms",
       "evidence": ""
     },
     {
@@ -630,7 +630,7 @@
       "check": "性能指标",
       "status": "PASS",
       "expected": "p50Ms/p95Ms/errorRate 字段存在",
-      "actual": "p50=6.9ms, p95=969.5ms, errorRate=0.07%",
+      "actual": "p50=6ms, p95=871.6ms, errorRate=0.12%",
       "evidence": ""
     },
     {
@@ -742,7 +742,7 @@
       "check": "图片-创建临时产品",
       "status": "PASS",
       "expected": "201 Created",
-      "actual": "id=49999, status=201",
+      "actual": "id=50010, status=201",
       "evidence": ""
     },
     {
@@ -750,7 +750,7 @@
       "check": "图片-上传slot1",
       "status": "PASS",
       "expected": "200 OK",
-      "actual": "status=200, body={\"id\":17,\"productId\":49999,\"slot\":1,\"imageKey\":\"products/IMGTEST2026070557266/IMGTEST2026070557266-1.png\",\"imageUrl\":\"http://localhost:9000/sakurafilter/products/IMGTEST2026070557266/IMGTEST2026070557",
+      "actual": "status=200, body={\"id\":19,\"productId\":50010,\"slot\":1,\"imageKey\":\"products/IMGTEST2026070561538/IMGTEST2026070561538-1.png\",\"imageUrl\":\"http://localhost:9000/sakurafilter/products/IMGTEST2026070561538/IMGTEST2026070561",
       "evidence": ""
     },
     {
@@ -814,7 +814,7 @@
       "check": "产品compare",
       "status": "PASS",
       "expected": "200 + 响应体非空",
-      "actual": "status=200, len=2685",
+      "actual": "status=200, len=2054",
       "evidence": ""
     },
     {
@@ -894,7 +894,7 @@
       "check": "Prometheus指标",
       "status": "PASS",
       "expected": "200 + 指标非空",
-      "actual": "status=200, len=831075",
+      "actual": "status=200, len=821129",
       "evidence": ""
     },
     {
@@ -942,7 +942,7 @@
       "check": "XSS-创建接受",
       "status": "PASS",
       "expected": "201 + JSON 含原始 <script> (前端负责转义)",
-      "actual": "id=50000, raw_has_script=True",
+      "actual": "id=50011, raw_has_script=True",
       "evidence": ""
     },
     {
@@ -990,7 +990,7 @@
       "check": "乐观锁-创建产品",
       "status": "PASS",
       "expected": "201 Created",
-      "actual": "id=50001, status=201",
+      "actual": "id=50012, status=201",
       "evidence": ""
     },
     {
@@ -998,7 +998,7 @@
       "check": "乐观锁-GET RowVersion",
       "status": "PASS",
       "expected": "rowVersion 非空",
-      "actual": "rowVersion=123124181",
+      "actual": "rowVersion=123124328",
       "evidence": ""
     },
     {
@@ -1182,7 +1182,7 @@
       "check": "图片边界-创建产品",
       "status": "PASS",
       "expected": "201 Created",
-      "actual": "id=50002, status=201",
+      "actual": "id=50013, status=201",
       "evidence": ""
     },
     {

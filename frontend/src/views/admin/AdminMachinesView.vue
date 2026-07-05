@@ -63,8 +63,8 @@ function openEdit(row: MachineItem) {
 }
 async function saveDialog() {
   const b = dialogForm.machineBrand.trim()
-  if (!b) { ElMessage.warning(t('admin.machinesview.warning.l63_')); return }
-  if (b.length > 200) { ElMessage.warning(t('admin.machinesview.warning.l64_200')); return }
+  if (!b) { ElMessage.warning(t('admin.machinesview.warning.machine_model_brand_cannot_be')); return }
+  if (b.length > 200) { ElMessage.warning(t('admin.machinesview.warning.machine_model_brand_length')); return }
   const model = dialogForm.machineModel.trim() || undefined
   const name = dialogForm.machineName.trim() || undefined
   try {
@@ -192,21 +192,21 @@ onMounted(load)
 
     <div class="mt-2 text-xs text-muted">{{ t("common.dictviewcommon.total_drag", { total, active: activeCount, soft: total - activeCount }) }}</div>
 
-    <el-dialog v-model="dialogOpen" :title="dialogMode === 'create' ? t('admin.machinesview.title.l192_') : t('admin.machinesview.title.l192__2')" width="560px">
+    <el-dialog v-model="dialogOpen" :title="dialogMode === 'create' ? t('admin.machinesview.title.add_machine_model') : t('admin.machinesview.title.edit_machine_model')" width="560px">
       <el-form :model="dialogForm" label-width="120px" size="small">
         <el-form-item :label="t('common.action.brand')" required>
           <el-input v-model="dialogForm.machineBrand" :placeholder="t('common.field.e_g_bosch')" maxlength="200" show-word-limit />
         </el-form-item>
         <el-form-item :label="t('common.action.model')">
-          <el-input v-model="dialogForm.machineModel" :placeholder="t('admin.machinesview.placeholder.l198_0_451_103_001')" maxlength="200" show-word-limit />
+          <el-input v-model="dialogForm.machineModel" :placeholder="t('admin.machinesview.placeholder.e_g_empty')" maxlength="200" show-word-limit />
         </el-form-item>
         <el-form-item :label="t('common.action.name')">
-          <el-input v-model="dialogForm.machineName" :placeholder="t('admin.machinesview.placeholder.l201_tractor_x300')" maxlength="200" show-word-limit />
+          <el-input v-model="dialogForm.machineName" :placeholder="t('admin.machinesview.placeholder.e_g_tractor_x')" maxlength="200" show-word-limit />
           <div class="text-xs text-muted mt-1">3 字段组成 UNIQUE 索引, 任一字段可空</div>
         </el-form-item>
         <!-- P2.3: 分类下拉 (4 大类) -->
-        <el-form-item :label="t('admin.machinesview.label.l205_')">
-          <el-select v-model="dialogForm.machineCategory" :placeholder="t('admin.machinesview.placeholder.l206_4')" style="width: 100%">
+        <el-form-item :label="t('admin.machinesview.label.category')">
+          <el-select v-model="dialogForm.machineCategory" :placeholder="t('admin.machinesview.placeholder.select')" style="width: 100%">
             <el-option v-for="opt in CATEGORY_OPTIONS" :key="opt" :label="opt" :value="opt" />
           </el-select>
           <div class="text-xs text-muted mt-1">P2.3: 4 大类 (Agriculture/Commercial/Construction/others) 用于前台按场景聚合品牌</div>

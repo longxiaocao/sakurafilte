@@ -157,7 +157,7 @@ async function discontinue(row: ProductListItem) {
   productMutating.value = true
   try {
     await adminProductApi.discontinue(row.id, 'admin')
-    ElMessage.success(t('admin.productsview.success.l157_'))
+    ElMessage.success(t('admin.productsview.success.discontinued_v2'))
     load()
   } catch {
     // 错误已被拦截器
@@ -234,11 +234,11 @@ async function loadMoreHistory() {
 
 async function batchCompare() {
   if (selected.value.length < 2) {
-    ElMessage.warning(t('admin.productsview.warning.l234_2_6'))
+    ElMessage.warning(t('admin.productsview.warning.please_select_pcs_product'))
     return
   }
   if (selected.value.length > 6) {
-    ElMessage.warning(t('admin.productsview.warning.l238_6'))
+    ElMessage.warning(t('admin.productsview.warning.at_most_compare_pcs'))
     return
   }
   // P3.5 (Task 12): 跳转到 /admin/compare?ids=1,2,3,4,5,6
@@ -295,23 +295,23 @@ onBeforeUnmount(() => {
     <!-- 顶部工具条 -->
     <!-- P1-4 修复: 工具条移动端折叠 - 次要控件 (countMode 标签, t('common.field.all')列 switch) 在 sm 以下隐藏 -->
     <div class="flex items-center gap-2 mb-3 flex-wrap">
-      <el-input v-model="filter.oem2" placeholder="OEM 2" clearable size="small" style="width: 160px" :aria-label="t('admin.productsview.aria.l297_oem2')" @keyup.enter="quickSearch" />
-      <el-input v-model="filter.mr1" placeholder="MR.1" clearable size="small" style="width: 120px" :aria-label="t('admin.productsview.aria.l298_mr1')" @keyup.enter="quickSearch" />
-      <el-input v-model="filter.productName1" :placeholder="t('common.field.product_name')" clearable size="small" style="width: 160px" :aria-label="t('admin.productsview.aria.l299_product_name')" @keyup.enter="quickSearch" />
-      <el-select v-model="filter.type" :placeholder="t('common.action.type')" clearable size="small" style="width: 100px" :aria-label="t('admin.productsview.aria.l300_type')">
+      <el-input v-model="filter.oem2" placeholder="OEM 2" clearable size="small" style="width: 160px" :aria-label="t('admin.productsview.aria.oem_search')" @keyup.enter="quickSearch" />
+      <el-input v-model="filter.mr1" placeholder="MR.1" clearable size="small" style="width: 120px" :aria-label="t('admin.productsview.aria.mr_search')" @keyup.enter="quickSearch" />
+      <el-input v-model="filter.productName1" :placeholder="t('common.field.product_name')" clearable size="small" style="width: 160px" :aria-label="t('admin.productsview.aria.product_name_search')" @keyup.enter="quickSearch" />
+      <el-select v-model="filter.type" :placeholder="t('common.action.type')" clearable size="small" style="width: 100px" :aria-label="t('admin.productsview.aria.filter_by_type')">
         <el-option label="oil" value="oil" />
         <el-option label="fuel" value="fuel" />
         <el-option label="air" value="air" />
         <el-option label="cabin" value="cabin" />
         <el-option label="others" value="others" />
       </el-select>
-      <el-input v-model="filter.oem3Batch" :placeholder="t('admin.productsview.placeholder.l303_oem_3')" clearable size="small" class="hidden sm:inline-block" style="width: 220px" :aria-label="t('admin.productsview.aria.l307_oem3_batch')" @keyup.enter="quickSearch" />
+      <el-input v-model="filter.oem3Batch" :placeholder="t('admin.productsview.placeholder.oem_batch_count')" clearable size="small" class="hidden sm:inline-block" style="width: 220px" :aria-label="t('admin.productsview.aria.oem_batch_search')" @keyup.enter="quickSearch" />
       <el-button type="primary" size="small" @click="quickSearch">搜索</el-button>
       <el-button size="small" @click="openAdv" class="hidden sm:inline-flex">高级筛选</el-button>
       <span class="text-xs text-muted hidden sm:inline">count: {{ countModeUsed }}</span>
       <div class="flex-1" />
       <!-- E2E UI.1 修复: 列设置开关 — 默认隐藏次要列, 点击显示全部 24 列 -->
-      <el-switch v-model="showAllColumns" size="small" :active-text="t('admin.productsview.string.l309_')" :inactive-text="t('admin.productsview.string.l309__2')" inline-prompt class="hidden sm:inline-flex" />
+      <el-switch v-model="showAllColumns" size="small" :active-text="t('admin.productsview.string.all_columns')" :inactive-text="t('admin.productsview.string.columns')" inline-prompt class="hidden sm:inline-flex" />
       <el-button size="small" @click="batchCompare" :disabled="selected.length < 2">批量对比 ({{ selected.length }})</el-button>
       <el-button type="primary" size="small" @click="newProduct">新增产品</el-button>
     </div>
@@ -351,15 +351,15 @@ onBeforeUnmount(() => {
             <el-tag v-if="row.isPublished" type="success" size="small">✓</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="isDiscontinued" :label="t('admin.productsview.label.l349_')" width="50">
+        <el-table-column prop="isDiscontinued" :label="t('admin.productsview.label.discontinued')" width="50">
           <template #default="{ row }">
             <el-tag v-if="row.isDiscontinued" type="info" size="small">已停</el-tag>
           </template>
         </el-table-column>
-        <el-table-column :label="t('admin.productsview.label.l354_')" width="120">
+        <el-table-column :label="t('admin.productsview.label.update')" width="120">
           <template #default="{ row }">{{ fmtDate(row.updatedAt) }}</template>
         </el-table-column>
-        <el-table-column :label="t('admin.productsview.label.l357_')" width="200" fixed="right">
+        <el-table-column :label="t('admin.productsview.label.action')" width="200" fixed="right">
           <template #default="{ row }">
             <el-button size="small" text @click="editProduct(row)">编辑</el-button>
             <el-button v-if="!row.isDiscontinued" size="small" text type="warning" @click="discontinue(row)">停售</el-button>
@@ -387,7 +387,7 @@ onBeforeUnmount(() => {
     </div>
 
     <!-- 高级筛选抽屉 -->
-    <el-drawer v-model="drawerOpen" :title="t('admin.productsview.title.l385_')" size="640px" direction="rtl">
+    <el-drawer v-model="drawerOpen" :title="t('admin.productsview.title.filter')" size="640px" direction="rtl">
       <div class="p-3 space-y-3">
         <div class="text-sm font-medium">文本字段</div>
         <div class="grid grid-cols-2 gap-2">
@@ -399,7 +399,7 @@ onBeforeUnmount(() => {
           <el-input v-model="advFilter.mediaName" placeholder="Media" size="small" />
           <el-input v-model="advFilter.mediaModel" placeholder="MediaModel" size="small" />
           <el-input v-model="advFilter.sealingMaterial" :placeholder="t('common.action.seal_material')" size="small" />
-          <el-input v-model="advFilter.efficiency1" :placeholder="t('admin.productsview.placeholder.l397_')" size="small" />
+          <el-input v-model="advFilter.efficiency1" :placeholder="t('admin.productsview.placeholder.efficiency')" size="small" />
         </div>
 
         <div class="text-sm font-medium">尺寸范围 (mm)</div>
@@ -437,7 +437,7 @@ onBeforeUnmount(() => {
 
     <!-- 历史抽屉 (Day 9.1: 解析 changedFields JSON, 按字段展示) -->
     <!-- Day 9.2: 顶部加筛选 (changeType / since / until / limit) -->
-    <el-drawer v-model="historyOpen" :title="t('admin.productsview.title.l435_')" size="700px" direction="rtl" :close-on-click-modal="false">
+    <el-drawer v-model="historyOpen" :title="t('admin.productsview.title.en_v6')" size="700px" direction="rtl" :close-on-click-modal="false">
       <!-- 筛选条 -->
       <div class="px-3 py-2 hairline-b bg-[var(--color-bg-hover)]">
         <div class="grid grid-cols-4 gap-2 items-end">
@@ -515,8 +515,8 @@ onBeforeUnmount(() => {
               border
               max-height="240"
             >
-              <el-table-column prop="key" :label="t('admin.productsview.label.l513_')" width="160" />
-              <el-table-column :label="t('admin.productsview.label.l514_')">
+              <el-table-column prop="key" :label="t('admin.productsview.label.field')" width="160" />
+              <el-table-column :label="t('admin.productsview.label.value')">
                 <template #default="{ row }">
                   <code class="text-xs">{{ row.newVal === null || row.newVal === undefined ? 'null' : typeof row.newVal === 'object' ? JSON.stringify(row.newVal) : String(row.newVal) }}</code>
                 </template>

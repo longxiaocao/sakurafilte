@@ -45,8 +45,8 @@ function openEdit(row: TypeItem) {
 }
 async function saveDialog() {
   const v = dialogForm.type.trim()
-  if (!v) { ElMessage.warning(t('admin.typesview.warning.l45_type')); return }
-  if (v.length > 50) { ElMessage.warning(t('admin.typesview.warning.l46_type_50')); return }
+  if (!v) { ElMessage.warning(t('admin.typesview.warning.type_cannot_be_empty')); return }
+  if (v.length > 50) { ElMessage.warning(t('admin.typesview.warning.type_length')); return }
   try {
     if (dialogMode.value === 'create') {
       await dictApi.types.create(v, dialogForm.sortOrder); ElMessage.success(t('common.action.created'))
@@ -88,7 +88,7 @@ async function onDrop(e: DragEvent, targetId: number) {
   const moved = items.value.splice(sourceIdx, 1)[0]; items.value.splice(targetIdx, 0, moved)
   const updates: TypeReorderItem[] = items.value.map((it, idx) => ({ id: it.id, sortOrder: (idx + 1) * 10 }))
   items.value.forEach((it, idx) => { it.sortOrder = (idx + 1) * 10 })
-  try { await dictApi.types.reorder(updates); ElMessage.success(t('admin.typesview.success.l88_p2_3')) }
+  try { await dictApi.types.reorder(updates); ElMessage.success(t('admin.typesview.success.sort_order_saved_frontend')) }
   catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || t('common.action.sort_failed')); await load() }
 }
 function onDragEnd() { draggingId.value = null; dragOverId.value = null }
@@ -113,7 +113,7 @@ onMounted(load)
       <h1 class="text-lg font-medium">类型字典 (Type)</h1>
       <span class="text-xs text-muted">P2.2 后台管理 · 固定 5 值: oil / fuel / air / cabin / others · P2.3 拖动排序后前台立即生效</span>
       <div class="flex-1" />
-      <el-input v-model="searchKw" :placeholder="t('admin.typesview.placeholder.l113_type')" clearable size="small" style="width: 200px" @keyup.enter="onSearch" />
+      <el-input v-model="searchKw" :placeholder="t('admin.typesview.placeholder.search_type')" clearable size="small" style="width: 200px" @keyup.enter="onSearch" />
       <el-button size="small" @click="onSearch">搜索</el-button>
       <el-checkbox v-model="includeDeleted" @change="load" size="small">含已删</el-checkbox>
       <el-button type="primary" size="small" @click="openCreate">新增 Type</el-button>
@@ -155,10 +155,10 @@ onMounted(load)
 
     <div class="mt-2 text-xs text-muted">{{ t("common.dictviewcommon.total_drag", { total, active: activeCount, soft: total - activeCount }) }}</div>
 
-    <el-dialog v-model="dialogOpen" :title="dialogMode === 'create' ? t('admin.typesview.title.l155_type') : t('admin.typesview.title.l155_type_2')" width="480px">
+    <el-dialog v-model="dialogOpen" :title="dialogMode === 'create' ? t('admin.typesview.title.add_type') : t('admin.typesview.title.edit_type')" width="480px">
       <el-form :model="dialogForm" label-width="100px" size="small">
         <el-form-item label="Type" required>
-          <el-input v-model="dialogForm.type" :placeholder="t('admin.typesview.placeholder.l158_oil_fuel_air_cabin_others')" maxlength="50" show-word-limit />
+          <el-input v-model="dialogForm.type" :placeholder="t('admin.typesview.placeholder.e_g_oil_fuel')" maxlength="50" show-word-limit />
         </el-form-item>
         <el-form-item :label="t('common.action.sort_order')">
           <el-input-number v-model="dialogForm.sortOrder" :min="0" :step="10" style="width: 100%" />

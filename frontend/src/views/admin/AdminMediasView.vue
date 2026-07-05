@@ -49,8 +49,8 @@ function openEdit(row: MediaItem) {
 }
 async function saveDialog() {
   const n = dialogForm.mediaName.trim()
-  if (!n) { ElMessage.warning(t('admin.mediasview.warning.l49_media')); return }
-  if (n.length > 100) { ElMessage.warning(t('admin.mediasview.warning.l50_media_100')); return }
+  if (!n) { ElMessage.warning(t('admin.mediasview.warning.media_name_cannot_be')); return }
+  if (n.length > 100) { ElMessage.warning(t('admin.mediasview.warning.media_name_length')); return }
   const m = dialogForm.mediaModel.trim() || undefined
   try {
     if (dialogMode.value === 'create') {
@@ -110,7 +110,7 @@ onMounted(load)
       <h1 class="text-lg font-medium">介质字典 (Media)</h1>
       <span class="text-xs text-muted">P2.2 后台管理 · 2 字段: Media 名称 + 型号 · 用于产品表单分区 4 media/media_model 二合一</span>
       <div class="flex-1" />
-      <el-input v-model="searchKw" :placeholder="t('admin.mediasview.placeholder.l110_media')" clearable size="small" style="width: 200px" @keyup.enter="onSearch" />
+      <el-input v-model="searchKw" :placeholder="t('admin.mediasview.placeholder.search_media_name_or')" clearable size="small" style="width: 200px" @keyup.enter="onSearch" />
       <el-button size="small" @click="onSearch">搜索</el-button>
       <el-checkbox v-model="includeDeleted" @change="load" size="small">含已删</el-checkbox>
       <el-button type="primary" size="small" @click="openCreate">新增 Media</el-button>
@@ -154,13 +154,13 @@ onMounted(load)
 
     <div class="mt-2 text-xs text-muted">{{ t("common.dictviewcommon.total_drag", { total, active: activeCount, soft: total - activeCount }) }}</div>
 
-    <el-dialog v-model="dialogOpen" :title="dialogMode === 'create' ? t('admin.mediasview.title.l154_media') : t('admin.mediasview.title.l154_media_2')" width="540px">
+    <el-dialog v-model="dialogOpen" :title="dialogMode === 'create' ? t('admin.mediasview.title.add_media') : t('admin.mediasview.title.edit_media')" width="540px">
       <el-form :model="dialogForm" label-width="120px" size="small">
-        <el-form-item :label="t('admin.mediasview.label.l156_media')" required>
-          <el-input v-model="dialogForm.mediaName" :placeholder="t('admin.mediasview.placeholder.l157_cellulose_synthetic_carbon')" maxlength="100" show-word-limit />
+        <el-form-item :label="t('admin.mediasview.label.media_name')" required>
+          <el-input v-model="dialogForm.mediaName" :placeholder="t('admin.mediasview.placeholder.e_g_cellulose_synthetic')" maxlength="100" show-word-limit />
         </el-form-item>
-        <el-form-item :label="t('admin.mediasview.label.l159_media')">
-          <el-input v-model="dialogForm.mediaModel" :placeholder="t('admin.mediasview.placeholder.l160_5_m_10_m')" maxlength="100" show-word-limit />
+        <el-form-item :label="t('admin.mediasview.label.media_model')">
+          <el-input v-model="dialogForm.mediaModel" :placeholder="t('admin.mediasview.placeholder.e_g_m_m')" maxlength="100" show-word-limit />
           <div class="text-xs text-muted mt-1">可空; (name, model) 二者组成 UNIQUE 索引</div>
         </el-form-item>
         <el-form-item :label="t('common.action.sort_order')">

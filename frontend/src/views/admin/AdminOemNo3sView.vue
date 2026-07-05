@@ -43,8 +43,8 @@ function openEdit(row: OemNo3Item) {
 }
 async function saveDialog() {
   const v = dialogForm.oemNo3.trim()
-  if (!v) { ElMessage.warning(t('admin.oemno3sview.warning.l43_oem_3')); return }
-  if (v.length > 200) { ElMessage.warning(t('admin.oemno3sview.warning.l44_oem_3_200')); return }
+  if (!v) { ElMessage.warning(t('admin.oemno3sview.warning.oem_cannot_be_empty')); return }
+  if (v.length > 200) { ElMessage.warning(t('admin.oemno3sview.warning.oem_length')); return }
   try {
     if (dialogMode.value === 'create') {
       await dictApi.oemNo3s.create(v, dialogForm.sortOrder); ElMessage.success(t('common.action.created'))
@@ -103,7 +103,7 @@ onMounted(load)
       <h1 class="text-lg font-medium">OEM 3 字典</h1>
       <span class="text-xs text-muted">P2.2 后台管理 · 用于交叉引用分区 2 oem_no_3 自动补全</span>
       <div class="flex-1" />
-      <el-input v-model="searchKw" :placeholder="t('admin.oemno3sview.placeholder.l103_oem_3')" clearable size="small" style="width: 200px" @keyup.enter="onSearch" />
+      <el-input v-model="searchKw" :placeholder="t('admin.oemno3sview.placeholder.search_oem')" clearable size="small" style="width: 200px" @keyup.enter="onSearch" />
       <el-button size="small" @click="onSearch">搜索</el-button>
       <el-checkbox v-model="includeDeleted" @change="load" size="small">含已删</el-checkbox>
       <el-button type="primary" size="small" @click="openCreate">新增 OEM 3</el-button>
@@ -145,10 +145,10 @@ onMounted(load)
 
     <div class="mt-2 text-xs text-muted">{{ t("common.dictviewcommon.total_drag", { total, active: activeCount, soft: total - activeCount }) }}</div>
 
-    <el-dialog v-model="dialogOpen" :title="dialogMode === 'create' ? t('admin.oemno3sview.title.l145_oem_3') : t('admin.oemno3sview.title.l145_oem_3_2')" width="480px">
+    <el-dialog v-model="dialogOpen" :title="dialogMode === 'create' ? t('admin.oemno3sview.title.add_oem') : t('admin.oemno3sview.title.edit_oem')" width="480px">
       <el-form :model="dialogForm" label-width="100px" size="small">
         <el-form-item label="OEM 3" required>
-          <el-input v-model="dialogForm.oemNo3" :placeholder="t('admin.oemno3sview.placeholder.l148_11427622448')" maxlength="200" show-word-limit />
+          <el-input v-model="dialogForm.oemNo3" :placeholder="t('admin.oemno3sview.placeholder.e_g')" maxlength="200" show-word-limit />
         </el-form-item>
         <el-form-item :label="t('common.action.sort_order')">
           <el-input-number v-model="dialogForm.sortOrder" :min="0" :step="10" style="width: 100%" />

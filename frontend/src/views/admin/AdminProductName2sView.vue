@@ -43,8 +43,8 @@ function openEdit(row: ProductName2Item) {
 }
 async function saveDialog() {
   const v = dialogForm.productName2.trim()
-  if (!v) { ElMessage.warning(t('admin.productname2sview.warning.l43_2')); return }
-  if (v.length > 200) { ElMessage.warning(t('admin.productname2sview.warning.l44_2_200')); return }
+  if (!v) { ElMessage.warning(t('admin.productname2sview.warning.product_name_cannot_be')); return }
+  if (v.length > 200) { ElMessage.warning(t('admin.productname2sview.warning.product_name_length')); return }
   try {
     if (dialogMode.value === 'create') {
       await dictApi.productName2s.create(v, dialogForm.sortOrder); ElMessage.success(t('common.action.created'))
@@ -103,7 +103,7 @@ onMounted(load)
       <h1 class="text-lg font-medium">产品名 2 字典</h1>
       <span class="text-xs text-muted">P2.2 后台管理 · 用于产品表单分区 1 product_name_2 自动补全</span>
       <div class="flex-1" />
-      <el-input v-model="searchKw" :placeholder="t('admin.productname2sview.placeholder.l103_2')" clearable size="small" style="width: 200px" @keyup.enter="onSearch" />
+      <el-input v-model="searchKw" :placeholder="t('admin.productname2sview.placeholder.search_product_name')" clearable size="small" style="width: 200px" @keyup.enter="onSearch" />
       <el-button size="small" @click="onSearch">搜索</el-button>
       <el-checkbox v-model="includeDeleted" @change="load" size="small">含已删</el-checkbox>
       <el-button type="primary" size="small" @click="openCreate">新增产品名 2</el-button>
@@ -145,10 +145,10 @@ onMounted(load)
 
     <div class="mt-2 text-xs text-muted">{{ t("common.dictviewcommon.total_drag", { total, active: activeCount, soft: total - activeCount }) }}</div>
 
-    <el-dialog v-model="dialogOpen" :title="dialogMode === 'create' ? t('admin.productname2sview.title.l145_2') : t('admin.productname2sview.title.l145_2_2')" width="480px">
+    <el-dialog v-model="dialogOpen" :title="dialogMode === 'create' ? t('admin.productname2sview.title.add_product') : t('admin.productname2sview.title.edit_product')" width="480px">
       <el-form :model="dialogForm" label-width="100px" size="small">
         <el-form-item :label="t('common.action.product_name_2')" required>
-          <el-input v-model="dialogForm.productName2" :placeholder="t('admin.productname2sview.placeholder.l148_spin_on')" maxlength="200" show-word-limit />
+          <el-input v-model="dialogForm.productName2" :placeholder="t('admin.productname2sview.placeholder.e_g_spin_on')" maxlength="200" show-word-limit />
         </el-form-item>
         <el-form-item :label="t('common.action.sort_order')">
           <el-input-number v-model="dialogForm.sortOrder" :min="0" :step="10" style="width: 100%" />

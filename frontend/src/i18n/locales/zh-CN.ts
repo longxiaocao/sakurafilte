@@ -14,58 +14,58 @@ export default {
   admin: {
     compareview: {
       error: {
-        l273_: '加载产品失败',
+        load_product_failed: '加载产品失败',
       },
       placeholder: {
-        l329_id: '输入产品 ID 加入',
+        input_product_id_add: '输入产品 ID 加入',
       },
       string: {
 
 
-        l107_: '外箱',
-        l109_: '外箱/件',
-        l110_kg: '外箱重 (kg)',
-        l111_mm: '外箱长 (mm)',
-        l112_mm: '外箱宽 (mm)',
-        l113_mm: '外箱高 (mm)',
-        l117_crossref: 'CrossRef / 车型',
-        l119_oem: 'OEM 交叉引用',
-        l120_: '适配车型',
-        l185_: '加载失败',
-        l53_: '基础',
-        l55_oem: 'OEM 编号',
+        outer_carton: '外箱',
+        outer_carton_pcs: '外箱/件',
+        outer_carton_kg: '外箱重 (kg)',
+        outer_carton_length_mm: '外箱长 (mm)',
+        outer_carton_width_mm: '外箱宽 (mm)',
+        outer_carton_height_mm: '外箱高 (mm)',
+        crossref_vehicle_model: 'CrossRef / 车型',
+        oem_cross_reference: 'OEM 交叉引用',
+        machine_applications: '适配车型',
+        load_failed: '加载失败',
+        basic: '基础',
+        oem_number: 'OEM 编号',
 
 
 
-        l64_mm: '尺寸 (mm)',
+        dimensions_mm: '尺寸 (mm)',
 
 
-        l83_lr: '旁通 LR',
-        l84_hr: '旁通 HR',
+        bypass_lr: '旁通 LR',
+        bypass_hr: '旁通 HR',
 
 
 
-        l88_bar: '耐压 (bar)',
+        pressure_resistance_bar: '耐压 (bar)',
 
 
-        l96_: '介质',
-        l97_: '介质型号',
+        media: '介质',
+        media_model: '介质型号',
 
 
       },
       success: {
-        l246_: '已移除',
-        l272_added: '已加入: {oem}',
+        remove: '已移除',
+        added_oem: '已加入: {oem}',
       },
       title: {
-        l373_: '左移',
-        l381_: '右移',
-        l390_: '移除该列',
+        move_left: '左移',
+        move_right: '右移',
+        remove_columns: '移除该列',
       },
       warning: {
-        l253_id: '请输入有效的产品 ID',
-        l257_: '该产品已在对比列表中',
-        l262_max: '最多对比 {max} 个产品',
+        please_enter_active_product: '请输入有效的产品 ID',
+        product_in_compare_list: '该产品已在对比列表中',
+        compare_max_max_products: '最多对比 {max} 个产品',
       },
     },
     enginesview: {
@@ -83,8 +83,8 @@ export default {
       },
       placeholder: {
 
-        l156_cummins: '例: CUMMINS',
-        l159_isb_4_5_l: '例: ISB 4.5 L (可空)',
+        e_g_cummins: '例: CUMMINS',
+        e_g_isb_l: '例: ISB 4.5 L (可空)',
       },
       string: {
 
@@ -97,97 +97,98 @@ export default {
 
       },
       title: {
-        l153_: '新增发动机',
-        l153__2: '编辑发动机',
+        add_engine: '新增发动机',
+        edit_engine: '编辑发动机',
       },
       warning: {
-        l47_: '发动机品牌不能为空',
-        l48_200: '发动机品牌长度不能超过 200',
+        engine_brand_cannot_be_empty: '发动机品牌不能为空',
+        engine_brand_length: '发动机品牌长度不能超过 200',
 
       },
     },
     etlview: {
       buttontext: {
-        l290_: '下一步',
+        next: '下一步',
 
-        l306_: '确认取消',
+        confirm_cancel: '确认取消',
 
-        l353_: '暂停',
-        l353__2: '不暂停',
+        pause: '暂停',
+        no_pause: '不暂停',
 
-        l377__2: '不恢复',
+        no_resume: '不恢复',
+        resume: '恢复',
       },
       info: {
-        l305_: '可补充详细描述 (留空用默认)',
-        l305__2: '取消原因说明',
+        description_empty_default: '可补充详细描述 (留空用默认)',
+        cancel_note: '取消原因说明',
 
-        l362_: '无活跃任务可暂停',
+        task_pause: '无活跃任务可暂停',
       },
       label: {
-        l450_: '实体',
+        entity: '实体',
 
-        l466_: '文件路径',
-        l592_: '文件',
-        l593_: '大小',
-        l594_: '行数',
+        file: '文件路径',
+        file_v2: '文件',
+        en: '大小',
+        rows_count: '行数',
 
-        l602_json: '原始 JSON',
-        l648_: '时间',
-        l649_: '错误',
-        l682_: '原因',
-        l683_: '已读/插/改',
-        l690_: '耗时',
-        l695_: '取消时间',
+        original_json: '原始 JSON',
+        timestamp: '时间',
+        error: '错误',
+        en_v2: '原因',
+        phrase_63454: '已读/插/改',
+        en_v3: '耗时',
+        cancel_timestamp: '取消时间',
       },
       placeholder: {
-        l469_jsonl: 'JSONL 绝对路径',
+        jsonl_absolute_path: 'JSONL 绝对路径',
       },
       string: {
-        l219_sse: 'SSE 连接断开, 浏览器将自动重连',
+        sse_on_browser_will: 'SSE 连接断开, 浏览器将自动重连',
 
 
 
 
-        l258_: '任务超时',
-        l258__2: '任务执行超时',
-        l259_: '系统关闭/重启',
-        l259__2: '服务关闭/重启',
+        task_timeout: '任务超时',
+        task_execute: '任务执行超时',
+        system_shutdown_restart: '系统关闭/重启',
+        service_close_restart: '服务关闭/重启',
 
 
-        l272_etl: '取消 ETL 任务',
+        cancel_etl_task: '取消 ETL 任务',
 
 
-        l352_etl: '暂停 ETL 任务',
+        pause_etl_task: '暂停 ETL 任务',
 
-        l353_pause_msg: '暂停当前 ETL 任务?\n\n当前批次跑完后会优雅退出, checkpoint_id 会写入 etl_progress_log, 后续可用"{resume}"按钮从该点续读.\n\n(区别于"{cancel}" — 取消会立即终止并回滚当前批次)',
+        pause_current_etl_task: '暂停当前 ETL 任务?\n\n当前批次跑完后会优雅退出, checkpoint_id 会写入 etl_progress_log, 后续可用"{resume}"按钮从该点续读.\n\n(区别于"{cancel}" — 取消会立即终止并回滚当前批次)',
 
-        l375_etl_n_n_paused_checkpoint_id_1_commit: '恢复暂停的 ETL 任务?\n\n将从最近一条 paused 记录的 checkpoint_id+1 行开始续读, 跳过已 COMMIT 的批次.',
-        l376_etl: '恢复 ETL 任务',
-        l386_resume: '已触发 Resume: entity={entity} checkpoint={checkpoint} (从第 {line} 行开始)',
-        l386_resume_alt: '已触发 Resume: entity={entity} checkpoint={checkpoint} (从第 {line} 行继续)',
-        l419_copy: 'COPY 暂存',
-        l420_insert: 'INSERT 写库',
-        l421_commit: 'COMMIT 提交',
-        l422_meili: 'Meili 同步',
-        l423_: '完成',
-        l481_truncate_xrefs_apps_products: '开启: TRUNCATE 同时清空 xrefs/apps (首次全量场景); 关闭: 仅清 products, 保留关联表 (单独刷新主表)',
-        l64_auto_inferred: '已自动识别 entity={entity}, 文件: {name}',
-        l68_manual_entity: '已填入文件: {name} (entity 需手动选择)',
-        l71_first_only: '本次拖入 {total} 个文件, 仅采用第一个: {name}',
-        l78_etl: '松开以填入 ETL 文件路径',
+        resume_pause_etl_task: '恢复暂停的 ETL 任务?\n\n将从最近一条 paused 记录的 checkpoint_id+1 行开始续读, 跳过已 COMMIT 的批次.',
+        resume_etl_task: '恢复 ETL 任务',
+        resume_triggered_entity_entity: '已触发 Resume: entity={entity} checkpoint={checkpoint} (从第 {line} 行开始)',
+        resume_triggered_entity_entity_alt: '已触发 Resume: entity={entity} checkpoint={checkpoint} (从第 {line} 行继续)',
+        copy_staging: 'COPY 暂存',
+        insert_write_db: 'INSERT 写库',
+        commit_submit: 'COMMIT 提交',
+        meili_sync: 'Meili 同步',
+        complete: '完成',
+        on_truncate_clear_xrefs: '开启: TRUNCATE 同时清空 xrefs/apps (首次全量场景); 关闭: 仅清 products, 保留关联表 (单独刷新主表)',
+        auto_recognized_entity_entity: '已自动识别 entity={entity}, 文件: {name}',
+        file_filled_name_entity: '已填入文件: {name} (entity 需手动选择)',
+        dropped_total_files_only: '本次拖入 {total} 个文件, 仅采用第一个: {name}',
+        on_etl_file: '松开以填入 ETL 文件路径',
 
-        l323_cancel_signal: '已发送取消信号 (码: {code}), 任务即将终止',
+        cancel_signal_sent_code: '已发送取消信号 (码: {code}), 任务即将终止',
       },
       success: {
-        l111_dry_run: 'dry-run 校验完成',
-        l111_etl: '已触发 ETL, 后台执行中',
-        l249_: '已清除',
+        dry_run_validation_completed: 'dry-run 校验完成',
+        triggered_etl_background_execute: '已触发 ETL, 后台执行中',
+        phrase_21459: '已清除',
       },
       templatetext: {
-        l492_: '立即导入',
-        l492_dry_run: '执行 dry-run',
-        l610_: '展开全部 ',
-        l610_10: '收起 (只显示前 10 行)',
+        immediately_import: '立即导入',
+        execute_dry_run: '执行 dry-run',
+        expand_all: '展开全部 ',
+        collapse_show_front_rows: '收起 (只显示前 10 行)',
       },
       warning: {
 
@@ -195,46 +196,46 @@ export default {
     },
     helpview: {
       string: {
-        l124_xlsx: '拖拽 XLSX 到此',
-        l127_: '搜索',
-        l12_cross_references_oem_brand_mann_bosch_ma: '替代品牌厂家名 (cross_references.oem_brand), 例: Mann, Bosch, Mahle',
+        xlsx_to: '拖拽 XLSX 到此',
+        search: '搜索',
+        alternative_brand_cross_references: '替代品牌厂家名 (cross_references.oem_brand), 例: Mann, Bosch, Mahle',
 
-        l13_oil_filter_fuel_filter: '产品主名称 (例: Oil Filter, Fuel Filter), 影响前台产品页',
+        product_name_e_g: '产品主名称 (例: Oil Filter, Fuel Filter), 影响前台产品页',
 
-        l14_of100: '产品副名称/型号后缀 (例: OF100)',
-        l15_5_oil_fuel_air_cabin_others_sort_order: '5 固定分类: oil / fuel / air / cabin / others, sort_order 决定前台排序',
-        l15_type: '类型 (Type)',
-        l16_oem_5_27m_distinct_typeahead: '替代品牌 OEM 编号 (5.27M distinct), 字典化便于 typeahead 联想',
-        l17_2_cellulose_a020: '滤材名称 + 型号 (2 字段字典), 例: Cellulose / A020',
-        l17_media: '介质 (Media)',
-        l18_4_agriculture_commercial_construction_ot: '机器品牌 + 型号 + 名称, 按 4 大类聚合: Agriculture / Commercial / Construction / others',
-        l18_machine: '机型 (Machine)',
-        l19_: '发动机品牌 + 型号',
-        l19_engine: '发动机 (Engine)',
-        l25_oem: '为什么输入 OEM 编号后无法搜索?',
-        l25_a_oem: '检查该 OEM 是否在产品表 oem2 字段里 (注意: 不是 cross_references.oem_brand). 前台公开页用 oemNoDisplay / oem2, 后台搜索用任意一个字段.',
-        l26_oem_oem2_cross_references_oem_brand_oemn: '检查该 OEM 是否在产品表 oem2 字段里 (注意: 不是 cross_references.oem_brand). 前台公开页用 oemNoDisplay',
-        l29_typeahead: '为什么新增产品时 typeahead 联想不到想要的值?',
-        l29_a_typeahead: '字典是后台维护的, 需先在 "字典管理" → 对应字典 → 新增 value. typeahead 只返回字典内已存在的值 (前 20 条按 sort_order 排).',
-        l30_: '字典管理',
-        l33_h1_100_0: '尺寸搜索 (H1 = 100) 返回 0 条结果, 但库里有这个产品?',
-        l34_5mm_95_105_h1_110_h1_id: '尺寸搜索默认容差 ±5mm (固定, 不可改), 即 95-105 之间. 如果产品 H1 = 110, 不会命中. 改用更小的 H1 值或精确 ID 查询.',
-        l37_etl_reading: 'ETL 触发后卡在 reading 状态?',
-        l37_a_etl: 'reading 阶段是流式 COPY 暂存, 大文件 (1M 行) 可能 30-60s. 如超过 5 分钟无进度, 检查后端日志 (output/SPIKE-REPORT-*.md) 看是否有 SQL 错误.',
-        l41_: '怎么批量删除产品?',
-        l41_a_batch: '后台产品列表勾选多行 → 顶部 "批量停售" 按钮. 停售 = is_discontinued=true, 前台不展示, 历史数据保留. 如需物理删除, 走 SQL (慎用).',
-        l45_: '上传图片后前台不显示?',
-        l45_a_image: '检查 (1) 产品 isPublished=true (上架) (2) slot 1-6 范围 (3) 浏览器 console 看 OSS 预签名 URL 1 h 有效. 如过期, 重新加载产品页.',
-        l46_1_ispublished_true_2_slot_1_6_3_console_: '检查 (1) 产品 isPublished=true (上架) (2) slot 1-6 范围 (3) 浏览器 console 看 OSS 预签名 URL 1 ',
-        l82_: '进入后台',
-        l84_full_load_insert_only_upsert: ' + 模式 (full-load / insert-only / upsert), 点 ',
+        product_name_model_back: '产品副名称/型号后缀 (例: OF100)',
+        category_oil_fuel_air: '5 固定分类: oil / fuel / air / cabin / others, sort_order 决定前台排序',
+        type_type: '类型 (Type)',
+        alternative_brand_oem_number: '替代品牌 OEM 编号 (5.27M distinct), 字典化便于 typeahead 联想',
+        filter_media_name_model: '滤材名称 + 型号 (2 字段字典), 例: Cellulose / A020',
+        media_media: '介质 (Media)',
+        machine_brand_model_name: '机器品牌 + 型号 + 名称, 按 4 大类聚合: Agriculture / Commercial / Construction / others',
+        machine_model_machine: '机型 (Machine)',
+        engine_brand_model: '发动机品牌 + 型号',
+        engine_engine: '发动机 (Engine)',
+        for_input_oem_number: '为什么输入 OEM 编号后无法搜索?',
+        check_if_oem_is: '检查该 OEM 是否在产品表 oem2 字段里 (注意: 不是 cross_references.oem_brand). 前台公开页用 oemNoDisplay / oem2, 后台搜索用任意一个字段.',
+        oem_yes_no_in: '检查该 OEM 是否在产品表 oem2 字段里 (注意: 不是 cross_references.oem_brand). 前台公开页用 oemNoDisplay',
+        for_add_product_typeahead: '为什么新增产品时 typeahead 联想不到想要的值?',
+        dictionary_is_maintained_in: '字典是后台维护的, 需先在 "字典管理" → 对应字典 → 新增 value. typeahead 只返回字典内已存在的值 (前 20 条按 sort_order 排).',
+        dictionary_management: '字典管理',
+        dimensions_search_h_back: '尺寸搜索 (H1 = 100) 返回 0 条结果, 但库里有这个产品?',
+        dimensions_search_default_mm: '尺寸搜索默认容差 ±5mm (固定, 不可改), 即 95-105 之间. 如果产品 H1 = 110, 不会命中. 改用更小的 H1 值或精确 ID 查询.',
+        etl_trigger_back_in: 'ETL 触发后卡在 reading 状态?',
+        reading_phase_is_streaming: 'reading 阶段是流式 COPY 暂存, 大文件 (1M 行) 可能 30-60s. 如超过 5 分钟无进度, 检查后端日志 (output/SPIKE-REPORT-*.md) 看是否有 SQL 错误.',
+        batch_delete_product: '怎么批量删除产品?',
+        in_admin_product_list: '后台产品列表勾选多行 → 顶部 "批量停售" 按钮. 停售 = is_discontinued=true, 前台不展示, 历史数据保留. 如需物理删除, 走 SQL (慎用).',
+        upload_image_back_frontend_sho: '上传图片后前台不显示?',
+        check_product_ispublished_true: '检查 (1) 产品 isPublished=true (上架) (2) slot 1-6 范围 (3) 浏览器 console 看 OSS 预签名 URL 1 h 有效. 如过期, 重新加载产品页.',
+        product_ispublished_true_listed: '检查 (1) 产品 isPublished=true (上架) (2) slot 1-6 范围 (3) 浏览器 console 看 OSS 预签名 URL 1 ',
+        enter_admin: '进入后台',
+        mode_full_load_insert: ' + 模式 (full-load / insert-only / upsert), 点 ',
       },
       title: {
-        l71_: '快速开始',
-        l72_: '字典使用规范',
-        l73_: '批量导入',
-        l74_: '搜索容差',
-        l75_: '常见问题',
+        start: '快速开始',
+        en_v4: '字典使用规范',
+        batch_import: '批量导入',
+        search_v2: '搜索容差',
+        common: '常见问题',
       },
     },
     machinesview: {
@@ -249,14 +250,14 @@ export default {
 
 
 
-        l205_: '分类',
+        category: '分类',
 
       },
       placeholder: {
 
-        l198_0_451_103_001: '例: 0 451 103 001 (可空)',
-        l201_tractor_x300: '例: Tractor X300 (可空)',
-        l206_4: '选择 4 大类之一',
+        e_g_empty: '例: 0 451 103 001 (可空)',
+        e_g_tractor_x: '例: Tractor X300 (可空)',
+        select: '选择 4 大类之一',
       },
       string: {
 
@@ -269,12 +270,12 @@ export default {
 
       },
       title: {
-        l192_: '新增机型',
-        l192__2: '编辑机型',
+        add_machine_model: '新增机型',
+        edit_machine_model: '编辑机型',
       },
       warning: {
-        l63_: '机型品牌不能为空',
-        l64_200: '机型品牌长度不能超过 200',
+        machine_model_brand_cannot_be: '机型品牌不能为空',
+        machine_model_brand_length: '机型品牌长度不能超过 200',
 
       },
     },
@@ -287,14 +288,14 @@ export default {
 
       },
       label: {
-        l156_media: 'Media 名称',
-        l159_media: 'Media 型号',
+        media_name: 'Media 名称',
+        media_model: 'Media 型号',
 
       },
       placeholder: {
-        l110_media: '搜索 Media 名称或型号',
-        l157_cellulose_synthetic_carbon: '例: Cellulose / Synthetic / Carbon',
-        l160_5_m_10_m: '例: 5μm / 10μm (可空)',
+        search_media_name_or: '搜索 Media 名称或型号',
+        e_g_cellulose_synthetic: '例: Cellulose / Synthetic / Carbon',
+        e_g_m_m: '例: 5μm / 10μm (可空)',
       },
       string: {
 
@@ -307,12 +308,12 @@ export default {
 
       },
       title: {
-        l154_media: '新增 Media',
-        l154_media_2: '编辑 Media',
+        add_media: '新增 Media',
+        edit_media: '编辑 Media',
       },
       warning: {
-        l49_media: 'Media 名称不能为空',
-        l50_media_100: 'Media 名称长度不能超过 100',
+        media_name_cannot_be: 'Media 名称不能为空',
+        media_name_length: 'Media 名称长度不能超过 100',
 
       },
     },
@@ -325,14 +326,14 @@ export default {
 
       },
       placeholder: {
-        l212_: '搜索品牌',
+        search_brand: '搜索品牌',
 
       },
       string: {
 
 
 
-        l280_: '新增品牌',
+        add_brand: '新增品牌',
 
 
       },
@@ -345,12 +346,12 @@ export default {
       },
       title: {
 
-        l292_oem: '新增 OEM 品牌',
-        l292_oem_2: '编辑 OEM 品牌',
+        add_oem_brand: '新增 OEM 品牌',
+        edit_oem_brand: '编辑 OEM 品牌',
       },
       warning: {
-        l65_: '品牌名不能为空',
-        l69_100: '品牌名长度不能超过 100',
+        brand_cannot_be_empty: '品牌名不能为空',
+        brand_length: '品牌名长度不能超过 100',
       },
     },
     oemno3sview: {
@@ -365,8 +366,8 @@ export default {
 
       },
       placeholder: {
-        l103_oem_3: '搜索 OEM 3',
-        l148_11427622448: '例: 11427622448',
+        search_oem: '搜索 OEM 3',
+        e_g: '例: 11427622448',
       },
       string: {
 
@@ -379,49 +380,49 @@ export default {
 
       },
       title: {
-        l145_oem_3: '新增 OEM 3',
-        l145_oem_3_2: '编辑 OEM 3',
+        add_oem: '新增 OEM 3',
+        edit_oem: '编辑 OEM 3',
       },
       warning: {
-        l43_oem_3: 'OEM 3 不能为空',
-        l44_oem_3_200: 'OEM 3 长度不能超过 200',
+        oem_cannot_be_empty: 'OEM 3 不能为空',
+        oem_length: 'OEM 3 长度不能超过 200',
 
       },
     },
     perfview: {
       label: {
-        l201_: '暂停自动刷新',
-        l201__2: '开启自动刷新',
-        l209_: '刷新间隔',
+        pause_auto_refresh: '暂停自动刷新',
+        on_auto_refresh: '开启自动刷新',
+        refresh: '刷新间隔',
       },
       string: {
-        l150_p95_crit: 'P95 = {ms}ms (≥1000ms 严重)',
-        l152_p95_warn: 'P95 = {ms}ms (≥500ms 警告)',
-        l155_err_crit: '错误率 = {pct}% (≥10% 严重)',
-        l157_err_warn: '错误率 = {pct}% (≥5% 警告)',
+        p_ms_ms_ms: 'P95 = {ms}ms (≥1000ms 严重)',
+        p_ms_ms_ms_v2: 'P95 = {ms}ms (≥500ms 警告)',
+        error_rate_pct_critical: '错误率 = {pct}% (≥10% 严重)',
+        error_rate_pct_warning: '错误率 = {pct}% (≥5% 警告)',
 
-        l165_: '就绪',
-        l166_: '降级',
+        en_v5: '就绪',
+        downgrade: '降级',
 
-        l84_: '刷新失败',
+        refresh_failed: '刷新失败',
       },
       templatetext: {
-        l203_: '⏸ 暂停',
-        l221_: '刷新中…',
-        l221__2: '↻ 刷新',
-        l240_: '⚠ 严重告警',
-        l240__2: '⚠ 警告',
+        pause_v2: '⏸ 暂停',
+        refresh_v2: '刷新中…',
+        refresh: '↻ 刷新',
+        alert: '⚠ 严重告警',
+        warning: '⚠ 警告',
 
-        l303__2: '存活',
+        en: '存活',
 
-        l336_appsettings_json: 'appsettings.json (兜底)',
-        l336_db: 'DB (已加载)',
+        en_appsettings_json: 'appsettings.json (兜底)',
+        db_load: 'DB (已加载)',
       },
     },
     productformview: {
       error: {
-        l165_: '数据已被其他管理员修改, 请刷新后重试',
-        l171_oem: '产品已存在, 请检查 OEM 号',
+        data_has_been_modified_by: '数据已被其他管理员修改, 请刷新后重试',
+        product_already_exists_please: '产品已存在, 请检查 OEM 号',
 
 
 
@@ -430,66 +431,66 @@ export default {
 
 
 
-        l362_oem_2: 'OEM 2 (必填)',
+        oem_required: 'OEM 2 (必填)',
 
-        l366_: '备注',
-
-
-
-
-        l430_lr: '旁通阀 LR',
-        l431_hr: '旁通阀 HR',
-
-        l433_bar: '破裂压力 (bar)',
+        remark: '备注',
 
 
 
-        l474_: '母箱数量',
-        l478_kg: '母箱重 (kg)',
-        l482_mm: '母箱长 (mm)',
-        l486_mm: '母箱宽 (mm)',
-        l490_mm: '母箱高 (mm)',
-        l494_m: '母箱体积 (m³)',
+
+        bypass_valve_lr: '旁通阀 LR',
+        bypass_valve_hr: '旁通阀 HR',
+
+        collapse_pressure_bar: '破裂压力 (bar)',
+
+
+
+        master_box_qty: '母箱数量',
+        master_carton_kg: '母箱重 (kg)',
+        master_carton_length_mm: '母箱长 (mm)',
+        master_carton_width_mm: '母箱宽 (mm)',
+        master_carton_height_mm: '母箱高 (mm)',
+        master_box_volume_m: '母箱体积 (m³)',
       },
       placeholder: {
 
 
-        l379_: '品牌 (输入自动补全)',
-        l392_oem_3: 'OEM 3 (输入自动补全)',
+        brand_input_auto: '品牌 (输入自动补全)',
+        oem_input_auto: 'OEM 3 (输入自动补全)',
 
-        l424_name_model_or: '输入自动补全 (name/model OR 匹配)',
-
-
-        l512_: '品牌 (必填)',
-        l516_: '型号 (必填)',
+        input_auto_name_model: '输入自动补全 (name/model OR 匹配)',
 
 
-        l525_: '发动机型号',
+        brand_required: '品牌 (必填)',
+        model_required: '型号 (必填)',
+
+
+        engine_model: '发动机型号',
       },
       string: {
-        l164_: '已被修改',
-        l164__2: '已被其他用户修改',
-        l291_slot_uploaded: 'Slot {slot} 上传成功',
-        l312_slot_deleted: 'Slot {slot} 已删除',
-        l340_edit_product: '编辑产品 #{id}',
-        l375_xrefs: '② 交叉引用 ({count})',
-        l510_apps: '⑥ 适用车型 ({count})',
+        by_modify: '已被修改',
+        by_user_modify: '已被其他用户修改',
+        slot_slot_uploaded: 'Slot {slot} 上传成功',
+        slot_slot_deleted: 'Slot {slot} 已删除',
+        edit_product_id: '编辑产品 #{id}',
+        cross_reference_count: '② 交叉引用 ({count})',
+        machine_applications_count: '⑥ 适用车型 ({count})',
       },
       success: {
-        l148_: '已保存',
-        l151_: '已创建',
+        saved: '已保存',
+        created: '已创建',
       },
       templatetext: {
-        l338_: '新增产品',
+        add_product: '新增产品',
       },
       title: {
-        l346_: '基础信息',
-        l401_mm: '③ 尺寸 (mm)',
+        basic_info: '基础信息',
+        dimensions_mm: '③ 尺寸 (mm)',
 
-        l533_1_6: '⑦ 图片 (1-6 槽位)',
+        image: '⑦ 图片 (1-6 槽位)',
       },
       warning: {
-        l282_: '请先保存产品再上传图片',
+        please_first_save_product_then: '请先保存产品再上传图片',
       },
     },
     productname1sview: {
@@ -501,8 +502,8 @@ export default {
 
       },
       placeholder: {
-        l176_1: '搜索产品名 1',
-        l232_oil_filter: '例: OIL FILTER',
+        search_product_name: '搜索产品名 1',
+        e_g_oil_filter: '例: OIL FILTER',
       },
       string: {
 
@@ -520,12 +521,12 @@ export default {
       },
       title: {
 
-        l229_1: '新增产品名 1',
-        l229_1_2: '编辑产品名 1',
+        add_product: '新增产品名 1',
+        edit_product: '编辑产品名 1',
       },
       warning: {
-        l58_1: '产品名 1 不能为空',
-        l59_1_200: '产品名 1 长度不能超过 200',
+        product_name_cannot_be: '产品名 1 不能为空',
+        product_name_length: '产品名 1 长度不能超过 200',
       },
     },
     productname2sview: {
@@ -540,8 +541,8 @@ export default {
 
       },
       placeholder: {
-        l103_2: '搜索产品名 2',
-        l148_spin_on: '例: SPIN-ON',
+        search_product_name: '搜索产品名 2',
+        e_g_spin_on: '例: SPIN-ON',
       },
       string: {
 
@@ -554,62 +555,62 @@ export default {
 
       },
       title: {
-        l145_2: '新增产品名 2',
-        l145_2_2: '编辑产品名 2',
+        add_product: '新增产品名 2',
+        edit_product: '编辑产品名 2',
       },
       warning: {
-        l43_2: '产品名 2 不能为空',
-        l44_2_200: '产品名 2 长度不能超过 200',
+        product_name_cannot_be: '产品名 2 不能为空',
+        product_name_length: '产品名 2 长度不能超过 200',
 
       },
     },
     productsview: {
       aria: {
-        l297_oem2: 'OEM 2 搜索',
-        l298_mr1: 'MR.1 搜索',
-        l299_product_name: '产品名搜索',
-        l300_type: '按类型筛选',
-        l307_oem3_batch: 'OEM 3 批量搜索',
+        oem_search: 'OEM 2 搜索',
+        mr_search: 'MR.1 搜索',
+        product_name_search: '产品名搜索',
+        filter_by_type: '按类型筛选',
+        oem_batch_search: 'OEM 3 批量搜索',
       },
       label: {
 
 
 
-        l349_: '停售',
-        l354_: '更新',
-        l357_: '操作',
+        discontinued: '停售',
+        update: '更新',
+        action: '操作',
 
-        l513_: '字段',
-        l514_: '新值',
+        field: '字段',
+        value: '新值',
       },
       placeholder: {
 
-        l303_oem_3: 'OEM 3 批量',
+        oem_batch_count: 'OEM 3 批量',
 
 
 
-        l397_: '效率',
+        efficiency: '效率',
 
 
 
 
       },
       string: {
-        l309_: '全部列',
-        l309__2: '核心列',
+        all_columns: '全部列',
+        columns: '核心列',
       },
       success: {
-        l157_: '已停售',
+        discontinued_v2: '已停售',
 
       },
       title: {
-        l385_: '高级筛选',
-        l435_: '变更历史',
+        filter: '高级筛选',
+        en_v6: '变更历史',
       },
       warning: {
 
-        l234_2_6: '请选择 2-6 个产品',
-        l238_6: '最多对比 6 个',
+        please_select_pcs_product: '请选择 2-6 个产品',
+        at_most_compare_pcs: '最多对比 6 个',
       },
     },
     typesview: {
@@ -624,8 +625,8 @@ export default {
 
       },
       placeholder: {
-        l113_type: '搜索 Type',
-        l158_oil_fuel_air_cabin_others: '例: oil / fuel / air / cabin / others',
+        search_type: '搜索 Type',
+        e_g_oil_fuel: '例: oil / fuel / air / cabin / others',
       },
       string: {
 
@@ -636,56 +637,56 @@ export default {
 
 
 
-        l88_p2_3: '排序已保存, 前台产品页 P2.3 立即生效',
+        sort_order_saved_frontend: '排序已保存, 前台产品页 P2.3 立即生效',
       },
       title: {
-        l155_type: '新增 Type',
-        l155_type_2: '编辑 Type',
+        add_type: '新增 Type',
+        edit_type: '编辑 Type',
       },
       warning: {
-        l45_type: 'Type 不能为空',
-        l46_type_50: 'Type 长度不能超过 50',
+        type_cannot_be_empty: 'Type 不能为空',
+        type_length: 'Type 长度不能超过 50',
       },
     },
     usersview: {
       label: {
-        l284_: '用户列表',
-        l342_: '登录审计',
+        user_list: '用户列表',
+        login_audit: '登录审计',
 
-        l389_: '密码',
+        password: '密码',
 
 
 
-        l443_: '启用状态',
-        l456_: '新密码',
+        enable_status: '启用状态',
+        password_v2: '新密码',
       },
       placeholder: {
-        l387_: '登录用户名',
+        login_username: '登录用户名',
 
 
       },
       string: {
 
-        l199_reset_pwd: '已重置 {user} 的密码',
-        l56_admin: '管理员 (admin)',
-        l57_operator: '操作员 (operator)',
-        l58_viewer: '只读 (viewer)',
+        password_of_user_has: '已重置 {user} 的密码',
+        admin_admin: '管理员 (admin)',
+        action_operator: '操作员 (operator)',
+        read_only_viewer: '只读 (viewer)',
       },
       success: {
-        l115_: '用户已创建',
-        l147_: '用户已更新',
+        user_created: '用户已创建',
+        user_updated: '用户已更新',
 
-        l252_: '已退出登录',
+        logout: '已退出登录',
       },
       title: {
-        l384_: '新增用户',
-        l424_edit_user: '编辑用户: {user}',
-        l456_reset_pwd: '重置密码: {user}',
+        add_user: '新增用户',
+        edit_user_user: '编辑用户: {user}',
+        reset_password_user: '重置密码: {user}',
       },
       warning: {
-        l103_8: '密码至少 8 个字符',
-        l191_8: '新密码至少 8 个字符',
-        l99_: '用户名不能为空',
+        password_at_least_pcs: '密码至少 8 个字符',
+        password_at_least_pcs_v2: '新密码至少 8 个字符',
+        username_cannot_be_empty: '用户名不能为空',
       },
     },
   },
@@ -738,6 +739,8 @@ export default {
 
       fault: '故障',
 
+      ready: '就绪',
+
       efficiency_1: '效率 1',
 
       efficiency_2: '效率 2',
@@ -745,6 +748,8 @@ export default {
       bypass_pressure: '旁通压力',
 
       bypass_valve_count: '旁通阀数',
+
+      downgrade: '降级',
 
       no_active_task_to_cancel: '无活跃任务可取消',
 
@@ -821,6 +826,8 @@ export default {
       restored: '已恢复',
 
       sort_order_saved: '排序已保存',
+
+      ready: '就绪',
 
       confirm: '确认',
 

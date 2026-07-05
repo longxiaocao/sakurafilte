@@ -148,10 +148,10 @@ async function save() {
     if (isEdit.value) {
       // E2E BD.3 修复 v2: 带回 GET 时的 RowVersion, 后端用此值检测并发冲突
       await adminProductApi.update(productId.value, { ...form, rowVersion: rowVersion.value }, 'admin')
-      ElMessage.success(t('admin.productformview.success.l148_'))
+      ElMessage.success(t('admin.productformview.success.saved'))
     } else {
       await adminProductApi.create(form, 'admin')
-      ElMessage.success(t('admin.productformview.success.l151_'))
+      ElMessage.success(t('admin.productformview.success.created'))
     }
     router.push('/admin/products')
   } catch (e: any) {
@@ -164,14 +164,14 @@ async function save() {
       //   后端 ProblemDetails.title 区分: "产品已存在" / "数据已被修改"
       const title = e?.response?.data?.title || e?.problem?.title || ''
       const detail = e?.response?.data?.detail || e?.problem?.detail || ''
-      if (title.includes(t('admin.productformview.string.l164_')) || detail.includes(t('admin.productformview.string.l164__2')) || detail.includes('lost update')) {
-        ElMessage.error(t('admin.productformview.error.l165_'))
+      if (title.includes(t('admin.productformview.string.by_modify')) || detail.includes(t('admin.productformview.string.by_user_modify')) || detail.includes('lost update')) {
+        ElMessage.error(t('admin.productformview.error.data_has_been_modified_by'))
         // 自动重新加载最新数据, 避免用户手动刷新
         // P2-7 修复 v2: 保存 timer 引用, 卸载时清理, 避免用户导航离开后意外 reload
         if (reloadTimer !== null) clearTimeout(reloadTimer)
         reloadTimer = setTimeout(() => window.location.reload(), 1500)
       } else {
-        ElMessage.error(t('admin.productformview.error.l171_oem'))
+        ElMessage.error(t('admin.productformview.error.product_already_exists_please'))
       }
     }
   } finally {
@@ -282,14 +282,14 @@ async function uploadImage(slot: number, e: Event) {
   const file = input.files?.[0]
   if (!file) return
   if (!isEdit.value) {
-    ElMessage.warning(t('admin.productformview.warning.l282_'))
+    ElMessage.warning(t('admin.productformview.warning.please_first_save_product_then'))
     return
   }
   if (uploading.value) return
   uploading.value = true
   try {
     const r = await imageApi.upload(productId.value, slot, file)
-    ElMessage.success(t('admin.productformview.string.l291_slot_uploaded', { slot }))
+    ElMessage.success(t('admin.productformview.string.slot_slot_uploaded', { slot }))
     images.value[slot - 1] = r
   } catch {
     // 已被拦截器
@@ -310,7 +310,7 @@ async function removeImage(slot: number) {
   try {
     await imageApi.remove(productId.value, slot)
     images.value[slot - 1] = undefined as any
-    ElMessage.success(t('admin.productformview.string.l312_slot_deleted', { slot }))
+    ElMessage.success(t('admin.productformview.string.slot_slot_deleted', { slot }))
   } catch {
     // 已被拦截器
   } finally {
@@ -338,7 +338,7 @@ onBeforeUnmount(() => {
   <div class="p-3 max-w-screen-xl mx-auto" v-loading="loading">
     <div class="flex items-center gap-2 mb-3">
       <el-button @click="router.back()" size="small">返回</el-button>
-      <h1 class="text-lg font-medium">{{ isEdit ? t('admin.productformview.string.l340_edit_product', { id: productId }) : t('admin.productformview.templatetext.l338_') }}</h1>
+      <h1 class="text-lg font-medium">{{ isEdit ? t('admin.productformview.string.edit_product_id', { id: productId }) : t('admin.productformview.templatetext.add_product') }}</h1>
       <div class="flex-1" />
       <el-button type="primary" @click="save" :loading="saving">保存</el-button>
     </div>
@@ -346,7 +346,7 @@ onBeforeUnmount(() => {
     <el-form :model="form" label-position="top" label-width="100px" size="small">
       <el-collapse v-model="activeNames">
         <!-- 分区 1: 基础信息 -->
-        <el-collapse-item :title="t('admin.productformview.title.l346_')" name="1">
+        <el-collapse-item :title="t('admin.productformview.title.basic_info')" name="1">
           <div class="grid grid-cols-3 gap-3">
             <!-- P2.2: productName1/2/type 全部 typeahead -->
             <el-form-item :label="t('common.action.product_name_1')">
@@ -362,24 +362,24 @@ onBeforeUnmount(() => {
                 placeholder="oil/fuel/air/cabin/others" clearable size="small" :trigger-on-focus="true" :debounce="200" />
             </el-form-item>
             <el-form-item label="MR.1"><el-input v-model="form.mr1" /></el-form-item>
-            <el-form-item :label="t('admin.productformview.label.l362_oem_2')"><el-input v-model="form.oem2" /></el-form-item>
+            <el-form-item :label="t('admin.productformview.label.oem_required')"><el-input v-model="form.oem2" /></el-form-item>
             <el-form-item :label="t('common.field.publish')">
               <el-switch v-model="form.isPublished" />
             </el-form-item>
-            <el-form-item :label="t('admin.productformview.label.l366_')" class="col-span-3">
+            <el-form-item :label="t('admin.productformview.label.remark')" class="col-span-3">
               <el-input v-model="form.remark" type="textarea" :rows="2" />
             </el-form-item>
           </div>
         </el-collapse-item>
 
         <!-- 分区 2: 交叉引用 -->
-        <el-collapse-item :title="`t('admin.productformview.string.l375_xrefs', { count: form.crossReferences.length })`" name="2">
+        <el-collapse-item :title="`t('admin.productformview.string.cross_reference_count', { count: form.crossReferences.length })`" name="2">
           <div v-for="(x, i) in form.crossReferences" :key="i" class="flex gap-2 mb-2">
             <!-- Day 10: P1.3 自动补全 — 字典为空时降级为自由输入 -->
             <el-autocomplete
               v-model="x.oemBrand"
               :fetch-suggestions="queryOemBrands"
-              :placeholder="t('admin.productformview.placeholder.l379_')"
+              :placeholder="t('admin.productformview.placeholder.brand_input_auto')"
               style="width: 200px"
               clearable
               size="small"
@@ -392,7 +392,7 @@ onBeforeUnmount(() => {
             </el-autocomplete>
             <!-- P2.2: OEM 3 typeahead -->
             <el-autocomplete v-model="x.oemNo3" :fetch-suggestions="queryOemNo3"
-              :placeholder="t('admin.productformview.placeholder.l392_oem_3')" style="width: 240px" clearable size="small"
+              :placeholder="t('admin.productformview.placeholder.oem_input_auto')" style="width: 240px" clearable size="small"
               :trigger-on-focus="true" :debounce="200" />
             <el-input v-model="x.productName1" :placeholder="t('common.field.product_name')" size="small" />
             <el-button text type="danger" @click="removeXref(i)">删除</el-button>
@@ -401,7 +401,7 @@ onBeforeUnmount(() => {
         </el-collapse-item>
 
         <!-- 分区 3: 尺寸 -->
-        <el-collapse-item :title="t('admin.productformview.title.l401_mm')" name="3">
+        <el-collapse-item :title="t('admin.productformview.title.dimensions_mm')" name="3">
           <div class="grid grid-cols-4 gap-3">
             <el-form-item label="D1"><el-input-number v-model="form.d1Mm" :min="0" :precision="2" /></el-form-item>
             <el-form-item label="D2"><el-input-number v-model="form.d2Mm" :min="0" :precision="2" /></el-form-item>
@@ -424,16 +424,16 @@ onBeforeUnmount(() => {
             <!-- P2.2: Media 字段 typeahead (2 字段) -->
             <el-form-item label="Media">
               <el-autocomplete v-model="form.media" :fetch-suggestions="queryMedia"
-                :placeholder="t('admin.productformview.placeholder.l424_name_model_or')" clearable size="small"
+                :placeholder="t('admin.productformview.placeholder.input_auto_name_model')" clearable size="small"
                 :trigger-on-focus="true" :debounce="200" value-key="value" />
             </el-form-item>
             <el-form-item label="MediaModel"><el-input v-model="form.mediaModel" /></el-form-item>
             <el-form-item :label="t('common.field.efficiency_1')"><el-input v-model="form.efficiency1" /></el-form-item>
             <el-form-item :label="t('common.field.efficiency_2')"><el-input v-model="form.efficiency2" /></el-form-item>
-            <el-form-item :label="t('admin.productformview.label.l430_lr')"><el-input-number v-model="form.bypassValveLr" :min="0" :precision="2" /></el-form-item>
-            <el-form-item :label="t('admin.productformview.label.l431_hr')"><el-input-number v-model="form.bypassValveHr" :min="0" :precision="2" /></el-form-item>
+            <el-form-item :label="t('admin.productformview.label.bypass_valve_lr')"><el-input-number v-model="form.bypassValveLr" :min="0" :precision="2" /></el-form-item>
+            <el-form-item :label="t('admin.productformview.label.bypass_valve_hr')"><el-input-number v-model="form.bypassValveHr" :min="0" :precision="2" /></el-form-item>
             <el-form-item :label="t('common.field.bypass_pressure')"><el-input-number v-model="form.bypassPressure" :min="0" :precision="2" /></el-form-item>
-            <el-form-item :label="t('admin.productformview.label.l433_bar')"><el-input-number v-model="form.collapsePressureBar" :min="0" :precision="2" /></el-form-item>
+            <el-form-item :label="t('admin.productformview.label.collapse_pressure_bar')"><el-input-number v-model="form.collapsePressureBar" :min="0" :precision="2" /></el-form-item>
             <el-form-item :label="t('common.action.seal_material')"><el-input v-model="form.sealingMaterial" /></el-form-item>
             <el-form-item :label="t('common.field.temperature_range')"><el-input v-model="form.tempRange" /></el-form-item>
           </div>
@@ -474,27 +474,27 @@ onBeforeUnmount(() => {
               </el-input>
               <FieldHelpPopover field-key="volumePerCartonM3" />
             </el-form-item>
-            <el-form-item :label="t('admin.productformview.label.l474_')">
+            <el-form-item :label="t('admin.productformview.label.master_box_qty')">
               <el-input-number v-model="form.masterBoxQty" :min="0" />
               <FieldHelpPopover field-key="masterBoxQty" />
             </el-form-item>
-            <el-form-item :label="t('admin.productformview.label.l478_kg')">
+            <el-form-item :label="t('admin.productformview.label.master_carton_kg')">
               <el-input-number v-model="form.masterBoxWeightKgs" :min="0" :precision="3" />
               <FieldHelpPopover field-key="masterBoxWeightKgs" />
             </el-form-item>
-            <el-form-item :label="t('admin.productformview.label.l482_mm')">
+            <el-form-item :label="t('admin.productformview.label.master_carton_length_mm')">
               <el-input-number v-model="form.masterBoxLengthMm" :min="0" :precision="2" />
               <FieldHelpPopover field-key="masterBoxLengthMm" />
             </el-form-item>
-            <el-form-item :label="t('admin.productformview.label.l486_mm')">
+            <el-form-item :label="t('admin.productformview.label.master_carton_width_mm')">
               <el-input-number v-model="form.masterBoxWidthMm" :min="0" :precision="2" />
               <FieldHelpPopover field-key="masterBoxWidthMm" />
             </el-form-item>
-            <el-form-item :label="t('admin.productformview.label.l490_mm')">
+            <el-form-item :label="t('admin.productformview.label.master_carton_height_mm')">
               <el-input-number v-model="form.masterBoxHeightMm" :min="0" :precision="2" />
               <FieldHelpPopover field-key="masterBoxHeightMm" />
             </el-form-item>
-            <el-form-item :label="t('admin.productformview.label.l494_m')">
+            <el-form-item :label="t('admin.productformview.label.master_box_volume_m')">
               <el-input
                 :model-value="masterBoxVolumeText"
                 readonly
@@ -508,15 +508,15 @@ onBeforeUnmount(() => {
         </el-collapse-item>
 
         <!-- 分区 7: 车型 (P2.2: machine/engine 字段全部 typeahead) -->
-        <el-collapse-item :title="`t('admin.productformview.string.l510_apps', { count: form.machineApplications.length })`" name="7">
+        <el-collapse-item :title="`t('admin.productformview.string.machine_applications_count', { count: form.machineApplications.length })`" name="7">
           <div v-for="(m, i) in form.machineApplications" :key="i" class="grid grid-cols-5 gap-2 mb-2">
             <!-- 机型品牌: typeahead -->
             <el-autocomplete v-model="m.machineBrand" :fetch-suggestions="queryMachineBrand"
-              :placeholder="t('admin.productformview.placeholder.l512_')" size="small" clearable :trigger-on-focus="true" :debounce="200"
+              :placeholder="t('admin.productformview.placeholder.brand_required')" size="small" clearable :trigger-on-focus="true" :debounce="200"
               :class="{ 'app-required': isAppRowDirty(m) && !m.machineBrand?.trim() }" />
             <!-- 机型型号: typeahead (与 brand 联动共享查询) -->
             <el-autocomplete v-model="m.machineModel" :fetch-suggestions="queryMachineModel"
-              :placeholder="t('admin.productformview.placeholder.l516_')" size="small" clearable :trigger-on-focus="true" :debounce="200"
+              :placeholder="t('admin.productformview.placeholder.model_required')" size="small" clearable :trigger-on-focus="true" :debounce="200"
               :class="{ 'app-required': isAppRowDirty(m) && !m.machineModel?.trim() }" />
             <el-input v-model="m.modelName" :placeholder="t('common.action.name')" size="small" />
             <!-- 发动机品牌: typeahead -->
@@ -525,7 +525,7 @@ onBeforeUnmount(() => {
             <div class="flex gap-1">
               <!-- 发动机型号: typeahead -->
               <el-autocomplete v-model="m.engineType" :fetch-suggestions="queryEngineType"
-                :placeholder="t('admin.productformview.placeholder.l525_')" size="small" clearable :trigger-on-focus="true" :debounce="200" />
+                :placeholder="t('admin.productformview.placeholder.engine_model')" size="small" clearable :trigger-on-focus="true" :debounce="200" />
               <el-button text type="danger" @click="removeApp(i)">×</el-button>
             </div>
           </div>
@@ -533,7 +533,7 @@ onBeforeUnmount(() => {
         </el-collapse-item>
 
         <!-- 分区 8: 图片 (仅编辑) -->
-        <el-collapse-item v-if="isEdit" :title="t('admin.productformview.title.l533_1_6')" name="8">
+        <el-collapse-item v-if="isEdit" :title="t('admin.productformview.title.image')" name="8">
           <div class="grid grid-cols-3 gap-3">
             <div v-for="slot in 6" :key="slot" class="hairline p-2">
               <div class="text-xs text-muted mb-1">Slot {{ slot }}</div>

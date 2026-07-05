@@ -58,8 +58,8 @@ function openEdit(row: ProductName1Item) {
 
 async function saveDialog() {
   const v = dialogForm.productName1.trim()
-  if (!v) { ElMessage.warning(t('admin.productname1sview.warning.l58_1')); return }
-  if (v.length > 200) { ElMessage.warning(t('admin.productname1sview.warning.l59_1_200')); return }
+  if (!v) { ElMessage.warning(t('admin.productname1sview.warning.product_name_cannot_be')); return }
+  if (v.length > 200) { ElMessage.warning(t('admin.productname1sview.warning.product_name_length')); return }
   try {
     if (dialogMode.value === 'create') {
       await dictApi.productName1s.create(v, dialogForm.sortOrder)
@@ -176,7 +176,7 @@ onMounted(load)
       <h1 class="text-lg font-medium">产品名 1 字典</h1>
       <span class="text-xs text-muted">P2.2 后台管理 · 用于产品表单分区 1 product_name_1 自动补全</span>
       <div class="flex-1" />
-      <el-input v-model="searchKw" :placeholder="t('admin.productname1sview.placeholder.l176_1')" clearable size="small"
+      <el-input v-model="searchKw" :placeholder="t('admin.productname1sview.placeholder.search_product_name')" clearable size="small"
         style="width: 200px" @keyup.enter="onSearch" />
       <el-button size="small" @click="onSearch">搜索</el-button>
       <el-checkbox v-model="includeDeleted" @change="load" size="small">含已删</el-checkbox>
@@ -229,10 +229,10 @@ onMounted(load)
     </div>
 
     <el-dialog v-model="dialogOpen"
-      :title="dialogMode === 'create' ? t('admin.productname1sview.title.l229_1') : t('admin.productname1sview.title.l229_1_2')" width="480px">
+      :title="dialogMode === 'create' ? t('admin.productname1sview.title.add_product') : t('admin.productname1sview.title.edit_product')" width="480px">
       <el-form :model="dialogForm" label-width="100px" size="small">
         <el-form-item :label="t('common.action.product_name_1')" required>
-          <el-input v-model="dialogForm.productName1" :placeholder="t('admin.productname1sview.placeholder.l232_oil_filter')" maxlength="200" show-word-limit />
+          <el-input v-model="dialogForm.productName1" :placeholder="t('admin.productname1sview.placeholder.e_g_oil_filter')" maxlength="200" show-word-limit />
         </el-form-item>
         <el-form-item :label="t('common.action.sort_order')">
           <el-input-number v-model="dialogForm.sortOrder" :min="0" :step="10" style="width: 100%" />

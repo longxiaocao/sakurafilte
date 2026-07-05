@@ -63,13 +63,13 @@ function handleFilesDropped(files: File[]) {
   if (inferred) {
     form.entity = inferred
     form.jsonlPath = serverPath
-    ElMessage.success(t('admin.etlview.string.l64_auto_inferred', { entity: inferred, name: f.name }))
+    ElMessage.success(t('admin.etlview.string.auto_recognized_entity_entity', { entity: inferred, name: f.name }))
   } else {
     form.jsonlPath = serverPath
-    ElMessage.info(t('admin.etlview.string.l68_manual_entity', { name: f.name }))
+    ElMessage.info(t('admin.etlview.string.file_filled_name_entity', { name: f.name }))
   }
   if (files.length > 1) {
-    ElMessage.warning(t('admin.etlview.string.l71_first_only', { total: files.length, name: f.name }))
+    ElMessage.warning(t('admin.etlview.string.dropped_total_files_only', { total: files.length, name: f.name }))
   }
 }
 
@@ -78,7 +78,7 @@ onMounted(() => {
   registerDrag({
     onFilesDropped: handleFilesDropped,
     acceptRoute: DEFAULT_ADMIN_ACCEPT,
-    hintText: t('admin.etlview.string.l78_etl')
+    hintText: t('admin.etlview.string.on_etl_file')
   })
 })
 
@@ -111,7 +111,7 @@ async function doTrigger() {
       cascade: form.cascade,    // Day 11 Phase 1: cascade 安全锁
       dryRun: form.dryRun
     })
-    ElMessage.success(form.dryRun ? t('admin.etlview.success.l111_dry_run') : t('admin.etlview.success.l111_etl'))
+    ElMessage.success(form.dryRun ? t('admin.etlview.success.dry_run_validation_completed') : t('admin.etlview.success.triggered_etl_background_execute'))
     // 触发后立即拉一次进度
     await pollOnce()
     // dry-run 模式下 r 是 { dryRun, file, mode, lines, sizeBytes }
@@ -219,7 +219,7 @@ function connectSSE() {
   es.onerror = () => {
     // 浏览器会自动重连, 这里只打印 (debug 级避免污染生产控制台)
     // WHY console.debug: SSE 临时断开是常态 (代理/网络抖动), 不应被监控告警捕获
-    console.debug(t('admin.etlview.string.l219_sse'))
+    console.debug(t('admin.etlview.string.sse_on_browser_will'))
   }
   eventSource = es
 }
@@ -249,7 +249,7 @@ function clearLastFinished() {
   } catch {
     // 忽略
   }
-  ElMessage.success(t('admin.etlview.success.l249_'))
+  ElMessage.success(t('admin.etlview.success.phrase_21459'))
 }
 
 // Day 9.6: 取消原因枚举白名单
@@ -258,8 +258,8 @@ function clearLastFinished() {
 const reasonCodeOptions = [
   { value: 'USER_REQUEST', label: t('common.field.user_cancelled'), defaultReason: t('common.field.user_cancelled') },
   { value: 'ADMIN_OVERRIDE', label: t('common.field.admin_force_cancel'), defaultReason: t('common.field.admin_force_cancel') },
-  { value: 'TIMEOUT', label: t('admin.etlview.string.l258_'), defaultReason: t('admin.etlview.string.l258__2') },
-  { value: 'SYSTEM_SHUTDOWN', label: t('admin.etlview.string.l259_'), defaultReason: t('admin.etlview.string.l259__2') },
+  { value: 'TIMEOUT', label: t('admin.etlview.string.task_timeout'), defaultReason: t('admin.etlview.string.task_execute') },
+  { value: 'SYSTEM_SHUTDOWN', label: t('admin.etlview.string.system_shutdown_restart'), defaultReason: t('admin.etlview.string.service_close_restart') },
   { value: 'OTHER', label: t('common.field.other_reason'), defaultReason: t('common.field.other_reason') }
 ] as const
 
@@ -272,7 +272,7 @@ async function doCancel() {
   try {
     // 步骤 1: 选择 reason_code 枚举 (Element Plus ElMessageBox 自定义 HTML)
     await ElMessageBox({
-      title: t('admin.etlview.string.l272_etl'),
+      title: t('admin.etlview.string.cancel_etl_task'),
       message: `
         <div style="text-align:left;font-size:13px;line-height:1.6">
           <div style="margin-bottom:8px;color:#606266">请选择取消原因 (会写入历史审计, 按此码聚合):</div>
@@ -290,7 +290,7 @@ async function doCancel() {
         </div>
       `,
       showCancelButton: true,
-      confirmButtonText: t('admin.etlview.buttontext.l290_'),
+      confirmButtonText: t('admin.etlview.buttontext.next'),
       cancelButtonText: t('common.field.no_cancel'),
       type: 'warning',
       dangerouslyUseHTMLString: true
@@ -305,8 +305,8 @@ async function doCancel() {
   }
   // 步骤 2: 询问是否填写更详细的描述 (可选, 留空则用默认)
   try {
-    const r = await ElMessageBox.prompt(t('admin.etlview.info.l305_'), t('admin.etlview.info.l305__2'), {
-      confirmButtonText: t('admin.etlview.buttontext.l306_'),
+    const r = await ElMessageBox.prompt(t('admin.etlview.info.description_empty_default'), t('admin.etlview.info.cancel_note'), {
+      confirmButtonText: t('admin.etlview.buttontext.confirm_cancel'),
       cancelButtonText: t('common.field.no_cancel'),
       inputPlaceholder: reason,
       inputValue: reason,
@@ -321,7 +321,7 @@ async function doCancel() {
   try {
     const r = await etlApi.cancel(reason, reasonCode)
     if (r.cancelled) {
-      ElMessage.warning(t('admin.etlview.string.l323_cancel_signal', { code: reasonCode }))
+      ElMessage.warning(t('admin.etlview.string.cancel_signal_sent_code', { code: reasonCode }))
     } else {
       ElMessage.info(r.reason || t('common.field.no_active_task_to_cancel'))
     }
@@ -351,9 +351,9 @@ onMounted(() => { checkPausedTask() })
 async function doPause() {
   try {
     await ElMessageBox.confirm(
-      t('admin.etlview.string.l353_pause_msg', { resume: t('common.action.resume'), cancel: t('common.field.cancel') }),
-      t('admin.etlview.string.l352_etl'),
-      { type: 'warning', confirmButtonText: t('admin.etlview.buttontext.l353_'), cancelButtonText: t('admin.etlview.buttontext.l353__2') }
+      t('admin.etlview.string.pause_current_etl_task', { resume: t('common.action.resume'), cancel: t('common.field.cancel') }),
+      t('admin.etlview.string.pause_etl_task'),
+      { type: 'warning', confirmButtonText: t('admin.etlview.buttontext.pause'), cancelButtonText: t('admin.etlview.buttontext.pause') }
     )
   } catch { return }
   pausing.value = true
@@ -362,7 +362,7 @@ async function doPause() {
     if (r.paused) {
       ElMessage.warning(`已发送暂停信号, checkpoint_id=${r.checkpointId ?? '?'}, 当前批次跑完后退出`)
     } else {
-      ElMessage.info(r.reason || t('admin.etlview.info.l362_'))
+      ElMessage.info(r.reason || t('admin.etlview.info.task_pause'))
     }
   } catch (e: any) {
     // 已被拦截器处理
@@ -375,16 +375,16 @@ async function doPause() {
 async function doResume() {
   try {
     await ElMessageBox.confirm(
-      t('admin.etlview.string.l375_etl_n_n_paused_checkpoint_id_1_commit'),
-      t('admin.etlview.string.l376_etl'),
-      { type: 'info', confirmButtonText: t('common.action.resume'), cancelButtonText: t('admin.etlview.buttontext.l377__2') }
+      t('admin.etlview.string.resume_pause_etl_task'),
+      t('admin.etlview.string.resume_etl_task'),
+      { type: 'info', confirmButtonText: t('common.action.resume'), cancelButtonText: t('admin.etlview.buttontext.no_resume') }
     )
   } catch { return }
   resuming.value = true
   try {
     const r = await etlApi.resume()
     if (r.resumed) {
-      ElMessage.success(t('admin.etlview.string.l386_resume', { entity: r.entity, checkpoint: r.checkpointId, line: r.nextLineNo }))
+      ElMessage.success(t('admin.etlview.string.resume_triggered_entity_entity', { entity: r.entity, checkpoint: r.checkpointId, line: r.nextLineNo }))
       hasPausedTask.value = false  // Resume 已触发新的 ETL, paused 记录应已不算最新
     } else {
       ElMessage.warning(r.error || t('common.action.restore_failed'))
@@ -419,11 +419,11 @@ function statusTagType(s: string): 'success' | 'warning' | 'info' | 'danger' | '
 function stageLabel(s: string) {
   return (
     {
-      staging: t('admin.etlview.string.l419_copy'),
-      insert: t('admin.etlview.string.l420_insert'),
-      commit: t('admin.etlview.string.l421_commit'),
-      meili: t('admin.etlview.string.l422_meili'),
-      done: t('admin.etlview.string.l423_')
+      staging: t('admin.etlview.string.copy_staging'),
+      insert: t('admin.etlview.string.insert_write_db'),
+      commit: t('admin.etlview.string.commit_submit'),
+      meili: t('admin.etlview.string.meili_sync'),
+      done: t('admin.etlview.string.complete')
     } as Record<string, string>
   )[s] ?? s
 }
@@ -452,7 +452,7 @@ function prettyJson(raw: string): string {
       </template>
 
       <el-form :inline="false" label-width="100px" size="default">
-        <el-form-item :label="t('admin.etlview.label.l450_')">
+        <el-form-item :label="t('admin.etlview.label.entity')">
           <el-radio-group v-model="form.entity" @change="changeEntity">
             <el-radio-button value="products">products</el-radio-button>
             <el-radio-button value="xrefs">xrefs</el-radio-button>
@@ -468,10 +468,10 @@ function prettyJson(raw: string): string {
           </el-radio-group>
         </el-form-item>
 
-        <el-form-item :label="t('admin.etlview.label.l466_')">
+        <el-form-item :label="t('admin.etlview.label.file')">
           <el-input
             v-model="form.jsonlPath"
-            :placeholder="t('admin.etlview.placeholder.l469_jsonl')"
+            :placeholder="t('admin.etlview.placeholder.jsonl_absolute_path')"
             style="width: 500px"
             clearable
           />
@@ -483,7 +483,7 @@ function prettyJson(raw: string): string {
             <!-- Day 11 Phase 1: cascade 安全锁, 仅 products + full-load 显示 -->
             <el-tooltip
               v-if="form.entity === 'products' && form.mode === 'full-load' && !form.dryRun"
-              :content="t('admin.etlview.string.l481_truncate_xrefs_apps_products')"
+              :content="t('admin.etlview.string.on_truncate_clear_xrefs')"
               placement="top"
             >
               <el-checkbox v-model="form.cascade">cascade (清空关联表)</el-checkbox>
@@ -494,7 +494,7 @@ function prettyJson(raw: string): string {
               :disabled="status === 'running'"
               @click="doTrigger"
             >
-              {{ form.dryRun ? t('admin.etlview.templatetext.l492_dry_run') : t('admin.etlview.templatetext.l492_') }}
+              {{ form.dryRun ? t('admin.etlview.templatetext.execute_dry_run') : t('admin.etlview.templatetext.immediately_import') }}
             </el-button>
             <el-button
               v-if="status === 'running'"
@@ -594,9 +594,9 @@ function prettyJson(raw: string): string {
         </div>
       </template>
       <el-descriptions :column="2" size="small" border>
-        <el-descriptions-item :label="t('admin.etlview.label.l592_')">{{ lastDryRun.file }}</el-descriptions-item>
-        <el-descriptions-item :label="t('admin.etlview.label.l593_')">{{ fmtBytes(lastDryRun.sizeBytes) }}</el-descriptions-item>
-        <el-descriptions-item :label="t('admin.etlview.label.l594_')">{{ fmt(lastDryRun.lines) }}</el-descriptions-item>
+        <el-descriptions-item :label="t('admin.etlview.label.file_v2')">{{ lastDryRun.file }}</el-descriptions-item>
+        <el-descriptions-item :label="t('admin.etlview.label.en')">{{ fmtBytes(lastDryRun.sizeBytes) }}</el-descriptions-item>
+        <el-descriptions-item :label="t('admin.etlview.label.rows_count')">{{ fmt(lastDryRun.lines) }}</el-descriptions-item>
         <el-descriptions-item :label="t('common.field.mode')">{{ lastDryRun.mode }}</el-descriptions-item>
       </el-descriptions>
 
@@ -604,7 +604,7 @@ function prettyJson(raw: string): string {
         <div class="text-sm font-semibold mb-1">样本预览 (前 {{ lastDryRun.samples?.length || 0 }} 行 JSON)</div>
         <el-table :data="(showAllSamples ? lastDryRun.samples : lastDryRun.samples.slice(0, 10)).map((s, i) => ({ idx: i + 1, raw: s }))" size="small" border max-height="320">
           <el-table-column prop="idx" label="#" width="50" />
-          <el-table-column :label="t('admin.etlview.label.l602_json')">
+          <el-table-column :label="t('admin.etlview.label.original_json')">
             <template #default="{ row }">
               <pre class="text-xs whitespace-pre-wrap break-all m-0">{{ prettyJson(row.raw) }}</pre>
             </template>
@@ -612,7 +612,7 @@ function prettyJson(raw: string): string {
         </el-table>
         <div class="mt-2 flex justify-end">
           <el-button text size="small" @click="showAllSamples = !showAllSamples">
-            {{ showAllSamples ? t('admin.etlview.templatetext.l610_10') : t('admin.etlview.templatetext.l610_') + (lastDryRun.samples?.length || 0) + $t('admin.etlview.templatetext.l610_') }}
+            {{ showAllSamples ? t('admin.etlview.templatetext.collapse_show_front_rows') : t('admin.etlview.templatetext.expand_all') + (lastDryRun.samples?.length || 0) + $t('admin.etlview.templatetext.expand_all') }}
           </el-button>
         </div>
       </div>
@@ -650,8 +650,8 @@ function prettyJson(raw: string): string {
       <div v-if="lastFinished.recentErrors && lastFinished.recentErrors.length > 0" class="mt-3">
         <div class="text-sm font-semibold mb-1">最近错误 (最多 10 条)</div>
         <el-table :data="lastFinished.recentErrors" size="small" max-height="240" border>
-          <el-table-column prop="at" :label="t('admin.etlview.label.l648_')" width="200" />
-          <el-table-column prop="message" :label="t('admin.etlview.label.l649_')" show-overflow-tooltip />
+          <el-table-column prop="at" :label="t('admin.etlview.label.timestamp')" width="200" />
+          <el-table-column prop="message" :label="t('admin.etlview.label.error')" show-overflow-tooltip />
         </el-table>
       </div>
     </el-card>
@@ -684,20 +684,20 @@ function prettyJson(raw: string): string {
                 <span v-else class="text-gray-400 text-xs">LEGACY</span>
               </template>
             </el-table-column>
-            <el-table-column prop="cancelReason" :label="t('admin.etlview.label.l682_')" show-overflow-tooltip min-width="180" />
-            <el-table-column :label="t('admin.etlview.label.l683_')" width="120">
+            <el-table-column prop="cancelReason" :label="t('admin.etlview.label.en_v2')" show-overflow-tooltip min-width="180" />
+            <el-table-column :label="t('admin.etlview.label.phrase_63454')" width="120">
               <template #default="{ row }">
                 <span class="text-xs">
                   {{ row.readCount }} / {{ row.insertedCount }} / {{ row.updatedCount }}
                 </span>
               </template>
             </el-table-column>
-            <el-table-column :label="t('admin.etlview.label.l690_')" width="80">
+            <el-table-column :label="t('admin.etlview.label.en_v3')" width="80">
               <template #default="{ row }">
                 <span class="text-xs">{{ row.durationSec.toFixed(1) }}s</span>
               </template>
             </el-table-column>
-            <el-table-column :label="t('admin.etlview.label.l695_')" width="170">
+            <el-table-column :label="t('admin.etlview.label.cancel_timestamp')" width="170">
               <template #default="{ row }">
                 <span class="text-xs text-[var(--color-text-muted)]">{{ (row.cancelledAt || row.finishedAt).slice(0, 19) }}</span>
               </template>

@@ -65,11 +65,11 @@ function openEdit(row: OemBrandItem) {
 
 async function saveDialog() {
   if (!dialogForm.brand.trim()) {
-    ElMessage.warning(t('admin.oembrandsview.warning.l65_'))
+    ElMessage.warning(t('admin.oembrandsview.warning.brand_cannot_be_empty'))
     return
   }
   if (dialogForm.brand.length > 100) {
-    ElMessage.warning(t('admin.oembrandsview.warning.l69_100'))
+    ElMessage.warning(t('admin.oembrandsview.warning.brand_length'))
     return
   }
   try {
@@ -212,7 +212,7 @@ onMounted(load)
       <div class="flex-1" />
       <el-input
         v-model="searchKw"
-        :placeholder="t('admin.oembrandsview.placeholder.l212_')"
+        :placeholder="t('admin.oembrandsview.placeholder.search_brand')"
         clearable
         size="small"
         style="width: 200px"
@@ -280,7 +280,7 @@ onMounted(load)
       </div>
       <!-- 空状态 -->
       <div v-if="!loading && items.length === 0" class="dict-empty">
-        暂无数据, 点击右上t('admin.oembrandsview.string.l280_')开始
+        暂无数据, 点击右上t('admin.oembrandsview.string.add_brand')开始
       </div>
     </div>
 
@@ -292,7 +292,7 @@ onMounted(load)
     <!-- 新增 / 编辑 弹窗 -->
     <el-dialog
       v-model="dialogOpen"
-      :title="dialogMode === 'create' ? t('admin.oembrandsview.title.l292_oem') : t('admin.oembrandsview.title.l292_oem_2')"
+      :title="dialogMode === 'create' ? t('admin.oembrandsview.title.add_oem_brand') : t('admin.oembrandsview.title.edit_oem_brand')"
       width="480px"
     >
       <el-form :model="dialogForm" label-width="80px" size="small">

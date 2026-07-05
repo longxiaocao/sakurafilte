@@ -84,7 +84,7 @@ async function refreshAll() {
   try {
     await Promise.all([fetchPerf(), fetchAuth(), fetchHealth()])
   } catch (e: any) {
-    error.value = e?.message || t('admin.perfview.string.l84_')
+    error.value = e?.message || t('admin.perfview.string.refresh_failed')
   } finally {
     loading.value = false
   }
@@ -148,14 +148,14 @@ const alerts = computed<{ level: 'warning' | 'critical'; msg: string }[]>(() => 
   const p = perf.value
   if (!p) return list
   if (p.p95Ms >= 1000) {
-    list.push({ level: 'critical', msg: t("admin.perfview.string.l150_p95_crit", { ms: p.p95Ms.toFixed(0) }) })
+    list.push({ level: 'critical', msg: t("admin.perfview.string.p_ms_ms_ms", { ms: p.p95Ms.toFixed(0) }) })
   } else if (p.p95Ms >= 500) {
-    list.push({ level: 'warning', msg: t("admin.perfview.string.l152_p95_warn", { ms: p.p95Ms.toFixed(0) }) })
+    list.push({ level: 'warning', msg: t("admin.perfview.string.p_ms_ms_ms_v2", { ms: p.p95Ms.toFixed(0) }) })
   }
   if (p.errorRate >= 10) {
-    list.push({ level: 'critical', msg: t("admin.perfview.string.l155_err_crit", { pct: p.errorRate.toFixed(1) }) })
+    list.push({ level: 'critical', msg: t("admin.perfview.string.error_rate_pct_critical", { pct: p.errorRate.toFixed(1) }) })
   } else if (p.errorRate >= 5) {
-    list.push({ level: 'warning', msg: t("admin.perfview.string.l157_err_warn", { pct: p.errorRate.toFixed(1) }) })
+    list.push({ level: 'warning', msg: t("admin.perfview.string.error_rate_pct_warning", { pct: p.errorRate.toFixed(1) }) })
   }
   return list
 })
@@ -165,8 +165,8 @@ const hasCritical = computed(() => alerts.value.some(a => a.level === 'critical'
 
 const readyText = computed(() => {
   if (readyOk.value === null) return t('common.field.detecting')
-  if (readyOk.value) return t('admin.perfview.string.l165_')
-  if (readyDegraded.value) return t('admin.perfview.string.l166_')
+  if (readyOk.value) return t('common.action.ready')
+  if (readyDegraded.value) return t('common.field.downgrade')
   return t('common.field.fault')
 })
 
@@ -201,15 +201,15 @@ function fmtTime(ts: string | null): string {
         <button
           @click="toggleAutoRefresh"
           class="px-2 py-1 text-sm hairline hover:bg-[var(--color-bg-hover)]"
-          :aria-label="autoRefresh ? t('admin.perfview.label.l201_') : t('admin.perfview.label.l201__2')"
+          :aria-label="autoRefresh ? t('admin.perfview.label.pause_auto_refresh') : t('admin.perfview.label.on_auto_refresh')"
         >
-          {{ autoRefresh ? t('admin.perfview.templatetext.l203_') : $t('admin.perfview.templatetext.l203_') }}
+          {{ autoRefresh ? t('admin.perfview.templatetext.pause_v2') : $t('admin.perfview.templatetext.pause_v2') }}
         </button>
         <select
           v-model="refreshSec"
           @change="changeInterval(refreshSec)"
           class="px-2 py-1 text-sm hairline bg-[var(--color-bg-elevated)]"
-          aria-:label="t('admin.perfview.label.l209_')"
+          aria-:label="t('admin.perfview.label.refresh')"
         >
           <option :value="3">3s</option>
           <option :value="5">5s</option>
@@ -221,7 +221,7 @@ function fmtTime(ts: string | null): string {
           :disabled="loading"
           class="px-3 py-1 text-sm hairline hover:bg-[var(--color-bg-hover)] disabled:opacity-50"
         >
-          {{ loading ? t('admin.perfview.templatetext.l221_') : t('admin.perfview.templatetext.l221__2') }}
+          {{ loading ? t('admin.perfview.templatetext.refresh_v2') : t('admin.perfview.templatetext.refresh') }}
         </button>
       </div>
     </div>
@@ -240,7 +240,7 @@ function fmtTime(ts: string | null): string {
     >
       <div class="flex items-center gap-2 mb-1">
         <span class="text-base font-medium" :class="hasCritical ? 'text-red-700' : 'text-yellow-700'">
-          {{ hasCritical ? t('admin.perfview.templatetext.l240_') : t('admin.perfview.templatetext.l240__2') }}
+          {{ hasCritical ? t('admin.perfview.templatetext.alert') : t('admin.perfview.templatetext.warning') }}
         </span>
       </div>
       <ul class="text-xs space-y-1">
@@ -303,7 +303,7 @@ function fmtTime(ts: string | null): string {
         <div class="hairline p-3">
           <div class="text-xs text-muted mb-1">Liveness (/health/live)</div>
           <div class="text-base font-medium" :class="liveOk === null ? 'text-neutral-500' : liveOk ? 'text-green-600' : 'text-red-600'">
-            {{ liveOk === null ? t('common.field.detecting') : liveOk ? t('admin.perfview.templatetext.l303__2') : t('common.field.fault') }}
+            {{ liveOk === null ? t('common.field.detecting') : liveOk ? t('admin.perfview.templatetext.en') : t('common.field.fault') }}
           </div>
         </div>
         <div class="hairline p-3">
@@ -336,7 +336,7 @@ function fmtTime(ts: string | null): string {
           <div class="text-xs text-muted mb-1">数据来源</div>
           <div class="text-base font-medium">
             <span :class="auth.loadedFromDb ? 'text-green-600' : 'text-yellow-600'">
-              {{ auth.loadedFromDb ? t('admin.perfview.templatetext.l336_db') : t('admin.perfview.templatetext.l336_appsettings_json') }}
+              {{ auth.loadedFromDb ? t('admin.perfview.templatetext.db_load') : t('admin.perfview.templatetext.en_appsettings_json') }}
             </span>
           </div>
         </div>

@@ -47,8 +47,8 @@ function openEdit(row: EngineItem) {
 }
 async function saveDialog() {
   const b = dialogForm.engineBrand.trim()
-  if (!b) { ElMessage.warning(t('admin.enginesview.warning.l47_')); return }
-  if (b.length > 200) { ElMessage.warning(t('admin.enginesview.warning.l48_200')); return }
+  if (!b) { ElMessage.warning(t('admin.enginesview.warning.engine_brand_cannot_be_empty')); return }
+  if (b.length > 200) { ElMessage.warning(t('admin.enginesview.warning.engine_brand_length')); return }
   const t2 = dialogForm.engineType.trim() || undefined
   try {
     if (dialogMode.value === 'create') {
@@ -153,13 +153,13 @@ onMounted(load)
 
     <div class="mt-2 text-xs text-muted">{{ t("common.dictviewcommon.total_drag", { total, active: activeCount, soft: total - activeCount }) }}</div>
 
-    <el-dialog v-model="dialogOpen" :title="dialogMode === 'create' ? t('admin.enginesview.title.l153_') : t('admin.enginesview.title.l153__2')" width="540px">
+    <el-dialog v-model="dialogOpen" :title="dialogMode === 'create' ? t('admin.enginesview.title.add_engine') : t('admin.enginesview.title.edit_engine')" width="540px">
       <el-form :model="dialogForm" label-width="120px" size="small">
         <el-form-item :label="t('common.action.brand')" required>
-          <el-input v-model="dialogForm.engineBrand" :placeholder="t('admin.enginesview.placeholder.l156_cummins')" maxlength="200" show-word-limit />
+          <el-input v-model="dialogForm.engineBrand" :placeholder="t('admin.enginesview.placeholder.e_g_cummins')" maxlength="200" show-word-limit />
         </el-form-item>
         <el-form-item :label="t('common.action.model')">
-          <el-input v-model="dialogForm.engineType" :placeholder="t('admin.enginesview.placeholder.l159_isb_4_5_l')" maxlength="200" show-word-limit />
+          <el-input v-model="dialogForm.engineType" :placeholder="t('admin.enginesview.placeholder.e_g_isb_l')" maxlength="200" show-word-limit />
           <div class="text-xs text-muted mt-1">2 字段组成 UNIQUE 索引, 型号可空</div>
         </el-form-item>
         <el-form-item :label="t('common.action.sort_order')">

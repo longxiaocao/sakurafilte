@@ -53,9 +53,9 @@ interface FieldGroup {
 
 const fieldGroups: FieldGroup[] = [
   {
-    name: t('admin.compareview.string.l53_'),
+    name: t('admin.compareview.string.basic'),
     fields: [
-      { key: 'oemNoDisplay', label: t('admin.compareview.string.l55_oem'), get: (p) => p.oemNoDisplay ?? '' },
+      { key: 'oemNoDisplay', label: t('admin.compareview.string.oem_number'), get: (p) => p.oemNoDisplay ?? '' },
       { key: 'oem2', label: 'OEM 2', get: (p) => p.oem2 ?? '' },
       { key: 'mr1', label: 'MR.1', get: (p) => p.mr1 ?? '' },
       { key: 'productName1', label: t('common.action.product_name_1'), get: (p) => p.productName1 ?? '' },
@@ -64,7 +64,7 @@ const fieldGroups: FieldGroup[] = [
     ]
   },
   {
-    name: t('admin.compareview.string.l64_mm'),
+    name: t('admin.compareview.string.dimensions_mm'),
     fields: [
       { key: 'd1Mm', label: 'D1', get: (p) => (p.d1Mm !== undefined && p.d1Mm !== null ? String(p.d1Mm) : '') },
       { key: 'd2Mm', label: 'D2', get: (p) => (p.d2Mm !== undefined && p.d2Mm !== null ? String(p.d2Mm) : '') },
@@ -83,12 +83,12 @@ const fieldGroups: FieldGroup[] = [
       { key: 'd8Thread', label: t('common.field.d8_thread'), get: (p) => p.d8Thread ?? '' },
       { key: 'noCheckValves', label: t('common.field.check_valve_count'), get: (p) => (p.noCheckValves !== undefined && p.noCheckValves !== null ? String(p.noCheckValves) : '') },
       { key: 'noBypassValves', label: t('common.field.bypass_valve_count'), get: (p) => (p.noBypassValves !== undefined && p.noBypassValves !== null ? String(p.noBypassValves) : '') },
-      { key: 'bypassValveLr', label: t('admin.compareview.string.l83_lr'), get: (p) => (p.bypassValveLr !== undefined && p.bypassValveLr !== null ? String(p.bypassValveLr) : '') },
-      { key: 'bypassValveHr', label: t('admin.compareview.string.l84_hr'), get: (p) => (p.bypassValveHr !== undefined && p.bypassValveHr !== null ? String(p.bypassValveHr) : '') },
+      { key: 'bypassValveLr', label: t('admin.compareview.string.bypass_lr'), get: (p) => (p.bypassValveLr !== undefined && p.bypassValveLr !== null ? String(p.bypassValveLr) : '') },
+      { key: 'bypassValveHr', label: t('admin.compareview.string.bypass_hr'), get: (p) => (p.bypassValveHr !== undefined && p.bypassValveHr !== null ? String(p.bypassValveHr) : '') },
       { key: 'efficiency1', label: t('common.field.efficiency_1'), get: (p) => p.efficiency1 ?? '' },
       { key: 'efficiency2', label: t('common.field.efficiency_2'), get: (p) => p.efficiency2 ?? '' },
       { key: 'bypassPressure', label: t('common.field.bypass_pressure'), get: (p) => (p.bypassPressure !== undefined && p.bypassPressure !== null ? String(p.bypassPressure) : '') },
-      { key: 'collapsePressureBar', label: t('admin.compareview.string.l88_bar'), get: (p) => (p.collapsePressureBar !== undefined && p.collapsePressureBar !== null ? String(p.collapsePressureBar) : '') },
+      { key: 'collapsePressureBar', label: t('admin.compareview.string.pressure_resistance_bar'), get: (p) => (p.collapsePressureBar !== undefined && p.collapsePressureBar !== null ? String(p.collapsePressureBar) : '') },
       { key: 'sealingMaterial', label: t('common.action.seal_material'), get: (p) => p.sealingMaterial ?? '' },
       { key: 'tempRange', label: t('common.field.temperature_range'), get: (p) => p.tempRange ?? '' }
     ]
@@ -96,8 +96,8 @@ const fieldGroups: FieldGroup[] = [
   {
     name: t('common.field.packaging'),
     fields: [
-      { key: 'media', label: t('admin.compareview.string.l96_'), get: (p) => p.media ?? '' },
-      { key: 'mediaModel', label: t('admin.compareview.string.l97_'), get: (p) => p.mediaModel ?? '' },
+      { key: 'media', label: t('admin.compareview.string.media'), get: (p) => p.media ?? '' },
+      { key: 'mediaModel', label: t('admin.compareview.string.media_model'), get: (p) => p.mediaModel ?? '' },
       { key: 'qtyPerCarton', label: t('common.action.carton_per_pcs'), get: (p) => (p.qtyPerCarton !== undefined && p.qtyPerCarton !== null ? String(p.qtyPerCarton) : '') },
       { key: 'weightKgs', label: t('common.field.weight_kg'), get: (p) => (p.weightKgs !== undefined && p.weightKgs !== null ? String(p.weightKgs) : '') },
       { key: 'cartonLengthMm', label: t('common.field.carton_length_mm'), get: (p) => (p.cartonLengthMm !== undefined && p.cartonLengthMm !== null ? String(p.cartonLengthMm) : '') },
@@ -107,20 +107,20 @@ const fieldGroups: FieldGroup[] = [
     ]
   },
   {
-    name: t('admin.compareview.string.l107_'),
+    name: t('admin.compareview.string.outer_carton'),
     fields: [
-      { key: 'masterBoxQty', label: t('admin.compareview.string.l109_'), get: (p) => (p.masterBoxQty !== undefined && p.masterBoxQty !== null ? String(p.masterBoxQty) : '') },
-      { key: 'masterBoxWeightKgs', label: t('admin.compareview.string.l110_kg'), get: (p) => (p.masterBoxWeightKgs !== undefined && p.masterBoxWeightKgs !== null ? String(p.masterBoxWeightKgs) : '') },
-      { key: 'masterBoxLengthMm', label: t('admin.compareview.string.l111_mm'), get: (p) => (p.masterBoxLengthMm !== undefined && p.masterBoxLengthMm !== null ? String(p.masterBoxLengthMm) : '') },
-      { key: 'masterBoxWidthMm', label: t('admin.compareview.string.l112_mm'), get: (p) => (p.masterBoxWidthMm !== undefined && p.masterBoxWidthMm !== null ? String(p.masterBoxWidthMm) : '') },
-      { key: 'masterBoxHeightMm', label: t('admin.compareview.string.l113_mm'), get: (p) => (p.masterBoxHeightMm !== undefined && p.masterBoxHeightMm !== null ? String(p.masterBoxHeightMm) : '') }
+      { key: 'masterBoxQty', label: t('admin.compareview.string.outer_carton_pcs'), get: (p) => (p.masterBoxQty !== undefined && p.masterBoxQty !== null ? String(p.masterBoxQty) : '') },
+      { key: 'masterBoxWeightKgs', label: t('admin.compareview.string.outer_carton_kg'), get: (p) => (p.masterBoxWeightKgs !== undefined && p.masterBoxWeightKgs !== null ? String(p.masterBoxWeightKgs) : '') },
+      { key: 'masterBoxLengthMm', label: t('admin.compareview.string.outer_carton_length_mm'), get: (p) => (p.masterBoxLengthMm !== undefined && p.masterBoxLengthMm !== null ? String(p.masterBoxLengthMm) : '') },
+      { key: 'masterBoxWidthMm', label: t('admin.compareview.string.outer_carton_width_mm'), get: (p) => (p.masterBoxWidthMm !== undefined && p.masterBoxWidthMm !== null ? String(p.masterBoxWidthMm) : '') },
+      { key: 'masterBoxHeightMm', label: t('admin.compareview.string.outer_carton_height_mm'), get: (p) => (p.masterBoxHeightMm !== undefined && p.masterBoxHeightMm !== null ? String(p.masterBoxHeightMm) : '') }
     ]
   },
   {
-    name: t('admin.compareview.string.l117_crossref'),
+    name: t('admin.compareview.string.crossref_vehicle_model'),
     fields: [
-      { key: 'crossReferences', label: t('admin.compareview.string.l119_oem'), get: (p) => xrefSummary(p.crossReferences) },
-      { key: 'machineApplications', label: t('admin.compareview.string.l120_'), get: (p) => machineSummary(p.machineApplications) }
+      { key: 'crossReferences', label: t('admin.compareview.string.oem_cross_reference'), get: (p) => xrefSummary(p.crossReferences) },
+      { key: 'machineApplications', label: t('admin.compareview.string.machine_applications'), get: (p) => machineSummary(p.machineApplications) }
     ]
   }
 ]
@@ -185,7 +185,7 @@ async function loadByIds(ids: number[]) {
     products.value = capped.map((id) => map.get(id)).filter((p): p is ProductDetail => !!p)
     saveOrder()
   } catch (e: any) {
-    error.value = e?.message || t('admin.compareview.string.l185_')
+    error.value = e?.message || t('admin.compareview.string.load_failed')
     ElMessage.error(error.value)
   } finally {
     loading.value = false
@@ -246,22 +246,22 @@ function removeProduct(idx: number) {
   products.value = products.value.filter((_, i) => i !== idx)
   saveOrder()
   persistUrlOrder()
-  ElMessage.success(t('admin.compareview.success.l246_'))
+  ElMessage.success(t('admin.compareview.success.remove'))
 }
 
 // ===== 加入产品 =====
 async function addProductById() {
   const id = parseInt(newIdInput.value.trim(), 10)
   if (!id || isNaN(id)) {
-    ElMessage.warning(t('admin.compareview.warning.l253_id'))
+    ElMessage.warning(t('admin.compareview.warning.please_enter_active_product'))
     return
   }
   if (products.value.some((p) => p.id === id)) {
-    ElMessage.warning(t('admin.compareview.warning.l257_'))
+    ElMessage.warning(t('admin.compareview.warning.product_in_compare_list'))
     return
   }
   if (products.value.length >= MAX_COMPARE) {
-    ElMessage.warning(t('admin.compareview.warning.l262_max', { max: MAX_COMPARE }))
+    ElMessage.warning(t('admin.compareview.warning.compare_max_max_products', { max: MAX_COMPARE }))
     return
   }
   loading.value = true
@@ -271,9 +271,9 @@ async function addProductById() {
     newIdInput.value = ''
     saveOrder()
     persistUrlOrder()
-    ElMessage.success(t('admin.compareview.success.l272_added', { oem: p.oemNoDisplay }))
+    ElMessage.success(t('admin.compareview.success.added_oem', { oem: p.oemNoDisplay }))
   } catch (e: any) {
-    ElMessage.error(e?.message || t('admin.compareview.error.l273_'))
+    ElMessage.error(e?.message || t('admin.compareview.error.load_product_failed'))
   } finally {
     loading.value = false
   }
@@ -329,7 +329,7 @@ function doPrint() {
       <div class="flex-1" />
       <el-input
         v-model="newIdInput"
-        :placeholder="t('admin.compareview.placeholder.l329_id')"
+        :placeholder="t('admin.compareview.placeholder.input_product_id_add')"
         size="small"
         style="width: 180px"
         @keyup.enter="addProductById"
@@ -373,7 +373,7 @@ function doPrint() {
                 text
                 :disabled="idx === 0"
                 @click="moveLeft(idx)"
-                :title="t('admin.compareview.title.l373_')"
+                :title="t('admin.compareview.title.move_left')"
                 style="padding: 0 2px; height: 16px; line-height: 16px"
               >‹</el-button>
               <el-button
@@ -381,7 +381,7 @@ function doPrint() {
                 text
                 :disabled="idx === products.length - 1"
                 @click="moveRight(idx)"
-                :title="t('admin.compareview.title.l381_')"
+                :title="t('admin.compareview.title.move_right')"
                 style="padding: 0 2px; height: 16px; line-height: 16px"
               >›</el-button>
             </div>
@@ -390,7 +390,7 @@ function doPrint() {
               text
               class="no-print"
               @click="removeProduct(idx)"
-              :title="t('admin.compareview.title.l390_')"
+              :title="t('admin.compareview.title.remove_columns')"
               style="padding: 0 4px; height: 18px; line-height: 18px; color: #d00"
             >×</el-button>
           </div>

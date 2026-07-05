@@ -56,9 +56,9 @@ const resetForm = reactive<{ id?: number; username?: string; newPassword: string
 
 // 角色选项 (与后端 UserRole enum 一致)
 const ROLE_OPTIONS: { value: UserRole; label: string; tagType: 'danger' | 'primary' | 'info' }[] = [
-  { value: 'admin', label: t('admin.usersview.string.l56_admin'), tagType: 'danger' },
-  { value: 'operator', label: t('admin.usersview.string.l57_operator'), tagType: 'primary' },
-  { value: 'viewer', label: t('admin.usersview.string.l58_viewer'), tagType: 'info' }
+  { value: 'admin', label: t('admin.usersview.string.admin_admin'), tagType: 'danger' },
+  { value: 'operator', label: t('admin.usersview.string.action_operator'), tagType: 'primary' },
+  { value: 'viewer', label: t('admin.usersview.string.read_only_viewer'), tagType: 'info' }
 ]
 
 function roleTagType(role: UserRole): 'danger' | 'primary' | 'info' {
@@ -99,11 +99,11 @@ function openCreate() {
 async function saveCreate() {
   if (userSubmitting.value) return
   if (!createForm.username.trim()) {
-    ElMessage.warning(t('admin.usersview.warning.l99_'))
+    ElMessage.warning(t('admin.usersview.warning.username_cannot_be_empty'))
     return
   }
   if (createForm.password.length < 8) {
-    ElMessage.warning(t('admin.usersview.warning.l103_8'))
+    ElMessage.warning(t('admin.usersview.warning.password_at_least_pcs'))
     return
   }
   userSubmitting.value = true
@@ -115,7 +115,7 @@ async function saveCreate() {
       email: createForm.email || undefined,
       fullName: createForm.fullName || undefined
     })
-    ElMessage.success(t('admin.usersview.success.l115_'))
+    ElMessage.success(t('admin.usersview.success.user_created'))
     createOpen.value = false
     await loadUsers()
   } catch {
@@ -147,7 +147,7 @@ async function saveEdit() {
       isActive: editForm.isActive
     }
     await usersApi.update(editForm.id, patch)
-    ElMessage.success(t('admin.usersview.success.l147_'))
+    ElMessage.success(t('admin.usersview.success.user_updated'))
     editOpen.value = false
     await loadUsers()
   } catch {
@@ -191,13 +191,13 @@ async function saveReset() {
   if (userSubmitting.value) return
   if (resetForm.id == null) return
   if (resetForm.newPassword.length < 8) {
-    ElMessage.warning(t('admin.usersview.warning.l191_8'))
+    ElMessage.warning(t('admin.usersview.warning.password_at_least_pcs_v2'))
     return
   }
   userSubmitting.value = true
   try {
     await usersApi.resetPassword(resetForm.id, resetForm.newPassword)
-    ElMessage.success(t('admin.usersview.string.l199_reset_pwd', { user: resetForm.username }))
+    ElMessage.success(t('admin.usersview.string.password_of_user_has', { user: resetForm.username }))
     resetOpen.value = false
   } catch {
     // axios 拦截器已统一弹错误
@@ -252,7 +252,7 @@ async function handleLogout() {
     userSubmitting.value = false
   }
   auth.clearAuth()
-  ElMessage.success(t('admin.usersview.success.l252_'))
+  ElMessage.success(t('admin.usersview.success.logout'))
   window.location.href = '/login'
 }
 
@@ -284,7 +284,7 @@ onMounted(() => {
 
     <el-tabs v-model="activeTab" @tab-change="onTabChange">
       <!-- ===== Tab 1: 用户列表 ===== -->
-      <el-tab-pane :label="t('admin.usersview.label.l284_')" name="users">
+      <el-tab-pane :label="t('admin.usersview.label.user_list')" name="users">
         <div class="hairline" v-loading="usersLoading">
           <!-- 表头 -->
           <div class="user-head">
@@ -342,7 +342,7 @@ onMounted(() => {
       </el-tab-pane>
 
       <!-- ===== Tab 2: 登录审计 ===== -->
-      <el-tab-pane :label="t('admin.usersview.label.l342_')" name="audit">
+      <el-tab-pane :label="t('admin.usersview.label.login_audit')" name="audit">
         <div class="hairline" v-loading="auditLoading">
           <div class="audit-head">
             <div class="cell-id">ID</div>
@@ -384,12 +384,12 @@ onMounted(() => {
     </el-tabs>
 
     <!-- 新增用户对话框 -->
-    <el-dialog v-model="createOpen" :title="t('admin.usersview.title.l384_')" width="480px">
+    <el-dialog v-model="createOpen" :title="t('admin.usersview.title.add_user')" width="480px">
       <el-form :model="createForm" label-width="80px" size="small">
         <el-form-item :label="t('common.field.username')" required>
-          <el-input v-model="createForm.username" :placeholder="t('admin.usersview.placeholder.l387_')" maxlength="50" show-word-limit />
+          <el-input v-model="createForm.username" :placeholder="t('admin.usersview.placeholder.login_username')" maxlength="50" show-word-limit />
         </el-form-item>
-        <el-form-item :label="t('admin.usersview.label.l389_')" required>
+        <el-form-item :label="t('admin.usersview.label.password')" required>
           <el-input
             v-model="createForm.password"
             type="password"
@@ -422,7 +422,7 @@ onMounted(() => {
     </el-dialog>
 
     <!-- 编辑用户对话框 -->
-    <el-dialog v-model="editOpen" :title="`t('admin.usersview.title.l424_edit_user', { user: editForm.username })`" width="480px">
+    <el-dialog v-model="editOpen" :title="`t('admin.usersview.title.edit_user_user', { user: editForm.username })`" width="480px">
       <el-form :model="editForm" label-width="80px" size="small">
         <el-form-item :label="t('common.field.username')">
           <el-input :model-value="editForm.username" disabled />
@@ -443,7 +443,7 @@ onMounted(() => {
         <el-form-item :label="t('common.field.full_name')">
           <el-input v-model="editForm.fullName" :placeholder="t('common.action.optional')" />
         </el-form-item>
-        <el-form-item :label="t('admin.usersview.label.l443_')">
+        <el-form-item :label="t('admin.usersview.label.enable_status')">
           <el-switch v-model="editForm.isActive" />
         </el-form-item>
       </el-form>
@@ -454,9 +454,9 @@ onMounted(() => {
     </el-dialog>
 
     <!-- 重置密码对话框 -->
-    <el-dialog v-model="resetOpen" :title="`t('admin.usersview.title.l456_reset_pwd', { user: resetForm.username })`" width="480px">
+    <el-dialog v-model="resetOpen" :title="`t('admin.usersview.title.reset_password_user', { user: resetForm.username })`" width="480px">
       <el-form :model="resetForm" label-width="80px" size="small">
-        <el-form-item :label="t('admin.usersview.label.l456_')" required>
+        <el-form-item :label="t('admin.usersview.label.password_v2')" required>
           <el-input
             v-model="resetForm.newPassword"
             type="password"

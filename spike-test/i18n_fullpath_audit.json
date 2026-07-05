@@ -1,12 +1,12 @@
 {
   "stats": {
     "files_scanned": 47,
-    "zh_keys": 413,
-    "en_keys": 413,
-    "used_keys": 349,
+    "zh_keys": 417,
+    "en_keys": 417,
+    "used_keys": 348,
     "missing_zh": 0,
     "missing_en": 0,
-    "orphan_zh": 64,
+    "orphan_zh": 69,
     "only_zh": 0,
     "only_en": 0
   },
@@ -20,32 +20,56 @@
     {
       "severity": "INFO",
       "category": "orphan",
-      "key": "admin.etlview.string.l386_resume_alt",
-      "message": "'admin.etlview.string.l386_resume_alt' 定义但未使用 (考虑删除)"
+      "key": "admin.etlview.buttontext.no_pause",
+      "message": "'admin.etlview.buttontext.no_pause' 定义但未使用 (考虑删除)"
     },
     {
       "severity": "INFO",
       "category": "orphan",
-      "key": "admin.helpview.string.l26_oem_oem2_cross_references_oem_brand_oemn",
-      "message": "'admin.helpview.string.l26_oem_oem2_cross_references_oem_brand_oemn' 定义但未使用 (考虑删除)"
+      "key": "admin.etlview.buttontext.resume",
+      "message": "'admin.etlview.buttontext.resume' 定义但未使用 (考虑删除)"
     },
     {
       "severity": "INFO",
       "category": "orphan",
-      "key": "admin.helpview.string.l30_",
-      "message": "'admin.helpview.string.l30_' 定义但未使用 (考虑删除)"
+      "key": "admin.etlview.string.resume_triggered_entity_entity_alt",
+      "message": "'admin.etlview.string.resume_triggered_entity_entity_alt' 定义但未使用 (考虑删除)"
     },
     {
       "severity": "INFO",
       "category": "orphan",
-      "key": "admin.helpview.string.l46_1_ispublished_true_2_slot_1_6_3_console_",
-      "message": "'admin.helpview.string.l46_1_ispublished_true_2_slot_1_6_3_console_' 定义但未使用 (考虑删除)"
+      "key": "admin.helpview.string.dictionary_management",
+      "message": "'admin.helpview.string.dictionary_management' 定义但未使用 (考虑删除)"
     },
     {
       "severity": "INFO",
       "category": "orphan",
-      "key": "admin.helpview.string.l84_full_load_insert_only_upsert",
-      "message": "'admin.helpview.string.l84_full_load_insert_only_upsert' 定义但未使用 (考虑删除)"
+      "key": "admin.helpview.string.mode_full_load_insert",
+      "message": "'admin.helpview.string.mode_full_load_insert' 定义但未使用 (考虑删除)"
+    },
+    {
+      "severity": "INFO",
+      "category": "orphan",
+      "key": "admin.helpview.string.oem_yes_no_in",
+      "message": "'admin.helpview.string.oem_yes_no_in' 定义但未使用 (考虑删除)"
+    },
+    {
+      "severity": "INFO",
+      "category": "orphan",
+      "key": "admin.helpview.string.product_ispublished_true_listed",
+      "message": "'admin.helpview.string.product_ispublished_true_listed' 定义但未使用 (考虑删除)"
+    },
+    {
+      "severity": "INFO",
+      "category": "orphan",
+      "key": "admin.perfview.string.downgrade",
+      "message": "'admin.perfview.string.downgrade' 定义但未使用 (考虑删除)"
+    },
+    {
+      "severity": "INFO",
+      "category": "orphan",
+      "key": "admin.perfview.string.en_v5",
+      "message": "'admin.perfview.string.en_v5' 定义但未使用 (考虑删除)"
     },
     {
       "severity": "INFO",
@@ -116,32 +140,8 @@
     {
       "severity": "INFO",
       "category": "orphan",
-      "key": "common.copy",
-      "message": "'common.copy' 定义但未使用 (考虑删除)"
-    },
-    {
-      "severity": "INFO",
-      "category": "orphan",
-      "key": "common.delete",
-      "message": "'common.delete' 定义但未使用 (考虑删除)"
-    },
-    {
-      "severity": "INFO",
-      "category": "orphan",
-      "key": "common.edit",
-      "message": "'common.edit' 定义但未使用 (考虑删除)"
-    },
-    {
-      "severity": "INFO",
-      "category": "orphan",
-      "key": "common.export",
-      "message": "'common.export' 定义但未使用 (考虑删除)"
-    },
-    {
-      "severity": "INFO",
-      "category": "orphan",
       "key": "...",
-      "message": "还有 44 个未使用的 zh key"
+      "message": "还有 49 个未使用的 zh key"
     }
   ]
 }

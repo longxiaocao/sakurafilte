@@ -12,41 +12,41 @@ const { t } = useI18n()
 
 // 8 个字典 (P1.3 + P2.2)
 const dictList = [
-  { name: t('common.field.oem_brand'), path: '/admin/dict/oem-brands', desc: t('admin.helpview.string.l12_cross_references_oem_brand_mann_bosch_ma') },
-  { name: t('common.action.product_name_1'), path: '/admin/dict/product-name1s', desc: t('admin.helpview.string.l13_oil_filter_fuel_filter') },
-  { name: t('common.action.product_name_2'), path: '/admin/dict/product-name2s', desc: t('admin.helpview.string.l14_of100') },
-  { name: t('admin.helpview.string.l15_type'), path: '/admin/dict/types', desc: t('admin.helpview.string.l15_5_oil_fuel_air_cabin_others_sort_order') },
-  { name: 'OEM 3', path: '/admin/dict/oem-no3s', desc: t('admin.helpview.string.l16_oem_5_27m_distinct_typeahead') },
-  { name: t('admin.helpview.string.l17_media'), path: '/admin/dict/medias', desc: t('admin.helpview.string.l17_2_cellulose_a020') },
-  { name: t('admin.helpview.string.l18_machine'), path: '/admin/dict/machines', desc: t('admin.helpview.string.l18_4_agriculture_commercial_construction_ot') },
-  { name: t('admin.helpview.string.l19_engine'), path: '/admin/dict/engines', desc: t('admin.helpview.string.l19_') }
+  { name: t('common.field.oem_brand'), path: '/admin/dict/oem-brands', desc: t('admin.helpview.string.alternative_brand_cross_references') },
+  { name: t('common.action.product_name_1'), path: '/admin/dict/product-name1s', desc: t('admin.helpview.string.product_name_e_g') },
+  { name: t('common.action.product_name_2'), path: '/admin/dict/product-name2s', desc: t('admin.helpview.string.product_name_model_back') },
+  { name: t('admin.helpview.string.type_type'), path: '/admin/dict/types', desc: t('admin.helpview.string.category_oil_fuel_air') },
+  { name: 'OEM 3', path: '/admin/dict/oem-no3s', desc: t('admin.helpview.string.alternative_brand_oem_number') },
+  { name: t('admin.helpview.string.media_media'), path: '/admin/dict/medias', desc: t('admin.helpview.string.filter_media_name_model') },
+  { name: t('admin.helpview.string.machine_model_machine'), path: '/admin/dict/machines', desc: t('admin.helpview.string.machine_brand_model_name') },
+  { name: t('admin.helpview.string.engine_engine'), path: '/admin/dict/engines', desc: t('admin.helpview.string.engine_brand_model') }
 ]
 
 // FAQ 数据
 const faqs = [
   {
-    q: t('admin.helpview.string.l25_oem'),
-    a: t('admin.helpview.string.l25_a_oem')
+    q: t('admin.helpview.string.for_input_oem_number'),
+    a: t('admin.helpview.string.check_if_oem_is')
   },
   {
-    q: t('admin.helpview.string.l29_typeahead'),
-    a: t('admin.helpview.string.l29_a_typeahead')
+    q: t('admin.helpview.string.for_add_product_typeahead'),
+    a: t('admin.helpview.string.dictionary_is_maintained_in')
   },
   {
-    q: t('admin.helpview.string.l33_h1_100_0'),
-    a: t('admin.helpview.string.l34_5mm_95_105_h1_110_h1_id')
+    q: t('admin.helpview.string.dimensions_search_h_back'),
+    a: t('admin.helpview.string.dimensions_search_default_mm')
   },
   {
-    q: t('admin.helpview.string.l37_etl_reading'),
-    a: t('admin.helpview.string.l37_a_etl')
+    q: t('admin.helpview.string.etl_trigger_back_in'),
+    a: t('admin.helpview.string.reading_phase_is_streaming')
   },
   {
-    q: t('admin.helpview.string.l41_'),
-    a: t('admin.helpview.string.l41_a_batch')
+    q: t('admin.helpview.string.batch_delete_product'),
+    a: t('admin.helpview.string.in_admin_product_list')
   },
   {
-    q: t('admin.helpview.string.l45_'),
-    a: t('admin.helpview.string.l45_a_image')
+    q: t('admin.helpview.string.upload_image_back_frontend_sho'),
+    a: t('admin.helpview.string.check_product_ispublished_true')
   }
 ]
 
@@ -71,20 +71,20 @@ const helpPreview = computed(() => helpPreviewKeys
       :offset="60"
       class="help-anchor hairline p-2 mb-3 bg-[var(--color-bg-elevated)]"
     >
-      <el-anchor-link href="#quickstart" :title="t('admin.helpview.title.l71_')" />
-      <el-anchor-link href="#dict" :title="t('admin.helpview.title.l72_')" />
-      <el-anchor-link href="#import" :title="t('admin.helpview.title.l73_')" />
-      <el-anchor-link href="#search" :title="t('admin.helpview.title.l74_')" />
-      <el-anchor-link href="#faq" :title="t('admin.helpview.title.l75_')" />
+      <el-anchor-link href="#quickstart" :title="t('admin.helpview.title.start')" />
+      <el-anchor-link href="#dict" :title="t('admin.helpview.title.en_v4')" />
+      <el-anchor-link href="#import" :title="t('admin.helpview.title.batch_import')" />
+      <el-anchor-link href="#search" :title="t('admin.helpview.title.search_v2')" />
+      <el-anchor-link href="#faq" :title="t('admin.helpview.title.common')" />
     </el-anchor>
 
     <!-- 1. 快速开始 -->
     <section id="quickstart" class="hairline p-4 mb-3">
       <h2 class="text-base font-medium mb-2">1. 快速开始 (5 步入门)</h2>
       <ol class="text-sm leading-7 list-decimal pl-5 text-[var(--color-text-muted)]">
-        <li>点击右上 t('admin.helpview.string.l82_'), 输入 <code class="bg-[var(--color-bg-hover)] px-1">X-Admin-Token</code> (与后端 <code>Auth:DevStaticToken</code> 一致)</li>
+        <li>点击右上 t('admin.helpview.string.enter_admin'), 输入 <code class="bg-[var(--color-bg-hover)] px-1">X-Admin-Token</code> (与后端 <code>Auth:DevStaticToken</code> 一致)</li>
         <li>字典管理 → 8 个字典先 seed 数据 (首次部署): 走 spike-test/_seed_dict_*.py 6 个脚本</li>
-        <li>ETL 触发 → 选择 "products.xlsx" / "xrefs.xlsx" / "apps.xlsxt('admin.helpview.string.l84_full_load_insert_only_upsert')触发"</li>
+        <li>ETL 触发 → 选择 "products.xlsx" / "xrefs.xlsx" / "apps.xlsxt('admin.helpview.string.mode_full_load_insert')触发"</li>
         <li>产品管理 → 用 8 字段 / OEM 查询 / 批量粘贴查询, 命中产品进入详情</li>
         <li>产品详情页支持上传 6 张图 (slot 1-6) + 编辑 7 分区字段 (后台产品表单)</li>
       </ol>
@@ -124,10 +124,10 @@ const helpPreview = computed(() => helpPreviewKeys
       <h2 class="text-base font-medium mb-2">3. 批量导入流程 (XLSX 拖拽)</h2>
       <ol class="text-sm leading-7 list-decimal pl-5">
         <li>准备 Excel: products / xrefs / machine_applications 三张表 (列名见 ETL 触发页)</li>
-        <li>ETL 触发页 → t('admin.helpview.string.l124_xlsx') → 自动识别 entity + 模式 (推荐 full-load 全量, insert-only 仅新增)</li>
+        <li>ETL 触发页 → t('admin.helpview.string.xlsx_to') → 自动识别 entity + 模式 (推荐 full-load 全量, insert-only 仅新增)</li>
         <li>进度条 5 阶段: reading → staging → inserting → committing → meili-sync, 任一阶段失败可暂停/恢复</li>
         <li>完成后会在 etl_progress_log 写一行 (含 read/stage/inserted/skipped/missing_oem/error 计数)</li>
-        <li>后台产品管理用 t('admin.helpview.string.l127_') 验证导入数据是否可查</li>
+        <li>后台产品管理用 t('admin.helpview.string.search') 验证导入数据是否可查</li>
       </ol>
       <p class="text-xs text-muted mt-2">
         ⚠ 性能: 1M products 全量约 2-3 分钟, 5M xrefs 约 5-8 分钟, 1M apps 约 2 分钟 (PG 本地测试数据)
