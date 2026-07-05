@@ -295,17 +295,17 @@ onBeforeUnmount(() => {
     <!-- 顶部工具条 -->
     <!-- P1-4 修复: 工具条移动端折叠 - 次要控件 (countMode 标签, t('admin.productsview.label.l442_')列 switch) 在 sm 以下隐藏 -->
     <div class="flex items-center gap-2 mb-3 flex-wrap">
-      <el-input v-model="filter.oem2" placeholder="OEM 2" clearable size="small" style="width: 160px" aria-label="OEM 2 搜索" @keyup.enter="quickSearch" />
-      <el-input v-model="filter.mr1" placeholder="MR.1" clearable size="small" style="width: 120px" aria-label="MR.1 搜索" @keyup.enter="quickSearch" />
-      <el-input v-model="filter.productName1" :placeholder="t('admin.productsview.placeholder.l295_')" clearable size="small" style="width: 160px" aria-label="产品名搜索" @keyup.enter="quickSearch" />
-      <el-select v-model="filter.type" :placeholder="t('admin.productsview.placeholder.l296_')" clearable size="small" style="width: 100px" aria-label="按类型筛选">
+      <el-input v-model="filter.oem2" placeholder="OEM 2" clearable size="small" style="width: 160px" :aria-label="t('admin.productsview.aria.l297_oem2')" @keyup.enter="quickSearch" />
+      <el-input v-model="filter.mr1" placeholder="MR.1" clearable size="small" style="width: 120px" :aria-label="t('admin.productsview.aria.l298_mr1')" @keyup.enter="quickSearch" />
+      <el-input v-model="filter.productName1" :placeholder="t('admin.productsview.placeholder.l295_')" clearable size="small" style="width: 160px" :aria-label="t('admin.productsview.aria.l299_product_name')" @keyup.enter="quickSearch" />
+      <el-select v-model="filter.type" :placeholder="t('admin.productsview.placeholder.l296_')" clearable size="small" style="width: 100px" :aria-label="t('admin.productsview.aria.l300_type')">
         <el-option label="oil" value="oil" />
         <el-option label="fuel" value="fuel" />
         <el-option label="air" value="air" />
         <el-option label="cabin" value="cabin" />
         <el-option label="others" value="others" />
       </el-select>
-      <el-input v-model="filter.oem3Batch" :placeholder="t('admin.productsview.placeholder.l303_oem_3')" clearable size="small" class="hidden sm:inline-block" style="width: 220px" aria-label="OEM 3 批量搜索" @keyup.enter="quickSearch" />
+      <el-input v-model="filter.oem3Batch" :placeholder="t('admin.productsview.placeholder.l303_oem_3')" clearable size="small" class="hidden sm:inline-block" style="width: 220px" :aria-label="t('admin.productsview.aria.l307_oem3_batch')" @keyup.enter="quickSearch" />
       <el-button type="primary" size="small" @click="quickSearch">搜索</el-button>
       <el-button size="small" @click="openAdv" class="hidden sm:inline-flex">高级筛选</el-button>
       <span class="text-xs text-muted hidden sm:inline">count: {{ countModeUsed }}</span>

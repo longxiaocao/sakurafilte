@@ -26,11 +26,11 @@ const dictList = [
 const faqs = [
   {
     q: t('admin.helpview.string.l25_oem'),
-    a: '检查该 OEM 是否在产品表 oem2 字段里 (注意: 不是 cross_references.oem_brand). 前台公开页用 oemNoDisplay / oem2, 后台搜索用任意一个字段.'
+    a: t('admin.helpview.string.l25_a_oem')
   },
   {
     q: t('admin.helpview.string.l29_typeahead'),
-    a: '字典是后台维护的, 需先在 "字典管理" → 对应字典 → 新增 value. typeahead 只返回字典内已存在的值 (前 20 条按 sort_order 排).'
+    a: t('admin.helpview.string.l29_a_typeahead')
   },
   {
     q: t('admin.helpview.string.l33_h1_100_0'),
@@ -38,15 +38,15 @@ const faqs = [
   },
   {
     q: t('admin.helpview.string.l37_etl_reading'),
-    a: 'reading 阶段是流式 COPY 暂存, 大文件 (1M 行) 可能 30-60s. 如超过 5 分钟无进度, 检查后端日志 (output/SPIKE-REPORT-*.md) 看是否有 SQL 错误.'
+    a: t('admin.helpview.string.l37_a_etl')
   },
   {
     q: t('admin.helpview.string.l41_'),
-    a: '后台产品列表勾选多行 → 顶部 "批量停售" 按钮. 停售 = is_discontinued=true, 前台不展示, 历史数据保留. 如需物理删除, 走 SQL (慎用).'
+    a: t('admin.helpview.string.l41_a_batch')
   },
   {
     q: t('admin.helpview.string.l45_'),
-    a: '检查 (1) 产品 isPublished=true (上架) (2) slot 1-6 范围 (3) 浏览器 console 看 OSS 预签名 URL 1 h 有效. 如过期, 重新加载产品页.'
+    a: t('admin.helpview.string.l45_a_image')
   }
 ]
 

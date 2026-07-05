@@ -53,6 +53,7 @@ export default {
       },
       success: {
         l246_: 'Remove',
+        l272_added: 'Added: {oem}',
       },
       title: {
         l373_: 'Move Left',
@@ -62,6 +63,7 @@ export default {
       warning: {
         l253_id: 'Please enter Active Product ID',
         l257_: '该Product in Compare List',
+        l262_max: 'Compare Max {max} Products',
       },
     },
     enginesview: {
@@ -154,16 +156,25 @@ export default {
         l351_: 'Resume',
         l351__2: 'Cancel',
         l352_etl: 'Pause ETL Task',
+        l353_cancel_word: 'Cancel',
+        l353_pause_msg: 'Pause Current ETL Task?\n\nCurrent batch will Exit gracefully after Complete, checkpoint_id will Write etl_progress_log, the Follow "{resume}" button can be used to 续读 from 该 point.\n\n(Different from "{cancel}" — Cancel will Immediately Terminate and Rollback Current batch)',
+        l353_resume_word: 'Resume',
         l375_etl_n_n_paused_checkpoint_id_1_commit: 'Resume Pause ETL Task?\\n\\nwill from Recent 一 items paused Record checkpoint_id+1 rows Start 续读, Skip COMMIT batch times.',
         l376_etl: 'Resume ETL Task',
+        l386_resume: 'Resume Triggered: entity={entity} checkpoint={checkpoint} (from line {line})',
+        l386_resume_alt: 'Resume Triggered: entity={entity} checkpoint={checkpoint} (from line {line} Continue)',
         l419_copy: 'COPY Staging',
         l420_insert: 'INSERT Write DB',
         l421_commit: 'COMMIT Submit',
         l422_meili: 'Meili Sync',
         l423_: 'Complete',
         l481_truncate_xrefs_apps_products: 'On 启: TRUNCATE 同时 Clear xrefs/apps (首times 全Count 场景); Close: Only 清 products, 保留Off 联Table (单独 Refresh 主Table)',
+        l64_auto_inferred: 'Auto-recognized entity={entity}, file: {name}',
+        l68_manual_entity: 'File Filled: {name} (entity need manual select)',
+        l71_first_only: 'Dropped {total} files, only first used: {name}',
         l78_etl: '松On 以填入 ETL File 路径',
         l96_: 'Confirm',
+        l323_cancel_signal: 'Cancel Signal Sent (code: {code}), task will Terminate soon',
       },
       success: {
         l111_dry_run: 'dry-run Validation completed',
@@ -177,6 +188,7 @@ export default {
         l610_10: 'Collapse (只Show Front 10 rows)',
       },
       warning: {
+        l323_: '无活跃Task 可 Cancel',
         l387_: 'Resume Failed',
       },
     },
@@ -200,16 +212,19 @@ export default {
         l19_: 'Engine Brand + Model',
         l19_engine: 'Engine (Engine)',
         l25_oem: 'for 什么Input OEM Number Back 无法 Search?',
+        l25_a_oem: 'Check if 该 OEM is in products.oem2 field (Note: not cross_references.oem_brand). Public Page uses oemNoDisplay / oem2, Admin Search uses any field.',
         l26_oem_oem2_cross_references_oem_brand_oemn: '检查该 OEM Yes No in Product Table oem2 Field 里 (注意: 不Yes cross_references.oem_brand). frontend Published 用 oemNoDisplay',
         l29_typeahead: 'for 什么 Add Product 时 typeahead 联想不to 想要 Value?',
+        l29_a_typeahead: 'Dictionary is maintained in admin, need to add value in "Dictionary Management" → target dict → Add. typeahead only returns existing values (top 20 by sort_order).',
         l30_: 'Dictionary Management',
         l33_h1_100_0: 'Dimensions Search (H1 = 100) Back 0 items Result, but 库里有这pcs Product?',
         l34_5mm_95_105_h1_110_h1_id: 'Dimensions Search Default 容差 ±5mm (固定, 不可改), 即 95-105 之间. 如果Product H1 = 110, 不会命. 改用更小 H1 Value or Precise ID Query.',
         l37_etl_reading: 'ETL Trigger Back 卡in reading Status?',
-        l38_reading_copy_1m_30_60s_5_output_spike_r: 'reading Stage Yes 流式 COPY Staging, 大File (1M rows) 可能 30-60s. 如超过 5 min 无Progress, 检查Back 端Log (output/SPIKE-R',
+        l37_a_etl: 'reading phase is streaming COPY staging, large files (1M rows) may take 30-60s. If no progress after 5 minutes, check backend log (output/SPIKE-REPORT-*.md) for SQL errors.',
         l41_: '怎么 Batch Delete Product?',
-        l42_: 'batch Count Discontinued',
+        l41_a_batch: 'In admin product list, select multiple rows → top "Batch Discontinue" button. Discontinue = is_discontinued=true, hidden on public page, history preserved. For physical delete, use SQL (carefully).',
         l45_: 'Upload Image Back frontend 不Show?',
+        l45_a_image: 'Check (1) product isPublished=true (2) slot 1-6 range (3) browser console for OSS pre-signed URL 1h validity. If expired, reload product page.',
         l46_1_ispublished_true_2_slot_1_6_3_console_: '检查 (1) Product isPublished=true (Listed) (2) slot 1-6 范围 (3) Browser console 看 OSS 预Signature URL 1',
         l82_: 'Enter Admin',
         l84_full_load_insert_only_upsert: '+ Mode (full-load / insert-only / upsert), 点',
@@ -382,6 +397,10 @@ export default {
         l209_: 'Refresh 间隔',
       },
       string: {
+        l150_p95_crit: 'P95 = {ms}ms (≥1000ms Critical)',
+        l152_p95_warn: 'P95 = {ms}ms (≥500ms Warning)',
+        l155_err_crit: 'Error Rate = {pct}% (≥10% Critical)',
+        l157_err_warn: 'Error Rate = {pct}% (≥5% Warning)',
         l164_: '检测',
         l165_: '[EN] 就绪',
         l166_: 'Downgrade',
@@ -460,6 +479,11 @@ export default {
       string: {
         l164_: 'by Modify',
         l164__2: 'by 其他User Modify',
+        l291_slot_uploaded: 'Slot {slot} Uploaded',
+        l312_slot_deleted: 'Slot {slot} Deleted',
+        l340_edit_product: 'Edit Product #{id}',
+        l375_xrefs: '② Cross-Reference ({count})',
+        l510_apps: '⑥ Machine Applications ({count})',
       },
       success: {
         l148_: 'Saved',
@@ -554,6 +578,13 @@ export default {
       },
     },
     productsview: {
+      aria: {
+        l297_oem2: 'OEM 2 Search',
+        l298_mr1: 'MR.1 Search',
+        l299_product_name: 'Product Name Search',
+        l300_type: 'Filter by Type',
+        l307_oem3_batch: 'OEM 3 Batch Search',
+      },
       label: {
         l329_: 'Type',
         l342_: 'carton/pcs',
@@ -662,6 +693,7 @@ export default {
       },
       string: {
         l161_: 'Confirm',
+        l199_reset_pwd: 'Password of {user} has been Reset',
         l56_admin: 'Admin (admin)',
         l57_operator: 'Action 员 (operator)',
         l58_viewer: 'Read-only (viewer)',
@@ -674,6 +706,8 @@ export default {
       },
       title: {
         l384_: 'Add User',
+        l424_edit_user: 'Edit User: {user}',
+        l456_reset_pwd: 'Reset Password: {user}',
       },
       warning: {
         l103_8: 'Password At least 8 pcs 字符',
@@ -681,8 +715,7 @@ export default {
         l99_: 'Username cannot be empty',
       },
     },
-  }
-,
+  },
 
   common: {
     confirm: 'Confirm',
@@ -701,11 +734,14 @@ export default {
     import: 'Import',
     copy: 'Copy',
     copied: 'Copied',
-    success: 'Operation succeeded',
-    failed: 'Operation failed',
+    success: 'Success',
+    failed: 'Failed',
     noData: 'No data',
     noResult: 'No matching results',
-    loadFailed: 'Load failed, please retry or contact administrator'
+    loadFailed: 'Load failed, Please Retry or Contact Admin',
+    dictviewcommon: {
+      total_drag: 'Total {total} (Active {active}, Soft-deleted {soft}) · Drag to Sort',
+    },
   },
   nav: {
     productSearch: 'Product Search',

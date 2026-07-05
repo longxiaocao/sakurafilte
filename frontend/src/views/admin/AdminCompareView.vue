@@ -261,7 +261,7 @@ async function addProductById() {
     return
   }
   if (products.value.length >= MAX_COMPARE) {
-    ElMessage.warning(`最多对比 ${MAX_COMPARE} 个产品`)
+    ElMessage.warning(t('admin.compareview.warning.l262_max', { max: MAX_COMPARE }))
     return
   }
   loading.value = true
@@ -271,7 +271,7 @@ async function addProductById() {
     newIdInput.value = ''
     saveOrder()
     persistUrlOrder()
-    ElMessage.success(`已加入: ${p.oemNoDisplay}`)
+    ElMessage.success(t('admin.compareview.success.l272_added', { oem: p.oemNoDisplay }))
   } catch (e: any) {
     ElMessage.error(e?.message || t('admin.compareview.error.l273_'))
   } finally {

@@ -152,7 +152,7 @@ onMounted(load)
       <div v-if="!loading && items.length === 0" class="dict-empty" > {{ t('admin.mediasview.string.l149_') }}新增 Media开始</div>
     </div>
 
-    <div class="mt-2 text-xs text-muted">共 {{ total }} 条 (启用 {{ activeCount }}, 软删 {{ total - activeCount }}) · 拖动"≡"列重排</div>
+    <div class="mt-2 text-xs text-muted">{{ t("common.dictviewcommon.total_drag", { total, active: activeCount, soft: total - activeCount }) }}</div>
 
     <el-dialog v-model="dialogOpen" :title="dialogMode === 'create' ? t('admin.mediasview.title.l154_media') : t('admin.mediasview.title.l154_media_2')" width="540px">
       <el-form :model="dialogForm" label-width="120px" size="small">

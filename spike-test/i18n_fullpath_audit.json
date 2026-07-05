@@ -1,12 +1,12 @@
 {
   "stats": {
     "files_scanned": 47,
-    "zh_keys": 88,
-    "en_keys": 88,
-    "used_keys": 29,
+    "zh_keys": 578,
+    "en_keys": 578,
+    "used_keys": 511,
     "missing_zh": 0,
     "missing_en": 0,
-    "orphan_zh": 59,
+    "orphan_zh": 67,
     "only_zh": 0,
     "only_en": 0
   },
@@ -17,6 +17,54 @@
     "exit_code": 0
   },
   "findings": [
+    {
+      "severity": "INFO",
+      "category": "orphan",
+      "key": "admin.etlview.string.l351__2",
+      "message": "'admin.etlview.string.l351__2' 定义但未使用 (考虑删除)"
+    },
+    {
+      "severity": "INFO",
+      "category": "orphan",
+      "key": "admin.etlview.string.l386_resume_alt",
+      "message": "'admin.etlview.string.l386_resume_alt' 定义但未使用 (考虑删除)"
+    },
+    {
+      "severity": "INFO",
+      "category": "orphan",
+      "key": "admin.etlview.warning.l323_",
+      "message": "'admin.etlview.warning.l323_' 定义但未使用 (考虑删除)"
+    },
+    {
+      "severity": "INFO",
+      "category": "orphan",
+      "key": "admin.helpview.string.l26_oem_oem2_cross_references_oem_brand_oemn",
+      "message": "'admin.helpview.string.l26_oem_oem2_cross_references_oem_brand_oemn' 定义但未使用 (考虑删除)"
+    },
+    {
+      "severity": "INFO",
+      "category": "orphan",
+      "key": "admin.helpview.string.l30_",
+      "message": "'admin.helpview.string.l30_' 定义但未使用 (考虑删除)"
+    },
+    {
+      "severity": "INFO",
+      "category": "orphan",
+      "key": "admin.helpview.string.l46_1_ispublished_true_2_slot_1_6_3_console_",
+      "message": "'admin.helpview.string.l46_1_ispublished_true_2_slot_1_6_3_console_' 定义但未使用 (考虑删除)"
+    },
+    {
+      "severity": "INFO",
+      "category": "orphan",
+      "key": "admin.helpview.string.l84_full_load_insert_only_upsert",
+      "message": "'admin.helpview.string.l84_full_load_insert_only_upsert' 定义但未使用 (考虑删除)"
+    },
+    {
+      "severity": "INFO",
+      "category": "orphan",
+      "key": "admin.productname1sview.string.l221_",
+      "message": "'admin.productname1sview.string.l221_' 定义但未使用 (考虑删除)"
+    },
     {
       "severity": "INFO",
       "category": "orphan",
@@ -92,56 +140,8 @@
     {
       "severity": "INFO",
       "category": "orphan",
-      "key": "common.delete",
-      "message": "'common.delete' 定义但未使用 (考虑删除)"
-    },
-    {
-      "severity": "INFO",
-      "category": "orphan",
-      "key": "common.edit",
-      "message": "'common.edit' 定义但未使用 (考虑删除)"
-    },
-    {
-      "severity": "INFO",
-      "category": "orphan",
-      "key": "common.export",
-      "message": "'common.export' 定义但未使用 (考虑删除)"
-    },
-    {
-      "severity": "INFO",
-      "category": "orphan",
-      "key": "common.failed",
-      "message": "'common.failed' 定义但未使用 (考虑删除)"
-    },
-    {
-      "severity": "INFO",
-      "category": "orphan",
-      "key": "common.import",
-      "message": "'common.import' 定义但未使用 (考虑删除)"
-    },
-    {
-      "severity": "INFO",
-      "category": "orphan",
-      "key": "common.loadFailed",
-      "message": "'common.loadFailed' 定义但未使用 (考虑删除)"
-    },
-    {
-      "severity": "INFO",
-      "category": "orphan",
-      "key": "common.loading",
-      "message": "'common.loading' 定义但未使用 (考虑删除)"
-    },
-    {
-      "severity": "INFO",
-      "category": "orphan",
-      "key": "common.noData",
-      "message": "'common.noData' 定义但未使用 (考虑删除)"
-    },
-    {
-      "severity": "INFO",
-      "category": "orphan",
       "key": "...",
-      "message": "还有 39 个未使用的 zh key"
+      "message": "还有 47 个未使用的 zh key"
     }
   ]
 }

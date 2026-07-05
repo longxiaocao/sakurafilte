@@ -143,7 +143,7 @@ onMounted(load)
       <div v-if="!loading && items.length === 0" class="dict-empty" > {{ t('admin.oemno3sview.string.l140_') }}新增 OEM 3开始</div>
     </div>
 
-    <div class="mt-2 text-xs text-muted">共 {{ total }} 条 (启用 {{ activeCount }}, 软删 {{ total - activeCount }}) · 拖动"≡"列重排</div>
+    <div class="mt-2 text-xs text-muted">{{ t("common.dictviewcommon.total_drag", { total, active: activeCount, soft: total - activeCount }) }}</div>
 
     <el-dialog v-model="dialogOpen" :title="dialogMode === 'create' ? t('admin.oemno3sview.title.l145_oem_3') : t('admin.oemno3sview.title.l145_oem_3_2')" width="480px">
       <el-form :model="dialogForm" label-width="100px" size="small">

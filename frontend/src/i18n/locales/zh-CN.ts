@@ -61,6 +61,7 @@ export default {
       },
       success: {
         l246_: '已移除',
+        l272_added: '已加入: {oem}',
       },
       title: {
         l373_: '左移',
@@ -70,6 +71,7 @@ export default {
       warning: {
         l253_id: '请输入有效的产品 ID',
         l257_: '该产品已在对比列表中',
+        l262_max: '最多对比 {max} 个产品',
       },
     },
     enginesview: {
@@ -162,16 +164,25 @@ export default {
         l351_: '恢复',
         l351__2: '取消',
         l352_etl: '暂停 ETL 任务',
-        l375_etl_n_n_paused_checkpoint_id_1_commit: '恢复暂停的 ETL 任务?\\n\\n将从最近一条 paused 记录的 checkpoint_id+1 行开始续读, 跳过已 COMMIT 的批次.',
+        l353_cancel_word: '取消',
+        l353_pause_msg: '暂停当前 ETL 任务?\n\n当前批次跑完后会优雅退出, checkpoint_id 会写入 etl_progress_log, 后续可用"{resume}"按钮从该点续读.\n\n(区别于"{cancel}" — 取消会立即终止并回滚当前批次)',
+        l353_resume_word: '恢复',
+        l375_etl_n_n_paused_checkpoint_id_1_commit: '恢复暂停的 ETL 任务?\n\n将从最近一条 paused 记录的 checkpoint_id+1 行开始续读, 跳过已 COMMIT 的批次.',
         l376_etl: '恢复 ETL 任务',
+        l386_resume: '已触发 Resume: entity={entity} checkpoint={checkpoint} (从第 {line} 行开始)',
+        l386_resume_alt: '已触发 Resume: entity={entity} checkpoint={checkpoint} (从第 {line} 行继续)',
         l419_copy: 'COPY 暂存',
         l420_insert: 'INSERT 写库',
         l421_commit: 'COMMIT 提交',
         l422_meili: 'Meili 同步',
         l423_: '完成',
         l481_truncate_xrefs_apps_products: '开启: TRUNCATE 同时清空 xrefs/apps (首次全量场景); 关闭: 仅清 products, 保留关联表 (单独刷新主表)',
+        l64_auto_inferred: '已自动识别 entity={entity}, 文件: {name}',
+        l68_manual_entity: '已填入文件: {name} (entity 需手动选择)',
+        l71_first_only: '本次拖入 {total} 个文件, 仅采用第一个: {name}',
         l78_etl: '松开以填入 ETL 文件路径',
         l96_: '确认',
+        l323_cancel_signal: '已发送取消信号 (码: {code}), 任务即将终止',
       },
       success: {
         l111_dry_run: 'dry-run 校验完成',
@@ -185,6 +196,7 @@ export default {
         l610_10: '收起 (只显示前 10 行)',
       },
       warning: {
+        l323_: '无活跃任务可取消',
         l387_: '恢复失败',
       },
     },
@@ -208,16 +220,19 @@ export default {
         l19_: '发动机品牌 + 型号',
         l19_engine: '发动机 (Engine)',
         l25_oem: '为什么输入 OEM 编号后无法搜索?',
+        l25_a_oem: '检查该 OEM 是否在产品表 oem2 字段里 (注意: 不是 cross_references.oem_brand). 前台公开页用 oemNoDisplay / oem2, 后台搜索用任意一个字段.',
         l26_oem_oem2_cross_references_oem_brand_oemn: '检查该 OEM 是否在产品表 oem2 字段里 (注意: 不是 cross_references.oem_brand). 前台公开页用 oemNoDisplay',
         l29_typeahead: '为什么新增产品时 typeahead 联想不到想要的值?',
+        l29_a_typeahead: '字典是后台维护的, 需先在 "字典管理" → 对应字典 → 新增 value. typeahead 只返回字典内已存在的值 (前 20 条按 sort_order 排).',
         l30_: '字典管理',
         l33_h1_100_0: '尺寸搜索 (H1 = 100) 返回 0 条结果, 但库里有这个产品?',
         l34_5mm_95_105_h1_110_h1_id: '尺寸搜索默认容差 ±5mm (固定, 不可改), 即 95-105 之间. 如果产品 H1 = 110, 不会命中. 改用更小的 H1 值或精确 ID 查询.',
         l37_etl_reading: 'ETL 触发后卡在 reading 状态?',
-        l38_reading_copy_1m_30_60s_5_output_spike_r: 'reading 阶段是流式 COPY 暂存, 大文件 (1M 行) 可能 30-60s. 如超过 5 分钟无进度, 检查后端日志 (output/SPIKE-R',
+        l37_a_etl: 'reading 阶段是流式 COPY 暂存, 大文件 (1M 行) 可能 30-60s. 如超过 5 分钟无进度, 检查后端日志 (output/SPIKE-REPORT-*.md) 看是否有 SQL 错误.',
         l41_: '怎么批量删除产品?',
-        l42_: '批量停售',
+        l41_a_batch: '后台产品列表勾选多行 → 顶部 "批量停售" 按钮. 停售 = is_discontinued=true, 前台不展示, 历史数据保留. 如需物理删除, 走 SQL (慎用).',
         l45_: '上传图片后前台不显示?',
+        l45_a_image: '检查 (1) 产品 isPublished=true (上架) (2) slot 1-6 范围 (3) 浏览器 console 看 OSS 预签名 URL 1 h 有效. 如过期, 重新加载产品页.',
         l46_1_ispublished_true_2_slot_1_6_3_console_: '检查 (1) 产品 isPublished=true (上架) (2) slot 1-6 范围 (3) 浏览器 console 看 OSS 预签名 URL 1 ',
         l82_: '进入后台',
         l84_full_load_insert_only_upsert: ' + 模式 (full-load / insert-only / upsert), 点 ',
@@ -390,6 +405,10 @@ export default {
         l209_: '刷新间隔',
       },
       string: {
+        l150_p95_crit: 'P95 = {ms}ms (≥1000ms 严重)',
+        l152_p95_warn: 'P95 = {ms}ms (≥500ms 警告)',
+        l155_err_crit: '错误率 = {pct}% (≥10% 严重)',
+        l157_err_warn: '错误率 = {pct}% (≥5% 警告)',
         l164_: '检测中',
         l165_: '就绪',
         l166_: '降级',
@@ -468,6 +487,11 @@ export default {
       string: {
         l164_: '已被修改',
         l164__2: '已被其他用户修改',
+        l291_slot_uploaded: 'Slot {slot} 上传成功',
+        l312_slot_deleted: 'Slot {slot} 已删除',
+        l340_edit_product: '编辑产品 #{id}',
+        l375_xrefs: '② 交叉引用 ({count})',
+        l510_apps: '⑥ 适用车型 ({count})',
       },
       success: {
         l148_: '已保存',
@@ -562,6 +586,13 @@ export default {
       },
     },
     productsview: {
+      aria: {
+        l297_oem2: 'OEM 2 搜索',
+        l298_mr1: 'MR.1 搜索',
+        l299_product_name: '产品名搜索',
+        l300_type: '按类型筛选',
+        l307_oem3_batch: 'OEM 3 批量搜索',
+      },
       label: {
         l329_: '类型',
         l342_: '箱/件',
@@ -670,6 +701,7 @@ export default {
       },
       string: {
         l161_: '确认',
+        l199_reset_pwd: '已重置 {user} 的密码',
         l56_admin: '管理员 (admin)',
         l57_operator: '操作员 (operator)',
         l58_viewer: '只读 (viewer)',
@@ -682,6 +714,8 @@ export default {
       },
       title: {
         l384_: '新增用户',
+        l424_edit_user: '编辑用户: {user}',
+        l456_reset_pwd: '重置密码: {user}',
       },
       warning: {
         l103_8: '密码至少 8 个字符',
@@ -689,8 +723,7 @@ export default {
         l99_: '用户名不能为空',
       },
     },
-  }
-,
+  },
 
   common: {
     confirm: '确认',
@@ -713,7 +746,10 @@ export default {
     failed: '操作失败',
     noData: '暂无数据',
     noResult: '未找到匹配结果',
-    loadFailed: '加载失败, 请稍后重试或联系管理员'
+    loadFailed: '加载失败, 请稍后重试或联系管理员',
+    dictviewcommon: {
+      total_drag: '共 {total} 条 (启用 {active}, 软删 {soft}) · 拖动以排序',
+    },
   },
   nav: {
     productSearch: '产品搜索',

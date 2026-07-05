@@ -63,13 +63,13 @@ function handleFilesDropped(files: File[]) {
   if (inferred) {
     form.entity = inferred
     form.jsonlPath = serverPath
-    ElMessage.success(`已自动识别 entity=${inferred}, 文件: ${f.name}`)
+    ElMessage.success(t('admin.etlview.string.l64_auto_inferred', { entity: inferred, name: f.name }))
   } else {
     form.jsonlPath = serverPath
-    ElMessage.info(`已填入文件: ${f.name} (entity 需手动选择)`)
+    ElMessage.info(t('admin.etlview.string.l68_manual_entity', { name: f.name }))
   }
   if (files.length > 1) {
-    ElMessage.warning(`本次拖入 ${files.length} 个文件, 仅采用第一个: ${f.name}`)
+    ElMessage.warning(t('admin.etlview.string.l71_first_only', { total: files.length, name: f.name }))
   }
 }
 
@@ -321,7 +321,7 @@ async function doCancel() {
   try {
     const r = await etlApi.cancel(reason, reasonCode)
     if (r.cancelled) {
-      ElMessage.warning(`已发送取消信号 (码: ${reasonCode}), 任务即将终止`)
+      ElMessage.warning(t('admin.etlview.string.l323_cancel_signal', { code: reasonCode }))
     } else {
       ElMessage.info(r.reason || t('admin.etlview.info.l323_'))
     }
@@ -351,7 +351,7 @@ onMounted(() => { checkPausedTask() })
 async function doPause() {
   try {
     await ElMessageBox.confirm(
-      '暂停当前 ETL 任务?\n\n当前批次跑完后会优雅退出, checkpoint_id 会写入 etl_progress_log, 后续可用"恢复"按钮从该点续读.\n\n(区别于"取消" — 取消会立即终止并回滚当前批次)',
+      t('admin.etlview.string.l353_pause_msg', { resume: t('admin.etlview.string.l353_resume_word'), cancel: t('admin.etlview.string.l353_cancel_word') }),
       t('admin.etlview.string.l352_etl'),
       { type: 'warning', confirmButtonText: t('admin.etlview.buttontext.l353_'), cancelButtonText: t('admin.etlview.buttontext.l353__2') }
     )
@@ -384,7 +384,7 @@ async function doResume() {
   try {
     const r = await etlApi.resume()
     if (r.resumed) {
-      ElMessage.success(`已触发 Resume: entity=${r.entity} checkpoint=${r.checkpointId} (从第 ${r.nextLineNo} 行开始)`)
+      ElMessage.success(t('admin.etlview.string.l386_resume', { entity: r.entity, checkpoint: r.checkpointId, line: r.nextLineNo }))
       hasPausedTask.value = false  // Resume 已触发新的 ETL, paused 记录应已不算最新
     } else {
       ElMessage.warning(r.error || t('admin.etlview.warning.l387_'))

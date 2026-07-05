@@ -289,7 +289,7 @@ async function uploadImage(slot: number, e: Event) {
   uploading.value = true
   try {
     const r = await imageApi.upload(productId.value, slot, file)
-    ElMessage.success(`Slot ${slot} 上传成功`)
+    ElMessage.success(t('admin.productformview.string.l291_slot_uploaded', { slot }))
     images.value[slot - 1] = r
   } catch {
     // 已被拦截器
@@ -310,7 +310,7 @@ async function removeImage(slot: number) {
   try {
     await imageApi.remove(productId.value, slot)
     images.value[slot - 1] = undefined as any
-    ElMessage.success(`Slot ${slot} 已删除`)
+    ElMessage.success(t('admin.productformview.string.l312_slot_deleted', { slot }))
   } catch {
     // 已被拦截器
   } finally {
@@ -338,7 +338,7 @@ onBeforeUnmount(() => {
   <div class="p-3 max-w-screen-xl mx-auto" v-loading="loading">
     <div class="flex items-center gap-2 mb-3">
       <el-button @click="router.back()" size="small">返回</el-button>
-      <h1 class="text-lg font-medium">{{ isEdit ? `编辑产品 #${productId}` : t('admin.productformview.templatetext.l338_') }}</h1>
+      <h1 class="text-lg font-medium">{{ isEdit ? t('admin.productformview.string.l340_edit_product', { id: productId }) : t('admin.productformview.templatetext.l338_') }}</h1>
       <div class="flex-1" />
       <el-button type="primary" @click="save" :loading="saving">保存</el-button>
     </div>
@@ -373,7 +373,7 @@ onBeforeUnmount(() => {
         </el-collapse-item>
 
         <!-- 分区 2: 交叉引用 -->
-        <el-collapse-item :title="`② 交叉引用 (${form.crossReferences.length})`" name="2">
+        <el-collapse-item :title="`t('admin.productformview.string.l375_xrefs', { count: form.crossReferences.length })`" name="2">
           <div v-for="(x, i) in form.crossReferences" :key="i" class="flex gap-2 mb-2">
             <!-- Day 10: P1.3 自动补全 — 字典为空时降级为自由输入 -->
             <el-autocomplete
@@ -508,7 +508,7 @@ onBeforeUnmount(() => {
         </el-collapse-item>
 
         <!-- 分区 7: 车型 (P2.2: machine/engine 字段全部 typeahead) -->
-        <el-collapse-item :title="`⑥ 适用车型 (${form.machineApplications.length})`" name="7">
+        <el-collapse-item :title="`t('admin.productformview.string.l510_apps', { count: form.machineApplications.length })`" name="7">
           <div v-for="(m, i) in form.machineApplications" :key="i" class="grid grid-cols-5 gap-2 mb-2">
             <!-- 机型品牌: typeahead -->
             <el-autocomplete v-model="m.machineBrand" :fetch-suggestions="queryMachineBrand"

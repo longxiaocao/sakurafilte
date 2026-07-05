@@ -153,7 +153,7 @@ onMounted(load)
       <div v-if="!loading && items.length === 0" class="dict-empty" > {{ t('admin.typesview.string.l150_') }}新增 Type开始</div>
     </div>
 
-    <div class="mt-2 text-xs text-muted">共 {{ total }} 条 (启用 {{ activeCount }}, 软删 {{ total - activeCount }}) · 拖动"≡"列重排, P2.3 前台立即生效</div>
+    <div class="mt-2 text-xs text-muted">{{ t("common.dictviewcommon.total_drag", { total, active: activeCount, soft: total - activeCount }) }}</div>
 
     <el-dialog v-model="dialogOpen" :title="dialogMode === 'create' ? t('admin.typesview.title.l155_type') : t('admin.typesview.title.l155_type_2')" width="480px">
       <el-form :model="dialogForm" label-width="100px" size="small">

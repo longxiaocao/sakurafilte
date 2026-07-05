@@ -197,7 +197,7 @@ async function saveReset() {
   userSubmitting.value = true
   try {
     await usersApi.resetPassword(resetForm.id, resetForm.newPassword)
-    ElMessage.success(`已重置 ${resetForm.username} 的密码`)
+    ElMessage.success(t('admin.usersview.string.l199_reset_pwd', { user: resetForm.username }))
     resetOpen.value = false
   } catch {
     // axios 拦截器已统一弹错误
@@ -422,7 +422,7 @@ onMounted(() => {
     </el-dialog>
 
     <!-- 编辑用户对话框 -->
-    <el-dialog v-model="editOpen" :title="`编辑用户: ${editForm.username}`" width="480px">
+    <el-dialog v-model="editOpen" :title="`t('admin.usersview.title.l424_edit_user', { user: editForm.username })`" width="480px">
       <el-form :model="editForm" label-width="80px" size="small">
         <el-form-item :label="t('admin.usersview.label.l424_')">
           <el-input :model-value="editForm.username" disabled />
@@ -454,7 +454,7 @@ onMounted(() => {
     </el-dialog>
 
     <!-- 重置密码对话框 -->
-    <el-dialog v-model="resetOpen" :title="`重置密码: ${resetForm.username}`" width="480px">
+    <el-dialog v-model="resetOpen" :title="`t('admin.usersview.title.l456_reset_pwd', { user: resetForm.username })`" width="480px">
       <el-form :model="resetForm" label-width="80px" size="small">
         <el-form-item :label="t('admin.usersview.label.l456_')" required>
           <el-input

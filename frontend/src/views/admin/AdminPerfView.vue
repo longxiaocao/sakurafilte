@@ -148,14 +148,14 @@ const alerts = computed<{ level: 'warning' | 'critical'; msg: string }[]>(() => 
   const p = perf.value
   if (!p) return list
   if (p.p95Ms >= 1000) {
-    list.push({ level: 'critical', msg: `P95 = ${p.p95Ms.toFixed(0)}ms (≥1000ms 严重)` })
+    list.push({ level: 'critical', msg: t("admin.perfview.string.l150_p95_crit", { ms: p.p95Ms.toFixed(0) }) })
   } else if (p.p95Ms >= 500) {
-    list.push({ level: 'warning', msg: `P95 = ${p.p95Ms.toFixed(0)}ms (≥500ms 警告)` })
+    list.push({ level: 'warning', msg: t("admin.perfview.string.l152_p95_warn", { ms: p.p95Ms.toFixed(0) }) })
   }
   if (p.errorRate >= 10) {
-    list.push({ level: 'critical', msg: `错误率 = ${p.errorRate.toFixed(1)}% (≥10% 严重)` })
+    list.push({ level: 'critical', msg: t("admin.perfview.string.l155_err_crit", { pct: p.errorRate.toFixed(1) }) })
   } else if (p.errorRate >= 5) {
-    list.push({ level: 'warning', msg: `错误率 = ${p.errorRate.toFixed(1)}% (≥5% 警告)` })
+    list.push({ level: 'warning', msg: t("admin.perfview.string.l157_err_warn", { pct: p.errorRate.toFixed(1) }) })
   }
   return list
 })
