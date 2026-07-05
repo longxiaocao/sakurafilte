@@ -446,8 +446,16 @@ def test_scenario_4_dict_management(page, token):
                    "PASS" if has_table else "FAIL",
                    "表格存在", "存在" if has_table else "不存在")
 
-            # 检查拖拽手柄
-            has_drag = page.query_selector(".drag-handle, [draggable]") is not None
+            # 检查拖拽手柄 (加固: 主动等待 + 重试, 解决偶发 WARN)
+            #   WHY: v-if="isDraggable(row)" 条件渲染, 行加载时序可能导致首次未检测到
+            #   方案: wait_for_selector 主动等 3s, 超时后再 query_selector 兜底
+            has_drag = False
+            try:
+                page.wait_for_selector(".drag-handle", timeout=3000)
+                has_drag = True
+            except Exception:
+                # 兜底: 再 query 一次 (含 [draggable] 属性)
+                has_drag = page.query_selector(".drag-handle, [draggable]") is not None
             record("4-字典管理", f"{name}-拖拽手柄",
                    "PASS" if has_drag else "WARN",
                    "拖拽手柄存在", "存在" if has_drag else "未找到")
