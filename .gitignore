@@ -116,3 +116,12 @@ spike-test/output/_test_*.jsonl
 spike-test/output/products_*.jsonl
 spike-test/output/cleaned/
 spike-test/output/synthetic_*_1000k.*
+
+## k6 二进制 (可在 https://github.com/grafana/k6/releases 重新下载, 不提交)
+# WHY: 二进制文件 ~50MB, 跨平台, 团队成员各自下载本地版本
+spike-test/perf/k6-bin/
+
+## 性能压测结果 (可重建, 不提交)
+# WHY: 压测报告由 perf 脚本生成, 含时间戳, 每次跑都不同
+spike-test/perf/results/
+spike-test/perf/stress_search.py
