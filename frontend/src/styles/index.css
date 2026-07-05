@@ -219,6 +219,35 @@ html.dark {
   --el-color-primary-light-5: var(--color-accent);
   --el-color-primary-light-7: var(--color-accent);
   --el-color-primary-light-9: var(--color-bg-hover);
+  /* UX P0-2: dark 模式补全覆盖 - 之前只覆盖了 text/border/bg, 表格/分页/弹窗/消息仍用 EP 默认浅色 */
+  --el-table-bg-color: var(--color-bg-elevated);
+  --el-table-tr-bg-color: var(--color-bg-elevated);
+  --el-table-body-text-color: var(--color-text);
+  --el-table-header-text-color: var(--color-text);
+  --el-table-row-hover-bg-color: var(--color-bg-hover);
+  --el-pagination-bg-color: var(--color-bg-elevated);
+  --el-pagination-button-bg-color: var(--color-bg-elevated);
+  --el-pagination-button-color: var(--color-text);
+  --el-pagination-button-disabled-bg-color: var(--color-bg-hover);
+  --el-pagination-hover-color: var(--color-accent);
+  --el-dropdown-menu-bg-color: var(--color-bg-elevated);
+  --el-dropdown-menuItem-hover-fill: var(--color-bg-hover);
+  --el-dropdown-menuItem-hover-color: var(--color-accent);
+  --el-dropdown-menuItem-color: var(--color-text);
+  --el-message-bg-color: var(--color-bg-elevated);
+  --el-message-border-color: var(--color-border);
+  --el-message-text-color: var(--color-text);
+  --el-popover-bg-color: var(--color-bg-elevated);
+  --el-popover-border-color: var(--color-border);
+  --el-popover-title-text-color: var(--color-text);
+  --el-popover-text-color: var(--color-text);
+  --el-tooltip-bg-color: var(--color-bg-overlay);
+  --el-tooltip-text-color: var(--color-text);
+  --el-tag-bg-color: var(--color-bg-hover);
+  --el-tag-text-color: var(--color-text);
+  --el-tag-border-color: var(--color-border);
+  --el-switch-off-color: var(--color-border);
+  --el-switch-on-color: var(--color-accent);
 }
 
 html.dark .el-card,

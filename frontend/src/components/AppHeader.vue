@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAdminAuth } from '@/composables/useAdminAuth'
@@ -7,6 +7,10 @@ import { useThemeStore } from '@/stores/theme'  // P5.3
 import { authApi } from '@/api'
 import { useI18n } from 'vue-i18n'  // P2.6
 import { setLocale } from '@/i18n'  // P2.6
+
+// UX P0-1: 移动端汉堡菜单 drawer 状态
+const mobileNavOpen = ref(false)
+function closeMobileNav() { mobileNavOpen.value = false }
 
 const route = useRoute()
 const router = useRouter()
@@ -136,8 +140,18 @@ function toggleLocale() {
     class="hairline-b bg-[var(--color-bg)] flex items-center px-3 h-12 gap-3"
     role="banner"
   >
+    <!-- UX P0-1: 移动端汉堡按钮 (sm 以下显示, 桌面端隐藏) -->
+    <button
+      class="sm:hidden -ml-1 p-2 hover:bg-[var(--color-bg-hover)] flex items-center"
+      @click="mobileNavOpen = true"
+      aria-label="打开导航菜单"
+      :aria-expanded="mobileNavOpen"
+    >
+      <el-icon aria-hidden="true"><Menu /></el-icon>
+    </button>
     <div class="font-medium text-base tracking-tight">SakuraFilter</div>
-    <nav class="flex items-center gap-1 ml-3" aria-label="主导航">
+    <!-- UX P0-1: 桌面端 nav (sm 以上显示, 移动端隐藏) -->
+    <nav class="hidden sm:flex items-center gap-1 ml-3" aria-label="主导航">
       <template v-for="item in navItems" :key="item.label">
         <!-- Day 10+: 字典管理下拉 (P1.3 + P2.2 共 8 个) -->
         <el-dropdown
@@ -186,10 +200,10 @@ function toggleLocale() {
       </template>
     </nav>
     <div class="flex-1" />
-    <!-- P5.3 主题切换按钮 -->
+    <!-- P5.3 主题切换按钮 (桌面端显示, 移动端由 drawer 接管) -->
     <button
       @click="theme.toggle()"
-      class="px-2 py-1 text-sm hairline hover:bg-[var(--color-bg-hover)] flex items-center gap-1"
+      class="hidden sm:flex px-2 py-1 text-sm hairline hover:bg-[var(--color-bg-hover)] items-center gap-1"
       :title="theme.mode === 'dark' ? '切换到浅色' : '切换到深色'"
       aria-label="主题切换"
       :aria-pressed="theme.mode === 'dark'"
@@ -197,21 +211,22 @@ function toggleLocale() {
       <el-icon aria-hidden="true"><Moon v-if="theme.mode === 'light'" /><Sunny v-else /></el-icon>
       <span class="hidden sm:inline">{{ theme.mode === 'dark' ? '深色' : '浅色' }}</span>
     </button>
-    <!-- P2.6: 语言切换按钮 (中英双语) -->
+    <!-- P2.6: 语言切换按钮 (中英双语, 移动端由 drawer 接管) -->
     <button
       @click="toggleLocale"
-      class="px-2 py-1 text-sm hairline hover:bg-[var(--color-bg-hover)] flex items-center gap-1"
+      class="hidden sm:flex px-2 py-1 text-sm hairline hover:bg-[var(--color-bg-hover)] items-center gap-1"
       :aria-label="`切换语言, 当前 ${locale === 'zh-CN' ? '中文' : 'English'}`"
       title="切换语言"
     >
       <el-icon aria-hidden="true"><Promotion /></el-icon>
       <span class="hidden sm:inline">{{ locale === 'zh-CN' ? '中' : 'EN' }}</span>
     </button>
-    <!-- JWT 改造: 用户菜单 (已登录显示 el-dropdown, 未登录显示进入后台按钮) -->
+    <!-- JWT 改造: 用户菜单 (已登录显示 el-dropdown, 未登录显示进入后台按钮; 移动端由 drawer 接管) -->
     <el-dropdown
       v-if="isAdminPath && user"
       :trigger="userTrigger"
       @command="onUserCommand"
+      class="hidden sm:inline-block"
     >
       <button
         class="px-2 py-1 text-sm hairline hover:bg-[var(--color-bg-hover)] flex items-center gap-1"
@@ -239,11 +254,104 @@ function toggleLocale() {
     <button
       v-else
       @click="toggleAdmin"
-      class="px-2 py-1 text-sm hairline hover:bg-[var(--color-bg-hover)] flex items-center gap-1"
+      class="hidden sm:flex px-2 py-1 text-sm hairline hover:bg-[var(--color-bg-hover)] items-center gap-1"
       :aria-label="isAdminPath ? '退出后台' : '进入后台登录'"
     >
       <el-icon aria-hidden="true"><Lock v-if="!isAdminPath" /><Unlock v-else /></el-icon>
       {{ isAdminPath ? '退出后台' : '进入后台' }}
     </button>
   </header>
+
+  <!-- UX P0-1: 移动端导航抽屉 (sm 以下显示, 桌面端不渲染) -->
+  <!-- WHY: 9 个 nav 按钮 + 3 个工具按钮在 390px 移动端溢出 701px (1.8x 视口宽度), -->
+  <!--   用 drawer 收纳全部 nav, 桌面端 <nav> 完全不受影响 -->
+  <el-drawer
+    v-model="mobileNavOpen"
+    direction="rtl"
+    size="85%"
+    :with-header="false"
+    class="sm:hidden"
+    aria-label="移动端导航菜单"
+  >
+    <div
+      class="h-full flex flex-col p-4"
+      style="background: var(--color-bg-elevated); color: var(--color-text);"
+    >
+      <div class="font-medium text-base tracking-tight mb-4">SakuraFilter</div>
+      <nav class="flex flex-col gap-1 flex-1" aria-label="移动端主导航">
+        <template v-for="item in navItems" :key="'m-' + item.label">
+          <!-- 字典管理: drawer 内展开为分组列表, 避免嵌套 dropdown -->
+          <div v-if="item.dropdown === 'dict'" class="flex flex-col">
+            <div class="text-xs uppercase px-2 py-1 text-muted">字典管理</div>
+            <button
+              v-for="d in dictItems"
+              :key="d.path"
+              @click="goDict(d.path); closeMobileNav()"
+              class="px-2 py-2 text-left text-sm flex items-center hover:bg-[var(--color-bg-hover)]"
+              :class="route.path === d.path ? 'text-accent font-medium' : ''"
+              :aria-label="d.label"
+              :aria-current="route.path === d.path ? 'page' : undefined"
+            >
+              {{ d.label }}
+            </button>
+          </div>
+          <button
+            v-else
+            @click="go(item); closeMobileNav()"
+            class="px-2 py-2 text-left text-sm flex items-center hover:bg-[var(--color-bg-hover)]"
+            :class="item.path && route.path === item.path ? 'text-accent font-medium' : ''"
+            :aria-label="item.label"
+            :aria-current="item.path && route.path === item.path ? 'page' : undefined"
+          >
+            <el-icon class="mr-2" aria-hidden="true"><component :is="item.icon" /></el-icon>
+            {{ item.label }}
+          </button>
+        </template>
+      </nav>
+      <!-- drawer 底部: 主题 + 语言 + 用户/进入后台 -->
+      <div class="hairline-t pt-3 flex flex-col gap-1">
+        <button
+          @click="theme.toggle(); closeMobileNav()"
+          class="px-2 py-2 text-left text-sm flex items-center hover:bg-[var(--color-bg-hover)]"
+          :aria-label="theme.mode === 'dark' ? '切换到浅色' : '切换到深色'"
+        >
+          <el-icon class="mr-2" aria-hidden="true"><Moon v-if="theme.mode === 'light'" /><Sunny v-else /></el-icon>
+          {{ theme.mode === 'dark' ? '浅色' : '深色' }}
+        </button>
+        <button
+          @click="toggleLocale(); closeMobileNav()"
+          class="px-2 py-2 text-left text-sm flex items-center hover:bg-[var(--color-bg-hover)]"
+          :aria-label="`切换语言, 当前 ${locale === 'zh-CN' ? '中文' : 'English'}`"
+        >
+          <el-icon class="mr-2" aria-hidden="true"><Promotion /></el-icon>
+          {{ locale === 'zh-CN' ? 'English' : '中文' }}
+        </button>
+        <div v-if="user" class="px-2 py-2 text-sm flex items-center gap-2">
+          <el-icon aria-hidden="true"><User /></el-icon>
+          {{ user.username }}
+          <el-tag size="small" :type="user.role === 'admin' ? 'danger' : user.role === 'operator' ? 'primary' : 'info'">
+            {{ user.role }}
+          </el-tag>
+        </div>
+        <button
+          v-if="user"
+          @click="handleLogout(); closeMobileNav()"
+          class="px-2 py-2 text-left text-sm flex items-center text-red-500 hover:bg-[var(--color-bg-hover)]"
+          aria-label="退出登录"
+        >
+          <el-icon class="mr-2" aria-hidden="true"><SwitchButton /></el-icon>
+          退出登录
+        </button>
+        <button
+          v-else
+          @click="toggleAdmin(); closeMobileNav()"
+          class="px-2 py-2 text-left text-sm flex items-center hover:bg-[var(--color-bg-hover)]"
+          :aria-label="isAdminPath ? '退出后台' : '进入后台登录'"
+        >
+          <el-icon class="mr-2" aria-hidden="true"><Lock v-if="!isAdminPath" /><Unlock v-else /></el-icon>
+          {{ isAdminPath ? '退出后台' : '进入后台' }}
+        </button>
+      </div>
+    </div>
+  </el-drawer>
 </template>
