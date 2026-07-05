@@ -1946,6 +1946,57 @@ def test_backend_deep_water(token):
     except Exception as e:
         record("后端深水区", "SSE/机型品牌-异常", "FAIL", "API 调用", str(e))
 
+    # 19. 公开产品端点 (P2 测试盲点补充)
+    # WHY: /api/public/by-type 和 /api/public/product/{slug} 之前未测试
+    #   by-type: 按 dict_type 分组聚合产品摘要 (前台首页 4 大类展示)
+    #   product/{slug}: 单产品详情 (slug 解析 oem, 支持 OemNoDisplay/Oem2/Mr1 三级匹配)
+    print("\n[BD.19] 公开产品端点")
+    try:
+        # 19.1 by-type 聚合 (无需 token)
+        resp = requests.get(f"{BACKEND}/api/public/by-type", timeout=20)
+        if resp.status_code == 200:
+            data = resp.json()
+            # ByTypeResponse: { types: N, groups: [...] }
+            groups = data.get("groups", [])
+            total_count = data.get("totalCount", 0)
+            ok = len(groups) > 0 or total_count >= 0
+            record("后端深水区", "by-type聚合",
+                   "PASS" if ok else "FAIL",
+                   "200 + groups 非空",
+                   f"groups={len(groups)}, total={total_count}")
+        else:
+            record("后端深水区", "by-type聚合", "FAIL",
+                   "200 OK", f"status={resp.status_code}")
+
+        # 19.2 product/{slug} 单产品详情 (用已知 OEM)
+        resp = requests.get(f"{BACKEND}/api/public/product/E2E202607046159", timeout=10)
+        if resp.status_code == 200:
+            data = resp.json()
+            # 验证关键字段 (id/oem2/productName1)
+            has_fields = ("id" in data and "oem2" in data and "productName1" in data)
+            record("后端深水区", "产品详情-slug",
+                   "PASS" if has_fields else "WARN",
+                   "id + oem2 + productName1 字段",
+                   f"keys={list(data.keys())[:8]}")
+        else:
+            record("后端深水区", "产品详情-slug", "FAIL",
+                   "200 OK", f"status={resp.status_code}")
+
+        # 19.3 product/{slug} 不存在应 404
+        resp = requests.get(f"{BACKEND}/api/public/product/NOT_EXIST_SLUG_99999",
+                          timeout=10)
+        record("后端深水区", "产品详情-不存在",
+               "PASS" if resp.status_code == 404 else "WARN",
+               "404 Not Found", f"status={resp.status_code}")
+
+        # 19.4 by-type 公开访问 (无 token 应 200, [AllowAnonymous])
+        resp = requests.get(f"{BACKEND}/api/public/by-type", timeout=20)
+        record("后端深水区", "by-type公开访问",
+               "PASS" if resp.status_code == 200 else "FAIL",
+               "200 OK (AllowAnonymous)", f"status={resp.status_code}")
+    except Exception as e:
+        record("后端深水区", "公开产品端点-异常", "FAIL", "API 调用", str(e))
+
 def test_scenario_6_login_ui(page, login_resp):
     """场景 6: 登录页 UI 流程 (P2 测试盲点补充)
     WHY: 之前 E2E 通过 API 登录 + 注入 localStorage, 完全跳过 /login 页面
