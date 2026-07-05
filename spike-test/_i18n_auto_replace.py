@@ -1,33 +1,30 @@
 """
-i18n 半自动替换脚本
-=====================
-WHY: admin 页面有 1029 处硬编码中文, 全部手工替换会耗尽 context 且易出错.
-  本脚本做"半自动" - 减少人工, 但保留审核:
+i18n 半自动替换脚本 v2
+=======================
+WHY v2:
+  - v1 在第 269 行直接跳过所有含 [a-zA-Z0-9] 的字符串 (如 "OEM 编号", "产品名 1"),
+    导致 160 处关键 label/placeholder 未被替换, 仅 6 处生效.
+  - 替换语法有 bug: `title=t('key')` 应为 `:title="t('key')"`, 且
+    `t` 函数需从 useI18n 显式解构, 否则 template 中无效.
+  - 自动注入 useI18n 到缺失的 .vue 文件.
 
-  1. 读取 hardcoded_zh_audit.json
-  2. 按文件分组, 优先 ElMessage (用户最常看到) > placeholder > label
-  3. 对每条中文字符串:
-     - 调用 _i18n_glossary.translate_zh_to_en() 生成专业英文翻译
-     - 生成 i18n key (admin.{file}.line{line})
-     - 写入 zh-CN.ts 和 en-US.ts
-     - 在 .vue 文件中替换为 t('admin.x.y')
-  4. 替换策略:
-     - 纯字面量: 直接替换
-     - 模板字符串 (含 ${}): 跳过 (需人工设计 key + 插值)
-     - 单字: 跳过
-  5. 跑 _i18n_fullpath_audit.py 验证 0 缺失
+改进:
+  1. 放宽 mixed 跳过规则: 仅跳过含 `{` `}` `$` `\` `{{` 的非标点干扰项
+  2. 修复语法: 替换时自动判别属性绑定/插值, 生成正确语法
+  3. 扫描所有 .vue 缺失 useI18n 的 script, 自动注入 `const { t } = useI18n()`
+  4. 注入到 zh-CN.ts / en-US.ts
 
 用法:
   python _i18n_auto_replace.py                  # 处理所有 ElMessage + 短纯字面量
   python _i18n_auto_replace.py --dry-run        # 只报告不修改
-  python _i18n_auto_replace.py --type ElMessage # 只处理 ElMessage
+  python _i18n_auto_replace.py --type ElMessage # 只处理某类型
 """
 import argparse
 import json
 import re
 import sys
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Set
 
 # WHY: 引入过滤器专业术语词典, 让英文翻译自动化 + 行业化
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -55,18 +52,16 @@ def safe_key(s: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", s.lower()).strip("_")[:40]
 
 
-def needs_escape_for_ts(s: str) -> str:
-    """转义 TS 字符串字面量"""
-    return s.replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\n")
+def _escape_for_ts(s: str) -> str:
+    """转义字符串字面量, 嵌入 TS 单引号字符串"""
+    return s.replace("\\", "\\\\").replace("'", "\\'")
 
 
 def generate_key(file_rel: str, line: int, ctx: str, text: str, used: set) -> str:
     """生成唯一 i18n key"""
     file_short = Path(file_rel).stem.replace("Admin", "").replace(".vue", "").lower()
-    # 简化 ctx
     ctx_short = ctx.split(".")[-1] if "." in ctx else ctx.replace("-", "")
     base = f"admin.{file_short}.{ctx_short}.l{line}_{safe_key(text)}"
-    # 去重
     key = base
     n = 2
     while key in used:
@@ -88,24 +83,23 @@ def translate_with_fallback(zh: str) -> str:
     return f"[EN] {zh[:30]}"
 
 
-def _escape_for_ts(s: str) -> str:
-    """转义字符串字面量, 嵌入 TS 单引号字符串"""
-    return s.replace("\\", "\\\\").replace("'", "\\'")
+def has_template_or_special(text: str) -> bool:
+    """
+    检查是否含不可处理的内容 (模板字符串/插值)
+    WHY v2: 原版同时跳过 ASCII 字母/数字, 导致 160+ 处无法替换.
+             现在只跳过含 `${...}` `{{...}}` 反引号 换行 的内容.
+    """
+    if "${" in text or "`" in text or "{{" in text:
+        return True
+    if "\n" in text:
+        return True
+    return False
 
 
 def inject_to_locale(ts_path: Path, entries: Dict[str, str], locale_name: str) -> None:
     """
     把 key→value 注入到 locale TS 文件的 export default { ... } 中.
     分组: admin.{file_short}.{ctx_short} = value
-
-    注入策略:
-      1. 读取文件, 找到 export default { ... } 的精确边界 (括号匹配)
-      2. 在 { ... } 内部:
-         - 已有 admin: {...} 块 → 替换其内部内容
-         - 无 admin 块 → 在 { 后插入
-      3. 确保上一个属性末尾有逗号, 避免 TS 语法错误
-
-    关键修复: 用括号匹配找精确的 { ... } 边界, 避免正则误吞
     """
     text = ts_path.read_text(encoding="utf-8")
 
@@ -143,7 +137,6 @@ def inject_to_locale(ts_path: Path, entries: Dict[str, str], locale_name: str) -
         print(f"  [WARN] {locale_name} 找不到 export default {{ }}, 跳过注入")
         return
 
-    # 括号匹配找 export default 块的结束位置
     ed_start = ed_match.end()  # 在 { 之后
     depth = 1
     i = ed_start
@@ -161,13 +154,10 @@ def inject_to_locale(ts_path: Path, entries: Dict[str, str], locale_name: str) -
         return
     ed_end = i  # 在 } 位置
 
-    # ed_start 到 ed_end 之间是 export default 的内容 (不含 { })
     body = text[ed_start:ed_end]
 
-    # 在 body 中找 admin: { ... } 块 (括号匹配)
     admin_match = re.search(r"^(\s*)admin:\s*\{", body, re.MULTILINE)
     if admin_match:
-        # 已有 admin 块, 找匹配的 } (括号匹配)
         admin_inner_start = admin_match.end()
         depth = 1
         j = admin_inner_start
@@ -183,17 +173,145 @@ def inject_to_locale(ts_path: Path, entries: Dict[str, str], locale_name: str) -
         if depth != 0:
             print(f"  [WARN] {locale_name} admin 块未闭合")
             return
-        # admin_match.start() 到 j+1 (含 })
         new_body = body[:admin_match.start()] + admin_block.rstrip(",") + "\n" + body[j+1:]
     else:
-        # 无 admin 块, 在 body 开头插入
-        # 确保 body 之前的内容末尾有逗号 (如果不是, 改 body 开头加逗号)
         new_body = admin_block + "\n" + body
 
-    # 检查 export default 块结尾的 , 符号
-    # 简单: 重新拼接
     new_text = text[:ed_start] + new_body + text[ed_end:]
     ts_path.write_text(new_text, encoding="utf-8")
+
+
+def ensure_usei18n(vue_path: Path) -> bool:
+    """
+    确保 .vue 文件 script setup 中有 `import { useI18n }` + `const { t } = useI18n()`
+    WHY v2: v1 替换时假设文件已有 useI18n, 实际大部分 admin 视图未导入, 导致 t() 未定义.
+
+    Returns: True if injection happened, False if already had it
+    """
+    text = vue_path.read_text(encoding="utf-8")
+
+    if "useI18n" in text and "const { t }" in text:
+        return False
+
+    # 1. 注入 import
+    if "useI18n" not in text:
+        # 在 'vue' 或 'vue-router' 导入后插入 vue-i18n
+        if "from 'vue'" in text:
+            text = text.replace(
+                "from 'vue'",
+                "from 'vue'\nimport { useI18n } from 'vue-i18n'",
+                1
+            )
+        elif "from \"vue\"" in text:
+            text = text.replace(
+                "from \"vue\"",
+                "from \"vue\"\nimport { useI18n } from 'vue-i18n'",
+                1
+            )
+        else:
+            # 兜底: 第一个 import 行后插入
+            text = re.sub(
+                r"(import .+\n)",
+                r"\1import { useI18n } from 'vue-i18n'\n",
+                text,
+                count=1
+            )
+
+    # 2. 注入 const { t } = useI18n()
+    if "const { t }" not in text:
+        # 找到最后一个 import 行, 在它之后插入 const { t } = useI18n()
+        # 关键: 必须在所有 import 之后, 否则 useI18n 未定义
+        import_lines = list(re.finditer(r"^import .+?$", text, re.MULTILINE))
+        if import_lines:
+            last_import = import_lines[-1]
+            insert_pos = last_import.end() + 1  # +1 是换行
+            text = text[:insert_pos] + "\nconst { t } = useI18n()\n" + text[insert_pos:]
+        else:
+            # 兜底: <script setup> 后
+            m = re.search(r"(<script setup[^>]*>\n)", text)
+            if m:
+                insert_pos = m.end()
+                text = text[:insert_pos] + "\nconst { t } = useI18n()\n" + text[insert_pos:]
+
+    vue_path.write_text(text, encoding="utf-8")
+    return True
+
+
+def replace_in_vue(text: str, old: str, key: str) -> Tuple[str, int]:
+    """
+    智能替换 .vue 中的中文字符串.
+
+    关键修复 v2:
+      - `title="中文"` → `:title="t('key')"` (属性绑定)
+      - `title=t('key')` → `:title="t('key')"` (语法补全)
+      - `:title="中文"` → `:title="t('key')"` (插值)
+      - `'中文'` → `t('key')` (普通字符串)
+      - `"中文"` → `t('key')` (双引号)
+      - `name: '中文'` → `name: t('key')` (object 属性)
+
+    Returns: (new_text, replaced_count)
+    """
+    replaced = 0
+
+    # 优先匹配 attribute 形式
+    for attr in ["title", "label", "placeholder", "value", "name"]:
+        # :title="中文"  →  :title="t('key')"
+        pat1 = f':{attr}="{old}"'
+        if pat1 in text:
+            text = text.replace(pat1, f':{attr}="t(\'{key}\')"', 1)
+            replaced += 1
+            continue
+        # title="中文"  →  :title="t('key')"  (缺冒号)
+        pat2 = f'{attr}="{old}"'
+        if pat2 in text:
+            text = text.replace(pat2, f':{attr}="t(\'{key}\')"', 1)
+            replaced += 1
+            continue
+        # title='中文'  →  :title="t('key')"  (单引号)
+        pat3 = f"{attr}='{old}'"
+        if pat3 in text:
+            text = text.replace(pat3, f":{attr}=\"t('{key}')\"", 1)
+            replaced += 1
+            continue
+        # name: '中文'  →  name: t('key')  (object 属性形式)
+        pat_obj = f"{attr}: '{old}'"
+        if pat_obj in text:
+            text = text.replace(pat_obj, f"{attr}: t('{key}')", 1)
+            replaced += 1
+            continue
+        # name: "中文"  →  name: t('key')
+        pat_obj2 = f'{attr}: "{old}"'
+        if pat_obj2 in text:
+            text = text.replace(pat_obj2, f'{attr}: t("{key}")', 1)
+            replaced += 1
+            continue
+        # {{ '中文' }}  (template literal)
+        pat4 = f"{{{{ '{old}' }}}}"
+        if pat4 in text:
+            text = text.replace(pat4, f"{{{{ t('{key}') }}}}", 1)
+            replaced += 1
+            continue
+        pat5 = f'{{{{ "{old}" }}}}'
+        if pat5 in text:
+            text = text.replace(pat5, f'{{{{ t("{key}") }}}}', 1)
+            replaced += 1
+            continue
+
+    # '中文' → t('key')  (普通字符串)
+    if replaced == 0:
+        for q in ["'", '"', "`"]:
+            old_pat = f"{q}{old}{q}"
+            if old_pat in text:
+                text = text.replace(old_pat, f"t('{key}')", 1)
+                replaced += 1
+                break
+
+    # 兜底: 直接替换
+    if replaced == 0 and old in text:
+        text = text.replace(old, f"t('{key}')", 1)
+        replaced += 1
+
+    return text, replaced
 
 
 def main():
@@ -210,7 +328,6 @@ def main():
     findings = audit["findings"]
     print(f"扫描到 {len(findings)} 处硬编码中文")
 
-    # 按类型过滤
     if args.type:
         findings = [f for f in findings if f["context"] == args.type]
         print(f"  --type={args.type} 过滤后剩 {len(findings)} 处")
@@ -220,7 +337,6 @@ def main():
     for f in findings:
         by_file.setdefault(f["file"], []).append(f)
 
-    # 排序: 优先级高 → 低
     def priority(f):
         try:
             return PRIORITY.index(f["context"])
@@ -230,49 +346,33 @@ def main():
         by_file[fp].sort(key=priority)
 
     used_keys: set = set()
-    file_replacements: Dict[str, List[Tuple[int, str, str, str]]] = {}  # file -> [(line, old, new, key)]
-    new_zh_entries: Dict[str, str] = {}  # key -> zh value
-    new_en_entries: Dict[str, str] = {}  # key -> en value (词典翻译 or 占位)
+    file_replacements: Dict[str, List[Tuple[int, str, str, str]]] = {}
+    new_zh_entries: Dict[str, str] = {}
+    new_en_entries: Dict[str, str] = {}
     translation_stats = {
-        "glossary_hit": 0,      # 词典命中
-        "fallback_placeholder": 0,  # 回退占位
+        "glossary_hit": 0,
+        "fallback_placeholder": 0,
     }
 
     skipped_template = 0
     skipped_short = 0
     skipped_too_long = 0
-    skipped_mixed = 0  # 包含非中文 ASCII 字符 (如 "OEM 编号" 难处理)
-    skipped_multiline = 0  # 包含 \n 的多行字符串
 
     for f in findings:
         ctx = f["context"]
         text = f["text"]
-        # 跳过模板字符串 (含 ${...} 或反引号)
-        if "${" in text or "`" in text or "{{" in text:
+        if has_template_or_special(text):
             skipped_template += 1
             continue
-        # 跳过过短 (单字或纯标点)
         if len(text) < 2 or not re.search(r"[\u4e00-\u9fff]", text):
             skipped_short += 1
             continue
-        # 跳过过长 (>60 字符, 可能是句子而非按钮)
-        if len(text) > 60:
+        if len(text) > 80:
             skipped_too_long += 1
-            continue
-        # 跳过含 \n 的多行字符串
-        # WHY: ElMessageBox.confirm('暂停当前 ETL?\n\n...') 多行字符串, 替换算法无法精确处理多行边界
-        if "\n" in text:
-            skipped_multiline += 1
-            continue
-        # 跳过含 ASCII 字母/数字的混合字符串
-        # WHY: "OEM 编号" "MR.1" "slot 1-6" 难处理, 会出现 "OEM t('...')" 残缺语法
-        if re.search(r"[a-zA-Z0-9]", text):
-            skipped_mixed += 1
             continue
 
         key = generate_key(f["file"], f["line"], ctx, text, used_keys)
         new_zh_entries[key] = text
-        # 英文翻译: 词典驱动 + 占位回退
         en = translate_with_fallback(text)
         if en.startswith("[EN] "):
             translation_stats["fallback_placeholder"] += 1
@@ -287,13 +387,11 @@ def main():
     total = translation_stats["glossary_hit"] + translation_stats["fallback_placeholder"]
     hit_rate = (translation_stats["glossary_hit"] / total * 100) if total else 0
 
-    print(f"\n处理结果:")
+    print(f"\n处理结果 (v2 - 含中英/数字混合):")
     print(f"  拟替换: {sum(len(v) for v in file_replacements.values())}")
-    print(f"  跳过 (含模板字符串): {skipped_template}")
-    print(f"  跳过 (太短): {skipped_short}")
+    print(f"  跳过 (含模板字符串/换行): {skipped_template}")
+    print(f"  跳过 (太短/无中文): {skipped_short}")
     print(f"  跳过 (过长): {skipped_too_long}")
-    print(f"  跳过 (多行): {skipped_multiline}")
-    print(f"  跳过 (中英/数字混合): {skipped_mixed}")
     print(f"  新 i18n key: {len(new_zh_entries)}")
     print(f"  翻译质量: 词典命中 {translation_stats['glossary_hit']} / 占位 {translation_stats['fallback_placeholder']} (命中率 {hit_rate:.1f}%)")
 
@@ -302,7 +400,6 @@ def main():
         print(f"  受影响文件: {len(file_replacements)}")
         for fp, repls in list(file_replacements.items())[:5]:
             print(f"    {fp}: {len(repls)} 处替换")
-        # 输出 5 个翻译样例供人工审核
         print(f"\n  翻译样例 (前 10 条):")
         sample = list(new_en_entries.items())[:10]
         for k, en in sample:
@@ -310,46 +407,39 @@ def main():
             print(f"    {zh!r:35s} → {en!r:50s} (key: {k})")
         sys.exit(0)
 
-    # === 实际修改 ===
-    # 1. 替换 .vue 文件
-    #    关键: 替换 '中文' → t('admin.x.y'), NOT 't('admin.x.y')'
-    #    原理: 在 .vue 中, 中文以 'xxx' / "xxx" / `xxx` 三种引号包裹.
-    #          替换时去掉外层引号, 改成 t('key'), 避免引号嵌套.
     if not args.dry_run:
+        # 1. 先给所有受影响的 .vue 注入 useI18n
+        injected_files: List[str] = []
+        for fp in file_replacements.keys():
+            full = ROOT / fp
+            if not full.exists():
+                continue
+            if ensure_usei18n(full):
+                injected_files.append(fp)
+        if injected_files:
+            print(f"  ✓ {len(injected_files)} 个 .vue 注入 useI18n: {injected_files}")
+
+        # 2. 实际替换 .vue 文件
         for fp, repls in file_replacements.items():
             full = ROOT / fp
+            if not full.exists():
+                continue
             text = full.read_text(encoding="utf-8")
             for line_no, old, new, key in repls:
-                # 尝试三种引号包裹
-                replaced = False
-                for q in ["'", '"', "`"]:
-                    old_pat = f"{q}{old}{q}"
-                    if old_pat in text:
-                        # 替换为 t('key'), t("key"), t(`key`) - 统一用 t('key')
-                        text = text.replace(old_pat, f"t('{key}')", 1)
-                        replaced = True
-                        break
-                if not replaced:
-                    # 无引号包裹 - 直接替换为 t('key')
-                    if old in text:
-                        text = text.replace(old, f"t('{key}')", 1)
+                text, n = replace_in_vue(text, old, key)
+                if n == 0:
+                    print(f"  [WARN] {fp}:{line_no} 替换失败: {old!r}")
             full.write_text(text, encoding="utf-8")
         print(f"  ✓ {len(file_replacements)} 个 .vue 文件已替换")
 
-    # 2. 注入到 zh-CN.ts 和 en-US.ts
-    #    WHY: 替换 .vue 后, 前端 t('admin.x.y') 会查 zh-CN / en-US.
-    #         若不注入 key, console 会报 "Not found key", 用户看到的是 key 字符串.
-    #    策略: 在 export default { ... } 末尾的 } 前插入 admin 块
-    #          按 admin.{file_short}.{ctx_short} 分组, 保持文件可读性
-    #    关键: 检查最后一个 } 前的字符, 确保语法合法 (有逗号)
     if not args.dry_run and new_zh_entries:
         inject_to_locale(ZH_TS, new_zh_entries, "zh-CN")
         inject_to_locale(EN_TS, new_en_entries, "en-US")
         print(f"  ✓ {len(new_zh_entries)} 个 key 已注入 zh-CN.ts / en-US.ts")
 
-    # 报告
     report = {
         "ts": __import__("datetime").datetime.now().isoformat(),
+        "version": "v2",
         "total_findings": len(findings),
         "replaced": sum(len(v) for v in file_replacements.values()),
         "skipped_template": skipped_template,
@@ -358,13 +448,14 @@ def main():
         "new_keys_count": len(new_zh_entries),
         "translation_stats": translation_stats,
         "glossary_hit_rate": hit_rate,
-        "new_keys": new_zh_entries,  # 供人工审核
-        "new_translations": new_en_entries,  # 供人工审核
+        "injected_usei18n": injected_files if not args.dry_run else [],
+        "new_keys": new_zh_entries,
+        "new_translations": new_en_entries,
         "files": {fp: len(repls) for fp, repls in file_replacements.items()},
     }
     OUT.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
     print(f"\n  报告: {OUT.relative_to(ROOT)}")
-    print(f"  跳过模板字符串: {skipped_template} (需人工处理)")
+    print(f"  跳过模板字符串/换行: {skipped_template} (需人工处理)")
 
 
 if __name__ == "__main__":

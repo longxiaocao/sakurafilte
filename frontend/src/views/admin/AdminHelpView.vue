@@ -23,27 +23,27 @@ const dictList = [
 const faqs = [
   {
     q: '为什么输入 OEM 编号后无法搜索?',
-    a: '检查该 OEM 是否在产品表 oem2 字段里 (注意: 不是 cross_references.oem_brand)。前台公开页用 oemNoDisplay / oem2, 后台搜索用任意一个字段。'
+    a: '检查该 OEM 是否在产品表 oem2 字段里 (注意: 不是 cross_references.oem_brand). 前台公开页用 oemNoDisplay / oem2, 后台搜索用任意一个字段.'
   },
   {
     q: '为什么新增产品时 typeahead 联想不到想要的值?',
     a: '字典是后台维护的, 需先在 "字典管理" → 对应字典 → 新增 value. typeahead 只返回字典内已存在的值 (前 20 条按 sort_order 排).'
   },
   {
-    q: '尺寸搜索 (H1=100) 返回 0 条结果, 但库里有这个产品?',
-    a: '尺寸搜索默认容差 ±5mm (固定, 不可改), 即 95-105 之间。如果产品 H1=110, 不会命中。改用更小的 H1 值或精确 ID 查询。'
+    q: '尺寸搜索 (H1 = 100) 返回 0 条结果, 但库里有这个产品?',
+    a: '尺寸搜索默认容差 ±5mm (固定, 不可改), 即 95-105 之间. 如果产品 H1 = 110, 不会命中. 改用更小的 H1 值或精确 ID 查询.'
   },
   {
     q: 'ETL 触发后卡在 reading 状态?',
-    a: 'reading 阶段是流式 COPY 暂存, 大文件 (1M 行) 可能 30-60s。如超过 5 分钟无进度, 检查后端日志 (output/SPIKE-REPORT-*.md) 看是否有 SQL 错误.'
+    a: 'reading 阶段是流式 COPY 暂存, 大文件 (1M 行) 可能 30-60s. 如超过 5 分钟无进度, 检查后端日志 (output/SPIKE-REPORT-*.md) 看是否有 SQL 错误.'
   },
   {
     q: '怎么批量删除产品?',
-    a: '后台产品列表勾选多行 → 顶部 "批量停售" 按钮。停售 = is_discontinued=true, 前台不展示, 历史数据保留. 如需物理删除, 走 SQL (慎用).'
+    a: '后台产品列表勾选多行 → 顶部 "批量停售" 按钮. 停售 = is_discontinued=true, 前台不展示, 历史数据保留. 如需物理删除, 走 SQL (慎用).'
   },
   {
     q: '上传图片后前台不显示?',
-    a: '检查 (1) 产品 isPublished=true (上架) (2) slot 1-6 范围 (3) 浏览器 console 看 OSS 预签名 URL 1h 有效。如过期, 重新加载产品页。'
+    a: '检查 (1) 产品 isPublished=true (上架) (2) slot 1-6 范围 (3) 浏览器 console 看 OSS 预签名 URL 1 h 有效. 如过期, 重新加载产品页.'
   }
 ]
 

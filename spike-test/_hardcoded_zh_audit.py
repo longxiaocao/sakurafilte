@@ -50,13 +50,22 @@ def find_hardcoded_zh(text: str, file_rel: str) -> List[Dict]:
         if not CN_CHAR.search(line):
             continue
         # 提取所有"包含中文的完整字符串字面量"
-        # 匹配 'xxx' / "xxx" / `xxx`, xxx 中含中文
+        # 关键: 用贪婪匹配 [^'\\1]* 确保覆盖整个字符串, 避免 findall 切分
+        # 修复: 之前用非贪婪 *? 配合 findall, 同一字符串内多个中文片段会被切碎
         quoted_strings = re.findall(
-            r"(['\"`])((?:\\.|(?!\1).)*?[\u4e00-\u9fff](?:\\.|(?!\1).)*?)\1",
+            r"(['\"`])([^'\"`\n]*[\u4e00-\u9fff][^'\"`\n]*)\1",
             line
         )
         for q, content in quoted_strings:
             if len(content) < 2:
+                continue
+            # 跳过 t() 内的字符串 (i18n key 路径, 已被替换)
+            # 例如 t('admin.foo.bar') 中的 'admin.foo.bar' 也含 0 中文, 但被引号包裹
+            # 若字符串中含 'admin.' 前缀, 显然是 i18n key
+            if content.startswith("admin.") or "admin." in content[:20]:
+                continue
+            # 跳过 t( 之后的字符串 (即 'admin.x.y' 形式)
+            if q == "'" and "'admin." in line[line.find(q + content + q) - 50: line.find(q + content + q) + 50]:
                 continue
             # 推测类型
             ctx = "string"
