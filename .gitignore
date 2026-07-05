@@ -60,6 +60,17 @@ spike-test/backend.out
 spike-test/backend.err
 spike-test/backend_perf.err
 
+# Day 14 P0 修复: 后端运行日志 (out/err), debug 脚本, 临时 commit msg
+backend/backend.out
+backend/backend.err
+kill_stuck.ps1
+check_backend.ps1
+start-backend.ps1
+start-backend-emergency.bat
+test_api.ps1
+spike-test/_commit_msg.txt
+spike-test/_debug_*.py
+
 ## 操作系统
 .DS_Store
 Thumbs.db

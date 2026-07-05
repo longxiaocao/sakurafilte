@@ -33,6 +33,16 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/public/PublicProductView.vue'),
     meta: { title: '产品详情' }
   },
+  // ===== P0 (Day 14): 公开产品对比 (游客无需登录) =====
+  //   URL: /compare?ids=1,2,3,4,5,6
+  //   公开路由 (无 requireAuth, 游客可访问); 复用 admin CompareView 6 字段组布局
+  //   配合详情页 "加入对比" 按钮跳转
+  {
+    path: '/compare',
+    name: 'PublicCompare',
+    component: () => import('@/views/public/PublicCompareView.vue'),
+    meta: { title: '产品对比 (公开)' }
+  },
   // ===== 需求 4: 后台登录页 (替换 TOKEN 直接输入弹窗) =====
   //   - 公开路由 (requireAuth 不设置, 默认 falsy)
   //   - 登录页内本地映射验证, 成功后写入 useAdminAuthStore.token

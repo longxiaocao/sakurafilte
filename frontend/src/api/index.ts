@@ -217,6 +217,19 @@ export const productApi = {
   }
 }
 
+// ===== P0 (Day 14): 公开产品对比 (游客无需登录) =====
+//   GET /api/public/compare?ids=1,2,3,4,5,6 (后端 AllowAnonymous, 排除下架产品)
+//   用途: 产品详情页"加入对比" 按钮跳转目标; 也可作为公开 URL 分享
+//   限位: 最多 6 个产品 (后端校验, 超限 400)
+export const publicCompareApi = {
+  compare(ids: number[]): Promise<{ count: number; items: ProductDetail[] }> {
+    if (ids.length === 0) {
+      return Promise.resolve({ count: 0, items: [] })
+    }
+    return http.get('/public/compare', { params: { ids: ids.join(',') } }).then((r) => r.data)
+  }
+}
+
 // ===== P3.4 (Task 11.5): 公开搜索 (8 字段多框, 无需 token) =====
 //   GET /api/public/search?oemBrand=...&oemNo2=...&oemNo3=...&machineBrand=...&machineModel=...&modelName=...&engineBrand=...&engineType=...
 //   返: { total, page, pageSize, totalPages, elapsedMs, countMode, items: [{id, oemNoDisplay, oem2, productName1, type, d1Mm, h1Mm}] }

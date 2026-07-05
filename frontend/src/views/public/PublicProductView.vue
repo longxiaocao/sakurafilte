@@ -142,9 +142,9 @@ function goBack() {
 // ===== P0 UX 修复 (Day 14): 详情页操作按钮带上下文 =====
 //   - 查询替代: 滚动到页面下方"替代 OEM" 表格, 而非裸跳 /search
 //     (用户报告 P0: 跳到 /search 不带参数, 需要手输, 体验断链)
-//   - 加入对比: 携带当前产品 ID 跳 /admin/compare?ids=<id>
-//     (P0: 原实现裸跳 /admin/compare, 新页面让用户输入 ID, 体验断链)
-//     公开页未登录会先跳 /login?redirect=/admin/compare?ids=xxx, 登录后回跳自动加载
+//   - 加入对比: 携带当前产品 ID 跳 /compare?ids=<id> (公开对比页, 游客可用)
+//     (P0: 原实现跳 /admin/compare 需登录, 体验断链)
+//     公开页未登录用户可直接访问 /compare, 无需 redirect/login
 function goToAlternatives() {
   const el = document.getElementById('section-alternatives')
   if (el) {
@@ -159,9 +159,8 @@ function addToCompare() {
     ElMessage.warning('产品数据未加载')
     return
   }
-  // 详情页 → 对比页: 跳 admin 路径 (需鉴权), redirect 由路由守卫处理
-  // 登录后会自动回到 /admin/compare?ids=<id>, 对比页 parseIdsFromQuery 会自动加载
-  router.push(`/admin/compare?ids=${data.value.id}`)
+  // P0 (Day 14): 跳公开对比页 /compare (无 requireAuth), 游客可直接使用
+  router.push(`/compare?ids=${data.value.id}`)
 }
 
 function numOrDash(v?: number | string) {

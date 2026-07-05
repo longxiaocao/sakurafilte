@@ -38,6 +38,8 @@ const dictItems = [
 const navItems = computed(() => [
   { label: '产品搜索', path: '/search', icon: 'Search' },
   { label: 'OEM 查询', action: 'oemLookup', icon: 'Document' },
+  // P0 (Day 14): 公开产品对比 — 游客无需登录可访问, 与后台 admin/compare 区分
+  { label: '产品对比', path: '/compare', icon: 'DataAnalysis' },
   ...(isAdminPath.value
     ? [
         { label: '产品管理', path: '/admin/products', icon: 'Goods' },
@@ -46,8 +48,9 @@ const navItems = computed(() => [
         // JWT 改造: 用户管理 (仅 admin 角色显示)
         ...(isAdmin() ? [{ label: '用户管理', path: '/admin/users', icon: 'User' }] : []),
         { label: 'ETL 触发', path: '/admin/etl', icon: 'Loading' },
-        // P3.5 (Task 12): 产品对比 (最多 6 个产品, 列可调序, 打印优化)
-        { label: '产品对比', path: '/admin/compare', icon: 'DataAnalysis' },
+        // P3.5 (Task 12): 后台产品对比 (最多 6 个产品, 列可调序, 打印优化)
+        //   注: admin 路径下保留此入口作为深度使用, 公开页 /compare 已覆盖大多数用例
+        { label: '高级对比', path: '/admin/compare', icon: 'DataAnalysis' },
         // P5.5+: 性能监控 (P50/P95/P99 + 健康探针 + Token 轮转状态)
         { label: '性能', path: '/admin/perf', icon: 'TrendCharts' },
         // P5.4 (Task 15): 帮助页 (字典规范 + 搜索 + 导入)

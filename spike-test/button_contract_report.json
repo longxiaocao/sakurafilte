@@ -1,0 +1,363 @@
+{
+  "generatedAt": "2026-07-05T06:02:21Z",
+  "summary": {
+    "total": 39,
+    "passed": 39,
+    "failed": 0,
+    "warned": 0,
+    "skipped": 0
+  },
+  "results": [
+    {
+      "role": "STATIC",
+      "page": "all",
+      "button": "/admin/* 路由 requireAuth 覆盖",
+      "status": "PASS",
+      "expected": "所有 /admin/* 路由均需 requireAuth: true",
+      "actual": "扫描到 16 个 /admin 路由, 缺 requireAuth: []",
+      "evidence": "已知路由: ['/admin/products', '/admin/products/new', '/admin/products/:id/edit', '/admin/etl', '/admin/users', '/change-password', '/admin/dict/oem-brands', '/admin/dict/product-name1s', '/admin/dict/product-name2s', '/admin/dict/types', '/admin/dict/oem-no3s', '/admin/dict/medias', '/admin/dict/machines', '/admin/dict/engines', '/admin/compare', '/admin/help', '/admin/perf']"
+    },
+    {
+      "role": "STATIC",
+      "page": "all",
+      "button": "公开路由不应 requireAuth",
+      "status": "PASS",
+      "expected": "公开路由 (游客可访问) 不应带 requireAuth: true",
+      "actual": "误标 requireAuth 的公开路由: []",
+      "evidence": ""
+    },
+    {
+      "role": "GUEST",
+      "page": "/public/search",
+      "button": "8 字段搜索输入框",
+      "status": "PASS",
+      "expected": "可见",
+      "actual": "visible=True",
+      "evidence": ""
+    },
+    {
+      "role": "GUEST",
+      "page": "/public/search",
+      "button": "搜索按钮",
+      "status": "PASS",
+      "expected": "可见",
+      "actual": "visible=True",
+      "evidence": ""
+    },
+    {
+      "role": "GUEST",
+      "page": "/product/:oem",
+      "button": "查询替代 按钮",
+      "status": "PASS",
+      "expected": "可见 (游客可滚动到替代 OEM 表)",
+      "actual": "visible=True",
+      "evidence": ""
+    },
+    {
+      "role": "GUEST",
+      "page": "/product/:oem",
+      "button": "加入对比 按钮",
+      "status": "PASS",
+      "expected": "可见 (跳 /compare?ids=<id>, 游客可用)",
+      "actual": "visible=True",
+      "evidence": ""
+    },
+    {
+      "role": "GUEST",
+      "page": "/compare",
+      "button": "加入产品 ID 输入框",
+      "status": "PASS",
+      "expected": "可见",
+      "actual": "visible=True",
+      "evidence": ""
+    },
+    {
+      "role": "GUEST",
+      "page": "/compare",
+      "button": "加入按钮",
+      "status": "PASS",
+      "expected": "可见",
+      "actual": "visible=True",
+      "evidence": ""
+    },
+    {
+      "role": "GUEST",
+      "page": "/compare",
+      "button": "仅看差异 复选框",
+      "status": "PASS",
+      "expected": "可见",
+      "actual": "visible=True",
+      "evidence": ""
+    },
+    {
+      "role": "GUEST",
+      "page": "/compare",
+      "button": "清空按钮",
+      "status": "PASS",
+      "expected": "可见 (有产品时可点)",
+      "actual": "visible=True",
+      "evidence": ""
+    },
+    {
+      "role": "GUEST",
+      "page": "/compare",
+      "button": "打印按钮",
+      "status": "PASS",
+      "expected": "可见 (有产品时可点)",
+      "actual": "visible=True",
+      "evidence": ""
+    },
+    {
+      "role": "GUEST",
+      "page": "/search (顶栏)",
+      "button": "进入后台 按钮",
+      "status": "PASS",
+      "expected": "可见 (跳 /login)",
+      "actual": "visible=True",
+      "evidence": ""
+    },
+    {
+      "role": "GUEST",
+      "page": "/search (顶栏)",
+      "button": "用户菜单 (admin 下拉)",
+      "status": "PASS",
+      "expected": "不可见 (未登录)",
+      "actual": "visible=False",
+      "evidence": ""
+    },
+    {
+      "role": "GUEST",
+      "page": "/search (顶栏)",
+      "button": "后台 nav (产品管理/字典/ETL)",
+      "status": "PASS",
+      "expected": "不可见 (路由守卫拦截)",
+      "actual": "visible=False",
+      "evidence": ""
+    },
+    {
+      "role": "GUEST",
+      "page": "/admin/products",
+      "button": "路由守卫踢到 /login",
+      "status": "PASS",
+      "expected": "未登录访问 /admin/* 应跳 /login",
+      "actual": "url=http://localhost:5173/login?redirect=/admin/products",
+      "evidence": ""
+    },
+    {
+      "role": "GUEST",
+      "page": "/admin/products",
+      "button": "新增产品 按钮",
+      "status": "PASS",
+      "expected": "不可见 (未登录)",
+      "actual": "visible=False",
+      "evidence": ""
+    },
+    {
+      "role": "GUEST",
+      "page": "/admin/products",
+      "button": "批量对比 按钮",
+      "status": "PASS",
+      "expected": "不可见 (未登录)",
+      "actual": "visible=False",
+      "evidence": ""
+    },
+    {
+      "role": "GUEST",
+      "page": "API",
+      "button": "后台产品列表 (GET /api/admin/products?pageSize=1) 匿名",
+      "status": "PASS",
+      "expected": "401/403 (无 token 拒绝)",
+      "actual": "code=401",
+      "evidence": ""
+    },
+    {
+      "role": "GUEST",
+      "page": "API",
+      "button": "后台用户列表 (GET /api/admin/users?pageSize=1) 匿名",
+      "status": "PASS",
+      "expected": "401/403 (无 token 拒绝)",
+      "actual": "code=401",
+      "evidence": ""
+    },
+    {
+      "role": "GUEST",
+      "page": "API",
+      "button": "ETL 进度 (GET /api/admin/etl/progress) 匿名",
+      "status": "PASS",
+      "expected": "401/403 (无 token 拒绝)",
+      "actual": "code=401",
+      "evidence": ""
+    },
+    {
+      "role": "GUEST",
+      "page": "API",
+      "button": "字典 OEM 品牌 (GET /api/admin/dict/oem-brands?pageSize=1) 匿名",
+      "status": "PASS",
+      "expected": "401/403 (无 token 拒绝)",
+      "actual": "code=401",
+      "evidence": ""
+    },
+    {
+      "role": "GUEST",
+      "page": "API",
+      "button": "登录审计 (GET /api/admin/audit/login?pageSize=1) 匿名",
+      "status": "PASS",
+      "expected": "401/403 (无 token 拒绝)",
+      "actual": "code=401",
+      "evidence": ""
+    },
+    {
+      "role": "GUEST",
+      "page": "API",
+      "button": "公开搜索 (带字段) (GET /api/public/search?oemBrand=Bosch&pageSize=1) 匿名",
+      "status": "PASS",
+      "expected": "200 (游客可访问)",
+      "actual": "code=200",
+      "evidence": ""
+    },
+    {
+      "role": "GUEST",
+      "page": "API",
+      "button": "公开产品详情 (GET /api/public/product/AC%20010323) 匿名",
+      "status": "PASS",
+      "expected": "200 (游客可访问)",
+      "actual": "code=200",
+      "evidence": ""
+    },
+    {
+      "role": "GUEST",
+      "page": "API",
+      "button": "公开对比 (GET /api/public/compare?ids=1,2,3) 匿名",
+      "status": "PASS",
+      "expected": "200 (游客可访问)",
+      "actual": "code=200",
+      "evidence": ""
+    },
+    {
+      "role": "ADMIN",
+      "page": "/admin/products",
+      "button": "路由不被踢回",
+      "status": "PASS",
+      "expected": "URL 保持 /admin/products",
+      "actual": "url=http://localhost:5173/admin/products",
+      "evidence": ""
+    },
+    {
+      "role": "ADMIN",
+      "page": "/admin/products",
+      "button": "搜索 按钮",
+      "status": "PASS",
+      "expected": "可见",
+      "actual": "v=True",
+      "evidence": ""
+    },
+    {
+      "role": "ADMIN",
+      "page": "/admin/products",
+      "button": "高级筛选 按钮",
+      "status": "PASS",
+      "expected": "可见",
+      "actual": "v=True",
+      "evidence": ""
+    },
+    {
+      "role": "ADMIN",
+      "page": "/admin/products",
+      "button": "新增产品 按钮",
+      "status": "PASS",
+      "expected": "可见 (管理操作)",
+      "actual": "v=True",
+      "evidence": ""
+    },
+    {
+      "role": "ADMIN",
+      "page": "/admin/products",
+      "button": "批量对比 按钮",
+      "status": "PASS",
+      "expected": "可见 (无选中时禁用但可见)",
+      "actual": "v=True",
+      "evidence": ""
+    },
+    {
+      "role": "ADMIN",
+      "page": "顶栏",
+      "button": "用户菜单 (含 admin)",
+      "status": "PASS",
+      "expected": "可见",
+      "actual": "v=True",
+      "evidence": ""
+    },
+    {
+      "role": "ADMIN",
+      "page": "顶栏",
+      "button": "产品管理 nav",
+      "status": "PASS",
+      "expected": "可见",
+      "actual": "v=True",
+      "evidence": ""
+    },
+    {
+      "role": "ADMIN",
+      "page": "顶栏",
+      "button": "字典管理 nav",
+      "status": "PASS",
+      "expected": "可见",
+      "actual": "v=True",
+      "evidence": ""
+    },
+    {
+      "role": "ADMIN",
+      "page": "顶栏",
+      "button": "ETL 触发 nav",
+      "status": "PASS",
+      "expected": "可见",
+      "actual": "v=True",
+      "evidence": ""
+    },
+    {
+      "role": "ADMIN",
+      "page": "顶栏",
+      "button": "用户管理 nav (仅 admin)",
+      "status": "PASS",
+      "expected": "可见 (admin 角色专属)",
+      "actual": "v=True",
+      "evidence": ""
+    },
+    {
+      "role": "ADMIN",
+      "page": "顶栏",
+      "button": "性能监控 nav",
+      "status": "PASS",
+      "expected": "可见",
+      "actual": "v=True",
+      "evidence": ""
+    },
+    {
+      "role": "ADMIN",
+      "page": "/admin/users",
+      "button": "可访问",
+      "status": "PASS",
+      "expected": "URL 保持 /admin/users",
+      "actual": "url=http://localhost:5173/admin/users",
+      "evidence": ""
+    },
+    {
+      "role": "ADMIN",
+      "page": "/product/:oem",
+      "button": "查询替代 按钮",
+      "status": "PASS",
+      "expected": "可见 (登录后仍可用)",
+      "actual": "v=True",
+      "evidence": ""
+    },
+    {
+      "role": "ADMIN",
+      "page": "/product/:oem",
+      "button": "加入对比 按钮",
+      "status": "PASS",
+      "expected": "可见 (登录后仍可用)",
+      "actual": "v=True",
+      "evidence": ""
+    }
+  ]
+}

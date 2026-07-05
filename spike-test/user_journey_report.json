@@ -1,0 +1,196 @@
+{
+  "generatedAt": "2026-07-05T06:04:17Z",
+  "summary": {
+    "total": 23,
+    "passed": 23,
+    "failed": 0,
+    "warned": 0,
+    "skipped": 0
+  },
+  "results": [
+    {
+      "scenario": "A-游客",
+      "check": "公开搜索页可访问",
+      "status": "PASS",
+      "expected": "URL 含 /public/search 且有搜索输入框",
+      "actual": "url=http://localhost:5173/public/search hasSearchInput=True",
+      "evidence": ""
+    },
+    {
+      "scenario": "A-游客",
+      "check": "产品详情可访问",
+      "status": "PASS",
+      "expected": "URL 保持 /product/* 不被踢到 /login",
+      "actual": "url=http://localhost:5173/product/AC%20010323",
+      "evidence": ""
+    },
+    {
+      "scenario": "A-游客",
+      "check": "产品详情含'加入对比'按钮",
+      "status": "PASS",
+      "expected": "存在 加入对比 按钮",
+      "actual": "hasButton=True",
+      "evidence": ""
+    },
+    {
+      "scenario": "A-游客",
+      "check": "产品详情含'查询替代'按钮",
+      "status": "PASS",
+      "expected": "存在 查询替代 按钮",
+      "actual": "hasButton=True",
+      "evidence": ""
+    },
+    {
+      "scenario": "A-游客",
+      "check": "公开对比页可访问",
+      "status": "PASS",
+      "expected": "URL=/compare, 不被踢到 /login 或 /admin/compare",
+      "actual": "url=http://localhost:5173/compare?ids=1,2,3 hasTitle=True",
+      "evidence": ""
+    },
+    {
+      "scenario": "A-游客",
+      "check": "对比表格加载",
+      "status": "PASS",
+      "expected": "页面含 'OEM 编号' 字段行",
+      "actual": "hasData=True",
+      "evidence": ""
+    },
+    {
+      "scenario": "A-游客",
+      "check": "后台产品页需登录",
+      "status": "PASS",
+      "expected": "URL 跳到 /login (路由守卫拦截)",
+      "actual": "url=http://localhost:5173/login?redirect=/admin/products",
+      "evidence": ""
+    },
+    {
+      "scenario": "A-游客",
+      "check": "匿名调管理 API 被拒",
+      "status": "PASS",
+      "expected": "401/403 Unauthorized",
+      "actual": "code=401 body={\"type\":\"https://tools.ietf.org/html/rfc7235#section-3.1\",\"title\":\"Unauthorized\",\"status\":401,\"detail\":\"缺少或非法的 X-Admin-Token header\",\"instance\":\"/api/admin/products\"}",
+      "evidence": ""
+    },
+    {
+      "scenario": "A-游客",
+      "check": "匿名公开对比 API 可用",
+      "status": "PASS",
+      "expected": "200 + count >= 1",
+      "actual": "code=200 count=3",
+      "evidence": ""
+    },
+    {
+      "scenario": "A-游客",
+      "check": "匿名公开搜索 API 可用",
+      "status": "PASS",
+      "expected": "200 (带 oemBrand 字段)",
+      "actual": "code=200",
+      "evidence": ""
+    },
+    {
+      "scenario": "A-游客",
+      "check": "匿名产品详情 API 可用",
+      "status": "PASS",
+      "expected": "200",
+      "actual": "code=200",
+      "evidence": ""
+    },
+    {
+      "scenario": "C-边界",
+      "check": "空 ids 拒绝",
+      "status": "PASS",
+      "expected": "400",
+      "actual": "code=400 body={\"error\":\"ids 不能为空\"}",
+      "evidence": ""
+    },
+    {
+      "scenario": "C-边界",
+      "check": "非法 id 拒绝",
+      "status": "PASS",
+      "expected": "400",
+      "actual": "code=400 body={\"error\":\"非法 id: abc\"}",
+      "evidence": ""
+    },
+    {
+      "scenario": "C-边界",
+      "check": "超过 6 个 id 拒绝",
+      "status": "PASS",
+      "expected": "400",
+      "actual": "code=400 body={\"error\":\"对比最多 6 个产品\",\"given\":7}",
+      "evidence": ""
+    },
+    {
+      "scenario": "C-边界",
+      "check": "不存在 id 返回空",
+      "status": "PASS",
+      "expected": "200 + count=0",
+      "actual": "code=200 count=0",
+      "evidence": ""
+    },
+    {
+      "scenario": "C-边界",
+      "check": "错误密码登录被拒",
+      "status": "PASS",
+      "expected": "401/400",
+      "actual": "code=401 body={\"error\":\"用户名或密码错误, 或账号已被禁用/锁定\"}",
+      "evidence": ""
+    },
+    {
+      "scenario": "B-管理员",
+      "check": "登录 API 成功",
+      "status": "PASS",
+      "expected": "200 + accessToken",
+      "actual": "user=admin",
+      "evidence": ""
+    },
+    {
+      "scenario": "B-管理员",
+      "check": "登录响应含 user 对象",
+      "status": "PASS",
+      "expected": "user.role ∈ {admin, operator}",
+      "actual": "role=admin",
+      "evidence": ""
+    },
+    {
+      "scenario": "B-管理员",
+      "check": "后台产品页可访问",
+      "status": "PASS",
+      "expected": "URL 保持 /admin/products 不被踢回",
+      "actual": "url=http://localhost:5173/admin/products hasTitle=True",
+      "evidence": ""
+    },
+    {
+      "scenario": "B-管理员",
+      "check": "JWT 鉴权访问管理 API",
+      "status": "PASS",
+      "expected": "200 + total >= 1",
+      "actual": "code=200 total=49928",
+      "evidence": ""
+    },
+    {
+      "scenario": "B-管理员",
+      "check": "字典管理页可访问",
+      "status": "PASS",
+      "expected": "URL 保持 /admin/dict/*",
+      "actual": "url=http://localhost:5173/admin/dict/oem-brands",
+      "evidence": ""
+    },
+    {
+      "scenario": "B-管理员",
+      "check": "公开对比页 (登录后)",
+      "status": "PASS",
+      "expected": "URL 保持 /compare",
+      "actual": "url=http://localhost:5173/compare?ids=1,2",
+      "evidence": ""
+    },
+    {
+      "scenario": "B-管理员",
+      "check": "退出后访问后台被拦截",
+      "status": "PASS",
+      "expected": "URL 跳到 /login",
+      "actual": "url=http://localhost:5173/login?redirect=/admin/products",
+      "evidence": ""
+    }
+  ]
+}
