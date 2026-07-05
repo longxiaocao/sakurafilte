@@ -1310,6 +1310,63 @@ def test_backend_deep_water(token):
     except Exception as e:
         record("后端深水区", "健康检查-异常", "FAIL", "API 调用", str(e))
 
+    # 12. ETL history + 死信队列 (P2 测试盲点补充)
+    # WHY: /api/admin/etl/history 和 /api/admin/dead-letter 之前完全未验证
+    #   ETL history 记录所有导入任务 (含 failed 状态), 死信队列记录索引写入失败项
+    print("\n[BD.12] ETL history + 死信队列")
+    try:
+        # 12.1 ETL history 列表
+        resp = requests.get(f"{BACKEND}/api/admin/etl/history?page=1&pageSize=5",
+                          headers=headers, timeout=30)
+        if resp.status_code == 200:
+            data = resp.json()
+            items = data.get("items", [])
+            has_items = len(items) > 0
+            record("后端深水区", "ETL历史-列表",
+                   "PASS" if has_items else "WARN",
+                   "items 非空", f"items={len(items)}")
+            # 12.2 ETL history 字段完整性
+            if items:
+                first = items[0]
+                required_fields = ["id", "entityType", "status", "startedAt"]
+                has_fields = all(f in first for f in required_fields)
+                record("后端深水区", "ETL历史-字段完整性",
+                       "PASS" if has_fields else "FAIL",
+                       f"包含 {required_fields}",
+                       f"keys={list(first.keys())[:10]}")
+        else:
+            record("后端深水区", "ETL历史-列表", "FAIL",
+                   "200 OK", f"status={resp.status_code}")
+
+        # 12.3 ETL history 聚合
+        resp2 = requests.get(f"{BACKEND}/api/admin/etl/history/aggregate",
+                           headers=headers, timeout=30)
+        record("后端深水区", "ETL历史-聚合",
+               "PASS" if resp2.status_code == 200 else "FAIL",
+               "200 OK", f"status={resp2.status_code}")
+
+        # 12.4 死信队列列表
+        resp3 = requests.get(f"{BACKEND}/api/admin/dead-letter?page=1&pageSize=5",
+                           headers=headers, timeout=30)
+        if resp3.status_code == 200:
+            data3 = resp3.json()
+            items3 = data3.get("items", [])
+            # 死信队列可能有数据 (187万条) 也可能为空 (清理后)
+            record("后端深水区", "死信队列-列表",
+                   "PASS" if "items" in data3 else "FAIL",
+                   "200 + items 字段", f"items={len(items3)}, total={data3.get('total')}")
+        else:
+            record("后端深水区", "死信队列-列表", "FAIL",
+                   "200 OK", f"status={resp3.status_code}")
+
+        # 12.5 死信队列鉴权 (无 token 应 401)
+        resp4 = requests.get(f"{BACKEND}/api/admin/dead-letter?page=1&pageSize=1", timeout=10)
+        record("后端深水区", "死信队列-鉴权",
+               "PASS" if resp4.status_code == 401 else "WARN",
+               "401 Unauthorized", f"status={resp4.status_code}")
+    except Exception as e:
+        record("后端深水区", "ETL历史-异常", "FAIL", "API 调用", str(e))
+
 def test_scenario_6_login_ui(page, login_resp):
     """场景 6: 登录页 UI 流程 (P2 测试盲点补充)
     WHY: 之前 E2E 通过 API 登录 + 注入 localStorage, 完全跳过 /login 页面
