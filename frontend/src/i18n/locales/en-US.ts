@@ -58,6 +58,7 @@ export default {
     defaultAccount: 'Default: admin / (configured at deployment)'
   },
   search: {
+    title: 'Product Search',
     placeholder: 'Search OEM / name / model...',
     startSearch: 'Type keyword to start search',
     startSearchDesc: 'Supports OEM number, product name, vehicle model, etc.',

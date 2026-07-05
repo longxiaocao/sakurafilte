@@ -66,6 +66,7 @@ export default {
     defaultAccount: '默认账号: admin / (部署时配置)'
   },
   search: {
+    title: '产品搜索',
     placeholder: '搜索 OEM / 名称 / 车型...',
     startSearch: '输入关键词开始搜索',
     startSearchDesc: '支持 OEM 编号、产品名、车型等',

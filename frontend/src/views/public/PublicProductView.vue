@@ -194,10 +194,22 @@ function numOrDash(v?: number | string) {
 
     <div
       v-if="err"
-      class="text-red-600 text-sm mb-6 hairline-l border-l-red-600 pl-3"
+      class="mb-6 hairline bg-[var(--color-bg-elevated)] p-6 text-center"
       role="alert"
       aria-live="assertive"
-    >{{ err }}</div>
+    >
+      <div class="text-2xl font-semibold text-[var(--color-text)] mb-2">未找到该产品</div>
+      <div class="text-sm text-muted mb-4">
+        OEM 编号 <code class="font-mono px-1 py-0.5 bg-[var(--color-bg)]">{{ slug }}</code> 在数据库中不存在
+      </div>
+      <div class="text-xs text-muted mb-4">
+        可能原因: 编号已下架 / 拼写错误 / 旧编号被替代
+      </div>
+      <div class="flex gap-2 justify-center">
+        <el-button type="primary" @click="router.push('/search')">前往搜索</el-button>
+        <el-button @click="load()">重试</el-button>
+      </div>
+    </div>
 
     <!-- P1.2 骨架屏: 加载期间展示详情骨架, 提升感知性能 -->
     <SkeletonCard v-if="loading && !data" variant="detail" />
