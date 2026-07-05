@@ -13,8 +13,15 @@ BASE = sys.argv[1] if len(sys.argv) > 1 else "http://localhost:5148"
 CONCURRENCY = int(sys.argv[2]) if len(sys.argv) > 2 else 50
 TOTAL = int(sys.argv[3]) if len(sys.argv) > 3 else 1000
 
-KEYWORDS = ['AC', 'OC', 'OF', 'OEM-1', 'OEM-2', 'MR.1', 'filter']
-PRODUCT_IDS = [1001, 5001, 10000, 20000, 30000, 40000, 49960]
+KEYWORDS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'E2E', '06', '07', '5', '2026']
+# 真实存在的产品 OEM 字符串 (PublicProductController 接受 slug 格式, 最后一段是 oem)
+#   数据样本: oem_2 字段是 E2E202607056257 这种 16 位字符串
+OEM_SLUGS = [
+    'E2E202607056257', 'E2E202607058753', 'E2E202607057320', 'E2E202607056746',
+    'E2E202607056581', 'E2E202607057832', 'E2E202607055920', 'E2E202607058812',
+    'E2E202607053245', 'E2E202607058128', 'E2E202607058246', 'E2E202607054321',
+    'E2E202607051234', 'E2E202607057777', 'E2E202607054444',
+]
 
 latencies = []
 errors = 0
@@ -41,12 +48,14 @@ async def fetch_search(session, idx):
 
 async def fetch_product(session, idx):
     global errors
-    pid = PRODUCT_IDS[idx % len(PRODUCT_IDS)]
-    url = f"{BASE}/api/public/product/{pid}"
+    oem = OEM_SLUGS[idx % len(OEM_SLUGS)]
+    # slug 格式: <name1>-<name2>-<brand>-<oem>, 接口只关心最后一段
+    slug = f"E2E-Test-Product-{oem}"
+    url = f"{BASE}/api/public/product/{slug}"
     t0 = time.time()
     try:
         loop = asyncio.get_event_loop()
-        resp = await loop.run_in_executor(None, lambda: urlopen(url, timeout=5))
+        resp = await loop.run_in_executor(None, lambda: urlopen(url, timeout=10))
         status = resp.status
         data = resp.read()
     except Exception as e:
