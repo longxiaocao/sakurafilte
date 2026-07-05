@@ -167,10 +167,12 @@ def test_scenario_1_product_lifecycle(page, token):
             page.goto(f"{FRONTEND}/admin/products", wait_until="networkidle", timeout=15000)
             time.sleep(2)
             # 搜索 OEM 号
+            # WHY: 前端用 el-input @keyup.enter 触发搜索, fill() 不触发, 必须按回车
             search_input = page.query_selector("input[placeholder*='OEM'], input[type='search']")
             if search_input:
                 search_input.fill(test_oem)
-                time.sleep(2)
+                search_input.press("Enter")  # 触发 @keyup.enter="quickSearch"
+                time.sleep(3)  # 等待 API 返回 + DOM 更新
             page.screenshot(path=str(SCREENSHOT_DIR / "01-product-list-search.png"), full_page=True)
             has_product = page.evaluate(f"""() => {{
                 return document.body.innerText.includes('{test_oem}');
@@ -1596,9 +1598,20 @@ def test_backend_deep_water(token, login_resp):
                "404 Not Found", f"status={resp.status_code}")
 
         # 15.2 产品 compare (对比 2 个产品)
+        # WHY: 之前硬编码 ids=[50006,50007], full-load 后 id 范围变化会失效
+        #   改为动态查询 2 个存在的 id, 保证测试稳定性
+        try:
+            srch = requests.get(f"{BACKEND}/api/admin/products/search",
+                              params={"pageSize": 2, "countMode": "none"},
+                              headers=headers, timeout=10)
+            cmp_ids = [it["id"] for it in srch.json().get("items", [])][:2] if srch.status_code == 200 else []
+            if len(cmp_ids) < 2:
+                cmp_ids = [1, 2]  # 兜底
+        except Exception:
+            cmp_ids = [1, 2]
         resp = requests.post(f"{BACKEND}/api/admin/products/compare",
                            headers={**headers, "Content-Type": "application/json"},
-                           json={"ids": [50006, 50007]}, timeout=15)
+                           json={"ids": cmp_ids}, timeout=15)
         ok = resp.status_code == 200 and len(resp.content) > 100
         record("后端深水区", "产品compare",
                "PASS" if ok else "WARN",
