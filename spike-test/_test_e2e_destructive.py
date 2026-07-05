@@ -1367,6 +1367,96 @@ def test_backend_deep_water(token):
     except Exception as e:
         record("后端深水区", "ETL历史-异常", "FAIL", "API 调用", str(e))
 
+    # 13. ETL 端点 dry-run + 控制端点 (P2 测试盲点补充 — 盲点 3 部分)
+    # WHY: ETL trigger 之前从未测试, 但实际导入会写库 (污染数据)
+    #   dryRun=true 模式只做 schema 校验 + 抽样, 无副作用, 是安全测试切入点
+    #   控制端点 (cancel/pause/resume) 无活跃任务时返回安全响应, 不影响状态
+    print("\n[BD.13] ETL 端点 dry-run + 控制端点")
+    # 用 X-Admin-Token (ETL 专用鉴权, 与 Bearer 并存)
+    etl_headers = {**headers, "X-Admin-Token": "dev-admin-token-rotate-in-prod-MZK4R9P3X6V2N7Q1L5F0B8H3C",
+                   "Content-Type": "application/json"}
+    # 白名单内的 jsonl 文件 (Etl:AllowedImportDirs=["...\\spike-test\\output\\cleaned"])
+    xrefs_file = r"D:\projects\sakurafilter\spike-test\output\cleaned\xrefs_100.jsonl"
+    try:
+        # 13.1 ETL 进度查询 (无活跃任务应 idle)
+        resp = requests.get(f"{BACKEND}/api/admin/etl/progress",
+                          headers=etl_headers, timeout=10)
+        if resp.status_code == 200:
+            data = resp.json()
+            idle = data.get("inProgress") is False and data.get("activeTask") is None
+            record("后端深水区", "ETL进度-idle",
+                   "PASS" if idle else "WARN",
+                   "inProgress=false", f"inProgress={data.get('inProgress')}")
+        else:
+            record("后端深水区", "ETL进度-idle", "FAIL",
+                   "200 OK", f"status={resp.status_code}")
+
+        # 13.2 ETL dry-run xrefs (无副作用, 校验 + 抽样)
+        body = {"jsonlPath": xrefs_file, "entityType": "xrefs", "dryRun": True}
+        resp = requests.post(f"{BACKEND}/api/admin/etl/trigger",
+                           headers=etl_headers, json=body, timeout=30)
+        if resp.status_code == 200:
+            data = resp.json()
+            ok = (data.get("dryRun") is True
+                  and data.get("entity") == "xrefs"
+                  and data.get("lines", 0) > 0
+                  and len(data.get("samples", [])) > 0)
+            record("后端深水区", "ETL dry-run xrefs",
+                   "PASS" if ok else "FAIL",
+                   "dryRun=true + lines>0 + samples 非空",
+                   f"lines={data.get('lines')}, samples={len(data.get('samples', []))}")
+        else:
+            record("后端深水区", "ETL dry-run xrefs", "FAIL",
+                   "200 OK", f"status={resp.status_code}, body={resp.text[:200]}")
+
+        # 13.3 ETL cancel (无活跃任务应 200 + cancelled=false)
+        resp = requests.delete(f"{BACKEND}/api/admin/etl/task",
+                             headers=etl_headers, json={"reason": "e2e-test"}, timeout=10)
+        if resp.status_code == 200:
+            data = resp.json()
+            record("后端深水区", "ETL cancel-无任务",
+                   "PASS" if data.get("cancelled") is False else "WARN",
+                   "cancelled=false", f"cancelled={data.get('cancelled')}")
+        else:
+            record("后端深水区", "ETL cancel-无任务", "FAIL",
+                   "200 OK", f"status={resp.status_code}")
+
+        # 13.4 ETL pause (无活跃任务应 200 + paused=false)
+        resp = requests.post(f"{BACKEND}/api/admin/etl/pause",
+                           headers=etl_headers, timeout=10)
+        if resp.status_code == 200:
+            data = resp.json()
+            record("后端深水区", "ETL pause-无任务",
+                   "PASS" if data.get("paused") is False else "WARN",
+                   "paused=false", f"paused={data.get('paused')}")
+        else:
+            record("后端深水区", "ETL pause-无任务", "FAIL",
+                   "200 OK", f"status={resp.status_code}")
+
+        # 13.5 ETL resume (无 paused 任务应 404)
+        resp = requests.post(f"{BACKEND}/api/admin/etl/resume",
+                           headers=etl_headers, timeout=10)
+        record("后端深水区", "ETL resume-无paused",
+               "PASS" if resp.status_code == 404 else "WARN",
+               "404 Not Found", f"status={resp.status_code}")
+
+        # 13.6 ETL 鉴权 (无 token 应 401)
+        resp = requests.get(f"{BACKEND}/api/admin/etl/progress", timeout=10)
+        record("后端深水区", "ETL鉴权-无token",
+               "PASS" if resp.status_code == 401 else "FAIL",
+               "401 Unauthorized", f"status={resp.status_code}")
+
+        # 13.7 ETL bad path (文件不存在应 404)
+        body = {"jsonlPath": r"C:\nonexistent\file.jsonl",
+                "entityType": "products", "dryRun": True}
+        resp = requests.post(f"{BACKEND}/api/admin/etl/trigger",
+                           headers=etl_headers, json=body, timeout=10)
+        record("后端深水区", "ETL bad-path",
+               "PASS" if resp.status_code == 404 else "FAIL",
+               "404 Not Found", f"status={resp.status_code}")
+    except Exception as e:
+        record("后端深水区", "ETL端点-异常", "FAIL", "API 调用", str(e))
+
 def test_scenario_6_login_ui(page, login_resp):
     """场景 6: 登录页 UI 流程 (P2 测试盲点补充)
     WHY: 之前 E2E 通过 API 登录 + 注入 localStorage, 完全跳过 /login 页面
