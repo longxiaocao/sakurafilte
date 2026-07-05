@@ -1798,6 +1798,73 @@ def test_backend_deep_water(token):
     except Exception as e:
         record("后端深水区", "安全边界-异常", "FAIL", "API 调用", str(e))
 
+    # 17. 乐观锁并发测试 (P2 测试盲点补充 — xmin + OriginalValues)
+    # WHY: 乐观锁是 P0-1.3 修复的核心, 之前手工验证过 (r1=200, r2=409) 但未加入 E2E
+    #   机制: Product.RowVersion (uint) 映射 PG xmin, PUT 时前端带回 GET 时的 RowVersion
+    #         EF Core UPDATE SET WHERE xmin = @orig, 不匹配抛 DbUpdateConcurrencyException
+    #         端点捕获并返回 409 Conflict
+    #   测试: 创建产品 → GET 拿 RowVersion → PUT1 成功 (xmin 变化) → PUT2 用旧 RowVersion 应 409
+    print("\n[BD.17] 乐观锁并发测试 (xmin + OriginalValues)")
+    lock_product_id = None
+    try:
+        # 17.1 创建临时产品
+        lock_oem = f"LOCKTEST{TODAY}{int(time.time())%100000}"
+        resp = requests.post(f"{BACKEND}/api/admin/products",
+                           headers={**headers, "Content-Type": "application/json"},
+                           json={"oem2": lock_oem, "productName1": f"乐观锁测试_{lock_oem}",
+                                 "type": "filter", "isPublished": True}, timeout=15)
+        if resp.status_code in (200, 201):
+            lock_product_id = (resp.json() or {}).get("id")
+        record("后端深水区", "乐观锁-创建产品",
+               "PASS" if lock_product_id else "FAIL",
+               "201 Created", f"id={lock_product_id}, status={resp.status_code}")
+
+        if lock_product_id:
+            # 17.2 GET 获取产品 (拿 RowVersion = xmin_v1)
+            resp = requests.get(f"{BACKEND}/api/admin/products/{lock_product_id}",
+                              headers=headers, timeout=10)
+            if resp.status_code == 200:
+                prod_data = resp.json()
+                row_version_v1 = prod_data.get("rowVersion")
+                record("后端深水区", "乐观锁-GET RowVersion",
+                       "PASS" if row_version_v1 else "FAIL",
+                       "rowVersion 非空", f"rowVersion={row_version_v1}")
+            else:
+                record("后端深水区", "乐观锁-GET RowVersion", "FAIL",
+                       "200 OK", f"status={resp.status_code}")
+                row_version_v1 = None
+
+            if row_version_v1:
+                # 17.3 PUT1 用 RowVersion=v1 (应 200, xmin 变为 v2)
+                update1 = {**prod_data, "productName1": "乐观锁测试_v1_modified",
+                           "rowVersion": row_version_v1}
+                resp1 = requests.put(f"{BACKEND}/api/admin/products/{lock_product_id}",
+                                   headers={**headers, "Content-Type": "application/json"},
+                                   json=update1, timeout=15)
+                record("后端深水区", "乐观锁-PUT1成功",
+                       "PASS" if resp1.status_code == 200 else "FAIL",
+                       "200 OK", f"status={resp1.status_code}")
+
+                # 17.4 PUT2 用相同的 RowVersion=v1 (过期, 应 409 Conflict)
+                update2 = {**prod_data, "productName1": "乐观锁测试_v2_conflict",
+                           "rowVersion": row_version_v1}
+                resp2 = requests.put(f"{BACKEND}/api/admin/products/{lock_product_id}",
+                                   headers={**headers, "Content-Type": "application/json"},
+                                   json=update2, timeout=15)
+                record("后端深水区", "乐观锁-PUT2冲突",
+                       "PASS" if resp2.status_code == 409 else "FAIL",
+                       "409 Conflict", f"status={resp2.status_code}")
+
+            # 17.5 清理临时产品
+            resp = requests.delete(
+                f"{BACKEND}/api/admin/products/{lock_product_id}",
+                headers=headers, timeout=10)
+            record("后端深水区", "乐观锁-清理产品",
+                   "PASS" if resp.status_code in (200, 204) else "WARN",
+                   "200/204", f"status={resp.status_code}")
+    except Exception as e:
+        record("后端深水区", "乐观锁-异常", "FAIL", "API 调用", str(e))
+
 def test_scenario_6_login_ui(page, login_resp):
     """场景 6: 登录页 UI 流程 (P2 测试盲点补充)
     WHY: 之前 E2E 通过 API 登录 + 注入 localStorage, 完全跳过 /login 页面
