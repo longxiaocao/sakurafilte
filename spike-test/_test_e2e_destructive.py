@@ -701,7 +701,7 @@ def test_ui_ux_audit(page, token):
     except Exception as e:
         record("UI/UX审计", "二次确认弹窗", "WARN", "页面加载", str(e))
 
-def test_backend_deep_water(token):
+def test_backend_deep_water(token, login_resp):
     """后端深水区检测"""
     print("\n" + "=" * 60)
     print("  后端深水区检测")
@@ -2020,6 +2020,83 @@ def test_backend_deep_water(token):
     except Exception as e:
         record("后端深水区", "8字典typeahead-异常", "FAIL", "API 调用", str(e))
 
+    # 21. Auth 完整流程 (P2 测试盲点补充 — me/refresh/logout)
+    # WHY: /api/auth/me, /api/auth/refresh, /api/auth/logout 三个核心认证端点未测
+    #   - me: 验证 JWT claims 解析 + 当前用户信息返回
+    #   - refresh: 验证 refresh token 一次性使用 (revoke 旧 + issue 新)
+    #   - logout: 验证 refresh token 撤销后无法再 refresh
+    # 副作用: admin 的 refresh token 会被消耗 (不影响后续测试, access token 仍有效)
+    print("\n[BD.21] Auth 完整流程 (me/refresh/logout)")
+    admin_refresh_token = login_resp.get("refreshToken") if login_resp else None
+    try:
+        # 21.1 /api/auth/me (获取当前用户信息, 验证 JWT claims 解析)
+        resp = requests.get(f"{BACKEND}/api/auth/me", headers=headers, timeout=10)
+        if resp.status_code == 200:
+            me_data = resp.json()
+            ok = (me_data.get("username") == ADMIN_USER
+                  and me_data.get("role") == "admin"
+                  and "id" in me_data)
+            record("后端深水区", "Auth-me",
+                   "PASS" if ok else "FAIL",
+                   f"username={ADMIN_USER}, role=admin, id 存在",
+                   f"username={me_data.get('username')}, role={me_data.get('role')}, id={me_data.get('id')}")
+        else:
+            record("后端深水区", "Auth-me", "FAIL",
+                   "200 OK", f"status={resp.status_code}")
+
+        # 21.2 /api/auth/refresh (用 refresh token 换新 access + 新 refresh)
+        if admin_refresh_token:
+            resp2 = requests.post(f"{BACKEND}/api/auth/refresh",
+                                json={"refreshToken": admin_refresh_token},
+                                timeout=10)
+            new_refresh = None
+            new_access = None
+            if resp2.status_code == 200:
+                new_refresh = resp2.json().get("refreshToken")
+                new_access = resp2.json().get("accessToken")
+                record("后端深水区", "Auth-refresh",
+                       "PASS" if (new_refresh and new_access) else "FAIL",
+                       "200 + 新 accessToken + 新 refreshToken",
+                       f"new_access={'有' if new_access else '无'}, new_refresh={'有' if new_refresh else '无'}")
+            else:
+                record("后端深水区", "Auth-refresh", "FAIL",
+                       "200 OK", f"status={resp2.status_code}, body={resp2.text[:150]}")
+
+            # 21.3 旧 refresh token 二次使用应失败 (一次性使用机制, ReplacedByTokenId 链)
+            #   WHY: UserService.RevokeAndIssueAsync 撤销旧 token 并记录新 token, 旧 token 再次使用应 401
+            resp3 = requests.post(f"{BACKEND}/api/auth/refresh",
+                                json={"refreshToken": admin_refresh_token},
+                                timeout=10)
+            record("后端深水区", "Auth-refresh-一次性",
+                   "PASS" if resp3.status_code == 401 else "FAIL",
+                   "401 (旧 refresh token 已撤销)",
+                   f"status={resp3.status_code}")
+
+            # 21.4 /api/auth/logout (登出, 撤销新 refresh token)
+            if new_refresh:
+                resp4 = requests.post(f"{BACKEND}/api/auth/logout",
+                                    headers=headers,
+                                    json={"refreshToken": new_refresh},
+                                    timeout=10)
+                record("后端深水区", "Auth-logout",
+                       "PASS" if resp4.status_code == 200 else "FAIL",
+                       "200 OK", f"status={resp4.status_code}")
+
+                # 21.5 logout 后再用新 refresh token 调用 /refresh 应失败
+                #   WHY: 验证 logout 真的撤销了 token, 而不是只返回 200
+                resp5 = requests.post(f"{BACKEND}/api/auth/refresh",
+                                    json={"refreshToken": new_refresh},
+                                    timeout=10)
+                record("后端深水区", "Auth-logout-失效",
+                       "PASS" if resp5.status_code == 401 else "FAIL",
+                       "401 (logout 后 refresh token 已失效)",
+                       f"status={resp5.status_code}")
+        else:
+            record("后端深水区", "Auth-refresh", "FAIL",
+                   "admin refresh token 存在", "login_resp 中无 refreshToken")
+    except Exception as e:
+        record("后端深水区", "Auth流程-异常", "FAIL", "API 调用", str(e))
+
 def test_scenario_6_login_ui(page, login_resp):
     """场景 6: 登录页 UI 流程 (P2 测试盲点补充)
     WHY: 之前 E2E 通过 API 登录 + 注入 localStorage, 完全跳过 /login 页面
@@ -2178,7 +2255,7 @@ def main():
         browser.close()
 
     # 后端深水区检测
-    test_backend_deep_water(token)
+    test_backend_deep_water(token, login_resp)
 
     # 生成报告
     summary = {
