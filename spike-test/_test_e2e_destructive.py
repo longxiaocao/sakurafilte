@@ -1675,6 +1675,129 @@ def test_backend_deep_water(token):
     except Exception as e:
         record("后端深水区", "长尾端点-异常", "FAIL", "API 调用", str(e))
 
+    # 16. 安全与边界测试 (P2 测试盲点补充 — 输入校验/注入防护)
+    # WHY: 之前 E2E 只测正常流程, 未验证异常输入的拦截能力
+    #   覆盖: SQL 注入 / 路径遍历 / 超长输入 / 缺必填 / 无效 JSON / XSS / 弱密码 / 非法用户名
+    print("\n[BD.16] 安全与边界测试")
+    xss_product_id = None
+    try:
+        # 16.1 SQL 注入公开搜索 (ILIKE 转义应防注入, 返回 0 结果)
+        resp = requests.get(
+            f"{BACKEND}/api/public/search",
+            params={"oemNo2": "' OR 1=1 --"}, timeout=10)
+        if resp.status_code == 200:
+            total = resp.json().get("total", -1)
+            # total=0 表示 ' 被当字面值搜索, 未触发注入
+            record("后端深水区", "SQL注入-公开搜索",
+                   "PASS" if total == 0 else "FAIL",
+                   "total=0 (字面值搜索)", f"total={total}")
+        else:
+            record("后端深水区", "SQL注入-公开搜索", "FAIL",
+                   "200 OK", f"status={resp.status_code}")
+
+        # 16.2 路径遍历 ETL trigger (白名单应拦截)
+        body = {"jsonlPath": "../../etc/passwd",
+                "entityType": "products", "dryRun": True}
+        resp = requests.post(f"{BACKEND}/api/admin/etl/trigger",
+                           headers={**headers, "X-Admin-Token": "dev-admin-token-rotate-in-prod-MZK4R9P3X6V2N7Q1L5F0B8H3C",
+                                    "Content-Type": "application/json"},
+                           json=body, timeout=10)
+        record("后端深水区", "路径遍历-ETL",
+               "PASS" if resp.status_code == 400 else "FAIL",
+               "400 Bad Request", f"status={resp.status_code}")
+
+        # 16.3 超长 OEM 号 (10000 字符应 400)
+        long_oem = "A" * 10000
+        resp = requests.post(f"{BACKEND}/api/admin/products",
+                           headers={**headers, "Content-Type": "application/json"},
+                           json={"oem2": long_oem, "type": "filter"}, timeout=10)
+        record("后端深水区", "超长OEM号",
+               "PASS" if resp.status_code == 400 else "FAIL",
+               "400 Bad Request", f"status={resp.status_code}")
+
+        # 16.4 缺少必填字段 oem2 (应 400)
+        resp = requests.post(f"{BACKEND}/api/admin/products",
+                           headers={**headers, "Content-Type": "application/json"},
+                           json={"type": "filter"}, timeout=10)
+        record("后端深水区", "缺必填字段",
+               "PASS" if resp.status_code == 400 else "FAIL",
+               "400 Bad Request", f"status={resp.status_code}")
+
+        # 16.5 无效 JSON (应 400)
+        resp = requests.post(f"{BACKEND}/api/admin/products",
+                           headers={**headers, "Content-Type": "application/json"},
+                           data="{invalid json", timeout=10)
+        record("后端深水区", "无效JSON",
+               "PASS" if resp.status_code == 400 else "FAIL",
+               "400 Bad Request", f"status={resp.status_code}")
+
+        # 16.6 XSS 创建产品 (后端接受, JSON API 不转义 HTML — 前端 Vue 负责转义)
+        #   WHY 201 是预期: JSON API 返回原始 <script> 标签是正常的,
+        #     前端 Vue {{ }} 插值会自动转义为 &lt;script&gt;, 不触发 XSS
+        xss_oem = f"XSSTEST{int(time.time())%100000}"
+        resp = requests.post(f"{BACKEND}/api/admin/products",
+                           headers={**headers, "Content-Type": "application/json"},
+                           json={"oem2": xss_oem,
+                                 "productName1": "<script>alert(1)</script>",
+                                 "type": "filter"}, timeout=10)
+        if resp.status_code in (200, 201):
+            xss_product_id = (resp.json() or {}).get("id")
+            # 验证 JSON 响应包含原始 <script> (未转义, 因为 JSON 不需要 HTML 转义)
+            raw_has_script = "<script>" in resp.text
+            record("后端深水区", "XSS-创建接受",
+                   "PASS" if xss_product_id and raw_has_script else "WARN",
+                   "201 + JSON 含原始 <script> (前端负责转义)",
+                   f"id={xss_product_id}, raw_has_script={raw_has_script}")
+        else:
+            record("后端深水区", "XSS-创建接受", "FAIL",
+                   "201 Created", f"status={resp.status_code}")
+
+        # 16.7 字典空值 (应 400)
+        resp = requests.post(f"{BACKEND}/api/admin/dict/types",
+                           headers={**headers, "Content-Type": "application/json"},
+                           json={"value": ""}, timeout=10)
+        record("后端深水区", "字典空值",
+               "PASS" if resp.status_code == 400 else "FAIL",
+               "400 Bad Request", f"status={resp.status_code}")
+
+        # 16.8 字典超长值 (10000 字符应 400)
+        long_val = "B" * 10000
+        resp = requests.post(f"{BACKEND}/api/admin/dict/types",
+                           headers={**headers, "Content-Type": "application/json"},
+                           json={"value": long_val}, timeout=10)
+        record("后端深水区", "字典超长值",
+               "PASS" if resp.status_code == 400 else "FAIL",
+               "400 Bad Request", f"status={resp.status_code}")
+
+        # 16.9 弱密码 "123" (FluentValidation 应 400)
+        resp = requests.post(f"{BACKEND}/api/admin/users",
+                           headers={**headers, "Content-Type": "application/json"},
+                           json={"username": f"weak_{int(time.time())%100000}",
+                                 "password": "123", "role": "viewer"}, timeout=10)
+        record("后端深水区", "弱密码",
+               "PASS" if resp.status_code == 400 else "FAIL",
+               "400 Bad Request", f"status={resp.status_code}")
+
+        # 16.10 非法用户名 (特殊字符应 400, 仅允许 a-zA-Z0-9_-)
+        resp = requests.post(f"{BACKEND}/api/admin/users",
+                           headers={**headers, "Content-Type": "application/json"},
+                           json={"username": "user@hack!",
+                                 "password": "Test@2026Pwd", "role": "viewer"}, timeout=10)
+        record("后端深水区", "非法用户名",
+               "PASS" if resp.status_code == 400 else "FAIL",
+               "400 Bad Request", f"status={resp.status_code}")
+
+        # 16.11 清理 XSS 测试产品
+        if xss_product_id:
+            resp = requests.delete(
+                f"{BACKEND}/api/admin/products/{xss_product_id}",
+                headers=headers, timeout=10)
+            record("后端深水区", "XSS-清理产品",
+                   "PASS" if resp.status_code in (200, 204) else "WARN",
+                   "200/204", f"status={resp.status_code}")
+    except Exception as e:
+        record("后端深水区", "安全边界-异常", "FAIL", "API 调用", str(e))
+
 def test_scenario_6_login_ui(page, login_resp):
     """场景 6: 登录页 UI 流程 (P2 测试盲点补充)
     WHY: 之前 E2E 通过 API 登录 + 注入 localStorage, 完全跳过 /login 页面
