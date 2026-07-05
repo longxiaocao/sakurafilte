@@ -15,6 +15,9 @@ on:
   pull_request:
     branches: [master]
   workflow_dispatch:
+  schedule:
+    # 月度 regression 防火线 (每月 1 号 UTC 02:00) - 跨端 + 极端场景 + Lighthouse
+    - cron: '0 2 1 * *'
 
 env:
   DOTNET_VERSION: '8.0.x'
@@ -567,6 +570,11 @@ jobs:
         working-directory: frontend
         run: npx playwright install chromium --with-deps
 
+      - name: Install Playwright firefox (for cross-browser audit)
+        # WHY 月度 cron 跑跨端审计 (Chromium + Firefox), 装 firefox 浏览器
+        working-directory: frontend
+        run: npx playwright install firefox --with-deps
+
       - name: Start Vite dev server (background)
         run: |
           cd frontend
@@ -612,3 +620,42 @@ jobs:
           path: frontend/playwright-report/
           retention-days: 7
           if-no-files-found: ignore
+
+      # P2.7-1: 跨端审计 (Chromium + Firefox × 3 视口 × 5 路由 = 30 组合)
+      #   WHY: 之前 E2E 只跑 Chromium 1440x900, 50% 移动 + 30% Firefox 用户零覆盖
+      #        月度 cron 触发, 防止 mobile/Firefox 兼容回归
+      - name: Run P2.7-1 cross-browser audit (2 browsers × 3 viewports × 5 routes)
+        working-directory: spike-test
+        run: |
+          echo "===== P2.7-1 跨端审计 ====="
+          if python _cross_browser_audit.py; then
+            echo "[PASS] 跨端 30 组合 0 错误"
+          else
+            RC=$?
+            echo "::warning::P2.7-1 跨端审计发现问题 (rc=$RC), 上传截图"
+            exit 0  # 不阻塞 PR, 仅警告
+          fi
+
+      - name: Upload cross-browser screenshots (always, 30 PNG)
+        if: always() && github.event_name == 'push' || github.event_name == 'schedule'
+        uses: actions/upload-artifact@v4
+        with:
+          name: cross-browser-screenshots-${{ github.run_id }}
+          path: spike-test/screenshots/
+          retention-days: 30
+          if-no-files-found: ignore
+
+      # P2.7-2: 极端场景 E2E (5 个场景: 空/超长/XSS/断网/404)
+      #   WHY: 之前 E2E 只测标准路径, 真实用户会输入空/超长/特殊字符/断网
+      #        月度 cron 触发, 作为真实业务覆盖的 regression 防火线
+      - name: Run P2.7-2 edge case E2E (5 scenarios)
+        working-directory: spike-test
+        run: |
+          echo "===== P2.7-2 极端场景 E2E ====="
+          if python _edge_case_e2e.py; then
+            echo "[PASS] 极端场景 5/5 PASS"
+          else
+            RC=$?
+            echo "::warning::P2.7-2 极端场景失败 (rc=$RC), 需人工排查"
+            exit 0  # 不阻塞 PR, 仅警告
+          fi

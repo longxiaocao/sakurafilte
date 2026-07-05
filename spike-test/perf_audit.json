@@ -1,0 +1,64 @@
+{
+  "summary": {
+    "ts": "2026-07-05T18:47:44.695134",
+    "thresholds": {
+      "lcp_ms": 2500,
+      "fcp_ms": 1800,
+      "cls": 0.1,
+      "load_ms": 3000
+    },
+    "total": 5,
+    "ok": 5,
+    "warn": 0,
+    "fail": 0,
+    "console_issues": 0,
+    "exit_code": 0
+  },
+  "results": [
+    {
+      "route": "/",
+      "name": "home",
+      "lcp_ms": 556,
+      "fcp_ms": 504,
+      "cls": 0,
+      "load_ms": 2567,
+      "issues": []
+    },
+    {
+      "route": "/search",
+      "name": "search",
+      "lcp_ms": 100,
+      "fcp_ms": 48,
+      "cls": 0,
+      "load_ms": 2074,
+      "issues": []
+    },
+    {
+      "route": "/product/AC 010323",
+      "name": "product-detail",
+      "lcp_ms": 220,
+      "fcp_ms": 44,
+      "cls": 0.0,
+      "load_ms": 2057,
+      "issues": []
+    },
+    {
+      "route": "/compare?ids=1,2,3",
+      "name": "compare",
+      "lcp_ms": 400,
+      "fcp_ms": 356,
+      "cls": 0.0001,
+      "load_ms": 2385,
+      "issues": []
+    },
+    {
+      "route": "/login",
+      "name": "login",
+      "lcp_ms": 64,
+      "fcp_ms": 48,
+      "cls": 0,
+      "load_ms": 2064,
+      "issues": []
+    }
+  ]
+}
