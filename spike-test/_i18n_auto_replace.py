@@ -88,6 +88,79 @@ def translate_with_fallback(zh: str) -> str:
     return f"[EN] {zh[:30]}"
 
 
+def _escape_for_ts(s: str) -> str:
+    """转义字符串字面量, 嵌入 TS 单引号字符串"""
+    return s.replace("\\", "\\\\").replace("'", "\\'")
+
+
+def inject_to_locale(ts_path: Path, entries: Dict[str, str], locale_name: str) -> None:
+    """
+    把 key→value 注入到 locale TS 文件的 export default { ... } 中.
+    分组: admin.{file_short}.{ctx_short} = value
+
+    注入策略:
+      1. 读取文件, 找到最后一个 `}` (export default 的闭合)
+      2. 提取已有的 `admin` 块 (如有)
+      3. 合并新 entries, 按 key 路径排序
+      4. 重新生成 admin 块的 TS 字符串
+      5. 替换原 `admin` 块 (如有) 或在 } 前插入
+    """
+    text = ts_path.read_text(encoding="utf-8")
+
+    # 按 key 拆分: admin.compareview.string.l1_xxx -> { compareview: { string: { l1_xxx: ... } } }
+    grouped: Dict[str, Dict[str, Dict[str, str]]] = {}
+    for key, value in entries.items():
+        parts = key.split(".")
+        if len(parts) < 3 or parts[0] != "admin":
+            continue
+        file_short = parts[1]
+        ctx_short = parts[2]
+        sub = parts[3] if len(parts) > 3 else "value"
+        grouped.setdefault(file_short, {}).setdefault(ctx_short, {})[sub] = value
+
+    # 生成 admin 块 TS 字符串 (4 层嵌套)
+    def render_grouped() -> str:
+        lines = ["  admin: {"]
+        for file_short, ctxs in sorted(grouped.items()):
+            lines.append(f"    {file_short}: {{")
+            for ctx, subs in sorted(ctxs.items()):
+                lines.append(f"      {ctx}: {{")
+                for sub, val in sorted(subs.items()):
+                    safe_val = _escape_for_ts(val)
+                    lines.append(f"        {sub}: '{safe_val}',")
+                lines.append(f"      }},")
+            lines.append(f"    }},")
+        lines.append("  },")
+        return "\n".join(lines)
+
+    admin_block = render_grouped()
+
+    # 已有 admin 块 → 替换
+    if re.search(r"^\s*admin:\s*\{", text, re.MULTILINE):
+        # 找到 admin: { 开始的行, 匹配到对应的 } (按缩进判断)
+        pattern = re.compile(
+            r"^(\s*)admin:\s*\{\n(?:.*\n)*?^\s*\},?\s*$",
+            re.MULTILINE
+        )
+        m = pattern.search(text)
+        if m:
+            indent = m.group(1)
+            new_block = admin_block.replace("  ", indent, 1) if indent else admin_block
+            # 简化: 用整个块替换
+            new_text = text[:m.start()] + admin_block + "\n" + text[m.end():]
+            ts_path.write_text(new_text, encoding="utf-8")
+            return
+    # 无 admin 块 → 在 export default 最后一个 } 前插入
+    # 找最后一个 } (排除嵌套的)
+    # 简单: 找 export default { ... } 最后一行的 }
+    m = re.search(r"^(export default \{[\s\S]*?)\n\}\s*$", text, re.MULTILINE)
+    if m:
+        new_text = text[:m.end(1)] + "\n" + admin_block + "\n}"
+        ts_path.write_text(new_text, encoding="utf-8")
+    else:
+        print(f"  [WARN] {locale_name} 找不到 export default {{ }}, 跳过注入")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true")
@@ -206,17 +279,15 @@ def main():
             full.write_text(text, encoding="utf-8")
         print(f"  ✓ {len(file_replacements)} 个 .vue 文件已替换")
 
-    # 2. 追加到 zh-CN.ts (用户审核后可删除占位)
+    # 2. 注入到 zh-CN.ts 和 en-US.ts
+    #    WHY: 替换 .vue 后, 前端 t('admin.x.y') 会查 zh-CN / en-US.
+    #         若不注入 key, console 会报 "Not found key", 用户看到的是 key 字符串.
+    #    策略: 在 export default { ... } 末尾的 } 前插入 admin 块
+    #          按 admin.{file_short}.{ctx_short} 分组, 保持文件可读性
     if not args.dry_run and new_zh_entries:
-        zh_text = ZH_TS.read_text(encoding="utf-8")
-        en_text = EN_TS.read_text(encoding="utf-8")
-        # 简化为: 在 export default { ... } 末尾注入
-        # 实际更复杂, 因为要按 admin.{file}.{ctx} 分组
-        # 这里用最简策略: 把所有 key 平铺到 admin 块
-        # WHY 最简: 文件结构复杂, 完整解析需 AST, 风险 > 价值
-        #   建议人工审核 + 重组结构
-        print(f"  ⚠ i18n key 追加需人工编辑 zh-CN.ts / en-US.ts")
-        print(f"  新 key 写到: {OUT.relative_to(ROOT)}")
+        inject_to_locale(ZH_TS, new_zh_entries, "zh-CN")
+        inject_to_locale(EN_TS, new_en_entries, "en-US")
+        print(f"  ✓ {len(new_zh_entries)} 个 key 已注入 zh-CN.ts / en-US.ts")
 
     # 报告
     report = {

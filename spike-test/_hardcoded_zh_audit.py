@@ -114,7 +114,7 @@ def main():
             [{"file": k, "count": v} for k, v in by_file.items()],
             key=lambda x: -x["count"]
         ),
-        "findings": findings[:200],  # 限 200 条
+        "findings": findings,  # 全量保存, 不截断 (was: findings[:200])
     }
     OUT.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
 

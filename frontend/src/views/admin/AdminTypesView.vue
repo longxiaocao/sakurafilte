@@ -60,7 +60,7 @@ async function softDelete(row: TypeItem) {
   try {
     await ElMessageBox.confirm(
       FIXED.includes(row.type)
-        ? `确定删除固定 Type "${row.type}" 吗? 建议保留 (作为 P2.3 兜底), 但仍支持软删恢复。`
+        ? `确定删除固定 Type "${row.type}" 吗? 建议保留 (作为 P2.3 兜底), 但仍支持软删恢复.`
         : `确定删除 "${row.type}" 吗? (软删除)`, '确认', { type: 'warning' }
     )
   } catch { return }

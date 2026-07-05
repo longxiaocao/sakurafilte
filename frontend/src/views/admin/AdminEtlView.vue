@@ -348,7 +348,7 @@ onMounted(() => { checkPausedTask() })
 async function doPause() {
   try {
     await ElMessageBox.confirm(
-      '暂停当前 ETL 任务?\n\n当前批次跑完后会优雅退出, checkpoint_id 会写入 etl_progress_log, 后续可用"恢复"按钮从该点续读。\n\n(区别于"取消" — 取消会立即终止并回滚当前批次)',
+      '暂停当前 ETL 任务?\n\n当前批次跑完后会优雅退出, checkpoint_id 会写入 etl_progress_log, 后续可用"恢复"按钮从该点续读.\n\n(区别于"取消" — 取消会立即终止并回滚当前批次)',
       '暂停 ETL 任务',
       { type: 'warning', confirmButtonText: '暂停', cancelButtonText: '不暂停' }
     )
@@ -372,7 +372,7 @@ async function doPause() {
 async function doResume() {
   try {
     await ElMessageBox.confirm(
-      '恢复暂停的 ETL 任务?\n\n将从最近一条 paused 记录的 checkpoint_id+1 行开始续读, 跳过已 COMMIT 的批次。',
+      '恢复暂停的 ETL 任务?\n\n将从最近一条 paused 记录的 checkpoint_id+1 行开始续读, 跳过已 COMMIT 的批次.',
       '恢复 ETL 任务',
       { type: 'info', confirmButtonText: '恢复', cancelButtonText: '不恢复' }
     )
@@ -531,7 +531,7 @@ function prettyJson(raw: string): string {
       </template>
 
       <div v-if="!task.activeTask" class="text-[var(--color-text-muted)] text-sm">
-        当前无活跃任务。 等待触发或查看历史任务。
+        当前无活跃任务. 等待触发或查看历史任务.
       </div>
 
       <div v-else>

@@ -156,7 +156,7 @@ onMounted(load)
           <el-input v-model="dialogForm.engineBrand" placeholder="例: CUMMINS" maxlength="200" show-word-limit />
         </el-form-item>
         <el-form-item label="型号">
-          <el-input v-model="dialogForm.engineType" placeholder="例: ISB 4.5L (可空)" maxlength="200" show-word-limit />
+          <el-input v-model="dialogForm.engineType" placeholder="例: ISB 4.5 L (可空)" maxlength="200" show-word-limit />
           <div class="text-xs text-muted mt-1">2 字段组成 UNIQUE 索引, 型号可空</div>
         </el-form-item>
         <el-form-item label="排序">

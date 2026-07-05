@@ -27,7 +27,7 @@ const faqs = [
   },
   {
     q: '为什么新增产品时 typeahead 联想不到想要的值?',
-    a: '字典是后台维护的, 需先在 "字典管理" → 对应字典 → 新增 value。typeahead 只返回字典内已存在的值 (前 20 条按 sort_order 排)。'
+    a: '字典是后台维护的, 需先在 "字典管理" → 对应字典 → 新增 value. typeahead 只返回字典内已存在的值 (前 20 条按 sort_order 排).'
   },
   {
     q: '尺寸搜索 (H1=100) 返回 0 条结果, 但库里有这个产品?',
@@ -35,11 +35,11 @@ const faqs = [
   },
   {
     q: 'ETL 触发后卡在 reading 状态?',
-    a: 'reading 阶段是流式 COPY 暂存, 大文件 (1M 行) 可能 30-60s。如超过 5 分钟无进度, 检查后端日志 (output/SPIKE-REPORT-*.md) 看是否有 SQL 错误。'
+    a: 'reading 阶段是流式 COPY 暂存, 大文件 (1M 行) 可能 30-60s。如超过 5 分钟无进度, 检查后端日志 (output/SPIKE-REPORT-*.md) 看是否有 SQL 错误.'
   },
   {
     q: '怎么批量删除产品?',
-    a: '后台产品列表勾选多行 → 顶部 "批量停售" 按钮。停售 = is_discontinued=true, 前台不展示, 历史数据保留。如需物理删除, 走 SQL (慎用)。'
+    a: '后台产品列表勾选多行 → 顶部 "批量停售" 按钮。停售 = is_discontinued=true, 前台不展示, 历史数据保留. 如需物理删除, 走 SQL (慎用).'
   },
   {
     q: '上传图片后前台不显示?',
@@ -91,7 +91,7 @@ const helpPreview = computed(() => helpPreviewKeys
     <section id="dict" class="hairline p-4 mb-3">
       <h2 class="text-base font-medium mb-2">2. 字典使用规范 (8 个)</h2>
       <p class="text-xs text-muted mb-2">
-        字典 = 后台可维护的标准值集合。前台 typeahead / 后台表单 / 公开搜索均从字典取, 保证全站一致。
+        字典 = 后台可维护的标准值集合. 前台 typeahead / 后台表单 / 公开搜索均从字典取, 保证全站一致.
       </p>
       <table class="w-full text-sm">
         <thead>
@@ -112,7 +112,7 @@ const helpPreview = computed(() => helpPreviewKeys
         </tbody>
       </table>
       <p class="text-xs text-muted mt-2">
-        💡 拖拽排序: 字典管理页每行的 ≡ 按钮, sort_order 持久化, 前台展示按 sort_order 升序。
+        💡 拖拽排序: 字典管理页每行的 ≡ 按钮, sort_order 持久化, 前台展示按 sort_order 升序.
       </p>
     </section>
 
@@ -136,10 +136,10 @@ const helpPreview = computed(() => helpPreviewKeys
       <h2 class="text-base font-medium mb-2">4. 搜索容差 (±5mm 固定)</h2>
       <p class="text-sm leading-6">
         尺寸字段 (H1-H4 / D1-D4) 搜索默认 <strong>±5mm</strong> 容差, 即 H1=100 命中 H1∈[95,105] 的所有产品。
-        后端 AdminProductService 已 hardcode <code>tolerance=5</code>, 前端不暴露切换。
+        后端 AdminProductService 已 hardcode <code>tolerance=5</code>, 前端不暴露切换.
       </p>
       <p class="text-sm leading-6 mt-1">
-        多字段组合走 AND 关系 (收窄), 单字段命中即返回 (公开搜索 8 字段同时支持)。
+        多字段组合走 AND 关系 (收窄), 单字段命中即返回 (公开搜索 8 字段同时支持).
       </p>
 
       <h3 class="text-sm font-medium mt-3 mb-1">字段说明 (常用 10 个)</h3>
@@ -162,7 +162,7 @@ const helpPreview = computed(() => helpPreviewKeys
         </tbody>
       </table>
       <p class="text-xs text-muted mt-2">
-        完整字段说明见后台产品表单每个字段后的 <code>?</code> 图标 (鼠标悬停)。
+        完整字段说明见后台产品表单每个字段后的 <code>?</code> 图标 (鼠标悬停).
       </p>
     </section>
 

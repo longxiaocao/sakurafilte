@@ -168,7 +168,7 @@ async function save() {
         if (reloadTimer !== null) clearTimeout(reloadTimer)
         reloadTimer = setTimeout(() => window.location.reload(), 1500)
       } else {
-        ElMessage.error('产品已存在，请检查 OEM 号')
+        ElMessage.error('产品已存在, 请检查 OEM 号')
       }
     }
   } finally {
