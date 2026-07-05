@@ -35,6 +35,25 @@ const elLocale = computed(() => (locale.value === 'en-US' ? en : zhCn))
   </el-config-provider>
 </template>
 
+<style>
+/* 全局打印规则: 隐藏导航/工具栏/拖拽层, 保留主内容
+   覆盖所有页面, 防止 .compare-toolbar / header 出现在打印输出中 */
+@media print {
+  /* 隐藏 AppHeader (页面顶部导航) */
+  header.app-header {
+    display: none !important;
+  }
+  /* 拖拽遮罩绝不允许出现在打印中 */
+  .drag-drop-overlay {
+    display: none !important;
+  }
+  /* 任何 .no-print 标记的元素 (按钮/工具栏/缩放图标等) */
+  .no-print {
+    display: none !important;
+  }
+}
+</style>
+
 <style scoped>
 /* A11y: 视觉隐藏但屏幕阅读器可读, 获得焦点时显形 */
 .skip-to-content {

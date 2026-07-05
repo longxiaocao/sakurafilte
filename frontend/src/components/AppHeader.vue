@@ -148,7 +148,7 @@ function toggleLocale() {
 
 <template>
   <header
-    class="hairline-b bg-[var(--color-bg)] flex items-center px-3 h-12 gap-3"
+    class="app-header hairline-b bg-[var(--color-bg)] flex items-center px-3 h-12 gap-3"
     role="banner"
   >
     <!-- UX P0-1: 移动端汉堡按钮 (sm 以下显示, 桌面端隐藏) -->

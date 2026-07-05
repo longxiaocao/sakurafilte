@@ -425,9 +425,10 @@ function doPrint() {
 
 <style scoped>
 /* P3.5 (Task 12): 6 列 grid 对比布局 — Musk 极简风, 无阴影, 1px 边框, 纯黑/白 + 单一强调色 */
+/* 颜色全部走 CSS 变量, 响应浅/深色主题切换 */
 .compare-grid-wrap {
   overflow-x: auto;
-  background: #fff;
+  background: var(--color-bg);
 }
 
 .compare-grid {
@@ -438,18 +439,19 @@ function doPrint() {
 
 .compare-header-cell {
   padding: 8px 10px;
-  background: #fafafa;
+  background: var(--color-bg-table-stripe);
   border-bottom: 1px solid var(--color-border);
   font-size: 13px;
   min-height: 56px;
   position: sticky;
   top: 0;
   z-index: 2;
+  color: var(--color-text);
 }
 
 .field-name-cell {
   padding: 6px 10px;
-  background: #fafafa;
+  background: var(--color-bg-table-stripe);
   border-bottom: 1px solid var(--color-border);
   border-right: 1px solid var(--color-border);
   font-size: 13px;
@@ -468,8 +470,8 @@ function doPrint() {
 
 .group-name-cell {
   padding: 6px 10px;
-  background: #111;
-  color: #fff;
+  background: var(--color-text);
+  color: var(--color-bg);
   font-size: 12px;
   font-weight: 500;
   letter-spacing: 0.5px;
@@ -479,6 +481,7 @@ function doPrint() {
 
 .data-cell {
   padding: 6px 10px;
+  background: var(--color-bg-elevated);
   border-bottom: 1px solid var(--color-border);
   border-right: 1px solid var(--color-border);
   font-size: 13px;
@@ -486,23 +489,24 @@ function doPrint() {
   min-height: 32px;
   display: flex;
   align-items: center;
+  color: var(--color-text);
 }
 
 .data-cell:last-child {
   border-right: none;
 }
 
-/* 差异高亮: 全部相等灰底, 有差异黄底 */
+/* 差异高亮: 全部相等灰底, 有差异黄底 (用主题变量, 浅/深色均可见) */
 .data-cell.same {
-  background: #f5f5f5;
+  background: var(--color-bg-same);
 }
 
 .data-cell.diff {
-  background: #fffbe6;
+  background: var(--color-bg-diff);
 }
 
 .data-cell.empty {
-  color: #999;
+  color: var(--color-text-muted);
 }
 
 .product-cell {
@@ -514,6 +518,18 @@ function doPrint() {
 
 /* 打印优化: 隐藏工具条, 保留对比表格, 强制背景色 */
 @media print {
+  /* 深色模式下打印: 强制浅色变量, 避免黑底白字 */
+  :global(.dark),
+  :global(html.dark) {
+    --color-bg: #ffffff;
+    --color-bg-elevated: #ffffff;
+    --color-bg-table-stripe: #fafafa;
+    --color-bg-same: #f5f5f5;
+    --color-bg-diff: #fffbe6;
+    --color-text: #111827;
+    --color-text-muted: #6b7280;
+    --color-border: #e5e7eb;
+  }
   .compare-toolbar,
   .el-pagination,
   .el-button {
@@ -543,6 +559,9 @@ function doPrint() {
   }
   .compare-root {
     max-width: 100% !important;
+  }
+  .compare-grid-wrap {
+    background: #ffffff !important;
   }
   body {
     -webkit-print-color-adjust: exact;
