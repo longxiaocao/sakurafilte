@@ -1457,6 +1457,116 @@ def test_backend_deep_water(token):
     except Exception as e:
         record("后端深水区", "ETL端点-异常", "FAIL", "API 调用", str(e))
 
+    # 14. 产品图片上传/列表/删除 (P2 测试盲点补充 — 盲点 6)
+    # WHY: 图片上传端点之前完全未测试, MinIO 已在线 (localhost:9000)
+    #   完整流程: 创建临时产品 → 上传图 → 列表验证 → 越界/不存在/鉴权 → 删除清理
+    #   事务顺序 (P0-1.2): DB 事务占位 → S3 上传 → DB 提交 → 异步删旧
+    print("\n[BD.14] 产品图片上传/列表/删除")
+    try:
+        # 14.1 创建临时产品用于图片测试 (避免污染场景 1 产品)
+        img_oem = f"IMGTEST{TODAY}{int(time.time())%100000}"
+        prod_body = {
+            "oem2": img_oem,
+            "productName1": f"图片测试_{img_oem}",
+            "type": "filter",
+            "isPublished": True,
+        }
+        resp = requests.post(f"{BACKEND}/api/admin/products",
+                           headers={**headers, "Content-Type": "application/json"},
+                           json=prod_body, timeout=15)
+        img_product_id = None
+        if resp.status_code in (200, 201):
+            img_product_id = (resp.json() or {}).get("id")
+        record("后端深水区", "图片-创建临时产品",
+               "PASS" if img_product_id else "FAIL",
+               "201 Created", f"id={img_product_id}, status={resp.status_code}")
+
+        if img_product_id:
+            # 14.2 上传 1x1 PNG 到 slot=1 (主图)
+            #   生成最小 PNG: 1x1 红像素 (67 字节)
+            import struct, zlib
+            def _make_png():
+                w, h = 1, 1
+                raw = (b'\x00' + b'\xff\x00\x00') * w
+                raw = raw * h
+                comp = zlib.compress(raw)
+                def _chunk(tag, data):
+                    return struct.pack('>I', len(data)) + tag + data + \
+                           struct.pack('>I', zlib.crc32(tag + data) & 0xffffffff)
+                return (b'\x89PNG\r\n\x1a\n' +
+                        _chunk(b'IHDR', struct.pack('>IIBBBBB', w, h, 8, 2, 0, 0, 0)) +
+                        _chunk(b'IDAT', comp) +
+                        _chunk(b'IEND', b''))
+            png_bytes = _make_png()
+            files = {"file": ("test.png", png_bytes, "image/png")}
+            resp = requests.post(
+                f"{BACKEND}/api/admin/products/{img_product_id}/images/1",
+                headers=headers, files=files, timeout=30)
+            upload_ok = resp.status_code == 200
+            record("后端深水区", "图片-上传slot1",
+                   "PASS" if upload_ok else "FAIL",
+                   "200 OK", f"status={resp.status_code}, body={resp.text[:200]}")
+
+            # 14.3 列表验证 slot=1 存在
+            if upload_ok:
+                resp = requests.get(
+                    f"{BACKEND}/api/admin/products/{img_product_id}/images",
+                    headers=headers, timeout=10)
+                if resp.status_code == 200:
+                    items = resp.json()
+                    has_slot1 = any(i.get("slot") == 1 for i in items)
+                    record("后端深水区", "图片-列表含slot1",
+                           "PASS" if has_slot1 else "FAIL",
+                           "slot=1 存在", f"items={len(items)}, has_slot1={has_slot1}")
+                else:
+                    record("后端深水区", "图片-列表含slot1", "FAIL",
+                           "200 OK", f"status={resp.status_code}")
+
+            # 14.4 slot 越界 (slot=7 应 400)
+            files = {"file": ("test.png", png_bytes, "image/png")}
+            resp = requests.post(
+                f"{BACKEND}/api/admin/products/{img_product_id}/images/7",
+                headers=headers, files=files, timeout=10)
+            record("后端深水区", "图片-slot越界",
+                   "PASS" if resp.status_code == 400 else "FAIL",
+                   "400 Bad Request", f"status={resp.status_code}")
+
+            # 14.5 产品不存在 (id=99999999 应 404)
+            files = {"file": ("test.png", png_bytes, "image/png")}
+            resp = requests.post(
+                f"{BACKEND}/api/admin/products/99999999/images/1",
+                headers=headers, files=files, timeout=10)
+            record("后端深水区", "图片-产品不存在",
+                   "PASS" if resp.status_code == 404 else "FAIL",
+                   "404 Not Found", f"status={resp.status_code}")
+
+            # 14.6 鉴权 (无 token 应 401)
+            files = {"file": ("test.png", png_bytes, "image/png")}
+            resp = requests.post(
+                f"{BACKEND}/api/admin/products/{img_product_id}/images/1",
+                files=files, timeout=10)
+            record("后端深水区", "图片-鉴权",
+                   "PASS" if resp.status_code == 401 else "FAIL",
+                   "401 Unauthorized", f"status={resp.status_code}")
+
+            # 14.7 删除 slot=1 图
+            resp = requests.delete(
+                f"{BACKEND}/api/admin/products/{img_product_id}/images/1",
+                headers=headers, timeout=10)
+            record("后端深水区", "图片-删除slot1",
+                   "PASS" if resp.status_code == 200 else "FAIL",
+                   "200 OK", f"status={resp.status_code}")
+
+            # 14.8 清理临时产品 (软删)
+            resp = requests.delete(
+                f"{BACKEND}/api/admin/products/{img_product_id}",
+                headers=headers, timeout=10)
+            record("后端深水区", "图片-清理产品",
+                   "PASS" if resp.status_code in (200, 204) else "WARN",
+                   "200/204", f"status={resp.status_code}")
+    except Exception as e:
+        record("后端深水区", "图片上传-异常", "FAIL", "API 调用", str(e))
+
 def test_scenario_6_login_ui(page, login_resp):
     """场景 6: 登录页 UI 流程 (P2 测试盲点补充)
     WHY: 之前 E2E 通过 API 登录 + 注入 localStorage, 完全跳过 /login 页面
