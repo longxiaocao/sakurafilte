@@ -1,0 +1,1483 @@
+{
+  "stats": {
+    "files_scanned": 15,
+    "total_hardcoded": 1029,
+    "files_with_zh": 15,
+    "by_context": {
+      "string": 615,
+      "ElMessage.success": 62,
+      "ElMessage.warning": 51,
+      "ElMessage.error": 39,
+      "template-text": 63,
+      "placeholder": 59,
+      "title": 38,
+      "label": 88,
+      "ElMessage.info": 6,
+      "button-text": 8
+    }
+  },
+  "by_file_top": [
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "count": 122
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminHelpView.vue",
+      "count": 112
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminProductFormView.vue",
+      "count": 91
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminProductsView.vue",
+      "count": 77
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminUsersView.vue",
+      "count": 77
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "count": 69
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminMachinesView.vue",
+      "count": 68
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminOemBrandsView.vue",
+      "count": 59
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminPerfView.vue",
+      "count": 56
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminMediasView.vue",
+      "count": 54
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEnginesView.vue",
+      "count": 53
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminProductName1sView.vue",
+      "count": 51
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminTypesView.vue",
+      "count": 48
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminProductName2sView.vue",
+      "count": 47
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminOemNo3sView.vue",
+      "count": 45
+    }
+  ],
+  "findings": [
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 53,
+      "context": "string",
+      "text": "基础",
+      "key_suggestion": "admin.compareview.line53"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 55,
+      "context": "string",
+      "text": "编号",
+      "key_suggestion": "admin.compareview.line55"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 58,
+      "context": "string",
+      "text": "产品名 1",
+      "key_suggestion": "admin.compareview.line58"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 59,
+      "context": "string",
+      "text": "产品名 2",
+      "key_suggestion": "admin.compareview.line59"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 60,
+      "context": "string",
+      "text": "类型",
+      "key_suggestion": "admin.compareview.line60"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 64,
+      "context": "string",
+      "text": "尺寸 (mm)",
+      "key_suggestion": "admin.compareview.line64"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 77,
+      "context": "string",
+      "text": "性能",
+      "key_suggestion": "admin.compareview.line77"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 79,
+      "context": "string",
+      "text": "螺纹",
+      "key_suggestion": "admin.compareview.line79"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 80,
+      "context": "string",
+      "text": "螺纹",
+      "key_suggestion": "admin.compareview.line80"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 81,
+      "context": "string",
+      "text": "单向阀数",
+      "key_suggestion": "admin.compareview.line81"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 82,
+      "context": "string",
+      "text": "旁通阀数",
+      "key_suggestion": "admin.compareview.line82"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 83,
+      "context": "string",
+      "text": "旁通 LR",
+      "key_suggestion": "admin.compareview.line83"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 84,
+      "context": "string",
+      "text": "旁通 HR",
+      "key_suggestion": "admin.compareview.line84"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 85,
+      "context": "string",
+      "text": "效率 1",
+      "key_suggestion": "admin.compareview.line85"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 86,
+      "context": "string",
+      "text": "效率 2",
+      "key_suggestion": "admin.compareview.line86"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 87,
+      "context": "string",
+      "text": "旁通压力",
+      "key_suggestion": "admin.compareview.line87"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 88,
+      "context": "string",
+      "text": "耐压 (bar)",
+      "key_suggestion": "admin.compareview.line88"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 89,
+      "context": "string",
+      "text": "密封材料",
+      "key_suggestion": "admin.compareview.line89"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 90,
+      "context": "string",
+      "text": "温度范围",
+      "key_suggestion": "admin.compareview.line90"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 94,
+      "context": "string",
+      "text": "包装",
+      "key_suggestion": "admin.compareview.line94"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 96,
+      "context": "string",
+      "text": "介质",
+      "key_suggestion": "admin.compareview.line96"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 97,
+      "context": "string",
+      "text": "介质型号",
+      "key_suggestion": "admin.compareview.line97"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 98,
+      "context": "string",
+      "text": "箱/件",
+      "key_suggestion": "admin.compareview.line98"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 99,
+      "context": "string",
+      "text": "重量 (kg)",
+      "key_suggestion": "admin.compareview.line99"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 100,
+      "context": "string",
+      "text": "箱长 (mm)",
+      "key_suggestion": "admin.compareview.line100"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 101,
+      "context": "string",
+      "text": "箱宽 (mm)",
+      "key_suggestion": "admin.compareview.line101"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 102,
+      "context": "string",
+      "text": "箱高 (mm)",
+      "key_suggestion": "admin.compareview.line102"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 103,
+      "context": "string",
+      "text": "箱体积 (m",
+      "key_suggestion": "admin.compareview.line103"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 107,
+      "context": "string",
+      "text": "外箱",
+      "key_suggestion": "admin.compareview.line107"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 109,
+      "context": "string",
+      "text": "外箱/件",
+      "key_suggestion": "admin.compareview.line109"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 110,
+      "context": "string",
+      "text": "外箱重 (kg)",
+      "key_suggestion": "admin.compareview.line110"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 111,
+      "context": "string",
+      "text": "外箱长 (mm)",
+      "key_suggestion": "admin.compareview.line111"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 112,
+      "context": "string",
+      "text": "外箱宽 (mm)",
+      "key_suggestion": "admin.compareview.line112"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 113,
+      "context": "string",
+      "text": "外箱高 (mm)",
+      "key_suggestion": "admin.compareview.line113"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 117,
+      "context": "string",
+      "text": "车型",
+      "key_suggestion": "admin.compareview.line117"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 119,
+      "context": "string",
+      "text": "交叉引用",
+      "key_suggestion": "admin.compareview.line119"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 120,
+      "context": "string",
+      "text": "适配车型",
+      "key_suggestion": "admin.compareview.line120"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 185,
+      "context": "string",
+      "text": "加载失败",
+      "key_suggestion": "admin.compareview.line185"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 246,
+      "context": "ElMessage.success",
+      "text": "已移除",
+      "key_suggestion": "admin.compareview.line246"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 253,
+      "context": "ElMessage.warning",
+      "text": "请输入有效的产品 ID",
+      "key_suggestion": "admin.compareview.line253"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 257,
+      "context": "ElMessage.warning",
+      "text": "该产品已在对比列表中",
+      "key_suggestion": "admin.compareview.line257"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 261,
+      "context": "ElMessage.warning",
+      "text": "最多对比",
+      "key_suggestion": "admin.compareview.line261"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 261,
+      "context": "ElMessage.warning",
+      "text": "个产品",
+      "key_suggestion": "admin.compareview.line261"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 271,
+      "context": "ElMessage.success",
+      "text": "已加入:",
+      "key_suggestion": "admin.compareview.line271"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 273,
+      "context": "ElMessage.error",
+      "text": "加载产品失败",
+      "key_suggestion": "admin.compareview.line273"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 322,
+      "context": "string",
+      "text": "工具条 --",
+      "key_suggestion": "admin.compareview.line322"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 324,
+      "context": "string",
+      "text": "产品对比",
+      "key_suggestion": "admin.compareview.line324"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 325,
+      "context": "template-text",
+      "text": "最多",
+      "key_suggestion": "admin.compareview.line325"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 329,
+      "context": "placeholder",
+      "text": "输入产品 ID 加入",
+      "key_suggestion": "admin.compareview.line329"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 334,
+      "context": "string",
+      "text": "加入",
+      "key_suggestion": "admin.compareview.line334"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 335,
+      "context": "string",
+      "text": "仅看差异",
+      "key_suggestion": "admin.compareview.line335"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 336,
+      "context": "string",
+      "text": "清空",
+      "key_suggestion": "admin.compareview.line336"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 337,
+      "context": "string",
+      "text": "打印",
+      "key_suggestion": "admin.compareview.line337"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 340,
+      "context": "string",
+      "text": "空状态 --",
+      "key_suggestion": "admin.compareview.line340"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 342,
+      "context": "string",
+      "text": "暂无对比产品",
+      "key_suggestion": "admin.compareview.line342"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 343,
+      "context": "string",
+      "text": "从产品列表勾选 2-6 个",
+      "key_suggestion": "admin.compareview.line343"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 343,
+      "context": "string",
+      "text": "批量对比, 或在 URL 加",
+      "key_suggestion": "admin.compareview.line343"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 346,
+      "context": "string",
+      "text": "加载中 --",
+      "key_suggestion": "admin.compareview.line346"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 347,
+      "context": "string",
+      "text": "加载中...",
+      "key_suggestion": "admin.compareview.line347"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 349,
+      "context": "string",
+      "text": "对比表格 --",
+      "key_suggestion": "admin.compareview.line349"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 355,
+      "context": "string",
+      "text": "表头: 字段名",
+      "key_suggestion": "admin.compareview.line355"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 355,
+      "context": "string",
+      "text": "产品列 --",
+      "key_suggestion": "admin.compareview.line355"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 356,
+      "context": "string",
+      "text": "字段",
+      "key_suggestion": "admin.compareview.line356"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 373,
+      "context": "title",
+      "text": "左移",
+      "key_suggestion": "admin.compareview.line373"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 381,
+      "context": "title",
+      "text": "右移",
+      "key_suggestion": "admin.compareview.line381"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 390,
+      "context": "title",
+      "text": "移除该列",
+      "key_suggestion": "admin.compareview.line390"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 396,
+      "context": "string",
+      "text": "字段行: 按组渲染 --",
+      "key_suggestion": "admin.compareview.line396"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 398,
+      "context": "string",
+      "text": "组名行 (跨所有列) --",
+      "key_suggestion": "admin.compareview.line398"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 406,
+      "context": "string",
+      "text": "字段行 --",
+      "key_suggestion": "admin.compareview.line406"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEnginesView.vue",
+      "line": 26,
+      "context": "ElMessage.error",
+      "text": "加载失败:",
+      "key_suggestion": "admin.enginesview.line26"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEnginesView.vue",
+      "line": 47,
+      "context": "ElMessage.warning",
+      "text": "发动机品牌不能为空",
+      "key_suggestion": "admin.enginesview.line47"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEnginesView.vue",
+      "line": 48,
+      "context": "ElMessage.warning",
+      "text": "发动机品牌长度不能超过 200",
+      "key_suggestion": "admin.enginesview.line48"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEnginesView.vue",
+      "line": 52,
+      "context": "ElMessage.success",
+      "text": "已新增",
+      "key_suggestion": "admin.enginesview.line52"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEnginesView.vue",
+      "line": 55,
+      "context": "ElMessage.success",
+      "text": "已更新",
+      "key_suggestion": "admin.enginesview.line55"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEnginesView.vue",
+      "line": 58,
+      "context": "ElMessage.error",
+      "text": "操作失败",
+      "key_suggestion": "admin.enginesview.line58"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEnginesView.vue",
+      "line": 62,
+      "context": "ElMessage.warning",
+      "text": "确定删除",
+      "key_suggestion": "admin.enginesview.line62"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEnginesView.vue",
+      "line": 62,
+      "context": "ElMessage.warning",
+      "text": "吗? (软删除)",
+      "key_suggestion": "admin.enginesview.line62"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEnginesView.vue",
+      "line": 62,
+      "context": "ElMessage.warning",
+      "text": "确认",
+      "key_suggestion": "admin.enginesview.line62"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEnginesView.vue",
+      "line": 63,
+      "context": "ElMessage.success",
+      "text": "已删除",
+      "key_suggestion": "admin.enginesview.line63"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEnginesView.vue",
+      "line": 64,
+      "context": "ElMessage.error",
+      "text": "删除失败",
+      "key_suggestion": "admin.enginesview.line64"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEnginesView.vue",
+      "line": 67,
+      "context": "ElMessage.success",
+      "text": "已恢复",
+      "key_suggestion": "admin.enginesview.line67"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEnginesView.vue",
+      "line": 68,
+      "context": "ElMessage.error",
+      "text": "恢复失败",
+      "key_suggestion": "admin.enginesview.line68"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEnginesView.vue",
+      "line": 84,
+      "context": "ElMessage.success",
+      "text": "排序已保存",
+      "key_suggestion": "admin.enginesview.line84"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEnginesView.vue",
+      "line": 85,
+      "context": "ElMessage.error",
+      "text": "排序失败",
+      "key_suggestion": "admin.enginesview.line85"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEnginesView.vue",
+      "line": 106,
+      "context": "string",
+      "text": "发动机字典 (Engine)",
+      "key_suggestion": "admin.enginesview.line106"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEnginesView.vue",
+      "line": 107,
+      "context": "string",
+      "text": "后台管理",
+      "key_suggestion": "admin.enginesview.line107"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEnginesView.vue",
+      "line": 107,
+      "context": "string",
+      "text": "字段: 品牌",
+      "key_suggestion": "admin.enginesview.line107"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEnginesView.vue",
+      "line": 107,
+      "context": "string",
+      "text": "型号",
+      "key_suggestion": "admin.enginesview.line107"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEnginesView.vue",
+      "line": 107,
+      "context": "string",
+      "text": "用于产品表单分区 7 发动机信息",
+      "key_suggestion": "admin.enginesview.line107"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEnginesView.vue",
+      "line": 109,
+      "context": "placeholder",
+      "text": "搜索任一字段",
+      "key_suggestion": "admin.enginesview.line109"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEnginesView.vue",
+      "line": 110,
+      "context": "string",
+      "text": "搜索",
+      "key_suggestion": "admin.enginesview.line110"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEnginesView.vue",
+      "line": 111,
+      "context": "string",
+      "text": "含已删",
+      "key_suggestion": "admin.enginesview.line111"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEnginesView.vue",
+      "line": 112,
+      "context": "string",
+      "text": "新增发动机",
+      "key_suggestion": "admin.enginesview.line112"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEnginesView.vue",
+      "line": 119,
+      "context": "string",
+      "text": "品牌",
+      "key_suggestion": "admin.enginesview.line119"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEnginesView.vue",
+      "line": 120,
+      "context": "string",
+      "text": "型号",
+      "key_suggestion": "admin.enginesview.line120"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEnginesView.vue",
+      "line": 121,
+      "context": "string",
+      "text": "排序",
+      "key_suggestion": "admin.enginesview.line121"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEnginesView.vue",
+      "line": 122,
+      "context": "string",
+      "text": "引用",
+      "key_suggestion": "admin.enginesview.line122"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEnginesView.vue",
+      "line": 123,
+      "context": "string",
+      "text": "更新",
+      "key_suggestion": "admin.enginesview.line123"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEnginesView.vue",
+      "line": 124,
+      "context": "string",
+      "text": "状态",
+      "key_suggestion": "admin.enginesview.line124"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEnginesView.vue",
+      "line": 125,
+      "context": "string",
+      "text": "操作",
+      "key_suggestion": "admin.enginesview.line125"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEnginesView.vue",
+      "line": 139,
+      "context": "string",
+      "text": "已删",
+      "key_suggestion": "admin.enginesview.line139"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEnginesView.vue",
+      "line": 140,
+      "context": "string",
+      "text": "启用",
+      "key_suggestion": "admin.enginesview.line140"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEnginesView.vue",
+      "line": 143,
+      "context": "string",
+      "text": "编辑",
+      "key_suggestion": "admin.enginesview.line143"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEnginesView.vue",
+      "line": 144,
+      "context": "string",
+      "text": "删除",
+      "key_suggestion": "admin.enginesview.line144"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEnginesView.vue",
+      "line": 145,
+      "context": "string",
+      "text": "恢复",
+      "key_suggestion": "admin.enginesview.line145"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEnginesView.vue",
+      "line": 148,
+      "context": "string",
+      "text": "暂无数据, 点击右上",
+      "key_suggestion": "admin.enginesview.line148"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEnginesView.vue",
+      "line": 148,
+      "context": "string",
+      "text": "新增发动机",
+      "key_suggestion": "admin.enginesview.line148"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEnginesView.vue",
+      "line": 148,
+      "context": "string",
+      "text": "开始",
+      "key_suggestion": "admin.enginesview.line148"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEnginesView.vue",
+      "line": 151,
+      "context": "template-text",
+      "text": "条 (启用",
+      "key_suggestion": "admin.enginesview.line151"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEnginesView.vue",
+      "line": 151,
+      "context": "template-text",
+      "text": "软删",
+      "key_suggestion": "admin.enginesview.line151"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEnginesView.vue",
+      "line": 151,
+      "context": "template-text",
+      "text": "拖动",
+      "key_suggestion": "admin.enginesview.line151"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEnginesView.vue",
+      "line": 151,
+      "context": "template-text",
+      "text": "列重排",
+      "key_suggestion": "admin.enginesview.line151"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEnginesView.vue",
+      "line": 153,
+      "context": "title",
+      "text": "新增发动机",
+      "key_suggestion": "admin.enginesview.line153"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEnginesView.vue",
+      "line": 153,
+      "context": "title",
+      "text": "编辑发动机",
+      "key_suggestion": "admin.enginesview.line153"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEnginesView.vue",
+      "line": 155,
+      "context": "label",
+      "text": "品牌",
+      "key_suggestion": "admin.enginesview.line155"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEnginesView.vue",
+      "line": 156,
+      "context": "placeholder",
+      "text": "例: CUMMINS",
+      "key_suggestion": "admin.enginesview.line156"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEnginesView.vue",
+      "line": 158,
+      "context": "label",
+      "text": "型号",
+      "key_suggestion": "admin.enginesview.line158"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEnginesView.vue",
+      "line": 159,
+      "context": "placeholder",
+      "text": "例: ISB 4.5L (可空)",
+      "key_suggestion": "admin.enginesview.line159"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEnginesView.vue",
+      "line": 160,
+      "context": "string",
+      "text": "字段组成 UNIQUE 索引, 型号可空",
+      "key_suggestion": "admin.enginesview.line160"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEnginesView.vue",
+      "line": 162,
+      "context": "label",
+      "text": "排序",
+      "key_suggestion": "admin.enginesview.line162"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEnginesView.vue",
+      "line": 167,
+      "context": "string",
+      "text": "取消",
+      "key_suggestion": "admin.enginesview.line167"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEnginesView.vue",
+      "line": 168,
+      "context": "string",
+      "text": "保存",
+      "key_suggestion": "admin.enginesview.line168"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 21,
+      "context": "string",
+      "text": "仅 products",
+      "key_suggestion": "admin.etlview.line21"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 21,
+      "context": "string",
+      "text": "生效",
+      "key_suggestion": "admin.etlview.line21"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 63,
+      "context": "ElMessage.success",
+      "text": "已自动识别 entity",
+      "key_suggestion": "admin.etlview.line63"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 63,
+      "context": "ElMessage.success",
+      "text": "文件:",
+      "key_suggestion": "admin.etlview.line63"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 66,
+      "context": "ElMessage.info",
+      "text": "已填入文件:",
+      "key_suggestion": "admin.etlview.line66"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 66,
+      "context": "ElMessage.info",
+      "text": "需手动选择)",
+      "key_suggestion": "admin.etlview.line66"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 69,
+      "context": "ElMessage.warning",
+      "text": "本次拖入",
+      "key_suggestion": "admin.etlview.line69"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 69,
+      "context": "ElMessage.warning",
+      "text": "个文件, 仅采用第一个:",
+      "key_suggestion": "admin.etlview.line69"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 78,
+      "context": "string",
+      "text": "松开以填入 ETL 文件路径",
+      "key_suggestion": "admin.etlview.line78"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 95,
+      "context": "string",
+      "text": "即将触发",
+      "key_suggestion": "admin.etlview.line95"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 95,
+      "context": "string",
+      "text": "是否继续?",
+      "key_suggestion": "admin.etlview.line95"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 96,
+      "context": "string",
+      "text": "确认",
+      "key_suggestion": "admin.etlview.line96"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 107,
+      "context": "string",
+      "text": "之前漏传, 后端硬编码 products",
+      "key_suggestion": "admin.etlview.line107"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 108,
+      "context": "string",
+      "text": "安全锁",
+      "key_suggestion": "admin.etlview.line108"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 111,
+      "context": "ElMessage.success",
+      "text": "校验完成",
+      "key_suggestion": "admin.etlview.line111"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 111,
+      "context": "ElMessage.success",
+      "text": "已触发 ETL, 后台执行中",
+      "key_suggestion": "admin.etlview.line111"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 219,
+      "context": "string",
+      "text": "连接断开, 浏览器将自动重连",
+      "key_suggestion": "admin.etlview.line219"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 249,
+      "context": "ElMessage.success",
+      "text": "已清除",
+      "key_suggestion": "admin.etlview.line249"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 256,
+      "context": "string",
+      "text": "用户主动取消",
+      "key_suggestion": "admin.etlview.line256"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 256,
+      "context": "string",
+      "text": "用户主动取消",
+      "key_suggestion": "admin.etlview.line256"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 257,
+      "context": "string",
+      "text": "管理员强制取消",
+      "key_suggestion": "admin.etlview.line257"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 257,
+      "context": "string",
+      "text": "管理员强制取消",
+      "key_suggestion": "admin.etlview.line257"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 258,
+      "context": "string",
+      "text": "任务超时",
+      "key_suggestion": "admin.etlview.line258"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 258,
+      "context": "string",
+      "text": "任务执行超时",
+      "key_suggestion": "admin.etlview.line258"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 259,
+      "context": "string",
+      "text": "系统关闭/重启",
+      "key_suggestion": "admin.etlview.line259"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 259,
+      "context": "string",
+      "text": "服务关闭/重启",
+      "key_suggestion": "admin.etlview.line259"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 260,
+      "context": "string",
+      "text": "其他原因",
+      "key_suggestion": "admin.etlview.line260"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 260,
+      "context": "string",
+      "text": "其他原因",
+      "key_suggestion": "admin.etlview.line260"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 272,
+      "context": "string",
+      "text": "取消 ETL 任务",
+      "key_suggestion": "admin.etlview.line272"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 275,
+      "context": "string",
+      "text": "请选择取消原因 (会写入历史审计, 按此码聚合):",
+      "key_suggestion": "admin.etlview.line275"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 290,
+      "context": "button-text",
+      "text": "下一步",
+      "key_suggestion": "admin.etlview.line290"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 291,
+      "context": "button-text",
+      "text": "不取消",
+      "key_suggestion": "admin.etlview.line291"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 305,
+      "context": "ElMessage.info",
+      "text": "可补充详细描述 (留空用默认)",
+      "key_suggestion": "admin.etlview.line305"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 305,
+      "context": "ElMessage.info",
+      "text": "取消原因说明",
+      "key_suggestion": "admin.etlview.line305"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 306,
+      "context": "button-text",
+      "text": "确认取消",
+      "key_suggestion": "admin.etlview.line306"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 307,
+      "context": "button-text",
+      "text": "不取消",
+      "key_suggestion": "admin.etlview.line307"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 321,
+      "context": "ElMessage.warning",
+      "text": "已发送取消信号 (码:",
+      "key_suggestion": "admin.etlview.line321"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 321,
+      "context": "ElMessage.warning",
+      "text": "任务即将终止",
+      "key_suggestion": "admin.etlview.line321"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 323,
+      "context": "ElMessage.info",
+      "text": "无活跃任务可取消",
+      "key_suggestion": "admin.etlview.line323"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 351,
+      "context": "string",
+      "text": "暂停当前 ETL 任务?",
+      "key_suggestion": "admin.etlview.line351"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 351,
+      "context": "string",
+      "text": "当前批次跑完后会优雅退出, checkpoint_id 会写入 etl_progress_log, 后续可用",
+      "key_suggestion": "admin.etlview.line351"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 351,
+      "context": "string",
+      "text": "恢复",
+      "key_suggestion": "admin.etlview.line351"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 351,
+      "context": "string",
+      "text": "按钮从该点续读。",
+      "key_suggestion": "admin.etlview.line351"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 351,
+      "context": "string",
+      "text": "区别于",
+      "key_suggestion": "admin.etlview.line351"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 351,
+      "context": "string",
+      "text": "取消",
+      "key_suggestion": "admin.etlview.line351"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 351,
+      "context": "string",
+      "text": "取消会立即终止并回滚当前批次)",
+      "key_suggestion": "admin.etlview.line351"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 352,
+      "context": "string",
+      "text": "暂停 ETL 任务",
+      "key_suggestion": "admin.etlview.line352"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 353,
+      "context": "button-text",
+      "text": "暂停",
+      "key_suggestion": "admin.etlview.line353"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 353,
+      "context": "button-text",
+      "text": "不暂停",
+      "key_suggestion": "admin.etlview.line353"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 360,
+      "context": "ElMessage.warning",
+      "text": "已发送暂停信号, checkpoint_id",
+      "key_suggestion": "admin.etlview.line360"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 360,
+      "context": "ElMessage.warning",
+      "text": "当前批次跑完后退出",
+      "key_suggestion": "admin.etlview.line360"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 362,
+      "context": "ElMessage.info",
+      "text": "无活跃任务可暂停",
+      "key_suggestion": "admin.etlview.line362"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 375,
+      "context": "string",
+      "text": "恢复暂停的 ETL 任务?",
+      "key_suggestion": "admin.etlview.line375"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 375,
+      "context": "string",
+      "text": "将从最近一条 paused 记录的 checkpoint_id",
+      "key_suggestion": "admin.etlview.line375"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 375,
+      "context": "string",
+      "text": "行开始续读, 跳过已 COMMIT 的批次。",
+      "key_suggestion": "admin.etlview.line375"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 376,
+      "context": "string",
+      "text": "恢复 ETL 任务",
+      "key_suggestion": "admin.etlview.line376"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 377,
+      "context": "button-text",
+      "text": "恢复",
+      "key_suggestion": "admin.etlview.line377"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 377,
+      "context": "button-text",
+      "text": "不恢复",
+      "key_suggestion": "admin.etlview.line377"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 384,
+      "context": "ElMessage.success",
+      "text": "已触发 Resume: entity",
+      "key_suggestion": "admin.etlview.line384"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 384,
+      "context": "ElMessage.success",
+      "text": "从第",
+      "key_suggestion": "admin.etlview.line384"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 384,
+      "context": "ElMessage.success",
+      "text": "行开始)",
+      "key_suggestion": "admin.etlview.line384"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 385,
+      "context": "string",
+      "text": "已触发新的 ETL, paused 记录应已不算最新",
+      "key_suggestion": "admin.etlview.line385"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 387,
+      "context": "ElMessage.warning",
+      "text": "恢复失败",
+      "key_suggestion": "admin.etlview.line387"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 419,
+      "context": "string",
+      "text": "暂存",
+      "key_suggestion": "admin.etlview.line419"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 420,
+      "context": "string",
+      "text": "写库",
+      "key_suggestion": "admin.etlview.line420"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 421,
+      "context": "string",
+      "text": "提交",
+      "key_suggestion": "admin.etlview.line421"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 422,
+      "context": "string",
+      "text": "同步",
+      "key_suggestion": "admin.etlview.line422"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 423,
+      "context": "string",
+      "text": "完成",
+      "key_suggestion": "admin.etlview.line423"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 440,
+      "context": "string",
+      "text": "顶部：触发表单 --",
+      "key_suggestion": "admin.etlview.line440"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 444,
+      "context": "string",
+      "text": "手动 ETL 触发",
+      "key_suggestion": "admin.etlview.line444"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 450,
+      "context": "label",
+      "text": "实体",
+      "key_suggestion": "admin.etlview.line450"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 458,
+      "context": "label",
+      "text": "模式",
+      "key_suggestion": "admin.etlview.line458"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 466,
+      "context": "label",
+      "text": "文件路径",
+      "key_suggestion": "admin.etlview.line466"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 469,
+      "context": "placeholder",
+      "text": "绝对路径",
+      "key_suggestion": "admin.etlview.line469"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 477,
+      "context": "string",
+      "text": "仅校验文件)",
+      "key_suggestion": "admin.etlview.line477"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 478,
+      "context": "string",
+      "text": "安全锁, 仅 products",
+      "key_suggestion": "admin.etlview.line478"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 478,
+      "context": "string",
+      "text": "显示 --",
+      "key_suggestion": "admin.etlview.line478"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 481,
+      "context": "string",
+      "text": "开启: TRUNCATE 同时清空 xrefs/apps (首次全量场景); 关闭: 仅清 products, 保留关联表 (单独刷新主表)",
+      "key_suggestion": "admin.etlview.line481"
+    }
+  ]
+}
