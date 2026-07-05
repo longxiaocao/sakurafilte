@@ -1,8 +1,11 @@
 <script setup lang="ts">
 // Day 10+ P2.2: Engine 字典管理页 (2 字段: engine_brand + engine_type)
 import { ref, reactive, onMounted, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { dictApi, type EngineItem, type EngineReorderItem } from '@/api'
+
+const { t } = useI18n()
 
 const items = ref<EngineItem[]>([])
 const loading = ref(false)
@@ -23,7 +26,7 @@ async function load() {
   try {
     const { items: list } = await dictApi.engines.list(searchKw.value || undefined, includeDeleted.value, 500)
     items.value = list
-  } catch (e: any) { ElMessage.error('加载失败: ' + (e?.message || '')) }
+  } catch (e: any) { ElMessage.error(t('admin.enginesview.error.l26_') + (e?.message || '')) }
   finally { loading.value = false }
 }
 function onSearch() { load() }
@@ -44,28 +47,28 @@ function openEdit(row: EngineItem) {
 }
 async function saveDialog() {
   const b = dialogForm.engineBrand.trim()
-  if (!b) { ElMessage.warning('发动机品牌不能为空'); return }
-  if (b.length > 200) { ElMessage.warning('发动机品牌长度不能超过 200'); return }
-  const t = dialogForm.engineType.trim() || undefined
+  if (!b) { ElMessage.warning(t('admin.enginesview.warning.l47_')); return }
+  if (b.length > 200) { ElMessage.warning(t('admin.enginesview.warning.l48_200')); return }
+  const t2 = dialogForm.engineType.trim() || undefined
   try {
     if (dialogMode.value === 'create') {
-      await dictApi.engines.create(b, t, dialogForm.sortOrder); ElMessage.success('已新增')
+      await dictApi.engines.create(b, t2, dialogForm.sortOrder); ElMessage.success(t('admin.enginesview.success.l52_'))
     } else if (dialogForm.id != null) {
-      await dictApi.engines.update(dialogForm.id, { engineBrand: b, engineType: t, sortOrder: dialogForm.sortOrder })
-      ElMessage.success('已更新')
+      await dictApi.engines.update(dialogForm.id, { engineBrand: b, engineType: t2, sortOrder: dialogForm.sortOrder })
+      ElMessage.success(t('admin.enginesview.success.l55_'))
     }
     dialogOpen.value = false; await load()
-  } catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || '操作失败') }
+  } catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || t('admin.enginesview.error.l58_')) }
 }
 async function softDelete(row: EngineItem) {
   const label = `${row.engineBrand}${row.engineType ? ' / ' + row.engineType : ''}`
-  try { await ElMessageBox.confirm(`确定删除 "${label}" 吗? (软删除)`, '确认', { type: 'warning' }) } catch { return }
-  try { await dictApi.engines.delete(row.id); ElMessage.success('已删除'); await load() }
-  catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || '删除失败') }
+  try { await ElMessageBox.confirm(`确定删除 "${label}" 吗? (软删除)`, t('admin.enginesview.warning.l62_'), { type: 'warning' }) } catch { return }
+  try { await dictApi.engines.delete(row.id); ElMessage.success(t('admin.enginesview.success.l63_')); await load() }
+  catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || t('admin.enginesview.error.l64_')) }
 }
 async function restore(row: EngineItem) {
-  try { await dictApi.engines.restore(row.id); ElMessage.success('已恢复'); await load() }
-  catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || '恢复失败') }
+  try { await dictApi.engines.restore(row.id); ElMessage.success(t('admin.enginesview.success.l67_')); await load() }
+  catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || t('admin.enginesview.error.l68_')) }
 }
 
 function onDragStart(e: DragEvent, id: number) { draggingId.value = id; if (e.dataTransfer) { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(id)) } }
@@ -81,8 +84,8 @@ async function onDrop(e: DragEvent, targetId: number) {
   const moved = items.value.splice(sourceIdx, 1)[0]; items.value.splice(targetIdx, 0, moved)
   const updates: EngineReorderItem[] = items.value.map((it, idx) => ({ id: it.id, sortOrder: (idx + 1) * 10 }))
   items.value.forEach((it, idx) => { it.sortOrder = (idx + 1) * 10 })
-  try { await dictApi.engines.reorder(updates); ElMessage.success('排序已保存') }
-  catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || '排序失败'); await load() }
+  try { await dictApi.engines.reorder(updates); ElMessage.success(t('admin.enginesview.success.l84_')) }
+  catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || t('admin.enginesview.error.l85_')); await load() }
 }
 function onDragEnd() { draggingId.value = null; dragOverId.value = null }
 
@@ -106,7 +109,7 @@ onMounted(load)
       <h1 class="text-lg font-medium">发动机字典 (Engine)</h1>
       <span class="text-xs text-muted">P2.2 后台管理 · 2 字段: 品牌 + 型号 · 用于产品表单分区 7 发动机信息</span>
       <div class="flex-1" />
-      <el-input v-model="searchKw" placeholder="搜索任一字段" clearable size="small" style="width: 200px" @keyup.enter="onSearch" />
+      <el-input v-model="searchKw" :placeholder="t('admin.enginesview.placeholder.l109_')" clearable size="small" style="width: 200px" @keyup.enter="onSearch" />
       <el-button size="small" @click="onSearch">搜索</el-button>
       <el-checkbox v-model="includeDeleted" @change="load" size="small">含已删</el-checkbox>
       <el-button type="primary" size="small" @click="openCreate">新增发动机</el-button>
@@ -145,21 +148,21 @@ onMounted(load)
           <el-button v-else size="small" text type="success" @click="restore(row)">恢复</el-button>
         </div>
       </div>
-      <div v-if="!loading && items.length === 0" class="dict-empty">暂无数据, 点击右上"新增发动机"开始</div>
+      <div v-if="!loading && items.length === 0" class="dict-empty" > {{ t('admin.enginesview.string.l148_') }}新增发动机开始</div>
     </div>
 
     <div class="mt-2 text-xs text-muted">共 {{ total }} 条 (启用 {{ activeCount }}, 软删 {{ total - activeCount }}) · 拖动"≡"列重排</div>
 
-    <el-dialog v-model="dialogOpen" :title="dialogMode === 'create' ? '新增发动机' : '编辑发动机'" width="540px">
+    <el-dialog v-model="dialogOpen" :title="dialogMode === 'create' ? t('admin.enginesview.title.l153_') : t('admin.enginesview.title.l153__2')" width="540px">
       <el-form :model="dialogForm" label-width="120px" size="small">
-        <el-form-item label="品牌" required>
-          <el-input v-model="dialogForm.engineBrand" placeholder="例: CUMMINS" maxlength="200" show-word-limit />
+        <el-form-item :label="t('admin.enginesview.label.l155_')" required>
+          <el-input v-model="dialogForm.engineBrand" :placeholder="t('admin.enginesview.placeholder.l156_cummins')" maxlength="200" show-word-limit />
         </el-form-item>
-        <el-form-item label="型号">
-          <el-input v-model="dialogForm.engineType" placeholder="例: ISB 4.5 L (可空)" maxlength="200" show-word-limit />
+        <el-form-item :label="t('admin.enginesview.label.l158_')">
+          <el-input v-model="dialogForm.engineType" :placeholder="t('admin.enginesview.placeholder.l159_isb_4_5_l')" maxlength="200" show-word-limit />
           <div class="text-xs text-muted mt-1">2 字段组成 UNIQUE 索引, 型号可空</div>
         </el-form-item>
-        <el-form-item label="排序">
+        <el-form-item :label="t('admin.enginesview.label.l162_')">
           <el-input-number v-model="dialogForm.sortOrder" :min="0" :step="10" style="width: 100%" />
         </el-form-item>
       </el-form>

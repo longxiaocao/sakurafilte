@@ -1,0 +1,176 @@
+{
+  "generatedAt": "2026-07-05T13:03:24.265811Z",
+  "summary": {
+    "total": 8,
+    "passed": 8,
+    "failed": 0,
+    "warned": 0,
+    "violations_critical": 0,
+    "violations_serious": 0,
+    "violations_moderate": 0,
+    "violations_minor": 0
+  },
+  "pages": [
+    {
+      "label": "首页",
+      "path": "/",
+      "requires_auth": false,
+      "axe_runtime_ms": 137,
+      "violations_count": 0,
+      "by_impact": {
+        "critical": 0,
+        "serious": 0,
+        "moderate": 0,
+        "minor": 0
+      },
+      "violations": {
+        "critical": [],
+        "serious": [],
+        "moderate": [],
+        "minor": []
+      },
+      "error": null
+    },
+    {
+      "label": "公开搜索",
+      "path": "/search",
+      "requires_auth": false,
+      "axe_runtime_ms": 104,
+      "violations_count": 0,
+      "by_impact": {
+        "critical": 0,
+        "serious": 0,
+        "moderate": 0,
+        "minor": 0
+      },
+      "violations": {
+        "critical": [],
+        "serious": [],
+        "moderate": [],
+        "minor": []
+      },
+      "error": null
+    },
+    {
+      "label": "公开 8 字段搜索",
+      "path": "/public/search",
+      "requires_auth": false,
+      "axe_runtime_ms": 111,
+      "violations_count": 0,
+      "by_impact": {
+        "critical": 0,
+        "serious": 0,
+        "moderate": 0,
+        "minor": 0
+      },
+      "violations": {
+        "critical": [],
+        "serious": [],
+        "moderate": [],
+        "minor": []
+      },
+      "error": null
+    },
+    {
+      "label": "公开对比",
+      "path": "/compare?ids=1,2,3",
+      "requires_auth": false,
+      "axe_runtime_ms": 220,
+      "violations_count": 0,
+      "by_impact": {
+        "critical": 0,
+        "serious": 0,
+        "moderate": 0,
+        "minor": 0
+      },
+      "violations": {
+        "critical": [],
+        "serious": [],
+        "moderate": [],
+        "minor": []
+      },
+      "error": null
+    },
+    {
+      "label": "登录页",
+      "path": "/login",
+      "requires_auth": false,
+      "axe_runtime_ms": 85,
+      "violations_count": 0,
+      "by_impact": {
+        "critical": 0,
+        "serious": 0,
+        "moderate": 0,
+        "minor": 0
+      },
+      "violations": {
+        "critical": [],
+        "serious": [],
+        "moderate": [],
+        "minor": []
+      },
+      "error": null
+    },
+    {
+      "label": "后台产品列表",
+      "path": "/admin/products",
+      "requires_auth": true,
+      "axe_runtime_ms": 1604,
+      "violations_count": 0,
+      "by_impact": {
+        "critical": 0,
+        "serious": 0,
+        "moderate": 0,
+        "minor": 0
+      },
+      "violations": {
+        "critical": [],
+        "serious": [],
+        "moderate": [],
+        "minor": []
+      },
+      "error": null
+    },
+    {
+      "label": "后台 ETL",
+      "path": "/admin/etl",
+      "requires_auth": true,
+      "axe_runtime_ms": 380,
+      "violations_count": 0,
+      "by_impact": {
+        "critical": 0,
+        "serious": 0,
+        "moderate": 0,
+        "minor": 0
+      },
+      "violations": {
+        "critical": [],
+        "serious": [],
+        "moderate": [],
+        "minor": []
+      },
+      "error": null
+    },
+    {
+      "label": "后台帮助",
+      "path": "/admin/help",
+      "requires_auth": true,
+      "axe_runtime_ms": 271,
+      "violations_count": 0,
+      "by_impact": {
+        "critical": 0,
+        "serious": 0,
+        "moderate": 0,
+        "minor": 0
+      },
+      "violations": {
+        "critical": [],
+        "serious": [],
+        "moderate": [],
+        "minor": []
+      },
+      "error": null
+    }
+  ],
+  "violations": []
+}

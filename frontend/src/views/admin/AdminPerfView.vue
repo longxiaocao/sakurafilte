@@ -5,7 +5,10 @@
 //   - Token 轮转状态 (current/previous/rotatedAt)
 //   - Musk 风格: 纯黑白 + 单强调色, 无阴影, 1px hairline, 8px 网格
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { http } from '@/utils/http'
+
+const { t } = useI18n()
 
 interface PerfSnapshot {
   sampleCount: number
@@ -81,7 +84,7 @@ async function refreshAll() {
   try {
     await Promise.all([fetchPerf(), fetchAuth(), fetchHealth()])
   } catch (e: any) {
-    error.value = e?.message || '刷新失败'
+    error.value = e?.message || t('admin.perfview.string.l84_')
   } finally {
     loading.value = false
   }
@@ -161,10 +164,10 @@ const hasAlert = computed(() => alerts.value.length > 0)
 const hasCritical = computed(() => alerts.value.some(a => a.level === 'critical'))
 
 const readyText = computed(() => {
-  if (readyOk.value === null) return '检测中'
-  if (readyOk.value) return '就绪'
-  if (readyDegraded.value) return '降级'
-  return '故障'
+  if (readyOk.value === null) return t('admin.perfview.string.l164_')
+  if (readyOk.value) return t('admin.perfview.string.l165_')
+  if (readyDegraded.value) return t('admin.perfview.string.l166_')
+  return t('admin.perfview.string.l167_')
 })
 
 const readyColor = computed(() => {
@@ -198,15 +201,15 @@ function fmtTime(ts: string | null): string {
         <button
           @click="toggleAutoRefresh"
           class="px-2 py-1 text-sm hairline hover:bg-[var(--color-bg-hover)]"
-          :aria-label="autoRefresh ? '暂停自动刷新' : '开启自动刷新'"
+          :aria-label="autoRefresh ? t('admin.perfview.label.l201_') : t('admin.perfview.label.l201__2')"
         >
-          {{ autoRefresh ? '⏸ 暂停' : $t('admin.perfview.templatetext.l203_') }}
+          {{ autoRefresh ? t('admin.perfview.templatetext.l203_') : $t('admin.perfview.templatetext.l203_') }}
         </button>
         <select
           v-model="refreshSec"
           @change="changeInterval(refreshSec)"
           class="px-2 py-1 text-sm hairline bg-[var(--color-bg-elevated)]"
-          aria-label="刷新间隔"
+          aria-:label="t('admin.perfview.label.l209_')"
         >
           <option :value="3">3s</option>
           <option :value="5">5s</option>
@@ -218,7 +221,7 @@ function fmtTime(ts: string | null): string {
           :disabled="loading"
           class="px-3 py-1 text-sm hairline hover:bg-[var(--color-bg-hover)] disabled:opacity-50"
         >
-          {{ loading ? '刷新中…' : '↻ 刷新' }}
+          {{ loading ? t('admin.perfview.templatetext.l221_') : t('admin.perfview.templatetext.l221__2') }}
         </button>
       </div>
     </div>
@@ -237,7 +240,7 @@ function fmtTime(ts: string | null): string {
     >
       <div class="flex items-center gap-2 mb-1">
         <span class="text-base font-medium" :class="hasCritical ? 'text-red-700' : 'text-yellow-700'">
-          {{ hasCritical ? '⚠ 严重告警' : '⚠ 警告' }}
+          {{ hasCritical ? t('admin.perfview.templatetext.l240_') : t('admin.perfview.templatetext.l240__2') }}
         </span>
       </div>
       <ul class="text-xs space-y-1">
@@ -300,7 +303,7 @@ function fmtTime(ts: string | null): string {
         <div class="hairline p-3">
           <div class="text-xs text-muted mb-1">Liveness (/health/live)</div>
           <div class="text-base font-medium" :class="liveOk === null ? 'text-neutral-500' : liveOk ? 'text-green-600' : 'text-red-600'">
-            {{ liveOk === null ? '检测中' : liveOk ? '存活' : '故障' }}
+            {{ liveOk === null ? t('admin.perfview.templatetext.l303_') : liveOk ? t('admin.perfview.templatetext.l303__2') : t('admin.perfview.templatetext.l303__3') }}
           </div>
         </div>
         <div class="hairline p-3">
@@ -333,7 +336,7 @@ function fmtTime(ts: string | null): string {
           <div class="text-xs text-muted mb-1">数据来源</div>
           <div class="text-base font-medium">
             <span :class="auth.loadedFromDb ? 'text-green-600' : 'text-yellow-600'">
-              {{ auth.loadedFromDb ? 'DB (已加载)' : 'appsettings.json (兜底)' }}
+              {{ auth.loadedFromDb ? t('admin.perfview.templatetext.l336_db') : t('admin.perfview.templatetext.l336_appsettings_json') }}
             </span>
           </div>
         </div>

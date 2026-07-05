@@ -5,44 +5,47 @@
 //   - el-anchor 锚点导航 + 章节卡片
 //   - 整体 Musk 风格 (无阴影, 1px hairline, 8px 网格)
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { FIELD_HELP } from '@/data/field-help'
+
+const { t } = useI18n()
 
 // 8 个字典 (P1.3 + P2.2)
 const dictList = [
-  { name: 'OEM 品牌', path: '/admin/dict/oem-brands', desc: '替代品牌厂家名 (cross_references.oem_brand), 例: Mann, Bosch, Mahle' },
-  { name: '产品名 1', path: '/admin/dict/product-name1s', desc: '产品主名称 (例: Oil Filter, Fuel Filter), 影响前台产品页' },
-  { name: '产品名 2', path: '/admin/dict/product-name2s', desc: '产品副名称/型号后缀 (例: OF100)' },
-  { name: '类型 (Type)', path: '/admin/dict/types', desc: '5 固定分类: oil / fuel / air / cabin / others, sort_order 决定前台排序' },
-  { name: 'OEM 3', path: '/admin/dict/oem-no3s', desc: '替代品牌 OEM 编号 (5.27M distinct), 字典化便于 typeahead 联想' },
-  { name: '介质 (Media)', path: '/admin/dict/medias', desc: '滤材名称 + 型号 (2 字段字典), 例: Cellulose / A020' },
-  { name: '机型 (Machine)', path: '/admin/dict/machines', desc: '机器品牌 + 型号 + 名称, 按 4 大类聚合: Agriculture / Commercial / Construction / others' },
-  { name: '发动机 (Engine)', path: '/admin/dict/engines', desc: '发动机品牌 + 型号' }
+  { name: t('admin.helpview.string.l12_oem'), path: '/admin/dict/oem-brands', desc: t('admin.helpview.string.l12_cross_references_oem_brand_mann_bosch_ma') },
+  { name: t('admin.helpview.string.l13_1'), path: '/admin/dict/product-name1s', desc: t('admin.helpview.string.l13_oil_filter_fuel_filter') },
+  { name: t('admin.helpview.string.l14_2'), path: '/admin/dict/product-name2s', desc: t('admin.helpview.string.l14_of100') },
+  { name: t('admin.helpview.string.l15_type'), path: '/admin/dict/types', desc: t('admin.helpview.string.l15_5_oil_fuel_air_cabin_others_sort_order') },
+  { name: 'OEM 3', path: '/admin/dict/oem-no3s', desc: t('admin.helpview.string.l16_oem_5_27m_distinct_typeahead') },
+  { name: t('admin.helpview.string.l17_media'), path: '/admin/dict/medias', desc: t('admin.helpview.string.l17_2_cellulose_a020') },
+  { name: t('admin.helpview.string.l18_machine'), path: '/admin/dict/machines', desc: t('admin.helpview.string.l18_4_agriculture_commercial_construction_ot') },
+  { name: t('admin.helpview.string.l19_engine'), path: '/admin/dict/engines', desc: t('admin.helpview.string.l19_') }
 ]
 
 // FAQ 数据
 const faqs = [
   {
-    q: '为什么输入 OEM 编号后无法搜索?',
+    q: t('admin.helpview.string.l25_oem'),
     a: '检查该 OEM 是否在产品表 oem2 字段里 (注意: 不是 cross_references.oem_brand). 前台公开页用 oemNoDisplay / oem2, 后台搜索用任意一个字段.'
   },
   {
-    q: '为什么新增产品时 typeahead 联想不到想要的值?',
+    q: t('admin.helpview.string.l29_typeahead'),
     a: '字典是后台维护的, 需先在 "字典管理" → 对应字典 → 新增 value. typeahead 只返回字典内已存在的值 (前 20 条按 sort_order 排).'
   },
   {
-    q: '尺寸搜索 (H1 = 100) 返回 0 条结果, 但库里有这个产品?',
-    a: '尺寸搜索默认容差 ±5mm (固定, 不可改), 即 95-105 之间. 如果产品 H1 = 110, 不会命中. 改用更小的 H1 值或精确 ID 查询.'
+    q: t('admin.helpview.string.l33_h1_100_0'),
+    a: t('admin.helpview.string.l34_5mm_95_105_h1_110_h1_id')
   },
   {
-    q: 'ETL 触发后卡在 reading 状态?',
+    q: t('admin.helpview.string.l37_etl_reading'),
     a: 'reading 阶段是流式 COPY 暂存, 大文件 (1M 行) 可能 30-60s. 如超过 5 分钟无进度, 检查后端日志 (output/SPIKE-REPORT-*.md) 看是否有 SQL 错误.'
   },
   {
-    q: '怎么批量删除产品?',
+    q: t('admin.helpview.string.l41_'),
     a: '后台产品列表勾选多行 → 顶部 "批量停售" 按钮. 停售 = is_discontinued=true, 前台不展示, 历史数据保留. 如需物理删除, 走 SQL (慎用).'
   },
   {
-    q: '上传图片后前台不显示?',
+    q: t('admin.helpview.string.l45_'),
     a: '检查 (1) 产品 isPublished=true (上架) (2) slot 1-6 范围 (3) 浏览器 console 看 OSS 预签名 URL 1 h 有效. 如过期, 重新加载产品页.'
   }
 ]
@@ -68,20 +71,20 @@ const helpPreview = computed(() => helpPreviewKeys
       :offset="60"
       class="help-anchor hairline p-2 mb-3 bg-[var(--color-bg-elevated)]"
     >
-      <el-anchor-link href="#quickstart" title="快速开始" />
-      <el-anchor-link href="#dict" title="字典使用规范" />
-      <el-anchor-link href="#import" title="批量导入" />
-      <el-anchor-link href="#search" title="搜索容差" />
-      <el-anchor-link href="#faq" title="常见问题" />
+      <el-anchor-link href="#quickstart" :title="t('admin.helpview.title.l71_')" />
+      <el-anchor-link href="#dict" :title="t('admin.helpview.title.l72_')" />
+      <el-anchor-link href="#import" :title="t('admin.helpview.title.l73_')" />
+      <el-anchor-link href="#search" :title="t('admin.helpview.title.l74_')" />
+      <el-anchor-link href="#faq" :title="t('admin.helpview.title.l75_')" />
     </el-anchor>
 
     <!-- 1. 快速开始 -->
     <section id="quickstart" class="hairline p-4 mb-3">
       <h2 class="text-base font-medium mb-2">1. 快速开始 (5 步入门)</h2>
       <ol class="text-sm leading-7 list-decimal pl-5 text-[var(--color-text-muted)]">
-        <li>点击右上 "进入后台", 输入 <code class="bg-[var(--color-bg-hover)] px-1">X-Admin-Token</code> (与后端 <code>Auth:DevStaticToken</code> 一致)</li>
+        <li>点击右上 t('admin.helpview.string.l82_'), 输入 <code class="bg-[var(--color-bg-hover)] px-1">X-Admin-Token</code> (与后端 <code>Auth:DevStaticToken</code> 一致)</li>
         <li>字典管理 → 8 个字典先 seed 数据 (首次部署): 走 spike-test/_seed_dict_*.py 6 个脚本</li>
-        <li>ETL 触发 → 选择 "products.xlsx" / "xrefs.xlsx" / "apps.xlsx" + 模式 (full-load / insert-only / upsert), 点 "触发"</li>
+        <li>ETL 触发 → 选择 "products.xlsx" / "xrefs.xlsx" / "apps.xlsxt('admin.helpview.string.l84_full_load_insert_only_upsert')触发"</li>
         <li>产品管理 → 用 8 字段 / OEM 查询 / 批量粘贴查询, 命中产品进入详情</li>
         <li>产品详情页支持上传 6 张图 (slot 1-6) + 编辑 7 分区字段 (后台产品表单)</li>
       </ol>
@@ -121,10 +124,10 @@ const helpPreview = computed(() => helpPreviewKeys
       <h2 class="text-base font-medium mb-2">3. 批量导入流程 (XLSX 拖拽)</h2>
       <ol class="text-sm leading-7 list-decimal pl-5">
         <li>准备 Excel: products / xrefs / machine_applications 三张表 (列名见 ETL 触发页)</li>
-        <li>ETL 触发页 → "拖拽 XLSX 到此" → 自动识别 entity + 模式 (推荐 full-load 全量, insert-only 仅新增)</li>
+        <li>ETL 触发页 → t('admin.helpview.string.l124_xlsx') → 自动识别 entity + 模式 (推荐 full-load 全量, insert-only 仅新增)</li>
         <li>进度条 5 阶段: reading → staging → inserting → committing → meili-sync, 任一阶段失败可暂停/恢复</li>
         <li>完成后会在 etl_progress_log 写一行 (含 read/stage/inserted/skipped/missing_oem/error 计数)</li>
-        <li>后台产品管理用 "搜索" 验证导入数据是否可查</li>
+        <li>后台产品管理用 t('admin.helpview.string.l127_') 验证导入数据是否可查</li>
       </ol>
       <p class="text-xs text-muted mt-2">
         ⚠ 性能: 1M products 全量约 2-3 分钟, 5M xrefs 约 5-8 分钟, 1M apps 约 2 分钟 (PG 本地测试数据)

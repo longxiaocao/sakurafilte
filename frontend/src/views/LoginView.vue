@@ -66,7 +66,6 @@ async function handleLogin() {
   <div class="login-page min-h-screen flex items-center justify-center p-4 bg-[var(--color-bg)]">
     <div
       class="login-card w-full max-w-sm hairline p-8 bg-[var(--color-bg-elevated)]"
-      role="main"
       :aria-label="t('auth.title')"
     >
       <div class="text-center mb-6">

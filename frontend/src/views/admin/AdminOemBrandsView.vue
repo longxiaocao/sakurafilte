@@ -8,8 +8,11 @@
 //   - 不写 product_history: 字典变更不属产品业务变更
 //   - typeahead 数据由 G1.6 dictApi 提供, 在 AdminProductFormView 分区 2 用到
 import { ref, reactive, onMounted, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { dictApi, type OemBrandItem, type OemBrandReorderItem } from '@/api'
+
+const { t } = useI18n()
 
 const items = ref<OemBrandItem[]>([])
 const loading = ref(false)
@@ -34,7 +37,7 @@ async function load() {
     const { items: list } = await dictApi.oemBrands.list(searchKw.value || undefined, includeDeleted.value, 500)
     items.value = list
   } catch (e: any) {
-    ElMessage.error('加载失败: ' + (e?.message || ''))
+    ElMessage.error(t('admin.oembrandsview.error.l37_') + (e?.message || ''))
   } finally {
     loading.value = false
   }
@@ -62,29 +65,29 @@ function openEdit(row: OemBrandItem) {
 
 async function saveDialog() {
   if (!dialogForm.brand.trim()) {
-    ElMessage.warning('品牌名不能为空')
+    ElMessage.warning(t('admin.oembrandsview.warning.l65_'))
     return
   }
   if (dialogForm.brand.length > 100) {
-    ElMessage.warning('品牌名长度不能超过 100')
+    ElMessage.warning(t('admin.oembrandsview.warning.l69_100'))
     return
   }
   try {
     if (dialogMode.value === 'create') {
       await dictApi.oemBrands.create(dialogForm.brand.trim(), dialogForm.sortOrder)
-      ElMessage.success('已新增')
+      ElMessage.success(t('admin.oembrandsview.success.l75_'))
     } else if (dialogForm.id != null) {
       await dictApi.oemBrands.update(dialogForm.id, {
         brand: dialogForm.brand.trim(),
         sortOrder: dialogForm.sortOrder
       })
-      ElMessage.success('已更新')
+      ElMessage.success(t('admin.oembrandsview.success.l81_'))
     }
     dialogOpen.value = false
     await load()
   } catch (e: any) {
     // 后端 ProblemDetails 的 detail 字段优先显示
-    const detail = e?.response?.data?.detail || e?.message || '操作失败'
+    const detail = e?.response?.data?.detail || e?.message || t('admin.oembrandsview.string.l87_')
     ElMessage.error(detail)
   }
 }
@@ -92,8 +95,8 @@ async function saveDialog() {
 async function softDelete(row: OemBrandItem) {
   try {
     await ElMessageBox.confirm(
-      `确定删除品牌 "${row.brand}" 吗? (软删除, 可在"含已删"模式下恢复)`,
-      '确认',
+      `确定删除品牌 "${row.brand}t('admin.oembrandsview.string.l95_')含已删"模式下恢复)`,
+      t('admin.oembrandsview.string.l96_'),
       { type: 'warning' }
     )
   } catch {
@@ -101,10 +104,10 @@ async function softDelete(row: OemBrandItem) {
   }
   try {
     await dictApi.oemBrands.delete(row.id)
-    ElMessage.success('已删除')
+    ElMessage.success(t('admin.oembrandsview.success.l104_'))
     await load()
   } catch (e: any) {
-    const detail = e?.response?.data?.detail || e?.message || '删除失败'
+    const detail = e?.response?.data?.detail || e?.message || t('admin.oembrandsview.string.l107_')
     ElMessage.error(detail)
   }
 }
@@ -112,10 +115,10 @@ async function softDelete(row: OemBrandItem) {
 async function restore(row: OemBrandItem) {
   try {
     await dictApi.oemBrands.restore(row.id)
-    ElMessage.success('已恢复')
+    ElMessage.success(t('admin.oembrandsview.success.l115_'))
     await load()
   } catch (e: any) {
-    const detail = e?.response?.data?.detail || e?.message || '恢复失败'
+    const detail = e?.response?.data?.detail || e?.message || t('admin.oembrandsview.string.l118_')
     ElMessage.error(detail)
   }
 }
@@ -162,9 +165,9 @@ async function onDrop(e: DragEvent, targetId: number) {
   // 4) 调 API
   try {
     await dictApi.oemBrands.reorder(updates)
-    ElMessage.success('排序已保存')
+    ElMessage.success(t('admin.oembrandsview.success.l165_'))
   } catch (e: any) {
-    const detail = e?.response?.data?.detail || e?.message || '排序失败'
+    const detail = e?.response?.data?.detail || e?.message || t('admin.oembrandsview.string.l167_')
     ElMessage.error(detail)
     // 失败回滚: 重新加载
     await load()
@@ -209,7 +212,7 @@ onMounted(load)
       <div class="flex-1" />
       <el-input
         v-model="searchKw"
-        placeholder="搜索品牌"
+        :placeholder="t('admin.oembrandsview.placeholder.l212_')"
         clearable
         size="small"
         style="width: 200px"
@@ -246,7 +249,7 @@ onMounted(load)
         @dragend="onDragEnd"
       >
         <div class="cell-drag">
-          <span v-if="isDraggable(row)" class="drag-handle" title="拖动以排序">≡</span>
+          <span v-if="isDraggable(row)" class="drag-handle" :title="t('admin.oembrandsview.title.l249_')">≡</span>
         </div>
         <div class="cell-id">{{ row.id }}</div>
         <div class="cell-brand">{{ row.brand }}</div>
@@ -277,7 +280,7 @@ onMounted(load)
       </div>
       <!-- 空状态 -->
       <div v-if="!loading && items.length === 0" class="dict-empty">
-        暂无数据, 点击右上"新增品牌"开始
+        暂无数据, 点击右上t('admin.oembrandsview.string.l280_')开始
       </div>
     </div>
 
@@ -289,14 +292,14 @@ onMounted(load)
     <!-- 新增 / 编辑 弹窗 -->
     <el-dialog
       v-model="dialogOpen"
-      :title="dialogMode === 'create' ? '新增 OEM 品牌' : '编辑 OEM 品牌'"
+      :title="dialogMode === 'create' ? t('admin.oembrandsview.title.l292_oem') : t('admin.oembrandsview.title.l292_oem_2')"
       width="480px"
     >
       <el-form :model="dialogForm" label-width="80px" size="small">
-        <el-form-item label="品牌" required>
-          <el-input v-model="dialogForm.brand" placeholder="例: BOSCH" maxlength="100" show-word-limit />
+        <el-form-item :label="t('admin.oembrandsview.label.l296_')" required>
+          <el-input v-model="dialogForm.brand" :placeholder="t('admin.oembrandsview.placeholder.l297_bosch')" maxlength="100" show-word-limit />
         </el-form-item>
-        <el-form-item label="排序">
+        <el-form-item :label="t('admin.oembrandsview.label.l299_')">
           <el-input-number v-model="dialogForm.sortOrder" :min="0" :step="10" style="width: 100%" />
           <div class="text-xs text-muted mt-1">数字越小越靠前; 拖拽排序会自动分配</div>
         </el-form-item>

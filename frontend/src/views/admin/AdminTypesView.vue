@@ -3,8 +3,11 @@
 //   - 默认按 sortOrder 排 (P2.3 联动: 拖动后前台产品页按 sortOrder 展示)
 //   - 5 个固定值不允许硬删 (兜底 others)
 import { ref, reactive, onMounted, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { dictApi, type TypeItem, type TypeReorderItem } from '@/api'
+
+const { t } = useI18n()
 
 const items = ref<TypeItem[]>([])
 const loading = ref(false)
@@ -25,7 +28,7 @@ async function load() {
   try {
     const { items: list } = await dictApi.types.list(searchKw.value || undefined, includeDeleted.value, 500)
     items.value = list
-  } catch (e: any) { ElMessage.error('加载失败: ' + (e?.message || '')) }
+  } catch (e: any) { ElMessage.error(t('admin.typesview.error.l28_') + (e?.message || '')) }
   finally { loading.value = false }
 }
 function onSearch() { load() }
@@ -42,17 +45,17 @@ function openEdit(row: TypeItem) {
 }
 async function saveDialog() {
   const v = dialogForm.type.trim()
-  if (!v) { ElMessage.warning('Type 不能为空'); return }
-  if (v.length > 50) { ElMessage.warning('Type 长度不能超过 50'); return }
+  if (!v) { ElMessage.warning(t('admin.typesview.warning.l45_type')); return }
+  if (v.length > 50) { ElMessage.warning(t('admin.typesview.warning.l46_type_50')); return }
   try {
     if (dialogMode.value === 'create') {
-      await dictApi.types.create(v, dialogForm.sortOrder); ElMessage.success('已新增')
+      await dictApi.types.create(v, dialogForm.sortOrder); ElMessage.success(t('admin.typesview.success.l49_'))
     } else if (dialogForm.id != null) {
       await dictApi.types.update(dialogForm.id, { type: v, sortOrder: dialogForm.sortOrder })
-      ElMessage.success('已更新')
+      ElMessage.success(t('admin.typesview.success.l52_'))
     }
     dialogOpen.value = false; await load()
-  } catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || '操作失败') }
+  } catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || t('admin.typesview.error.l55_')) }
 }
 async function softDelete(row: TypeItem) {
   // 固定 5 值: oil/fuel/air/cabin/others 不允许硬删 (即使软删也警告, 避免误操作)
@@ -61,15 +64,15 @@ async function softDelete(row: TypeItem) {
     await ElMessageBox.confirm(
       FIXED.includes(row.type)
         ? `确定删除固定 Type "${row.type}" 吗? 建议保留 (作为 P2.3 兜底), 但仍支持软删恢复.`
-        : `确定删除 "${row.type}" 吗? (软删除)`, '确认', { type: 'warning' }
+        : `确定删除 "${row.type}" 吗? (软删除)`, t('admin.typesview.string.l64_'), { type: 'warning' }
     )
   } catch { return }
-  try { await dictApi.types.delete(row.id); ElMessage.success('已删除'); await load() }
-  catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || '删除失败') }
+  try { await dictApi.types.delete(row.id); ElMessage.success(t('admin.typesview.success.l67_')); await load() }
+  catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || t('admin.typesview.error.l68_')) }
 }
 async function restore(row: TypeItem) {
-  try { await dictApi.types.restore(row.id); ElMessage.success('已恢复'); await load() }
-  catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || '恢复失败') }
+  try { await dictApi.types.restore(row.id); ElMessage.success(t('admin.typesview.success.l71_')); await load() }
+  catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || t('admin.typesview.error.l72_')) }
 }
 
 function onDragStart(e: DragEvent, id: number) { draggingId.value = id; if (e.dataTransfer) { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(id)) } }
@@ -85,8 +88,8 @@ async function onDrop(e: DragEvent, targetId: number) {
   const moved = items.value.splice(sourceIdx, 1)[0]; items.value.splice(targetIdx, 0, moved)
   const updates: TypeReorderItem[] = items.value.map((it, idx) => ({ id: it.id, sortOrder: (idx + 1) * 10 }))
   items.value.forEach((it, idx) => { it.sortOrder = (idx + 1) * 10 })
-  try { await dictApi.types.reorder(updates); ElMessage.success('排序已保存, 前台产品页 P2.3 立即生效') }
-  catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || '排序失败'); await load() }
+  try { await dictApi.types.reorder(updates); ElMessage.success(t('admin.typesview.success.l88_p2_3')) }
+  catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || t('admin.typesview.error.l89_')); await load() }
 }
 function onDragEnd() { draggingId.value = null; dragOverId.value = null }
 
@@ -110,7 +113,7 @@ onMounted(load)
       <h1 class="text-lg font-medium">类型字典 (Type)</h1>
       <span class="text-xs text-muted">P2.2 后台管理 · 固定 5 值: oil / fuel / air / cabin / others · P2.3 拖动排序后前台立即生效</span>
       <div class="flex-1" />
-      <el-input v-model="searchKw" placeholder="搜索 Type" clearable size="small" style="width: 200px" @keyup.enter="onSearch" />
+      <el-input v-model="searchKw" :placeholder="t('admin.typesview.placeholder.l113_type')" clearable size="small" style="width: 200px" @keyup.enter="onSearch" />
       <el-button size="small" @click="onSearch">搜索</el-button>
       <el-checkbox v-model="includeDeleted" @change="load" size="small">含已删</el-checkbox>
       <el-button type="primary" size="small" @click="openCreate">新增 Type</el-button>
@@ -147,17 +150,17 @@ onMounted(load)
           <el-button v-else size="small" text type="success" @click="restore(row)">恢复</el-button>
         </div>
       </div>
-      <div v-if="!loading && items.length === 0" class="dict-empty">暂无数据, 点击右上"新增 Type"开始</div>
+      <div v-if="!loading && items.length === 0" class="dict-empty" > {{ t('admin.typesview.string.l150_') }}新增 Type开始</div>
     </div>
 
     <div class="mt-2 text-xs text-muted">共 {{ total }} 条 (启用 {{ activeCount }}, 软删 {{ total - activeCount }}) · 拖动"≡"列重排, P2.3 前台立即生效</div>
 
-    <el-dialog v-model="dialogOpen" :title="dialogMode === 'create' ? '新增 Type' : '编辑 Type'" width="480px">
+    <el-dialog v-model="dialogOpen" :title="dialogMode === 'create' ? t('admin.typesview.title.l155_type') : t('admin.typesview.title.l155_type_2')" width="480px">
       <el-form :model="dialogForm" label-width="100px" size="small">
         <el-form-item label="Type" required>
-          <el-input v-model="dialogForm.type" placeholder="例: oil / fuel / air / cabin / others" maxlength="50" show-word-limit />
+          <el-input v-model="dialogForm.type" :placeholder="t('admin.typesview.placeholder.l158_oil_fuel_air_cabin_others')" maxlength="50" show-word-limit />
         </el-form-item>
-        <el-form-item label="排序">
+        <el-form-item :label="t('admin.typesview.label.l160_')">
           <el-input-number v-model="dialogForm.sortOrder" :min="0" :step="10" style="width: 100%" />
         </el-form-item>
       </el-form>

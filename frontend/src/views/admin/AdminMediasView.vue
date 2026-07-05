@@ -3,8 +3,11 @@
 //   - 多字段: list/typeahead 走 media_name + media_model OR 匹配
 //   - 二合一展示: 同一行同时显示 name + model, 拖动按 media_name 主值排序
 import { ref, reactive, onMounted, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { dictApi, type MediaItem, type MediaReorderItem } from '@/api'
+
+const { t } = useI18n()
 
 const items = ref<MediaItem[]>([])
 const loading = ref(false)
@@ -25,7 +28,7 @@ async function load() {
   try {
     const { items: list } = await dictApi.medias.list(searchKw.value || undefined, includeDeleted.value, 500)
     items.value = list
-  } catch (e: any) { ElMessage.error('加载失败: ' + (e?.message || '')) }
+  } catch (e: any) { ElMessage.error(t('admin.mediasview.error.l28_') + (e?.message || '')) }
   finally { loading.value = false }
 }
 function onSearch() { load() }
@@ -46,27 +49,27 @@ function openEdit(row: MediaItem) {
 }
 async function saveDialog() {
   const n = dialogForm.mediaName.trim()
-  if (!n) { ElMessage.warning('Media 名称不能为空'); return }
-  if (n.length > 100) { ElMessage.warning('Media 名称长度不能超过 100'); return }
+  if (!n) { ElMessage.warning(t('admin.mediasview.warning.l49_media')); return }
+  if (n.length > 100) { ElMessage.warning(t('admin.mediasview.warning.l50_media_100')); return }
   const m = dialogForm.mediaModel.trim() || undefined
   try {
     if (dialogMode.value === 'create') {
-      await dictApi.medias.create(n, m, dialogForm.sortOrder); ElMessage.success('已新增')
+      await dictApi.medias.create(n, m, dialogForm.sortOrder); ElMessage.success(t('admin.mediasview.success.l54_'))
     } else if (dialogForm.id != null) {
       await dictApi.medias.update(dialogForm.id, { mediaName: n, mediaModel: m, sortOrder: dialogForm.sortOrder })
-      ElMessage.success('已更新')
+      ElMessage.success(t('admin.mediasview.success.l57_'))
     }
     dialogOpen.value = false; await load()
-  } catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || '操作失败') }
+  } catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || t('admin.mediasview.error.l60_')) }
 }
 async function softDelete(row: MediaItem) {
-  try { await ElMessageBox.confirm(`确定删除 "${row.mediaName}${row.mediaModel ? ' / ' + row.mediaModel : ''}" 吗? (软删除)`, '确认', { type: 'warning' }) } catch { return }
-  try { await dictApi.medias.delete(row.id); ElMessage.success('已删除'); await load() }
-  catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || '删除失败') }
+  try { await ElMessageBox.confirm(`确定删除 "${row.mediaName}${row.mediaModel ? ' / ' + row.mediaModel : ''}" 吗? (软删除)`, t('admin.mediasview.warning.l63_'), { type: 'warning' }) } catch { return }
+  try { await dictApi.medias.delete(row.id); ElMessage.success(t('admin.mediasview.success.l64_')); await load() }
+  catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || t('admin.mediasview.error.l65_')) }
 }
 async function restore(row: MediaItem) {
-  try { await dictApi.medias.restore(row.id); ElMessage.success('已恢复'); await load() }
-  catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || '恢复失败') }
+  try { await dictApi.medias.restore(row.id); ElMessage.success(t('admin.mediasview.success.l68_')); await load() }
+  catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || t('admin.mediasview.error.l69_')) }
 }
 
 function onDragStart(e: DragEvent, id: number) { draggingId.value = id; if (e.dataTransfer) { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(id)) } }
@@ -82,8 +85,8 @@ async function onDrop(e: DragEvent, targetId: number) {
   const moved = items.value.splice(sourceIdx, 1)[0]; items.value.splice(targetIdx, 0, moved)
   const updates: MediaReorderItem[] = items.value.map((it, idx) => ({ id: it.id, sortOrder: (idx + 1) * 10 }))
   items.value.forEach((it, idx) => { it.sortOrder = (idx + 1) * 10 })
-  try { await dictApi.medias.reorder(updates); ElMessage.success('排序已保存') }
-  catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || '排序失败'); await load() }
+  try { await dictApi.medias.reorder(updates); ElMessage.success(t('admin.mediasview.success.l85_')) }
+  catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || t('admin.mediasview.error.l86_')); await load() }
 }
 function onDragEnd() { draggingId.value = null; dragOverId.value = null }
 
@@ -107,7 +110,7 @@ onMounted(load)
       <h1 class="text-lg font-medium">介质字典 (Media)</h1>
       <span class="text-xs text-muted">P2.2 后台管理 · 2 字段: Media 名称 + 型号 · 用于产品表单分区 4 media/media_model 二合一</span>
       <div class="flex-1" />
-      <el-input v-model="searchKw" placeholder="搜索 Media 名称或型号" clearable size="small" style="width: 200px" @keyup.enter="onSearch" />
+      <el-input v-model="searchKw" :placeholder="t('admin.mediasview.placeholder.l110_media')" clearable size="small" style="width: 200px" @keyup.enter="onSearch" />
       <el-button size="small" @click="onSearch">搜索</el-button>
       <el-checkbox v-model="includeDeleted" @change="load" size="small">含已删</el-checkbox>
       <el-button type="primary" size="small" @click="openCreate">新增 Media</el-button>
@@ -146,21 +149,21 @@ onMounted(load)
           <el-button v-else size="small" text type="success" @click="restore(row)">恢复</el-button>
         </div>
       </div>
-      <div v-if="!loading && items.length === 0" class="dict-empty">暂无数据, 点击右上"新增 Media"开始</div>
+      <div v-if="!loading && items.length === 0" class="dict-empty" > {{ t('admin.mediasview.string.l149_') }}新增 Media开始</div>
     </div>
 
     <div class="mt-2 text-xs text-muted">共 {{ total }} 条 (启用 {{ activeCount }}, 软删 {{ total - activeCount }}) · 拖动"≡"列重排</div>
 
-    <el-dialog v-model="dialogOpen" :title="dialogMode === 'create' ? '新增 Media' : '编辑 Media'" width="540px">
+    <el-dialog v-model="dialogOpen" :title="dialogMode === 'create' ? t('admin.mediasview.title.l154_media') : t('admin.mediasview.title.l154_media_2')" width="540px">
       <el-form :model="dialogForm" label-width="120px" size="small">
-        <el-form-item label="Media 名称" required>
-          <el-input v-model="dialogForm.mediaName" placeholder="例: Cellulose / Synthetic / Carbon" maxlength="100" show-word-limit />
+        <el-form-item :label="t('admin.mediasview.label.l156_media')" required>
+          <el-input v-model="dialogForm.mediaName" :placeholder="t('admin.mediasview.placeholder.l157_cellulose_synthetic_carbon')" maxlength="100" show-word-limit />
         </el-form-item>
-        <el-form-item label="Media 型号">
-          <el-input v-model="dialogForm.mediaModel" placeholder="例: 5μm / 10μm (可空)" maxlength="100" show-word-limit />
+        <el-form-item :label="t('admin.mediasview.label.l159_media')">
+          <el-input v-model="dialogForm.mediaModel" :placeholder="t('admin.mediasview.placeholder.l160_5_m_10_m')" maxlength="100" show-word-limit />
           <div class="text-xs text-muted mt-1">可空; (name, model) 二者组成 UNIQUE 索引</div>
         </el-form-item>
-        <el-form-item label="排序">
+        <el-form-item :label="t('admin.mediasview.label.l163_')">
           <el-input-number v-model="dialogForm.sortOrder" :min="0" :step="10" style="width: 100%" />
         </el-form-item>
       </el-form>

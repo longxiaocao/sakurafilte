@@ -1,8 +1,11 @@
 <script setup lang="ts">
 // Day 10+ P2.2: OEM 3 字典管理页 (复用单字段模板)
 import { ref, reactive, onMounted, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { dictApi, type OemNo3Item, type OemNo3ReorderItem } from '@/api'
+
+const { t } = useI18n()
 
 const items = ref<OemNo3Item[]>([])
 const loading = ref(false)
@@ -23,7 +26,7 @@ async function load() {
   try {
     const { items: list } = await dictApi.oemNo3s.list(searchKw.value || undefined, includeDeleted.value, 500)
     items.value = list
-  } catch (e: any) { ElMessage.error('加载失败: ' + (e?.message || '')) }
+  } catch (e: any) { ElMessage.error(t('admin.oemno3sview.error.l26_') + (e?.message || '')) }
   finally { loading.value = false }
 }
 function onSearch() { load() }
@@ -40,26 +43,26 @@ function openEdit(row: OemNo3Item) {
 }
 async function saveDialog() {
   const v = dialogForm.oemNo3.trim()
-  if (!v) { ElMessage.warning('OEM 3 不能为空'); return }
-  if (v.length > 200) { ElMessage.warning('OEM 3 长度不能超过 200'); return }
+  if (!v) { ElMessage.warning(t('admin.oemno3sview.warning.l43_oem_3')); return }
+  if (v.length > 200) { ElMessage.warning(t('admin.oemno3sview.warning.l44_oem_3_200')); return }
   try {
     if (dialogMode.value === 'create') {
-      await dictApi.oemNo3s.create(v, dialogForm.sortOrder); ElMessage.success('已新增')
+      await dictApi.oemNo3s.create(v, dialogForm.sortOrder); ElMessage.success(t('admin.oemno3sview.success.l47_'))
     } else if (dialogForm.id != null) {
       await dictApi.oemNo3s.update(dialogForm.id, { oemNo3: v, sortOrder: dialogForm.sortOrder })
-      ElMessage.success('已更新')
+      ElMessage.success(t('admin.oemno3sview.success.l50_'))
     }
     dialogOpen.value = false; await load()
-  } catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || '操作失败') }
+  } catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || t('admin.oemno3sview.error.l53_')) }
 }
 async function softDelete(row: OemNo3Item) {
-  try { await ElMessageBox.confirm(`确定删除 "${row.oemNo3}" 吗? (软删除)`, '确认', { type: 'warning' }) } catch { return }
-  try { await dictApi.oemNo3s.delete(row.id); ElMessage.success('已删除'); await load() }
-  catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || '删除失败') }
+  try { await ElMessageBox.confirm(`确定删除 "${row.oemNo3}" 吗? (软删除)`, t('admin.oemno3sview.warning.l56_'), { type: 'warning' }) } catch { return }
+  try { await dictApi.oemNo3s.delete(row.id); ElMessage.success(t('admin.oemno3sview.success.l57_')); await load() }
+  catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || t('admin.oemno3sview.error.l58_')) }
 }
 async function restore(row: OemNo3Item) {
-  try { await dictApi.oemNo3s.restore(row.id); ElMessage.success('已恢复'); await load() }
-  catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || '恢复失败') }
+  try { await dictApi.oemNo3s.restore(row.id); ElMessage.success(t('admin.oemno3sview.success.l61_')); await load() }
+  catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || t('admin.oemno3sview.error.l62_')) }
 }
 
 function onDragStart(e: DragEvent, id: number) { draggingId.value = id; if (e.dataTransfer) { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(id)) } }
@@ -75,8 +78,8 @@ async function onDrop(e: DragEvent, targetId: number) {
   const moved = items.value.splice(sourceIdx, 1)[0]; items.value.splice(targetIdx, 0, moved)
   const updates: OemNo3ReorderItem[] = items.value.map((it, idx) => ({ id: it.id, sortOrder: (idx + 1) * 10 }))
   items.value.forEach((it, idx) => { it.sortOrder = (idx + 1) * 10 })
-  try { await dictApi.oemNo3s.reorder(updates); ElMessage.success('排序已保存') }
-  catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || '排序失败'); await load() }
+  try { await dictApi.oemNo3s.reorder(updates); ElMessage.success(t('admin.oemno3sview.success.l78_')) }
+  catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || t('admin.oemno3sview.error.l79_')); await load() }
 }
 function onDragEnd() { draggingId.value = null; dragOverId.value = null }
 
@@ -100,7 +103,7 @@ onMounted(load)
       <h1 class="text-lg font-medium">OEM 3 字典</h1>
       <span class="text-xs text-muted">P2.2 后台管理 · 用于交叉引用分区 2 oem_no_3 自动补全</span>
       <div class="flex-1" />
-      <el-input v-model="searchKw" placeholder="搜索 OEM 3" clearable size="small" style="width: 200px" @keyup.enter="onSearch" />
+      <el-input v-model="searchKw" :placeholder="t('admin.oemno3sview.placeholder.l103_oem_3')" clearable size="small" style="width: 200px" @keyup.enter="onSearch" />
       <el-button size="small" @click="onSearch">搜索</el-button>
       <el-checkbox v-model="includeDeleted" @change="load" size="small">含已删</el-checkbox>
       <el-button type="primary" size="small" @click="openCreate">新增 OEM 3</el-button>
@@ -137,17 +140,17 @@ onMounted(load)
           <el-button v-else size="small" text type="success" @click="restore(row)">恢复</el-button>
         </div>
       </div>
-      <div v-if="!loading && items.length === 0" class="dict-empty">暂无数据, 点击右上"新增 OEM 3"开始</div>
+      <div v-if="!loading && items.length === 0" class="dict-empty" > {{ t('admin.oemno3sview.string.l140_') }}新增 OEM 3开始</div>
     </div>
 
     <div class="mt-2 text-xs text-muted">共 {{ total }} 条 (启用 {{ activeCount }}, 软删 {{ total - activeCount }}) · 拖动"≡"列重排</div>
 
-    <el-dialog v-model="dialogOpen" :title="dialogMode === 'create' ? '新增 OEM 3' : '编辑 OEM 3'" width="480px">
+    <el-dialog v-model="dialogOpen" :title="dialogMode === 'create' ? t('admin.oemno3sview.title.l145_oem_3') : t('admin.oemno3sview.title.l145_oem_3_2')" width="480px">
       <el-form :model="dialogForm" label-width="100px" size="small">
         <el-form-item label="OEM 3" required>
-          <el-input v-model="dialogForm.oemNo3" placeholder="例: 11427622448" maxlength="200" show-word-limit />
+          <el-input v-model="dialogForm.oemNo3" :placeholder="t('admin.oemno3sview.placeholder.l148_11427622448')" maxlength="200" show-word-limit />
         </el-form-item>
-        <el-form-item label="排序">
+        <el-form-item :label="t('admin.oemno3sview.label.l150_')">
           <el-input-number v-model="dialogForm.sortOrder" :min="0" :step="10" style="width: 100%" />
         </el-form-item>
       </el-form>

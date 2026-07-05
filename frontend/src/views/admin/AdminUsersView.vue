@@ -4,10 +4,13 @@
 //   Tab 2: 登录审计 — login_audit_logs 表展示
 //   风格: Musk 极简 hairline + el-tag 区分角色/状态
 import { ref, reactive, onMounted, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { authApi, usersApi } from '@/api'
 import { useAdminAuthStore } from '@/composables/useAdminAuth'
 import type { UserListItem, UserCreateRequest, UserUpdateRequest, UserRole, LoginAuditLog } from '@/api/types'
+
+const { t } = useI18n()
 
 const auth = useAdminAuthStore()
 const activeTab = ref<'users' | 'audit'>('users')
@@ -53,9 +56,9 @@ const resetForm = reactive<{ id?: number; username?: string; newPassword: string
 
 // 角色选项 (与后端 UserRole enum 一致)
 const ROLE_OPTIONS: { value: UserRole; label: string; tagType: 'danger' | 'primary' | 'info' }[] = [
-  { value: 'admin', label: '管理员 (admin)', tagType: 'danger' },
-  { value: 'operator', label: '操作员 (operator)', tagType: 'primary' },
-  { value: 'viewer', label: '只读 (viewer)', tagType: 'info' }
+  { value: 'admin', label: t('admin.usersview.string.l56_admin'), tagType: 'danger' },
+  { value: 'operator', label: t('admin.usersview.string.l57_operator'), tagType: 'primary' },
+  { value: 'viewer', label: t('admin.usersview.string.l58_viewer'), tagType: 'info' }
 ]
 
 function roleTagType(role: UserRole): 'danger' | 'primary' | 'info' {
@@ -96,11 +99,11 @@ function openCreate() {
 async function saveCreate() {
   if (userSubmitting.value) return
   if (!createForm.username.trim()) {
-    ElMessage.warning('用户名不能为空')
+    ElMessage.warning(t('admin.usersview.warning.l99_'))
     return
   }
   if (createForm.password.length < 8) {
-    ElMessage.warning('密码至少 8 个字符')
+    ElMessage.warning(t('admin.usersview.warning.l103_8'))
     return
   }
   userSubmitting.value = true
@@ -112,7 +115,7 @@ async function saveCreate() {
       email: createForm.email || undefined,
       fullName: createForm.fullName || undefined
     })
-    ElMessage.success('用户已创建')
+    ElMessage.success(t('admin.usersview.success.l115_'))
     createOpen.value = false
     await loadUsers()
   } catch {
@@ -144,7 +147,7 @@ async function saveEdit() {
       isActive: editForm.isActive
     }
     await usersApi.update(editForm.id, patch)
-    ElMessage.success('用户已更新')
+    ElMessage.success(t('admin.usersview.success.l147_'))
     editOpen.value = false
     await loadUsers()
   } catch {
@@ -158,7 +161,7 @@ async function softDelete(row: UserListItem) {
   try {
     await ElMessageBox.confirm(
       `确定删除用户 "${row.username}" 吗? (软删除, 数据保留)`,
-      '确认',
+      t('admin.usersview.string.l161_'),
       { type: 'warning' }
     )
   } catch {
@@ -168,7 +171,7 @@ async function softDelete(row: UserListItem) {
   userSubmitting.value = true
   try {
     await usersApi.remove(row.id)
-    ElMessage.success('已删除')
+    ElMessage.success(t('admin.usersview.success.l171_'))
     await loadUsers()
   } catch {
     // axios 拦截器已统一弹错误
@@ -188,7 +191,7 @@ async function saveReset() {
   if (userSubmitting.value) return
   if (resetForm.id == null) return
   if (resetForm.newPassword.length < 8) {
-    ElMessage.warning('新密码至少 8 个字符')
+    ElMessage.warning(t('admin.usersview.warning.l191_8'))
     return
   }
   userSubmitting.value = true
@@ -249,7 +252,7 @@ async function handleLogout() {
     userSubmitting.value = false
   }
   auth.clearAuth()
-  ElMessage.success('已退出登录')
+  ElMessage.success(t('admin.usersview.success.l252_'))
   window.location.href = '/login'
 }
 
@@ -281,7 +284,7 @@ onMounted(() => {
 
     <el-tabs v-model="activeTab" @tab-change="onTabChange">
       <!-- ===== Tab 1: 用户列表 ===== -->
-      <el-tab-pane label="用户列表" name="users">
+      <el-tab-pane :label="t('admin.usersview.label.l284_')" name="users">
         <div class="hairline" v-loading="usersLoading">
           <!-- 表头 -->
           <div class="user-head">
@@ -339,7 +342,7 @@ onMounted(() => {
       </el-tab-pane>
 
       <!-- ===== Tab 2: 登录审计 ===== -->
-      <el-tab-pane label="登录审计" name="audit">
+      <el-tab-pane :label="t('admin.usersview.label.l342_')" name="audit">
         <div class="hairline" v-loading="auditLoading">
           <div class="audit-head">
             <div class="cell-id">ID</div>
@@ -381,21 +384,21 @@ onMounted(() => {
     </el-tabs>
 
     <!-- 新增用户对话框 -->
-    <el-dialog v-model="createOpen" title="新增用户" width="480px">
+    <el-dialog v-model="createOpen" :title="t('admin.usersview.title.l384_')" width="480px">
       <el-form :model="createForm" label-width="80px" size="small">
-        <el-form-item label="用户名" required>
-          <el-input v-model="createForm.username" placeholder="登录用户名" maxlength="50" show-word-limit />
+        <el-form-item :label="t('admin.usersview.label.l386_')" required>
+          <el-input v-model="createForm.username" :placeholder="t('admin.usersview.placeholder.l387_')" maxlength="50" show-word-limit />
         </el-form-item>
-        <el-form-item label="密码" required>
+        <el-form-item :label="t('admin.usersview.label.l389_')" required>
           <el-input
             v-model="createForm.password"
             type="password"
-            placeholder="至少 8 个字符"
+            :placeholder="t('admin.usersview.placeholder.l393_8')"
             show-password
             autocomplete="new-password"
           />
         </el-form-item>
-        <el-form-item label="角色" required>
+        <el-form-item :label="t('admin.usersview.label.l398_')" required>
           <el-select v-model="createForm.role" style="width: 100%">
             <el-option
               v-for="opt in ROLE_OPTIONS"
@@ -405,11 +408,11 @@ onMounted(() => {
             />
           </el-select>
         </el-form-item>
-        <el-form-item label="邮箱">
-          <el-input v-model="createForm.email" placeholder="可选" />
+        <el-form-item :label="t('admin.usersview.label.l408_')">
+          <el-input v-model="createForm.email" :placeholder="t('admin.usersview.placeholder.l409_')" />
         </el-form-item>
-        <el-form-item label="全名">
-          <el-input v-model="createForm.fullName" placeholder="可选" />
+        <el-form-item :label="t('admin.usersview.label.l411_')">
+          <el-input v-model="createForm.fullName" :placeholder="t('admin.usersview.placeholder.l412_')" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -421,10 +424,10 @@ onMounted(() => {
     <!-- 编辑用户对话框 -->
     <el-dialog v-model="editOpen" :title="`编辑用户: ${editForm.username}`" width="480px">
       <el-form :model="editForm" label-width="80px" size="small">
-        <el-form-item label="用户名">
+        <el-form-item :label="t('admin.usersview.label.l424_')">
           <el-input :model-value="editForm.username" disabled />
         </el-form-item>
-        <el-form-item label="角色">
+        <el-form-item :label="t('admin.usersview.label.l427_')">
           <el-select v-model="editForm.role" style="width: 100%">
             <el-option
               v-for="opt in ROLE_OPTIONS"
@@ -434,13 +437,13 @@ onMounted(() => {
             />
           </el-select>
         </el-form-item>
-        <el-form-item label="邮箱">
-          <el-input v-model="editForm.email" placeholder="可选" />
+        <el-form-item :label="t('admin.usersview.label.l437_')">
+          <el-input v-model="editForm.email" :placeholder="t('admin.usersview.placeholder.l438_')" />
         </el-form-item>
-        <el-form-item label="全名">
-          <el-input v-model="editForm.fullName" placeholder="可选" />
+        <el-form-item :label="t('admin.usersview.label.l440_')">
+          <el-input v-model="editForm.fullName" :placeholder="t('admin.usersview.placeholder.l441_')" />
         </el-form-item>
-        <el-form-item label="启用状态">
+        <el-form-item :label="t('admin.usersview.label.l443_')">
           <el-switch v-model="editForm.isActive" />
         </el-form-item>
       </el-form>
@@ -453,11 +456,11 @@ onMounted(() => {
     <!-- 重置密码对话框 -->
     <el-dialog v-model="resetOpen" :title="`重置密码: ${resetForm.username}`" width="480px">
       <el-form :model="resetForm" label-width="80px" size="small">
-        <el-form-item label="新密码" required>
+        <el-form-item :label="t('admin.usersview.label.l456_')" required>
           <el-input
             v-model="resetForm.newPassword"
             type="password"
-            placeholder="至少 8 个字符"
+            :placeholder="t('admin.usersview.placeholder.l460_8')"
             show-password
             autocomplete="new-password"
           />

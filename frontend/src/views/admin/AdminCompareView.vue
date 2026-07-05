@@ -8,10 +8,13 @@
 //   - 6 产品上限, 每列右上角 × 移除
 //   - 打印优化 CSS
 import { ref, computed, onMounted, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { adminProductApi } from '@/api'
 import type { ProductDetail, XrefInfo, MachineAppInfo } from '@/api/types'
+
+const { t } = useI18n()
 
 const route = useRoute()
 const router = useRouter()
@@ -50,18 +53,18 @@ interface FieldGroup {
 
 const fieldGroups: FieldGroup[] = [
   {
-    name: '基础',
+    name: t('admin.compareview.string.l53_'),
     fields: [
-      { key: 'oemNoDisplay', label: 'OEM 编号', get: (p) => p.oemNoDisplay ?? '' },
+      { key: 'oemNoDisplay', label: t('admin.compareview.string.l55_oem'), get: (p) => p.oemNoDisplay ?? '' },
       { key: 'oem2', label: 'OEM 2', get: (p) => p.oem2 ?? '' },
       { key: 'mr1', label: 'MR.1', get: (p) => p.mr1 ?? '' },
-      { key: 'productName1', label: '产品名 1', get: (p) => p.productName1 ?? '' },
-      { key: 'productName2', label: '产品名 2', get: (p) => p.productName2 ?? '' },
-      { key: 'type', label: '类型', get: (p) => p.type ?? '' }
+      { key: 'productName1', label: t('admin.compareview.string.l58_1'), get: (p) => p.productName1 ?? '' },
+      { key: 'productName2', label: t('admin.compareview.string.l59_2'), get: (p) => p.productName2 ?? '' },
+      { key: 'type', label: t('admin.compareview.string.l60_'), get: (p) => p.type ?? '' }
     ]
   },
   {
-    name: '尺寸 (mm)',
+    name: t('admin.compareview.string.l64_mm'),
     fields: [
       { key: 'd1Mm', label: 'D1', get: (p) => (p.d1Mm !== undefined && p.d1Mm !== null ? String(p.d1Mm) : '') },
       { key: 'd2Mm', label: 'D2', get: (p) => (p.d2Mm !== undefined && p.d2Mm !== null ? String(p.d2Mm) : '') },
@@ -74,50 +77,50 @@ const fieldGroups: FieldGroup[] = [
     ]
   },
   {
-    name: '性能',
+    name: t('admin.compareview.string.l77_'),
     fields: [
-      { key: 'd7Thread', label: 'D7 螺纹', get: (p) => p.d7Thread ?? '' },
-      { key: 'd8Thread', label: 'D8 螺纹', get: (p) => p.d8Thread ?? '' },
-      { key: 'noCheckValves', label: '单向阀数', get: (p) => (p.noCheckValves !== undefined && p.noCheckValves !== null ? String(p.noCheckValves) : '') },
-      { key: 'noBypassValves', label: '旁通阀数', get: (p) => (p.noBypassValves !== undefined && p.noBypassValves !== null ? String(p.noBypassValves) : '') },
-      { key: 'bypassValveLr', label: '旁通 LR', get: (p) => (p.bypassValveLr !== undefined && p.bypassValveLr !== null ? String(p.bypassValveLr) : '') },
-      { key: 'bypassValveHr', label: '旁通 HR', get: (p) => (p.bypassValveHr !== undefined && p.bypassValveHr !== null ? String(p.bypassValveHr) : '') },
-      { key: 'efficiency1', label: '效率 1', get: (p) => p.efficiency1 ?? '' },
-      { key: 'efficiency2', label: '效率 2', get: (p) => p.efficiency2 ?? '' },
-      { key: 'bypassPressure', label: '旁通压力', get: (p) => (p.bypassPressure !== undefined && p.bypassPressure !== null ? String(p.bypassPressure) : '') },
-      { key: 'collapsePressureBar', label: '耐压 (bar)', get: (p) => (p.collapsePressureBar !== undefined && p.collapsePressureBar !== null ? String(p.collapsePressureBar) : '') },
-      { key: 'sealingMaterial', label: '密封材料', get: (p) => p.sealingMaterial ?? '' },
-      { key: 'tempRange', label: '温度范围', get: (p) => p.tempRange ?? '' }
+      { key: 'd7Thread', label: t('admin.compareview.string.l79_d7'), get: (p) => p.d7Thread ?? '' },
+      { key: 'd8Thread', label: t('admin.compareview.string.l80_d8'), get: (p) => p.d8Thread ?? '' },
+      { key: 'noCheckValves', label: t('admin.compareview.string.l81_'), get: (p) => (p.noCheckValves !== undefined && p.noCheckValves !== null ? String(p.noCheckValves) : '') },
+      { key: 'noBypassValves', label: t('admin.compareview.string.l82_'), get: (p) => (p.noBypassValves !== undefined && p.noBypassValves !== null ? String(p.noBypassValves) : '') },
+      { key: 'bypassValveLr', label: t('admin.compareview.string.l83_lr'), get: (p) => (p.bypassValveLr !== undefined && p.bypassValveLr !== null ? String(p.bypassValveLr) : '') },
+      { key: 'bypassValveHr', label: t('admin.compareview.string.l84_hr'), get: (p) => (p.bypassValveHr !== undefined && p.bypassValveHr !== null ? String(p.bypassValveHr) : '') },
+      { key: 'efficiency1', label: t('admin.compareview.string.l85_1'), get: (p) => p.efficiency1 ?? '' },
+      { key: 'efficiency2', label: t('admin.compareview.string.l86_2'), get: (p) => p.efficiency2 ?? '' },
+      { key: 'bypassPressure', label: t('admin.compareview.string.l87_'), get: (p) => (p.bypassPressure !== undefined && p.bypassPressure !== null ? String(p.bypassPressure) : '') },
+      { key: 'collapsePressureBar', label: t('admin.compareview.string.l88_bar'), get: (p) => (p.collapsePressureBar !== undefined && p.collapsePressureBar !== null ? String(p.collapsePressureBar) : '') },
+      { key: 'sealingMaterial', label: t('admin.compareview.string.l89_'), get: (p) => p.sealingMaterial ?? '' },
+      { key: 'tempRange', label: t('admin.compareview.string.l90_'), get: (p) => p.tempRange ?? '' }
     ]
   },
   {
-    name: '包装',
+    name: t('admin.compareview.string.l94_'),
     fields: [
-      { key: 'media', label: '介质', get: (p) => p.media ?? '' },
-      { key: 'mediaModel', label: '介质型号', get: (p) => p.mediaModel ?? '' },
-      { key: 'qtyPerCarton', label: '箱/件', get: (p) => (p.qtyPerCarton !== undefined && p.qtyPerCarton !== null ? String(p.qtyPerCarton) : '') },
-      { key: 'weightKgs', label: '重量 (kg)', get: (p) => (p.weightKgs !== undefined && p.weightKgs !== null ? String(p.weightKgs) : '') },
-      { key: 'cartonLengthMm', label: '箱长 (mm)', get: (p) => (p.cartonLengthMm !== undefined && p.cartonLengthMm !== null ? String(p.cartonLengthMm) : '') },
-      { key: 'cartonWidthMm', label: '箱宽 (mm)', get: (p) => (p.cartonWidthMm !== undefined && p.cartonWidthMm !== null ? String(p.cartonWidthMm) : '') },
-      { key: 'cartonHeightMm', label: '箱高 (mm)', get: (p) => (p.cartonHeightMm !== undefined && p.cartonHeightMm !== null ? String(p.cartonHeightMm) : '') },
-      { key: 'volumePerCartonM3', label: '箱体积 (m³)', get: (p) => (p.volumePerCartonM3 !== undefined && p.volumePerCartonM3 !== null ? String(p.volumePerCartonM3) : '') }
+      { key: 'media', label: t('admin.compareview.string.l96_'), get: (p) => p.media ?? '' },
+      { key: 'mediaModel', label: t('admin.compareview.string.l97_'), get: (p) => p.mediaModel ?? '' },
+      { key: 'qtyPerCarton', label: t('admin.compareview.string.l98_'), get: (p) => (p.qtyPerCarton !== undefined && p.qtyPerCarton !== null ? String(p.qtyPerCarton) : '') },
+      { key: 'weightKgs', label: t('admin.compareview.string.l99_kg'), get: (p) => (p.weightKgs !== undefined && p.weightKgs !== null ? String(p.weightKgs) : '') },
+      { key: 'cartonLengthMm', label: t('admin.compareview.string.l100_mm'), get: (p) => (p.cartonLengthMm !== undefined && p.cartonLengthMm !== null ? String(p.cartonLengthMm) : '') },
+      { key: 'cartonWidthMm', label: t('admin.compareview.string.l101_mm'), get: (p) => (p.cartonWidthMm !== undefined && p.cartonWidthMm !== null ? String(p.cartonWidthMm) : '') },
+      { key: 'cartonHeightMm', label: t('admin.compareview.string.l102_mm'), get: (p) => (p.cartonHeightMm !== undefined && p.cartonHeightMm !== null ? String(p.cartonHeightMm) : '') },
+      { key: 'volumePerCartonM3', label: t('admin.compareview.string.l103_m'), get: (p) => (p.volumePerCartonM3 !== undefined && p.volumePerCartonM3 !== null ? String(p.volumePerCartonM3) : '') }
     ]
   },
   {
-    name: '外箱',
+    name: t('admin.compareview.string.l107_'),
     fields: [
-      { key: 'masterBoxQty', label: '外箱/件', get: (p) => (p.masterBoxQty !== undefined && p.masterBoxQty !== null ? String(p.masterBoxQty) : '') },
-      { key: 'masterBoxWeightKgs', label: '外箱重 (kg)', get: (p) => (p.masterBoxWeightKgs !== undefined && p.masterBoxWeightKgs !== null ? String(p.masterBoxWeightKgs) : '') },
-      { key: 'masterBoxLengthMm', label: '外箱长 (mm)', get: (p) => (p.masterBoxLengthMm !== undefined && p.masterBoxLengthMm !== null ? String(p.masterBoxLengthMm) : '') },
-      { key: 'masterBoxWidthMm', label: '外箱宽 (mm)', get: (p) => (p.masterBoxWidthMm !== undefined && p.masterBoxWidthMm !== null ? String(p.masterBoxWidthMm) : '') },
-      { key: 'masterBoxHeightMm', label: '外箱高 (mm)', get: (p) => (p.masterBoxHeightMm !== undefined && p.masterBoxHeightMm !== null ? String(p.masterBoxHeightMm) : '') }
+      { key: 'masterBoxQty', label: t('admin.compareview.string.l109_'), get: (p) => (p.masterBoxQty !== undefined && p.masterBoxQty !== null ? String(p.masterBoxQty) : '') },
+      { key: 'masterBoxWeightKgs', label: t('admin.compareview.string.l110_kg'), get: (p) => (p.masterBoxWeightKgs !== undefined && p.masterBoxWeightKgs !== null ? String(p.masterBoxWeightKgs) : '') },
+      { key: 'masterBoxLengthMm', label: t('admin.compareview.string.l111_mm'), get: (p) => (p.masterBoxLengthMm !== undefined && p.masterBoxLengthMm !== null ? String(p.masterBoxLengthMm) : '') },
+      { key: 'masterBoxWidthMm', label: t('admin.compareview.string.l112_mm'), get: (p) => (p.masterBoxWidthMm !== undefined && p.masterBoxWidthMm !== null ? String(p.masterBoxWidthMm) : '') },
+      { key: 'masterBoxHeightMm', label: t('admin.compareview.string.l113_mm'), get: (p) => (p.masterBoxHeightMm !== undefined && p.masterBoxHeightMm !== null ? String(p.masterBoxHeightMm) : '') }
     ]
   },
   {
-    name: 'CrossRef / 车型',
+    name: t('admin.compareview.string.l117_crossref'),
     fields: [
-      { key: 'crossReferences', label: 'OEM 交叉引用', get: (p) => xrefSummary(p.crossReferences) },
-      { key: 'machineApplications', label: '适配车型', get: (p) => machineSummary(p.machineApplications) }
+      { key: 'crossReferences', label: t('admin.compareview.string.l119_oem'), get: (p) => xrefSummary(p.crossReferences) },
+      { key: 'machineApplications', label: t('admin.compareview.string.l120_'), get: (p) => machineSummary(p.machineApplications) }
     ]
   }
 ]
@@ -182,7 +185,7 @@ async function loadByIds(ids: number[]) {
     products.value = capped.map((id) => map.get(id)).filter((p): p is ProductDetail => !!p)
     saveOrder()
   } catch (e: any) {
-    error.value = e?.message || '加载失败'
+    error.value = e?.message || t('admin.compareview.string.l185_')
     ElMessage.error(error.value)
   } finally {
     loading.value = false
@@ -243,18 +246,18 @@ function removeProduct(idx: number) {
   products.value = products.value.filter((_, i) => i !== idx)
   saveOrder()
   persistUrlOrder()
-  ElMessage.success('已移除')
+  ElMessage.success(t('admin.compareview.success.l246_'))
 }
 
 // ===== 加入产品 =====
 async function addProductById() {
   const id = parseInt(newIdInput.value.trim(), 10)
   if (!id || isNaN(id)) {
-    ElMessage.warning('请输入有效的产品 ID')
+    ElMessage.warning(t('admin.compareview.warning.l253_id'))
     return
   }
   if (products.value.some((p) => p.id === id)) {
-    ElMessage.warning('该产品已在对比列表中')
+    ElMessage.warning(t('admin.compareview.warning.l257_'))
     return
   }
   if (products.value.length >= MAX_COMPARE) {
@@ -270,7 +273,7 @@ async function addProductById() {
     persistUrlOrder()
     ElMessage.success(`已加入: ${p.oemNoDisplay}`)
   } catch (e: any) {
-    ElMessage.error(e?.message || '加载产品失败')
+    ElMessage.error(e?.message || t('admin.compareview.error.l273_'))
   } finally {
     loading.value = false
   }
@@ -326,7 +329,7 @@ function doPrint() {
       <div class="flex-1" />
       <el-input
         v-model="newIdInput"
-        placeholder="输入产品 ID 加入"
+        :placeholder="t('admin.compareview.placeholder.l329_id')"
         size="small"
         style="width: 180px"
         @keyup.enter="addProductById"
@@ -370,7 +373,7 @@ function doPrint() {
                 text
                 :disabled="idx === 0"
                 @click="moveLeft(idx)"
-                title="左移"
+                :title="t('admin.compareview.title.l373_')"
                 style="padding: 0 2px; height: 16px; line-height: 16px"
               >‹</el-button>
               <el-button
@@ -378,7 +381,7 @@ function doPrint() {
                 text
                 :disabled="idx === products.length - 1"
                 @click="moveRight(idx)"
-                title="右移"
+                :title="t('admin.compareview.title.l381_')"
                 style="padding: 0 2px; height: 16px; line-height: 16px"
               >›</el-button>
             </div>
@@ -387,7 +390,7 @@ function doPrint() {
               text
               class="no-print"
               @click="removeProduct(idx)"
-              title="移除该列"
+              :title="t('admin.compareview.title.l390_')"
               style="padding: 0 4px; height: 18px; line-height: 18px; color: #d00"
             >×</el-button>
           </div>

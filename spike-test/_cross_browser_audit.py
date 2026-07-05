@@ -28,7 +28,7 @@ VIEWPORTS = [
     ("desktop-1440", 1440, 900),
 ]
 
-BROWSERS = ["chromium", "firefox"]
+BROWSERS = ["chromium", "firefox", "webkit"]
 
 # 代表性路由 (公开页, 无需登录)
 ROUTES = [

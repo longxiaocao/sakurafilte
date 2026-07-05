@@ -220,7 +220,7 @@ function colorFor(code: string): string {
   flex: 0 0 auto;
 }
 .legend-code {
-  color: #9ca3af;
+  color: #4b5563;
   font-family: 'SF Mono', Consolas, monospace;
   font-size: 10px;
   flex: 0 0 auto;

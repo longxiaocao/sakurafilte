@@ -4,8 +4,11 @@
 //   - HTML5 原生拖拽 (无新依赖)
 //   - typeahead 数据供 AdminProductFormView 分区 1 product_name_1 用
 import { ref, reactive, onMounted, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { dictApi, type ProductName1Item, type ProductName1ReorderItem } from '@/api'
+
+const { t } = useI18n()
 
 const items = ref<ProductName1Item[]>([])
 const loading = ref(false)
@@ -28,7 +31,7 @@ async function load() {
     const { items: list } = await dictApi.productName1s.list(searchKw.value || undefined, includeDeleted.value, 500)
     items.value = list
   } catch (e: any) {
-    ElMessage.error('加载失败: ' + (e?.message || ''))
+    ElMessage.error(t('admin.productname1sview.error.l31_') + (e?.message || ''))
   } finally {
     loading.value = false
   }
@@ -55,22 +58,22 @@ function openEdit(row: ProductName1Item) {
 
 async function saveDialog() {
   const v = dialogForm.productName1.trim()
-  if (!v) { ElMessage.warning('产品名 1 不能为空'); return }
-  if (v.length > 200) { ElMessage.warning('产品名 1 长度不能超过 200'); return }
+  if (!v) { ElMessage.warning(t('admin.productname1sview.warning.l58_1')); return }
+  if (v.length > 200) { ElMessage.warning(t('admin.productname1sview.warning.l59_1_200')); return }
   try {
     if (dialogMode.value === 'create') {
       await dictApi.productName1s.create(v, dialogForm.sortOrder)
-      ElMessage.success('已新增')
+      ElMessage.success(t('admin.productname1sview.success.l63_'))
     } else if (dialogForm.id != null) {
       await dictApi.productName1s.update(dialogForm.id, {
         productName1: v, sortOrder: dialogForm.sortOrder
       })
-      ElMessage.success('已更新')
+      ElMessage.success(t('admin.productname1sview.success.l68_'))
     }
     dialogOpen.value = false
     await load()
   } catch (e: any) {
-    const detail = e?.response?.data?.detail || e?.message || '操作失败'
+    const detail = e?.response?.data?.detail || e?.message || t('admin.productname1sview.string.l73_')
     ElMessage.error(detail)
   }
 }
@@ -78,16 +81,16 @@ async function saveDialog() {
 async function softDelete(row: ProductName1Item) {
   try {
     await ElMessageBox.confirm(
-      `确定删除 "${row.productName1}" 吗? (软删除, 可在"含已删"模式下恢复)`,
-      '确认', { type: 'warning' }
+      `确定删除 "${row.productName1}t('admin.productname1sview.string.l81_')含已删"模式下恢复)`,
+      t('admin.productname1sview.string.l82_'), { type: 'warning' }
     )
   } catch { return }
   try {
     await dictApi.productName1s.delete(row.id)
-    ElMessage.success('已删除')
+    ElMessage.success(t('admin.productname1sview.success.l87_'))
     await load()
   } catch (e: any) {
-    const detail = e?.response?.data?.detail || e?.message || '删除失败'
+    const detail = e?.response?.data?.detail || e?.message || t('admin.productname1sview.string.l90_')
     ElMessage.error(detail)
   }
 }
@@ -95,10 +98,10 @@ async function softDelete(row: ProductName1Item) {
 async function restore(row: ProductName1Item) {
   try {
     await dictApi.productName1s.restore(row.id)
-    ElMessage.success('已恢复')
+    ElMessage.success(t('admin.productname1sview.success.l98_'))
     await load()
   } catch (e: any) {
-    const detail = e?.response?.data?.detail || e?.message || '恢复失败'
+    const detail = e?.response?.data?.detail || e?.message || t('admin.productname1sview.string.l101_')
     ElMessage.error(detail)
   }
 }
@@ -135,9 +138,9 @@ async function onDrop(e: DragEvent, targetId: number) {
   items.value.forEach((it, idx) => { it.sortOrder = (idx + 1) * 10 })
   try {
     await dictApi.productName1s.reorder(updates)
-    ElMessage.success('排序已保存')
+    ElMessage.success(t('admin.productname1sview.success.l138_'))
   } catch (e: any) {
-    const detail = e?.response?.data?.detail || e?.message || '排序失败'
+    const detail = e?.response?.data?.detail || e?.message || t('admin.productname1sview.string.l140_')
     ElMessage.error(detail)
     await load()
   }
@@ -173,7 +176,7 @@ onMounted(load)
       <h1 class="text-lg font-medium">产品名 1 字典</h1>
       <span class="text-xs text-muted">P2.2 后台管理 · 用于产品表单分区 1 product_name_1 自动补全</span>
       <div class="flex-1" />
-      <el-input v-model="searchKw" placeholder="搜索产品名 1" clearable size="small"
+      <el-input v-model="searchKw" :placeholder="t('admin.productname1sview.placeholder.l176_1')" clearable size="small"
         style="width: 200px" @keyup.enter="onSearch" />
       <el-button size="small" @click="onSearch">搜索</el-button>
       <el-checkbox v-model="includeDeleted" @change="load" size="small">含已删</el-checkbox>
@@ -201,7 +204,7 @@ onMounted(load)
         @dragend="onDragEnd"
       >
         <div class="cell-drag">
-          <span v-if="isDraggable(row)" class="drag-handle" title="拖动以排序">≡</span>
+          <span v-if="isDraggable(row)" class="drag-handle" :title="t('admin.productname1sview.title.l204_')">≡</span>
         </div>
         <div class="cell-id">{{ row.id }}</div>
         <div class="cell-name">{{ row.productName1 }}</div>
@@ -218,7 +221,7 @@ onMounted(load)
           <el-button v-else size="small" text type="success" @click="restore(row)">恢复</el-button>
         </div>
       </div>
-      <div v-if="!loading && items.length === 0" class="dict-empty">暂无数据, 点击右上"新增产品名 1"开始</div>
+      <div v-if="!loading && items.length === 0" class="dict-empty">暂无数据, 请先新增产品名 1</div>
     </div>
 
     <div class="mt-2 text-xs text-muted">
@@ -226,12 +229,12 @@ onMounted(load)
     </div>
 
     <el-dialog v-model="dialogOpen"
-      :title="dialogMode === 'create' ? '新增产品名 1' : '编辑产品名 1'" width="480px">
+      :title="dialogMode === 'create' ? t('admin.productname1sview.title.l229_1') : t('admin.productname1sview.title.l229_1_2')" width="480px">
       <el-form :model="dialogForm" label-width="100px" size="small">
-        <el-form-item label="产品名 1" required>
-          <el-input v-model="dialogForm.productName1" placeholder="例: OIL FILTER" maxlength="200" show-word-limit />
+        <el-form-item :label="t('admin.productname1sview.label.l231_1')" required>
+          <el-input v-model="dialogForm.productName1" :placeholder="t('admin.productname1sview.placeholder.l232_oil_filter')" maxlength="200" show-word-limit />
         </el-form-item>
-        <el-form-item label="排序">
+        <el-form-item :label="t('admin.productname1sview.label.l234_')">
           <el-input-number v-model="dialogForm.sortOrder" :min="0" :step="10" style="width: 100%" />
           <div class="text-xs text-muted mt-1">数字越小越靠前; 拖拽排序会自动分配</div>
         </el-form-item>

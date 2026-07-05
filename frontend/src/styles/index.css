@@ -332,6 +332,57 @@ html.dark .el-table--striped .el-table__body tr.el-table__row--striped td {
   color: var(--color-text);
 }
 
+/* ===== A11y axe-core 修复 (Day 14+ 改进) =====
+   - el-table 可滚动区域加 tabindex, 键盘可达 (scrollable-region-focusable)
+   - el-tag 危险/信息样式加深文字对比 (color-contrast)
+   - 锚点链接加深蓝色, 满足 WCAG AA 4.5:1
+   - el-radio-button 激活态文字加深 (color-contrast) */
+.el-table__body-wrapper {
+  outline: none;
+}
+.el-table__body-wrapper:focus-within {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+.el-tag--danger .el-tag__content {
+  color: #b91c1c !important;
+  font-weight: 500;
+}
+.el-tag--info .el-tag__content {
+  color: #1e40af !important;
+}
+.el-tag--warning .el-tag__content {
+  color: #92400e !important;
+}
+html.dark .el-tag--danger .el-tag__content { color: #fca5a5 !important; }
+html.dark .el-tag--info .el-tag__content { color: #93c5fd !important; }
+html.dark .el-tag--warning .el-tag__content { color: #fcd34d !important; }
+
+.el-switch__inner-wrapper > span {
+  color: var(--color-text);
+  font-weight: 500;
+}
+
+/* el-radio-button 激活态深色背景, 默认白字对比度不足, 改用 #fff + 加粗 */
+.el-radio-button.is-active > .el-radio-button__inner {
+  color: #fff !important;
+  font-weight: 500;
+  background-color: var(--color-accent) !important;
+  border-color: var(--color-accent) !important;
+}
+html.dark .el-radio-button.is-active > .el-radio-button__inner {
+  color: #0a0a0c !important;
+}
+
+a.el-anchor__link {
+  color: var(--color-accent);
+  text-decoration: none;
+}
+a.el-anchor__link:hover { text-decoration: underline; }
+html.dark a.el-anchor__link { color: #93c5fd; }
+
+
+
 /* Element Plus 中文 locale 提示 */
 .el-message {
   min-width: 280px;

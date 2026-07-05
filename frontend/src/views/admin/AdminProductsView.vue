@@ -5,10 +5,13 @@
 //   - 行操作: 编辑 / 软删 / 恢复 / 查看历史
 //   - 批量对比
 import { ref, reactive, onMounted, onBeforeUnmount, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { adminProductApi } from '@/api'
 import type { AdminSearchRequest, ProductListItem, ProductHistoryItem } from '@/api/types'
+
+const { t } = useI18n()
 
 const router = useRouter()
 
@@ -22,7 +25,7 @@ const countModeUsed = ref('exact')
 
 // E2E UI.1 修复: 列设置 — 默认隐藏次要列, 降低信息密度 (24 列 → 13 列)
 //   WHY: 24 列超出运维一眼扫读上限 (≤8 列为佳), 次要列 (D3/D4/H3/H4/D7/D8/Media 等) 默认隐藏
-//   核心列 (13): selection/ID/OEM/OEM2/类型/D1/D2/H1/H2/发布/停售/更新/操作
+//   核心列 (13): selection/ID/OEM/OEM2/t('admin.productsview.label.l329_')/D1/D2/H1/H2/发布/停售/更新/操作
 //   次要列 (11): MR1/D3/D4/H3/H4/D7/D8/Media/MediaModel/箱件/kg
 const showAllColumns = ref(false)
 
@@ -146,7 +149,7 @@ function editProduct(row: ProductListItem) {
 
 async function discontinue(row: ProductListItem) {
   try {
-    await ElMessageBox.confirm(`确定停售产品 "${row.oemNoDisplay}" 吗?`, '确认', { type: 'warning' })
+    await ElMessageBox.confirm(`确定停售产品 "${row.oemNoDisplay}" 吗?`, t('admin.productsview.warning.l149_'), { type: 'warning' })
   } catch {
     return
   }
@@ -154,7 +157,7 @@ async function discontinue(row: ProductListItem) {
   productMutating.value = true
   try {
     await adminProductApi.discontinue(row.id, 'admin')
-    ElMessage.success('已停售')
+    ElMessage.success(t('admin.productsview.success.l157_'))
     load()
   } catch {
     // 错误已被拦截器
@@ -168,7 +171,7 @@ async function restore(row: ProductListItem) {
   productMutating.value = true
   try {
     await adminProductApi.restore(row.id, 'admin')
-    ElMessage.success('已恢复')
+    ElMessage.success(t('admin.productsview.success.l171_'))
     load()
   } catch {
     // 错误已被拦截器
@@ -231,11 +234,11 @@ async function loadMoreHistory() {
 
 async function batchCompare() {
   if (selected.value.length < 2) {
-    ElMessage.warning('请选择 2-6 个产品')
+    ElMessage.warning(t('admin.productsview.warning.l234_2_6'))
     return
   }
   if (selected.value.length > 6) {
-    ElMessage.warning('最多对比 6 个')
+    ElMessage.warning(t('admin.productsview.warning.l238_6'))
     return
   }
   // P3.5 (Task 12): 跳转到 /admin/compare?ids=1,2,3,4,5,6
@@ -287,26 +290,28 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="p-3 max-w-screen-2xl mx-auto">
+    <!-- A11y axe: h1 标题 (page-has-heading-one) -->
+    <h1 class="text-lg font-medium mb-3">产品管理</h1>
     <!-- 顶部工具条 -->
-    <!-- P1-4 修复: 工具条移动端折叠 - 次要控件 (countMode 标签, 全部列 switch) 在 sm 以下隐藏 -->
+    <!-- P1-4 修复: 工具条移动端折叠 - 次要控件 (countMode 标签, t('admin.productsview.label.l442_')列 switch) 在 sm 以下隐藏 -->
     <div class="flex items-center gap-2 mb-3 flex-wrap">
-      <el-input v-model="filter.oem2" placeholder="OEM 2" clearable size="small" style="width: 160px" @keyup.enter="quickSearch" />
-      <el-input v-model="filter.mr1" placeholder="MR.1" clearable size="small" style="width: 120px" @keyup.enter="quickSearch" />
-      <el-input v-model="filter.productName1" placeholder="产品名" clearable size="small" style="width: 160px" @keyup.enter="quickSearch" />
-      <el-select v-model="filter.type" placeholder="类型" clearable size="small" style="width: 100px">
+      <el-input v-model="filter.oem2" placeholder="OEM 2" clearable size="small" style="width: 160px" aria-label="OEM 2 搜索" @keyup.enter="quickSearch" />
+      <el-input v-model="filter.mr1" placeholder="MR.1" clearable size="small" style="width: 120px" aria-label="MR.1 搜索" @keyup.enter="quickSearch" />
+      <el-input v-model="filter.productName1" :placeholder="t('admin.productsview.placeholder.l295_')" clearable size="small" style="width: 160px" aria-label="产品名搜索" @keyup.enter="quickSearch" />
+      <el-select v-model="filter.type" :placeholder="t('admin.productsview.placeholder.l296_')" clearable size="small" style="width: 100px" aria-label="按类型筛选">
         <el-option label="oil" value="oil" />
         <el-option label="fuel" value="fuel" />
         <el-option label="air" value="air" />
         <el-option label="cabin" value="cabin" />
         <el-option label="others" value="others" />
       </el-select>
-      <el-input v-model="filter.oem3Batch" placeholder="OEM 3 批量" clearable size="small" class="hidden sm:inline-block" style="width: 220px" @keyup.enter="quickSearch" />
+      <el-input v-model="filter.oem3Batch" :placeholder="t('admin.productsview.placeholder.l303_oem_3')" clearable size="small" class="hidden sm:inline-block" style="width: 220px" aria-label="OEM 3 批量搜索" @keyup.enter="quickSearch" />
       <el-button type="primary" size="small" @click="quickSearch">搜索</el-button>
       <el-button size="small" @click="openAdv" class="hidden sm:inline-flex">高级筛选</el-button>
       <span class="text-xs text-muted hidden sm:inline">count: {{ countModeUsed }}</span>
       <div class="flex-1" />
       <!-- E2E UI.1 修复: 列设置开关 — 默认隐藏次要列, 点击显示全部 24 列 -->
-      <el-switch v-model="showAllColumns" size="small" active-text="全部列" inactive-text="核心列" inline-prompt class="hidden sm:inline-flex" />
+      <el-switch v-model="showAllColumns" size="small" :active-text="t('admin.productsview.string.l309_')" :inactive-text="t('admin.productsview.string.l309__2')" inline-prompt class="hidden sm:inline-flex" />
       <el-button size="small" @click="batchCompare" :disabled="selected.length < 2">批量对比 ({{ selected.length }})</el-button>
       <el-button type="primary" size="small" @click="newProduct">新增产品</el-button>
     </div>
@@ -326,7 +331,7 @@ onBeforeUnmount(() => {
         <el-table-column prop="oemNoDisplay" label="OEM" width="160" fixed />
         <el-table-column v-if="showAllColumns" prop="mr1" label="MR.1" width="100" show-overflow-tooltip />
         <el-table-column prop="oem2" label="OEM 2" width="120" show-overflow-tooltip />
-        <el-table-column prop="type" label="类型" width="60" />
+        <el-table-column prop="type" :label="t('admin.productsview.placeholder.l296_')" width="60" />
         <el-table-column prop="d1Mm" label="D1" width="50" align="right" />
         <el-table-column prop="d2Mm" label="D2" width="50" align="right" />
         <el-table-column v-if="showAllColumns" prop="d3Mm" label="D3" width="50" align="right" />
@@ -339,22 +344,22 @@ onBeforeUnmount(() => {
         <el-table-column v-if="showAllColumns" prop="d8Thread" label="D8" width="70" />
         <el-table-column v-if="showAllColumns" prop="media" label="Media" width="100" show-overflow-tooltip />
         <el-table-column v-if="showAllColumns" prop="mediaModel" label="MediaModel" width="100" show-overflow-tooltip />
-        <el-table-column v-if="showAllColumns" prop="qtyPerCarton" label="箱/件" width="60" align="right" />
+        <el-table-column v-if="showAllColumns" prop="qtyPerCarton" :label="t('admin.productsview.label.l342_')" width="60" align="right" />
         <el-table-column v-if="showAllColumns" prop="weightKgs" label="kg" width="60" align="right" />
-        <el-table-column prop="isPublished" label="发布" width="50">
+        <el-table-column prop="isPublished" :label="t('admin.productsview.label.l344_')" width="50">
           <template #default="{ row }">
             <el-tag v-if="row.isPublished" type="success" size="small">✓</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="isDiscontinued" label="停售" width="50">
+        <el-table-column prop="isDiscontinued" :label="t('admin.productsview.label.l349_')" width="50">
           <template #default="{ row }">
             <el-tag v-if="row.isDiscontinued" type="info" size="small">已停</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="更新" width="120">
+        <el-table-column :label="t('admin.productsview.label.l354_')" width="120">
           <template #default="{ row }">{{ fmtDate(row.updatedAt) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column :label="t('admin.productsview.label.l357_')" width="200" fixed="right">
           <template #default="{ row }">
             <el-button size="small" text @click="editProduct(row)">编辑</el-button>
             <el-button v-if="!row.isDiscontinued" size="small" text type="warning" @click="discontinue(row)">停售</el-button>
@@ -382,19 +387,19 @@ onBeforeUnmount(() => {
     </div>
 
     <!-- 高级筛选抽屉 -->
-    <el-drawer v-model="drawerOpen" title="高级筛选" size="640px" direction="rtl">
+    <el-drawer v-model="drawerOpen" :title="t('admin.productsview.title.l385_')" size="640px" direction="rtl">
       <div class="p-3 space-y-3">
         <div class="text-sm font-medium">文本字段</div>
         <div class="grid grid-cols-2 gap-2">
-          <el-input v-model="advFilter.productName1" placeholder="产品名 1" size="small" />
-          <el-input v-model="advFilter.productName2" placeholder="产品名 2" size="small" />
+          <el-input v-model="advFilter.productName1" :placeholder="t('admin.productsview.placeholder.l389_1')" size="small" />
+          <el-input v-model="advFilter.productName2" :placeholder="t('admin.productsview.placeholder.l390_2')" size="small" />
           <el-input v-model="advFilter.mr1" placeholder="MR.1" size="small" />
           <el-input v-model="advFilter.oem2" placeholder="OEM 2" size="small" />
-          <el-input v-model="advFilter.oemBrand" placeholder="OEM 品牌" size="small" />
+          <el-input v-model="advFilter.oemBrand" :placeholder="t('admin.productsview.placeholder.l393_oem')" size="small" />
           <el-input v-model="advFilter.mediaName" placeholder="Media" size="small" />
           <el-input v-model="advFilter.mediaModel" placeholder="MediaModel" size="small" />
-          <el-input v-model="advFilter.sealingMaterial" placeholder="密封材料" size="small" />
-          <el-input v-model="advFilter.efficiency1" placeholder="效率" size="small" />
+          <el-input v-model="advFilter.sealingMaterial" :placeholder="t('admin.productsview.placeholder.l396_')" size="small" />
+          <el-input v-model="advFilter.efficiency1" :placeholder="t('admin.productsview.placeholder.l397_')" size="small" />
         </div>
 
         <div class="text-sm font-medium">尺寸范围 (mm)</div>
@@ -417,10 +422,10 @@ onBeforeUnmount(() => {
 
         <div class="text-sm font-medium">车型适配</div>
         <div class="grid grid-cols-2 gap-2">
-          <el-input v-model="advFilter.machineBrand" placeholder="品牌" size="small" />
-          <el-input v-model="advFilter.machineModel" placeholder="型号" size="small" />
-          <el-input v-model="advFilter.modelName" placeholder="名称" size="small" />
-          <el-input v-model="advFilter.engineBrand" placeholder="发动机品牌" size="small" />
+          <el-input v-model="advFilter.machineBrand" :placeholder="t('admin.productsview.placeholder.l420_')" size="small" />
+          <el-input v-model="advFilter.machineModel" :placeholder="t('admin.productsview.placeholder.l421_')" size="small" />
+          <el-input v-model="advFilter.modelName" :placeholder="t('admin.productsview.placeholder.l422_')" size="small" />
+          <el-input v-model="advFilter.engineBrand" :placeholder="t('admin.productsview.placeholder.l423_')" size="small" />
         </div>
 
         <div class="flex justify-end gap-2 pt-3">
@@ -432,14 +437,14 @@ onBeforeUnmount(() => {
 
     <!-- 历史抽屉 (Day 9.1: 解析 changedFields JSON, 按字段展示) -->
     <!-- Day 9.2: 顶部加筛选 (changeType / since / until / limit) -->
-    <el-drawer v-model="historyOpen" title="变更历史" size="700px" direction="rtl" :close-on-click-modal="false">
+    <el-drawer v-model="historyOpen" :title="t('admin.productsview.title.l435_')" size="700px" direction="rtl" :close-on-click-modal="false">
       <!-- 筛选条 -->
       <div class="px-3 py-2 hairline-b bg-[var(--color-bg-hover)]">
         <div class="grid grid-cols-4 gap-2 items-end">
           <div>
             <div class="text-xs text-muted mb-1">类型</div>
-            <el-select v-model="historyFilter.changeType" placeholder="全部" clearable size="small" @change="reloadCurrentHistory">
-              <el-option label="全部" value="" />
+            <el-select v-model="historyFilter.changeType" :placeholder="t('admin.productsview.placeholder.l441_')" clearable size="small" @change="reloadCurrentHistory">
+              <el-option :label="t('admin.productsview.placeholder.l441_')" value="" />
               <el-option label="create" value="create" />
               <el-option label="update" value="update" />
               <el-option label="discontinue" value="discontinue" />
@@ -451,7 +456,7 @@ onBeforeUnmount(() => {
             <el-date-picker
               v-model="historyFilter.since"
               type="datetime"
-              placeholder="不限"
+              :placeholder="t('admin.productsview.placeholder.l454_')"
               size="small"
               value-format="YYYY-MM-DDTHH:mm:ss"
               @change="reloadCurrentHistory"
@@ -462,7 +467,7 @@ onBeforeUnmount(() => {
             <el-date-picker
               v-model="historyFilter.until"
               type="datetime"
-              placeholder="不限"
+              :placeholder="t('admin.productsview.placeholder.l465_')"
               size="small"
               value-format="YYYY-MM-DDTHH:mm:ss"
               @change="reloadCurrentHistory"
@@ -510,8 +515,8 @@ onBeforeUnmount(() => {
               border
               max-height="240"
             >
-              <el-table-column prop="key" label="字段" width="160" />
-              <el-table-column label="新值">
+              <el-table-column prop="key" :label="t('admin.productsview.label.l513_')" width="160" />
+              <el-table-column :label="t('admin.productsview.label.l514_')">
                 <template #default="{ row }">
                   <code class="text-xs">{{ row.newVal === null || row.newVal === undefined ? 'null' : typeof row.newVal === 'object' ? JSON.stringify(row.newVal) : String(row.newVal) }}</code>
                 </template>

@@ -57,15 +57,30 @@ def _escape_for_ts(s: str) -> str:
     return s.replace("\\", "\\\\").replace("'", "\\'")
 
 
-def generate_key(file_rel: str, line: int, ctx: str, text: str, used: set) -> str:
-    """生成唯一 i18n key"""
+def generate_key(file_rel: str, line: int, ctx: str, text: str, used: set, en_text: str = "") -> str:
+    """生成唯一 i18n key (v3 语义化)
+    WHY v3:
+      - 旧版 l{line}_{hash} 难以阅读 (e.g. l53_ 含义不明)
+      - 新版用翻译后的英文短语作为 key 后缀, 更直观
+      - 例: admin.compareview.headers.basic (而非 admin.compareview.string.l53_)
+    """
     file_short = Path(file_rel).stem.replace("Admin", "").replace(".vue", "").lower()
     ctx_short = ctx.split(".")[-1] if "." in ctx else ctx.replace("-", "")
-    base = f"admin.{file_short}.{ctx_short}.l{line}_{safe_key(text)}"
+
+    # 用英文翻译作为 key 后缀 (更语义化)
+    # 翻译失败时回退到 safe_key(原文)
+    suffix_src = en_text if en_text and not en_text.startswith("[EN]") else text
+    suffix = safe_key(suffix_src)
+    if not suffix:
+        suffix = f"l{line}"
+
+    # 优先: admin.{file}.{ctx}.{suffix} (无 l{line} 前缀)
+    base = f"admin.{file_short}.{ctx_short}.{suffix}"
     key = base
     n = 2
     while key in used:
-        key = f"{base}_{n}"
+        # 重名时加 l{line} 区分
+        key = f"{base}_l{line}" if n == 2 else f"{base}_l{line}_{n}"
         n += 1
     used.add(key)
     return key
@@ -371,7 +386,9 @@ def main():
             skipped_too_long += 1
             continue
 
-        key = generate_key(f["file"], f["line"], ctx, text, used_keys)
+        en = translate_with_fallback(text)
+        # v3: 把翻译结果传给 generate_key, 让 key 反映英文语义
+        key = generate_key(f["file"], f["line"], ctx, text, used_keys, en_text=en)
         new_zh_entries[key] = text
         en = translate_with_fallback(text)
         if en.startswith("[EN] "):
