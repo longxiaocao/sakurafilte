@@ -214,8 +214,9 @@ function connectSSE() {
     } catch {}
   }
   es.onerror = () => {
-    // 浏览器会自动重连, 这里只打印
-    console.warn('SSE 连接断开, 浏览器将自动重连')
+    // 浏览器会自动重连, 这里只打印 (debug 级避免污染生产控制台)
+    // WHY console.debug: SSE 临时断开是常态 (代理/网络抖动), 不应被监控告警捕获
+    console.debug('SSE 连接断开, 浏览器将自动重连')
   }
   eventSource = es
 }

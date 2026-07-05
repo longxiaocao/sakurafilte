@@ -2509,6 +2509,13 @@ def main():
         context = browser.new_context(viewport={"width": 1440, "height": 900})
         page = context.new_page()
 
+        # P2.5 防御: 实时收集 console 错误, 测试结束前统一断言
+        # WHY 此前漏过 DragDropOverlay / search.title 等 P0 警告:
+        #   E2E 只验证 DOM/API, 不捕获 console 警告. Vue dev 模式下警告只 warn 不崩溃,
+        #   所以测试 PASS. 现在每次访问新路由后自动记录, 最后统一断言.
+        from _e2e_console_helper import attach_console_asserts, assert_console_clean
+        console_issues = attach_console_asserts(page)
+
         # 注入 JWT 登录态到浏览器 localStorage (绕过 /admin/* 路由守卫重定向)
         print("\n[初始化] 注入 JWT 登录态到浏览器 localStorage...")
         inject_auth_to_browser(page, login_resp)
@@ -2525,6 +2532,25 @@ def main():
 
         # UI/UX 审计
         test_ui_ux_audit(page, token)
+
+        # P2.5 防御: 断言整个 E2E 期间无 console 错误
+        # 允许 404 (负面用例: 不存在的产品)
+        # 允许 401 仅在白名单端点 (测试场景 6 故意输入错密码 + SSE 连接)
+        try:
+            assert_console_clean(
+                page, console_issues,
+                allow_404=True,
+                allow_401=True,
+                allow_401_patterns=[
+                    "/api/auth/login",                # 登录页测试故意输错密码
+                    "/api/admin/etl/progress/stream", # SSE 在未登录时连不上是预期
+                ],
+            )
+            print("\n[Console 审计] ✓ 整个 E2E 期间无 console 错误 (含 DragDropOverlay / i18n 检查)")
+        except AssertionError as e:
+            print(f"\n[Console 审计] ✗ 发现 console 错误:\n{e}")
+            record("CONSOLE_AUDIT", "console_clean", "FAIL", "", "", str(e)[:500])
+            raise
 
         browser.close()
 

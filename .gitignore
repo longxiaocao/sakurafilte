@@ -125,3 +125,9 @@ spike-test/perf/k6-bin/
 # WHY: 压测报告由 perf 脚本生成, 含时间戳, 每次跑都不同
 spike-test/perf/results/
 spike-test/perf/stress_search.py
+
+## 静态/运行时审计输出 (可重建, 不提交)
+# WHY: 前端审计脚本输出, 含时间戳, 每次跑都不同
+spike-test/frontend_static_audit.json
+spike-test/frontend_runtime_audit.json
+spike-test/security_scan_report.json
