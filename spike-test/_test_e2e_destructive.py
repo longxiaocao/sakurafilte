@@ -2097,6 +2097,267 @@ def test_backend_deep_water(token, login_resp):
     except Exception as e:
         record("后端深水区", "Auth流程-异常", "FAIL", "API 调用", str(e))
 
+    # 22. 死信队列高级功能 (P2 测试盲点补充 — cursor/since/过滤/recover-batch)
+    # WHY: BD.12 只测了基本 200 响应 (且用了端点不识别的 page/pageSize 参数)
+    #   端点实际支持: limit/operation/since/cursor/min_recovery_count/max_recovery_count
+    #   recover-batch 端点完全未测
+    # 安全策略: 用不存在的 operation 过滤, returned=0 不修改任何数据
+    print("\n[BD.22] 死信队列高级功能 (cursor/since/过滤/recover-batch)")
+    try:
+        # 22.1 dead-letter cursor 翻页 (limit=1 → 拿 nextCursor → 用 cursor 翻第二页)
+        resp = requests.get(f"{BACKEND}/api/admin/dead-letter?limit=1",
+                         headers=headers, timeout=15)
+        if resp.status_code == 200:
+            data = resp.json()
+            next_cursor = data.get("nextCursor")
+            has_more = data.get("hasMore")
+            # 若有 nextCursor, 用它翻第二页验证 keyset 分页
+            if next_cursor and has_more:
+                resp1b = requests.get(
+                    f"{BACKEND}/api/admin/dead-letter",
+                    params={"limit": 1, "cursor": next_cursor},
+                    headers=headers, timeout=15)
+                ok = (resp1b.status_code == 200
+                      and "items" in resp1b.json())
+                record("后端深水区", "死信-cursor翻页",
+                       "PASS" if ok else "FAIL",
+                       "200 + 第二页 items",
+                       f"status={resp1b.status_code}, items={len(resp1b.json().get('items', []))}")
+            else:
+                # 死信队列为空时无 nextCursor, 跳过翻页验证
+                record("后端深水区", "死信-cursor翻页",
+                       "PASS" if data.get("total", 0) == 0 else "WARN",
+                       "total=0 时无 nextCursor (符合预期)",
+                       f"total={data.get('total')}, hasMore={has_more}")
+        else:
+            record("后端深水区", "死信-cursor翻页", "FAIL",
+                   "200 OK", f"status={resp.status_code}")
+
+        # 22.2 dead-letter since 无效格式 (应 400)
+        resp2 = requests.get(
+            f"{BACKEND}/api/admin/dead-letter",
+            params={"since": "not-a-date"},
+            headers=headers, timeout=10)
+        record("后端深水区", "死信-since无效格式",
+               "PASS" if resp2.status_code == 400 else "FAIL",
+               "400 Bad Request", f"status={resp2.status_code}")
+
+        # 22.3 dead-letter min/max_recovery_count 过滤 (应 200, 返回过滤后结果)
+        resp3 = requests.get(
+            f"{BACKEND}/api/admin/dead-letter",
+            params={"min_recovery_count": 0, "max_recovery_count": 100, "limit": 5},
+            headers=headers, timeout=15)
+        if resp3.status_code == 200:
+            data3 = resp3.json()
+            ok = ("items" in data3
+                  and "minRecoveryCount" in data3
+                  and "maxRecoveryCount" in data3)
+            record("后端深水区", "死信-recovery过滤",
+                   "PASS" if ok else "FAIL",
+                   "200 + minRecoveryCount/maxRecoveryCount 字段",
+                   f"keys={list(data3.keys())[:8]}")
+        else:
+            record("后端深水区", "死信-recovery过滤", "FAIL",
+                   "200 OK", f"status={resp3.status_code}")
+
+        # 22.4 dead-letter operation 过滤 (不存在的 op, returned=0 不修改数据)
+        resp4 = requests.get(
+            f"{BACKEND}/api/admin/dead-letter",
+            params={"operation": "nonexistent_op_xyz_e2e", "limit": 5},
+            headers=headers, timeout=15)
+        if resp4.status_code == 200:
+            data4 = resp4.json()
+            # 不存在的 op 应返回 0 条
+            ok = data4.get("returned", -1) == 0
+            record("后端深水区", "死信-operation过滤",
+                   "PASS" if ok else "WARN",
+                   "returned=0 (不存在的 op)",
+                   f"returned={data4.get('returned')}, total={data4.get('total')}")
+        else:
+            record("后端深水区", "死信-operation过滤", "FAIL",
+                   "200 OK", f"status={resp4.status_code}")
+
+        # 22.5 recover-batch 不存在的 operation (200 + matched=0 + moved=0, 不修改数据)
+        #   WHY: 用不存在的 op, query 返回空列表, 不会 SaveChanges 修改任何死信
+        resp5 = requests.post(
+            f"{BACKEND}/api/admin/dead-letter/recover-batch",
+            params={"operation": "nonexistent_op_xyz_e2e", "limit": 10},
+            headers=headers, timeout=15)
+        if resp5.status_code == 200:
+            data5 = resp5.json()
+            ok = data5.get("matched") == 0 and data5.get("moved") == 0
+            record("后端深水区", "死信-recover-batch空操作",
+                   "PASS" if ok else "FAIL",
+                   "200 + matched=0 + moved=0 (无副作用)",
+                   f"matched={data5.get('matched')}, moved={data5.get('moved')}")
+        else:
+            record("后端深水区", "死信-recover-batch空操作", "FAIL",
+                   "200 OK", f"status={resp5.status_code}, body={resp5.text[:150]}")
+    except Exception as e:
+        record("后端深水区", "死信队列高级-异常", "FAIL", "API 调用", str(e))
+
+    # 23. 图片上传边界 (P2 测试盲点补充 — 大小/类型/缺字段)
+    # WHY: BD.14 只测了正常上传 + slot/id/鉴权, 未测大小/类型/缺字段边界
+    #   - 不支持类型 (image/gif): InvalidOperationException → ProblemDetailsFactory → 409
+    #   - 超大文件 (>10MB): InvalidOperationException("图片超过最大尺寸") → 端点 catch → 413
+    #   - 缺 file 字段: form.Files.GetFile("file") == null → 400
+    #   - 非 multipart: !req.HasFormContentType → 400
+    print("\n[BD.23] 图片上传边界 (大小/类型/缺字段)")
+    bd23_product_id = None
+    try:
+        # 23.1 创建临时产品
+        bd23_oem = f"BD23{TODAY}{int(time.time())%100000}"
+        resp = requests.post(f"{BACKEND}/api/admin/products",
+                           headers={**headers, "Content-Type": "application/json"},
+                           json={"oem2": bd23_oem, "productName1": f"BD23边界_{bd23_oem}",
+                                 "type": "filter", "isPublished": True}, timeout=15)
+        if resp.status_code in (200, 201):
+            bd23_product_id = (resp.json() or {}).get("id")
+        record("后端深水区", "图片边界-创建产品",
+               "PASS" if bd23_product_id else "FAIL",
+               "201 Created", f"id={bd23_product_id}, status={resp.status_code}")
+
+        if bd23_product_id:
+            # 23.2 上传不支持类型 (image/gif) → 409
+            #   WHY: AdminProductImageService 抛 InvalidOperationException("不支持的图片类型"),
+            #     Program.cs catch when 不匹配"超过最大尺寸", 走 ProblemDetailsFactory → 409
+            #   改进点: 语义上应为 400, 当前实现是 409 (测试按实际行为)
+            gif_bytes = (b'GIF89a\x01\x00\x01\x00\x80\x00\x00\xff\x00\x00'
+                         b'\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00'
+                         b'\x00\x02\x02D\x01\x00;')
+            files = {"file": ("test.gif", gif_bytes, "image/gif")}
+            resp2 = requests.post(
+                f"{BACKEND}/api/admin/products/{bd23_product_id}/images/1",
+                headers=headers, files=files, timeout=15)
+            record("后端深水区", "图片边界-不支持类型",
+                   "PASS" if resp2.status_code == 409 else "FAIL",
+                   "409 (InvalidOperationException → ProblemDetailsFactory)",
+                   f"status={resp2.status_code}")
+
+            # 23.3 上传超大文件 (>10MB) → 413
+            #   WHY: UploadAsync 抛 InvalidOperationException("图片超过最大尺寸 10MB"),
+            #     Program.cs catch when 匹配 → 413
+            #   已跳过: 当前环境 ASP.NET Core 临时文件缓存权限问题 (D:\.dev-cache\dotnet\tmp
+            #     创建 ASPNETCORE_*.tmp 失败), 任何 >64KB 的 form 都返回 500
+            #   改进点: 修复环境权限或配置 FormOptions.MemoryBufferThreshold 后再补充
+            #   业务层 413 逻辑已通过单元测试覆盖 (AdminProductImageService.UploadAsync)
+
+            # 23.4 缺 file 字段 (用 other 字段名, file 字段不存在) → 400
+            #   WHY: form.Files.GetFile("file") 返回 null → 400
+            files = {"other": ("test.txt", b"data", "text/plain")}
+            resp4 = requests.post(
+                f"{BACKEND}/api/admin/products/{bd23_product_id}/images/1",
+                headers=headers, files=files, timeout=10)
+            record("后端深水区", "图片边界-缺file字段",
+                   "PASS" if resp4.status_code == 400 else "FAIL",
+                   "400 Bad Request", f"status={resp4.status_code}")
+
+            # 23.5 非 multipart/form-data (用 application/json) → 400
+            #   WHY: !req.HasFormContentType → 400
+            resp5 = requests.post(
+                f"{BACKEND}/api/admin/products/{bd23_product_id}/images/1",
+                headers={**headers, "Content-Type": "application/json"},
+                json={"not": "a file"}, timeout=10)
+            record("后端深水区", "图片边界-非multipart",
+                   "PASS" if resp5.status_code == 400 else "FAIL",
+                   "400 Bad Request", f"status={resp5.status_code}")
+
+        # 23.6 清理临时产品
+        if bd23_product_id:
+            resp = requests.delete(
+                f"{BACKEND}/api/admin/products/{bd23_product_id}",
+                headers=headers, timeout=10)
+            record("后端深水区", "图片边界-清理产品",
+                   "PASS" if resp.status_code in (200, 204) else "WARN",
+                   "200/204", f"status={resp.status_code}")
+    except Exception as e:
+        record("后端深水区", "图片边界-异常", "FAIL", "API 调用", str(e))
+        # 兜底清理
+        if bd23_product_id:
+            try:
+                requests.delete(f"{BACKEND}/api/admin/products/{bd23_product_id}",
+                              headers=headers, timeout=10)
+            except Exception:
+                pass
+
+    # 24. cursor 翻页 + HMAC 校验 (P2 测试盲点补充)
+    # WHY: AdminProductService.SearchAsync 支持 pagingMode=cursor, cursor 带 HMAC 签名
+    #   - cursor 格式: "<ISO8601 updatedAt>|<id>|<sig16>"
+    #   - HMAC 签名防篡改 (改 updatedAt/id 越权访问)
+    #   - 篡改 cursor 应 400 (ArgumentException → ProblemDetailsFactory)
+    print("\n[BD.24] cursor 翻页 + HMAC 校验")
+    try:
+        # 24.1 cursor 模式首页 (pageSize=3, 拿 nextCursor)
+        resp = requests.get(
+            f"{BACKEND}/api/admin/products/search",
+            params={"pagingMode": "cursor", "pageSize": 3, "countMode": "none"},
+            headers=headers, timeout=15)
+        if resp.status_code == 200:
+            data = resp.json()
+            next_cursor = data.get("nextCursor")
+            items1 = data.get("items", [])
+            # 验证 nextCursor 格式 (3 段 | 分隔)
+            cursor_valid = (next_cursor and next_cursor.count("|") == 2)
+            record("后端深水区", "cursor-首页",
+                   "PASS" if (len(items1) > 0 and cursor_valid) else "FAIL",
+                   "200 + items + nextCursor (3 段格式)",
+                   f"items={len(items1)}, nextCursor={'有' if next_cursor else '无'}, valid={cursor_valid}")
+        else:
+            record("后端深水区", "cursor-首页", "FAIL",
+                   "200 OK", f"status={resp.status_code}")
+            next_cursor = None
+
+        # 24.2 用 nextCursor 翻第二页
+        if next_cursor:
+            resp2 = requests.get(
+                f"{BACKEND}/api/admin/products/search",
+                params={"pagingMode": "cursor", "pageSize": 3, "countMode": "none",
+                        "cursor": next_cursor},
+                headers=headers, timeout=15)
+            if resp2.status_code == 200:
+                data2 = resp2.json()
+                items2 = data2.get("items", [])
+                # 验证第二页 items 与首页不重复 (id 不同)
+                ids1 = {i.get("id") for i in items1} if resp.status_code == 200 else set()
+                ids2 = {i.get("id") for i in items2}
+                no_overlap = len(ids1 & ids2) == 0
+                record("后端深水区", "cursor-翻第二页",
+                       "PASS" if (len(items2) > 0 and no_overlap) else "FAIL",
+                       "200 + 第二页 items + 与首页无重复",
+                       f"items={len(items2)}, overlap={len(ids1 & ids2)}")
+            else:
+                record("后端深水区", "cursor-翻第二页", "FAIL",
+                       "200 OK", f"status={resp2.status_code}")
+
+            # 24.3 篡改 cursor (改 sig 段) → 400 (HMAC 验签失败)
+            #   WHY: cursor 格式 "<iso>|<id>|<sig16>", 改 sig 后 HMAC 验签失败
+            parts = next_cursor.split("|")
+            if len(parts) == 3:
+                tampered_cursor = f"{parts[0]}|{parts[1]}|deadbeefdeadbeef"
+                resp3 = requests.get(
+                    f"{BACKEND}/api/admin/products/search",
+                    params={"pagingMode": "cursor", "pageSize": 3, "countMode": "none",
+                            "cursor": tampered_cursor},
+                    headers=headers, timeout=15)
+                record("后端深水区", "cursor-篡改验签",
+                       "PASS" if resp3.status_code == 400 else "FAIL",
+                       "400 Bad Request (HMAC 验签失败)",
+                       f"status={resp3.status_code}")
+
+            # 24.4 cursor 格式错 (缺 sig 段, 只有 iso|id) → 400
+            bad_cursor = f"{parts[0]}|{parts[1]}" if len(parts) == 3 else "bad|cursor"
+            resp4 = requests.get(
+                f"{BACKEND}/api/admin/products/search",
+                params={"pagingMode": "cursor", "pageSize": 3, "countMode": "none",
+                        "cursor": bad_cursor},
+                headers=headers, timeout=15)
+            record("后端深水区", "cursor-格式错",
+                   "PASS" if resp4.status_code == 400 else "FAIL",
+                   "400 Bad Request (cursor 格式错)",
+                   f"status={resp4.status_code}")
+    except Exception as e:
+        record("后端深水区", "cursor-异常", "FAIL", "API 调用", str(e))
+
 def test_scenario_6_login_ui(page, login_resp):
     """场景 6: 登录页 UI 流程 (P2 测试盲点补充)
     WHY: 之前 E2E 通过 API 登录 + 注入 localStorage, 完全跳过 /login 页面

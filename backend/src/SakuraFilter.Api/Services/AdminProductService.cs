@@ -851,9 +851,15 @@ public class AdminProductService
             if (pagingMode == "cursor")
             {
                 var last = items[^1];
-                // Day 9.9: 修复 EnableLegacyTimestampBehavior 下 Kind=Local → ToUniversalTime 会偏移 8h
-                //   SpecifyKind 只改 Kind 不改时间值 (值已是正确的 UTC, 仅 Kind 标记错误)
-                var lastUtc = DateTime.SpecifyKind(last.UpdatedAt, DateTimeKind.Utc);
+                // BD.24 修复: Day 9.9 的 SpecifyKind 假设错误
+                //   实际: PG 列类型 = timestamptz, Npgsql.EnableLegacyTimestampBehavior 读取后
+                //         Kind=Local, value 是 session timezone (CST) 字面值, 不是真正的 UTC
+                //   修复: 用 ToUniversalTime() 把 CST 字面值转换为真正的 UTC (减 8h)
+                //   验证: 修复前 cursor iso=01:39:42Z (CST 字面值+Z), 解码 ToLocalTime 加 8h=09:39:42
+                //         keyset p.UpdatedAt(01:39:42) < cdt(09:39:42) 永远 TRUE → 翻页返回相同数据
+                //         修复后 cursor iso=17:39:42Z (真正 UTC), 解码 ToLocalTime 加 8h=01:39:42
+                //         keyset p.UpdatedAt(01:39:42) < cdt(01:39:42) = FALSE → 正确翻页
+                var lastUtc = last.UpdatedAt.ToUniversalTime();
                 // Day 8.2.2 修复: PG timestamptz 是微秒精度 (6 位), .fff 毫秒精度会丢精度导致下一页漏数据
                 // 同一毫秒内多次写入 (e.g. 5 个产品间隔 0.05s) 会命中同一毫秒, .fff 截断后游标"跳过"这些行
                 // Day 8.3: cursor 末尾追加 HMAC 签名, 防止客户端篡改 updatedAt/id 越权访问
