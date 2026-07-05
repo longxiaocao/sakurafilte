@@ -139,6 +139,31 @@ function goBack() {
   router.back()
 }
 
+// ===== P0 UX 修复 (Day 14): 详情页操作按钮带上下文 =====
+//   - 查询替代: 滚动到页面下方"替代 OEM" 表格, 而非裸跳 /search
+//     (用户报告 P0: 跳到 /search 不带参数, 需要手输, 体验断链)
+//   - 加入对比: 携带当前产品 ID 跳 /admin/compare?ids=<id>
+//     (P0: 原实现裸跳 /admin/compare, 新页面让用户输入 ID, 体验断链)
+//     公开页未登录会先跳 /login?redirect=/admin/compare?ids=xxx, 登录后回跳自动加载
+function goToAlternatives() {
+  const el = document.getElementById('section-alternatives')
+  if (el) {
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  } else {
+    ElMessage.warning('替代 OEM 表格未就绪')
+  }
+}
+
+function addToCompare() {
+  if (!data.value?.id) {
+    ElMessage.warning('产品数据未加载')
+    return
+  }
+  // 详情页 → 对比页: 跳 admin 路径 (需鉴权), redirect 由路由守卫处理
+  // 登录后会自动回到 /admin/compare?ids=<id>, 对比页 parseIdsFromQuery 会自动加载
+  router.push(`/admin/compare?ids=${data.value.id}`)
+}
+
 function numOrDash(v?: number | string) {
   if (v === null || v === undefined || v === '') return '—'
   return v
@@ -252,9 +277,12 @@ function numOrDash(v?: number | string) {
         </div>
 
         <!-- 操作按钮 (查询替代/对比/分享) -->
+        <!-- P0 修复 (Day 14): 两个按钮都带上下文, 跳到目标后无需用户手输 -->
         <div class="flex gap-2 mt-8">
-          <el-button @click="router.push('/search')" plain size="small">查询替代</el-button>
-          <el-button @click="router.push('/admin/compare')" plain size="small">加入对比</el-button>
+          <el-button @click="goToAlternatives" plain size="small">
+            查询替代 ({{ data?.crossReferences?.length ?? 0 }})
+          </el-button>
+          <el-button @click="addToCompare" plain size="small">加入对比</el-button>
         </div>
       </div>
     </section>
@@ -336,7 +364,7 @@ function numOrDash(v?: number | string) {
     </section>
 
     <!-- ===== 替代 OEM (全宽表格) ===== -->
-    <section v-if="data" class="mb-12">
+    <section v-if="data" class="mb-12" id="section-alternatives">
       <div class="flex items-baseline justify-between hairline-b pb-2 mb-6">
         <h2 class="text-sm font-medium uppercase tracking-wider">替代 OEM</h2>
         <span class="text-xs text-muted font-mono tabular-nums">{{ data.crossReferences?.length ?? 0 }} 条</span>
