@@ -1997,6 +1997,29 @@ def test_backend_deep_water(token):
     except Exception as e:
         record("后端深水区", "公开产品端点-异常", "FAIL", "API 调用", str(e))
 
+    # 20. 8 字典 typeahead 一致性扫描 (P2 测试盲点补充)
+    # WHY: BD.15 只测了 types 的 typeahead, 其他 7 个字典未验证
+    #   8 字典: oem-brands/product-name1s/product-name2s/types/oem-no3s/medias/machines/engines
+    print("\n[BD.20] 8 字典 typeahead 一致性扫描")
+    dict_slugs = ["oem-brands", "product-name1s", "product-name2s", "types",
+                  "oem-no3s", "medias", "machines", "engines"]
+    try:
+        all_ok = True
+        results_list = []
+        for slug in dict_slugs:
+            resp = requests.get(
+                f"{BACKEND}/api/admin/dict/{slug}/typeahead?q=a&limit=3",
+                headers=headers, timeout=15)
+            ok = resp.status_code == 200
+            results_list.append(f"{slug}={'OK' if ok else resp.status_code}")
+            if not ok:
+                all_ok = False
+        record("后端深水区", "8字典typeahead一致性",
+               "PASS" if all_ok else "FAIL",
+               "8 个字典全部 200", ", ".join(results_list))
+    except Exception as e:
+        record("后端深水区", "8字典typeahead-异常", "FAIL", "API 调用", str(e))
+
 def test_scenario_6_login_ui(page, login_resp):
     """场景 6: 登录页 UI 流程 (P2 测试盲点补充)
     WHY: 之前 E2E 通过 API 登录 + 注入 localStorage, 完全跳过 /login 页面
