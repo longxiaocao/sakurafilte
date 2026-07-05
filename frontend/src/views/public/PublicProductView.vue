@@ -10,6 +10,7 @@
 //   - 保留: SEO/OG meta, imageKey 命名 (R5), numOrDash
 import { ref, onMounted, computed, watch, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import { productApi } from '@/api'
 import type { ProductDetail } from '@/api/types'
 import SkeletonCard from '@/components/SkeletonCard.vue'

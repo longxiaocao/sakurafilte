@@ -110,5 +110,8 @@ export default {
     refreshPage: '刷新页面',
     technicalDetails: '查看技术详情',
     timestamp: '时间'
+  },
+  a11y: {
+    skipToContent: '跳到主内容'
   }
 }

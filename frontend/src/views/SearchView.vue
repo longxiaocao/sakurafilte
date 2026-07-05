@@ -219,6 +219,8 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="p-3 max-w-screen-2xl mx-auto">
+    <!-- Day 14+ A11y: 页面主标题 (屏幕阅读器可达, 视觉上用 .sr-only 隐藏, 避免破坏极简风格) -->
+    <h1 class="sr-only">{{ t('search.title', '产品搜索') }}</h1>
     <!-- P3.2 (Task 10): 单条 / 批量 切换 Tab -->
     <el-tabs v-model="activeTab" class="mb-3">
       <!-- ===== 单条 Tab (Day 9 + Task 9 容差) ===== -->

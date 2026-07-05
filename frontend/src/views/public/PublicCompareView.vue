@@ -269,6 +269,8 @@ function doPrint() {
 
 <template>
   <div class="p-3 max-w-screen-2xl mx-auto compare-root">
+    <!-- Day 14+ A11y: 页面主标题 (视觉隐藏, 屏幕阅读器可达) -->
+    <h1 class="sr-only">产品对比</h1>
     <!-- 工具条 -->
     <div class="compare-toolbar flex items-center gap-2 mb-3 flex-wrap">
       <span class="text-sm font-medium">产品对比</span>
@@ -300,8 +302,18 @@ function doPrint() {
       </div>
     </div>
 
-    <!-- 加载中 -->
-    <div v-if="loading && products.length === 0" class="py-12 text-center text-muted">加载中...</div>
+    <!-- 加载中 — 骨架屏 (Day 14 感知性能优化) -->
+    <div v-if="loading && products.length === 0" class="py-4" role="status" aria-live="polite" aria-label="正在加载产品对比数据">
+      <div v-for="g in 6" :key="g" class="mb-4">
+        <div class="skel-block h-5 w-20 mb-2" />
+        <div v-for="r in 4" :key="r" class="flex gap-3 mb-2">
+          <div class="skel-block h-4 w-32" />
+          <div class="skel-block h-4 flex-1" />
+          <div class="skel-block h-4 flex-1" />
+        </div>
+      </div>
+      <span class="sr-only">正在加载产品对比数据...</span>
+    </div>
 
     <!-- 对比表格 (复用 AdminCompareView 6 字段组布局) -->
     <div v-if="products.length > 0" class="compare-grid-wrap hairline">

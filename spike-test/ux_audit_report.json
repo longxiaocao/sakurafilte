@@ -1,0 +1,657 @@
+{
+  "generatedAt": "2026-07-05T06:51:03.069961Z",
+  "summary": {
+    "total": 78,
+    "passed": 78,
+    "failed": 0,
+    "warned": 0
+  },
+  "dimensions": {
+    "functionality": {
+      "items": [
+        {
+          "name": "用户旅程 E2E 全部通过",
+          "status": "PASS",
+          "expected": "0 FAIL",
+          "actual": "总计 23: PASS=23 FAIL=0 WARN=0 SKIP=0",
+          "fix": "",
+          "timestamp": "2026-07-05T06:51:50.296527Z"
+        },
+        {
+          "name": "按钮契约 全部通过",
+          "status": "PASS",
+          "expected": "0 FAIL",
+          "actual": "汇总: 总 39 项, PASS=39 FAIL=0 WARN=0 SKIP=0",
+          "fix": "",
+          "timestamp": "2026-07-05T06:52:33.136454Z"
+        }
+      ]
+    },
+    "accessibility": {
+      "items": [
+        {
+          "name": "首页 跳到主内容链接",
+          "status": "PASS",
+          "expected": "a[href='#main-content'] 存在",
+          "actual": "存在=True",
+          "fix": "",
+          "timestamp": "2026-07-05T06:52:35.720476Z"
+        },
+        {
+          "name": "首页 main landmark",
+          "status": "PASS",
+          "expected": "<main> 或 [role='main'] 存在",
+          "actual": "存在=True",
+          "fix": "App.vue 已用 <main role='main'>",
+          "timestamp": "2026-07-05T06:52:35.730237Z"
+        },
+        {
+          "name": "首页 标题层级",
+          "status": "PASS",
+          "expected": "至少 1 个 h1-h6",
+          "actual": "count=1",
+          "fix": "",
+          "timestamp": "2026-07-05T06:52:35.732355Z"
+        },
+        {
+          "name": "首页 跳到主内容可键盘聚焦",
+          "status": "PASS",
+          "expected": "首次 Tab 跳到 skip link",
+          "actual": "focused='skip-to-content'",
+          "fix": "skip-to-content 元素需无 transform 阻挡 Tab 焦点",
+          "timestamp": "2026-07-05T06:52:35.737453Z"
+        },
+        {
+          "name": "首页 交互元素有可访问名",
+          "status": "PASS",
+          "expected": "所有 button/a 都有文本/aria-label/title/icon",
+          "actual": "无标签=0 ",
+          "fix": "加 aria-label 或内嵌图标 (Element Plus 通用做法)",
+          "timestamp": "2026-07-05T06:52:35.739171Z"
+        },
+        {
+          "name": "首页 焦点可见样式",
+          "status": "PASS",
+          "expected": "全局 :focus-visible 样式存在",
+          "actual": "存在=True",
+          "fix": "",
+          "timestamp": "2026-07-05T06:52:35.741102Z"
+        },
+        {
+          "name": "公开搜索 跳到主内容链接",
+          "status": "PASS",
+          "expected": "a[href='#main-content'] 存在",
+          "actual": "存在=True",
+          "fix": "",
+          "timestamp": "2026-07-05T06:52:37.331714Z"
+        },
+        {
+          "name": "公开搜索 main landmark",
+          "status": "PASS",
+          "expected": "<main> 或 [role='main'] 存在",
+          "actual": "存在=True",
+          "fix": "App.vue 已用 <main role='main'>",
+          "timestamp": "2026-07-05T06:52:37.337075Z"
+        },
+        {
+          "name": "公开搜索 标题层级",
+          "status": "PASS",
+          "expected": "至少 1 个 h1-h6",
+          "actual": "count=1",
+          "fix": "",
+          "timestamp": "2026-07-05T06:52:37.338432Z"
+        },
+        {
+          "name": "公开搜索 跳到主内容可键盘聚焦",
+          "status": "PASS",
+          "expected": "首次 Tab 跳到 skip link",
+          "actual": "focused='skip-to-content'",
+          "fix": "skip-to-content 元素需无 transform 阻挡 Tab 焦点",
+          "timestamp": "2026-07-05T06:52:37.342316Z"
+        },
+        {
+          "name": "公开搜索 交互元素有可访问名",
+          "status": "PASS",
+          "expected": "所有 button/a 都有文本/aria-label/title/icon",
+          "actual": "无标签=0 ",
+          "fix": "加 aria-label 或内嵌图标 (Element Plus 通用做法)",
+          "timestamp": "2026-07-05T06:52:37.343762Z"
+        },
+        {
+          "name": "公开搜索 焦点可见样式",
+          "status": "PASS",
+          "expected": "全局 :focus-visible 样式存在",
+          "actual": "存在=True",
+          "fix": "",
+          "timestamp": "2026-07-05T06:52:37.345347Z"
+        },
+        {
+          "name": "公开 8 字段搜索 跳到主内容链接",
+          "status": "PASS",
+          "expected": "a[href='#main-content'] 存在",
+          "actual": "存在=True",
+          "fix": "",
+          "timestamp": "2026-07-05T06:52:38.910018Z"
+        },
+        {
+          "name": "公开 8 字段搜索 main landmark",
+          "status": "PASS",
+          "expected": "<main> 或 [role='main'] 存在",
+          "actual": "存在=True",
+          "fix": "App.vue 已用 <main role='main'>",
+          "timestamp": "2026-07-05T06:52:38.915243Z"
+        },
+        {
+          "name": "公开 8 字段搜索 标题层级",
+          "status": "PASS",
+          "expected": "至少 1 个 h1-h6",
+          "actual": "count=1",
+          "fix": "",
+          "timestamp": "2026-07-05T06:52:38.916667Z"
+        },
+        {
+          "name": "公开 8 字段搜索 跳到主内容可键盘聚焦",
+          "status": "PASS",
+          "expected": "首次 Tab 跳到 skip link",
+          "actual": "focused='skip-to-content'",
+          "fix": "skip-to-content 元素需无 transform 阻挡 Tab 焦点",
+          "timestamp": "2026-07-05T06:52:38.920236Z"
+        },
+        {
+          "name": "公开 8 字段搜索 交互元素有可访问名",
+          "status": "PASS",
+          "expected": "所有 button/a 都有文本/aria-label/title/icon",
+          "actual": "无标签=0 ",
+          "fix": "加 aria-label 或内嵌图标 (Element Plus 通用做法)",
+          "timestamp": "2026-07-05T06:52:38.922009Z"
+        },
+        {
+          "name": "公开 8 字段搜索 焦点可见样式",
+          "status": "PASS",
+          "expected": "全局 :focus-visible 样式存在",
+          "actual": "存在=True",
+          "fix": "",
+          "timestamp": "2026-07-05T06:52:38.923724Z"
+        },
+        {
+          "name": "公开对比 跳到主内容链接",
+          "status": "PASS",
+          "expected": "a[href='#main-content'] 存在",
+          "actual": "存在=True",
+          "fix": "",
+          "timestamp": "2026-07-05T06:52:40.831121Z"
+        },
+        {
+          "name": "公开对比 main landmark",
+          "status": "PASS",
+          "expected": "<main> 或 [role='main'] 存在",
+          "actual": "存在=True",
+          "fix": "App.vue 已用 <main role='main'>",
+          "timestamp": "2026-07-05T06:52:40.836333Z"
+        },
+        {
+          "name": "公开对比 标题层级",
+          "status": "PASS",
+          "expected": "至少 1 个 h1-h6",
+          "actual": "count=1",
+          "fix": "",
+          "timestamp": "2026-07-05T06:52:40.837911Z"
+        },
+        {
+          "name": "公开对比 跳到主内容可键盘聚焦",
+          "status": "PASS",
+          "expected": "首次 Tab 跳到 skip link",
+          "actual": "focused='skip-to-content'",
+          "fix": "skip-to-content 元素需无 transform 阻挡 Tab 焦点",
+          "timestamp": "2026-07-05T06:52:40.841993Z"
+        },
+        {
+          "name": "公开对比 交互元素有可访问名",
+          "status": "PASS",
+          "expected": "所有 button/a 都有文本/aria-label/title/icon",
+          "actual": "无标签=0 ",
+          "fix": "加 aria-label 或内嵌图标 (Element Plus 通用做法)",
+          "timestamp": "2026-07-05T06:52:40.843478Z"
+        },
+        {
+          "name": "公开对比 焦点可见样式",
+          "status": "PASS",
+          "expected": "全局 :focus-visible 样式存在",
+          "actual": "存在=True",
+          "fix": "",
+          "timestamp": "2026-07-05T06:52:40.845327Z"
+        },
+        {
+          "name": "登录页 跳到主内容链接",
+          "status": "PASS",
+          "expected": "a[href='#main-content'] 存在",
+          "actual": "存在=True",
+          "fix": "",
+          "timestamp": "2026-07-05T06:52:42.404645Z"
+        },
+        {
+          "name": "登录页 main landmark",
+          "status": "PASS",
+          "expected": "<main> 或 [role='main'] 存在",
+          "actual": "存在=True",
+          "fix": "App.vue 已用 <main role='main'>",
+          "timestamp": "2026-07-05T06:52:42.409717Z"
+        },
+        {
+          "name": "登录页 标题层级",
+          "status": "PASS",
+          "expected": "至少 1 个 h1-h6",
+          "actual": "count=1",
+          "fix": "",
+          "timestamp": "2026-07-05T06:52:42.411185Z"
+        },
+        {
+          "name": "登录页 跳到主内容可键盘聚焦",
+          "status": "PASS",
+          "expected": "首次 Tab 跳到 skip link",
+          "actual": "focused='skip-to-content'",
+          "fix": "skip-to-content 元素需无 transform 阻挡 Tab 焦点",
+          "timestamp": "2026-07-05T06:52:42.414846Z"
+        },
+        {
+          "name": "登录页 交互元素有可访问名",
+          "status": "PASS",
+          "expected": "所有 button/a 都有文本/aria-label/title/icon",
+          "actual": "无标签=0 ",
+          "fix": "加 aria-label 或内嵌图标 (Element Plus 通用做法)",
+          "timestamp": "2026-07-05T06:52:42.416208Z"
+        },
+        {
+          "name": "登录页 焦点可见样式",
+          "status": "PASS",
+          "expected": "全局 :focus-visible 样式存在",
+          "actual": "存在=True",
+          "fix": "",
+          "timestamp": "2026-07-05T06:52:42.417669Z"
+        }
+      ]
+    },
+    "performance": {
+      "items": [
+        {
+          "name": "公开搜索 FCP",
+          "status": "PASS",
+          "expected": "< 1800ms (Good)",
+          "actual": "fcp=60ms",
+          "fix": "",
+          "timestamp": "2026-07-05T06:52:43.028739Z"
+        },
+        {
+          "name": "公开搜索 LCP",
+          "status": "PASS",
+          "expected": "< 2500ms (Good)",
+          "actual": "lcp=0ms",
+          "fix": "",
+          "timestamp": "2026-07-05T06:52:43.028760Z"
+        },
+        {
+          "name": "公开搜索 DOMContentLoaded",
+          "status": "PASS",
+          "expected": "< 1500ms",
+          "actual": "dom=56ms",
+          "fix": "",
+          "timestamp": "2026-07-05T06:52:43.028766Z"
+        },
+        {
+          "name": "公开搜索 总耗时 (networkidle)",
+          "status": "PASS",
+          "expected": "< 3.0s",
+          "actual": "elapsed=0.56s",
+          "fix": "",
+          "timestamp": "2026-07-05T06:52:43.028772Z"
+        },
+        {
+          "name": "公开 8 字段搜索 FCP",
+          "status": "PASS",
+          "expected": "< 1800ms (Good)",
+          "actual": "fcp=64ms",
+          "fix": "",
+          "timestamp": "2026-07-05T06:52:43.651655Z"
+        },
+        {
+          "name": "公开 8 字段搜索 LCP",
+          "status": "PASS",
+          "expected": "< 2500ms (Good)",
+          "actual": "lcp=0ms",
+          "fix": "",
+          "timestamp": "2026-07-05T06:52:43.651676Z"
+        },
+        {
+          "name": "公开 8 字段搜索 DOMContentLoaded",
+          "status": "PASS",
+          "expected": "< 1500ms",
+          "actual": "dom=56ms",
+          "fix": "",
+          "timestamp": "2026-07-05T06:52:43.651682Z"
+        },
+        {
+          "name": "公开 8 字段搜索 总耗时 (networkidle)",
+          "status": "PASS",
+          "expected": "< 3.0s",
+          "actual": "elapsed=0.57s",
+          "fix": "",
+          "timestamp": "2026-07-05T06:52:43.651687Z"
+        },
+        {
+          "name": "产品详情 FCP",
+          "status": "PASS",
+          "expected": "< 1800ms (Good)",
+          "actual": "fcp=60ms",
+          "fix": "",
+          "timestamp": "2026-07-05T06:52:44.362942Z"
+        },
+        {
+          "name": "产品详情 LCP",
+          "status": "PASS",
+          "expected": "< 2500ms (Good)",
+          "actual": "lcp=0ms",
+          "fix": "",
+          "timestamp": "2026-07-05T06:52:44.362965Z"
+        },
+        {
+          "name": "产品详情 DOMContentLoaded",
+          "status": "PASS",
+          "expected": "< 1500ms",
+          "actual": "dom=55ms",
+          "fix": "",
+          "timestamp": "2026-07-05T06:52:44.362971Z"
+        },
+        {
+          "name": "产品详情 总耗时 (networkidle)",
+          "status": "PASS",
+          "expected": "< 3.0s",
+          "actual": "elapsed=0.66s",
+          "fix": "",
+          "timestamp": "2026-07-05T06:52:44.362976Z"
+        },
+        {
+          "name": "公开对比 FCP",
+          "status": "PASS",
+          "expected": "< 1800ms (Good)",
+          "actual": "fcp=60ms",
+          "fix": "",
+          "timestamp": "2026-07-05T06:52:45.002374Z"
+        },
+        {
+          "name": "公开对比 LCP",
+          "status": "PASS",
+          "expected": "< 2500ms (Good)",
+          "actual": "lcp=0ms",
+          "fix": "",
+          "timestamp": "2026-07-05T06:52:45.002432Z"
+        },
+        {
+          "name": "公开对比 DOMContentLoaded",
+          "status": "PASS",
+          "expected": "< 1500ms",
+          "actual": "dom=57ms",
+          "fix": "",
+          "timestamp": "2026-07-05T06:52:45.002441Z"
+        },
+        {
+          "name": "公开对比 总耗时 (networkidle)",
+          "status": "PASS",
+          "expected": "< 3.0s",
+          "actual": "elapsed=0.58s",
+          "fix": "",
+          "timestamp": "2026-07-05T06:52:45.002449Z"
+        }
+      ]
+    },
+    "cross_browser": {
+      "items": [
+        {
+          "name": "Chromium (Chrome/Edge) - 公开搜索 关键元素",
+          "status": "PASS",
+          "expected": "可见 input",
+          "actual": "visible=True",
+          "fix": "检查 CSS 兼容性 (Safari/Firefox 差异)",
+          "timestamp": "2026-07-05T06:52:47.639547Z"
+        },
+        {
+          "name": "Chromium (Chrome/Edge) - 公开对比 关键元素",
+          "status": "PASS",
+          "expected": "可见 .el-button",
+          "actual": "visible=True",
+          "fix": "检查 CSS 兼容性 (Safari/Firefox 差异)",
+          "timestamp": "2026-07-05T06:52:49.260827Z"
+        },
+        {
+          "name": "Chromium (Chrome/Edge) - 登录页 关键元素",
+          "status": "PASS",
+          "expected": "可见 input[autocomplete='username']",
+          "actual": "visible=True",
+          "fix": "检查 CSS 兼容性 (Safari/Firefox 差异)",
+          "timestamp": "2026-07-05T06:52:50.830040Z"
+        },
+        {
+          "name": "Firefox - 公开搜索 关键元素",
+          "status": "PASS",
+          "expected": "可见 input",
+          "actual": "visible=True",
+          "fix": "检查 CSS 兼容性 (Safari/Firefox 差异)",
+          "timestamp": "2026-07-05T06:52:54.109420Z"
+        },
+        {
+          "name": "Firefox - 公开对比 关键元素",
+          "status": "PASS",
+          "expected": "可见 .el-button",
+          "actual": "visible=True",
+          "fix": "检查 CSS 兼容性 (Safari/Firefox 差异)",
+          "timestamp": "2026-07-05T06:52:55.882021Z"
+        },
+        {
+          "name": "Firefox - 登录页 关键元素",
+          "status": "PASS",
+          "expected": "可见 input[autocomplete='username']",
+          "actual": "visible=True",
+          "fix": "检查 CSS 兼容性 (Safari/Firefox 差异)",
+          "timestamp": "2026-07-05T06:52:57.649901Z"
+        },
+        {
+          "name": "WebKit (Safari) - 公开搜索 关键元素",
+          "status": "PASS",
+          "expected": "可见 input",
+          "actual": "visible=True",
+          "fix": "检查 CSS 兼容性 (Safari/Firefox 差异)",
+          "timestamp": "2026-07-05T06:53:00.816201Z"
+        },
+        {
+          "name": "WebKit (Safari) - 公开对比 关键元素",
+          "status": "PASS",
+          "expected": "可见 .el-button",
+          "actual": "visible=True",
+          "fix": "检查 CSS 兼容性 (Safari/Firefox 差异)",
+          "timestamp": "2026-07-05T06:53:02.570972Z"
+        },
+        {
+          "name": "WebKit (Safari) - 登录页 关键元素",
+          "status": "PASS",
+          "expected": "可见 input[autocomplete='username']",
+          "actual": "visible=True",
+          "fix": "检查 CSS 兼容性 (Safari/Firefox 差异)",
+          "timestamp": "2026-07-05T06:53:04.491492Z"
+        }
+      ]
+    },
+    "cross_device": {
+      "items": [
+        {
+          "name": "Desktop 1280x800 - 公开搜索 关键元素",
+          "status": "PASS",
+          "expected": "可见 input",
+          "actual": "visible=True",
+          "fix": "检查响应式断点 (sm/md/lg) 是否正确",
+          "timestamp": "2026-07-05T06:53:07.222841Z"
+        },
+        {
+          "name": "Desktop 1280x800 - 公开搜索 body 无水平溢出",
+          "status": "PASS",
+          "expected": "scrollWidth - clientWidth <= 5px",
+          "actual": "overflow=0px",
+          "fix": "排查宽于视口的元素 (含 fixed width 的图片/表格)",
+          "timestamp": "2026-07-05T06:53:07.231968Z"
+        },
+        {
+          "name": "Desktop 1280x800 - 公开对比 关键元素",
+          "status": "PASS",
+          "expected": "可见 .el-button",
+          "actual": "visible=True",
+          "fix": "检查响应式断点 (sm/md/lg) 是否正确",
+          "timestamp": "2026-07-05T06:53:08.848150Z"
+        },
+        {
+          "name": "Desktop 1280x800 - 公开对比 body 无水平溢出",
+          "status": "PASS",
+          "expected": "scrollWidth - clientWidth <= 5px",
+          "actual": "overflow=0px",
+          "fix": "排查宽于视口的元素 (含 fixed width 的图片/表格)",
+          "timestamp": "2026-07-05T06:53:08.852598Z"
+        },
+        {
+          "name": "Desktop 1280x800 - 登录页 关键元素",
+          "status": "PASS",
+          "expected": "可见 input[autocomplete='username']",
+          "actual": "visible=True",
+          "fix": "检查响应式断点 (sm/md/lg) 是否正确",
+          "timestamp": "2026-07-05T06:53:10.411003Z"
+        },
+        {
+          "name": "Desktop 1280x800 - 登录页 body 无水平溢出",
+          "status": "PASS",
+          "expected": "scrollWidth - clientWidth <= 5px",
+          "actual": "overflow=0px",
+          "fix": "排查宽于视口的元素 (含 fixed width 的图片/表格)",
+          "timestamp": "2026-07-05T06:53:10.415713Z"
+        },
+        {
+          "name": "Tablet 768x1024 - 公开搜索 关键元素",
+          "status": "PASS",
+          "expected": "可见 input",
+          "actual": "visible=True",
+          "fix": "检查响应式断点 (sm/md/lg) 是否正确",
+          "timestamp": "2026-07-05T06:53:12.491262Z"
+        },
+        {
+          "name": "Tablet 768x1024 - 公开搜索 body 无水平溢出",
+          "status": "PASS",
+          "expected": "scrollWidth - clientWidth <= 5px",
+          "actual": "overflow=0px",
+          "fix": "排查宽于视口的元素 (含 fixed width 的图片/表格)",
+          "timestamp": "2026-07-05T06:53:12.500743Z"
+        },
+        {
+          "name": "Tablet 768x1024 - 公开对比 关键元素",
+          "status": "PASS",
+          "expected": "可见 .el-button",
+          "actual": "visible=True",
+          "fix": "检查响应式断点 (sm/md/lg) 是否正确",
+          "timestamp": "2026-07-05T06:53:14.113523Z"
+        },
+        {
+          "name": "Tablet 768x1024 - 公开对比 body 无水平溢出",
+          "status": "PASS",
+          "expected": "scrollWidth - clientWidth <= 5px",
+          "actual": "overflow=0px",
+          "fix": "排查宽于视口的元素 (含 fixed width 的图片/表格)",
+          "timestamp": "2026-07-05T06:53:14.118394Z"
+        },
+        {
+          "name": "Tablet 768x1024 - 登录页 关键元素",
+          "status": "PASS",
+          "expected": "可见 input[autocomplete='username']",
+          "actual": "visible=True",
+          "fix": "检查响应式断点 (sm/md/lg) 是否正确",
+          "timestamp": "2026-07-05T06:53:15.688447Z"
+        },
+        {
+          "name": "Tablet 768x1024 - 登录页 body 无水平溢出",
+          "status": "PASS",
+          "expected": "scrollWidth - clientWidth <= 5px",
+          "actual": "overflow=0px",
+          "fix": "排查宽于视口的元素 (含 fixed width 的图片/表格)",
+          "timestamp": "2026-07-05T06:53:15.692967Z"
+        },
+        {
+          "name": "Mobile 375x667 - 公开搜索 关键元素",
+          "status": "PASS",
+          "expected": "可见 input",
+          "actual": "visible=True",
+          "fix": "检查响应式断点 (sm/md/lg) 是否正确",
+          "timestamp": "2026-07-05T06:53:17.775367Z"
+        },
+        {
+          "name": "Mobile 375x667 - 公开搜索 body 无水平溢出",
+          "status": "PASS",
+          "expected": "scrollWidth - clientWidth <= 5px",
+          "actual": "overflow=0px",
+          "fix": "排查宽于视口的元素 (含 fixed width 的图片/表格)",
+          "timestamp": "2026-07-05T06:53:17.783719Z"
+        },
+        {
+          "name": "Mobile 375x667 - 公开搜索 按钮可点尺寸",
+          "status": "PASS",
+          "expected": ">= 32x24 px (WCAG 2.5.5 Target Size AAA)",
+          "actual": "size=253x38px",
+          "fix": "加 min-width/min-height 保障移动端可点",
+          "timestamp": "2026-07-05T06:53:17.785561Z"
+        },
+        {
+          "name": "Mobile 375x667 - 公开对比 关键元素",
+          "status": "PASS",
+          "expected": "可见 .el-button",
+          "actual": "visible=True",
+          "fix": "检查响应式断点 (sm/md/lg) 是否正确",
+          "timestamp": "2026-07-05T06:53:19.410343Z"
+        },
+        {
+          "name": "Mobile 375x667 - 公开对比 body 无水平溢出",
+          "status": "PASS",
+          "expected": "scrollWidth - clientWidth <= 5px",
+          "actual": "overflow=0px",
+          "fix": "排查宽于视口的元素 (含 fixed width 的图片/表格)",
+          "timestamp": "2026-07-05T06:53:19.415566Z"
+        },
+        {
+          "name": "Mobile 375x667 - 公开对比 按钮可点尺寸",
+          "status": "PASS",
+          "expected": ">= 32x24 px (WCAG 2.5.5 Target Size AAA)",
+          "actual": "size=48x24px",
+          "fix": "加 min-width/min-height 保障移动端可点",
+          "timestamp": "2026-07-05T06:53:19.417259Z"
+        },
+        {
+          "name": "Mobile 375x667 - 登录页 关键元素",
+          "status": "PASS",
+          "expected": "可见 input[autocomplete='username']",
+          "actual": "visible=True",
+          "fix": "检查响应式断点 (sm/md/lg) 是否正确",
+          "timestamp": "2026-07-05T06:53:20.983510Z"
+        },
+        {
+          "name": "Mobile 375x667 - 登录页 body 无水平溢出",
+          "status": "PASS",
+          "expected": "scrollWidth - clientWidth <= 5px",
+          "actual": "overflow=0px",
+          "fix": "排查宽于视口的元素 (含 fixed width 的图片/表格)",
+          "timestamp": "2026-07-05T06:53:20.987789Z"
+        },
+        {
+          "name": "Mobile 375x667 - 登录页 按钮可点尺寸",
+          "status": "PASS",
+          "expected": ">= 32x24 px (WCAG 2.5.5 Target Size AAA)",
+          "actual": "size=193x38px",
+          "fix": "加 min-width/min-height 保障移动端可点",
+          "timestamp": "2026-07-05T06:53:20.989313Z"
+        }
+      ]
+    }
+  },
+  "issues": [],
+  "recommendations": []
+}

@@ -60,7 +60,7 @@ spike-test/backend.out
 spike-test/backend.err
 spike-test/backend_perf.err
 
-# Day 14 P0 修复: 后端运行日志 (out/err), debug 脚本, 临时 commit msg
+# Day 14+ P0 修复: 后端运行日志 (out/err), debug 脚本, 临时 commit msg
 backend/backend.out
 backend/backend.err
 kill_stuck.ps1
@@ -70,6 +70,16 @@ start-backend-emergency.bat
 test_api.ps1
 spike-test/_commit_msg.txt
 spike-test/_debug_*.py
+
+# 临时调试 / 中间产物
+**/_temp_*
+**/_scratch_*
+# UX 审计中间产物 (raw), 最终 ux_audit_report.md 仍 commit
+spike-test/_ux_audit_*.png
+spike-test/_ux_audit_*.html
+# 临时 app 响应快照 (Vite HMR / 调试用)
+spike-test/_app_resp.txt
+spike-test/_app_*.txt
 
 ## 操作系统
 .DS_Store

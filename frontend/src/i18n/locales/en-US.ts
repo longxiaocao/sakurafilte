@@ -96,11 +96,14 @@ export default {
     switchToDark: 'Switch to dark'
   },
   error: {
-    title: 'Page load failed',
+    title: 'Page failed to load',
     desc: 'An unexpected error occurred. Try the following actions',
     copyError: 'Copy error',
     refreshPage: 'Refresh page',
     technicalDetails: 'Technical details',
     timestamp: 'Time'
+  },
+  a11y: {
+    skipToContent: 'Skip to main content'
   }
 }

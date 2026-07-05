@@ -132,6 +132,35 @@ body {
   .micro-num {
     transition: color 0.2s ease;
   }
+
+  /* 骨架屏块 (Day 14+: 比 spinner 更友好, 跟随主题) */
+  .skel-block {
+    background: var(--color-bg-hover);
+    animation: skel-pulse 1.6s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+  @keyframes skel-pulse {
+    0%, 100% { opacity: 0.6; }
+    50%      { opacity: 1; }
+  }
+  /* 屏幕阅读器专用 (视觉隐藏但 SR 可读) */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+  /* 尊重 prefers-reduced-motion: 关闭骨架屏动画 */
+  @media (prefers-reduced-motion: reduce) {
+    .skel-block {
+      animation: none;
+      opacity: 0.8;
+    }
+  }
 }
 
 /* P1.1 全局过渡: 让所有交互元素默认有过渡 (避免硬切换) */

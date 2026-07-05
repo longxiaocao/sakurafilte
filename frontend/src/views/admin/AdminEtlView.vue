@@ -10,6 +10,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { etlApi } from '@/api'
 import type { EtlActiveTaskInfo, EtlProgress, EtlDryRunResult, EtlHistoryItem, EtlReasonCodeAggregate } from '@/api/types'
 import EtlReasonCodePie from '@/components/EtlReasonCodePie.vue'
+import { useGlobalDragDrop, DEFAULT_ADMIN_ACCEPT } from '@/composables/useGlobalDragDrop'
 
 // ===== 表单 =====
 // Day 11 Phase 1: cascade 默认 true (兼容旧行为), UI 可切换为 false 单独刷新主表
@@ -31,6 +32,56 @@ function changeEntity(v: 'products' | 'xrefs' | 'apps') {
   form.entity = v
   form.jsonlPath = entityPaths[v]
 }
+
+// ===== 全局拖拽上传集成 (Day 14+: UX 偏好) =====
+//   拖动 .jsonl 到窗口 → 自动识别 entity + 填入路径
+//   浏览器安全: 拿不到绝对路径, 用默认基础目录 + file.name 拼出服务端路径
+//   用户可手动修改最终路径
+const { register: registerDrag, unregister: unregisterDrag } = useGlobalDragDrop()
+
+// 服务端默认基础目录 (与后端 PgmDefaultConfig 对齐)
+const SERVER_BASE_DIR = 'D:/data/sakurafilter'
+
+function inferEntityByName(name: string): 'products' | 'xrefs' | 'apps' | null {
+  const lower = name.toLowerCase()
+  if (lower.includes('product')) return 'products'
+  if (lower.includes('xref') || lower.includes('cross')) return 'xrefs'
+  if (lower.includes('app') || lower.includes('machine')) return 'apps'
+  return null
+}
+
+function handleFilesDropped(files: File[]) {
+  if (files.length === 0) return
+  // 取第一个文件
+  const f = files[0]
+  const inferred = inferEntityByName(f.name)
+  // 拼出服务端路径 (后端用 Path.Exists 校验)
+  const serverPath = `${SERVER_BASE_DIR}/${f.name}`
+  if (inferred) {
+    form.entity = inferred
+    form.jsonlPath = serverPath
+    ElMessage.success(`已自动识别 entity=${inferred}, 文件: ${f.name}`)
+  } else {
+    form.jsonlPath = serverPath
+    ElMessage.info(`已填入文件: ${f.name} (entity 需手动选择)`)
+  }
+  if (files.length > 1) {
+    ElMessage.warning(`本次拖入 ${files.length} 个文件, 仅采用第一个: ${f.name}`)
+  }
+}
+
+onMounted(() => {
+  // 注册全局拖拽 (admin 路径启用)
+  registerDrag({
+    onFilesDropped: handleFilesDropped,
+    acceptRoute: DEFAULT_ADMIN_ACCEPT,
+    hintText: '松开以填入 ETL 文件路径'
+  })
+})
+
+onBeforeUnmount(() => {
+  unregisterDrag()
+})
 
 // ===== 触发 =====
 const submitting = ref(false)
