@@ -34,11 +34,17 @@ EXCLUDE_FN = {
 }
 
 # 加载状态关键字
+# WHY 通用名: 实际代码用 saving / submitting / uploading / usersLoading / productMutating 等各种名字
+# 注意: \w*? 非贪婪, 否则 \w+ 会吃掉整个 userSubmitting 导致后缀无字符可匹配
 LOADING_PATTERNS = [
-    r"\bloading\s*=\s*true\b",          # loading.value = true
-    r"\bloading\.value\s*=\s*true\b",
+    # 通用命名: xxxLoading / xxxSubmitting / xxxSaving / xxxMutating / xxxUploading / xxxBusy
+    # 也覆盖: xxxCancelling / xxxPausing / xxxResuming (ETL 状态转换)
+    r"\b\w*?(?:Loading|Submitting|Saving|Mutating|Uploading|Busy|Pending|Cancelling|Pausing|Resuming|Stopping|Starting|Connecting)\s*=\s*true\b",
+    r"\b\w*?(?:Loading|Submitting|Saving|Mutating|Uploading|Busy|Pending|Cancelling|Pausing|Resuming|Stopping|Starting|Connecting)\.value\s*=\s*true\b",
+    r"\b\w*?(?:Loading|Submitting|Saving|Mutating|Uploading|Busy|Pending|Cancelling|Pausing|Resuming|Stopping|Starting|Connecting)\.value\s*=\s*false\b",
     r"isLoading\s*=\s*true\b",
-    r"\.loading\s*=\s*true\b",
+    # 全局 ElLoading.service 包装 (一行方案, 不需新 ref)
+    r"ElLoading\.service\s*\(",
 ]
 # error UI 关键字 (含全局拦截器导入作为"已覆盖"标记)
 ERROR_PATTERNS = [
@@ -82,7 +88,8 @@ def find_api_calls(text: str, file_rel: str) -> List[Dict]:
                 context = "\n".join(lines[start:end])
                 has_try = "try" in context and "{" in context
                 has_catch = "catch" in context
-                has_loading = any(re.search(p, context) for p in LOADING_PATTERNS)
+                # WHY re.IGNORECASE: saving 是小写, Loading 是大写, 都要匹配
+                has_loading = any(re.search(p, context, re.IGNORECASE) for p in LOADING_PATTERNS)
                 has_error = any(re.search(p, context) for p in ERROR_PATTERNS)
                 # WHY 全文扫描 import: 局部上下文 30 行可能不包含 import 语句
                 #   从 '@/utils/http' 导入的整个文件都被全局拦截器覆盖

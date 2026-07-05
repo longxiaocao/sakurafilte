@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage, ElMessageBox, ElLoading } from 'element-plus'
 import { useAdminAuth } from '@/composables/useAdminAuth'
 import { useThemeStore } from '@/stores/theme'  // P5.3
 import { authApi } from '@/api'
@@ -114,12 +114,16 @@ async function handleLogout() {
   } catch {
     return
   }
+  // WHY ElLoading: 全屏遮罩, 防止用户点击其他导航项导致路由跳转到需要登录的页面
+  const loading = ElLoading.service({ lock: true, text: '退出中...' })
   try {
     if (refreshToken.value) {
       await authApi.logout(refreshToken.value)
     }
   } catch {
     // 即使后端 logout 失败也前端清场
+  } finally {
+    loading.close()
   }
   clearAuth()
   ElMessage.success('已退出登录')

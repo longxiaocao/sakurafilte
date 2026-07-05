@@ -1,0 +1,147 @@
+{
+  "stats": {
+    "files_scanned": 47,
+    "zh_keys": 88,
+    "en_keys": 88,
+    "used_keys": 29,
+    "missing_zh": 0,
+    "missing_en": 0,
+    "orphan_zh": 59,
+    "only_zh": 0,
+    "only_en": 0
+  },
+  "summary": {
+    "fail": 0,
+    "warn": 0,
+    "info": 21,
+    "exit_code": 0
+  },
+  "findings": [
+    {
+      "severity": "INFO",
+      "category": "orphan",
+      "key": "auth.authFailed",
+      "message": "'auth.authFailed' 定义但未使用 (考虑删除)"
+    },
+    {
+      "severity": "INFO",
+      "category": "orphan",
+      "key": "auth.changePassword",
+      "message": "'auth.changePassword' 定义但未使用 (考虑删除)"
+    },
+    {
+      "severity": "INFO",
+      "category": "orphan",
+      "key": "auth.logout",
+      "message": "'auth.logout' 定义但未使用 (考虑删除)"
+    },
+    {
+      "severity": "INFO",
+      "category": "orphan",
+      "key": "auth.pleaseLogin",
+      "message": "'auth.pleaseLogin' 定义但未使用 (考虑删除)"
+    },
+    {
+      "severity": "INFO",
+      "category": "orphan",
+      "key": "auth.userDisabled",
+      "message": "'auth.userDisabled' 定义但未使用 (考虑删除)"
+    },
+    {
+      "severity": "INFO",
+      "category": "orphan",
+      "key": "auth.userLocked",
+      "message": "'auth.userLocked' 定义但未使用 (考虑删除)"
+    },
+    {
+      "severity": "INFO",
+      "category": "orphan",
+      "key": "common.add",
+      "message": "'common.add' 定义但未使用 (考虑删除)"
+    },
+    {
+      "severity": "INFO",
+      "category": "orphan",
+      "key": "common.back",
+      "message": "'common.back' 定义但未使用 (考虑删除)"
+    },
+    {
+      "severity": "INFO",
+      "category": "orphan",
+      "key": "common.cancel",
+      "message": "'common.cancel' 定义但未使用 (考虑删除)"
+    },
+    {
+      "severity": "INFO",
+      "category": "orphan",
+      "key": "common.confirm",
+      "message": "'common.confirm' 定义但未使用 (考虑删除)"
+    },
+    {
+      "severity": "INFO",
+      "category": "orphan",
+      "key": "common.copied",
+      "message": "'common.copied' 定义但未使用 (考虑删除)"
+    },
+    {
+      "severity": "INFO",
+      "category": "orphan",
+      "key": "common.copy",
+      "message": "'common.copy' 定义但未使用 (考虑删除)"
+    },
+    {
+      "severity": "INFO",
+      "category": "orphan",
+      "key": "common.delete",
+      "message": "'common.delete' 定义但未使用 (考虑删除)"
+    },
+    {
+      "severity": "INFO",
+      "category": "orphan",
+      "key": "common.edit",
+      "message": "'common.edit' 定义但未使用 (考虑删除)"
+    },
+    {
+      "severity": "INFO",
+      "category": "orphan",
+      "key": "common.export",
+      "message": "'common.export' 定义但未使用 (考虑删除)"
+    },
+    {
+      "severity": "INFO",
+      "category": "orphan",
+      "key": "common.failed",
+      "message": "'common.failed' 定义但未使用 (考虑删除)"
+    },
+    {
+      "severity": "INFO",
+      "category": "orphan",
+      "key": "common.import",
+      "message": "'common.import' 定义但未使用 (考虑删除)"
+    },
+    {
+      "severity": "INFO",
+      "category": "orphan",
+      "key": "common.loadFailed",
+      "message": "'common.loadFailed' 定义但未使用 (考虑删除)"
+    },
+    {
+      "severity": "INFO",
+      "category": "orphan",
+      "key": "common.loading",
+      "message": "'common.loading' 定义但未使用 (考虑删除)"
+    },
+    {
+      "severity": "INFO",
+      "category": "orphan",
+      "key": "common.noData",
+      "message": "'common.noData' 定义但未使用 (考虑删除)"
+    },
+    {
+      "severity": "INFO",
+      "category": "orphan",
+      "key": "...",
+      "message": "还有 39 个未使用的 zh key"
+    }
+  ]
+}

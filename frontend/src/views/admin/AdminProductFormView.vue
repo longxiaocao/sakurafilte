@@ -75,6 +75,8 @@ const rowVersion = ref<number>(0)
 
 const loading = ref(false)
 const saving = ref(false)
+const uploading = ref(false)
+const removing = ref(false)
 
 const images = ref<{ slot: number; imageKey: string; imageUrl: string }[]>([])
 
@@ -280,11 +282,17 @@ async function uploadImage(slot: number, e: Event) {
     ElMessage.warning('请先保存产品再上传图片')
     return
   }
+  if (uploading.value) return
+  uploading.value = true
   try {
     const r = await imageApi.upload(productId.value, slot, file)
     ElMessage.success(`Slot ${slot} 上传成功`)
     images.value[slot - 1] = r
-  } catch (e: any) {}
+  } catch {
+    // 已被拦截器
+  } finally {
+    uploading.value = false
+  }
   input.value = ''
 }
 
@@ -294,11 +302,17 @@ async function removeImage(slot: number) {
     ElMessage.error('Slot 非法: ' + slot + ', 必须在 1-6 之间')
     return
   }
+  if (removing.value) return
+  removing.value = true
   try {
     await imageApi.remove(productId.value, slot)
     images.value[slot - 1] = undefined as any
     ElMessage.success(`Slot ${slot} 已删除`)
-  } catch (e: any) {}
+  } catch {
+    // 已被拦截器
+  } finally {
+    removing.value = false
+  }
 }
 
 function isAppRowDirty(m: any): boolean {

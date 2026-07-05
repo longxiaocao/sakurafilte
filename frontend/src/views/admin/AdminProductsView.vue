@@ -89,6 +89,9 @@ watch(historyFilter, () => saveHistoryFilter(), { deep: true })
 // 批量选择
 const selected = ref<ProductListItem[]>([])
 
+// P2.7: 产品状态变更 (停售/恢复) 统一 loading, 防止重复点击
+const productMutating = ref(false)
+
 // P2-8.1: 列表请求取消控制器
 //   快速翻页/筛选切换时取消上一次未完成请求, 避免并发竞争导致旧结果覆盖新结果
 let loadAbort: AbortController | null = null
@@ -144,22 +147,34 @@ function editProduct(row: ProductListItem) {
 async function discontinue(row: ProductListItem) {
   try {
     await ElMessageBox.confirm(`确定停售产品 "${row.oemNoDisplay}" 吗?`, '确认', { type: 'warning' })
+  } catch {
+    return
+  }
+  if (productMutating.value) return
+  productMutating.value = true
+  try {
     await adminProductApi.discontinue(row.id, 'admin')
     ElMessage.success('已停售')
     load()
-  } catch (e: any) {
-    if (e !== 'cancel') {
-      // 错误已被拦截器
-    }
+  } catch {
+    // 错误已被拦截器
+  } finally {
+    productMutating.value = false
   }
 }
 
 async function restore(row: ProductListItem) {
+  if (productMutating.value) return
+  productMutating.value = true
   try {
     await adminProductApi.restore(row.id, 'admin')
     ElMessage.success('已恢复')
     load()
-  } catch (e: any) {}
+  } catch {
+    // 错误已被拦截器
+  } finally {
+    productMutating.value = false
+  }
 }
 
 // 当前查看历史的产品 id (用于筛选条件变化时 reload)

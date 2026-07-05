@@ -19,6 +19,9 @@ const usersTotal = ref(0)
 const usersPage = ref(1)
 const usersPageSize = ref(20)
 
+// P2.7: 用户管理 mutation 统一 loading, 防止重复点击触发并发写操作
+const userSubmitting = ref(false)
+
 // 新增用户对话框
 const createOpen = ref(false)
 const createForm = reactive<UserCreateRequest>({
@@ -91,6 +94,7 @@ function openCreate() {
 }
 
 async function saveCreate() {
+  if (userSubmitting.value) return
   if (!createForm.username.trim()) {
     ElMessage.warning('用户名不能为空')
     return
@@ -99,6 +103,7 @@ async function saveCreate() {
     ElMessage.warning('密码至少 8 个字符')
     return
   }
+  userSubmitting.value = true
   try {
     await usersApi.create({
       username: createForm.username.trim(),
@@ -112,6 +117,8 @@ async function saveCreate() {
     await loadUsers()
   } catch {
     // axios 拦截器已统一弹错误
+  } finally {
+    userSubmitting.value = false
   }
 }
 
@@ -126,7 +133,9 @@ function openEdit(row: UserListItem) {
 }
 
 async function saveEdit() {
+  if (userSubmitting.value) return
   if (editForm.id == null) return
+  userSubmitting.value = true
   try {
     const patch: UserUpdateRequest = {
       role: editForm.role,
@@ -140,6 +149,8 @@ async function saveEdit() {
     await loadUsers()
   } catch {
     // axios 拦截器已统一弹错误
+  } finally {
+    userSubmitting.value = false
   }
 }
 
@@ -153,12 +164,16 @@ async function softDelete(row: UserListItem) {
   } catch {
     return
   }
+  if (userSubmitting.value) return
+  userSubmitting.value = true
   try {
     await usersApi.remove(row.id)
     ElMessage.success('已删除')
     await loadUsers()
   } catch {
     // axios 拦截器已统一弹错误
+  } finally {
+    userSubmitting.value = false
   }
 }
 
@@ -170,17 +185,21 @@ function openReset(row: UserListItem) {
 }
 
 async function saveReset() {
+  if (userSubmitting.value) return
   if (resetForm.id == null) return
   if (resetForm.newPassword.length < 8) {
     ElMessage.warning('新密码至少 8 个字符')
     return
   }
+  userSubmitting.value = true
   try {
     await usersApi.resetPassword(resetForm.id, resetForm.newPassword)
     ElMessage.success(`已重置 ${resetForm.username} 的密码`)
     resetOpen.value = false
   } catch {
     // axios 拦截器已统一弹错误
+  } finally {
+    userSubmitting.value = false
   }
 }
 
@@ -218,12 +237,16 @@ function onTabChange(tab: string) {
 
 // ===== 顶部用户菜单 (退出登录) =====
 async function handleLogout() {
+  if (userSubmitting.value) return
+  userSubmitting.value = true
   try {
     if (auth.refreshToken) {
       await authApi.logout(auth.refreshToken)
     }
   } catch {
     // 即使后端 logout 失败也前端清场
+  } finally {
+    userSubmitting.value = false
   }
   auth.clearAuth()
   ElMessage.success('已退出登录')
