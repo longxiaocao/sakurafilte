@@ -343,7 +343,7 @@ onBeforeUnmount(() => {
     <el-form :model="form" label-position="top" label-width="100px" size="small">
       <el-collapse v-model="activeNames">
         <!-- 分区 1: 基础信息 -->
-        <el-collapse-item title="① 基础信息" name="1">
+        <el-collapse-item title=t('admin.productformview.title.l346_') name="1">
           <div class="grid grid-cols-3 gap-3">
             <!-- P2.2: productName1/2/type 全部 typeahead -->
             <el-form-item label="产品名 1">
@@ -416,7 +416,7 @@ onBeforeUnmount(() => {
         </el-collapse-item>
 
         <!-- 分区 5: 性能 -->
-        <el-collapse-item title="④ 性能" name="5">
+        <el-collapse-item title=t('admin.productformview.title.l419_') name="5">
           <div class="grid grid-cols-3 gap-3">
             <!-- P2.2: Media 字段 typeahead (2 字段) -->
             <el-form-item label="Media">
@@ -437,7 +437,7 @@ onBeforeUnmount(() => {
         </el-collapse-item>
 
         <!-- 分区 6: 包装 -->
-        <el-collapse-item title="⑤ 包装" name="6">
+        <el-collapse-item title=t('admin.productformview.title.l440_') name="6">
           <div class="grid grid-cols-4 gap-3">
             <el-form-item label="箱/件">
               <el-input-number v-model="form.qtyPerCarton" :min="0" />

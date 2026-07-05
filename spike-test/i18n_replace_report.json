@@ -1,0 +1,36 @@
+{
+  "ts": "2026-07-05T19:22:05.547490",
+  "total_findings": 166,
+  "replaced": 6,
+  "skipped_template": 13,
+  "skipped_short": 0,
+  "skipped_too_long": 11,
+  "new_keys_count": 6,
+  "translation_stats": {
+    "glossary_hit": 6,
+    "fallback_placeholder": 0
+  },
+  "glossary_hit_rate": 100.0,
+  "new_keys": {
+    "admin.etlview.templatetext.l610_": " 行",
+    "admin.helpview.string.l19_": ") + 型号",
+    "admin.perfview.templatetext.l203_": "▶ 自动",
+    "admin.productformview.title.l346_": "① 基础信息",
+    "admin.productformview.title.l419_": "④ 性能",
+    "admin.productformview.title.l440_": "⑤ 包装"
+  },
+  "new_translations": {
+    "admin.etlview.templatetext.l610_": "rows",
+    "admin.helpview.string.l19_": ") + Model",
+    "admin.perfview.templatetext.l203_": "▶ Auto",
+    "admin.productformview.title.l346_": "① Basic Information",
+    "admin.productformview.title.l419_": "④ Performance",
+    "admin.productformview.title.l440_": "⑤ Packaging"
+  },
+  "files": {
+    "frontend\\src\\views\\admin\\AdminEtlView.vue": 1,
+    "frontend\\src\\views\\admin\\AdminHelpView.vue": 1,
+    "frontend\\src\\views\\admin\\AdminPerfView.vue": 1,
+    "frontend\\src\\views\\admin\\AdminProductFormView.vue": 3
+  }
+}

@@ -99,11 +99,13 @@ def inject_to_locale(ts_path: Path, entries: Dict[str, str], locale_name: str) -
     分组: admin.{file_short}.{ctx_short} = value
 
     注入策略:
-      1. 读取文件, 找到最后一个 `}` (export default 的闭合)
-      2. 提取已有的 `admin` 块 (如有)
-      3. 合并新 entries, 按 key 路径排序
-      4. 重新生成 admin 块的 TS 字符串
-      5. 替换原 `admin` 块 (如有) 或在 } 前插入
+      1. 读取文件, 找到 export default { ... } 的精确边界 (括号匹配)
+      2. 在 { ... } 内部:
+         - 已有 admin: {...} 块 → 替换其内部内容
+         - 无 admin 块 → 在 { 后插入
+      3. 确保上一个属性末尾有逗号, 避免 TS 语法错误
+
+    关键修复: 用括号匹配找精确的 { ... } 边界, 避免正则误吞
     """
     text = ts_path.read_text(encoding="utf-8")
 
@@ -135,30 +137,63 @@ def inject_to_locale(ts_path: Path, entries: Dict[str, str], locale_name: str) -
 
     admin_block = render_grouped()
 
-    # 已有 admin 块 → 替换
-    if re.search(r"^\s*admin:\s*\{", text, re.MULTILINE):
-        # 找到 admin: { 开始的行, 匹配到对应的 } (按缩进判断)
-        pattern = re.compile(
-            r"^(\s*)admin:\s*\{\n(?:.*\n)*?^\s*\},?\s*$",
-            re.MULTILINE
-        )
-        m = pattern.search(text)
-        if m:
-            indent = m.group(1)
-            new_block = admin_block.replace("  ", indent, 1) if indent else admin_block
-            # 简化: 用整个块替换
-            new_text = text[:m.start()] + admin_block + "\n" + text[m.end():]
-            ts_path.write_text(new_text, encoding="utf-8")
-            return
-    # 无 admin 块 → 在 export default 最后一个 } 前插入
-    # 找最后一个 } (排除嵌套的)
-    # 简单: 找 export default { ... } 最后一行的 }
-    m = re.search(r"^(export default \{[\s\S]*?)\n\}\s*$", text, re.MULTILINE)
-    if m:
-        new_text = text[:m.end(1)] + "\n" + admin_block + "\n}"
-        ts_path.write_text(new_text, encoding="utf-8")
-    else:
+    # 找 export default { 的开始位置
+    ed_match = re.search(r"^export default \{\s*\n", text, re.MULTILINE)
+    if not ed_match:
         print(f"  [WARN] {locale_name} 找不到 export default {{ }}, 跳过注入")
+        return
+
+    # 括号匹配找 export default 块的结束位置
+    ed_start = ed_match.end()  # 在 { 之后
+    depth = 1
+    i = ed_start
+    while i < len(text) and depth > 0:
+        c = text[i]
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                break
+        i += 1
+    if depth != 0:
+        print(f"  [WARN] {locale_name} export default 块未闭合")
+        return
+    ed_end = i  # 在 } 位置
+
+    # ed_start 到 ed_end 之间是 export default 的内容 (不含 { })
+    body = text[ed_start:ed_end]
+
+    # 在 body 中找 admin: { ... } 块 (括号匹配)
+    admin_match = re.search(r"^(\s*)admin:\s*\{", body, re.MULTILINE)
+    if admin_match:
+        # 已有 admin 块, 找匹配的 } (括号匹配)
+        admin_inner_start = admin_match.end()
+        depth = 1
+        j = admin_inner_start
+        while j < len(body) and depth > 0:
+            c = body[j]
+            if c == "{":
+                depth += 1
+            elif c == "}":
+                depth -= 1
+                if depth == 0:
+                    break
+            j += 1
+        if depth != 0:
+            print(f"  [WARN] {locale_name} admin 块未闭合")
+            return
+        # admin_match.start() 到 j+1 (含 })
+        new_body = body[:admin_match.start()] + admin_block.rstrip(",") + "\n" + body[j+1:]
+    else:
+        # 无 admin 块, 在 body 开头插入
+        # 确保 body 之前的内容末尾有逗号 (如果不是, 改 body 开头加逗号)
+        new_body = admin_block + "\n" + body
+
+    # 检查 export default 块结尾的 , 符号
+    # 简单: 重新拼接
+    new_text = text[:ed_start] + new_body + text[ed_end:]
+    ts_path.write_text(new_text, encoding="utf-8")
 
 
 def main():
@@ -206,6 +241,8 @@ def main():
     skipped_template = 0
     skipped_short = 0
     skipped_too_long = 0
+    skipped_mixed = 0  # 包含非中文 ASCII 字符 (如 "OEM 编号" 难处理)
+    skipped_multiline = 0  # 包含 \n 的多行字符串
 
     for f in findings:
         ctx = f["context"]
@@ -221,6 +258,16 @@ def main():
         # 跳过过长 (>60 字符, 可能是句子而非按钮)
         if len(text) > 60:
             skipped_too_long += 1
+            continue
+        # 跳过含 \n 的多行字符串
+        # WHY: ElMessageBox.confirm('暂停当前 ETL?\n\n...') 多行字符串, 替换算法无法精确处理多行边界
+        if "\n" in text:
+            skipped_multiline += 1
+            continue
+        # 跳过含 ASCII 字母/数字的混合字符串
+        # WHY: "OEM 编号" "MR.1" "slot 1-6" 难处理, 会出现 "OEM t('...')" 残缺语法
+        if re.search(r"[a-zA-Z0-9]", text):
+            skipped_mixed += 1
             continue
 
         key = generate_key(f["file"], f["line"], ctx, text, used_keys)
@@ -245,6 +292,8 @@ def main():
     print(f"  跳过 (含模板字符串): {skipped_template}")
     print(f"  跳过 (太短): {skipped_short}")
     print(f"  跳过 (过长): {skipped_too_long}")
+    print(f"  跳过 (多行): {skipped_multiline}")
+    print(f"  跳过 (中英/数字混合): {skipped_mixed}")
     print(f"  新 i18n key: {len(new_zh_entries)}")
     print(f"  翻译质量: 词典命中 {translation_stats['glossary_hit']} / 占位 {translation_stats['fallback_placeholder']} (命中率 {hit_rate:.1f}%)")
 
@@ -263,19 +312,27 @@ def main():
 
     # === 实际修改 ===
     # 1. 替换 .vue 文件
+    #    关键: 替换 '中文' → t('admin.x.y'), NOT 't('admin.x.y')'
+    #    原理: 在 .vue 中, 中文以 'xxx' / "xxx" / `xxx` 三种引号包裹.
+    #          替换时去掉外层引号, 改成 t('key'), 避免引号嵌套.
     if not args.dry_run:
         for fp, repls in file_replacements.items():
             full = ROOT / fp
             text = full.read_text(encoding="utf-8")
             for line_no, old, new, key in repls:
-                # 精确匹配: 中文字符串作为字面量
-                # 处理两种: '中文' / "中文" / `中文`
+                # 尝试三种引号包裹
+                replaced = False
                 for q in ["'", '"', "`"]:
                     old_pat = f"{q}{old}{q}"
-                    new_pat = f"{q}{new}{q}"
                     if old_pat in text:
-                        text = text.replace(old_pat, new_pat, 1)
+                        # 替换为 t('key'), t("key"), t(`key`) - 统一用 t('key')
+                        text = text.replace(old_pat, f"t('{key}')", 1)
+                        replaced = True
                         break
+                if not replaced:
+                    # 无引号包裹 - 直接替换为 t('key')
+                    if old in text:
+                        text = text.replace(old, f"t('{key}')", 1)
             full.write_text(text, encoding="utf-8")
         print(f"  ✓ {len(file_replacements)} 个 .vue 文件已替换")
 
@@ -284,6 +341,7 @@ def main():
     #         若不注入 key, console 会报 "Not found key", 用户看到的是 key 字符串.
     #    策略: 在 export default { ... } 末尾的 } 前插入 admin 块
     #          按 admin.{file_short}.{ctx_short} 分组, 保持文件可读性
+    #    关键: 检查最后一个 } 前的字符, 确保语法合法 (有逗号)
     if not args.dry_run and new_zh_entries:
         inject_to_locale(ZH_TS, new_zh_entries, "zh-CN")
         inject_to_locale(EN_TS, new_en_entries, "en-US")

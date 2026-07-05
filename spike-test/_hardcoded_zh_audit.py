@@ -30,7 +30,12 @@ CN_CHAR = re.compile(r"[\u4e00-\u9fff]")
 # 保留: template 中的中文文案 / ElMessage 的中文 / placeholder / label
 
 def find_hardcoded_zh(text: str, file_rel: str) -> List[Dict]:
-    """找所有硬编码中文, 返回 [{line, content, context_type, suggested_key}]"""
+    """找所有硬编码中文, 返回 [{line, content, context_type, suggested_key}]
+
+    关键: 抓"包含中文的完整字符串字面量" (如 'OEM 编号' 整体),
+         不是只抓中文片段 (如 '编号'). 这样替换时能匹配整个字面量,
+         避免 'OEM 编号' 被部分替换为 'OEM t(...)'.
+    """
     findings = []
     lines = text.splitlines()
     for i, line in enumerate(lines):
@@ -44,11 +49,14 @@ def find_hardcoded_zh(text: str, file_rel: str) -> List[Dict]:
         # 找中文字符串
         if not CN_CHAR.search(line):
             continue
-        # 提取所有"中文片段" (连续的中文)
-        matches = re.findall(r"[\u4e00-\u9fff][\u4e00-\u9fff\s,.，。；;：:!?？\-_/()（）\[\]【】0-9a-zA-Z]*", line)
-        for m in matches:
-            m = m.strip()
-            if len(m) < 2:  # 至少 2 个中文字
+        # 提取所有"包含中文的完整字符串字面量"
+        # 匹配 'xxx' / "xxx" / `xxx`, xxx 中含中文
+        quoted_strings = re.findall(
+            r"(['\"`])((?:\\.|(?!\1).)*?[\u4e00-\u9fff](?:\\.|(?!\1).)*?)\1",
+            line
+        )
+        for q, content in quoted_strings:
+            if len(content) < 2:
                 continue
             # 推测类型
             ctx = "string"
@@ -66,13 +74,12 @@ def find_hardcoded_zh(text: str, file_rel: str) -> List[Dict]:
             elif 'confirmButtonText' in line or 'cancelButtonText' in line: ctx = "button-text"
             # 建议 key 名 (file + line + 简化)
             file_short = Path(file_rel).stem.replace("Admin", "").replace(".vue", "").lower()
-            # 转拼音不可行, 用 hash-like 名称
             key_suggestion = f"admin.{file_short}.line{i+1}"
             findings.append({
                 "file": file_rel,
                 "line": i + 1,
                 "context": ctx,
-                "text": m[:80],
+                "text": content[:80],
                 "key_suggestion": key_suggestion,
             })
     return findings

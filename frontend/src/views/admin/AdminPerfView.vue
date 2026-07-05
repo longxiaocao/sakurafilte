@@ -200,7 +200,7 @@ function fmtTime(ts: string | null): string {
           class="px-2 py-1 text-sm hairline hover:bg-[var(--color-bg-hover)]"
           :aria-label="autoRefresh ? '暂停自动刷新' : '开启自动刷新'"
         >
-          {{ autoRefresh ? '⏸ 暂停' : '▶ 自动' }}
+          {{ autoRefresh ? '⏸ 暂停' : $t('admin.perfview.templatetext.l203_') }}
         </button>
         <select
           v-model="refreshSec"

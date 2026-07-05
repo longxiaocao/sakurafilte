@@ -3,6 +3,30 @@
  * P2.6: English locale for SakuraFilter
  */
 export default {
+  admin: {
+    etlview: {
+      templatetext: {
+        l610_: 'rows',
+      },
+    },
+    helpview: {
+      string: {
+        l19_: ') + Model',
+      },
+    },
+    perfview: {
+      templatetext: {
+        l203_: '▶ Auto',
+      },
+    },
+    productformview: {
+      title: {
+        l346_: '① Basic Information',
+        l419_: '④ Performance',
+        l440_: '⑤ Packaging',
+      },
+    },
+  },
   common: {
     confirm: 'Confirm',
     cancel: 'Cancel',

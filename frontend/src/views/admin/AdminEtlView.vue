@@ -607,7 +607,7 @@ function prettyJson(raw: string): string {
         </el-table>
         <div class="mt-2 flex justify-end">
           <el-button text size="small" @click="showAllSamples = !showAllSamples">
-            {{ showAllSamples ? "收起 (只显示前 10 行)" : "展开全部 " + (lastDryRun.samples?.length || 0) + " 行" }}
+            {{ showAllSamples ? "收起 (只显示前 10 行)" : "展开全部 " + (lastDryRun.samples?.length || 0) + $t('admin.etlview.templatetext.l610_') }}
           </el-button>
         </div>
       </div>

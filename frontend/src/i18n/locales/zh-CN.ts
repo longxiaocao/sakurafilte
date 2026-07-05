@@ -11,6 +11,30 @@
  *   - theme: 主题切换
  */
 export default {
+  admin: {
+    etlview: {
+      templatetext: {
+        l610_: ' 行',
+      },
+    },
+    helpview: {
+      string: {
+        l19_: ') + 型号',
+      },
+    },
+    perfview: {
+      templatetext: {
+        l203_: '▶ 自动',
+      },
+    },
+    productformview: {
+      title: {
+        l346_: '① 基础信息',
+        l419_: '④ 性能',
+        l440_: '⑤ 包装',
+      },
+    },
+  },
   common: {
     confirm: '确认',
     cancel: '取消',

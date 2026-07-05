@@ -1,5 +1,5 @@
 {
-  "ts": "2026-07-05T19:09:12.880717",
+  "ts": "2026-07-05T19:25:29.680848",
   "all_pass": true,
   "step_count": 2,
   "fail_count": 0,
@@ -11,13 +11,13 @@
       "exit_code": 0,
       "duration_sec": 0.1,
       "report": "spike-test\\frontend_static_audit.json",
-      "tail": "=== Frontend Static Audit ===\n扫描文件: 31\ni18n keys: zh=92  en=92\nAPI 调用点: 37\nFAIL=0  WARN=0\n报告: spike-test\\frontend_static_audit.json"
+      "tail": "=== Frontend Static Audit ===\n扫描文件: 31\ni18n keys: zh=99  en=99\nAPI 调用点: 37\nFAIL=0  WARN=0\n报告: spike-test\\frontend_static_audit.json"
     },
     {
       "name": "2. 运行时扫描 (21 路由 console 监听)",
       "ok": true,
       "exit_code": 0,
-      "duration_sec": 45.0,
+      "duration_sec": 44.8,
       "report": "spike-test\\frontend_runtime_audit.json",
       "tail": "  [  OK] /admin/dict/engine\n  [  OK] /admin/dict/media\n  [  OK] /admin/dict/oem-brands\n  [  OK] /admin/dict/oem-no3\n  [  OK] /admin/users\n  [  OK] /admin/help\n  [  OK] /admin/compare\n\n=== 汇总 ===\nERROR: 0  WARN: 0\n\n问题分组 (top 20):\n  [  1] Failed to load resource: the server responded with a status of 404 (Not Found)\n\n报告: spike-test\\frontend_runtime_audit.json"
     }
