@@ -1873,6 +1873,79 @@ def test_backend_deep_water(token):
     except Exception as e:
         record("后端深水区", "乐观锁-异常", "FAIL", "API 调用", str(e))
 
+    # 18. SSE 流 + 公开机型品牌聚合 (P2 测试盲点补充)
+    # WHY: SSE 进度流和机型品牌聚合端点之前未测试
+    #   SSE: text/event-stream 长连接, 第一帧含当前 ETL 状态, 后续 broadcaster 推送
+    #   机型品牌: 按 4 大类 (Agriculture/Commercial/Construction/others) 聚合 brand
+    print("\n[BD.18] SSE 流 + 公开机型品牌聚合")
+    try:
+        # 18.1 SSE 流连接 + 第一帧格式
+        #   timeout=(连接超时 5s, 读取超时 10s); 读到第一帧即关闭, 不等后续推送
+        try:
+            sse_resp = requests.get(
+                f"{BACKEND}/api/admin/etl/progress/stream",
+                headers=headers, stream=True, timeout=(5, 10))
+            sse_ok = sse_resp.status_code == 200
+            sse_ct = sse_resp.headers.get("content-type", "")
+            sse_first = None
+            if sse_ok:
+                for line in sse_resp.iter_lines(decode_unicode=True):
+                    if line and line.startswith("data:"):
+                        sse_first = line
+                        break
+            sse_resp.close()
+            sse_format_ok = (sse_ok
+                             and "text/event-stream" in sse_ct
+                             and sse_first is not None
+                             and "inProgress" in (sse_first or ""))
+            record("后端深水区", "SSE流-第一帧",
+                   "PASS" if sse_format_ok else "FAIL",
+                   "200 + text/event-stream + data:{inProgress}",
+                   f"status={sse_resp.status_code}, ct={sse_ct}, first={(sse_first or '')[:80]}")
+        except Exception as e:
+            record("后端深水区", "SSE流-第一帧", "FAIL",
+                   "SSE 连接成功", f"异常: {e}")
+
+        # 18.2 公开机型品牌聚合 (无需 token)
+        resp = requests.get(
+            f"{BACKEND}/api/public/machine-brands/aggregated", timeout=10)
+        if resp.status_code == 200:
+            data = resp.json()
+            by_cat = data.get("byCategory", {})
+            # 4 大类 key 一定存在 (即使空列表)
+            has_4_cats = all(c in by_cat for c in
+                             ["Agriculture", "Commercial", "Construction", "others"])
+            total = data.get("totalCount", 0)
+            record("后端深水区", "机型品牌聚合",
+                   "PASS" if has_4_cats else "FAIL",
+                   "4 大类 key 存在 + totalCount",
+                   f"cats={list(by_cat.keys())}, total={total}")
+        else:
+            record("后端深水区", "机型品牌聚合", "FAIL",
+                   "200 OK", f"status={resp.status_code}")
+
+        # 18.3 机型品牌公开访问 (无 token 应 200, [AllowAnonymous])
+        resp = requests.get(
+            f"{BACKEND}/api/public/machine-brands/aggregated", timeout=10)
+        record("后端深水区", "机型品牌-公开访问",
+               "PASS" if resp.status_code == 200 else "FAIL",
+               "200 OK (AllowAnonymous)", f"status={resp.status_code}")
+
+        # 18.4 SSE 鉴权 (无 token 应 401)
+        try:
+            resp = requests.get(
+                f"{BACKEND}/api/admin/etl/progress/stream",
+                stream=True, timeout=(3, 5))
+            sse_noauth = resp.status_code
+            resp.close()
+        except Exception:
+            sse_noauth = 0
+        record("后端深水区", "SSE流-鉴权",
+               "PASS" if sse_noauth == 401 else "WARN",
+               "401 Unauthorized", f"status={sse_noauth}")
+    except Exception as e:
+        record("后端深水区", "SSE/机型品牌-异常", "FAIL", "API 调用", str(e))
+
 def test_scenario_6_login_ui(page, login_resp):
     """场景 6: 登录页 UI 流程 (P2 测试盲点补充)
     WHY: 之前 E2E 通过 API 登录 + 注入 localStorage, 完全跳过 /login 页面
