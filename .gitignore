@@ -30,6 +30,7 @@ spike-test/_*.tmp
 #   WHY: 每次 E2E 跑都会重新生成, 提交会污染历史
 spike-test/e2e-screenshots/
 spike-test/theme-screenshots/
+spike-test/ux-review/
 
 ## Python
 __pycache__/
