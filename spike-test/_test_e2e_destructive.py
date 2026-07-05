@@ -1120,6 +1120,98 @@ def test_backend_deep_water(token):
             except Exception:
                 pass
 
+    # 9. 公开搜索 8 字段正确性 (P2 测试盲点补充)
+    # WHY: PublicSearchController.EightField 8 个字段 (oemBrand/oemNo2/oemNo3/
+    #   machineBrand/machineModel/modelName/engineBrand/engineType) 之前只测端点可达性
+    #   未验证各字段是否能正确返回结果, 也未测全空 400 和多字段 AND 组合
+    #   选已知产品 id=50006 (oem_2=E2E202607046315, xref: XREF-BRAND+XREF-001,
+    #   machine: TEST-BRAND+TEST-MACHINE-001) 作为搜索目标
+    print("\n[BD.9] 公开搜索 8 字段正确性")
+    try:
+        # 9.1 oemNo2 字段 (走 products 表 ILIKE)
+        resp = requests.get(f"{BACKEND}/api/public/search?oemNo2=E2E202607046315&pageSize=5", timeout=30)
+        if resp.status_code == 200:
+            data = resp.json()
+            hit = any(it.get("oem2") == "E2E202607046315" for it in data.get("items", []))
+            record("后端深水区", "搜索8字段-oemNo2",
+                   "PASS" if (hit and data.get("total", 0) > 0) else "FAIL",
+                   "命中 oem2=E2E202607046315", f"total={data.get('total')}, hit={hit}")
+        else:
+            record("后端深水区", "搜索8字段-oemNo2", "FAIL", "200 OK", f"status={resp.status_code}")
+
+        # 9.2 oemBrand 字段 (走 cross_references EXISTS)
+        resp2 = requests.get(f"{BACKEND}/api/public/search?oemBrand=XREF-BRAND&pageSize=5", timeout=30)
+        if resp2.status_code == 200:
+            data2 = resp2.json()
+            record("后端深水区", "搜索8字段-oemBrand",
+                   "PASS" if data2.get("total", 0) > 0 else "FAIL",
+                   "total > 0", f"total={data2.get('total')}, elapsed={data2.get('elapsedMs')}ms")
+        else:
+            record("后端深水区", "搜索8字段-oemBrand", "FAIL", "200 OK", f"status={resp2.status_code}")
+
+        # 9.3 oemNo3 字段 (走 cross_references EXISTS)
+        resp3 = requests.get(f"{BACKEND}/api/public/search?oemNo3=XREF-001&pageSize=5", timeout=30)
+        if resp3.status_code == 200:
+            data3 = resp3.json()
+            record("后端深水区", "搜索8字段-oemNo3",
+                   "PASS" if data3.get("total", 0) > 0 else "FAIL",
+                   "total > 0", f"total={data3.get('total')}, elapsed={data3.get('elapsedMs')}ms")
+        else:
+            record("后端深水区", "搜索8字段-oemNo3", "FAIL", "200 OK", f"status={resp3.status_code}")
+
+        # 9.4 machineBrand 字段 (走 machine_applications EXISTS)
+        resp4 = requests.get(f"{BACKEND}/api/public/search?machineBrand=TEST-BRAND&pageSize=5", timeout=30)
+        if resp4.status_code == 200:
+            data4 = resp4.json()
+            record("后端深水区", "搜索8字段-machineBrand",
+                   "PASS" if data4.get("total", 0) > 0 else "FAIL",
+                   "total > 0", f"total={data4.get('total')}, elapsed={data4.get('elapsedMs')}ms")
+        else:
+            record("后端深水区", "搜索8字段-machineBrand", "FAIL", "200 OK", f"status={resp4.status_code}")
+
+        # 9.5 machineModel 字段 (走 machine_applications EXISTS)
+        resp5 = requests.get(f"{BACKEND}/api/public/search?machineModel=TEST-MACHINE-001&pageSize=5", timeout=30)
+        if resp5.status_code == 200:
+            data5 = resp5.json()
+            record("后端深水区", "搜索8字段-machineModel",
+                   "PASS" if data5.get("total", 0) > 0 else "FAIL",
+                   "total > 0", f"total={data5.get('total')}, elapsed={data5.get('elapsedMs')}ms")
+        else:
+            record("后端深水区", "搜索8字段-machineModel", "FAIL", "200 OK", f"status={resp5.status_code}")
+
+        # 9.6 全空字段 → 400
+        resp6 = requests.get(f"{BACKEND}/api/public/search", timeout=10)
+        record("后端深水区", "搜索8字段-全空拦截",
+               "PASS" if resp6.status_code == 400 else "FAIL",
+               "400 Bad Request", f"status={resp6.status_code}")
+
+        # 9.7 多字段 AND 组合 (oemBrand + oemNo3, 应同时命中 XREF-BRAND 和 XREF-001)
+        resp7 = requests.get(f"{BACKEND}/api/public/search?oemBrand=XREF-BRAND&oemNo3=XREF-001&pageSize=5", timeout=30)
+        if resp7.status_code == 200:
+            data7 = resp7.json()
+            # AND 组合应返回 ≤ 单字段结果数 (收窄范围)
+            single_field_total = data2.get("total", 0)  # oemBrand=XREF-BRAND 的 total
+            record("后端深水区", "搜索8字段-AND组合",
+                   "PASS" if (0 < data7.get("total", 0) <= single_field_total) else "WARN",
+                   f"0 < total ≤ {single_field_total} (AND 收窄)",
+                   f"total={data7.get('total')}")
+        else:
+            record("后端深水区", "搜索8字段-AND组合", "FAIL", "200 OK", f"status={resp7.status_code}")
+
+        # 9.8 分页参数验证 (pageSize=2, 验证 items 数 ≤ 2)
+        resp8 = requests.get(f"{BACKEND}/api/public/search?oemBrand=XREF-BRAND&page=1&pageSize=2", timeout=30)
+        if resp8.status_code == 200:
+            data8 = resp8.json()
+            items_count = len(data8.get("items", []))
+            page_size = data8.get("pageSize", 0)
+            record("后端深水区", "搜索8字段-分页",
+                   "PASS" if (items_count <= 2 and page_size == 2) else "FAIL",
+                   "items ≤ 2, pageSize=2", f"items={items_count}, pageSize={page_size}")
+        else:
+            record("后端深水区", "搜索8字段-分页", "FAIL", "200 OK", f"status={resp8.status_code}")
+    except Exception as e:
+        record("后端深水区", "搜索8字段-异常", "FAIL", "API 调用", str(e))
+
 def test_scenario_6_login_ui(page, login_resp):
     """场景 6: 登录页 UI 流程 (P2 测试盲点补充)
     WHY: 之前 E2E 通过 API 登录 + 注入 localStorage, 完全跳过 /login 页面
