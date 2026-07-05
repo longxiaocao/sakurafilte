@@ -1,0 +1,1019 @@
+{
+  "high_freq_count": 23,
+  "replacement_count": 145,
+  "unique_action_count": 23,
+  "semantic_map": {
+    "确认": "confirm",
+    "恢复失败": "restore_failed",
+    "已删除": "deleted",
+    "已恢复": "restored",
+    "加载失败: ": "load_failed",
+    "操作失败": "operation_failed",
+    "删除失败": "delete_failed",
+    "排序失败": "sort_failed",
+    "排序": "sort_order",
+    "已新增": "created",
+    "已更新": "updated",
+    ">暂无数据, 点击右上": "no_data_click_top_right",
+    "排序已保存": "sort_order_saved",
+    "产品名 1": "product_name_1",
+    "产品名 2": "product_name_2",
+    "类型": "type",
+    "品牌": "brand",
+    "可选": "optional",
+    "密封材料": "seal_material",
+    "箱/件": "carton_per_pcs",
+    "型号": "model",
+    "恢复": "resume",
+    "名称": "name"
+  },
+  "unique_actions": [
+    {
+      "key": "product_name_1",
+      "zh": "产品名 1",
+      "en": "Product Name 1"
+    },
+    {
+      "key": "product_name_2",
+      "zh": "产品名 2",
+      "en": "Product Name 2"
+    },
+    {
+      "key": "type",
+      "zh": "类型",
+      "en": "Type"
+    },
+    {
+      "key": "seal_material",
+      "zh": "密封材料",
+      "en": "Seal Material"
+    },
+    {
+      "key": "carton_per_pcs",
+      "zh": "箱/件",
+      "en": "carton/pcs"
+    },
+    {
+      "key": "load_failed",
+      "zh": "加载失败: ",
+      "en": "Load failed:"
+    },
+    {
+      "key": "operation_failed",
+      "zh": "操作失败",
+      "en": "Operation failed"
+    },
+    {
+      "key": "delete_failed",
+      "zh": "删除失败",
+      "en": "Delete failed"
+    },
+    {
+      "key": "restore_failed",
+      "zh": "恢复失败",
+      "en": "Resume Failed"
+    },
+    {
+      "key": "sort_failed",
+      "zh": "排序失败",
+      "en": "Sort Order Failed"
+    },
+    {
+      "key": "brand",
+      "zh": "品牌",
+      "en": "Brand"
+    },
+    {
+      "key": "model",
+      "zh": "型号",
+      "en": "Model"
+    },
+    {
+      "key": "sort_order",
+      "zh": "排序",
+      "en": "Sort Order"
+    },
+    {
+      "key": "no_data_click_top_right",
+      "zh": ">暂无数据, 点击右上",
+      "en": "> No data, Click Right 上"
+    },
+    {
+      "key": "created",
+      "zh": "已新增",
+      "en": "Add"
+    },
+    {
+      "key": "updated",
+      "zh": "已更新",
+      "en": "Updated"
+    },
+    {
+      "key": "deleted",
+      "zh": "已删除",
+      "en": "Deleted"
+    },
+    {
+      "key": "restored",
+      "zh": "已恢复",
+      "en": "Resumed"
+    },
+    {
+      "key": "sort_order_saved",
+      "zh": "排序已保存",
+      "en": "Sort Order Saved"
+    },
+    {
+      "key": "confirm",
+      "zh": "确认",
+      "en": "Confirm"
+    },
+    {
+      "key": "resume",
+      "zh": "恢复",
+      "en": "Resume"
+    },
+    {
+      "key": "name",
+      "zh": "名称",
+      "en": "Name"
+    },
+    {
+      "key": "optional",
+      "zh": "可选",
+      "en": "Optional"
+    }
+  ],
+  "replacements": [
+    {
+      "old": "admin.compareview.string.l58_1",
+      "new": "common.action.product_name_1",
+      "zh": "产品名 1",
+      "en": "Product Name 1"
+    },
+    {
+      "old": "admin.compareview.string.l59_2",
+      "new": "common.action.product_name_2",
+      "zh": "产品名 2",
+      "en": "Product Name 2"
+    },
+    {
+      "old": "admin.compareview.string.l60_",
+      "new": "common.action.type",
+      "zh": "类型",
+      "en": "Type"
+    },
+    {
+      "old": "admin.compareview.string.l89_",
+      "new": "common.action.seal_material",
+      "zh": "密封材料",
+      "en": "Seal Material"
+    },
+    {
+      "old": "admin.compareview.string.l98_",
+      "new": "common.action.carton_per_pcs",
+      "zh": "箱/件",
+      "en": "carton/pcs"
+    },
+    {
+      "old": "admin.enginesview.error.l26_",
+      "new": "common.action.load_failed",
+      "zh": "加载失败: ",
+      "en": "Load failed:"
+    },
+    {
+      "old": "admin.enginesview.error.l58_",
+      "new": "common.action.operation_failed",
+      "zh": "操作失败",
+      "en": "Operation failed"
+    },
+    {
+      "old": "admin.enginesview.error.l64_",
+      "new": "common.action.delete_failed",
+      "zh": "删除失败",
+      "en": "Delete failed"
+    },
+    {
+      "old": "admin.enginesview.error.l68_",
+      "new": "common.action.restore_failed",
+      "zh": "恢复失败",
+      "en": "Resume Failed"
+    },
+    {
+      "old": "admin.enginesview.error.l85_",
+      "new": "common.action.sort_failed",
+      "zh": "排序失败",
+      "en": "Sort Order Failed"
+    },
+    {
+      "old": "admin.enginesview.label.l155_",
+      "new": "common.action.brand",
+      "zh": "品牌",
+      "en": "Brand"
+    },
+    {
+      "old": "admin.enginesview.label.l158_",
+      "new": "common.action.model",
+      "zh": "型号",
+      "en": "Model"
+    },
+    {
+      "old": "admin.enginesview.label.l162_",
+      "new": "common.action.sort_order",
+      "zh": "排序",
+      "en": "Sort Order"
+    },
+    {
+      "old": "admin.enginesview.string.l148_",
+      "new": "common.action.no_data_click_top_right",
+      "zh": ">暂无数据, 点击右上",
+      "en": "> No data, Click Right 上"
+    },
+    {
+      "old": "admin.enginesview.success.l52_",
+      "new": "common.action.created",
+      "zh": "已新增",
+      "en": "Add"
+    },
+    {
+      "old": "admin.enginesview.success.l55_",
+      "new": "common.action.updated",
+      "zh": "已更新",
+      "en": "Updated"
+    },
+    {
+      "old": "admin.enginesview.success.l63_",
+      "new": "common.action.deleted",
+      "zh": "已删除",
+      "en": "Deleted"
+    },
+    {
+      "old": "admin.enginesview.success.l67_",
+      "new": "common.action.restored",
+      "zh": "已恢复",
+      "en": "Resumed"
+    },
+    {
+      "old": "admin.enginesview.success.l84_",
+      "new": "common.action.sort_order_saved",
+      "zh": "排序已保存",
+      "en": "Sort Order Saved"
+    },
+    {
+      "old": "admin.enginesview.warning.l62_",
+      "new": "common.action.confirm",
+      "zh": "确认",
+      "en": "Confirm"
+    },
+    {
+      "old": "admin.etlview.buttontext.l377_",
+      "new": "common.action.resume",
+      "zh": "恢复",
+      "en": "Resume"
+    },
+    {
+      "old": "admin.etlview.string.l351_",
+      "new": "common.action.resume",
+      "zh": "恢复",
+      "en": "Resume"
+    },
+    {
+      "old": "admin.etlview.string.l353_resume_word",
+      "new": "common.action.resume",
+      "zh": "恢复",
+      "en": "Resume"
+    },
+    {
+      "old": "admin.etlview.string.l96_",
+      "new": "common.action.confirm",
+      "zh": "确认",
+      "en": "Confirm"
+    },
+    {
+      "old": "admin.etlview.warning.l387_",
+      "new": "common.action.restore_failed",
+      "zh": "恢复失败",
+      "en": "Resume Failed"
+    },
+    {
+      "old": "admin.helpview.string.l13_1",
+      "new": "common.action.product_name_1",
+      "zh": "产品名 1",
+      "en": "Product Name 1"
+    },
+    {
+      "old": "admin.helpview.string.l14_2",
+      "new": "common.action.product_name_2",
+      "zh": "产品名 2",
+      "en": "Product Name 2"
+    },
+    {
+      "old": "admin.machinesview.error.l107_",
+      "new": "common.action.sort_failed",
+      "zh": "排序失败",
+      "en": "Sort Order Failed"
+    },
+    {
+      "old": "admin.machinesview.error.l38_",
+      "new": "common.action.load_failed",
+      "zh": "加载失败: ",
+      "en": "Load failed:"
+    },
+    {
+      "old": "admin.machinesview.error.l80_",
+      "new": "common.action.operation_failed",
+      "zh": "操作失败",
+      "en": "Operation failed"
+    },
+    {
+      "old": "admin.machinesview.error.l86_",
+      "new": "common.action.delete_failed",
+      "zh": "删除失败",
+      "en": "Delete failed"
+    },
+    {
+      "old": "admin.machinesview.error.l90_",
+      "new": "common.action.restore_failed",
+      "zh": "恢复失败",
+      "en": "Resume Failed"
+    },
+    {
+      "old": "admin.machinesview.label.l194_",
+      "new": "common.action.brand",
+      "zh": "品牌",
+      "en": "Brand"
+    },
+    {
+      "old": "admin.machinesview.label.l197_",
+      "new": "common.action.model",
+      "zh": "型号",
+      "en": "Model"
+    },
+    {
+      "old": "admin.machinesview.label.l200_",
+      "new": "common.action.name",
+      "zh": "名称",
+      "en": "Name"
+    },
+    {
+      "old": "admin.machinesview.label.l211_",
+      "new": "common.action.sort_order",
+      "zh": "排序",
+      "en": "Sort Order"
+    },
+    {
+      "old": "admin.machinesview.string.l187_",
+      "new": "common.action.no_data_click_top_right",
+      "zh": ">暂无数据, 点击右上",
+      "en": "> No data, Click Right 上"
+    },
+    {
+      "old": "admin.machinesview.success.l106_",
+      "new": "common.action.sort_order_saved",
+      "zh": "排序已保存",
+      "en": "Sort Order Saved"
+    },
+    {
+      "old": "admin.machinesview.success.l70_",
+      "new": "common.action.created",
+      "zh": "已新增",
+      "en": "Add"
+    },
+    {
+      "old": "admin.machinesview.success.l77_",
+      "new": "common.action.updated",
+      "zh": "已更新",
+      "en": "Updated"
+    },
+    {
+      "old": "admin.machinesview.success.l85_",
+      "new": "common.action.deleted",
+      "zh": "已删除",
+      "en": "Deleted"
+    },
+    {
+      "old": "admin.machinesview.success.l89_",
+      "new": "common.action.restored",
+      "zh": "已恢复",
+      "en": "Resumed"
+    },
+    {
+      "old": "admin.machinesview.warning.l84_",
+      "new": "common.action.confirm",
+      "zh": "确认",
+      "en": "Confirm"
+    },
+    {
+      "old": "admin.mediasview.error.l28_",
+      "new": "common.action.load_failed",
+      "zh": "加载失败: ",
+      "en": "Load failed:"
+    },
+    {
+      "old": "admin.mediasview.error.l60_",
+      "new": "common.action.operation_failed",
+      "zh": "操作失败",
+      "en": "Operation failed"
+    },
+    {
+      "old": "admin.mediasview.error.l65_",
+      "new": "common.action.delete_failed",
+      "zh": "删除失败",
+      "en": "Delete failed"
+    },
+    {
+      "old": "admin.mediasview.error.l69_",
+      "new": "common.action.restore_failed",
+      "zh": "恢复失败",
+      "en": "Resume Failed"
+    },
+    {
+      "old": "admin.mediasview.error.l86_",
+      "new": "common.action.sort_failed",
+      "zh": "排序失败",
+      "en": "Sort Order Failed"
+    },
+    {
+      "old": "admin.mediasview.label.l163_",
+      "new": "common.action.sort_order",
+      "zh": "排序",
+      "en": "Sort Order"
+    },
+    {
+      "old": "admin.mediasview.string.l149_",
+      "new": "common.action.no_data_click_top_right",
+      "zh": ">暂无数据, 点击右上",
+      "en": "> No data, Click Right 上"
+    },
+    {
+      "old": "admin.mediasview.success.l54_",
+      "new": "common.action.created",
+      "zh": "已新增",
+      "en": "Add"
+    },
+    {
+      "old": "admin.mediasview.success.l57_",
+      "new": "common.action.updated",
+      "zh": "已更新",
+      "en": "Updated"
+    },
+    {
+      "old": "admin.mediasview.success.l64_",
+      "new": "common.action.deleted",
+      "zh": "已删除",
+      "en": "Deleted"
+    },
+    {
+      "old": "admin.mediasview.success.l68_",
+      "new": "common.action.restored",
+      "zh": "已恢复",
+      "en": "Resumed"
+    },
+    {
+      "old": "admin.mediasview.success.l85_",
+      "new": "common.action.sort_order_saved",
+      "zh": "排序已保存",
+      "en": "Sort Order Saved"
+    },
+    {
+      "old": "admin.mediasview.warning.l63_",
+      "new": "common.action.confirm",
+      "zh": "确认",
+      "en": "Confirm"
+    },
+    {
+      "old": "admin.oembrandsview.error.l37_",
+      "new": "common.action.load_failed",
+      "zh": "加载失败: ",
+      "en": "Load failed:"
+    },
+    {
+      "old": "admin.oembrandsview.label.l296_",
+      "new": "common.action.brand",
+      "zh": "品牌",
+      "en": "Brand"
+    },
+    {
+      "old": "admin.oembrandsview.label.l299_",
+      "new": "common.action.sort_order",
+      "zh": "排序",
+      "en": "Sort Order"
+    },
+    {
+      "old": "admin.oembrandsview.string.l107_",
+      "new": "common.action.delete_failed",
+      "zh": "删除失败",
+      "en": "Delete failed"
+    },
+    {
+      "old": "admin.oembrandsview.string.l118_",
+      "new": "common.action.restore_failed",
+      "zh": "恢复失败",
+      "en": "Resume Failed"
+    },
+    {
+      "old": "admin.oembrandsview.string.l167_",
+      "new": "common.action.sort_failed",
+      "zh": "排序失败",
+      "en": "Sort Order Failed"
+    },
+    {
+      "old": "admin.oembrandsview.string.l87_",
+      "new": "common.action.operation_failed",
+      "zh": "操作失败",
+      "en": "Operation failed"
+    },
+    {
+      "old": "admin.oembrandsview.string.l96_",
+      "new": "common.action.confirm",
+      "zh": "确认",
+      "en": "Confirm"
+    },
+    {
+      "old": "admin.oembrandsview.success.l104_",
+      "new": "common.action.deleted",
+      "zh": "已删除",
+      "en": "Deleted"
+    },
+    {
+      "old": "admin.oembrandsview.success.l115_",
+      "new": "common.action.restored",
+      "zh": "已恢复",
+      "en": "Resumed"
+    },
+    {
+      "old": "admin.oembrandsview.success.l165_",
+      "new": "common.action.sort_order_saved",
+      "zh": "排序已保存",
+      "en": "Sort Order Saved"
+    },
+    {
+      "old": "admin.oembrandsview.success.l75_",
+      "new": "common.action.created",
+      "zh": "已新增",
+      "en": "Add"
+    },
+    {
+      "old": "admin.oembrandsview.success.l81_",
+      "new": "common.action.updated",
+      "zh": "已更新",
+      "en": "Updated"
+    },
+    {
+      "old": "admin.oemno3sview.error.l26_",
+      "new": "common.action.load_failed",
+      "zh": "加载失败: ",
+      "en": "Load failed:"
+    },
+    {
+      "old": "admin.oemno3sview.error.l53_",
+      "new": "common.action.operation_failed",
+      "zh": "操作失败",
+      "en": "Operation failed"
+    },
+    {
+      "old": "admin.oemno3sview.error.l58_",
+      "new": "common.action.delete_failed",
+      "zh": "删除失败",
+      "en": "Delete failed"
+    },
+    {
+      "old": "admin.oemno3sview.error.l62_",
+      "new": "common.action.restore_failed",
+      "zh": "恢复失败",
+      "en": "Resume Failed"
+    },
+    {
+      "old": "admin.oemno3sview.error.l79_",
+      "new": "common.action.sort_failed",
+      "zh": "排序失败",
+      "en": "Sort Order Failed"
+    },
+    {
+      "old": "admin.oemno3sview.label.l150_",
+      "new": "common.action.sort_order",
+      "zh": "排序",
+      "en": "Sort Order"
+    },
+    {
+      "old": "admin.oemno3sview.string.l140_",
+      "new": "common.action.no_data_click_top_right",
+      "zh": ">暂无数据, 点击右上",
+      "en": "> No data, Click Right 上"
+    },
+    {
+      "old": "admin.oemno3sview.success.l47_",
+      "new": "common.action.created",
+      "zh": "已新增",
+      "en": "Add"
+    },
+    {
+      "old": "admin.oemno3sview.success.l50_",
+      "new": "common.action.updated",
+      "zh": "已更新",
+      "en": "Updated"
+    },
+    {
+      "old": "admin.oemno3sview.success.l57_",
+      "new": "common.action.deleted",
+      "zh": "已删除",
+      "en": "Deleted"
+    },
+    {
+      "old": "admin.oemno3sview.success.l61_",
+      "new": "common.action.restored",
+      "zh": "已恢复",
+      "en": "Resumed"
+    },
+    {
+      "old": "admin.oemno3sview.success.l78_",
+      "new": "common.action.sort_order_saved",
+      "zh": "排序已保存",
+      "en": "Sort Order Saved"
+    },
+    {
+      "old": "admin.oemno3sview.warning.l56_",
+      "new": "common.action.confirm",
+      "zh": "确认",
+      "en": "Confirm"
+    },
+    {
+      "old": "admin.productformview.label.l349_1",
+      "new": "common.action.product_name_1",
+      "zh": "产品名 1",
+      "en": "Product Name 1"
+    },
+    {
+      "old": "admin.productformview.label.l353_2",
+      "new": "common.action.product_name_2",
+      "zh": "产品名 2",
+      "en": "Product Name 2"
+    },
+    {
+      "old": "admin.productformview.label.l357_",
+      "new": "common.action.type",
+      "zh": "类型",
+      "en": "Type"
+    },
+    {
+      "old": "admin.productformview.label.l434_",
+      "new": "common.action.seal_material",
+      "zh": "密封材料",
+      "en": "Seal Material"
+    },
+    {
+      "old": "admin.productformview.label.l442_",
+      "new": "common.action.carton_per_pcs",
+      "zh": "箱/件",
+      "en": "carton/pcs"
+    },
+    {
+      "old": "admin.productformview.placeholder.l518_",
+      "new": "common.action.name",
+      "zh": "名称",
+      "en": "Name"
+    },
+    {
+      "old": "admin.productname1sview.error.l31_",
+      "new": "common.action.load_failed",
+      "zh": "加载失败: ",
+      "en": "Load failed:"
+    },
+    {
+      "old": "admin.productname1sview.label.l231_1",
+      "new": "common.action.product_name_1",
+      "zh": "产品名 1",
+      "en": "Product Name 1"
+    },
+    {
+      "old": "admin.productname1sview.label.l234_",
+      "new": "common.action.sort_order",
+      "zh": "排序",
+      "en": "Sort Order"
+    },
+    {
+      "old": "admin.productname1sview.string.l101_",
+      "new": "common.action.restore_failed",
+      "zh": "恢复失败",
+      "en": "Resume Failed"
+    },
+    {
+      "old": "admin.productname1sview.string.l140_",
+      "new": "common.action.sort_failed",
+      "zh": "排序失败",
+      "en": "Sort Order Failed"
+    },
+    {
+      "old": "admin.productname1sview.string.l221_",
+      "new": "common.action.no_data_click_top_right",
+      "zh": ">暂无数据, 点击右上",
+      "en": "> No data, Click Right 上"
+    },
+    {
+      "old": "admin.productname1sview.string.l73_",
+      "new": "common.action.operation_failed",
+      "zh": "操作失败",
+      "en": "Operation failed"
+    },
+    {
+      "old": "admin.productname1sview.string.l82_",
+      "new": "common.action.confirm",
+      "zh": "确认",
+      "en": "Confirm"
+    },
+    {
+      "old": "admin.productname1sview.string.l90_",
+      "new": "common.action.delete_failed",
+      "zh": "删除失败",
+      "en": "Delete failed"
+    },
+    {
+      "old": "admin.productname1sview.success.l138_",
+      "new": "common.action.sort_order_saved",
+      "zh": "排序已保存",
+      "en": "Sort Order Saved"
+    },
+    {
+      "old": "admin.productname1sview.success.l63_",
+      "new": "common.action.created",
+      "zh": "已新增",
+      "en": "Add"
+    },
+    {
+      "old": "admin.productname1sview.success.l68_",
+      "new": "common.action.updated",
+      "zh": "已更新",
+      "en": "Updated"
+    },
+    {
+      "old": "admin.productname1sview.success.l87_",
+      "new": "common.action.deleted",
+      "zh": "已删除",
+      "en": "Deleted"
+    },
+    {
+      "old": "admin.productname1sview.success.l98_",
+      "new": "common.action.restored",
+      "zh": "已恢复",
+      "en": "Resumed"
+    },
+    {
+      "old": "admin.productname2sview.error.l26_",
+      "new": "common.action.load_failed",
+      "zh": "加载失败: ",
+      "en": "Load failed:"
+    },
+    {
+      "old": "admin.productname2sview.error.l53_",
+      "new": "common.action.operation_failed",
+      "zh": "操作失败",
+      "en": "Operation failed"
+    },
+    {
+      "old": "admin.productname2sview.error.l58_",
+      "new": "common.action.delete_failed",
+      "zh": "删除失败",
+      "en": "Delete failed"
+    },
+    {
+      "old": "admin.productname2sview.error.l62_",
+      "new": "common.action.restore_failed",
+      "zh": "恢复失败",
+      "en": "Resume Failed"
+    },
+    {
+      "old": "admin.productname2sview.error.l79_",
+      "new": "common.action.sort_failed",
+      "zh": "排序失败",
+      "en": "Sort Order Failed"
+    },
+    {
+      "old": "admin.productname2sview.label.l147_2",
+      "new": "common.action.product_name_2",
+      "zh": "产品名 2",
+      "en": "Product Name 2"
+    },
+    {
+      "old": "admin.productname2sview.label.l150_",
+      "new": "common.action.sort_order",
+      "zh": "排序",
+      "en": "Sort Order"
+    },
+    {
+      "old": "admin.productname2sview.string.l140_",
+      "new": "common.action.no_data_click_top_right",
+      "zh": ">暂无数据, 点击右上",
+      "en": "> No data, Click Right 上"
+    },
+    {
+      "old": "admin.productname2sview.success.l47_",
+      "new": "common.action.created",
+      "zh": "已新增",
+      "en": "Add"
+    },
+    {
+      "old": "admin.productname2sview.success.l50_",
+      "new": "common.action.updated",
+      "zh": "已更新",
+      "en": "Updated"
+    },
+    {
+      "old": "admin.productname2sview.success.l57_",
+      "new": "common.action.deleted",
+      "zh": "已删除",
+      "en": "Deleted"
+    },
+    {
+      "old": "admin.productname2sview.success.l61_",
+      "new": "common.action.restored",
+      "zh": "已恢复",
+      "en": "Resumed"
+    },
+    {
+      "old": "admin.productname2sview.success.l78_",
+      "new": "common.action.sort_order_saved",
+      "zh": "排序已保存",
+      "en": "Sort Order Saved"
+    },
+    {
+      "old": "admin.productname2sview.warning.l56_",
+      "new": "common.action.confirm",
+      "zh": "确认",
+      "en": "Confirm"
+    },
+    {
+      "old": "admin.productsview.label.l329_",
+      "new": "common.action.type",
+      "zh": "类型",
+      "en": "Type"
+    },
+    {
+      "old": "admin.productsview.label.l342_",
+      "new": "common.action.carton_per_pcs",
+      "zh": "箱/件",
+      "en": "carton/pcs"
+    },
+    {
+      "old": "admin.productsview.placeholder.l296_",
+      "new": "common.action.type",
+      "zh": "类型",
+      "en": "Type"
+    },
+    {
+      "old": "admin.productsview.placeholder.l389_1",
+      "new": "common.action.product_name_1",
+      "zh": "产品名 1",
+      "en": "Product Name 1"
+    },
+    {
+      "old": "admin.productsview.placeholder.l390_2",
+      "new": "common.action.product_name_2",
+      "zh": "产品名 2",
+      "en": "Product Name 2"
+    },
+    {
+      "old": "admin.productsview.placeholder.l396_",
+      "new": "common.action.seal_material",
+      "zh": "密封材料",
+      "en": "Seal Material"
+    },
+    {
+      "old": "admin.productsview.placeholder.l420_",
+      "new": "common.action.brand",
+      "zh": "品牌",
+      "en": "Brand"
+    },
+    {
+      "old": "admin.productsview.placeholder.l421_",
+      "new": "common.action.model",
+      "zh": "型号",
+      "en": "Model"
+    },
+    {
+      "old": "admin.productsview.placeholder.l422_",
+      "new": "common.action.name",
+      "zh": "名称",
+      "en": "Name"
+    },
+    {
+      "old": "admin.productsview.success.l171_",
+      "new": "common.action.restored",
+      "zh": "已恢复",
+      "en": "Resumed"
+    },
+    {
+      "old": "admin.productsview.warning.l149_",
+      "new": "common.action.confirm",
+      "zh": "确认",
+      "en": "Confirm"
+    },
+    {
+      "old": "admin.typesview.error.l28_",
+      "new": "common.action.load_failed",
+      "zh": "加载失败: ",
+      "en": "Load failed:"
+    },
+    {
+      "old": "admin.typesview.error.l55_",
+      "new": "common.action.operation_failed",
+      "zh": "操作失败",
+      "en": "Operation failed"
+    },
+    {
+      "old": "admin.typesview.error.l68_",
+      "new": "common.action.delete_failed",
+      "zh": "删除失败",
+      "en": "Delete failed"
+    },
+    {
+      "old": "admin.typesview.error.l72_",
+      "new": "common.action.restore_failed",
+      "zh": "恢复失败",
+      "en": "Resume Failed"
+    },
+    {
+      "old": "admin.typesview.error.l89_",
+      "new": "common.action.sort_failed",
+      "zh": "排序失败",
+      "en": "Sort Order Failed"
+    },
+    {
+      "old": "admin.typesview.label.l160_",
+      "new": "common.action.sort_order",
+      "zh": "排序",
+      "en": "Sort Order"
+    },
+    {
+      "old": "admin.typesview.string.l150_",
+      "new": "common.action.no_data_click_top_right",
+      "zh": ">暂无数据, 点击右上",
+      "en": "> No data, Click Right 上"
+    },
+    {
+      "old": "admin.typesview.string.l64_",
+      "new": "common.action.confirm",
+      "zh": "确认",
+      "en": "Confirm"
+    },
+    {
+      "old": "admin.typesview.success.l49_",
+      "new": "common.action.created",
+      "zh": "已新增",
+      "en": "Add"
+    },
+    {
+      "old": "admin.typesview.success.l52_",
+      "new": "common.action.updated",
+      "zh": "已更新",
+      "en": "Updated"
+    },
+    {
+      "old": "admin.typesview.success.l67_",
+      "new": "common.action.deleted",
+      "zh": "已删除",
+      "en": "Deleted"
+    },
+    {
+      "old": "admin.typesview.success.l71_",
+      "new": "common.action.restored",
+      "zh": "已恢复",
+      "en": "Resumed"
+    },
+    {
+      "old": "admin.usersview.placeholder.l409_",
+      "new": "common.action.optional",
+      "zh": "可选",
+      "en": "Optional"
+    },
+    {
+      "old": "admin.usersview.placeholder.l412_",
+      "new": "common.action.optional",
+      "zh": "可选",
+      "en": "Optional"
+    },
+    {
+      "old": "admin.usersview.placeholder.l438_",
+      "new": "common.action.optional",
+      "zh": "可选",
+      "en": "Optional"
+    },
+    {
+      "old": "admin.usersview.placeholder.l441_",
+      "new": "common.action.optional",
+      "zh": "可选",
+      "en": "Optional"
+    },
+    {
+      "old": "admin.usersview.string.l161_",
+      "new": "common.action.confirm",
+      "zh": "确认",
+      "en": "Confirm"
+    },
+    {
+      "old": "admin.usersview.success.l171_",
+      "new": "common.action.deleted",
+      "zh": "已删除",
+      "en": "Deleted"
+    }
+  ]
+}
