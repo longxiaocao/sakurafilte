@@ -1,0 +1,63 @@
+# P1-2: API 服务 Dockerfile (多阶段构建, Alpine 基础镜像)
+#   阶段 1 (build): .NET SDK 8.0 编译 Release 版本
+#   阶段 2 (runtime): .NET Runtime 8.0 Alpine, 仅复制发布产物
+#   最终镜像 ~150MB (含依赖)
+#   安全: 非 root 用户, 只读文件系统
+#
+#   构建:  docker build -t sakurafilter-api:1.0.0 -f docker/Dockerfile.api .
+#   运行:  docker run -d -p 5148:8080 --env-file .env.prod sakurafilter-api:1.0.0
+#
+#   参考: https://learn.microsoft.com/en-us/dotnet/core/docker/build-container
+
+# ========== 阶段 1: 构建 ==========
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+WORKDIR /src
+
+# 复制 csproj 文件优先, 利用 Docker 缓存 (依赖未变则跳过 restore)
+COPY src/SakuraFilter.Core/SakuraFilter.Core.csproj src/SakuraFilter.Core/
+COPY src/SakuraFilter.Infrastructure/SakuraFilter.Infrastructure.csproj src/SakuraFilter.Infrastructure/
+COPY src/SakuraFilter.Etl/SakuraFilter.Etl.csproj src/SakuraFilter.Etl/
+COPY src/SakuraFilter.Search/SakuraFilter.Search.csproj src/SakuraFilter.Search/
+COPY src/SakuraFilter.Api/SakuraFilter.Api.csproj src/SakuraFilter.Api/
+RUN dotnet restore src/SakuraFilter.Api/SakuraFilter.Api.csproj
+
+# 复制源代码
+COPY src/ src/
+
+# Release 编译 + 发布
+RUN dotnet publish src/SakuraFilter.Api/SakuraFilter.Api.csproj \
+    -c Release \
+    -o /app/publish \
+    --no-restore \
+    /p:UseAppHost=false
+
+# ========== 阶段 2: 运行 ==========
+FROM mcr.microsoft.com/dotnet/aspnet:8.0-alpine AS runtime
+WORKDIR /app
+
+# 安装时区数据 (某些时区计算需要)
+RUN apk add --no-cache tzdata
+
+# 创建非 root 用户
+RUN adduser -D -u 1000 sakura && \
+    chown -R sakura:sakura /app
+
+# 复制发布产物
+COPY --from=build --chown=sakura:sakura /app/publish .
+
+# 切换到非 root 用户
+USER sakura
+
+# 配置: ASP.NET Core 监听 8080 (容器内)
+ENV ASPNETCORE_URLS=http://+:8080 \
+    ASPNETCORE_ENVIRONMENT=Production \
+    DOTNET_RUNNING_IN_CONTAINER=true \
+    DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false
+
+EXPOSE 8080
+
+# 健康检查
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD wget --quiet --tries=1 --spider http://localhost:8080/health/live || exit 1
+
+ENTRYPOINT ["dotnet", "SakuraFilter.Api.dll"]

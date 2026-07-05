@@ -20,6 +20,10 @@ obj/
 .env.local
 .env.*.local
 !.env.example
+!.env.prod.example
+# 生产环境敏感配置 (P1-2 Docker 化)
+.env.prod
+docker/*.env
 
 ## 临时调试文件 (SQL/JSON 快照, 不应提交)
 spike-test/_check_*.sql

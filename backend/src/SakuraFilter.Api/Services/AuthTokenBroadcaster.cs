@@ -98,10 +98,29 @@ public class AuthTokenBroadcaster : IHostedService, IAsyncDisposable
                     }
                 };
 
-                // 保持连接 + 处理断连重试
+                // P2-6 修复: 阻塞等通知期间必须周期性报心跳, 否则 /health/ready 5min 后误判 stale
+                //   WHY: 之前只在循环顶部 _hostedStatus.ReportAlive 一次, 长连接等通知时心跳陈旧
+                //   策略: WaitAsync 用 CancellationToken 配合 Task.WhenAny + Task.Delay, 4min 报一次心跳
                 while (!ct.IsCancellationRequested && _listenConn.State == System.Data.ConnectionState.Open)
                 {
-                    await _listenConn.WaitAsync(ct);
+                    _hostedStatus.ReportAlive(nameof(AuthTokenBroadcaster));
+                    try
+                    {
+                        // 4 分钟超时让出, 然后再报心跳 + 重新等 (避免 5min stale 阈值)
+                        var waitTask = _listenConn.WaitAsync(ct);
+                        var heartbeatTask = Task.Delay(TimeSpan.FromMinutes(4), ct);
+                        var completed = await Task.WhenAny(waitTask, heartbeatTask);
+                        if (completed == waitTask)
+                        {
+                            // WaitAsync 完成 (连接断/出错), 退出内层 while 由外层重试
+                            break;
+                        }
+                        // heartbeatTask 触发, 继续循环 (报心跳 + 再等)
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        break;
+                    }
                 }
                 // P2-5 修复: 正常退出路径 (WaitAsync 返回但连接非 Open) 也需 Dispose 旧连接, 防止泄漏
                 try { _listenConn?.Dispose(); } catch { }

@@ -1,0 +1,216 @@
+# P1-2: Docker Compose 生产编排
+#   包含: API + Web(Nginx) + Postgres + MeiliSearch + MinIO + Prometheus + Grafana
+#   启动: docker-compose -f docker-compose.prod.yml --env-file .env.prod up -d
+#
+#   网络: sakura-net (bridge)
+#   存储: postgres-data / minio-data / grafana-data (named volumes)
+#   端口: 80(Web) / 9090(Prometheus) / 3000(Grafana) — PG/Meili/MinIO 不对外暴露
+
+version: "3.9"
+
+networks:
+  sakura-net:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  meili-data:
+  minio-data:
+  grafana-data:
+  prometheus-data:
+
+services:
+  # ===== 应用层 =====
+  api:
+    build:
+      context: ./backend
+      dockerfile: ../docker/Dockerfile.api
+    image: sakurafilter-api:1.0.0
+    container_name: sakura-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      meilisearch:
+        condition: service_started
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
+      MeiliSearch__Endpoint: "http://meilisearch:7700"
+      MeiliSearch__ApiKey: "${MEILI_MASTER_KEY}"
+      MeiliSearch__IndexName: products
+      Jwt__SigningKey: "${JWT_SIGNING_KEY}"
+      Jwt__Issuer: "${JWT_ISSUER}"
+      Jwt__Audience: "${JWT_AUDIENCE}"
+      Jwt__ExpireMinutes: "60"
+      Jwt__RefreshExpireDays: "7"
+      Auth__DevStaticToken: "${ADMIN_DEV_TOKEN}"
+      # MinIO / Aliyun OSS 切换
+      Storage__Provider: "minio"
+      Minio__Endpoint: "minio:9000"
+      Minio__AccessKey: "${MINIO_ROOT_USER}"
+      Minio__SecretKey: "${MINIO_ROOT_PASSWORD}"
+      Minio__BucketName: "sakurafilter"
+      Minio__PublicEndpoint: "http://localhost:9000"
+      Minio__UseSSL: "false"
+      Etl__RecentErrorBuffer: "10"
+      Etl__IndexReplayPollSeconds: "10"
+      Etl__IndexReplayBatchSize: "500"
+    networks:
+      - sakura-net
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health/live"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2G
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  web:
+    build:
+      context: ./frontend
+      dockerfile: ../docker/Dockerfile.web
+    image: sakurafilter-web:1.0.0
+    container_name: sakura-web
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "80:80"
+    networks:
+      - sakura-net
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+
+  # ===== 数据层 =====
+  postgres:
+    image: postgres:16-alpine
+    container_name: sakura-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - sakura-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4G
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.10
+    container_name: sakura-meili
+    restart: unless-stopped
+    environment:
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY}
+      MEILI_NO_ANALYTICS: "true"
+      MEILI_ENV: production
+    volumes:
+      - meili-data:/meili_data
+    networks:
+      - sakura-net
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+
+  minio:
+    image: minio/minio:latest
+    container_name: sakura-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - minio-data:/data
+    networks:
+      - sakura-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+
+  # ===== 监控层 =====
+  prometheus:
+    image: prom/prometheus:v2.55.0
+    container_name: sakura-prometheus
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=30d"
+      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+      - "--web.console.templates=/usr/share/prometheus/consoles"
+    volumes:
+      - ./docker/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    depends_on:
+      - api
+    networks:
+      - sakura-net
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: sakura-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    networks:
+      - sakura-net
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M

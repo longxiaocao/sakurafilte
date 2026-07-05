@@ -1,0 +1,94 @@
+# P1-2: SakuraFilter 业务仪表盘 (Grafana JSON)
+#   - 包含 HTTP QPS / 延迟 P95 / ETL 进度 / 死信队列 / 后台服务
+#   - 加载方式: docker-compose 自动挂载, 或手动 Import (uid: sakurafilter-main)
+
+{
+  "title": "SakuraFilter 业务监控",
+  "uid": "sakurafilter-main",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "HTTP 请求率 (req/s)",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        { "expr": "rate(http_requests_received_total{service=\"sakurafilter-api\"}[5m])", "legendFormat": "{{method}} {{code}}" }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "HTTP 延迟 P95 (s)",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        { "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))", "legendFormat": "P95 {{endpoint}}" }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "ETL 处理速率 (行/s)",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        { "expr": "rate(sakura_etl_records_processed_total[5m])", "legendFormat": "{{entity}} {{status}}" }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "死信队列深度",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 8 },
+      "targets": [
+        { "expr": "sakura_dead_letter_depth" }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area"
+      }
+    },
+    {
+      "id": 5,
+      "title": "后台服务陈旧数",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 8 },
+      "targets": [
+        { "expr": "sakura_hosted_services_stale" }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Meili 熔断器状态",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 6, "x": 0, "y": 16 },
+      "targets": [
+        { "expr": "sakurafilter_meili_circuit_breaker" }
+      ],
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none"
+      }
+    },
+    {
+      "id": 7,
+      "title": "鉴权失败计数",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 12, "x": 6, "y": 16 },
+      "targets": [
+        { "expr": "rate(sakura_auth_failures_total[5m])", "legendFormat": "{{reason}}" }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "限流命中计数",
+      "type": "graph",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "targets": [
+        { "expr": "rate(sakura_rate_limit_hits_total[5m])", "legendFormat": "{{endpoint}}" }
+      ]
+    }
+  ]
+}

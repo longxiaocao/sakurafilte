@@ -1,0 +1,15 @@
+# P1-2: Grafana 自动配置 (数据源 + 仪表盘)
+#   - 启动时自动加载 Prometheus 数据源
+#   - 加载 SakuraFilter 业务仪表盘
+
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: true
+    jsonData:
+      timeInterval: 15s

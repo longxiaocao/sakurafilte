@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.Routing.Constraints;
 using Microsoft.AspNetCore.HttpOverrides;        // P1-3: ForwardedHeaders
 using Microsoft.AspNetCore.Diagnostics;           // P1-5: IExceptionHandlerFeature
+using Prometheus;                                // P1-3: UseHttpMetrics / MapMetrics
 using Microsoft.AspNetCore.Authentication.JwtBearer;  // JWT: JwtBearerDefaults
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -227,6 +228,12 @@ builder.Services.AddSingleton<PerfMetrics>();
 //   - /health/ready 暴露 stale 列表 (超过 5min 未心跳视为卡死)
 //   - 仅暴露状态, 不参与 allOk 判定 (不剔除流量)
 builder.Services.AddSingleton<IHostedServiceStatus, HostedServiceStatus>();
+
+// P1-3: 业务指标注册表 (Singleton, prometheus-net 默认注册)
+//   - 10 个业务指标 (ETL/dead-letter/auth/rate-limit/search) 由各服务按需调用
+//   - BusinessMetricsRefreshWorker 周期刷新深度类指标 (gauge)
+builder.Services.AddSingleton<BusinessMetrics>();
+builder.Services.AddHostedService<BusinessMetricsRefreshWorker>();
 
 // P7.1: Auth Token 轮转存储 (Singleton, 内存缓存 + DB 覆盖 + PG NOTIFY 重载)
 //   - DevTokenAuthMiddleware 当前仍直读 IConfiguration; 后续 PR 改造为注入 IAuthTokenStore
@@ -572,6 +579,10 @@ if (rateLimitConfig.Enabled)
 {
     app.UseRateLimiter();
 }
+// P1-3: Prometheus HTTP 指标中间件 (必须在路由前)
+//   - 注入 http_request_duration_seconds / http_requests_received_total / http_requests_in_progress
+//   - 排除 /metrics 自身, 防止 Prometheus 抓取时被自身指标污染
+app.UseHttpMetrics();
 // JWT 认证体系: UseAuthentication/UseAuthorization
 //   - 放在 UseCors + UseRateLimiter 之后 (限流先防匿名 DoS, 再做认证)
 //   - 放在 DevTokenAuthMiddleware/ResponseTimeMiddleware 之前 (让后续中间件可读 ctx.User)
@@ -610,69 +621,17 @@ app.MapGet("/api/perf", (PerfMetrics metrics) =>
 .WithName("PerfSnapshot")
 .WithOpenApi();
 
-// P3-5.3: Prometheus 兼容 /metrics 端点 (无需鉴权, 供 Prometheus/grafana 抓取)
-//   WHY 不用 prometheus-net.AspNetCore: 本地 NuGet 缓存无此包, 自建简化版避免新依赖
-//   WHY 用 IsCircuitBreakerOpen 属性而非 IsPrimaryHealthyAsync:
-//        属性只读内存状态 (_primaryAvailable), 不触发网络探活, /metrics 响应快且不增加 Meili 负载
-//   WHY 不走 ResponseTimeMiddleware 排除: /metrics 是低频抓取 (15s/次), 不影响统计
-//   返回 Prometheus exposition format (text/plain; version=0.0.4)
-app.MapGet("/metrics", async (IServiceProvider sp) =>
-{
-    var sb = new System.Text.StringBuilder();
-    var search = sp.GetService<ISearchProvider>();
-    if (search is ResilientSearchProvider rsp)
-    {
-        var circuitOpen = rsp.IsCircuitBreakerOpen ? 1 : 0;
-        sb.AppendLine("# HELP sakurafilter_meili_circuit_breaker Meili search circuit breaker state (1=open/failing, 0=closed/healthy)");
-        sb.AppendLine("# TYPE sakurafilter_meili_circuit_breaker gauge");
-        sb.AppendLine($"sakurafilter_meili_circuit_breaker {circuitOpen}");
-    }
-
-    // P3-5.3: ETL 当前进度 (已读取行数)
-    //   WHY 直接读 EtlImportService.Progress.Read: 服务为单例, Progress.Read 内部用 Interlocked 线程安全
-    //   不引入新抽象 (IEtlProgressSnapshot): 单例直接访问即可, 避免过度设计
-    //   无活动任务时 Read=0, 指标值恒为 0 (符合 Prometheus gauge 语义)
-    try
-    {
-        var etl = sp.GetService<EtlImportService>();
-        if (etl != null)
-        {
-            var read = etl.Progress.Read;
-            sb.AppendLine("# HELP sakurafilter_etl_progress_read ETL 当前任务已读取行数 (无活动任务时为 0)");
-            sb.AppendLine("# TYPE sakurafilter_etl_progress_read gauge");
-            sb.AppendLine($"sakurafilter_etl_progress_read {read}");
-        }
-    }
-    catch (Exception ex)
-    {
-        // 采集失败不影响其他指标输出, 仅在注释行记录根因 (Prometheus 忽略 # 开头行)
-        sb.AppendLine($"# ETL progress collect error: {ex.Message}");
-    }
-
-    // P3-5.3: 死信队列深度 (status='active' 行数)
-    //   WHY CreateScope: ProductDbContext 是 scoped 服务, /metrics 端点由 DI 容器解析 IServiceProvider
-    //        是 singleton 上下文, 直接注入 scoped 服务会抛 InvalidOperationException
-    //   WHY CountAsync + Status 过滤: 命中 idx_dead_letter_active_recovery 部分索引 (WHERE status='active')
-    //        避免全表扫描, 1M 行死信表实测 <50ms
-    //   WHY try-catch 包裹: PG 连接异常时不应导致整个 /metrics 端点 500, 影响其他指标采集
-    try
-    {
-        using var scope = sp.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<ProductDbContext>();
-        var depth = await db.SearchIndexDeadLetters.CountAsync(d => d.Status == "active");
-        sb.AppendLine("# HELP sakurafilter_dead_letter_depth 死信队列当前深度 (status=active 行数, 等待人工/worker 处理)");
-        sb.AppendLine("# TYPE sakurafilter_dead_letter_depth gauge");
-        sb.AppendLine($"sakurafilter_dead_letter_depth {depth}");
-    }
-    catch (Exception ex)
-    {
-        sb.AppendLine($"# Dead letter depth collect error: {ex.Message}");
-    }
-
-    return Results.Text(sb.ToString(), "text/plain; version=0.0.4");
-})
-.WithName("Metrics")
-.WithOpenApi();
+// P1-3: Prometheus 兼容 /metrics 端点 (无需鉴权, 供 Prometheus/grafana 抓取)
+//   迁移: 原手动 StringBuilder 输出 (sakurafilter_meili_circuit_breaker / sakurafilter_etl_progress_read /
+//         sakurafilter_dead_letter_depth) 已迁至 BusinessMetrics 注册表, 由 BusinessMetricsRefreshWorker 周期刷新
+//   端点: prometheus-net MapMetrics 输出默认注册表 (含 HTTP 指标 + 业务指标 + 进程指标)
+//   WHY 改用 prometheus-net:
+//     * 统一到同一 Registry, 运维只配 1 个 scrape job
+//     * UseHttpMetrics 自动注入 http_request_duration_seconds (按 route/status/code 维度)
+//     * 内置 dotnet 进程指标 (GC/线程/句柄) 免费拿到
+app.MapMetrics("/metrics")
+    .WithName("Metrics")
+    .WithOpenApi();
 
 // P6: 性能告警查询 (需 X-Admin-Token, 走 DevTokenAuthMiddleware 鉴权)
 //   返回最近 100 条告警 (按时间倒序), 运维面板用

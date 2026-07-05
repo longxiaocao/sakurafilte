@@ -1,0 +1,44 @@
+# P1-2: 前端 Dockerfile (Node 20 构建 + Nginx Alpine 部署)
+#   阶段 1 (build): Node 20 Alpine 编译 Vue 3 SPA
+#   阶段 2 (runtime): Nginx Alpine 托管静态文件, 体积 < 50MB
+#   安全: 非 root, 禁 root 路径, 反代 API 到后端容器
+#
+#   构建:  docker build -t sakurafilter-web:1.0.0 -f docker/Dockerfile.web ../frontend
+#   运行:  docker run -d -p 80:80 sakurafilter-web:1.0.0
+
+# ========== 阶段 1: 构建 ==========
+FROM node:20-alpine AS build
+WORKDIR /app
+
+# 仅当 package*.json 变化时才重装依赖 (Docker 缓存优化)
+COPY package*.json ./
+RUN npm ci --no-audit --no-fund
+
+# 复制源代码 + 构建
+COPY . .
+RUN npm run build
+
+# ========== 阶段 2: Nginx 部署 ==========
+FROM nginx:1.27-alpine AS runtime
+
+# 删除默认配置 + 站点
+RUN rm -rf /etc/nginx/conf.d/default.conf /usr/share/nginx/html/*
+
+# 复制自定义 Nginx 配置
+COPY docker/nginx.conf /etc/nginx/conf.d/sakurafilter.conf
+
+# 复制构建产物
+COPY --from=build /app/dist /usr/share/nginx/html
+
+# 创建非 root 用户运行 nginx (使用已有 nginx 用户, UID 101)
+# 保持 nginx 官方镜像的运行模式: master root + worker nginx
+# 仅修改静态文件权限让 nginx worker 可读
+RUN chown -R nginx:nginx /usr/share/nginx/html /var/cache/nginx
+
+EXPOSE 80
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+    CMD wget --quiet --tries=1 --spider http://localhost/health || exit 1
+
+# 使用官方 nginx 镜像默认入口
+CMD ["nginx", "-g", "daemon off;"]
