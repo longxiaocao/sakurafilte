@@ -1,0 +1,62 @@
+{
+  "test_name": "error_monitor_e2e",
+  "checks": [
+    {
+      "name": "错误日志页可访问",
+      "status": "PASS",
+      "msg": "页面加载成功"
+    },
+    {
+      "name": "触发测试错误",
+      "status": "PASS",
+      "msg": "3 个测试事件已注入"
+    },
+    {
+      "name": "列表显示事件",
+      "status": "PASS",
+      "msg": "事件已出现在列表中"
+    },
+    {
+      "name": "统计卡片渲染",
+      "status": "PASS",
+      "msg": "5 个统计卡片可见"
+    },
+    {
+      "name": "级别筛选",
+      "status": "PASS",
+      "msg": "Error 筛选生效"
+    },
+    {
+      "name": "事件详情面板",
+      "status": "PASS",
+      "msg": "详情面板正常显示"
+    },
+    {
+      "name": "搜索过滤",
+      "status": "PASS",
+      "msg": "搜索 TEST 生效"
+    },
+    {
+      "name": "localStorage 持久化",
+      "status": "PASS",
+      "msg": "刷新后事件仍在"
+    },
+    {
+      "name": "导出 JSON",
+      "status": "PASS",
+      "msg": "文件已下载, 大小 3721 bytes"
+    },
+    {
+      "name": "清空日志",
+      "status": "PASS",
+      "msg": "清空操作完成"
+    }
+  ],
+  "summary": {
+    "total": 10,
+    "pass": 10,
+    "fail": 0,
+    "warn": 0
+  },
+  "total": 10
+}

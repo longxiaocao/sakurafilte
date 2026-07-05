@@ -173,6 +173,15 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/admin/AdminPerfView.vue'),
     meta: { title: '性能监控', requireAuth: true }
   },
+  // ===== 批次 6c: 前端错误日志管理 =====
+  //   展示 errorMonitor 捕获的本地事件, 支持搜索/筛选/导出/清空
+  //   触发测试错误验证监控链路
+  {
+    path: '/admin/errors',
+    name: 'AdminErrors',
+    component: () => import('@/views/admin/AdminErrorView.vue'),
+    meta: { title: '错误日志', requireAuth: true }
+  },
   // ===== 需求 6: 前端优化 Demo 演示页 =====
   //   - 整合展示需求 1-5 的所有优化点
   //   - 提供产品详情页 3 种布局方案对比 (A/B/C)

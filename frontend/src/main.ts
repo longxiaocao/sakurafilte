@@ -7,13 +7,21 @@ import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 import App from './App.vue'
 import router from './router'
 import { installPerfInterceptor } from './utils/perf'
+import { initMonitor, installVueErrorHandler, addBreadcrumb } from './utils/errorMonitor'
 import i18n from './i18n'
 import './styles/index.css'
 
 // P5.5: 启动前端性能埋点 (axios 拦截器, 批量上报到 /api/perf/ingest)
 installPerfInterceptor()
 
+// 批次 6c: 启动前端错误监控 (离线优先, 默认无网络开销)
+//   - 自动捕获: window.onerror / unhandledrejection / Vue errorHandler
+//   - 持久化: localStorage 200 条, 跨会话保留
+//   - 远程上报: 仅当 VITE_ERROR_REPORT_URL 配置时启用
+initMonitor()
+
 const app = createApp(App)
+installVueErrorHandler(app)
 
 // 全局注册 Element Plus 图标 (Musk 风格简洁, 不滥用)
 for (const [key, component] of Object.entries(ElementPlusIconsVue)) {

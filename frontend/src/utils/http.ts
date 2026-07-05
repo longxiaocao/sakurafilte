@@ -11,6 +11,7 @@ import axios, { AxiosError, type AxiosInstance, type AxiosRequestConfig, type In
 import { ElMessage } from 'element-plus'
 import { useAdminAuthStore } from '@/composables/useAdminAuth'
 import type { LoginResponse } from '@/api/types'
+import { captureException, addBreadcrumb } from './errorMonitor'
 
 const TOKEN_HEADER_LEGACY = 'X-Admin-Token'
 const TOKEN_HEADER_BEARER = 'Authorization'
@@ -143,15 +144,24 @@ http.interceptors.response.use(
     }
 
     if (status === undefined) {
-      // 网络层错误 (无响应)
+      // 网络层错误 (无响应) — 批次 6c: 上报错误监控
       if (err?.code === 'ECONNABORTED') {
         ElMessage.error('请求超时,请检查网络后重试')
+        captureException(err, { level: 'warning', tags: { source: 'axios', type: 'timeout' } })
       } else if (err?.code === 'ERR_NETWORK') {
         ElMessage.error('网络连接失败,请检查网络')
+        captureException(err, { level: 'error', tags: { source: 'axios', type: 'network' } })
       } else {
         ElMessage.error(`网络异常: ${err.message || '请稍后重试'}`)
+        captureException(err, { level: 'error', tags: { source: 'axios', type: 'unknown' } })
       }
     } else if (status >= 500) {
+      // 批次 6c: 5xx 上报 (含 detail 便于排查, 脱敏在 captureException 内部完成)
+      captureException(err, {
+        level: 'error',
+        tags: { source: 'axios', status: String(status) },
+        extra: { url: cfg?.url, method: cfg?.method, detail },
+      })
       // P2-8.2: 500+ 绝对不透传 detail (可能含堆栈/SQL), 仅展示友好提示 + 错误码
       ElMessage.error(`服务器繁忙,请稍后重试 (错误码:${status})`)
       // 开发环境打印 detail 便于排查 (生产环境不打印, 避免泄露)

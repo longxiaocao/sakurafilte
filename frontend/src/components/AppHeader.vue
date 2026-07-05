@@ -53,6 +53,8 @@ const navItems = computed(() => [
         { label: '高级对比', path: '/admin/compare', icon: 'DataAnalysis' },
         // P5.5+: 性能监控 (P50/P95/P99 + 健康探针 + Token 轮转状态)
         { label: '性能', path: '/admin/perf', icon: 'TrendCharts' },
+        // 批次 6c: 错误日志 (前端错误监控 + 导出 + 清空)
+        { label: '错误', path: '/admin/errors', icon: 'Warning' },
         // P5.4 (Task 15): 帮助页 (字典规范 + 搜索 + 导入)
         { label: '帮助', path: '/admin/help', icon: 'QuestionFilled' }
       ]

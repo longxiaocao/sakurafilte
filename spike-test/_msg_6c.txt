@@ -1,0 +1,32 @@
+feat(monitor-6c): 自研 Sentry 风格前端错误监控 (离线优先, 无密钥)
+
+WHY:
+- 用户硬约束: 软件分发需完全离线/无授权/无密钥
+- Sentry SaaS 强制 DSN 注册且云端依赖, 违反离线原则
+- Sentry 自部署需独立服务, 超出本地单机部署边界
+
+WHAT:
+- 新增 utils/errorMonitor.ts (Sentry v8 兼容 API):
+  - captureException / captureMessage / addBreadcrumb
+  - 本地环形缓冲 (localStorage 200 条, 跨会话保留)
+  - 自动去重 (5min 窗口, 同 message+stack 折叠)
+  - 自动脱敏 (JWT/Cookie/Authorization/password 等敏感字段)
+  - 远程上报 (可选, VITE_ERROR_REPORT_URL 非空时启用, 30s 批量)
+- main.ts 集成: initMonitor + installVueErrorHandler
+- http.ts 集成: addBreadcrumb (请求级别) + captureException (5xx/网络错误)
+- 新增 /admin/errors 页面:
+  - 5 维度统计 (total/fatal/error/warning/info)
+  - 级别筛选 + 全文搜索
+  - 详情面板 (message/extra/breadcrumbs)
+  - 一键复制 JSON / 导出 JSON 文件 / 清空
+  - 测试按钮 (3 种) 验证监控链路
+  - 自动刷新 0/3/10/30s 切换
+- 17 个单测 (errorMonitor.test.ts) 全通过
+- 10 个 E2E (_test_error_monitor.py) 全通过
+- i18n 适配 (AdminPerfView/AdminErrorView 用 t() 调用)
+
+验证:
+- 单元测试: 49 passed (含新增 17 个)
+- 构建: 8.41s, 0 错误
+- E2E: 10/10 PASS
+- 离线运行: 默认 0 网络开销 (VITE_ERROR_REPORT_URL 未配置)
