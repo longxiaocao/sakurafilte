@@ -61,6 +61,8 @@
 
 ### GET /api/admin/auth/status
 
+**Auth Token 轮转状态查询 (current/previous 长度 + 轮转时间, 不暴露完整 token)**
+
 **Responses**:
 
 - `200`: OK
@@ -70,6 +72,8 @@
 ## Admin Dead-letter
 
 ### GET /api/admin/dead-letter
+
+**死信队列分页查询 (keyset cursor, 支持 operation/since/recovery_count 过滤)**
 
 **Parameters**:
 
@@ -106,6 +110,8 @@
 ---
 
 ### POST /api/admin/dead-letter/{id}/recover
+
+**死信单条恢复 (移回 pending + advisory lock 串行化)**
 
 **Parameters**:
 
@@ -1022,6 +1028,8 @@
 
 ### GET /api/admin/perf/alerts
 
+**性能告警列表 (按时间倒序, 运维面板用)**
+
 **Parameters**:
 
 | Name | In | Type | Required | Description |
@@ -1037,6 +1045,8 @@
 ## Admin Products
 
 ### GET /api/admin/products
+
+**后台产品列表 (支持搜索/筛选/排序/分页, 含 published/discontinued 状态)**
 
 **Parameters**:
 
@@ -1056,6 +1066,8 @@
 
 ### POST /api/admin/products
 
+**后台创建产品 (含 cross-references + machine-applications 嵌套创建)**
+
 **Request Body**:
 
 - Content-Type: `application/json` (schema: `ProductFormDto`)
@@ -1068,6 +1080,8 @@
 
 ### POST /api/admin/products/compare
 
+**后台产品对比 (admin 用, 不排除下架, 上限 6 个)**
+
 **Request Body**:
 
 - Content-Type: `application/json` (schema: `CompareRequest`)
@@ -1079,6 +1093,8 @@
 ---
 
 ### GET /api/admin/products/search
+
+**后台产品搜索 (admin 用, 含下架, 8 字段)**
 
 **Parameters**:
 
@@ -1139,6 +1155,8 @@
 
 ### DELETE /api/admin/products/{id}
 
+**后台软删除产品 (is_discontinued=true, 保留历史)**
+
 **Parameters**:
 
 | Name | In | Type | Required | Description |
@@ -1153,6 +1171,8 @@
 
 ### GET /api/admin/products/{id}
 
+**后台产品详情 (含全部字段, 不排除下架)**
+
 **Parameters**:
 
 | Name | In | Type | Required | Description |
@@ -1166,6 +1186,8 @@
 ---
 
 ### PUT /api/admin/products/{id}
+
+**后台更新产品 (xmin 乐观锁, 409 冲突)**
 
 **Parameters**:
 
@@ -1248,6 +1270,8 @@
 
 ### POST /api/admin/products/{id}/restore
 
+**后台恢复已下架产品 (is_discontinued=false)**
+
 **Parameters**:
 
 | Name | In | Type | Required | Description |
@@ -1263,6 +1287,11 @@
 ## Auth
 
 ### POST /api/auth/change-password
+
+**修改密码
+需登录: 从 JWT claims 取 userId
+入参: { oldPassword, newPassword }
+失败返回 400 (旧密码错误)**
 
 **Request Body**:
 
@@ -1295,6 +1324,10 @@
 
 ### POST /api/auth/logout
 
+**登出 (撤销当前 refresh token)
+需登录: 从 JWT claims 取 userId
+入参: { refreshToken } (客户端传当前持有的 refresh token)**
+
 **Request Body**:
 
 - Content-Type: `application/json` (schema: `RefreshRequest`)
@@ -1309,13 +1342,30 @@
 
 ### GET /api/auth/me
 
+**获取当前登录用户信息
+需登录: 从 JWT claims 取 userId**
+
 **Responses**:
 
 - `200`: OK
+- `401`: Unauthorized
 
 ---
 
 ### POST /api/auth/refresh
+
+**刷新 token
+入参: { refreshToken }
+出参: 新 { accessToken, refreshToken, expiresIn }
+流程: 验证旧 token → 撤销旧 token + 签发新 token (一次性)
+失败返回 401 (refresh token 无效/过期/已撤销)**
+
+示例请求:
+POST /api/auth/refresh
+{ "refreshToken": "3F0fPsvbU4c05XvxVBU1..." }
+成功响应 (200): 新 token 三件套 (同 login)
+失败响应:
+- 401: refresh token 无效/过期/已撤销
 
 **Request Body**:
 
@@ -1326,6 +1376,8 @@
 **Responses**:
 
 - `200`: OK
+- `400`: Bad Request
+- `401`: Unauthorized
 
 ---
 
@@ -1343,6 +1395,8 @@
 
 ### POST /api/etl/import
 
+**ETL 导入触发 (products/xrefs/apps, 统一入口, 路径白名单校验)**
+
 **Request Body**:
 
 - Content-Type: `application/json` (schema: `ImportRequest`)
@@ -1354,6 +1408,8 @@
 ---
 
 ### POST /api/etl/import-apps
+
+**ETL 导入 apps (兼容旧入口, 新调用走 /api/etl/import + entityType)**
 
 **Request Body**:
 
@@ -1367,6 +1423,8 @@
 
 ### POST /api/etl/import-xrefs
 
+**ETL 导入 xrefs (兼容旧入口, 新调用走 /api/etl/import + entityType)**
+
 **Request Body**:
 
 - Content-Type: `application/json` (schema: `ImportRequest`)
@@ -1379,6 +1437,8 @@
 
 ### GET /api/etl/status
 
+**ETL 导入进度查询 (实时 JSON, 含 current/total/elapsed/eta)**
+
 **Responses**:
 
 - `200`: OK
@@ -1389,6 +1449,8 @@
 
 ### GET /health/live
 
+**Liveness 探活 (进程是否存活, K8s/Docker 用)**
+
 **Responses**:
 
 - `200`: OK
@@ -1396,6 +1458,8 @@
 ---
 
 ### GET /health/ready
+
+**Readiness 探活 (PG/Meili/BackgroundService 整体健康度)**
 
 **Responses**:
 
@@ -1407,6 +1471,8 @@
 
 ### GET /api/perf
 
+**性能埋点快照 (P50/P95/P99, 最近 1000 条样本)**
+
 **Responses**:
 
 - `200`: OK
@@ -1414,6 +1480,8 @@
 ---
 
 ### POST /api/perf/ingest
+
+**接收前端性能埋点批量上报 (上限 100 条/批)**
 
 **Request Body**:
 
@@ -1428,6 +1496,8 @@
 ## Products
 
 ### GET /api/products/{oem}
+
+**产品详情 (按 OEM 精确/规范化查询, 含 cross-references + machine-applications)**
 
 **Parameters**:
 
@@ -1445,6 +1515,9 @@
 
 ### GET /api/public/compare
 
+**批量对比 (公开) - 1-6 个产品
+URL: GET /api/public/compare?ids=1,2,3**
+
 **Parameters**:
 
 | Name | In | Type | Required | Description |
@@ -1461,6 +1534,11 @@
 
 ### GET /api/public/machine-brands/aggregated
 
+**按 4 大类聚合 brand 列表
+返: MachineBrandsAggregatedDto:
+  { byCategory: { "Agriculture": [...], "Commercial": [...], ... }, totalCount: N }
+4 大类 key 一定存在, 即使空列表也返 []**
+
 **Responses**:
 
 - `200`: OK
@@ -1471,6 +1549,13 @@
 
 ### GET /api/public/by-type
 
+**按 type 分组聚合, 顺序按 dict_type.sort_order 升序
+返: List<TypeGroupDto>:
+  { type, sortOrder, productCount, products: [ProductSummaryDto...] }
+限制:
+  - 每个 type 至多 50 个 product (避免单 type 撑爆响应)
+  - 仅返回 dict_type 已定义的 5 类 (oil/fuel/air/cabin/others), 未定义 type 的产品不展示**
+
 **Responses**:
 
 - `200`: OK
@@ -1478,6 +1563,15 @@
 ---
 
 ### GET /api/public/product/{slug}
+
+**P3.3 (Task 11): 单产品详情 (公开)
+URL 格式: /api/public/product/{slug}
+slug 格式 (按 R1 规格): {name1}-{name2}-{oemBrand}-{oemNo}
+解析策略: 取 slug 最后一段作为 oem (支持 OEM 自身含 - 的场景,如 "AB-123-X")
+  - 1) OemNoDisplay 精确匹配
+  - 2) Oem2 匹配 (alt OEM)
+  - 3) Mr1 匹配
+排除 is_discontinued=true (前台不展示下架产品)**
 
 **Parameters**:
 
@@ -1513,10 +1607,33 @@
 **Responses**:
 
 - `200`: OK
+- `400`: Bad Request
 
 ---
 
 ### POST /api/public/search/batch-oem
+
+**批量 OEM 查询 (Excel 多行粘贴)
+入参: oems (1-500 个字符串, 自动 trim + 去重)
+返: 每个 OEM 一条结果
+  命中: {oem, hit=true, productId, oemBrand, productName1, oem2}
+  未命中: {oem, hit=false}
+匹配字段: oem_2 (与前台搜索一致)**
+
+示例请求:
+POST /api/public/search/batch-oem
+{ "oems": ["P00050000", "11427622448", "C-204"] }
+成功响应 (200):
+{
+"total": 3,
+"hits": 2,
+"miss": 1,
+"results": [
+{ "oem": "P00050000", "hit": true, "productId": 12345, "oemBrand": "Mann", "productName1": "OIL FILTER", "oem2": "P00050000" },
+{ "oem": "11427622448", "hit": true, "productId": 67890, "oemBrand": "Bosch", "productName1": "AIR FILTER", "oem2": "11427622448" },
+{ "oem": "C-204", "hit": false }
+]
+}
 
 **Request Body**:
 
@@ -1527,12 +1644,15 @@
 **Responses**:
 
 - `200`: OK
+- `400`: Bad Request
 
 ---
 
 ## Search
 
 ### POST /api/search
+
+**产品搜索 (走 ISearchProvider 抽象, Resilient 主备自动切换)**
 
 **Request Body**:
 
@@ -1546,6 +1666,8 @@
 
 ### GET /api/search/health
 
+**搜索健康检查 (主备状态)**
+
 **Responses**:
 
 - `200`: OK
@@ -1555,6 +1677,9 @@
 ## Users
 
 ### GET /api/admin/audit/login
+
+**登录审计日志 (分页, 按时间倒序)
+出参: { items: [...], total, page, pageSize }**
 
 **Parameters**:
 
@@ -1572,6 +1697,9 @@
 
 ### GET /api/admin/users
 
+**用户列表 (分页)
+出参: { items: [...], total, page, pageSize }**
+
 **Parameters**:
 
 | Name | In | Type | Required | Description |
@@ -1587,6 +1715,9 @@
 
 ### POST /api/admin/users
 
+**创建用户
+入参: { username, password, role, email?, fullName? }**
+
 **Request Body**:
 
 - Content-Type: `application/json` (schema: `CreateUserRequest`)
@@ -1600,6 +1731,8 @@
 ---
 
 ### DELETE /api/admin/users/{id}
+
+**软删除用户**
 
 **Parameters**:
 
@@ -1615,6 +1748,8 @@
 
 ### GET /api/admin/users/{id}
 
+**用户详情**
+
 **Parameters**:
 
 | Name | In | Type | Required | Description |
@@ -1628,6 +1763,9 @@
 ---
 
 ### PATCH /api/admin/users/{id}
+
+**修改用户 (role/email/fullName/isActive)
+入参: { role?, email?, fullName?, isActive? } (仅传需改字段)**
 
 **Parameters**:
 
@@ -1648,6 +1786,9 @@
 ---
 
 ### POST /api/admin/users/{id}/reset-password
+
+**管理员重置密码
+入参: { newPassword }**
 
 **Parameters**:
 
@@ -1671,9 +1812,35 @@
 
 ### BatchOemRequest
 
+批量查询入参
+
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `oems` | array | ✗ |  |
+
+### BatchOemResponse
+
+批量查询响应
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `total` | integer (int32) | ✗ |  |
+| `hits` | integer (int32) | ✗ |  |
+| `miss` | integer (int32) | ✗ |  |
+| `results` | array | ✗ |  |
+
+### BatchOemResult
+
+单条 OEM 结果
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `oem` | string | ✗ |  |
+| `hit` | boolean | ✗ |  |
+| `productId` | integer (int64) | ✗ |  |
+| `oemBrand` | string | ✗ |  |
+| `productName1` | string | ✗ |  |
+| `oem2` | string | ✗ |  |
 
 ### CancelRequest
 
@@ -1877,12 +2044,16 @@
 
 ### OemBrandReorderItem
 
+OEM 品牌重排序输入项
+
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `id` | integer (int64) | ✗ |  |
 | `sortOrder` | integer (int32) | ✗ |  |
 
 ### OemBrandReorderRequest
+
+OEM 品牌重排序请求体
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
@@ -2032,6 +2203,34 @@
 |-------|------|----------|-------------|
 | `productName2` | string | ✗ |  |
 | `sortOrder` | integer (int32) | ✗ |  |
+
+### PublicEightResponse
+
+P3.4 (Task 11.5): 8 字段响应
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `total` | integer (int64) | ✗ |  |
+| `page` | integer (int32) | ✗ |  |
+| `pageSize` | integer (int32) | ✗ |  |
+| `totalPages` | integer (int32) | ✗ |  |
+| `elapsedMs` | integer (int32) | ✗ |  |
+| `countMode` | string | ✗ |  |
+| `items` | array | ✗ |  |
+
+### PublicSearchHit
+
+P3.4 (Task 11.5): 公开搜索单条结果
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | integer (int64) | ✗ |  |
+| `oemNoDisplay` | string | ✗ |  |
+| `oem2` | string | ✗ |  |
+| `productName1` | string | ✗ |  |
+| `type` | string | ✗ |  |
+| `d1Mm` | string | ✗ |  |
+| `h1Mm` | string | ✗ |  |
 
 ### RefreshRequest
 

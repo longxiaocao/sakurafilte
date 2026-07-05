@@ -631,7 +631,7 @@ app.MapGet("/", () => Results.Ok(new { name = "SakuraFilter API", version = "0.3
 //   端点本身被 ResponseTimeMiddleware 排除, 不会污染统计样本
 app.MapGet("/api/perf", (PerfMetrics metrics) =>
     Results.Ok(metrics.GetSnapshot()))
-.WithName("PerfSnapshot")
+.WithSummary("性能埋点快照 (P50/P95/P99, 最近 1000 条样本)").WithName("PerfSnapshot")
 .WithOpenApi();
 
 // P1-3: Prometheus 兼容 /metrics 端点 (无需鉴权, 供 Prometheus/grafana 抓取)
@@ -643,7 +643,7 @@ app.MapGet("/api/perf", (PerfMetrics metrics) =>
 //     * UseHttpMetrics 自动注入 http_request_duration_seconds (按 route/status/code 维度)
 //     * 内置 dotnet 进程指标 (GC/线程/句柄) 免费拿到
 app.MapMetrics("/metrics")
-    .WithName("Metrics")
+    .WithSummary("Prometheus 兼容 /metrics 端点 (含 HTTP + 业务 + 进程指标)").WithName("Metrics")
     .WithOpenApi();
 
 // P6: 性能告警查询 (需 X-Admin-Token, 走 DevTokenAuthMiddleware 鉴权)
@@ -651,7 +651,7 @@ app.MapMetrics("/metrics")
 //   WHY 放 /api/admin: 告警含系统健康信号, 不应公开 (与 /api/perf 区分)
 app.MapGet("/api/admin/perf/alerts", (PerfAlertService alerts, int? limit) =>
     Results.Ok(alerts.GetRecentAlerts(limit ?? 50)))
-.WithName("PerfAlerts")
+.WithSummary("性能告警列表 (按时间倒序, 运维面板用)").WithName("PerfAlerts")
 .WithOpenApi();
 
 // P5.5: 接收前端性能埋点批量上报
@@ -677,7 +677,7 @@ app.MapPost("/api/perf/ingest", (
     }
     return Results.Ok(new { received = body.Samples.Count });
 })
-.WithName("PerfIngest")
+.WithSummary("接收前端性能埋点批量上报 (上限 100 条/批)").WithName("PerfIngest")
 .WithOpenApi();
 
 // P5.5: 健康检查分级
@@ -693,7 +693,7 @@ app.MapPost("/api/perf/ingest", (
 //   - 8 个 BackgroundService 卡死时 stale 列表暴露具体服务名
 //   - 仅暴露状态, 不影响 allOk 判定 (避免误剔流量)
 app.MapGet("/health/live", () => Results.Ok(new { status = "alive" }))
-    .WithName("HealthLive");
+    .WithSummary("Liveness 探活 (进程是否存活, K8s/Docker 用)").WithName("HealthLive");
 app.MapGet("/health/ready", async (
     ProductDbContext db,
     SakuraFilter.Search.ISearchProvider search,
@@ -750,7 +750,7 @@ app.MapGet("/health/ready", async (
         new { status, checks },
         statusCode: statusCode);
 })
-.WithName("HealthReady");
+.WithSummary("Readiness 探活 (PG/Meili/BackgroundService 整体健康度)").WithName("HealthReady");
 
 // P7.1: Auth Token 状态查询端点
 //   暴露 current/previous 长度 + 轮转时间 + 操作人 (不暴露完整 token)
@@ -772,7 +772,7 @@ app.MapGet("/api/admin/auth/status", (IAuthTokenStore store) =>
         hasPrevious = !string.IsNullOrEmpty(previous)
     });
 })
-.WithName("AdminAuthStatus")
+.WithSummary("Auth Token 轮转状态查询 (current/previous 长度 + 轮转时间, 不暴露完整 token)").WithName("AdminAuthStatus")
 .RequireRateLimiting("global");
 
 // P3.2 (Task 10): 启用 MVC 控制器路由
@@ -785,7 +785,7 @@ app.MapPost("/api/search", async (SearchRequest req, ISearchProvider search, Can
     var result = await search.SearchAsync(req, ct);
     return Results.Ok(new { provider = search.Name, result });
 })
-.WithName("SearchProducts")
+.WithSummary("产品搜索 (走 ISearchProvider 抽象, Resilient 主备自动切换)").WithName("SearchProducts")
 .WithOpenApi()
 .RequireRateLimiting("search");
 
@@ -795,7 +795,7 @@ app.MapGet("/api/search/health", async (ISearchProvider search, CancellationToke
     var healthy = await search.HealthCheckAsync(ct);
     return Results.Ok(new { provider = search.Name, healthy });
 })
-.WithName("SearchHealth")
+.WithSummary("搜索健康检查 (主备状态)").WithName("SearchHealth")
 .WithOpenApi();
 
 // 产品详情
@@ -826,7 +826,7 @@ app.MapGet("/api/products/{oem}", async (string oem, ProductDbContext db, Cancel
         p.ImageKey, xrefs, apps
     ));
 })
-.WithName("GetProductByOem")
+.WithSummary("产品详情 (按 OEM 精确/规范化查询, 含 cross-references + machine-applications)").WithName("GetProductByOem")
 .WithOpenApi();
 
 // P0-3.3 修复: ETL 路径遍历防护 — 校验 jsonlPath 是否在 Etl:AllowedImportDirs 白名单内
@@ -900,13 +900,13 @@ app.MapPost("/api/etl/import", (ImportRequest req, EtlImportService etl, ILogger
     _ = Task.Run(async () => await etl.TriggerAsync(entityType, req.JsonlPath, mode, 0, CancellationToken.None, cascadeFlag));
     return Results.Accepted(value: etl.Progress.ToJson());
 })
-.WithName("EtlImport")
+.WithSummary("ETL 导入触发 (products/xrefs/apps, 统一入口, 路径白名单校验)").WithName("EtlImport")
 .WithOpenApi();
 
 // ETL 进度查询
 app.MapGet("/api/etl/status", (EtlImportService etl) =>
     Results.Ok(etl.Progress.ToJson()))
-.WithName("EtlStatus")
+.WithSummary("ETL 导入进度查询 (实时 JSON, 含 current/total/elapsed/eta)").WithName("EtlStatus")
 .WithOpenApi();
 
 // ETL 导入 xrefs
@@ -925,7 +925,7 @@ app.MapPost("/api/etl/import-xrefs", (ImportRequest req, EtlImportService etl, I
     _ = Task.Run(async () => await etl.TriggerAsync("xrefs", req.JsonlPath, mode, 0, CancellationToken.None));
     return Results.Accepted(value: etl.Progress.ToJson());
 })
-.WithName("EtlImportXrefs")
+.WithSummary("ETL 导入 xrefs (兼容旧入口, 新调用走 /api/etl/import + entityType)").WithName("EtlImportXrefs")
 .WithOpenApi();
 
 // ETL 导入 apps
@@ -944,7 +944,7 @@ app.MapPost("/api/etl/import-apps", (ImportRequest req, EtlImportService etl, IL
     _ = Task.Run(async () => await etl.TriggerAsync("apps", req.JsonlPath, mode, 0, CancellationToken.None));
     return Results.Accepted(value: etl.Progress.ToJson());
 })
-.WithName("EtlImportApps")
+.WithSummary("ETL 导入 apps (兼容旧入口, 新调用走 /api/etl/import + entityType)").WithName("EtlImportApps")
 .WithOpenApi();
 
 // Day 7.5: 死信队列查询 (运维入口,免 psql)
@@ -1043,7 +1043,7 @@ app.MapGet("/api/admin/dead-letter", async (
         items = rows
     });
 })
-.WithName("GetDeadLetter")
+.WithSummary("死信队列分页查询 (keyset cursor, 支持 operation/since/recovery_count 过滤)").WithName("GetDeadLetter")
 .WithOpenApi();
 
 // Day 7.5: 死信恢复 (单条) — 移回 pending,retry_count 重置
@@ -1109,7 +1109,7 @@ app.MapPost("/api/admin/dead-letter/{id:long}/recover", async (long id, ProductD
     }
     return result!;
 })
-.WithName("RecoverDeadLetter")
+.WithSummary("死信单条恢复 (移回 pending + advisory lock 串行化)").WithName("RecoverDeadLetter")
 .WithOpenApi();
 
 // Day 7.10: 死信批量恢复 — 按过滤条件一次性移回 pending
@@ -1233,7 +1233,7 @@ app.MapPost("/api/admin/products", async (ProductFormDto form, AdminProductServi
     catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
     catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
 })
-.WithName("AdminCreateProduct");
+.WithSummary("后台创建产品 (含 cross-references + machine-applications 嵌套创建)").WithName("AdminCreateProduct");
 
 // 列表分页
 app.MapGet("/api/admin/products", async (
@@ -1248,7 +1248,7 @@ app.MapGet("/api/admin/products", async (
         page ?? 1, pageSize ?? 50, type, keyword, includeDiscontinued ?? false, ct);
     return Results.Ok(new { total, page = page ?? 1, pageSize = pageSize ?? 50, items });
 })
-.WithName("AdminListProducts");
+.WithSummary("后台产品列表 (支持搜索/筛选/排序/分页, 含 published/discontinued 状态)").WithName("AdminListProducts");
 
 // 高级搜索 (Day 8.2, 17 字段 + 尺寸范围 + 批量 OEM)
 //   接受 AdminProductSearchRequest 全部 query string 字段 (扁平 DTO)
@@ -1294,7 +1294,7 @@ app.MapGet("/api/admin/products/search", async (
         return ProblemDetailsFactory.FromException(ctx, ex);
     }
 })
-.WithName("AdminSearchProducts");
+.WithSummary("后台产品搜索 (admin 用, 含下架, 8 字段)").WithName("AdminSearchProducts");
 
 // 批量对比 (Day 8.2, 1-6 个产品)
 //   WHY POST 而非 GET: URL 长度限制 (RFC 7230 推荐 8000 字符), 6 个 id 不会爆但 POST 语义更清晰
@@ -1310,7 +1310,7 @@ app.MapPost("/api/admin/products/compare", async (
     var items = await svc.CompareAsync(body.Ids, null, ct);
     return Results.Ok(new { count = items.Count, items });
 })
-.WithName("AdminCompareProducts");
+.WithSummary("后台产品对比 (admin 用, 不排除下架, 上限 6 个)").WithName("AdminCompareProducts");
 
 // 详情
 app.MapGet("/api/admin/products/{id:long}", async (long id, AdminProductService svc, AdminProductImageService imgSvc, HttpContext ctx, CancellationToken ct) =>
@@ -1323,7 +1323,7 @@ app.MapGet("/api/admin/products/{id:long}", async (long id, AdminProductService 
     }
     catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
 })
-.WithName("AdminGetProduct");
+.WithSummary("后台产品详情 (含全部字段, 不排除下架)").WithName("AdminGetProduct");
 
 // 更新
 app.MapPut("/api/admin/products/{id:long}", async (long id, ProductFormDto form, AdminProductService svc, HttpContext ctx, CancellationToken ct) =>
@@ -1365,7 +1365,7 @@ app.MapPut("/api/admin/products/{id:long}", async (long id, ProductFormDto form,
     catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
     catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
 })
-.WithName("AdminUpdateProduct");
+.WithSummary("后台更新产品 (xmin 乐观锁, 409 冲突)").WithName("AdminUpdateProduct");
 
 // 软删除 (下架)
 app.MapDelete("/api/admin/products/{id:long}", async (long id, AdminProductService svc, HttpContext ctx, CancellationToken ct) =>
@@ -1383,7 +1383,7 @@ app.MapDelete("/api/admin/products/{id:long}", async (long id, AdminProductServi
     catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
     catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
 })
-.WithName("AdminDeleteProduct");
+.WithSummary("后台软删除产品 (is_discontinued=true, 保留历史)").WithName("AdminDeleteProduct");
 
 // 恢复 (从下架恢复)
 app.MapPost("/api/admin/products/{id:long}/restore", async (long id, AdminProductService svc, HttpContext ctx, CancellationToken ct) =>
@@ -1401,7 +1401,7 @@ app.MapPost("/api/admin/products/{id:long}/restore", async (long id, AdminProduc
     catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
     catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
 })
-.WithName("AdminRestoreProduct");
+.WithSummary("后台恢复已下架产品 (is_discontinued=false)").WithName("AdminRestoreProduct");
 
 // 上传产品图 (slot 1-6)
 app.MapPost("/api/admin/products/{id:long}/images/{slot:int}", async (

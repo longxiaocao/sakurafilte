@@ -1,9 +1,9 @@
 {
-  "generatedAt": "2026-07-05T06:51:50Z",
+  "generatedAt": "2026-07-05T15:18:12Z",
   "summary": {
-    "total": 23,
-    "passed": 23,
-    "failed": 0,
+    "total": 20,
+    "passed": 12,
+    "failed": 8,
     "warned": 0,
     "skipped": 0
   },
@@ -11,57 +11,33 @@
     {
       "scenario": "A-游客",
       "check": "公开搜索页可访问",
-      "status": "PASS",
-      "expected": "URL 含 /public/search 且有搜索输入框",
-      "actual": "url=http://localhost:5173/public/search hasSearchInput=True",
+      "status": "FAIL",
+      "expected": "页面加载",
+      "actual": "Page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:5173/public/search\nCall log:\n  - navigating to \"http://localhost:5173/public/search\", waiting until \"domcontentloaded\"\n",
       "evidence": ""
     },
     {
       "scenario": "A-游客",
       "check": "产品详情可访问",
-      "status": "PASS",
-      "expected": "URL 保持 /product/* 不被踢到 /login",
-      "actual": "url=http://localhost:5173/product/AC%20010323",
-      "evidence": ""
-    },
-    {
-      "scenario": "A-游客",
-      "check": "产品详情含'加入对比'按钮",
-      "status": "PASS",
-      "expected": "存在 加入对比 按钮",
-      "actual": "hasButton=True",
-      "evidence": ""
-    },
-    {
-      "scenario": "A-游客",
-      "check": "产品详情含'查询替代'按钮",
-      "status": "PASS",
-      "expected": "存在 查询替代 按钮",
-      "actual": "hasButton=True",
+      "status": "FAIL",
+      "expected": "页面加载",
+      "actual": "Page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:5173/product/AC%20010323\nCall log:\n  - navigating to \"http://localhost:5173/product/AC%20010323\", waiting until \"domcontentloaded\"\n",
       "evidence": ""
     },
     {
       "scenario": "A-游客",
       "check": "公开对比页可访问",
-      "status": "PASS",
-      "expected": "URL=/compare, 不被踢到 /login 或 /admin/compare",
-      "actual": "url=http://localhost:5173/compare?ids=1,2,3 hasTitle=True",
-      "evidence": ""
-    },
-    {
-      "scenario": "A-游客",
-      "check": "对比表格加载",
-      "status": "PASS",
-      "expected": "页面含 'OEM 编号' 字段行",
-      "actual": "hasData=True",
+      "status": "FAIL",
+      "expected": "页面加载",
+      "actual": "Page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:5173/compare?ids=1,2,3\nCall log:\n  - navigating to \"http://localhost:5173/compare?ids=1,2,3\", waiting until \"networkidle\"\n",
       "evidence": ""
     },
     {
       "scenario": "A-游客",
       "check": "后台产品页需登录",
-      "status": "PASS",
-      "expected": "URL 跳到 /login (路由守卫拦截)",
-      "actual": "url=http://localhost:5173/login?redirect=/admin/products",
+      "status": "FAIL",
+      "expected": "页面跳 /login",
+      "actual": "Page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:5173/admin/products\nCall log:\n  - navigating to \"http://localhost:5173/admin/products\", waiting until \"networkidle\"\n",
       "evidence": ""
     },
     {
@@ -155,9 +131,9 @@
     {
       "scenario": "B-管理员",
       "check": "后台产品页可访问",
-      "status": "PASS",
-      "expected": "URL 保持 /admin/products 不被踢回",
-      "actual": "url=http://localhost:5173/admin/products hasTitle=True",
+      "status": "FAIL",
+      "expected": "页面加载",
+      "actual": "Page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:5173/login\nCall log:\n  - navigating to \"http://localhost:5173/login\", waiting until \"domcontentloaded\"\n",
       "evidence": ""
     },
     {
@@ -165,31 +141,31 @@
       "check": "JWT 鉴权访问管理 API",
       "status": "PASS",
       "expected": "200 + total >= 1",
-      "actual": "code=200 total=49928",
+      "actual": "code=200 total=49938",
       "evidence": ""
     },
     {
       "scenario": "B-管理员",
       "check": "字典管理页可访问",
-      "status": "PASS",
-      "expected": "URL 保持 /admin/dict/*",
-      "actual": "url=http://localhost:5173/admin/dict/oem-brands",
+      "status": "FAIL",
+      "expected": "页面加载",
+      "actual": "Page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:5173/admin/dict/oem-brands\nCall log:\n  - navigating to \"http://localhost:5173/admin/dict/oem-brands\", waiting until \"networkidle\"\n",
       "evidence": ""
     },
     {
       "scenario": "B-管理员",
       "check": "公开对比页 (登录后)",
-      "status": "PASS",
-      "expected": "URL 保持 /compare",
-      "actual": "url=http://localhost:5173/compare?ids=1,2",
+      "status": "FAIL",
+      "expected": "页面加载",
+      "actual": "Page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:5173/compare?ids=1,2\nCall log:\n  - navigating to \"http://localhost:5173/compare?ids=1,2\", waiting until \"networkidle\"\n",
       "evidence": ""
     },
     {
       "scenario": "B-管理员",
       "check": "退出后访问后台被拦截",
-      "status": "PASS",
-      "expected": "URL 跳到 /login",
-      "actual": "url=http://localhost:5173/login?redirect=/admin/products",
+      "status": "FAIL",
+      "expected": "页面跳 /login",
+      "actual": "Page.evaluate: SecurityError: Failed to read the 'localStorage' property from 'Window': Access is denied for this document.\n    at UtilityScript.evaluate (<anonymous>:310:18)\n    at UtilityScript.<anonymous> (<anonymous>:1:44)",
       "evidence": ""
     }
   ]

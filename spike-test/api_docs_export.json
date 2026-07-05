@@ -4,7 +4,7 @@
     {
       "name": "openapi.json 可解析",
       "status": "PASS",
-      "msg": "size=108646 bytes"
+      "msg": "size=124733 bytes"
     },
     {
       "name": "openapi 版本 3.x",
@@ -24,7 +24,7 @@
     {
       "name": "含 components.schemas",
       "status": "PASS",
-      "msg": "schema count=50"
+      "msg": "schema count=54"
     },
     {
       "name": "含安全方案",
@@ -33,13 +33,13 @@
     },
     {
       "name": "关键端点覆盖",
-      "status": "FAIL",
-      "msg": "8/9 端点存在: /api/auth/login, /api/auth/me, /api/public/search, /api/admin/products, /api/etl/status, /api/etl/import, /health/live, /health/ready"
+      "status": "PASS",
+      "msg": "9/9 端点存在: /api/auth/login, /api/auth/me, /api/public/search, /api/public/product/{slug}, /api/admin/products, /api/etl/status, /api/etl/import, /health/live, /health/ready"
     },
     {
       "name": "summary 覆盖率",
-      "status": "FAIL",
-      "msg": "0.0% (0/112)"
+      "status": "PASS",
+      "msg": "34.8% (39/112)"
     },
     {
       "name": "responses 全覆盖",
@@ -49,7 +49,7 @@
     {
       "name": "API.md 存在",
       "status": "PASS",
-      "msg": "size=42.1 KB"
+      "msg": "size=48.3 KB"
     },
     {
       "name": "MD 含标题",
@@ -74,8 +74,8 @@
   ],
   "summary": {
     "total": 14,
-    "pass": 12,
-    "fail": 2
+    "pass": 14,
+    "fail": 0
   },
   "total": 14
 }

@@ -109,6 +109,8 @@
         "tags": [
           "Auth"
         ],
+        "summary": "刷新 token\r\n入参: { refreshToken }\r\n出参: 新 { accessToken, refreshToken, expiresIn }\r\n流程: 验证旧 token → 撤销旧 token + 签发新 token (一次性)\r\n失败返回 401 (refresh token 无效/过期/已撤销)",
+        "description": "示例请求:\r\n            \r\n    POST /api/auth/refresh\r\n    { \"refreshToken\": \"3F0fPsvbU4c05XvxVBU1...\" }\r\n            \r\n成功响应 (200): 新 token 三件套 (同 login)\r\n失败响应:\r\n- 401: refresh token 无效/过期/已撤销",
         "requestBody": {
           "content": {
             "application/json": {
@@ -131,6 +133,46 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       }
@@ -140,6 +182,7 @@
         "tags": [
           "Auth"
         ],
+        "summary": "登出 (撤销当前 refresh token)\r\n需登录: 从 JWT claims 取 userId\r\n入参: { refreshToken } (客户端传当前持有的 refresh token)",
         "requestBody": {
           "content": {
             "application/json": {
@@ -171,9 +214,30 @@
         "tags": [
           "Auth"
         ],
+        "summary": "获取当前登录用户信息\r\n需登录: 从 JWT claims 取 userId",
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       }
@@ -183,6 +247,7 @@
         "tags": [
           "Auth"
         ],
+        "summary": "修改密码\r\n需登录: 从 JWT claims 取 userId\r\n入参: { oldPassword, newPassword }\r\n失败返回 400 (旧密码错误)",
         "requestBody": {
           "content": {
             "application/json": {
@@ -214,6 +279,7 @@
         "tags": [
           "PublicCompare"
         ],
+        "summary": "批量对比 (公开) - 1-6 个产品\r\nURL: GET /api/public/compare?ids=1,2,3",
         "parameters": [
           {
             "name": "ids",
@@ -235,6 +301,7 @@
         "tags": [
           "PublicMachineBrands"
         ],
+        "summary": "按 4 大类聚合 brand 列表\r\n返: MachineBrandsAggregatedDto:\r\n  { byCategory: { \"Agriculture\": [...], \"Commercial\": [...], ... }, totalCount: N }\r\n4 大类 key 一定存在, 即使空列表也返 []",
         "responses": {
           "200": {
             "description": "OK"
@@ -247,6 +314,7 @@
         "tags": [
           "PublicProduct"
         ],
+        "summary": "P3.3 (Task 11): 单产品详情 (公开)\r\nURL 格式: /api/public/product/{slug}\r\nslug 格式 (按 R1 规格): {name1}-{name2}-{oemBrand}-{oemNo}\r\n解析策略: 取 slug 最后一段作为 oem (支持 OEM 自身含 - 的场景,如 \"AB-123-X\")\r\n  - 1) OemNoDisplay 精确匹配\r\n  - 2) Oem2 匹配 (alt OEM)\r\n  - 3) Mr1 匹配\r\n排除 is_discontinued=true (前台不展示下架产品)",
         "parameters": [
           {
             "name": "slug",
@@ -269,6 +337,7 @@
         "tags": [
           "PublicProduct"
         ],
+        "summary": "按 type 分组聚合, 顺序按 dict_type.sort_order 升序\r\n返: List<TypeGroupDto>:\r\n  { type, sortOrder, productCount, products: [ProductSummaryDto...] }\r\n限制:\r\n  - 每个 type 至多 50 个 product (避免单 type 撑爆响应)\r\n  - 仅返回 dict_type 已定义的 5 类 (oil/fuel/air/cabin/others), 未定义 type 的产品不展示",
         "responses": {
           "200": {
             "description": "OK"
@@ -281,6 +350,8 @@
         "tags": [
           "PublicSearch"
         ],
+        "summary": "批量 OEM 查询 (Excel 多行粘贴)\r\n入参: oems (1-500 个字符串, 自动 trim + 去重)\r\n返: 每个 OEM 一条结果\r\n  命中: {oem, hit=true, productId, oemBrand, productName1, oem2}\r\n  未命中: {oem, hit=false}\r\n匹配字段: oem_2 (与前台搜索一致)",
+        "description": "示例请求:\r\n            \r\n    POST /api/public/search/batch-oem\r\n    { \"oems\": [\"P00050000\", \"11427622448\", \"C-204\"] }\r\n            \r\n成功响应 (200):\r\n            \r\n    {\r\n      \"total\": 3,\r\n      \"hits\": 2,\r\n      \"miss\": 1,\r\n      \"results\": [\r\n        { \"oem\": \"P00050000\", \"hit\": true, \"productId\": 12345, \"oemBrand\": \"Mann\", \"productName1\": \"OIL FILTER\", \"oem2\": \"P00050000\" },\r\n        { \"oem\": \"11427622448\", \"hit\": true, \"productId\": 67890, \"oemBrand\": \"Bosch\", \"productName1\": \"AIR FILTER\", \"oem2\": \"11427622448\" },\r\n        { \"oem\": \"C-204\", \"hit\": false }\r\n      ]\r\n    }",
         "requestBody": {
           "content": {
             "application/json": {
@@ -302,7 +373,44 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchOemResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchOemResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchOemResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       }
@@ -390,7 +498,44 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicEightResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicEightResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicEightResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       }
@@ -412,6 +557,7 @@
         "tags": [
           "SakuraFilter.Api"
         ],
+        "summary": "性能埋点快照 (P50/P95/P99, 最近 1000 条样本)",
         "operationId": "PerfSnapshot",
         "responses": {
           "200": {
@@ -425,6 +571,7 @@
         "tags": [
           "SakuraFilter.Api"
         ],
+        "summary": "性能告警列表 (按时间倒序, 运维面板用)",
         "operationId": "PerfAlerts",
         "parameters": [
           {
@@ -448,6 +595,7 @@
         "tags": [
           "SakuraFilter.Api"
         ],
+        "summary": "接收前端性能埋点批量上报 (上限 100 条/批)",
         "operationId": "PerfIngest",
         "requestBody": {
           "content": {
@@ -471,6 +619,7 @@
         "tags": [
           "SakuraFilter.Api"
         ],
+        "summary": "Liveness 探活 (进程是否存活, K8s/Docker 用)",
         "operationId": "HealthLive",
         "responses": {
           "200": {
@@ -484,6 +633,7 @@
         "tags": [
           "SakuraFilter.Api"
         ],
+        "summary": "Readiness 探活 (PG/Meili/BackgroundService 整体健康度)",
         "operationId": "HealthReady",
         "responses": {
           "200": {
@@ -497,6 +647,7 @@
         "tags": [
           "SakuraFilter.Api"
         ],
+        "summary": "Auth Token 轮转状态查询 (current/previous 长度 + 轮转时间, 不暴露完整 token)",
         "operationId": "AdminAuthStatus",
         "responses": {
           "200": {
@@ -510,6 +661,7 @@
         "tags": [
           "SakuraFilter.Api"
         ],
+        "summary": "产品搜索 (走 ISearchProvider 抽象, Resilient 主备自动切换)",
         "operationId": "SearchProducts",
         "requestBody": {
           "content": {
@@ -533,6 +685,7 @@
         "tags": [
           "SakuraFilter.Api"
         ],
+        "summary": "搜索健康检查 (主备状态)",
         "operationId": "SearchHealth",
         "responses": {
           "200": {
@@ -546,6 +699,7 @@
         "tags": [
           "SakuraFilter.Api"
         ],
+        "summary": "产品详情 (按 OEM 精确/规范化查询, 含 cross-references + machine-applications)",
         "operationId": "GetProductByOem",
         "parameters": [
           {
@@ -569,6 +723,7 @@
         "tags": [
           "SakuraFilter.Api"
         ],
+        "summary": "ETL 导入触发 (products/xrefs/apps, 统一入口, 路径白名单校验)",
         "operationId": "EtlImport",
         "requestBody": {
           "content": {
@@ -592,6 +747,7 @@
         "tags": [
           "SakuraFilter.Api"
         ],
+        "summary": "ETL 导入进度查询 (实时 JSON, 含 current/total/elapsed/eta)",
         "operationId": "EtlStatus",
         "responses": {
           "200": {
@@ -605,6 +761,7 @@
         "tags": [
           "SakuraFilter.Api"
         ],
+        "summary": "ETL 导入 xrefs (兼容旧入口, 新调用走 /api/etl/import + entityType)",
         "operationId": "EtlImportXrefs",
         "requestBody": {
           "content": {
@@ -628,6 +785,7 @@
         "tags": [
           "SakuraFilter.Api"
         ],
+        "summary": "ETL 导入 apps (兼容旧入口, 新调用走 /api/etl/import + entityType)",
         "operationId": "EtlImportApps",
         "requestBody": {
           "content": {
@@ -651,6 +809,7 @@
         "tags": [
           "SakuraFilter.Api"
         ],
+        "summary": "死信队列分页查询 (keyset cursor, 支持 operation/since/recovery_count 过滤)",
         "operationId": "GetDeadLetter",
         "parameters": [
           {
@@ -711,6 +870,7 @@
         "tags": [
           "SakuraFilter.Api"
         ],
+        "summary": "死信单条恢复 (移回 pending + advisory lock 串行化)",
         "operationId": "RecoverDeadLetter",
         "parameters": [
           {
@@ -790,6 +950,7 @@
         "tags": [
           "SakuraFilter.Api"
         ],
+        "summary": "后台创建产品 (含 cross-references + machine-applications 嵌套创建)",
         "operationId": "AdminCreateProduct",
         "requestBody": {
           "content": {
@@ -811,6 +972,7 @@
         "tags": [
           "SakuraFilter.Api"
         ],
+        "summary": "后台产品列表 (支持搜索/筛选/排序/分页, 含 published/discontinued 状态)",
         "operationId": "AdminListProducts",
         "parameters": [
           {
@@ -863,6 +1025,7 @@
         "tags": [
           "SakuraFilter.Api"
         ],
+        "summary": "后台产品搜索 (admin 用, 含下架, 8 字段)",
         "operationId": "AdminSearchProducts",
         "parameters": [
           {
@@ -1220,6 +1383,7 @@
         "tags": [
           "SakuraFilter.Api"
         ],
+        "summary": "后台产品对比 (admin 用, 不排除下架, 上限 6 个)",
         "operationId": "AdminCompareProducts",
         "requestBody": {
           "content": {
@@ -1243,6 +1407,7 @@
         "tags": [
           "SakuraFilter.Api"
         ],
+        "summary": "后台产品详情 (含全部字段, 不排除下架)",
         "operationId": "AdminGetProduct",
         "parameters": [
           {
@@ -1265,6 +1430,7 @@
         "tags": [
           "SakuraFilter.Api"
         ],
+        "summary": "后台更新产品 (xmin 乐观锁, 409 冲突)",
         "operationId": "AdminUpdateProduct",
         "parameters": [
           {
@@ -1297,6 +1463,7 @@
         "tags": [
           "SakuraFilter.Api"
         ],
+        "summary": "后台软删除产品 (is_discontinued=true, 保留历史)",
         "operationId": "AdminDeleteProduct",
         "parameters": [
           {
@@ -1321,6 +1488,7 @@
         "tags": [
           "SakuraFilter.Api"
         ],
+        "summary": "后台恢复已下架产品 (is_discontinued=false)",
         "operationId": "AdminRestoreProduct",
         "parameters": [
           {
@@ -3173,6 +3341,7 @@
         "tags": [
           "Users"
         ],
+        "summary": "用户列表 (分页)\r\n出参: { items: [...], total, page, pageSize }",
         "parameters": [
           {
             "name": "page",
@@ -3203,6 +3372,7 @@
         "tags": [
           "Users"
         ],
+        "summary": "创建用户\r\n入参: { username, password, role, email?, fullName? }",
         "requestBody": {
           "content": {
             "application/json": {
@@ -3234,6 +3404,7 @@
         "tags": [
           "Users"
         ],
+        "summary": "用户详情",
         "parameters": [
           {
             "name": "id",
@@ -3255,6 +3426,7 @@
         "tags": [
           "Users"
         ],
+        "summary": "修改用户 (role/email/fullName/isActive)\r\n入参: { role?, email?, fullName?, isActive? } (仅传需改字段)",
         "parameters": [
           {
             "name": "id",
@@ -3295,6 +3467,7 @@
         "tags": [
           "Users"
         ],
+        "summary": "软删除用户",
         "parameters": [
           {
             "name": "id",
@@ -3318,6 +3491,7 @@
         "tags": [
           "Users"
         ],
+        "summary": "管理员重置密码\r\n入参: { newPassword }",
         "parameters": [
           {
             "name": "id",
@@ -3360,6 +3534,7 @@
         "tags": [
           "Users"
         ],
+        "summary": "登录审计日志 (分页, 按时间倒序)\r\n出参: { items: [...], total, page, pageSize }",
         "parameters": [
           {
             "name": "page",
@@ -3409,7 +3584,65 @@
             "nullable": true
           }
         },
-        "additionalProperties": false
+        "additionalProperties": false,
+        "description": "批量查询入参"
+      },
+      "BatchOemResponse": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "hits": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "miss": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BatchOemResult"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "批量查询响应"
+      },
+      "BatchOemResult": {
+        "type": "object",
+        "properties": {
+          "oem": {
+            "type": "string",
+            "nullable": true
+          },
+          "hit": {
+            "type": "boolean"
+          },
+          "productId": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "oemBrand": {
+            "type": "string",
+            "nullable": true
+          },
+          "productName1": {
+            "type": "string",
+            "nullable": true
+          },
+          "oem2": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "单条 OEM 结果"
       },
       "CancelRequest": {
         "type": "object",
@@ -3928,7 +4161,8 @@
             "format": "int32"
           }
         },
-        "additionalProperties": false
+        "additionalProperties": false,
+        "description": "OEM 品牌重排序输入项"
       },
       "OemBrandReorderRequest": {
         "type": "object",
@@ -3941,7 +4175,8 @@
             "nullable": true
           }
         },
-        "additionalProperties": false
+        "additionalProperties": false,
+        "description": "OEM 品牌重排序请求体"
       },
       "OemBrandUpdateRequest": {
         "type": "object",
@@ -4360,6 +4595,79 @@
         },
         "additionalProperties": false
       },
+      "PublicEightResponse": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "page": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalPages": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "elapsedMs": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "countMode": {
+            "type": "string",
+            "nullable": true
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PublicSearchHit"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "P3.4 (Task 11.5): 8 字段响应"
+      },
+      "PublicSearchHit": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "oemNoDisplay": {
+            "type": "string",
+            "nullable": true
+          },
+          "oem2": {
+            "type": "string",
+            "nullable": true
+          },
+          "productName1": {
+            "type": "string",
+            "nullable": true
+          },
+          "type": {
+            "type": "string",
+            "nullable": true
+          },
+          "d1Mm": {
+            "type": "string",
+            "nullable": true
+          },
+          "h1Mm": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "P3.4 (Task 11.5): 公开搜索单条结果"
+      },
       "RefreshRequest": {
         "type": "object",
         "properties": {
@@ -4568,6 +4876,32 @@
     },
     {
       "Bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "Auth",
+      "description": "认证控制器 (JWT 登录/刷新/登出/当前用户/修改密码)\r\n路由前缀: /api/auth\r\n设计:\r\n  - login/refresh: [AllowAnonymous] (登录前无 token)\r\n  - logout/me/change-password: [Authorize] (需登录)\r\n  - 登录失败统一返回 401 (不区分\"用户不存在\"和\"密码错\", 防止枚举用户)\r\n  - refresh 端点: 旧 token 撤销 + 签发新 token (一次性使用, 防重放)"
+    },
+    {
+      "name": "PublicCompare",
+      "description": "P0 权限改造 (Day 14): 公开产品对比端点 (无需 token)\r\n设计:\r\n  - 复刻 AdminProductService.CompareAsync 的查询结构, 但排除 is_discontinued=true\r\n    (前台不应展示下架产品, 与 PublicProductController.GetBySlug 一致)\r\n  - 上限 6 个产品, 单次 query + InMemory 分组, 避免 N+1\r\n  - 返回: { count, items: ProductDetailDto[] }, 与 admin compare 形态一致\r\n            \r\n与 admin/compare 的差异:\r\n  - 路径: /api/public/compare vs /api/admin/products/compare\r\n  - 鉴权: 公开 (AllowAnonymous) vs 需 X-Admin-Token / JWT\r\n  - 过滤: 排除下架 vs 不过滤\r\n  - 排序: 保持传入 ids 顺序 vs 保持传入 ids 顺序"
+    },
+    {
+      "name": "PublicMachineBrands",
+      "description": "P2.3 (Task 8.4): 公开机型品牌聚合端点 (无需 token)\r\n用途: 前台按 4 大类 (Agriculture/Commercial/Construction/others) 展示活跃 brand\r\n设计:\r\n  - 仅含 active (deleted_at IS NULL) 的 dict_machine\r\n  - 去重: 同 brand 多次出现 (因 model/name 不同) 只返一次\r\n  - 4 大类一定有 key, 即使空列表也返 (前端不用判空)\r\n  - brand 按 sort_order 升序, 再按字母序"
+    },
+    {
+      "name": "PublicProduct",
+      "description": "公开产品页端点 (无需 token)\r\n设计:\r\n  - P2.3 by-type: 按 dict_type.sort_order 分组聚合产品摘要\r\n  - P3.3 by-slug: 单产品详情 (复用了 AdminProductService.GetByIdAsync 避免重写投影)"
+    },
+    {
+      "name": "PublicSearch",
+      "description": "P3.2 (Task 10): 公开搜索端点 (无需 token, 走 \"search\" 限流分区)\r\n用途: 前台搜索页面的批量粘贴查询\r\n设计: 与 AdminProductService 共享 ProductDbContext, 走 AsNoTracking 性能最优"
+    },
+    {
+      "name": "Users",
+      "description": "用户管理控制器 (管理员专用)\r\n路由前缀: /api/admin/users\r\n鉴权: [Authorize(Policy=\"Admin\")] 仅 admin 角色可访问\r\n设计:\r\n  - 用户 CRUD + 软删除\r\n  - 管理员重置密码 (不需旧密码)\r\n  - 登录审计日志查询 (分页)"
     }
   ]
 }
