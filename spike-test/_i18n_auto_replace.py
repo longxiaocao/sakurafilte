@@ -7,6 +7,7 @@ WHY: admin 页面有 1029 处硬编码中文, 全部手工替换会耗尽 contex
   1. 读取 hardcoded_zh_audit.json
   2. 按文件分组, 优先 ElMessage (用户最常看到) > placeholder > label
   3. 对每条中文字符串:
+     - 调用 _i18n_glossary.translate_zh_to_en() 生成专业英文翻译
      - 生成 i18n key (admin.{file}.line{line})
      - 写入 zh-CN.ts 和 en-US.ts
      - 在 .vue 文件中替换为 t('admin.x.y')
@@ -27,6 +28,15 @@ import re
 import sys
 from pathlib import Path
 from typing import Dict, List, Tuple
+
+# WHY: 引入过滤器专业术语词典, 让英文翻译自动化 + 行业化
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+try:
+    from _i18n_glossary import translate_zh_to_en
+    HAS_GLOSSARY = True
+except ImportError:
+    HAS_GLOSSARY = False
+    print("[WARN] 未找到 _i18n_glossary.py, 英文翻译将回退到 [EN] 占位符")
 
 ROOT = Path(__file__).resolve().parent.parent
 FRONT = ROOT / "frontend" / "src"
@@ -66,6 +76,18 @@ def generate_key(file_rel: str, line: int, ctx: str, text: str, used: set) -> st
     return key
 
 
+def translate_with_fallback(zh: str) -> str:
+    """
+    调用词典翻译, 失败则回退到 [EN] 占位.
+    词典模块来源: _i18n_glossary (Donaldson/Fleetguard/Sakura 行业术语)
+    """
+    if HAS_GLOSSARY:
+        en = translate_zh_to_en(zh)
+        if en:
+            return en
+    return f"[EN] {zh[:30]}"
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true")
@@ -102,7 +124,11 @@ def main():
     used_keys: set = set()
     file_replacements: Dict[str, List[Tuple[int, str, str, str]]] = {}  # file -> [(line, old, new, key)]
     new_zh_entries: Dict[str, str] = {}  # key -> zh value
-    new_en_entries: Dict[str, str] = {}  # key -> en value (英文占位)
+    new_en_entries: Dict[str, str] = {}  # key -> en value (词典翻译 or 占位)
+    translation_stats = {
+        "glossary_hit": 0,      # 词典命中
+        "fallback_placeholder": 0,  # 回退占位
+    }
 
     skipped_template = 0
     skipped_short = 0
@@ -126,12 +152,20 @@ def main():
 
         key = generate_key(f["file"], f["line"], ctx, text, used_keys)
         new_zh_entries[key] = text
-        # 英文占位 (人工后续翻译)
-        new_en_entries[key] = f"[EN] {text[:30]}"
+        # 英文翻译: 词典驱动 + 占位回退
+        en = translate_with_fallback(text)
+        if en.startswith("[EN] "):
+            translation_stats["fallback_placeholder"] += 1
+        else:
+            translation_stats["glossary_hit"] += 1
+        new_en_entries[key] = en
 
         file_replacements.setdefault(f["file"], []).append(
             (f["line"], text, f"t('{key}')", key)
         )
+
+    total = translation_stats["glossary_hit"] + translation_stats["fallback_placeholder"]
+    hit_rate = (translation_stats["glossary_hit"] / total * 100) if total else 0
 
     print(f"\n处理结果:")
     print(f"  拟替换: {sum(len(v) for v in file_replacements.values())}")
@@ -139,12 +173,19 @@ def main():
     print(f"  跳过 (太短): {skipped_short}")
     print(f"  跳过 (过长): {skipped_too_long}")
     print(f"  新 i18n key: {len(new_zh_entries)}")
+    print(f"  翻译质量: 词典命中 {translation_stats['glossary_hit']} / 占位 {translation_stats['fallback_placeholder']} (命中率 {hit_rate:.1f}%)")
 
     if args.dry_run:
         print(f"\n[DRY-RUN] 不实际修改文件")
         print(f"  受影响文件: {len(file_replacements)}")
         for fp, repls in list(file_replacements.items())[:5]:
             print(f"    {fp}: {len(repls)} 处替换")
+        # 输出 5 个翻译样例供人工审核
+        print(f"\n  翻译样例 (前 10 条):")
+        sample = list(new_en_entries.items())[:10]
+        for k, en in sample:
+            zh = new_zh_entries[k]
+            print(f"    {zh!r:35s} → {en!r:50s} (key: {k})")
         sys.exit(0)
 
     # === 实际修改 ===
@@ -186,7 +227,10 @@ def main():
         "skipped_short": skipped_short,
         "skipped_too_long": skipped_too_long,
         "new_keys_count": len(new_zh_entries),
+        "translation_stats": translation_stats,
+        "glossary_hit_rate": hit_rate,
         "new_keys": new_zh_entries,  # 供人工审核
+        "new_translations": new_en_entries,  # 供人工审核
         "files": {fp: len(repls) for fp, repls in file_replacements.items()},
     }
     OUT.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
