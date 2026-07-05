@@ -161,7 +161,7 @@ async function softDelete(row: UserListItem) {
   try {
     await ElMessageBox.confirm(
       `确定删除用户 "${row.username}" 吗? (软删除, 数据保留)`,
-      t('admin.usersview.string.l161_'),
+      t('common.action.confirm'),
       { type: 'warning' }
     )
   } catch {
@@ -171,7 +171,7 @@ async function softDelete(row: UserListItem) {
   userSubmitting.value = true
   try {
     await usersApi.remove(row.id)
-    ElMessage.success(t('admin.usersview.success.l171_'))
+    ElMessage.success(t('common.action.deleted'))
     await loadUsers()
   } catch {
     // axios 拦截器已统一弹错误
@@ -386,19 +386,19 @@ onMounted(() => {
     <!-- 新增用户对话框 -->
     <el-dialog v-model="createOpen" :title="t('admin.usersview.title.l384_')" width="480px">
       <el-form :model="createForm" label-width="80px" size="small">
-        <el-form-item :label="t('admin.usersview.label.l386_')" required>
+        <el-form-item :label="t('common.field.username')" required>
           <el-input v-model="createForm.username" :placeholder="t('admin.usersview.placeholder.l387_')" maxlength="50" show-word-limit />
         </el-form-item>
         <el-form-item :label="t('admin.usersview.label.l389_')" required>
           <el-input
             v-model="createForm.password"
             type="password"
-            :placeholder="t('admin.usersview.placeholder.l393_8')"
+            :placeholder="t('common.field.at_least_8_chars')"
             show-password
             autocomplete="new-password"
           />
         </el-form-item>
-        <el-form-item :label="t('admin.usersview.label.l398_')" required>
+        <el-form-item :label="t('common.field.role')" required>
           <el-select v-model="createForm.role" style="width: 100%">
             <el-option
               v-for="opt in ROLE_OPTIONS"
@@ -408,11 +408,11 @@ onMounted(() => {
             />
           </el-select>
         </el-form-item>
-        <el-form-item :label="t('admin.usersview.label.l408_')">
-          <el-input v-model="createForm.email" :placeholder="t('admin.usersview.placeholder.l409_')" />
+        <el-form-item :label="t('common.field.email')">
+          <el-input v-model="createForm.email" :placeholder="t('common.action.optional')" />
         </el-form-item>
-        <el-form-item :label="t('admin.usersview.label.l411_')">
-          <el-input v-model="createForm.fullName" :placeholder="t('admin.usersview.placeholder.l412_')" />
+        <el-form-item :label="t('common.field.full_name')">
+          <el-input v-model="createForm.fullName" :placeholder="t('common.action.optional')" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -424,10 +424,10 @@ onMounted(() => {
     <!-- 编辑用户对话框 -->
     <el-dialog v-model="editOpen" :title="`t('admin.usersview.title.l424_edit_user', { user: editForm.username })`" width="480px">
       <el-form :model="editForm" label-width="80px" size="small">
-        <el-form-item :label="t('admin.usersview.label.l424_')">
+        <el-form-item :label="t('common.field.username')">
           <el-input :model-value="editForm.username" disabled />
         </el-form-item>
-        <el-form-item :label="t('admin.usersview.label.l427_')">
+        <el-form-item :label="t('common.field.role')">
           <el-select v-model="editForm.role" style="width: 100%">
             <el-option
               v-for="opt in ROLE_OPTIONS"
@@ -437,11 +437,11 @@ onMounted(() => {
             />
           </el-select>
         </el-form-item>
-        <el-form-item :label="t('admin.usersview.label.l437_')">
-          <el-input v-model="editForm.email" :placeholder="t('admin.usersview.placeholder.l438_')" />
+        <el-form-item :label="t('common.field.email')">
+          <el-input v-model="editForm.email" :placeholder="t('common.action.optional')" />
         </el-form-item>
-        <el-form-item :label="t('admin.usersview.label.l440_')">
-          <el-input v-model="editForm.fullName" :placeholder="t('admin.usersview.placeholder.l441_')" />
+        <el-form-item :label="t('common.field.full_name')">
+          <el-input v-model="editForm.fullName" :placeholder="t('common.action.optional')" />
         </el-form-item>
         <el-form-item :label="t('admin.usersview.label.l443_')">
           <el-switch v-model="editForm.isActive" />
@@ -460,7 +460,7 @@ onMounted(() => {
           <el-input
             v-model="resetForm.newPassword"
             type="password"
-            :placeholder="t('admin.usersview.placeholder.l460_8')"
+            :placeholder="t('common.field.at_least_8_chars')"
             show-password
             autocomplete="new-password"
           />

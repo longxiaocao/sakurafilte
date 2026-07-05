@@ -275,7 +275,7 @@ async function queryEngineType(q: string, cb: (items: { value: string; engineTyp
 async function uploadImage(slot: number, e: Event) {
   // Day 9.3: 前端 slot 范围校验, 与后端 AdminProductImageService.UploadAsync 一致
   if (slot < 1 || slot > 6 || !Number.isInteger(slot)) {
-    ElMessage.error(t('admin.productformview.error.l275_slot') + slot + t('admin.productformview.error.l275_1_6'))
+    ElMessage.error(t('common.field.invalid_slot') + slot + t('common.field.slot_must_be_1_to_6'))
     return
   }
   const input = e.target as HTMLInputElement
@@ -302,7 +302,7 @@ async function uploadImage(slot: number, e: Event) {
 async function removeImage(slot: number) {
   // Day 9.3: 前端 slot 范围校验
   if (slot < 1 || slot > 6 || !Number.isInteger(slot)) {
-    ElMessage.error(t('admin.productformview.error.l302_slot') + slot + t('admin.productformview.error.l302_1_6'))
+    ElMessage.error(t('common.field.invalid_slot') + slot + t('common.field.slot_must_be_1_to_6'))
     return
   }
   if (removing.value) return
@@ -349,21 +349,21 @@ onBeforeUnmount(() => {
         <el-collapse-item :title="t('admin.productformview.title.l346_')" name="1">
           <div class="grid grid-cols-3 gap-3">
             <!-- P2.2: productName1/2/type 全部 typeahead -->
-            <el-form-item :label="t('admin.productformview.label.l349_1')">
+            <el-form-item :label="t('common.action.product_name_1')">
               <el-autocomplete v-model="form.productName1" :fetch-suggestions="queryProductName1"
-                :placeholder="t('admin.productformview.placeholder.l351_')" clearable size="small" :trigger-on-focus="true" :debounce="200" />
+                :placeholder="t('common.field.input_autocomplete')" clearable size="small" :trigger-on-focus="true" :debounce="200" />
             </el-form-item>
-            <el-form-item :label="t('admin.productformview.label.l353_2')">
+            <el-form-item :label="t('common.action.product_name_2')">
               <el-autocomplete v-model="form.productName2" :fetch-suggestions="queryProductName2"
-                :placeholder="t('admin.productformview.placeholder.l355_')" clearable size="small" :trigger-on-focus="true" :debounce="200" />
+                :placeholder="t('common.field.input_autocomplete')" clearable size="small" :trigger-on-focus="true" :debounce="200" />
             </el-form-item>
-            <el-form-item :label="t('admin.productformview.label.l357_')">
+            <el-form-item :label="t('common.action.type')">
               <el-autocomplete v-model="form.type" :fetch-suggestions="queryType"
                 placeholder="oil/fuel/air/cabin/others" clearable size="small" :trigger-on-focus="true" :debounce="200" />
             </el-form-item>
             <el-form-item label="MR.1"><el-input v-model="form.mr1" /></el-form-item>
             <el-form-item :label="t('admin.productformview.label.l362_oem_2')"><el-input v-model="form.oem2" /></el-form-item>
-            <el-form-item :label="t('admin.productformview.label.l363_')">
+            <el-form-item :label="t('common.field.publish')">
               <el-switch v-model="form.isPublished" />
             </el-form-item>
             <el-form-item :label="t('admin.productformview.label.l366_')" class="col-span-3">
@@ -394,7 +394,7 @@ onBeforeUnmount(() => {
             <el-autocomplete v-model="x.oemNo3" :fetch-suggestions="queryOemNo3"
               :placeholder="t('admin.productformview.placeholder.l392_oem_3')" style="width: 240px" clearable size="small"
               :trigger-on-focus="true" :debounce="200" />
-            <el-input v-model="x.productName1" :placeholder="t('admin.productformview.placeholder.l394_')" size="small" />
+            <el-input v-model="x.productName1" :placeholder="t('common.field.product_name')" size="small" />
             <el-button text type="danger" @click="removeXref(i)">删除</el-button>
           </div>
           <el-button @click="addXref" size="small">+ 添加交叉引用</el-button>
@@ -411,15 +411,15 @@ onBeforeUnmount(() => {
             <el-form-item label="H2"><el-input-number v-model="form.h2Mm" :min="0" :precision="2" /></el-form-item>
             <el-form-item label="H3"><el-input-number v-model="form.h3Mm" :min="0" :precision="2" /></el-form-item>
             <el-form-item label="H4"><el-input-number v-model="form.h4Mm" :min="0" :precision="2" /></el-form-item>
-            <el-form-item :label="t('admin.productformview.label.l411_d7')"><el-input v-model="form.d7Thread" /></el-form-item>
-            <el-form-item :label="t('admin.productformview.label.l412_d8')"><el-input v-model="form.d8Thread" /></el-form-item>
-            <el-form-item :label="t('admin.productformview.label.l413_')"><el-input-number v-model="form.noCheckValves" :min="0" /></el-form-item>
-            <el-form-item :label="t('admin.productformview.label.l414_')"><el-input-number v-model="form.noBypassValves" :min="0" /></el-form-item>
+            <el-form-item :label="t('common.field.d7_thread')"><el-input v-model="form.d7Thread" /></el-form-item>
+            <el-form-item :label="t('common.field.d8_thread')"><el-input v-model="form.d8Thread" /></el-form-item>
+            <el-form-item :label="t('common.field.check_valve_count')"><el-input-number v-model="form.noCheckValves" :min="0" /></el-form-item>
+            <el-form-item :label="t('common.field.bypass_valve_count')"><el-input-number v-model="form.noBypassValves" :min="0" /></el-form-item>
           </div>
         </el-collapse-item>
 
         <!-- 分区 5: 性能 -->
-        <el-collapse-item :title="$t('admin.productformview.title.l419_')" name="5">
+        <el-collapse-item :title="$t('common.field.performance')" name="5">
           <div class="grid grid-cols-3 gap-3">
             <!-- P2.2: Media 字段 typeahead (2 字段) -->
             <el-form-item label="Media">
@@ -428,46 +428,46 @@ onBeforeUnmount(() => {
                 :trigger-on-focus="true" :debounce="200" value-key="value" />
             </el-form-item>
             <el-form-item label="MediaModel"><el-input v-model="form.mediaModel" /></el-form-item>
-            <el-form-item :label="t('admin.productformview.label.l428_1')"><el-input v-model="form.efficiency1" /></el-form-item>
-            <el-form-item :label="t('admin.productformview.label.l429_2')"><el-input v-model="form.efficiency2" /></el-form-item>
+            <el-form-item :label="t('common.field.efficiency_1')"><el-input v-model="form.efficiency1" /></el-form-item>
+            <el-form-item :label="t('common.field.efficiency_2')"><el-input v-model="form.efficiency2" /></el-form-item>
             <el-form-item :label="t('admin.productformview.label.l430_lr')"><el-input-number v-model="form.bypassValveLr" :min="0" :precision="2" /></el-form-item>
             <el-form-item :label="t('admin.productformview.label.l431_hr')"><el-input-number v-model="form.bypassValveHr" :min="0" :precision="2" /></el-form-item>
-            <el-form-item :label="t('admin.productformview.label.l432_')"><el-input-number v-model="form.bypassPressure" :min="0" :precision="2" /></el-form-item>
+            <el-form-item :label="t('common.field.bypass_pressure')"><el-input-number v-model="form.bypassPressure" :min="0" :precision="2" /></el-form-item>
             <el-form-item :label="t('admin.productformview.label.l433_bar')"><el-input-number v-model="form.collapsePressureBar" :min="0" :precision="2" /></el-form-item>
-            <el-form-item :label="t('admin.productformview.label.l434_')"><el-input v-model="form.sealingMaterial" /></el-form-item>
-            <el-form-item :label="t('admin.productformview.label.l435_')"><el-input v-model="form.tempRange" /></el-form-item>
+            <el-form-item :label="t('common.action.seal_material')"><el-input v-model="form.sealingMaterial" /></el-form-item>
+            <el-form-item :label="t('common.field.temperature_range')"><el-input v-model="form.tempRange" /></el-form-item>
           </div>
         </el-collapse-item>
 
         <!-- 分区 6: 包装 -->
-        <el-collapse-item :title="$t('admin.productformview.title.l440_')" name="6">
+        <el-collapse-item :title="$t('common.field.packaging')" name="6">
           <div class="grid grid-cols-4 gap-3">
-            <el-form-item :label="t('admin.productformview.label.l442_')">
+            <el-form-item :label="t('common.action.carton_per_pcs')">
               <el-input-number v-model="form.qtyPerCarton" :min="0" />
               <FieldHelpPopover field-key="qtyPerCarton" />
             </el-form-item>
-            <el-form-item :label="t('admin.productformview.label.l446_kg')">
+            <el-form-item :label="t('common.field.weight_kg')">
               <el-input-number v-model="form.weightKgs" :min="0" :precision="3" />
               <FieldHelpPopover field-key="weightKgs" />
             </el-form-item>
-            <el-form-item :label="t('admin.productformview.label.l450_mm')">
+            <el-form-item :label="t('common.field.carton_length_mm')">
               <el-input-number v-model="form.cartonLengthMm" :min="0" :precision="2" />
               <FieldHelpPopover field-key="cartonLengthMm" />
             </el-form-item>
-            <el-form-item :label="t('admin.productformview.label.l454_mm')">
+            <el-form-item :label="t('common.field.carton_width_mm')">
               <el-input-number v-model="form.cartonWidthMm" :min="0" :precision="2" />
               <FieldHelpPopover field-key="cartonWidthMm" />
             </el-form-item>
-            <el-form-item :label="t('admin.productformview.label.l458_mm')">
+            <el-form-item :label="t('common.field.carton_height_mm')">
               <el-input-number v-model="form.cartonHeightMm" :min="0" :precision="2" />
               <FieldHelpPopover field-key="cartonHeightMm" />
             </el-form-item>
             <!-- P5.1: 体积自动计算 (L*W*H/1e9 m³), 后端 DeriveVolume 兜底 -->
-            <el-form-item :label="t('admin.productformview.label.l463_m')">
+            <el-form-item :label="t('common.field.carton_volume_m3')">
               <el-input
                 :model-value="cartonVolumeText"
                 readonly
-                :placeholder="t('admin.productformview.placeholder.l467_')"
+                :placeholder="t('common.field.auto_calculated')"
                 class="!w-32"
               >
                 <template #append>只读</template>
@@ -498,7 +498,7 @@ onBeforeUnmount(() => {
               <el-input
                 :model-value="masterBoxVolumeText"
                 readonly
-                :placeholder="t('admin.productformview.placeholder.l498_')"
+                :placeholder="t('common.field.auto_calculated')"
                 class="!w-32"
               >
                 <template #append>只读</template>
@@ -518,10 +518,10 @@ onBeforeUnmount(() => {
             <el-autocomplete v-model="m.machineModel" :fetch-suggestions="queryMachineModel"
               :placeholder="t('admin.productformview.placeholder.l516_')" size="small" clearable :trigger-on-focus="true" :debounce="200"
               :class="{ 'app-required': isAppRowDirty(m) && !m.machineModel?.trim() }" />
-            <el-input v-model="m.modelName" :placeholder="t('admin.productformview.placeholder.l518_')" size="small" />
+            <el-input v-model="m.modelName" :placeholder="t('common.action.name')" size="small" />
             <!-- 发动机品牌: typeahead -->
             <el-autocomplete v-model="m.engineBrand" :fetch-suggestions="queryEngineBrand"
-              :placeholder="t('admin.productformview.placeholder.l521_')" size="small" clearable :trigger-on-focus="true" :debounce="200" />
+              :placeholder="t('common.field.engine_brand')" size="small" clearable :trigger-on-focus="true" :debounce="200" />
             <div class="flex gap-1">
               <!-- 发动机型号: typeahead -->
               <el-autocomplete v-model="m.engineType" :fetch-suggestions="queryEngineType"

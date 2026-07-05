@@ -25,7 +25,7 @@ const countModeUsed = ref('exact')
 
 // E2E UI.1 修复: 列设置 — 默认隐藏次要列, 降低信息密度 (24 列 → 13 列)
 //   WHY: 24 列超出运维一眼扫读上限 (≤8 列为佳), 次要列 (D3/D4/H3/H4/D7/D8/Media 等) 默认隐藏
-//   核心列 (13): selection/ID/OEM/OEM2/t('admin.productsview.label.l329_')/D1/D2/H1/H2/发布/停售/更新/操作
+//   核心列 (13): selection/ID/OEM/OEM2/t('common.action.type')/D1/D2/H1/H2/发布/停售/更新/操作
 //   次要列 (11): MR1/D3/D4/H3/H4/D7/D8/Media/MediaModel/箱件/kg
 const showAllColumns = ref(false)
 
@@ -149,7 +149,7 @@ function editProduct(row: ProductListItem) {
 
 async function discontinue(row: ProductListItem) {
   try {
-    await ElMessageBox.confirm(`确定停售产品 "${row.oemNoDisplay}" 吗?`, t('admin.productsview.warning.l149_'), { type: 'warning' })
+    await ElMessageBox.confirm(`确定停售产品 "${row.oemNoDisplay}" 吗?`, t('common.action.confirm'), { type: 'warning' })
   } catch {
     return
   }
@@ -171,7 +171,7 @@ async function restore(row: ProductListItem) {
   productMutating.value = true
   try {
     await adminProductApi.restore(row.id, 'admin')
-    ElMessage.success(t('admin.productsview.success.l171_'))
+    ElMessage.success(t('common.action.restored'))
     load()
   } catch {
     // 错误已被拦截器
@@ -293,12 +293,12 @@ onBeforeUnmount(() => {
     <!-- A11y axe: h1 标题 (page-has-heading-one) -->
     <h1 class="text-lg font-medium mb-3">产品管理</h1>
     <!-- 顶部工具条 -->
-    <!-- P1-4 修复: 工具条移动端折叠 - 次要控件 (countMode 标签, t('admin.productsview.label.l442_')列 switch) 在 sm 以下隐藏 -->
+    <!-- P1-4 修复: 工具条移动端折叠 - 次要控件 (countMode 标签, t('common.field.all')列 switch) 在 sm 以下隐藏 -->
     <div class="flex items-center gap-2 mb-3 flex-wrap">
       <el-input v-model="filter.oem2" placeholder="OEM 2" clearable size="small" style="width: 160px" :aria-label="t('admin.productsview.aria.l297_oem2')" @keyup.enter="quickSearch" />
       <el-input v-model="filter.mr1" placeholder="MR.1" clearable size="small" style="width: 120px" :aria-label="t('admin.productsview.aria.l298_mr1')" @keyup.enter="quickSearch" />
-      <el-input v-model="filter.productName1" :placeholder="t('admin.productsview.placeholder.l295_')" clearable size="small" style="width: 160px" :aria-label="t('admin.productsview.aria.l299_product_name')" @keyup.enter="quickSearch" />
-      <el-select v-model="filter.type" :placeholder="t('admin.productsview.placeholder.l296_')" clearable size="small" style="width: 100px" :aria-label="t('admin.productsview.aria.l300_type')">
+      <el-input v-model="filter.productName1" :placeholder="t('common.field.product_name')" clearable size="small" style="width: 160px" :aria-label="t('admin.productsview.aria.l299_product_name')" @keyup.enter="quickSearch" />
+      <el-select v-model="filter.type" :placeholder="t('common.action.type')" clearable size="small" style="width: 100px" :aria-label="t('admin.productsview.aria.l300_type')">
         <el-option label="oil" value="oil" />
         <el-option label="fuel" value="fuel" />
         <el-option label="air" value="air" />
@@ -331,7 +331,7 @@ onBeforeUnmount(() => {
         <el-table-column prop="oemNoDisplay" label="OEM" width="160" fixed />
         <el-table-column v-if="showAllColumns" prop="mr1" label="MR.1" width="100" show-overflow-tooltip />
         <el-table-column prop="oem2" label="OEM 2" width="120" show-overflow-tooltip />
-        <el-table-column prop="type" :label="t('admin.productsview.placeholder.l296_')" width="60" />
+        <el-table-column prop="type" :label="t('common.action.type')" width="60" />
         <el-table-column prop="d1Mm" label="D1" width="50" align="right" />
         <el-table-column prop="d2Mm" label="D2" width="50" align="right" />
         <el-table-column v-if="showAllColumns" prop="d3Mm" label="D3" width="50" align="right" />
@@ -344,9 +344,9 @@ onBeforeUnmount(() => {
         <el-table-column v-if="showAllColumns" prop="d8Thread" label="D8" width="70" />
         <el-table-column v-if="showAllColumns" prop="media" label="Media" width="100" show-overflow-tooltip />
         <el-table-column v-if="showAllColumns" prop="mediaModel" label="MediaModel" width="100" show-overflow-tooltip />
-        <el-table-column v-if="showAllColumns" prop="qtyPerCarton" :label="t('admin.productsview.label.l342_')" width="60" align="right" />
+        <el-table-column v-if="showAllColumns" prop="qtyPerCarton" :label="t('common.action.carton_per_pcs')" width="60" align="right" />
         <el-table-column v-if="showAllColumns" prop="weightKgs" label="kg" width="60" align="right" />
-        <el-table-column prop="isPublished" :label="t('admin.productsview.label.l344_')" width="50">
+        <el-table-column prop="isPublished" :label="t('common.field.publish')" width="50">
           <template #default="{ row }">
             <el-tag v-if="row.isPublished" type="success" size="small">✓</el-tag>
           </template>
@@ -391,14 +391,14 @@ onBeforeUnmount(() => {
       <div class="p-3 space-y-3">
         <div class="text-sm font-medium">文本字段</div>
         <div class="grid grid-cols-2 gap-2">
-          <el-input v-model="advFilter.productName1" :placeholder="t('admin.productsview.placeholder.l389_1')" size="small" />
-          <el-input v-model="advFilter.productName2" :placeholder="t('admin.productsview.placeholder.l390_2')" size="small" />
+          <el-input v-model="advFilter.productName1" :placeholder="t('common.action.product_name_1')" size="small" />
+          <el-input v-model="advFilter.productName2" :placeholder="t('common.action.product_name_2')" size="small" />
           <el-input v-model="advFilter.mr1" placeholder="MR.1" size="small" />
           <el-input v-model="advFilter.oem2" placeholder="OEM 2" size="small" />
-          <el-input v-model="advFilter.oemBrand" :placeholder="t('admin.productsview.placeholder.l393_oem')" size="small" />
+          <el-input v-model="advFilter.oemBrand" :placeholder="t('common.field.oem_brand')" size="small" />
           <el-input v-model="advFilter.mediaName" placeholder="Media" size="small" />
           <el-input v-model="advFilter.mediaModel" placeholder="MediaModel" size="small" />
-          <el-input v-model="advFilter.sealingMaterial" :placeholder="t('admin.productsview.placeholder.l396_')" size="small" />
+          <el-input v-model="advFilter.sealingMaterial" :placeholder="t('common.action.seal_material')" size="small" />
           <el-input v-model="advFilter.efficiency1" :placeholder="t('admin.productsview.placeholder.l397_')" size="small" />
         </div>
 
@@ -422,10 +422,10 @@ onBeforeUnmount(() => {
 
         <div class="text-sm font-medium">车型适配</div>
         <div class="grid grid-cols-2 gap-2">
-          <el-input v-model="advFilter.machineBrand" :placeholder="t('admin.productsview.placeholder.l420_')" size="small" />
-          <el-input v-model="advFilter.machineModel" :placeholder="t('admin.productsview.placeholder.l421_')" size="small" />
-          <el-input v-model="advFilter.modelName" :placeholder="t('admin.productsview.placeholder.l422_')" size="small" />
-          <el-input v-model="advFilter.engineBrand" :placeholder="t('admin.productsview.placeholder.l423_')" size="small" />
+          <el-input v-model="advFilter.machineBrand" :placeholder="t('common.action.brand')" size="small" />
+          <el-input v-model="advFilter.machineModel" :placeholder="t('common.action.model')" size="small" />
+          <el-input v-model="advFilter.modelName" :placeholder="t('common.action.name')" size="small" />
+          <el-input v-model="advFilter.engineBrand" :placeholder="t('common.field.engine_brand')" size="small" />
         </div>
 
         <div class="flex justify-end gap-2 pt-3">
@@ -443,8 +443,8 @@ onBeforeUnmount(() => {
         <div class="grid grid-cols-4 gap-2 items-end">
           <div>
             <div class="text-xs text-muted mb-1">类型</div>
-            <el-select v-model="historyFilter.changeType" :placeholder="t('admin.productsview.placeholder.l441_')" clearable size="small" @change="reloadCurrentHistory">
-              <el-option :label="t('admin.productsview.placeholder.l441_')" value="" />
+            <el-select v-model="historyFilter.changeType" :placeholder="t('common.field.all')" clearable size="small" @change="reloadCurrentHistory">
+              <el-option :label="t('common.field.all')" value="" />
               <el-option label="create" value="create" />
               <el-option label="update" value="update" />
               <el-option label="discontinue" value="discontinue" />
@@ -456,7 +456,7 @@ onBeforeUnmount(() => {
             <el-date-picker
               v-model="historyFilter.since"
               type="datetime"
-              :placeholder="t('admin.productsview.placeholder.l454_')"
+              :placeholder="t('common.field.unlimited')"
               size="small"
               value-format="YYYY-MM-DDTHH:mm:ss"
               @change="reloadCurrentHistory"
@@ -467,7 +467,7 @@ onBeforeUnmount(() => {
             <el-date-picker
               v-model="historyFilter.until"
               type="datetime"
-              :placeholder="t('admin.productsview.placeholder.l465_')"
+              :placeholder="t('common.field.unlimited')"
               size="small"
               value-format="YYYY-MM-DDTHH:mm:ss"
               @change="reloadCurrentHistory"

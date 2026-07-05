@@ -31,7 +31,7 @@ async function load() {
     const { items: list } = await dictApi.productName1s.list(searchKw.value || undefined, includeDeleted.value, 500)
     items.value = list
   } catch (e: any) {
-    ElMessage.error(t('admin.productname1sview.error.l31_') + (e?.message || ''))
+    ElMessage.error(t('common.action.load_failed') + (e?.message || ''))
   } finally {
     loading.value = false
   }
@@ -63,17 +63,17 @@ async function saveDialog() {
   try {
     if (dialogMode.value === 'create') {
       await dictApi.productName1s.create(v, dialogForm.sortOrder)
-      ElMessage.success(t('admin.productname1sview.success.l63_'))
+      ElMessage.success(t('common.action.created'))
     } else if (dialogForm.id != null) {
       await dictApi.productName1s.update(dialogForm.id, {
         productName1: v, sortOrder: dialogForm.sortOrder
       })
-      ElMessage.success(t('admin.productname1sview.success.l68_'))
+      ElMessage.success(t('common.action.updated'))
     }
     dialogOpen.value = false
     await load()
   } catch (e: any) {
-    const detail = e?.response?.data?.detail || e?.message || t('admin.productname1sview.string.l73_')
+    const detail = e?.response?.data?.detail || e?.message || t('common.action.operation_failed')
     ElMessage.error(detail)
   }
 }
@@ -81,16 +81,16 @@ async function saveDialog() {
 async function softDelete(row: ProductName1Item) {
   try {
     await ElMessageBox.confirm(
-      `确定删除 "${row.productName1}t('admin.productname1sview.string.l81_')含已删"模式下恢复)`,
-      t('admin.productname1sview.string.l82_'), { type: 'warning' }
+      `确定删除 "${row.productName1}t('common.field.soft_delete_confirm')含已删"模式下恢复)`,
+      t('common.action.confirm'), { type: 'warning' }
     )
   } catch { return }
   try {
     await dictApi.productName1s.delete(row.id)
-    ElMessage.success(t('admin.productname1sview.success.l87_'))
+    ElMessage.success(t('common.action.deleted'))
     await load()
   } catch (e: any) {
-    const detail = e?.response?.data?.detail || e?.message || t('admin.productname1sview.string.l90_')
+    const detail = e?.response?.data?.detail || e?.message || t('common.action.delete_failed')
     ElMessage.error(detail)
   }
 }
@@ -98,10 +98,10 @@ async function softDelete(row: ProductName1Item) {
 async function restore(row: ProductName1Item) {
   try {
     await dictApi.productName1s.restore(row.id)
-    ElMessage.success(t('admin.productname1sview.success.l98_'))
+    ElMessage.success(t('common.action.restored'))
     await load()
   } catch (e: any) {
-    const detail = e?.response?.data?.detail || e?.message || t('admin.productname1sview.string.l101_')
+    const detail = e?.response?.data?.detail || e?.message || t('common.action.restore_failed')
     ElMessage.error(detail)
   }
 }
@@ -138,9 +138,9 @@ async function onDrop(e: DragEvent, targetId: number) {
   items.value.forEach((it, idx) => { it.sortOrder = (idx + 1) * 10 })
   try {
     await dictApi.productName1s.reorder(updates)
-    ElMessage.success(t('admin.productname1sview.success.l138_'))
+    ElMessage.success(t('common.action.sort_order_saved'))
   } catch (e: any) {
-    const detail = e?.response?.data?.detail || e?.message || t('admin.productname1sview.string.l140_')
+    const detail = e?.response?.data?.detail || e?.message || t('common.action.sort_failed')
     ElMessage.error(detail)
     await load()
   }
@@ -204,7 +204,7 @@ onMounted(load)
         @dragend="onDragEnd"
       >
         <div class="cell-drag">
-          <span v-if="isDraggable(row)" class="drag-handle" :title="t('admin.productname1sview.title.l204_')">≡</span>
+          <span v-if="isDraggable(row)" class="drag-handle" :title="t('common.field.drag_to_sort')">≡</span>
         </div>
         <div class="cell-id">{{ row.id }}</div>
         <div class="cell-name">{{ row.productName1 }}</div>
@@ -231,10 +231,10 @@ onMounted(load)
     <el-dialog v-model="dialogOpen"
       :title="dialogMode === 'create' ? t('admin.productname1sview.title.l229_1') : t('admin.productname1sview.title.l229_1_2')" width="480px">
       <el-form :model="dialogForm" label-width="100px" size="small">
-        <el-form-item :label="t('admin.productname1sview.label.l231_1')" required>
+        <el-form-item :label="t('common.action.product_name_1')" required>
           <el-input v-model="dialogForm.productName1" :placeholder="t('admin.productname1sview.placeholder.l232_oil_filter')" maxlength="200" show-word-limit />
         </el-form-item>
-        <el-form-item :label="t('admin.productname1sview.label.l234_')">
+        <el-form-item :label="t('common.action.sort_order')">
           <el-input-number v-model="dialogForm.sortOrder" :min="0" :step="10" style="width: 100%" />
           <div class="text-xs text-muted mt-1">数字越小越靠前; 拖拽排序会自动分配</div>
         </el-form-item>

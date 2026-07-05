@@ -28,7 +28,7 @@ async function load() {
   try {
     const { items: list } = await dictApi.types.list(searchKw.value || undefined, includeDeleted.value, 500)
     items.value = list
-  } catch (e: any) { ElMessage.error(t('admin.typesview.error.l28_') + (e?.message || '')) }
+  } catch (e: any) { ElMessage.error(t('common.action.load_failed') + (e?.message || '')) }
   finally { loading.value = false }
 }
 function onSearch() { load() }
@@ -49,13 +49,13 @@ async function saveDialog() {
   if (v.length > 50) { ElMessage.warning(t('admin.typesview.warning.l46_type_50')); return }
   try {
     if (dialogMode.value === 'create') {
-      await dictApi.types.create(v, dialogForm.sortOrder); ElMessage.success(t('admin.typesview.success.l49_'))
+      await dictApi.types.create(v, dialogForm.sortOrder); ElMessage.success(t('common.action.created'))
     } else if (dialogForm.id != null) {
       await dictApi.types.update(dialogForm.id, { type: v, sortOrder: dialogForm.sortOrder })
-      ElMessage.success(t('admin.typesview.success.l52_'))
+      ElMessage.success(t('common.action.updated'))
     }
     dialogOpen.value = false; await load()
-  } catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || t('admin.typesview.error.l55_')) }
+  } catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || t('common.action.operation_failed')) }
 }
 async function softDelete(row: TypeItem) {
   // 固定 5 值: oil/fuel/air/cabin/others 不允许硬删 (即使软删也警告, 避免误操作)
@@ -64,15 +64,15 @@ async function softDelete(row: TypeItem) {
     await ElMessageBox.confirm(
       FIXED.includes(row.type)
         ? `确定删除固定 Type "${row.type}" 吗? 建议保留 (作为 P2.3 兜底), 但仍支持软删恢复.`
-        : `确定删除 "${row.type}" 吗? (软删除)`, t('admin.typesview.string.l64_'), { type: 'warning' }
+        : `确定删除 "${row.type}" 吗? (软删除)`, t('common.action.confirm'), { type: 'warning' }
     )
   } catch { return }
-  try { await dictApi.types.delete(row.id); ElMessage.success(t('admin.typesview.success.l67_')); await load() }
-  catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || t('admin.typesview.error.l68_')) }
+  try { await dictApi.types.delete(row.id); ElMessage.success(t('common.action.deleted')); await load() }
+  catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || t('common.action.delete_failed')) }
 }
 async function restore(row: TypeItem) {
-  try { await dictApi.types.restore(row.id); ElMessage.success(t('admin.typesview.success.l71_')); await load() }
-  catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || t('admin.typesview.error.l72_')) }
+  try { await dictApi.types.restore(row.id); ElMessage.success(t('common.action.restored')); await load() }
+  catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || t('common.action.restore_failed')) }
 }
 
 function onDragStart(e: DragEvent, id: number) { draggingId.value = id; if (e.dataTransfer) { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(id)) } }
@@ -89,7 +89,7 @@ async function onDrop(e: DragEvent, targetId: number) {
   const updates: TypeReorderItem[] = items.value.map((it, idx) => ({ id: it.id, sortOrder: (idx + 1) * 10 }))
   items.value.forEach((it, idx) => { it.sortOrder = (idx + 1) * 10 })
   try { await dictApi.types.reorder(updates); ElMessage.success(t('admin.typesview.success.l88_p2_3')) }
-  catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || t('admin.typesview.error.l89_')); await load() }
+  catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || t('common.action.sort_failed')); await load() }
 }
 function onDragEnd() { draggingId.value = null; dragOverId.value = null }
 
@@ -150,7 +150,7 @@ onMounted(load)
           <el-button v-else size="small" text type="success" @click="restore(row)">恢复</el-button>
         </div>
       </div>
-      <div v-if="!loading && items.length === 0" class="dict-empty" > {{ t('admin.typesview.string.l150_') }}新增 Type开始</div>
+      <div v-if="!loading && items.length === 0" class="dict-empty" > {{ t('common.action.no_data_click_top_right') }}新增 Type开始</div>
     </div>
 
     <div class="mt-2 text-xs text-muted">{{ t("common.dictviewcommon.total_drag", { total, active: activeCount, soft: total - activeCount }) }}</div>
@@ -160,7 +160,7 @@ onMounted(load)
         <el-form-item label="Type" required>
           <el-input v-model="dialogForm.type" :placeholder="t('admin.typesview.placeholder.l158_oil_fuel_air_cabin_others')" maxlength="50" show-word-limit />
         </el-form-item>
-        <el-form-item :label="t('admin.typesview.label.l160_')">
+        <el-form-item :label="t('common.action.sort_order')">
           <el-input-number v-model="dialogForm.sortOrder" :min="0" :step="10" style="width: 100%" />
         </el-form-item>
       </el-form>

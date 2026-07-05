@@ -37,7 +37,7 @@ async function load() {
     const { items: list } = await dictApi.oemBrands.list(searchKw.value || undefined, includeDeleted.value, 500)
     items.value = list
   } catch (e: any) {
-    ElMessage.error(t('admin.oembrandsview.error.l37_') + (e?.message || ''))
+    ElMessage.error(t('common.action.load_failed') + (e?.message || ''))
   } finally {
     loading.value = false
   }
@@ -75,19 +75,19 @@ async function saveDialog() {
   try {
     if (dialogMode.value === 'create') {
       await dictApi.oemBrands.create(dialogForm.brand.trim(), dialogForm.sortOrder)
-      ElMessage.success(t('admin.oembrandsview.success.l75_'))
+      ElMessage.success(t('common.action.created'))
     } else if (dialogForm.id != null) {
       await dictApi.oemBrands.update(dialogForm.id, {
         brand: dialogForm.brand.trim(),
         sortOrder: dialogForm.sortOrder
       })
-      ElMessage.success(t('admin.oembrandsview.success.l81_'))
+      ElMessage.success(t('common.action.updated'))
     }
     dialogOpen.value = false
     await load()
   } catch (e: any) {
     // 后端 ProblemDetails 的 detail 字段优先显示
-    const detail = e?.response?.data?.detail || e?.message || t('admin.oembrandsview.string.l87_')
+    const detail = e?.response?.data?.detail || e?.message || t('common.action.operation_failed')
     ElMessage.error(detail)
   }
 }
@@ -95,8 +95,8 @@ async function saveDialog() {
 async function softDelete(row: OemBrandItem) {
   try {
     await ElMessageBox.confirm(
-      `确定删除品牌 "${row.brand}t('admin.oembrandsview.string.l95_')含已删"模式下恢复)`,
-      t('admin.oembrandsview.string.l96_'),
+      `确定删除品牌 "${row.brand}t('common.field.soft_delete_confirm')含已删"模式下恢复)`,
+      t('common.action.confirm'),
       { type: 'warning' }
     )
   } catch {
@@ -104,10 +104,10 @@ async function softDelete(row: OemBrandItem) {
   }
   try {
     await dictApi.oemBrands.delete(row.id)
-    ElMessage.success(t('admin.oembrandsview.success.l104_'))
+    ElMessage.success(t('common.action.deleted'))
     await load()
   } catch (e: any) {
-    const detail = e?.response?.data?.detail || e?.message || t('admin.oembrandsview.string.l107_')
+    const detail = e?.response?.data?.detail || e?.message || t('common.action.delete_failed')
     ElMessage.error(detail)
   }
 }
@@ -115,10 +115,10 @@ async function softDelete(row: OemBrandItem) {
 async function restore(row: OemBrandItem) {
   try {
     await dictApi.oemBrands.restore(row.id)
-    ElMessage.success(t('admin.oembrandsview.success.l115_'))
+    ElMessage.success(t('common.action.restored'))
     await load()
   } catch (e: any) {
-    const detail = e?.response?.data?.detail || e?.message || t('admin.oembrandsview.string.l118_')
+    const detail = e?.response?.data?.detail || e?.message || t('common.action.restore_failed')
     ElMessage.error(detail)
   }
 }
@@ -165,9 +165,9 @@ async function onDrop(e: DragEvent, targetId: number) {
   // 4) 调 API
   try {
     await dictApi.oemBrands.reorder(updates)
-    ElMessage.success(t('admin.oembrandsview.success.l165_'))
+    ElMessage.success(t('common.action.sort_order_saved'))
   } catch (e: any) {
-    const detail = e?.response?.data?.detail || e?.message || t('admin.oembrandsview.string.l167_')
+    const detail = e?.response?.data?.detail || e?.message || t('common.action.sort_failed')
     ElMessage.error(detail)
     // 失败回滚: 重新加载
     await load()
@@ -249,7 +249,7 @@ onMounted(load)
         @dragend="onDragEnd"
       >
         <div class="cell-drag">
-          <span v-if="isDraggable(row)" class="drag-handle" :title="t('admin.oembrandsview.title.l249_')">≡</span>
+          <span v-if="isDraggable(row)" class="drag-handle" :title="t('common.field.drag_to_sort')">≡</span>
         </div>
         <div class="cell-id">{{ row.id }}</div>
         <div class="cell-brand">{{ row.brand }}</div>
@@ -296,10 +296,10 @@ onMounted(load)
       width="480px"
     >
       <el-form :model="dialogForm" label-width="80px" size="small">
-        <el-form-item :label="t('admin.oembrandsview.label.l296_')" required>
-          <el-input v-model="dialogForm.brand" :placeholder="t('admin.oembrandsview.placeholder.l297_bosch')" maxlength="100" show-word-limit />
+        <el-form-item :label="t('common.action.brand')" required>
+          <el-input v-model="dialogForm.brand" :placeholder="t('common.field.e_g_bosch')" maxlength="100" show-word-limit />
         </el-form-item>
-        <el-form-item :label="t('admin.oembrandsview.label.l299_')">
+        <el-form-item :label="t('common.action.sort_order')">
           <el-input-number v-model="dialogForm.sortOrder" :min="0" :step="10" style="width: 100%" />
           <div class="text-xs text-muted mt-1">数字越小越靠前; 拖拽排序会自动分配</div>
         </el-form-item>

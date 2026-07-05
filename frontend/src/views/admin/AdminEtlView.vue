@@ -96,7 +96,7 @@ async function doTrigger() {
   try {
     await ElMessageBox.confirm(
       `即将触发 ${form.entity} ETL (${form.mode}${form.dryRun ? ' - dry-run' : ''}), 是否继续?`,
-      t('admin.etlview.string.l96_'),
+      t('common.action.confirm'),
       { type: 'warning' }
     )
   } catch {
@@ -210,7 +210,7 @@ function connectSSE() {
           ['completed', 'failed', 'cancelled'].includes(r.activeTask.status)) {
         refreshAudit()
       }
-      // P1.1 (Task 3): 任务进入 paused 状态 → 刷新t('admin.etlview.buttontext.l377_')按钮可见性
+      // P1.1 (Task 3): 任务进入 paused 状态 → 刷新t('common.action.resume')按钮可见性
       if (r.activeTask && r.activeTask.status === 'paused') {
         checkPausedTask()
       }
@@ -256,11 +256,11 @@ function clearLastFinished() {
 //   WHY 固定: 与后端 EtlProgress.AllowedReasonCodes 对齐, 避免传任意字符串
 //   运营审计按 reason_code 聚合 (USER_REQUEST/TIMEOUT/SYSTEM_SHUTDOWN/ADMIN_OVERRIDE/OTHER)
 const reasonCodeOptions = [
-  { value: 'USER_REQUEST', label: t('admin.etlview.string.l256_'), defaultReason: t('admin.etlview.string.l256__2') },
-  { value: 'ADMIN_OVERRIDE', label: t('admin.etlview.string.l257_'), defaultReason: t('admin.etlview.string.l257__2') },
+  { value: 'USER_REQUEST', label: t('common.field.user_cancelled'), defaultReason: t('common.field.user_cancelled') },
+  { value: 'ADMIN_OVERRIDE', label: t('common.field.admin_force_cancel'), defaultReason: t('common.field.admin_force_cancel') },
   { value: 'TIMEOUT', label: t('admin.etlview.string.l258_'), defaultReason: t('admin.etlview.string.l258__2') },
   { value: 'SYSTEM_SHUTDOWN', label: t('admin.etlview.string.l259_'), defaultReason: t('admin.etlview.string.l259__2') },
-  { value: 'OTHER', label: t('admin.etlview.string.l260_'), defaultReason: t('admin.etlview.string.l260__2') }
+  { value: 'OTHER', label: t('common.field.other_reason'), defaultReason: t('common.field.other_reason') }
 ] as const
 
 // Day 9.1: 取消当前活跃 ETL 任务
@@ -291,7 +291,7 @@ async function doCancel() {
       `,
       showCancelButton: true,
       confirmButtonText: t('admin.etlview.buttontext.l290_'),
-      cancelButtonText: t('admin.etlview.buttontext.l291_'),
+      cancelButtonText: t('common.field.no_cancel'),
       type: 'warning',
       dangerouslyUseHTMLString: true
     })
@@ -307,7 +307,7 @@ async function doCancel() {
   try {
     const r = await ElMessageBox.prompt(t('admin.etlview.info.l305_'), t('admin.etlview.info.l305__2'), {
       confirmButtonText: t('admin.etlview.buttontext.l306_'),
-      cancelButtonText: t('admin.etlview.buttontext.l307_'),
+      cancelButtonText: t('common.field.no_cancel'),
       inputPlaceholder: reason,
       inputValue: reason,
       inputValidator: undefined
@@ -323,7 +323,7 @@ async function doCancel() {
     if (r.cancelled) {
       ElMessage.warning(t('admin.etlview.string.l323_cancel_signal', { code: reasonCode }))
     } else {
-      ElMessage.info(r.reason || t('admin.etlview.info.l323_'))
+      ElMessage.info(r.reason || t('common.field.no_active_task_to_cancel'))
     }
   } catch (e: any) {
     // 已被拦截器处理
@@ -351,7 +351,7 @@ onMounted(() => { checkPausedTask() })
 async function doPause() {
   try {
     await ElMessageBox.confirm(
-      t('admin.etlview.string.l353_pause_msg', { resume: t('admin.etlview.string.l353_resume_word'), cancel: t('admin.etlview.string.l353_cancel_word') }),
+      t('admin.etlview.string.l353_pause_msg', { resume: t('common.action.resume'), cancel: t('common.field.cancel') }),
       t('admin.etlview.string.l352_etl'),
       { type: 'warning', confirmButtonText: t('admin.etlview.buttontext.l353_'), cancelButtonText: t('admin.etlview.buttontext.l353__2') }
     )
@@ -377,7 +377,7 @@ async function doResume() {
     await ElMessageBox.confirm(
       t('admin.etlview.string.l375_etl_n_n_paused_checkpoint_id_1_commit'),
       t('admin.etlview.string.l376_etl'),
-      { type: 'info', confirmButtonText: t('admin.etlview.string.l351_'), cancelButtonText: t('admin.etlview.buttontext.l377__2') }
+      { type: 'info', confirmButtonText: t('common.action.resume'), cancelButtonText: t('admin.etlview.buttontext.l377__2') }
     )
   } catch { return }
   resuming.value = true
@@ -387,7 +387,7 @@ async function doResume() {
       ElMessage.success(t('admin.etlview.string.l386_resume', { entity: r.entity, checkpoint: r.checkpointId, line: r.nextLineNo }))
       hasPausedTask.value = false  // Resume 已触发新的 ETL, paused 记录应已不算最新
     } else {
-      ElMessage.warning(r.error || t('admin.etlview.warning.l387_'))
+      ElMessage.warning(r.error || t('common.action.restore_failed'))
     }
   } catch (e: any) {
     // 已被拦截器处理
@@ -460,7 +460,7 @@ function prettyJson(raw: string): string {
           </el-radio-group>
         </el-form-item>
 
-        <el-form-item :label="t('admin.etlview.label.l458_')">
+        <el-form-item :label="t('common.field.mode')">
           <el-radio-group v-model="form.mode">
             <el-radio-button value="full-load">full-load (TRUNCATE+INSERT)</el-radio-button>
             <el-radio-button value="insert-only">insert-only (ON CONFLICT DO NOTHING)</el-radio-button>
@@ -597,7 +597,7 @@ function prettyJson(raw: string): string {
         <el-descriptions-item :label="t('admin.etlview.label.l592_')">{{ lastDryRun.file }}</el-descriptions-item>
         <el-descriptions-item :label="t('admin.etlview.label.l593_')">{{ fmtBytes(lastDryRun.sizeBytes) }}</el-descriptions-item>
         <el-descriptions-item :label="t('admin.etlview.label.l594_')">{{ fmt(lastDryRun.lines) }}</el-descriptions-item>
-        <el-descriptions-item :label="t('admin.etlview.label.l595_')">{{ lastDryRun.mode }}</el-descriptions-item>
+        <el-descriptions-item :label="t('common.field.mode')">{{ lastDryRun.mode }}</el-descriptions-item>
       </el-descriptions>
 
       <div v-if="lastDryRun.samples && lastDryRun.samples.length > 0" class="mt-3">

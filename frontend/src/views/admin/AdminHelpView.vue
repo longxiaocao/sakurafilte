@@ -12,9 +12,9 @@ const { t } = useI18n()
 
 // 8 个字典 (P1.3 + P2.2)
 const dictList = [
-  { name: t('admin.helpview.string.l12_oem'), path: '/admin/dict/oem-brands', desc: t('admin.helpview.string.l12_cross_references_oem_brand_mann_bosch_ma') },
-  { name: t('admin.helpview.string.l13_1'), path: '/admin/dict/product-name1s', desc: t('admin.helpview.string.l13_oil_filter_fuel_filter') },
-  { name: t('admin.helpview.string.l14_2'), path: '/admin/dict/product-name2s', desc: t('admin.helpview.string.l14_of100') },
+  { name: t('common.field.oem_brand'), path: '/admin/dict/oem-brands', desc: t('admin.helpview.string.l12_cross_references_oem_brand_mann_bosch_ma') },
+  { name: t('common.action.product_name_1'), path: '/admin/dict/product-name1s', desc: t('admin.helpview.string.l13_oil_filter_fuel_filter') },
+  { name: t('common.action.product_name_2'), path: '/admin/dict/product-name2s', desc: t('admin.helpview.string.l14_of100') },
   { name: t('admin.helpview.string.l15_type'), path: '/admin/dict/types', desc: t('admin.helpview.string.l15_5_oil_fuel_air_cabin_others_sort_order') },
   { name: 'OEM 3', path: '/admin/dict/oem-no3s', desc: t('admin.helpview.string.l16_oem_5_27m_distinct_typeahead') },
   { name: t('admin.helpview.string.l17_media'), path: '/admin/dict/medias', desc: t('admin.helpview.string.l17_2_cellulose_a020') },

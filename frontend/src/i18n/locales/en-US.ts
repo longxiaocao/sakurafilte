@@ -12,10 +12,8 @@ export default {
         l329_id: 'Input Product ID Add',
       },
       string: {
-        l100_mm: 'carton 长 (mm)',
-        l101_mm: 'carton 宽 (mm)',
-        l102_mm: 'carton 高 (mm)',
-        l103_m: 'carton Volume (m³)',
+
+
         l107_: 'Outer Carton',
         l109_: 'Outer Carton/pcs',
         l110_kg: 'Outer Carton 重 (kg)',
@@ -28,28 +26,24 @@ export default {
         l185_: 'Load failed',
         l53_: 'Basic',
         l55_oem: 'OEM Number',
-        l58_1: 'Product Name 1',
-        l59_2: 'Product Name 2',
-        l60_: 'Type',
+
+
+
         l64_mm: 'Dimensions (mm)',
-        l77_: 'Performance',
-        l79_d7: 'D7 Thread',
-        l80_d8: 'D8 Thread',
-        l81_: 'Check Valve Count',
-        l82_: 'Bypass Valve Count',
+
+
         l83_lr: 'Bypass LR',
         l84_hr: 'Bypass HR',
-        l85_1: 'Efficiency 1',
-        l86_2: 'Efficiency 2',
-        l87_: 'Bypass Pressure',
+
+
+
         l88_bar: 'Pressure Resistance (bar)',
-        l89_: 'Seal Material',
-        l90_: 'Temperature Range',
-        l94_: 'Packaging',
+
+
         l96_: 'Media',
         l97_: 'Media Model',
-        l98_: 'carton/pcs',
-        l99_kg: 'Weight (kg)',
+
+
       },
       success: {
         l246_: 'Remove',
@@ -68,31 +62,31 @@ export default {
     },
     enginesview: {
       error: {
-        l26_: 'Load failed:',
-        l58_: 'Operation failed',
-        l64_: 'Delete failed',
-        l68_: 'Resume Failed',
-        l85_: 'Sort Order Failed',
+
+
+
+
+
       },
       label: {
-        l155_: 'Brand',
-        l158_: 'Model',
-        l162_: 'Sort Order',
+
+
+
       },
       placeholder: {
-        l109_: 'Search 任一Field',
+
         l156_cummins: 'e.g.: CUMMINS',
         l159_isb_4_5_l: 'e.g.: ISB 4.5 L (可Empty)',
       },
       string: {
-        l148_: '> No data, Click Right 上',
+
       },
       success: {
-        l52_: 'Add',
-        l55_: 'Updated',
-        l63_: 'Deleted',
-        l67_: 'Resumed',
-        l84_: 'Sort Order Saved',
+
+
+
+
+
       },
       title: {
         l153_: 'Add Engine',
@@ -101,34 +95,34 @@ export default {
       warning: {
         l47_: 'Engine Brand cannot be empty',
         l48_200: 'Engine Brand Length 不能超过 200',
-        l62_: 'Confirm',
+
       },
     },
     etlview: {
       buttontext: {
         l290_: 'Next',
-        l291_: '不 Cancel',
+
         l306_: 'Confirm Cancel',
-        l307_: '不 Cancel',
+
         l353_: 'Pause',
         l353__2: '不Pause',
-        l377_: 'Resume',
+
         l377__2: '不Resume',
       },
       info: {
         l305_: '可补充详细Description (留Empty 用Default)',
         l305__2: 'Cancel 原因Note',
-        l323_: '无活跃Task 可 Cancel',
+
         l362_: '无活跃Task 可Pause',
       },
       label: {
         l450_: 'Entity',
-        l458_: 'Mode',
+
         l466_: 'File 路径',
         l592_: 'File',
         l593_: '[EN] 大小',
         l594_: 'rows Count',
-        l595_: 'Mode',
+
         l602_json: 'Original JSON',
         l648_: 'Timestamp',
         l649_: 'Error',
@@ -142,23 +136,23 @@ export default {
       },
       string: {
         l219_sse: 'SSE 连接断On, Browser will Auto 重连',
-        l256_: 'User cancelled',
-        l256__2: 'User cancelled',
-        l257_: 'Admin override',
-        l257__2: 'Admin override',
+
+
+
+
         l258_: 'Task timeout',
         l258__2: 'Task Execute 超时',
         l259_: 'System shutdown/Restart',
         l259__2: 'Service Close/Restart',
-        l260_: 'Other reason',
-        l260__2: 'Other reason',
+
+
         l272_etl: 'Cancel ETL Task',
-        l351_: 'Resume',
-        l351__2: 'Cancel',
+
+
         l352_etl: 'Pause ETL Task',
-        l353_cancel_word: 'Cancel',
+
         l353_pause_msg: 'Pause Current ETL Task?\n\nCurrent batch will Exit gracefully after Complete, checkpoint_id will Write etl_progress_log, the Follow "{resume}" button can be used to 续读 from 该 point.\n\n(Different from "{cancel}" — Cancel will Immediately Terminate and Rollback Current batch)',
-        l353_resume_word: 'Resume',
+
         l375_etl_n_n_paused_checkpoint_id_1_commit: 'Resume Pause ETL Task?\\n\\nwill from Recent 一 items paused Record checkpoint_id+1 rows Start 续读, Skip COMMIT batch times.',
         l376_etl: 'Resume ETL Task',
         l386_resume: 'Resume Triggered: entity={entity} checkpoint={checkpoint} (from line {line})',
@@ -173,7 +167,7 @@ export default {
         l68_manual_entity: 'File Filled: {name} (entity need manual select)',
         l71_first_only: 'Dropped {total} files, only first used: {name}',
         l78_etl: '松On 以填入 ETL File 路径',
-        l96_: 'Confirm',
+
         l323_cancel_signal: 'Cancel Signal Sent (code: {code}), task will Terminate soon',
       },
       success: {
@@ -188,8 +182,7 @@ export default {
         l610_10: 'Collapse (只Show Front 10 rows)',
       },
       warning: {
-        l323_: '无活跃Task 可 Cancel',
-        l387_: 'Resume Failed',
+
       },
     },
     helpview: {
@@ -197,10 +190,9 @@ export default {
         l124_xlsx: '拖拽 XLSX to 此',
         l127_: 'Search',
         l12_cross_references_oem_brand_mann_bosch_ma: 'Alternative Brand 厂家名 (cross_references.oem_brand), e.g.: Mann, Bosch, Mahle',
-        l12_oem: 'OEM Brand',
-        l13_1: 'Product Name 1',
+
         l13_oil_filter_fuel_filter: 'Product 主Name (e.g.: Oil Filter, Fuel Filter), 影响frontend Product',
-        l14_2: 'Product Name 2',
+
         l14_of100: 'Product 副Name/Model Back 缀 (e.g.: OF100)',
         l15_5_oil_fuel_air_cabin_others_sort_order: '5 固定Category: oil / fuel / air / cabin / others, sort_order 决定frontend Sort Order',
         l15_type: 'Type (Type)',
@@ -239,35 +231,34 @@ export default {
     },
     machinesview: {
       error: {
-        l107_: 'Sort Order Failed',
-        l38_: 'Load failed:',
-        l80_: 'Operation failed',
-        l86_: 'Delete failed',
-        l90_: 'Resume Failed',
+
+
+
+
+
       },
       label: {
-        l194_: 'Brand',
-        l197_: 'Model',
-        l200_: 'Name',
+
+
+
         l205_: 'Category',
-        l211_: 'Sort Order',
+
       },
       placeholder: {
-        l140_: 'Search 任一Field',
-        l195_bosch: 'e.g.: BOSCH',
+
         l198_0_451_103_001: 'e.g.: 0 451 103 001 (可Empty)',
         l201_tractor_x300: 'e.g.: Tractor X300 (可Empty)',
         l206_4: 'Select 4 大类之一',
       },
       string: {
-        l187_: '> No data, Click Right 上',
+
       },
       success: {
-        l106_: 'Sort Order Saved',
-        l70_: 'Add',
-        l77_: 'Updated',
-        l85_: 'Deleted',
-        l89_: 'Resumed',
+
+
+
+
+
       },
       title: {
         l192_: 'Add Machine Model',
@@ -276,21 +267,21 @@ export default {
       warning: {
         l63_: 'Machine Model Brand cannot be empty',
         l64_200: 'Machine Model Brand Length 不能超过 200',
-        l84_: 'Confirm',
+
       },
     },
     mediasview: {
       error: {
-        l28_: 'Load failed:',
-        l60_: 'Operation failed',
-        l65_: 'Delete failed',
-        l69_: 'Resume Failed',
-        l86_: 'Sort Order Failed',
+
+
+
+
+
       },
       label: {
         l156_media: 'Media Name',
         l159_media: 'Media Model',
-        l163_: 'Sort Order',
+
       },
       placeholder: {
         l110_media: 'Search Media Name or Model',
@@ -298,14 +289,14 @@ export default {
         l160_5_m_10_m: 'e.g.: 5μm / 10μm (可Empty)',
       },
       string: {
-        l149_: '> No data, Click Right 上',
+
       },
       success: {
-        l54_: 'Add',
-        l57_: 'Updated',
-        l64_: 'Deleted',
-        l68_: 'Resumed',
-        l85_: 'Sort Order Saved',
+
+
+
+
+
       },
       title: {
         l154_media: 'Add Media',
@@ -314,39 +305,38 @@ export default {
       warning: {
         l49_media: 'Media Name cannot be empty',
         l50_media_100: 'Media Name Length 不能超过 100',
-        l63_: 'Confirm',
+
       },
     },
     oembrandsview: {
       error: {
-        l37_: 'Load failed:',
+
       },
       label: {
-        l296_: 'Brand',
-        l299_: 'Sort Order',
+
+
       },
       placeholder: {
         l212_: 'Search Brand',
-        l297_bosch: 'e.g.: BOSCH',
+
       },
       string: {
-        l107_: 'Delete failed',
-        l118_: 'Resume Failed',
-        l167_: 'Sort Order Failed',
+
+
+
         l280_: 'Add Brand',
-        l87_: 'Operation failed',
-        l95_: '吗? (软 Delete, 可in',
-        l96_: 'Confirm',
+
+
       },
       success: {
-        l104_: 'Deleted',
-        l115_: 'Resumed',
-        l165_: 'Sort Order Saved',
-        l75_: 'Add',
-        l81_: 'Updated',
+
+
+
+
+
       },
       title: {
-        l249_: 'Drag 以 Sort Order',
+
         l292_oem: 'Add OEM Brand',
         l292_oem_2: 'Edit OEM Brand',
       },
@@ -357,28 +347,28 @@ export default {
     },
     oemno3sview: {
       error: {
-        l26_: 'Load failed:',
-        l53_: 'Operation failed',
-        l58_: 'Delete failed',
-        l62_: 'Resume Failed',
-        l79_: 'Sort Order Failed',
+
+
+
+
+
       },
       label: {
-        l150_: 'Sort Order',
+
       },
       placeholder: {
         l103_oem_3: 'Search OEM 3',
         l148_11427622448: 'e.g.: 11427622448',
       },
       string: {
-        l140_: '> No data, Click Right 上',
+
       },
       success: {
-        l47_: 'Add',
-        l50_: 'Updated',
-        l57_: 'Deleted',
-        l61_: 'Resumed',
-        l78_: 'Sort Order Saved',
+
+
+
+
+
       },
       title: {
         l145_oem_3: 'Add OEM 3',
@@ -387,7 +377,7 @@ export default {
       warning: {
         l43_oem_3: 'OEM 3 cannot be empty',
         l44_oem_3_200: 'OEM 3 Length 不能超过 200',
-        l56_: 'Confirm',
+
       },
     },
     perfview: {
@@ -401,10 +391,10 @@ export default {
         l152_p95_warn: 'P95 = {ms}ms (≥500ms Warning)',
         l155_err_crit: 'Error Rate = {pct}% (≥10% Critical)',
         l157_err_warn: 'Error Rate = {pct}% (≥5% Warning)',
-        l164_: '检测',
+
         l165_: '[EN] 就绪',
         l166_: 'Downgrade',
-        l167_: '[EN] 故障',
+
         l84_: 'Refresh Failed',
       },
       templatetext: {
@@ -413,9 +403,9 @@ export default {
         l221__2: '↻ Refresh',
         l240_: '⚠ 严重Alert',
         l240__2: '⚠ Warning',
-        l303_: '检测',
+
         l303__2: '[EN] 存活',
-        l303__3: '[EN] 故障',
+
         l336_appsettings_json: '[EN] appsettings.json (兜底)',
         l336_db: 'DB ( Load)',
       },
@@ -424,36 +414,28 @@ export default {
       error: {
         l165_: 'Data has been modified by another admin, Please refresh and retry',
         l171_oem: 'Product already exists, Please check the OEM number',
-        l275_1_6: ', must be between 1-6',
-        l275_slot: 'Invalid Slot:',
-        l302_1_6: ', must be between 1-6',
-        l302_slot: 'Invalid Slot:',
+
+
+
       },
       label: {
-        l349_1: 'Product Name 1',
-        l353_2: 'Product Name 2',
-        l357_: 'Type',
+
+
+
         l362_oem_2: 'OEM 2 (Required)',
-        l363_: 'Publish',
+
         l366_: 'Remark',
-        l411_d7: 'D7 Thread',
-        l412_d8: 'D8 Thread',
-        l413_: 'Check Valve Count',
-        l414_: 'Bypass Valve Count',
-        l428_1: 'Efficiency 1',
-        l429_2: 'Efficiency 2',
+
+
+
+
         l430_lr: 'Bypass Valve LR',
         l431_hr: 'Bypass Valve HR',
-        l432_: 'Bypass Pressure',
+
         l433_bar: 'Collapse Pressure (bar)',
-        l434_: 'Seal Material',
-        l435_: 'Temperature Range',
-        l442_: 'carton/pcs',
-        l446_kg: 'Weight (kg)',
-        l450_mm: 'carton 长 (mm)',
-        l454_mm: 'carton 宽 (mm)',
-        l458_mm: 'carton 高 (mm)',
-        l463_m: 'carton Volume (m³)',
+
+
+
         l474_: 'Master Box Qty',
         l478_kg: 'Master Carton 重 (kg)',
         l482_mm: 'Master Carton 长 (mm)',
@@ -462,18 +444,18 @@ export default {
         l494_m: 'Master Box Volume (m³)',
       },
       placeholder: {
-        l351_: 'Input Auto 补全',
-        l355_: 'Input Auto 补全',
+
+
         l379_: 'Brand (Input Auto 补全)',
         l392_oem_3: 'OEM 3 (Input Auto 补全)',
-        l394_: 'Product Name',
+
         l424_name_model_or: 'Input Auto 补全 (name/model OR 匹配)',
-        l467_: 'Auto 计算',
-        l498_: 'Auto 计算',
+
+
         l512_: 'Brand (Required)',
         l516_: 'Model (Required)',
-        l518_: 'Name',
-        l521_: 'Engine Brand',
+
+
         l525_: 'Engine Model',
       },
       string: {
@@ -495,8 +477,7 @@ export default {
       title: {
         l346_: 'Basic Info',
         l401_mm: '③ Dimensions (mm)',
-        l419_: 'Performance',
-        l440_: 'Packaging',
+
         l533_1_6: '⑦ Image (1-6 槽位)',
       },
       warning: {
@@ -505,34 +486,32 @@ export default {
     },
     productname1sview: {
       error: {
-        l31_: 'Load failed:',
+
       },
       label: {
-        l231_1: 'Product Name 1',
-        l234_: 'Sort Order',
+
+
       },
       placeholder: {
         l176_1: 'Search Product Name 1',
         l232_oil_filter: 'e.g.: OIL FILTER',
       },
       string: {
-        l101_: 'Resume Failed',
-        l140_: 'Sort Order Failed',
-        l221_: '> No data, Click Right 上',
-        l73_: 'Operation failed',
-        l81_: '吗? (软 Delete, 可in',
-        l82_: 'Confirm',
-        l90_: 'Delete failed',
+
+
+
+
+
       },
       success: {
-        l138_: 'Sort Order Saved',
-        l63_: 'Add',
-        l68_: 'Updated',
-        l87_: 'Deleted',
-        l98_: 'Resumed',
+
+
+
+
+
       },
       title: {
-        l204_: 'Drag 以 Sort Order',
+
         l229_1: 'Add Product 名 1',
         l229_1_2: 'Edit Product 名 1',
       },
@@ -543,29 +522,28 @@ export default {
     },
     productname2sview: {
       error: {
-        l26_: 'Load failed:',
-        l53_: 'Operation failed',
-        l58_: 'Delete failed',
-        l62_: 'Resume Failed',
-        l79_: 'Sort Order Failed',
+
+
+
+
+
       },
       label: {
-        l147_2: 'Product Name 2',
-        l150_: 'Sort Order',
+
       },
       placeholder: {
         l103_2: 'Search Product Name 2',
         l148_spin_on: 'e.g.: SPIN-ON',
       },
       string: {
-        l140_: '> No data, Click Right 上',
+
       },
       success: {
-        l47_: 'Add',
-        l50_: 'Updated',
-        l57_: 'Deleted',
-        l61_: 'Resumed',
-        l78_: 'Sort Order Saved',
+
+
+
+
+
       },
       title: {
         l145_2: 'Add Product 名 2',
@@ -574,7 +552,7 @@ export default {
       warning: {
         l43_2: 'Product Name 2 cannot be empty',
         l44_2_200: 'Product Name 2 Length 不能超过 200',
-        l56_: 'Confirm',
+
       },
     },
     productsview: {
@@ -586,32 +564,27 @@ export default {
         l307_oem3_batch: 'OEM 3 Batch Search',
       },
       label: {
-        l329_: 'Type',
-        l342_: 'carton/pcs',
-        l344_: 'Publish',
+
+
+
         l349_: 'Discontinued',
         l354_: 'Update',
         l357_: 'Action',
-        l442_: 'All',
+
         l513_: 'Field',
         l514_: '新Value',
       },
       placeholder: {
-        l295_: 'Product Name',
-        l296_: 'Type',
+
         l303_oem_3: 'OEM 3 batch Count',
-        l389_1: 'Product Name 1',
-        l390_2: 'Product Name 2',
-        l393_oem: 'OEM Brand',
-        l396_: 'Seal Material',
+
+
+
         l397_: 'Efficiency',
-        l420_: 'Brand',
-        l421_: 'Model',
-        l422_: 'Name',
-        l423_: 'Engine Brand',
-        l441_: 'All',
-        l454_: '[EN] 不限',
-        l465_: '[EN] 不限',
+
+
+
+
       },
       string: {
         l309_: 'All columns',
@@ -619,42 +592,42 @@ export default {
       },
       success: {
         l157_: 'Discontinued',
-        l171_: 'Resumed',
+
       },
       title: {
         l385_: '高级Filter',
         l435_: '[EN] 变更历史',
       },
       warning: {
-        l149_: 'Confirm',
+
         l234_2_6: 'Please select 2-6 pcs Product',
         l238_6: 'At most Compare 6 pcs',
       },
     },
     typesview: {
       error: {
-        l28_: 'Load failed:',
-        l55_: 'Operation failed',
-        l68_: 'Delete failed',
-        l72_: 'Resume Failed',
-        l89_: 'Sort Order Failed',
+
+
+
+
+
       },
       label: {
-        l160_: 'Sort Order',
+
       },
       placeholder: {
         l113_type: 'Search Type',
         l158_oil_fuel_air_cabin_others: 'e.g.: oil / fuel / air / cabin / others',
       },
       string: {
-        l150_: '> No data, Click Right 上',
-        l64_: 'Confirm',
+
+
       },
       success: {
-        l49_: 'Add',
-        l52_: 'Updated',
-        l67_: 'Deleted',
-        l71_: 'Resumed',
+
+
+
+
         l88_p2_3: 'Sort Order Saved, frontend Product P2.3 Immediately take effect',
       },
       title: {
@@ -670,29 +643,21 @@ export default {
       label: {
         l284_: 'User List',
         l342_: 'Login Audit',
-        l386_: 'Username',
+
         l389_: 'Password',
-        l398_: 'Role',
-        l408_: 'Email',
-        l411_: '[EN] 全名',
-        l424_: 'Username',
-        l427_: 'Role',
-        l437_: 'Email',
-        l440_: '[EN] 全名',
+
+
+
         l443_: 'Enable Status',
         l456_: '新Password',
       },
       placeholder: {
         l387_: 'Login Username',
-        l393_8: 'At least 8 pcs 字符',
-        l409_: 'Optional',
-        l412_: 'Optional',
-        l438_: 'Optional',
-        l441_: 'Optional',
-        l460_8: 'At least 8 pcs 字符',
+
+
       },
       string: {
-        l161_: 'Confirm',
+
         l199_reset_pwd: 'Password of {user} has been Reset',
         l56_admin: 'Admin (admin)',
         l57_operator: 'Action 员 (operator)',
@@ -701,7 +666,7 @@ export default {
       success: {
         l115_: 'User Created',
         l147_: 'User Updated',
-        l171_: 'Deleted',
+
         l252_: 'Logout',
       },
       title: {
@@ -718,6 +683,146 @@ export default {
   },
 
   common: {
+
+    field: {
+
+      soft_delete_confirm: '吗? (软 Delete, 可in',
+
+      slot_must_be_1_to_6: ', must be between 1-6',
+
+      d7_thread: 'D7 Thread',
+
+      d8_thread: 'D8 Thread',
+
+      oem_brand: 'OEM Brand',
+
+      invalid_slot: 'Invalid Slot:',
+
+      no_cancel: '不 Cancel',
+
+      unlimited: '[EN] 不限',
+
+      product_name: 'Product Name',
+
+      e_g_bosch: 'e.g.: BOSCH',
+
+      full_name: '[EN] 全名',
+
+      all: 'All',
+
+      other_reason: 'Other reason',
+
+      packaging: 'Packaging',
+
+      check_valve_count: 'Check Valve Count',
+
+      engine_brand: 'Engine Brand',
+
+      publish: 'Publish',
+
+      cancel: 'Cancel',
+
+      performance: 'Performance',
+
+      drag_to_sort: 'Drag 以 Sort Order',
+
+      search_any_field: 'Search 任一Field',
+
+      fault: '[EN] 故障',
+
+      efficiency_1: 'Efficiency 1',
+
+      efficiency_2: 'Efficiency 2',
+
+      bypass_pressure: 'Bypass Pressure',
+
+      bypass_valve_count: 'Bypass Valve Count',
+
+      no_active_task_to_cancel: '无活跃Task 可 Cancel',
+
+      detecting: '检测',
+
+      mode: 'Mode',
+
+      temperature_range: 'Temperature Range',
+
+      user_cancelled: 'User cancelled',
+
+      username: 'Username',
+
+      admin_force_cancel: 'Admin override',
+
+      carton_volume_m3: 'carton Volume (m³)',
+
+      carton_width_mm: 'carton 宽 (mm)',
+
+      carton_length_mm: 'carton 长 (mm)',
+
+      carton_height_mm: 'carton 高 (mm)',
+
+      auto_calculated: 'Auto 计算',
+
+      at_least_8_chars: 'At least 8 pcs 字符',
+
+      role: 'Role',
+
+      input_autocomplete: 'Input Auto 补全',
+
+      email: 'Email',
+
+      weight_kg: 'Weight (kg)',
+
+    },
+
+    action: {
+
+      product_name_1: 'Product Name 1',
+
+      product_name_2: 'Product Name 2',
+
+      type: 'Type',
+
+      seal_material: 'Seal Material',
+
+      carton_per_pcs: 'carton/pcs',
+
+      load_failed: 'Load failed:',
+
+      operation_failed: 'Operation failed',
+
+      delete_failed: 'Delete failed',
+
+      restore_failed: 'Resume Failed',
+
+      sort_failed: 'Sort Order Failed',
+
+      brand: 'Brand',
+
+      model: 'Model',
+
+      sort_order: 'Sort Order',
+
+      no_data_click_top_right: '> No data, Click Right 上',
+
+      created: 'Add',
+
+      updated: 'Updated',
+
+      deleted: 'Deleted',
+
+      restored: 'Resumed',
+
+      sort_order_saved: 'Sort Order Saved',
+
+      confirm: 'Confirm',
+
+      resume: 'Resume',
+
+      name: 'Name',
+
+      optional: 'Optional',
+
+    },
     confirm: 'Confirm',
     cancel: 'Cancel',
     save: 'Save',

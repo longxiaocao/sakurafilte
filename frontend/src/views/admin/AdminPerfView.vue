@@ -164,10 +164,10 @@ const hasAlert = computed(() => alerts.value.length > 0)
 const hasCritical = computed(() => alerts.value.some(a => a.level === 'critical'))
 
 const readyText = computed(() => {
-  if (readyOk.value === null) return t('admin.perfview.string.l164_')
+  if (readyOk.value === null) return t('common.field.detecting')
   if (readyOk.value) return t('admin.perfview.string.l165_')
   if (readyDegraded.value) return t('admin.perfview.string.l166_')
-  return t('admin.perfview.string.l167_')
+  return t('common.field.fault')
 })
 
 const readyColor = computed(() => {
@@ -303,7 +303,7 @@ function fmtTime(ts: string | null): string {
         <div class="hairline p-3">
           <div class="text-xs text-muted mb-1">Liveness (/health/live)</div>
           <div class="text-base font-medium" :class="liveOk === null ? 'text-neutral-500' : liveOk ? 'text-green-600' : 'text-red-600'">
-            {{ liveOk === null ? t('admin.perfview.templatetext.l303_') : liveOk ? t('admin.perfview.templatetext.l303__2') : t('admin.perfview.templatetext.l303__3') }}
+            {{ liveOk === null ? t('common.field.detecting') : liveOk ? t('admin.perfview.templatetext.l303__2') : t('common.field.fault') }}
           </div>
         </div>
         <div class="hairline p-3">

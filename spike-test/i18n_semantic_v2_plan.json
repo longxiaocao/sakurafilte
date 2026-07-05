@@ -1,0 +1,574 @@
+{
+  "version": "v2",
+  "unique_value_count": 43,
+  "replacement_count": 86,
+  "semantic_map": {
+    "箱长 (mm)": "carton_length_mm",
+    "箱宽 (mm)": "carton_width_mm",
+    "箱高 (mm)": "carton_height_mm",
+    "箱体积 (m³)": "carton_volume_m3",
+    "性能": "performance",
+    "D7 螺纹": "d7_thread",
+    "D8 螺纹": "d8_thread",
+    "单向阀数": "check_valve_count",
+    "旁通阀数": "bypass_valve_count",
+    "效率 1": "efficiency_1",
+    "效率 2": "efficiency_2",
+    "旁通压力": "bypass_pressure",
+    "温度范围": "temperature_range",
+    "包装": "packaging",
+    "重量 (kg)": "weight_kg",
+    "搜索任一字段": "search_any_field",
+    "不取消": "no_cancel",
+    "无活跃任务可取消": "no_active_task_to_cancel",
+    "模式": "mode",
+    "用户主动取消": "user_cancelled",
+    "外箱": "outer_carton",
+    "外箱/件": "outer_carton_per_pcs",
+    "外箱重 (kg)": "outer_carton_weight_kg",
+    "外箱长 (mm)": "outer_carton_length_mm",
+    "外箱宽 (mm)": "outer_carton_width_mm",
+    "外箱高 (mm)": "outer_carton_height_mm",
+    " 吗? (软删除, 可在": "soft_delete_confirm",
+    ", 必须在 1-6 之间": "slot_must_be_1_to_6",
+    "OEM 品牌": "oem_brand",
+    "Slot 非法: ": "invalid_slot",
+    "不限": "unlimited",
+    "产品名": "product_name",
+    "例: BOSCH": "e_g_bosch",
+    "全名": "full_name",
+    "全部": "all",
+    "其他原因": "other_reason",
+    "发动机品牌": "engine_brand",
+    "发布": "publish",
+    "取消": "cancel",
+    "拖动以排序": "drag_to_sort",
+    "故障": "fault",
+    "检测中": "detecting",
+    "用户名": "username",
+    "管理员强制取消": "admin_force_cancel",
+    "自动计算": "auto_calculated",
+    "至少 8 个字符": "at_least_8_chars",
+    "角色": "role",
+    "输入自动补全": "input_autocomplete",
+    "邮箱": "email"
+  },
+  "replacements": [
+    {
+      "old": "admin.oembrandsview.string.l95_",
+      "new": "common.field.soft_delete_confirm",
+      "zh": " 吗? (软删除, 可在",
+      "en": "吗? (软 Delete, 可in"
+    },
+    {
+      "old": "admin.productname1sview.string.l81_",
+      "new": "common.field.soft_delete_confirm",
+      "zh": " 吗? (软删除, 可在",
+      "en": "吗? (软 Delete, 可in"
+    },
+    {
+      "old": "admin.productformview.error.l275_1_6",
+      "new": "common.field.slot_must_be_1_to_6",
+      "zh": ", 必须在 1-6 之间",
+      "en": ", must be between 1-6"
+    },
+    {
+      "old": "admin.productformview.error.l302_1_6",
+      "new": "common.field.slot_must_be_1_to_6",
+      "zh": ", 必须在 1-6 之间",
+      "en": ", must be between 1-6"
+    },
+    {
+      "old": "admin.compareview.string.l79_d7",
+      "new": "common.field.d7_thread",
+      "zh": "D7 螺纹",
+      "en": "D7 Thread"
+    },
+    {
+      "old": "admin.productformview.label.l411_d7",
+      "new": "common.field.d7_thread",
+      "zh": "D7 螺纹",
+      "en": "D7 Thread"
+    },
+    {
+      "old": "admin.compareview.string.l80_d8",
+      "new": "common.field.d8_thread",
+      "zh": "D8 螺纹",
+      "en": "D8 Thread"
+    },
+    {
+      "old": "admin.productformview.label.l412_d8",
+      "new": "common.field.d8_thread",
+      "zh": "D8 螺纹",
+      "en": "D8 Thread"
+    },
+    {
+      "old": "admin.helpview.string.l12_oem",
+      "new": "common.field.oem_brand",
+      "zh": "OEM 品牌",
+      "en": "OEM Brand"
+    },
+    {
+      "old": "admin.productsview.placeholder.l393_oem",
+      "new": "common.field.oem_brand",
+      "zh": "OEM 品牌",
+      "en": "OEM Brand"
+    },
+    {
+      "old": "admin.productformview.error.l275_slot",
+      "new": "common.field.invalid_slot",
+      "zh": "Slot 非法: ",
+      "en": "Invalid Slot:"
+    },
+    {
+      "old": "admin.productformview.error.l302_slot",
+      "new": "common.field.invalid_slot",
+      "zh": "Slot 非法: ",
+      "en": "Invalid Slot:"
+    },
+    {
+      "old": "admin.etlview.buttontext.l291_",
+      "new": "common.field.no_cancel",
+      "zh": "不取消",
+      "en": "不 Cancel"
+    },
+    {
+      "old": "admin.etlview.buttontext.l307_",
+      "new": "common.field.no_cancel",
+      "zh": "不取消",
+      "en": "不 Cancel"
+    },
+    {
+      "old": "admin.productsview.placeholder.l454_",
+      "new": "common.field.unlimited",
+      "zh": "不限",
+      "en": "[EN] 不限"
+    },
+    {
+      "old": "admin.productsview.placeholder.l465_",
+      "new": "common.field.unlimited",
+      "zh": "不限",
+      "en": "[EN] 不限"
+    },
+    {
+      "old": "admin.productformview.placeholder.l394_",
+      "new": "common.field.product_name",
+      "zh": "产品名",
+      "en": "Product Name"
+    },
+    {
+      "old": "admin.productsview.placeholder.l295_",
+      "new": "common.field.product_name",
+      "zh": "产品名",
+      "en": "Product Name"
+    },
+    {
+      "old": "admin.machinesview.placeholder.l195_bosch",
+      "new": "common.field.e_g_bosch",
+      "zh": "例: BOSCH",
+      "en": "e.g.: BOSCH"
+    },
+    {
+      "old": "admin.oembrandsview.placeholder.l297_bosch",
+      "new": "common.field.e_g_bosch",
+      "zh": "例: BOSCH",
+      "en": "e.g.: BOSCH"
+    },
+    {
+      "old": "admin.usersview.label.l411_",
+      "new": "common.field.full_name",
+      "zh": "全名",
+      "en": "[EN] 全名"
+    },
+    {
+      "old": "admin.usersview.label.l440_",
+      "new": "common.field.full_name",
+      "zh": "全名",
+      "en": "[EN] 全名"
+    },
+    {
+      "old": "admin.productsview.label.l442_",
+      "new": "common.field.all",
+      "zh": "全部",
+      "en": "All"
+    },
+    {
+      "old": "admin.productsview.placeholder.l441_",
+      "new": "common.field.all",
+      "zh": "全部",
+      "en": "All"
+    },
+    {
+      "old": "admin.etlview.string.l260_",
+      "new": "common.field.other_reason",
+      "zh": "其他原因",
+      "en": "Other reason"
+    },
+    {
+      "old": "admin.etlview.string.l260__2",
+      "new": "common.field.other_reason",
+      "zh": "其他原因",
+      "en": "Other reason"
+    },
+    {
+      "old": "admin.compareview.string.l94_",
+      "new": "common.field.packaging",
+      "zh": "包装",
+      "en": "Packaging"
+    },
+    {
+      "old": "admin.productformview.title.l440_",
+      "new": "common.field.packaging",
+      "zh": "包装",
+      "en": "Packaging"
+    },
+    {
+      "old": "admin.compareview.string.l81_",
+      "new": "common.field.check_valve_count",
+      "zh": "单向阀数",
+      "en": "Check Valve Count"
+    },
+    {
+      "old": "admin.productformview.label.l413_",
+      "new": "common.field.check_valve_count",
+      "zh": "单向阀数",
+      "en": "Check Valve Count"
+    },
+    {
+      "old": "admin.productformview.placeholder.l521_",
+      "new": "common.field.engine_brand",
+      "zh": "发动机品牌",
+      "en": "Engine Brand"
+    },
+    {
+      "old": "admin.productsview.placeholder.l423_",
+      "new": "common.field.engine_brand",
+      "zh": "发动机品牌",
+      "en": "Engine Brand"
+    },
+    {
+      "old": "admin.productformview.label.l363_",
+      "new": "common.field.publish",
+      "zh": "发布",
+      "en": "Publish"
+    },
+    {
+      "old": "admin.productsview.label.l344_",
+      "new": "common.field.publish",
+      "zh": "发布",
+      "en": "Publish"
+    },
+    {
+      "old": "admin.etlview.string.l351__2",
+      "new": "common.field.cancel",
+      "zh": "取消",
+      "en": "Cancel"
+    },
+    {
+      "old": "admin.etlview.string.l353_cancel_word",
+      "new": "common.field.cancel",
+      "zh": "取消",
+      "en": "Cancel"
+    },
+    {
+      "old": "admin.compareview.string.l77_",
+      "new": "common.field.performance",
+      "zh": "性能",
+      "en": "Performance"
+    },
+    {
+      "old": "admin.productformview.title.l419_",
+      "new": "common.field.performance",
+      "zh": "性能",
+      "en": "Performance"
+    },
+    {
+      "old": "admin.oembrandsview.title.l249_",
+      "new": "common.field.drag_to_sort",
+      "zh": "拖动以排序",
+      "en": "Drag 以 Sort Order"
+    },
+    {
+      "old": "admin.productname1sview.title.l204_",
+      "new": "common.field.drag_to_sort",
+      "zh": "拖动以排序",
+      "en": "Drag 以 Sort Order"
+    },
+    {
+      "old": "admin.enginesview.placeholder.l109_",
+      "new": "common.field.search_any_field",
+      "zh": "搜索任一字段",
+      "en": "Search 任一Field"
+    },
+    {
+      "old": "admin.machinesview.placeholder.l140_",
+      "new": "common.field.search_any_field",
+      "zh": "搜索任一字段",
+      "en": "Search 任一Field"
+    },
+    {
+      "old": "admin.perfview.string.l167_",
+      "new": "common.field.fault",
+      "zh": "故障",
+      "en": "[EN] 故障"
+    },
+    {
+      "old": "admin.perfview.templatetext.l303__3",
+      "new": "common.field.fault",
+      "zh": "故障",
+      "en": "[EN] 故障"
+    },
+    {
+      "old": "admin.compareview.string.l85_1",
+      "new": "common.field.efficiency_1",
+      "zh": "效率 1",
+      "en": "Efficiency 1"
+    },
+    {
+      "old": "admin.productformview.label.l428_1",
+      "new": "common.field.efficiency_1",
+      "zh": "效率 1",
+      "en": "Efficiency 1"
+    },
+    {
+      "old": "admin.compareview.string.l86_2",
+      "new": "common.field.efficiency_2",
+      "zh": "效率 2",
+      "en": "Efficiency 2"
+    },
+    {
+      "old": "admin.productformview.label.l429_2",
+      "new": "common.field.efficiency_2",
+      "zh": "效率 2",
+      "en": "Efficiency 2"
+    },
+    {
+      "old": "admin.compareview.string.l87_",
+      "new": "common.field.bypass_pressure",
+      "zh": "旁通压力",
+      "en": "Bypass Pressure"
+    },
+    {
+      "old": "admin.productformview.label.l432_",
+      "new": "common.field.bypass_pressure",
+      "zh": "旁通压力",
+      "en": "Bypass Pressure"
+    },
+    {
+      "old": "admin.compareview.string.l82_",
+      "new": "common.field.bypass_valve_count",
+      "zh": "旁通阀数",
+      "en": "Bypass Valve Count"
+    },
+    {
+      "old": "admin.productformview.label.l414_",
+      "new": "common.field.bypass_valve_count",
+      "zh": "旁通阀数",
+      "en": "Bypass Valve Count"
+    },
+    {
+      "old": "admin.etlview.info.l323_",
+      "new": "common.field.no_active_task_to_cancel",
+      "zh": "无活跃任务可取消",
+      "en": "无活跃Task 可 Cancel"
+    },
+    {
+      "old": "admin.etlview.warning.l323_",
+      "new": "common.field.no_active_task_to_cancel",
+      "zh": "无活跃任务可取消",
+      "en": "无活跃Task 可 Cancel"
+    },
+    {
+      "old": "admin.perfview.string.l164_",
+      "new": "common.field.detecting",
+      "zh": "检测中",
+      "en": "检测"
+    },
+    {
+      "old": "admin.perfview.templatetext.l303_",
+      "new": "common.field.detecting",
+      "zh": "检测中",
+      "en": "检测"
+    },
+    {
+      "old": "admin.etlview.label.l458_",
+      "new": "common.field.mode",
+      "zh": "模式",
+      "en": "Mode"
+    },
+    {
+      "old": "admin.etlview.label.l595_",
+      "new": "common.field.mode",
+      "zh": "模式",
+      "en": "Mode"
+    },
+    {
+      "old": "admin.compareview.string.l90_",
+      "new": "common.field.temperature_range",
+      "zh": "温度范围",
+      "en": "Temperature Range"
+    },
+    {
+      "old": "admin.productformview.label.l435_",
+      "new": "common.field.temperature_range",
+      "zh": "温度范围",
+      "en": "Temperature Range"
+    },
+    {
+      "old": "admin.etlview.string.l256_",
+      "new": "common.field.user_cancelled",
+      "zh": "用户主动取消",
+      "en": "User cancelled"
+    },
+    {
+      "old": "admin.etlview.string.l256__2",
+      "new": "common.field.user_cancelled",
+      "zh": "用户主动取消",
+      "en": "User cancelled"
+    },
+    {
+      "old": "admin.usersview.label.l386_",
+      "new": "common.field.username",
+      "zh": "用户名",
+      "en": "Username"
+    },
+    {
+      "old": "admin.usersview.label.l424_",
+      "new": "common.field.username",
+      "zh": "用户名",
+      "en": "Username"
+    },
+    {
+      "old": "admin.etlview.string.l257_",
+      "new": "common.field.admin_force_cancel",
+      "zh": "管理员强制取消",
+      "en": "Admin override"
+    },
+    {
+      "old": "admin.etlview.string.l257__2",
+      "new": "common.field.admin_force_cancel",
+      "zh": "管理员强制取消",
+      "en": "Admin override"
+    },
+    {
+      "old": "admin.compareview.string.l103_m",
+      "new": "common.field.carton_volume_m3",
+      "zh": "箱体积 (m³)",
+      "en": "carton Volume (m³)"
+    },
+    {
+      "old": "admin.productformview.label.l463_m",
+      "new": "common.field.carton_volume_m3",
+      "zh": "箱体积 (m³)",
+      "en": "carton Volume (m³)"
+    },
+    {
+      "old": "admin.compareview.string.l101_mm",
+      "new": "common.field.carton_width_mm",
+      "zh": "箱宽 (mm)",
+      "en": "carton 宽 (mm)"
+    },
+    {
+      "old": "admin.productformview.label.l454_mm",
+      "new": "common.field.carton_width_mm",
+      "zh": "箱宽 (mm)",
+      "en": "carton 宽 (mm)"
+    },
+    {
+      "old": "admin.compareview.string.l100_mm",
+      "new": "common.field.carton_length_mm",
+      "zh": "箱长 (mm)",
+      "en": "carton 长 (mm)"
+    },
+    {
+      "old": "admin.productformview.label.l450_mm",
+      "new": "common.field.carton_length_mm",
+      "zh": "箱长 (mm)",
+      "en": "carton 长 (mm)"
+    },
+    {
+      "old": "admin.compareview.string.l102_mm",
+      "new": "common.field.carton_height_mm",
+      "zh": "箱高 (mm)",
+      "en": "carton 高 (mm)"
+    },
+    {
+      "old": "admin.productformview.label.l458_mm",
+      "new": "common.field.carton_height_mm",
+      "zh": "箱高 (mm)",
+      "en": "carton 高 (mm)"
+    },
+    {
+      "old": "admin.productformview.placeholder.l467_",
+      "new": "common.field.auto_calculated",
+      "zh": "自动计算",
+      "en": "Auto 计算"
+    },
+    {
+      "old": "admin.productformview.placeholder.l498_",
+      "new": "common.field.auto_calculated",
+      "zh": "自动计算",
+      "en": "Auto 计算"
+    },
+    {
+      "old": "admin.usersview.placeholder.l393_8",
+      "new": "common.field.at_least_8_chars",
+      "zh": "至少 8 个字符",
+      "en": "At least 8 pcs 字符"
+    },
+    {
+      "old": "admin.usersview.placeholder.l460_8",
+      "new": "common.field.at_least_8_chars",
+      "zh": "至少 8 个字符",
+      "en": "At least 8 pcs 字符"
+    },
+    {
+      "old": "admin.usersview.label.l398_",
+      "new": "common.field.role",
+      "zh": "角色",
+      "en": "Role"
+    },
+    {
+      "old": "admin.usersview.label.l427_",
+      "new": "common.field.role",
+      "zh": "角色",
+      "en": "Role"
+    },
+    {
+      "old": "admin.productformview.placeholder.l351_",
+      "new": "common.field.input_autocomplete",
+      "zh": "输入自动补全",
+      "en": "Input Auto 补全"
+    },
+    {
+      "old": "admin.productformview.placeholder.l355_",
+      "new": "common.field.input_autocomplete",
+      "zh": "输入自动补全",
+      "en": "Input Auto 补全"
+    },
+    {
+      "old": "admin.usersview.label.l408_",
+      "new": "common.field.email",
+      "zh": "邮箱",
+      "en": "Email"
+    },
+    {
+      "old": "admin.usersview.label.l437_",
+      "new": "common.field.email",
+      "zh": "邮箱",
+      "en": "Email"
+    },
+    {
+      "old": "admin.compareview.string.l99_kg",
+      "new": "common.field.weight_kg",
+      "zh": "重量 (kg)",
+      "en": "Weight (kg)"
+    },
+    {
+      "old": "admin.productformview.label.l446_kg",
+      "new": "common.field.weight_kg",
+      "zh": "重量 (kg)",
+      "en": "Weight (kg)"
+    }
+  ]
+}

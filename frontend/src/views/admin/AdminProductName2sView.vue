@@ -26,7 +26,7 @@ async function load() {
   try {
     const { items: list } = await dictApi.productName2s.list(searchKw.value || undefined, includeDeleted.value, 500)
     items.value = list
-  } catch (e: any) { ElMessage.error(t('admin.productname2sview.error.l26_') + (e?.message || '')) }
+  } catch (e: any) { ElMessage.error(t('common.action.load_failed') + (e?.message || '')) }
   finally { loading.value = false }
 }
 function onSearch() { load() }
@@ -47,22 +47,22 @@ async function saveDialog() {
   if (v.length > 200) { ElMessage.warning(t('admin.productname2sview.warning.l44_2_200')); return }
   try {
     if (dialogMode.value === 'create') {
-      await dictApi.productName2s.create(v, dialogForm.sortOrder); ElMessage.success(t('admin.productname2sview.success.l47_'))
+      await dictApi.productName2s.create(v, dialogForm.sortOrder); ElMessage.success(t('common.action.created'))
     } else if (dialogForm.id != null) {
       await dictApi.productName2s.update(dialogForm.id, { productName2: v, sortOrder: dialogForm.sortOrder })
-      ElMessage.success(t('admin.productname2sview.success.l50_'))
+      ElMessage.success(t('common.action.updated'))
     }
     dialogOpen.value = false; await load()
-  } catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || t('admin.productname2sview.error.l53_')) }
+  } catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || t('common.action.operation_failed')) }
 }
 async function softDelete(row: ProductName2Item) {
-  try { await ElMessageBox.confirm(`确定删除 "${row.productName2}" 吗? (软删除)`, t('admin.productname2sview.warning.l56_'), { type: 'warning' }) } catch { return }
-  try { await dictApi.productName2s.delete(row.id); ElMessage.success(t('admin.productname2sview.success.l57_')); await load() }
-  catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || t('admin.productname2sview.error.l58_')) }
+  try { await ElMessageBox.confirm(`确定删除 "${row.productName2}" 吗? (软删除)`, t('common.action.confirm'), { type: 'warning' }) } catch { return }
+  try { await dictApi.productName2s.delete(row.id); ElMessage.success(t('common.action.deleted')); await load() }
+  catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || t('common.action.delete_failed')) }
 }
 async function restore(row: ProductName2Item) {
-  try { await dictApi.productName2s.restore(row.id); ElMessage.success(t('admin.productname2sview.success.l61_')); await load() }
-  catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || t('admin.productname2sview.error.l62_')) }
+  try { await dictApi.productName2s.restore(row.id); ElMessage.success(t('common.action.restored')); await load() }
+  catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || t('common.action.restore_failed')) }
 }
 
 function onDragStart(e: DragEvent, id: number) { draggingId.value = id; if (e.dataTransfer) { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(id)) } }
@@ -78,8 +78,8 @@ async function onDrop(e: DragEvent, targetId: number) {
   const moved = items.value.splice(sourceIdx, 1)[0]; items.value.splice(targetIdx, 0, moved)
   const updates: ProductName2ReorderItem[] = items.value.map((it, idx) => ({ id: it.id, sortOrder: (idx + 1) * 10 }))
   items.value.forEach((it, idx) => { it.sortOrder = (idx + 1) * 10 })
-  try { await dictApi.productName2s.reorder(updates); ElMessage.success(t('admin.productname2sview.success.l78_')) }
-  catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || t('admin.productname2sview.error.l79_')); await load() }
+  try { await dictApi.productName2s.reorder(updates); ElMessage.success(t('common.action.sort_order_saved')) }
+  catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || t('common.action.sort_failed')); await load() }
 }
 function onDragEnd() { draggingId.value = null; dragOverId.value = null }
 
@@ -140,17 +140,17 @@ onMounted(load)
           <el-button v-else size="small" text type="success" @click="restore(row)">恢复</el-button>
         </div>
       </div>
-      <div v-if="!loading && items.length === 0" class="dict-empty" > {{ t('admin.productname2sview.string.l140_') }}新增产品名 2开始</div>
+      <div v-if="!loading && items.length === 0" class="dict-empty" > {{ t('common.action.no_data_click_top_right') }}新增产品名 2开始</div>
     </div>
 
     <div class="mt-2 text-xs text-muted">{{ t("common.dictviewcommon.total_drag", { total, active: activeCount, soft: total - activeCount }) }}</div>
 
     <el-dialog v-model="dialogOpen" :title="dialogMode === 'create' ? t('admin.productname2sview.title.l145_2') : t('admin.productname2sview.title.l145_2_2')" width="480px">
       <el-form :model="dialogForm" label-width="100px" size="small">
-        <el-form-item :label="t('admin.productname2sview.label.l147_2')" required>
+        <el-form-item :label="t('common.action.product_name_2')" required>
           <el-input v-model="dialogForm.productName2" :placeholder="t('admin.productname2sview.placeholder.l148_spin_on')" maxlength="200" show-word-limit />
         </el-form-item>
-        <el-form-item :label="t('admin.productname2sview.label.l150_')">
+        <el-form-item :label="t('common.action.sort_order')">
           <el-input-number v-model="dialogForm.sortOrder" :min="0" :step="10" style="width: 100%" />
         </el-form-item>
       </el-form>

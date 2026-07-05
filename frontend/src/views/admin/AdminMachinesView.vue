@@ -38,7 +38,7 @@ async function load() {
   try {
     const { items: list } = await dictApi.machines.list(searchKw.value || undefined, includeDeleted.value, 500)
     items.value = list
-  } catch (e: any) { ElMessage.error(t('admin.machinesview.error.l38_') + (e?.message || '')) }
+  } catch (e: any) { ElMessage.error(t('common.action.load_failed') + (e?.message || '')) }
   finally { loading.value = false }
 }
 function onSearch() { load() }
@@ -70,27 +70,27 @@ async function saveDialog() {
   try {
     if (dialogMode.value === 'create') {
       // Day 11 Phase 1 BUG FIX B: create 时也传 machineCategory (之前漏传, 后端默认 "others")
-      await dictApi.machines.create(b, model, name, dialogForm.sortOrder, dialogForm.machineCategory); ElMessage.success(t('admin.machinesview.success.l70_'))
+      await dictApi.machines.create(b, model, name, dialogForm.sortOrder, dialogForm.machineCategory); ElMessage.success(t('common.action.created'))
     } else if (dialogForm.id != null) {
       // P2.3: 提交时把 machineCategory 一并 PUT
       await dictApi.machines.update(dialogForm.id, {
         machineBrand: b, machineModel: model, machineName: name,
         sortOrder: dialogForm.sortOrder, machineCategory: dialogForm.machineCategory
       })
-      ElMessage.success(t('admin.machinesview.success.l77_'))
+      ElMessage.success(t('common.action.updated'))
     }
     dialogOpen.value = false; await load()
-  } catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || t('admin.machinesview.error.l80_')) }
+  } catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || t('common.action.operation_failed')) }
 }
 async function softDelete(row: MachineItem) {
   const label = `${row.machineBrand}${row.machineModel ? ' / ' + row.machineModel : ''}${row.machineName ? ' / ' + row.machineName : ''}`
-  try { await ElMessageBox.confirm(`确定删除 "${label}" 吗? (软删除)`, t('admin.machinesview.warning.l84_'), { type: 'warning' }) } catch { return }
-  try { await dictApi.machines.delete(row.id); ElMessage.success(t('admin.machinesview.success.l85_')); await load() }
-  catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || t('admin.machinesview.error.l86_')) }
+  try { await ElMessageBox.confirm(`确定删除 "${label}" 吗? (软删除)`, t('common.action.confirm'), { type: 'warning' }) } catch { return }
+  try { await dictApi.machines.delete(row.id); ElMessage.success(t('common.action.deleted')); await load() }
+  catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || t('common.action.delete_failed')) }
 }
 async function restore(row: MachineItem) {
-  try { await dictApi.machines.restore(row.id); ElMessage.success(t('admin.machinesview.success.l89_')); await load() }
-  catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || t('admin.machinesview.error.l90_')) }
+  try { await dictApi.machines.restore(row.id); ElMessage.success(t('common.action.restored')); await load() }
+  catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || t('common.action.restore_failed')) }
 }
 
 function onDragStart(e: DragEvent, id: number) { draggingId.value = id; if (e.dataTransfer) { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(id)) } }
@@ -106,8 +106,8 @@ async function onDrop(e: DragEvent, targetId: number) {
   const moved = items.value.splice(sourceIdx, 1)[0]; items.value.splice(targetIdx, 0, moved)
   const updates: MachineReorderItem[] = items.value.map((it, idx) => ({ id: it.id, sortOrder: (idx + 1) * 10 }))
   items.value.forEach((it, idx) => { it.sortOrder = (idx + 1) * 10 })
-  try { await dictApi.machines.reorder(updates); ElMessage.success(t('admin.machinesview.success.l106_')) }
-  catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || t('admin.machinesview.error.l107_')); await load() }
+  try { await dictApi.machines.reorder(updates); ElMessage.success(t('common.action.sort_order_saved')) }
+  catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || t('common.action.sort_failed')); await load() }
 }
 function onDragEnd() { draggingId.value = null; dragOverId.value = null }
 
@@ -140,7 +140,7 @@ onMounted(load)
       <h1 class="text-lg font-medium">机型字典 (Machine)</h1>
       <span class="text-xs text-muted">P2.2 后台管理 · 3 字段: 品牌 + 型号 + 名称 · 用于产品表单分区 7 适用车型</span>
       <div class="flex-1" />
-      <el-input v-model="searchKw" :placeholder="t('admin.machinesview.placeholder.l140_')" clearable size="small" style="width: 200px" @keyup.enter="onSearch" />
+      <el-input v-model="searchKw" :placeholder="t('common.field.search_any_field')" clearable size="small" style="width: 200px" @keyup.enter="onSearch" />
       <el-button size="small" @click="onSearch">搜索</el-button>
       <el-checkbox v-model="includeDeleted" @change="load" size="small">含已删</el-checkbox>
       <el-button type="primary" size="small" @click="openCreate">新增机型</el-button>
@@ -187,20 +187,20 @@ onMounted(load)
           <el-button v-else size="small" text type="success" @click="restore(row)">恢复</el-button>
         </div>
       </div>
-      <div v-if="!loading && items.length === 0" class="dict-empty" > {{ t('admin.machinesview.string.l187_') }}新增机型开始</div>
+      <div v-if="!loading && items.length === 0" class="dict-empty" > {{ t('common.action.no_data_click_top_right') }}新增机型开始</div>
     </div>
 
     <div class="mt-2 text-xs text-muted">{{ t("common.dictviewcommon.total_drag", { total, active: activeCount, soft: total - activeCount }) }}</div>
 
     <el-dialog v-model="dialogOpen" :title="dialogMode === 'create' ? t('admin.machinesview.title.l192_') : t('admin.machinesview.title.l192__2')" width="560px">
       <el-form :model="dialogForm" label-width="120px" size="small">
-        <el-form-item :label="t('admin.machinesview.label.l194_')" required>
-          <el-input v-model="dialogForm.machineBrand" :placeholder="t('admin.machinesview.placeholder.l195_bosch')" maxlength="200" show-word-limit />
+        <el-form-item :label="t('common.action.brand')" required>
+          <el-input v-model="dialogForm.machineBrand" :placeholder="t('common.field.e_g_bosch')" maxlength="200" show-word-limit />
         </el-form-item>
-        <el-form-item :label="t('admin.machinesview.label.l197_')">
+        <el-form-item :label="t('common.action.model')">
           <el-input v-model="dialogForm.machineModel" :placeholder="t('admin.machinesview.placeholder.l198_0_451_103_001')" maxlength="200" show-word-limit />
         </el-form-item>
-        <el-form-item :label="t('admin.machinesview.label.l200_')">
+        <el-form-item :label="t('common.action.name')">
           <el-input v-model="dialogForm.machineName" :placeholder="t('admin.machinesview.placeholder.l201_tractor_x300')" maxlength="200" show-word-limit />
           <div class="text-xs text-muted mt-1">3 字段组成 UNIQUE 索引, 任一字段可空</div>
         </el-form-item>
@@ -211,7 +211,7 @@ onMounted(load)
           </el-select>
           <div class="text-xs text-muted mt-1">P2.3: 4 大类 (Agriculture/Commercial/Construction/others) 用于前台按场景聚合品牌</div>
         </el-form-item>
-        <el-form-item :label="t('admin.machinesview.label.l211_')">
+        <el-form-item :label="t('common.action.sort_order')">
           <el-input-number v-model="dialogForm.sortOrder" :min="0" :step="10" style="width: 100%" />
         </el-form-item>
       </el-form>

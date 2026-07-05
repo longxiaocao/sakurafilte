@@ -1,12 +1,12 @@
 {
   "stats": {
     "files_scanned": 47,
-    "zh_keys": 578,
-    "en_keys": 578,
-    "used_keys": 511,
+    "zh_keys": 413,
+    "en_keys": 413,
+    "used_keys": 349,
     "missing_zh": 0,
     "missing_en": 0,
-    "orphan_zh": 67,
+    "orphan_zh": 64,
     "only_zh": 0,
     "only_en": 0
   },
@@ -20,20 +20,8 @@
     {
       "severity": "INFO",
       "category": "orphan",
-      "key": "admin.etlview.string.l351__2",
-      "message": "'admin.etlview.string.l351__2' 定义但未使用 (考虑删除)"
-    },
-    {
-      "severity": "INFO",
-      "category": "orphan",
       "key": "admin.etlview.string.l386_resume_alt",
       "message": "'admin.etlview.string.l386_resume_alt' 定义但未使用 (考虑删除)"
-    },
-    {
-      "severity": "INFO",
-      "category": "orphan",
-      "key": "admin.etlview.warning.l323_",
-      "message": "'admin.etlview.warning.l323_' 定义但未使用 (考虑删除)"
     },
     {
       "severity": "INFO",
@@ -58,12 +46,6 @@
       "category": "orphan",
       "key": "admin.helpview.string.l84_full_load_insert_only_upsert",
       "message": "'admin.helpview.string.l84_full_load_insert_only_upsert' 定义但未使用 (考虑删除)"
-    },
-    {
-      "severity": "INFO",
-      "category": "orphan",
-      "key": "admin.productname1sview.string.l221_",
-      "message": "'admin.productname1sview.string.l221_' 定义但未使用 (考虑删除)"
     },
     {
       "severity": "INFO",
@@ -140,8 +122,26 @@
     {
       "severity": "INFO",
       "category": "orphan",
+      "key": "common.delete",
+      "message": "'common.delete' 定义但未使用 (考虑删除)"
+    },
+    {
+      "severity": "INFO",
+      "category": "orphan",
+      "key": "common.edit",
+      "message": "'common.edit' 定义但未使用 (考虑删除)"
+    },
+    {
+      "severity": "INFO",
+      "category": "orphan",
+      "key": "common.export",
+      "message": "'common.export' 定义但未使用 (考虑删除)"
+    },
+    {
+      "severity": "INFO",
+      "category": "orphan",
       "key": "...",
-      "message": "还有 47 个未使用的 zh key"
+      "message": "还有 44 个未使用的 zh key"
     }
   ]
 }

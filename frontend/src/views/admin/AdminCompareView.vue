@@ -58,9 +58,9 @@ const fieldGroups: FieldGroup[] = [
       { key: 'oemNoDisplay', label: t('admin.compareview.string.l55_oem'), get: (p) => p.oemNoDisplay ?? '' },
       { key: 'oem2', label: 'OEM 2', get: (p) => p.oem2 ?? '' },
       { key: 'mr1', label: 'MR.1', get: (p) => p.mr1 ?? '' },
-      { key: 'productName1', label: t('admin.compareview.string.l58_1'), get: (p) => p.productName1 ?? '' },
-      { key: 'productName2', label: t('admin.compareview.string.l59_2'), get: (p) => p.productName2 ?? '' },
-      { key: 'type', label: t('admin.compareview.string.l60_'), get: (p) => p.type ?? '' }
+      { key: 'productName1', label: t('common.action.product_name_1'), get: (p) => p.productName1 ?? '' },
+      { key: 'productName2', label: t('common.action.product_name_2'), get: (p) => p.productName2 ?? '' },
+      { key: 'type', label: t('common.action.type'), get: (p) => p.type ?? '' }
     ]
   },
   {
@@ -77,33 +77,33 @@ const fieldGroups: FieldGroup[] = [
     ]
   },
   {
-    name: t('admin.compareview.string.l77_'),
+    name: t('common.field.performance'),
     fields: [
-      { key: 'd7Thread', label: t('admin.compareview.string.l79_d7'), get: (p) => p.d7Thread ?? '' },
-      { key: 'd8Thread', label: t('admin.compareview.string.l80_d8'), get: (p) => p.d8Thread ?? '' },
-      { key: 'noCheckValves', label: t('admin.compareview.string.l81_'), get: (p) => (p.noCheckValves !== undefined && p.noCheckValves !== null ? String(p.noCheckValves) : '') },
-      { key: 'noBypassValves', label: t('admin.compareview.string.l82_'), get: (p) => (p.noBypassValves !== undefined && p.noBypassValves !== null ? String(p.noBypassValves) : '') },
+      { key: 'd7Thread', label: t('common.field.d7_thread'), get: (p) => p.d7Thread ?? '' },
+      { key: 'd8Thread', label: t('common.field.d8_thread'), get: (p) => p.d8Thread ?? '' },
+      { key: 'noCheckValves', label: t('common.field.check_valve_count'), get: (p) => (p.noCheckValves !== undefined && p.noCheckValves !== null ? String(p.noCheckValves) : '') },
+      { key: 'noBypassValves', label: t('common.field.bypass_valve_count'), get: (p) => (p.noBypassValves !== undefined && p.noBypassValves !== null ? String(p.noBypassValves) : '') },
       { key: 'bypassValveLr', label: t('admin.compareview.string.l83_lr'), get: (p) => (p.bypassValveLr !== undefined && p.bypassValveLr !== null ? String(p.bypassValveLr) : '') },
       { key: 'bypassValveHr', label: t('admin.compareview.string.l84_hr'), get: (p) => (p.bypassValveHr !== undefined && p.bypassValveHr !== null ? String(p.bypassValveHr) : '') },
-      { key: 'efficiency1', label: t('admin.compareview.string.l85_1'), get: (p) => p.efficiency1 ?? '' },
-      { key: 'efficiency2', label: t('admin.compareview.string.l86_2'), get: (p) => p.efficiency2 ?? '' },
-      { key: 'bypassPressure', label: t('admin.compareview.string.l87_'), get: (p) => (p.bypassPressure !== undefined && p.bypassPressure !== null ? String(p.bypassPressure) : '') },
+      { key: 'efficiency1', label: t('common.field.efficiency_1'), get: (p) => p.efficiency1 ?? '' },
+      { key: 'efficiency2', label: t('common.field.efficiency_2'), get: (p) => p.efficiency2 ?? '' },
+      { key: 'bypassPressure', label: t('common.field.bypass_pressure'), get: (p) => (p.bypassPressure !== undefined && p.bypassPressure !== null ? String(p.bypassPressure) : '') },
       { key: 'collapsePressureBar', label: t('admin.compareview.string.l88_bar'), get: (p) => (p.collapsePressureBar !== undefined && p.collapsePressureBar !== null ? String(p.collapsePressureBar) : '') },
-      { key: 'sealingMaterial', label: t('admin.compareview.string.l89_'), get: (p) => p.sealingMaterial ?? '' },
-      { key: 'tempRange', label: t('admin.compareview.string.l90_'), get: (p) => p.tempRange ?? '' }
+      { key: 'sealingMaterial', label: t('common.action.seal_material'), get: (p) => p.sealingMaterial ?? '' },
+      { key: 'tempRange', label: t('common.field.temperature_range'), get: (p) => p.tempRange ?? '' }
     ]
   },
   {
-    name: t('admin.compareview.string.l94_'),
+    name: t('common.field.packaging'),
     fields: [
       { key: 'media', label: t('admin.compareview.string.l96_'), get: (p) => p.media ?? '' },
       { key: 'mediaModel', label: t('admin.compareview.string.l97_'), get: (p) => p.mediaModel ?? '' },
-      { key: 'qtyPerCarton', label: t('admin.compareview.string.l98_'), get: (p) => (p.qtyPerCarton !== undefined && p.qtyPerCarton !== null ? String(p.qtyPerCarton) : '') },
-      { key: 'weightKgs', label: t('admin.compareview.string.l99_kg'), get: (p) => (p.weightKgs !== undefined && p.weightKgs !== null ? String(p.weightKgs) : '') },
-      { key: 'cartonLengthMm', label: t('admin.compareview.string.l100_mm'), get: (p) => (p.cartonLengthMm !== undefined && p.cartonLengthMm !== null ? String(p.cartonLengthMm) : '') },
-      { key: 'cartonWidthMm', label: t('admin.compareview.string.l101_mm'), get: (p) => (p.cartonWidthMm !== undefined && p.cartonWidthMm !== null ? String(p.cartonWidthMm) : '') },
-      { key: 'cartonHeightMm', label: t('admin.compareview.string.l102_mm'), get: (p) => (p.cartonHeightMm !== undefined && p.cartonHeightMm !== null ? String(p.cartonHeightMm) : '') },
-      { key: 'volumePerCartonM3', label: t('admin.compareview.string.l103_m'), get: (p) => (p.volumePerCartonM3 !== undefined && p.volumePerCartonM3 !== null ? String(p.volumePerCartonM3) : '') }
+      { key: 'qtyPerCarton', label: t('common.action.carton_per_pcs'), get: (p) => (p.qtyPerCarton !== undefined && p.qtyPerCarton !== null ? String(p.qtyPerCarton) : '') },
+      { key: 'weightKgs', label: t('common.field.weight_kg'), get: (p) => (p.weightKgs !== undefined && p.weightKgs !== null ? String(p.weightKgs) : '') },
+      { key: 'cartonLengthMm', label: t('common.field.carton_length_mm'), get: (p) => (p.cartonLengthMm !== undefined && p.cartonLengthMm !== null ? String(p.cartonLengthMm) : '') },
+      { key: 'cartonWidthMm', label: t('common.field.carton_width_mm'), get: (p) => (p.cartonWidthMm !== undefined && p.cartonWidthMm !== null ? String(p.cartonWidthMm) : '') },
+      { key: 'cartonHeightMm', label: t('common.field.carton_height_mm'), get: (p) => (p.cartonHeightMm !== undefined && p.cartonHeightMm !== null ? String(p.cartonHeightMm) : '') },
+      { key: 'volumePerCartonM3', label: t('common.field.carton_volume_m3'), get: (p) => (p.volumePerCartonM3 !== undefined && p.volumePerCartonM3 !== null ? String(p.volumePerCartonM3) : '') }
     ]
   },
   {

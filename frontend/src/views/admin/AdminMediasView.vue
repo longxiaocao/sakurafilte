@@ -28,7 +28,7 @@ async function load() {
   try {
     const { items: list } = await dictApi.medias.list(searchKw.value || undefined, includeDeleted.value, 500)
     items.value = list
-  } catch (e: any) { ElMessage.error(t('admin.mediasview.error.l28_') + (e?.message || '')) }
+  } catch (e: any) { ElMessage.error(t('common.action.load_failed') + (e?.message || '')) }
   finally { loading.value = false }
 }
 function onSearch() { load() }
@@ -54,22 +54,22 @@ async function saveDialog() {
   const m = dialogForm.mediaModel.trim() || undefined
   try {
     if (dialogMode.value === 'create') {
-      await dictApi.medias.create(n, m, dialogForm.sortOrder); ElMessage.success(t('admin.mediasview.success.l54_'))
+      await dictApi.medias.create(n, m, dialogForm.sortOrder); ElMessage.success(t('common.action.created'))
     } else if (dialogForm.id != null) {
       await dictApi.medias.update(dialogForm.id, { mediaName: n, mediaModel: m, sortOrder: dialogForm.sortOrder })
-      ElMessage.success(t('admin.mediasview.success.l57_'))
+      ElMessage.success(t('common.action.updated'))
     }
     dialogOpen.value = false; await load()
-  } catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || t('admin.mediasview.error.l60_')) }
+  } catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || t('common.action.operation_failed')) }
 }
 async function softDelete(row: MediaItem) {
-  try { await ElMessageBox.confirm(`确定删除 "${row.mediaName}${row.mediaModel ? ' / ' + row.mediaModel : ''}" 吗? (软删除)`, t('admin.mediasview.warning.l63_'), { type: 'warning' }) } catch { return }
-  try { await dictApi.medias.delete(row.id); ElMessage.success(t('admin.mediasview.success.l64_')); await load() }
-  catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || t('admin.mediasview.error.l65_')) }
+  try { await ElMessageBox.confirm(`确定删除 "${row.mediaName}${row.mediaModel ? ' / ' + row.mediaModel : ''}" 吗? (软删除)`, t('common.action.confirm'), { type: 'warning' }) } catch { return }
+  try { await dictApi.medias.delete(row.id); ElMessage.success(t('common.action.deleted')); await load() }
+  catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || t('common.action.delete_failed')) }
 }
 async function restore(row: MediaItem) {
-  try { await dictApi.medias.restore(row.id); ElMessage.success(t('admin.mediasview.success.l68_')); await load() }
-  catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || t('admin.mediasview.error.l69_')) }
+  try { await dictApi.medias.restore(row.id); ElMessage.success(t('common.action.restored')); await load() }
+  catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || t('common.action.restore_failed')) }
 }
 
 function onDragStart(e: DragEvent, id: number) { draggingId.value = id; if (e.dataTransfer) { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(id)) } }
@@ -85,8 +85,8 @@ async function onDrop(e: DragEvent, targetId: number) {
   const moved = items.value.splice(sourceIdx, 1)[0]; items.value.splice(targetIdx, 0, moved)
   const updates: MediaReorderItem[] = items.value.map((it, idx) => ({ id: it.id, sortOrder: (idx + 1) * 10 }))
   items.value.forEach((it, idx) => { it.sortOrder = (idx + 1) * 10 })
-  try { await dictApi.medias.reorder(updates); ElMessage.success(t('admin.mediasview.success.l85_')) }
-  catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || t('admin.mediasview.error.l86_')); await load() }
+  try { await dictApi.medias.reorder(updates); ElMessage.success(t('common.action.sort_order_saved')) }
+  catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || t('common.action.sort_failed')); await load() }
 }
 function onDragEnd() { draggingId.value = null; dragOverId.value = null }
 
@@ -149,7 +149,7 @@ onMounted(load)
           <el-button v-else size="small" text type="success" @click="restore(row)">恢复</el-button>
         </div>
       </div>
-      <div v-if="!loading && items.length === 0" class="dict-empty" > {{ t('admin.mediasview.string.l149_') }}新增 Media开始</div>
+      <div v-if="!loading && items.length === 0" class="dict-empty" > {{ t('common.action.no_data_click_top_right') }}新增 Media开始</div>
     </div>
 
     <div class="mt-2 text-xs text-muted">{{ t("common.dictviewcommon.total_drag", { total, active: activeCount, soft: total - activeCount }) }}</div>
@@ -163,7 +163,7 @@ onMounted(load)
           <el-input v-model="dialogForm.mediaModel" :placeholder="t('admin.mediasview.placeholder.l160_5_m_10_m')" maxlength="100" show-word-limit />
           <div class="text-xs text-muted mt-1">可空; (name, model) 二者组成 UNIQUE 索引</div>
         </el-form-item>
-        <el-form-item :label="t('admin.mediasview.label.l163_')">
+        <el-form-item :label="t('common.action.sort_order')">
           <el-input-number v-model="dialogForm.sortOrder" :min="0" :step="10" style="width: 100%" />
         </el-form-item>
       </el-form>
