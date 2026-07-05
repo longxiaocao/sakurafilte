@@ -33,7 +33,28 @@ public class PublicSearchController : ControllerBase
     ///   未命中: {oem, hit=false}
     /// 匹配字段: oem_2 (与前台搜索一致)
     /// </summary>
+    /// <remarks>
+    /// 示例请求:
+    ///
+    ///     POST /api/public/search/batch-oem
+    ///     { "oems": ["P00050000", "11427622448", "C-204"] }
+    ///
+    /// 成功响应 (200):
+    ///
+    ///     {
+    ///       "total": 3,
+    ///       "hits": 2,
+    ///       "miss": 1,
+    ///       "results": [
+    ///         { "oem": "P00050000", "hit": true, "productId": 12345, "oemBrand": "Mann", "productName1": "OIL FILTER", "oem2": "P00050000" },
+    ///         { "oem": "11427622448", "hit": true, "productId": 67890, "oemBrand": "Bosch", "productName1": "AIR FILTER", "oem2": "11427622448" },
+    ///         { "oem": "C-204", "hit": false }
+    ///       ]
+    ///     }
+    /// </remarks>
     [HttpPost("batch-oem")]
+    [ProducesResponseType(typeof(BatchOemResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> BatchOem(
         [FromBody] BatchOemRequest? req,
         CancellationToken ct)
@@ -135,6 +156,8 @@ public class PublicSearchController : ControllerBase
     ///  - 性能: 1M 数据 + 5M xref + 1M apps 预计 50-300ms
     /// </summary>
     [HttpGet("")]
+    [ProducesResponseType(typeof(PublicEightResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> EightField(
         [FromQuery(Name = "oemBrand")]    string? oemBrand,
         [FromQuery(Name = "oemNo2")]      string? oemNo2,

@@ -55,6 +55,8 @@ const navItems = computed(() => [
         { label: '性能', path: '/admin/perf', icon: 'TrendCharts' },
         // 批次 6c: 错误日志 (前端错误监控 + 导出 + 清空)
         { label: '错误', path: '/admin/errors', icon: 'Warning' },
+        // 批次 6d: API 文档 (OpenAPI 浏览器)
+        { label: 'API', path: '/admin/api-docs', icon: 'Document' },
         // P5.4 (Task 15): 帮助页 (字典规范 + 搜索 + 导入)
         { label: '帮助', path: '/admin/help', icon: 'QuestionFilled' }
       ]

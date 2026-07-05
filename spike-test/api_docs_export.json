@@ -1,0 +1,81 @@
+{
+  "test_name": "api_docs_export",
+  "checks": [
+    {
+      "name": "openapi.json 可解析",
+      "status": "PASS",
+      "msg": "size=108646 bytes"
+    },
+    {
+      "name": "openapi 版本 3.x",
+      "status": "PASS",
+      "msg": "openapi=3.0.1"
+    },
+    {
+      "name": "含 info 块",
+      "status": "PASS",
+      "msg": "title=SakuraFilter API"
+    },
+    {
+      "name": "含 paths 块",
+      "status": "PASS",
+      "msg": "path count=89"
+    },
+    {
+      "name": "含 components.schemas",
+      "status": "PASS",
+      "msg": "schema count=50"
+    },
+    {
+      "name": "含安全方案",
+      "status": "PASS",
+      "msg": "schemes=['X-Admin-Token', 'Bearer']"
+    },
+    {
+      "name": "关键端点覆盖",
+      "status": "FAIL",
+      "msg": "8/9 端点存在: /api/auth/login, /api/auth/me, /api/public/search, /api/admin/products, /api/etl/status, /api/etl/import, /health/live, /health/ready"
+    },
+    {
+      "name": "summary 覆盖率",
+      "status": "FAIL",
+      "msg": "0.0% (0/112)"
+    },
+    {
+      "name": "responses 全覆盖",
+      "status": "PASS",
+      "msg": "缺 responses: 0/112"
+    },
+    {
+      "name": "API.md 存在",
+      "status": "PASS",
+      "msg": "size=42.1 KB"
+    },
+    {
+      "name": "MD 含标题",
+      "status": "PASS",
+      "msg": ""
+    },
+    {
+      "name": "MD 含端点索引",
+      "status": "PASS",
+      "msg": ""
+    },
+    {
+      "name": "MD 含认证章节",
+      "status": "PASS",
+      "msg": ""
+    },
+    {
+      "name": "MD 含关键端点",
+      "status": "PASS",
+      "msg": "3/3 端点在 MD 中"
+    }
+  ],
+  "summary": {
+    "total": 14,
+    "pass": 12,
+    "fail": 2
+  },
+  "total": 14
+}

@@ -118,8 +118,21 @@ public class AuthController : ControllerBase
     /// 流程: 验证旧 token → 撤销旧 token + 签发新 token (一次性)
     /// 失败返回 401 (refresh token 无效/过期/已撤销)
     /// </summary>
+    /// <remarks>
+    /// 示例请求:
+    ///
+    ///     POST /api/auth/refresh
+    ///     { "refreshToken": "3F0fPsvbU4c05XvxVBU1..." }
+    ///
+    /// 成功响应 (200): 新 token 三件套 (同 login)
+    /// 失败响应:
+    /// - 401: refresh token 无效/过期/已撤销
+    /// </remarks>
     [HttpPost("refresh")]
     [AllowAnonymous]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Refresh([FromBody] RefreshRequest req, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(req.RefreshToken))
@@ -173,6 +186,8 @@ public class AuthController : ControllerBase
     /// </summary>
     [HttpGet("me")]
     [Authorize]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetMe(CancellationToken ct)
     {
         var user = await _userService.GetCurrentUserAsync(User, ct);

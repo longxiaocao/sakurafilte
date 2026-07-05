@@ -119,6 +119,19 @@ builder.Services.AddSwaggerGen(c =>
             Array.Empty<string>()
         }
     });
+
+    // 批次 6d: 集成 XML 文档注释, 让 /// 摘要自动显示在 Swagger UI
+    var xmlFile = $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name}.xml";
+    var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
+    if (File.Exists(xmlPath))
+    {
+        c.IncludeXmlComments(xmlPath, includeControllerXmlComments: true);
+    }
+    else
+    {
+        // 启动期记录缺失, 便于排查 "文档不显示" 问题
+        Console.WriteLine($"[Swagger] XML doc not found: {xmlPath} (确保 csproj 启用 GenerateDocumentationFile)");
+    }
 });
 
 // JWT 认证体系: 注册 JwtTokenService (单例) + UserService (Scoped)

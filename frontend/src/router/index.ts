@@ -182,6 +182,15 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/admin/AdminErrorView.vue'),
     meta: { title: '错误日志', requireAuth: true }
   },
+  // ===== 批次 6d: API 文档浏览器 (OpenAPI 3.0) =====
+  //   实时拉取 /swagger/v1/swagger.json, 按模块分组展示
+  //   失败回退到 openapi.json 离线副本
+  {
+    path: '/admin/api-docs',
+    name: 'AdminApiDocs',
+    component: () => import('@/views/admin/AdminApiDocsView.vue'),
+    meta: { title: 'API 文档', requireAuth: true }
+  },
   // ===== 需求 6: 前端优化 Demo 演示页 =====
   //   - 整合展示需求 1-5 的所有优化点
   //   - 提供产品详情页 3 种布局方案对比 (A/B/C)
