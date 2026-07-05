@@ -1212,6 +1212,104 @@ def test_backend_deep_water(token):
     except Exception as e:
         record("后端深水区", "搜索8字段-异常", "FAIL", "API 调用", str(e))
 
+    # 10. 批量 OEM 查询 (P2 测试盲点补充)
+    # WHY: PublicSearchController.BatchOem 端点 (Excel 多行粘贴) 完全未验证
+    #   覆盖: 命中 + 未命中混合, 验证 hits/miss 计数 + 单条结果字段
+    print("\n[BD.10] 批量 OEM 查询 (batch-oem)")
+    try:
+        batch_body = {"oems": ["E2E202607046315", "E2E202607046159", "NOT_EXIST_OEM"]}
+        resp = requests.post(f"{BACKEND}/api/public/search/batch-oem",
+                           headers={"Content-Type": "application/json"},
+                           json=batch_body, timeout=30)
+        if resp.status_code == 200:
+            data = resp.json()
+            total = data.get("total", 0)
+            hits = data.get("hits", 0)
+            miss = data.get("miss", 0)
+            results = data.get("results", [])
+            # 验证: total=3, hits=2, miss=1
+            count_ok = (total == 3 and hits == 2 and miss == 1)
+            # 验证: 未命中项 hit=false
+            not_exist = next((r for r in results if r.get("oem") == "NOT_EXIST_OEM"), None)
+            not_exist_ok = (not_exist and not_exist.get("hit") is False)
+            # 验证: 命中项有 productId
+            hit_item = next((r for r in results if r.get("hit") is True), None)
+            hit_ok = (hit_item and hit_item.get("productId") is not None)
+            record("后端深水区", "批量OEM查询",
+                   "PASS" if (count_ok and not_exist_ok and hit_ok) else "FAIL",
+                   "total=3, hits=2, miss=1, 命中项有 productId",
+                   f"total={total}, hits={hits}, miss={miss}, hit_ok={hit_ok}, not_exist_ok={not_exist_ok}")
+        else:
+            record("后端深水区", "批量OEM查询", "FAIL",
+                   "200 OK", f"status={resp.status_code}, body={resp.text[:150]}")
+    except Exception as e:
+        record("后端深水区", "批量OEM查询-异常", "FAIL", "API 调用", str(e))
+
+    # 10.5 批量 OEM 鉴权 (无需 token, 应 200)
+    print("\n[BD.10.5] 批量 OEM 鉴权 (无需 token 应 200)")
+    try:
+        resp = requests.post(f"{BACKEND}/api/public/search/batch-oem",
+                           headers={"Content-Type": "application/json"},
+                           json={"oems": ["TEST"]}, timeout=10)
+        record("后端深水区", "批量OEM-公开访问",
+               "PASS" if resp.status_code == 200 else "FAIL",
+               "200 OK (无需 token)", f"status={resp.status_code}")
+    except Exception as e:
+        record("后端深水区", "批量OEM-公开访问", "FAIL", "API 调用", str(e))
+
+    # 11. 健康检查 + 性能指标端点 (P2 测试盲点补充)
+    # WHY: /health/live, /health/ready, /api/perf, /api/search/health 之前完全未验证
+    print("\n[BD.11] 健康检查 + 性能指标端点")
+    try:
+        # 11.1 /health/live (存活检查)
+        resp = requests.get(f"{BACKEND}/health/live", timeout=10)
+        alive = resp.status_code == 200 and resp.json().get("status") == "alive"
+        record("后端深水区", "健康检查-live",
+               "PASS" if alive else "FAIL",
+               "200 + status=alive", f"status={resp.status_code}, body={resp.text[:100]}")
+
+        # 11.2 /health/ready (就绪检查, 含 postgres/meili/fallback)
+        resp2 = requests.get(f"{BACKEND}/health/ready", timeout=10)
+        if resp2.status_code == 200:
+            data2 = resp2.json()
+            checks = data2.get("checks", [])
+            postgres_ok = any(c.get("name") == "postgres" and c.get("healthy") for c in checks)
+            record("后端深水区", "健康检查-ready",
+                   "PASS" if postgres_ok else "FAIL",
+                   "postgres healthy=true", f"checks={checks}")
+        else:
+            record("后端深水区", "健康检查-ready", "FAIL",
+                   "200 OK", f"status={resp2.status_code}")
+
+        # 11.3 /api/perf (性能指标)
+        resp3 = requests.get(f"{BACKEND}/api/perf", timeout=10)
+        if resp3.status_code == 200:
+            data3 = resp3.json()
+            has_p50 = "p50Ms" in data3
+            has_p95 = "p95Ms" in data3
+            has_error_rate = "errorRate" in data3
+            record("后端深水区", "性能指标",
+                   "PASS" if (has_p50 and has_p95 and has_error_rate) else "FAIL",
+                   "p50Ms/p95Ms/errorRate 字段存在",
+                   f"p50={data3.get('p50Ms')}ms, p95={data3.get('p95Ms')}ms, errorRate={data3.get('errorRate')}%")
+        else:
+            record("后端深水区", "性能指标", "FAIL",
+                   "200 OK", f"status={resp3.status_code}")
+
+        # 11.4 /api/search/health (搜索健康)
+        resp4 = requests.get(f"{BACKEND}/api/search/health", timeout=10)
+        if resp4.status_code == 200:
+            data4 = resp4.json()
+            healthy = data4.get("healthy") is True
+            record("后端深水区", "搜索健康检查",
+                   "PASS" if healthy else "FAIL",
+                   "healthy=true", f"provider={data4.get('provider')}, healthy={data4.get('healthy')}")
+        else:
+            record("后端深水区", "搜索健康检查", "FAIL",
+                   "200 OK", f"status={resp4.status_code}")
+    except Exception as e:
+        record("后端深水区", "健康检查-异常", "FAIL", "API 调用", str(e))
+
 def test_scenario_6_login_ui(page, login_resp):
     """场景 6: 登录页 UI 流程 (P2 测试盲点补充)
     WHY: 之前 E2E 通过 API 登录 + 注入 localStorage, 完全跳过 /login 页面
