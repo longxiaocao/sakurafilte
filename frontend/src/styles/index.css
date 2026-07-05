@@ -288,6 +288,16 @@ html.dark .el-table--striped .el-table__body tr.el-table__row--striped td {
   --el-table-row-hover-bg-color: var(--color-bg-hover);
 }
 
+/* P1-5 修复: 移动端表格水平滚动 - 13+ 列总宽 800+px, 强制 min-width 让 el-table 触发内部水平滚动 */
+@media (max-width: 640px) {
+  .el-table {
+    min-width: 800px;
+  }
+  .el-table .el-table__body-wrapper {
+    overflow-x: auto !important;
+  }
+}
+
 .el-table th.el-table__cell {
   font-weight: 500;
   color: var(--color-text);

@@ -273,6 +273,7 @@ onBeforeUnmount(() => {
 <template>
   <div class="p-3 max-w-screen-2xl mx-auto">
     <!-- 顶部工具条 -->
+    <!-- P1-4 修复: 工具条移动端折叠 - 次要控件 (countMode 标签, 全部列 switch) 在 sm 以下隐藏 -->
     <div class="flex items-center gap-2 mb-3 flex-wrap">
       <el-input v-model="filter.oem2" placeholder="OEM 2" clearable size="small" style="width: 160px" @keyup.enter="quickSearch" />
       <el-input v-model="filter.mr1" placeholder="MR.1" clearable size="small" style="width: 120px" @keyup.enter="quickSearch" />
@@ -284,19 +285,20 @@ onBeforeUnmount(() => {
         <el-option label="cabin" value="cabin" />
         <el-option label="others" value="others" />
       </el-select>
-      <el-input v-model="filter.oem3Batch" placeholder="OEM 3 批量 (逗号分隔)" clearable size="small" style="width: 220px" @keyup.enter="quickSearch" />
+      <el-input v-model="filter.oem3Batch" placeholder="OEM 3 批量" clearable size="small" class="hidden sm:inline-block" style="width: 220px" @keyup.enter="quickSearch" />
       <el-button type="primary" size="small" @click="quickSearch">搜索</el-button>
-      <el-button size="small" @click="openAdv">高级筛选</el-button>
-      <span class="text-xs text-muted">count: {{ countModeUsed }}</span>
+      <el-button size="small" @click="openAdv" class="hidden sm:inline-flex">高级筛选</el-button>
+      <span class="text-xs text-muted hidden sm:inline">count: {{ countModeUsed }}</span>
       <div class="flex-1" />
       <!-- E2E UI.1 修复: 列设置开关 — 默认隐藏次要列, 点击显示全部 24 列 -->
-      <el-switch v-model="showAllColumns" size="small" active-text="全部列" inactive-text="核心列" inline-prompt />
+      <el-switch v-model="showAllColumns" size="small" active-text="全部列" inactive-text="核心列" inline-prompt class="hidden sm:inline-flex" />
       <el-button size="small" @click="batchCompare" :disabled="selected.length < 2">批量对比 ({{ selected.length }})</el-button>
       <el-button type="primary" size="small" @click="newProduct">新增产品</el-button>
     </div>
 
     <!-- 表格 -->
-    <div class="hairline">
+    <!-- P1-5 修复: 表格容器加 overflow-x-auto - 13 列总宽 800+px, 移动端触发水平滚动而非列被裁切 -->
+    <div class="hairline overflow-x-auto">
       <el-table
         :data="items"
         v-loading="loading"
