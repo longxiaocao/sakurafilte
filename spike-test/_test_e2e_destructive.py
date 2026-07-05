@@ -1006,7 +1006,11 @@ def test_backend_deep_water(token):
     # 8. 用户管理 + 修改密码 (P2 测试盲点补充)
     # WHY: 7 个用户管理端点 (CRUD/reset-password/change-password/audit) 完全未验证
     #   覆盖: 创建用户 → 新用户登录 → 改密码 → 新密码登录 → 管理员重置密码 → 禁用 → 禁用后登录失败
-    print("\n[BD.8] 用户管理 + 修改密码")
+    #   限流处理: /api/auth/login 限流 5 次/分钟/IP (AuthPermitsPerMinute=5)
+    #     BD.8 内 4 次登录 + 测试开头 admin 登录 + 场景 6 登录尝试 → 触发 429
+    #     修复: BD.8 开始前 sleep(62) 让当前 60s 固定窗口过期, 4 次登录在新窗口内 (4<5)
+    print("\n[BD.8] 用户管理 + 修改密码 (sleep 62s 等待限流窗口过期)")
+    time.sleep(62)  # 等待 auth 限流窗口过期 (FixedWindow 60s + 2s 缓冲)
     test_username = f"e2e_u{int(time.time())%100000}"
     test_password = "Test@2026Pwd"
     new_password = "NewPwd@2026XYZ"
@@ -1566,6 +1570,110 @@ def test_backend_deep_water(token):
                    "200/204", f"status={resp.status_code}")
     except Exception as e:
         record("后端深水区", "图片上传-异常", "FAIL", "API 调用", str(e))
+
+    # 15. 长尾端点扫描 (P2 测试盲点补充 — 12 个未测端点)
+    # WHY: 之前 E2E 只覆盖核心端点, 以下 12 个端点完全未验证:
+    #   产品: restore/compare/search/admin-get-by-oem
+    #   字典: _schema/typeahead
+    #   搜索: /api/search (POST) /api/products/{oem}
+    #   运维: /api/admin/perf/alerts /api/admin/auth/status /metrics /api/etl/status
+    #   死信: /api/admin/dead-letter/{id}/recover
+    print("\n[BD.15] 长尾端点扫描 (12 个未测端点)")
+    try:
+        # 15.1 产品 restore (id 不存在应 404)
+        resp = requests.post(f"{BACKEND}/api/admin/products/99999999/restore",
+                           headers=headers, timeout=10)
+        record("后端深水区", "产品restore-不存在",
+               "PASS" if resp.status_code == 404 else "WARN",
+               "404 Not Found", f"status={resp.status_code}")
+
+        # 15.2 产品 compare (对比 2 个产品)
+        resp = requests.post(f"{BACKEND}/api/admin/products/compare",
+                           headers={**headers, "Content-Type": "application/json"},
+                           json={"ids": [50006, 50007]}, timeout=15)
+        ok = resp.status_code == 200 and len(resp.content) > 100
+        record("后端深水区", "产品compare",
+               "PASS" if ok else "WARN",
+               "200 + 响应体非空", f"status={resp.status_code}, len={len(resp.content)}")
+
+        # 15.3 后台产品搜索 /api/admin/products/search
+        resp = requests.get(f"{BACKEND}/api/admin/products/search?q=filter&page=1&pageSize=2",
+                          headers=headers, timeout=15)
+        record("后端深水区", "后台产品搜索",
+               "PASS" if resp.status_code == 200 else "FAIL",
+               "200 OK", f"status={resp.status_code}")
+
+        # 15.4 性能告警 /api/admin/perf/alerts
+        resp = requests.get(f"{BACKEND}/api/admin/perf/alerts?limit=10",
+                          headers=headers, timeout=10)
+        record("后端深水区", "性能告警",
+               "PASS" if resp.status_code == 200 else "FAIL",
+               "200 OK", f"status={resp.status_code}")
+
+        # 15.5 认证状态 /api/admin/auth/status (token 轮转信息)
+        resp = requests.get(f"{BACKEND}/api/admin/auth/status",
+                          headers=headers, timeout=10)
+        if resp.status_code == 200:
+            data = resp.json()
+            ok = "currentLen" in data and "loadedFromDb" in data
+            record("后端深水区", "认证状态",
+                   "PASS" if ok else "WARN",
+                   "currentLen + loadedFromDb 字段",
+                   f"keys={list(data.keys())[:5]}")
+        else:
+            record("后端深水区", "认证状态", "FAIL",
+                   "200 OK", f"status={resp.status_code}")
+
+        # 15.6 字典 schema /api/admin/dict/_schema
+        resp = requests.get(f"{BACKEND}/api/admin/dict/_schema",
+                          headers=headers, timeout=10)
+        record("后端深水区", "字典schema",
+               "PASS" if resp.status_code == 200 and len(resp.content) > 100 else "FAIL",
+               "200 + schema 非空", f"status={resp.status_code}, len={len(resp.content)}")
+
+        # 15.7 字典 typeahead (types 字典)
+        resp = requests.get(f"{BACKEND}/api/admin/dict/types/typeahead?q=fil&limit=5",
+                          headers=headers, timeout=10)
+        record("后端深水区", "字典typeahead",
+               "PASS" if resp.status_code == 200 else "FAIL",
+               "200 OK", f"status={resp.status_code}")
+
+        # 15.8 搜索 POST /api/search
+        resp = requests.post(f"{BACKEND}/api/search",
+                           headers={**headers, "Content-Type": "application/json"},
+                           json={"query": "filter", "page": 1, "pageSize": 5}, timeout=15)
+        record("后端深水区", "搜索POST",
+               "PASS" if resp.status_code == 200 else "FAIL",
+               "200 OK", f"status={resp.status_code}")
+
+        # 15.9 公开产品详情 /api/products/{oem}
+        resp = requests.get(f"{BACKEND}/api/products/E2E202607046159", timeout=10)
+        record("后端深水区", "公开产品详情",
+               "PASS" if resp.status_code == 200 else "WARN",
+               "200 OK", f"status={resp.status_code}")
+
+        # 15.10 公开 ETL 状态 /api/etl/status (X-Admin-Token 鉴权)
+        etl_h = {**headers, "X-Admin-Token": "dev-admin-token-rotate-in-prod-MZK4R9P3X6V2N7Q1L5F0B8H3C"}
+        resp = requests.get(f"{BACKEND}/api/etl/status", headers=etl_h, timeout=10)
+        record("后端深水区", "公开ETL状态",
+               "PASS" if resp.status_code == 200 else "FAIL",
+               "200 OK", f"status={resp.status_code}")
+
+        # 15.11 死信恢复 (id 不存在应 404)
+        resp = requests.post(f"{BACKEND}/api/admin/dead-letter/99999999/recover",
+                           headers=headers, timeout=10)
+        record("后端深水区", "死信恢复-不存在",
+               "PASS" if resp.status_code == 404 else "WARN",
+               "404 Not Found", f"status={resp.status_code}")
+
+        # 15.12 Prometheus 指标 /metrics
+        resp = requests.get(f"{BACKEND}/metrics", timeout=10)
+        ok = resp.status_code == 200 and len(resp.content) > 100
+        record("后端深水区", "Prometheus指标",
+               "PASS" if ok else "FAIL",
+               "200 + 指标非空", f"status={resp.status_code}, len={len(resp.content)}")
+    except Exception as e:
+        record("后端深水区", "长尾端点-异常", "FAIL", "API 调用", str(e))
 
 def test_scenario_6_login_ui(page, login_resp):
     """场景 6: 登录页 UI 流程 (P2 测试盲点补充)
