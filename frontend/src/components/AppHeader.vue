@@ -36,23 +36,23 @@ const dictItems = [
 //   改方案: nav 中 "产品详情" 改为 "OEM 查询", 点击后弹 ElMessageBox.prompt 收 oem, 再跳详情
 //   避免之前直接 router.push('/product') 触发 "No match found" 警告
 //
-// P-Admin-UX v3: 顶栏动态收纳 — 解决 v2 公共+admin 合并后 10 按钮溢出 1280px 问题
-//   核心: ResizeObserver 监听 nav 容器宽度, 按优先级贪心决定每个按钮进主顶栏还是 "更多" 下拉
-//   优先级 (数字越小越靠前, 必显示): 公共 3 按钮 + 字典/产品/ETL/用户管理/高级搜索
-//   低优先 (可收纳): 高级对比 / 性能 / 错误 / API / 帮助
-//   算法: 从高到低累加 offsetWidth, 超过可用宽度则后续进 "更多" 下拉
-//   触发: window resize + 路由变化 + 用户名切换
-//
-// 完整按钮池 (按优先级 1-13 排序)
+// P-Admin-UX v4: 顶栏动态收纳 — 解决 v3 admin 路径跳公开页 admin 入口全部消失问题
+//   v3 错: admin 6 按钮仅 isAdminPath 时渲染, 跳公开页后全部消失
+//   v4 对: 公共 3 按钮始终在; admin 6 按钮 + 低优 5 按钮在"已登录用户"任意路径都在
+//     - 已登录用户在公开页 (产品搜索 / 高级搜索 / OEM 查询 / 产品对比) 仍能看到 admin 入口, 体验一致
+//     - 未登录用户只看到公共 3 按钮 (最精简, 不暴露 admin 入口)
+//   优先级 (数字越小越靠前): 公共 3 (1-3) → admin 高优 5 (4-8) → 低优 5 (9-13)
+//   动态收纳: ResizeObserver 监听 nav 容器宽度, 贪心决定哪些进 "更多"
 const allNavItems = computed(() => {
   const items: Array<{ key: string; label: string; icon: string; path?: string; action?: string; dropdown?: string; priority: number }> = [
-    // 公共区 (始终在池子里, 公共路径优先, admin 路径也保留以便跳转)
+    // 公共区 (始终在池子里, 不论路径不论登录)
     { key: 'search', label: '产品搜索', path: '/search', icon: 'Search', priority: 1 },
     { key: 'oem', label: 'OEM 查询', action: 'oemLookup', icon: 'Document', priority: 2 },
     { key: 'compare', label: '产品对比', path: '/compare', icon: 'DataLine', priority: 3 }
   ]
-  if (isAdminPath.value) {
-    // 后台区
+  // 已登录用户: 在任何路径都看到 admin 入口, 解决 v3 跳公开页丢 admin 体验问题
+  if (user.value) {
+    // admin 高优 (必显示, 不可收纳)
     items.push(
       { key: 'products', label: '产品管理', path: '/admin/products', icon: 'Goods', priority: 4 },
       { key: 'adv-search', label: '高级搜索', path: '/public/search', icon: 'Filter', priority: 5 },
@@ -62,7 +62,7 @@ const allNavItems = computed(() => {
     if (isAdmin()) {
       items.push({ key: 'users', label: '用户管理', path: '/admin/users', icon: 'User', priority: 8 })
     }
-    // 低优先级 (可收纳)
+    // admin 低优 (可收纳, 宽度不够时进 "更多" 下拉)
     items.push(
       { key: 'adv-compare', label: '高级对比', path: '/admin/compare', icon: 'DataBoard', priority: 9 },
       { key: 'perf', label: '性能', path: '/admin/perf', icon: 'TrendCharts', priority: 10 },
@@ -175,6 +175,10 @@ watch(() => route.path, () => {
   nextTick(() => measureButtons())
 })
 watch(() => isAdminPath.value, () => {
+  nextTick(() => measureButtons())
+})
+// P-Admin-UX v4: 用户登录/登出时按钮池数量从 3→11 或 11→3, 需重算
+watch(() => user.value, () => {
   nextTick(() => measureButtons())
 })
 
@@ -391,8 +395,9 @@ function toggleLocale() {
       <span class="hidden sm:inline">{{ locale === 'zh-CN' ? '中' : 'EN' }}</span>
     </button>
     <!-- JWT 改造: 用户菜单 (已登录显示 el-dropdown, 未登录显示进入后台按钮; 移动端由 drawer 接管) -->
+    <!-- P-Admin-UX v4: 用户菜单改为 v-if=user (任何路径已登录都显示), 与 v4 admin 入口保留一致 -->
     <el-dropdown
-      v-if="isAdminPath && user"
+      v-if="user"
       :trigger="userTrigger"
       @command="onUserCommand"
       class="hidden sm:inline-block"
@@ -420,23 +425,7 @@ function toggleLocale() {
         </el-dropdown-menu>
       </template>
     </el-dropdown>
-    <!-- P-Admin-UX v3: 公共路径下, 已登录用户显示"已登录 admin"角标, 直接跳后台无需经 /login -->
-    <button
-      v-else-if="!isAdminPath && token"
-      @click="router.push('/admin/products')"
-      class="hidden sm:flex px-2 py-1 text-sm hairline hover:bg-[var(--color-bg-hover)] items-center gap-1"
-      :aria-label="'已登录, 跳到后台'"
-      title="已登录, 点击进入后台"
-    >
-      <el-icon aria-hidden="true"><User /></el-icon>
-      <el-tag
-        size="small"
-        :type="user?.role === 'admin' ? 'danger' : 'primary'"
-        class="ml-1"
-      >{{ user?.role || '已登录' }}</el-tag>
-      <span class="ml-1">进入后台</span>
-      <el-icon class="ml-1" aria-hidden="true"><Right /></el-icon>
-    </button>
+    <!-- P-Admin-UX v4: 移除 v3 的"已登录 admin 角标"按钮, 因为 v4 admin 6 入口在任意路径都保留, 此按钮冗余 -->
     <button
       v-else
       @click="toggleAdmin"
