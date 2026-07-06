@@ -16,6 +16,7 @@ public static class EndpointRouteBuilderExtensions
         app.MapAdminEtlEndpoints();
         app.MapDeadLetterEndpoints();
         app.MapDictionaryEndpoints();
+        app.MapPublicTypeaheadEndpoints();
         // P3.2 (Task 10): MVC 控制器路由 (PublicSearchController 等)
         app.MapControllers();
         return app;

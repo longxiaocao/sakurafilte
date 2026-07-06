@@ -249,6 +249,19 @@ export const publicSearchApi = {
     params.page = req.page ?? 1
     params.pageSize = req.pageSize ?? 20
     return http.get('/public/search', { params }).then((r) => r.data)
+  },
+
+  // P-Demo: 8 字段 typeahead 候选项 (输入 2 字符起返回 distinct 候选, 最多 20 条)
+  //   field ∈ oem-brand | oem-no2 | oem-no3 | machine-brand | machine-model | model-name | engine-brand | engine-type
+  //   支持 AbortSignal 取消上一次请求 (快速输入时只保留最后一次)
+  typeahead(field: string, q: string, limit = 20, signal?: AbortSignal): Promise<{ count: number; items: string[] }> {
+    return http.get(`/public/typeahead/${field}`, { params: { q, limit }, signal })
+      .then((r) => r.data)
+      .catch((err: any) => {
+        // AbortError 静默 (用户快速输入时正常取消)
+        if (err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED') return { count: 0, items: [] }
+        throw err
+      })
   }
 }
 

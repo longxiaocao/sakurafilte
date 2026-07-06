@@ -48,17 +48,44 @@ const form = reactive<SearchForm>(emptyForm())
 const page = ref(1)
 const pageSize = ref(20)
 
-// 字段定义 — 集中维护 label / placeholder / key, 模板循环用
+// 字段定义 — 集中维护 label / placeholder / key / typeaheadField, 模板循环用
+//   typeaheadField: 后端 /api/public/typeahead/{field} 的 field 名 (kebab-case)
 const fields = [
-  { key: 'oemBrand',    label: 'OEM Brand',     placeholder: 'e.g. MANN, Bosch, CAT' },
-  { key: 'oemNo2',      label: 'OEM 2 NO.',     placeholder: '产品自身 OEM 2 编号' },
-  { key: 'oemNo3',      label: 'OEM 3 NO.',     placeholder: 'e.g. 207-60... (交叉引用)' },
-  { key: 'machineBrand',label: 'Machine Brand', placeholder: 'e.g. Caterpillar, JCB' },
-  { key: 'machineModel',label: 'Machine Model', placeholder: '机型' },
-  { key: 'modelName',   label: 'Model Name',    placeholder: '型号名' },
-  { key: 'engineBrand', label: 'Engine Brand',  placeholder: '发动机品牌' },
-  { key: 'engineType',  label: 'Engine Type',   placeholder: '发动机型号' }
+  { key: 'oemBrand',     label: 'OEM Brand',      placeholder: 'e.g. MANN, Bosch, CAT',  typeaheadField: 'oem-brand' },
+  { key: 'oemNo2',       label: 'OEM 2 NO.',      placeholder: '产品自身 OEM 2 编号',     typeaheadField: 'oem-no2' },
+  { key: 'oemNo3',       label: 'OEM 3 NO.',      placeholder: 'e.g. 207-60... (交叉引用)', typeaheadField: 'oem-no3' },
+  { key: 'machineBrand', label: 'Machine Brand',  placeholder: 'e.g. Caterpillar, JCB',  typeaheadField: 'machine-brand' },
+  { key: 'machineModel', label: 'Machine Model',  placeholder: '机型',                   typeaheadField: 'machine-model' },
+  { key: 'modelName',    label: 'Model Name',     placeholder: '型号名',                 typeaheadField: 'model-name' },
+  { key: 'engineBrand',  label: 'Engine Brand',   placeholder: '发动机品牌',             typeaheadField: 'engine-brand' },
+  { key: 'engineType',   label: 'Engine Type',    placeholder: '发动机型号',             typeaheadField: 'engine-type' }
 ] as const
+
+// ===== typeahead 候选项 (每字段独立 AbortController, 快速输入只保留最后一次请求) =====
+//   WHY: 用户快速输入 "CATER" 时, "C"/"CA"/"CAT"/"CATE"/"CATER" 5 次请求,
+//        只保留最后一次, 前 4 次用 AbortController 取消, 避免后端无效查询
+const typeaheadControllers: Record<string, AbortController | null> = {}
+
+async function fetchSuggestions(fieldKey: string, typeaheadField: string, query: string, cb: (items: string[]) => void) {
+  // 输入 < 2 字符不查 (与后端一致, 避免全表扫描)
+  if (!query || query.trim().length < 2) {
+    cb([])
+    return
+  }
+  // 取消上一次同字段的请求
+  const prev = typeaheadControllers[fieldKey]
+  if (prev) prev.abort()
+  const ctrl = new AbortController()
+  typeaheadControllers[fieldKey] = ctrl
+  try {
+    const resp = await publicSearchApi.typeahead(typeaheadField, query.trim(), 20, ctrl.signal)
+    cb(resp.items || [])
+  } catch {
+    cb([])
+  } finally {
+    if (typeaheadControllers[fieldKey] === ctrl) typeaheadControllers[fieldKey] = null
+  }
+}
 
 // ===== 搜索结果状态 =====
 const loading = ref(false)
@@ -270,11 +297,15 @@ onUnmounted(() => {
       <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
         <div v-for="f in fields" :key="f.key">
           <label class="block text-xs text-muted mb-1">{{ f.label }}</label>
-          <el-input
+          <el-autocomplete
             v-model="form[f.key]"
             :placeholder="f.placeholder"
+            :fetch-suggestions="(q: any, cb: any) => fetchSuggestions(f.key, f.typeaheadField, String(q ?? ''), cb as any)"
+            :trigger-on-focus="false"
             clearable
             size="default"
+            class="w-full"
+            @select="() => doSearch()"
             @keyup.enter="doSearch"
           />
         </div>

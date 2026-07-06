@@ -378,6 +378,7 @@ public static class ServiceCollectionExtensions
     {
         services.AddScoped<AdminProductService>();
         services.AddScoped<AdminProductImageService>();
+        services.AddScoped<PublicTypeaheadService>();
         services.AddScoped<OemBrandDictService>();
         services.AddScoped<ProductName1DictService>();
         services.AddScoped<ProductName2DictService>();
