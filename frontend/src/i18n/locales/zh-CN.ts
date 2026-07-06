@@ -107,6 +107,70 @@ export default {
       },
     },
     etlview: {
+      page_title: 'ETL 触发与监控',
+      section: {
+        pipeline: '数据流程',
+        trigger: '手动 ETL 触发',
+        alert_status: '告警状态',
+        last_finished: '最近一次完成结果',
+        dry_run: '最近 dry-run 校验',
+        recent_errors: '最近错误 (最多 10 条)',
+        audit: '取消审计 (按 reason_code 聚合)'
+      },
+      pipeline: {
+        stage_read: '读取',
+        stage_staging: '暂存',
+        stage_insert: '写入',
+        stage_commit: '提交',
+        stage_meili: '同步',
+        stage_done: '完成',
+        stage_idle: '空闲',
+        status_running: '运行中',
+        status_completed: '已完成',
+        status_failed: '失败',
+        status_paused: '已暂停',
+        status_cancelled: '已取消',
+        status_idle: '空闲',
+        elapsed_label: '已耗时',
+        errors_label: '错误'
+      },
+      kpi: {
+        trigger_24h: '24h 触发总数',
+        success_24h: '24h 成功数',
+        failed_24h: '24h 失败数',
+        avg_duration: '24h 平均耗时',
+        last_24h: '最近 24 小时',
+        success_rate: '成功率 {rate}%',
+        need_attention: '需关注',
+        all_ok: '全部正常',
+        completed_only: '仅统计已完成任务'
+      },
+      alert: {
+        p2_tag: 'P2 待接入',
+        title: '告警系统',
+        description: '告警系统 (钉钉 / 微信 / 通用 Webhook / 微信公众号) 计划在下一阶段实施,当前为占位。',
+        planned_types: '告警类型',
+        planned_channels: '推送渠道',
+        type_etl: 'ETL 任务',
+        type_perf: '性能阈值',
+        type_security: '安全事件',
+        type_access: '访问异常',
+        type_resource: '资源监控',
+        channel_dingtalk: '钉钉',
+        channel_wechat: '企业微信',
+        channel_webhook: '通用 Webhook',
+        view_design_btn: '查看告警设计文档'
+      },
+      audit: {
+        observable_tag: '运营可观察',
+        recent_20_cancelled: '最近 20 条 cancelled 记录',
+        reason_code: '原因码',
+        legacy: '历史数据'
+      },
+      dry_run: {
+        samples_count: '样本 {count} 行',
+        samples_preview: '样本预览 (前 {count} 行 JSON)'
+      },
       buttontext: {
         next: '下一步',
 
@@ -187,8 +251,9 @@ export default {
       templatetext: {
         immediately_import: '立即导入',
         execute_dry_run: '执行 dry-run',
-        expand_all: '展开全部 ',
+        expand_all: '展开全部 {count} 行',
         collapse_show_front_rows: '收起 (只显示前 10 行)',
+        cancel_task: '取消任务',
       },
       warning: {
 

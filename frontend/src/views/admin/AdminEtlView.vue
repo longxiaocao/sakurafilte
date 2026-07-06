@@ -1,27 +1,37 @@
 <script setup lang="ts">
-// Day 9: 后台 ETL 触发 + 实时进度页
-//   - 实体选择: products / xrefs / apps
-//   - 模式选择: full-load / insert-only / upsert
-//   - dry-run 切换: 仅校验文件 + 行数, 不写库
-//   - 3s 轮询 /api/admin/etl/progress 实时显示状态
-//   - 上次完成结果快照 + recent errors
+// AdminEtlView — ETL 触发与监控 (P1 重构版 2026-07-06)
+//
+// 重构要点:
+//   - 拆出 useEtlProgress composable (SSE + 审计 + 持久化)
+//   - 拆出 EtlPipeline 组件 (6 阶段流程图)
+//   - 拆出 EtlKpiCards 组件 (4 张 KPI 概览)
+//   - 拆出 EtlAlertStatus 组件 (P2 告警占位)
+//   - 保留所有现有功能: 触发/暂停/取消/恢复/dry-run/拖拽/历史审计
+//
+// 视觉调整:
+//   - 移除 "Day 8.4" 装饰标签
+//   - 6 卡片纵向布局: KPI → Pipeline → 触发 → 告警 → 最近完成 → 审计
+//   - Musk 风格 hairline border + 0 shadow (组件已实现)
 import { ref, reactive, onMounted, onBeforeUnmount, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { etlApi } from '@/api'
-import type { EtlActiveTaskInfo, EtlProgress, EtlDryRunResult, EtlHistoryItem, EtlReasonCodeAggregate } from '@/api/types'
+import type { EtlDryRunResult, EtlProgress } from '@/api/types'
 import EtlReasonCodePie from '@/components/EtlReasonCodePie.vue'
+import EtlPipeline from '@/components/EtlPipeline.vue'
+import EtlKpiCards from '@/components/EtlKpiCards.vue'
+import EtlAlertStatus from '@/components/EtlAlertStatus.vue'
 import { useGlobalDragDrop, DEFAULT_ADMIN_ACCEPT } from '@/composables/useGlobalDragDrop'
+import { useEtlProgress } from '@/composables/useEtlProgress'
 
 const { t } = useI18n()
 
 // ===== 表单 =====
-// Day 11 Phase 1: cascade 默认 true (兼容旧行为), UI 可切换为 false 单独刷新主表
 const form = reactive({
   entity: 'products' as 'products' | 'xrefs' | 'apps',
   mode: 'upsert' as 'full-load' | 'insert-only' | 'upsert',
   dryRun: false,
-  cascade: true,  // 仅 products + full-load 生效
+  cascade: true,
   jsonlPath: 'D:/data/sakurafilter/products.jsonl'
 })
 
@@ -36,13 +46,8 @@ function changeEntity(v: 'products' | 'xrefs' | 'apps') {
   form.jsonlPath = entityPaths[v]
 }
 
-// ===== 全局拖拽上传集成 (Day 14+: UX 偏好) =====
-//   拖动 .jsonl 到窗口 → 自动识别 entity + 填入路径
-//   浏览器安全: 拿不到绝对路径, 用默认基础目录 + file.name 拼出服务端路径
-//   用户可手动修改最终路径
+// ===== 全局拖拽 =====
 const { register: registerDrag, unregister: unregisterDrag } = useGlobalDragDrop()
-
-// 服务端默认基础目录 (与后端 PgmDefaultConfig 对齐)
 const SERVER_BASE_DIR = 'D:/data/sakurafilter'
 
 function inferEntityByName(name: string): 'products' | 'xrefs' | 'apps' | null {
@@ -55,10 +60,8 @@ function inferEntityByName(name: string): 'products' | 'xrefs' | 'apps' | null {
 
 function handleFilesDropped(files: File[]) {
   if (files.length === 0) return
-  // 取第一个文件
   const f = files[0]
   const inferred = inferEntityByName(f.name)
-  // 拼出服务端路径 (后端用 Path.Exists 校验)
   const serverPath = `${SERVER_BASE_DIR}/${f.name}`
   if (inferred) {
     form.entity = inferred
@@ -74,7 +77,6 @@ function handleFilesDropped(files: File[]) {
 }
 
 onMounted(() => {
-  // 注册全局拖拽 (admin 路径启用)
   registerDrag({
     onFilesDropped: handleFilesDropped,
     acceptRoute: DEFAULT_ADMIN_ACCEPT,
@@ -86,12 +88,26 @@ onBeforeUnmount(() => {
   unregisterDrag()
 })
 
+// ===== Composable: 实时进度 + 审计 =====
+const {
+  task,
+  lastFinished,
+  reasonCodeAgg,
+  historyItems,
+  historyLoading,
+  hasPausedTask,
+  refreshAudit,
+  clearLastFinished
+} = useEtlProgress()
+
 // ===== 触发 =====
 const submitting = ref(false)
 const cancelling = ref(false)
-// P1.1 (Task 3): 暂停/恢复状态
 const pausing = ref(false)
 const resuming = ref(false)
+const lastDryRun = ref<EtlDryRunResult | null>(null)
+const showAllSamples = ref(false)
+
 async function doTrigger() {
   try {
     await ElMessageBox.confirm(
@@ -107,154 +123,24 @@ async function doTrigger() {
     const r = await etlApi.trigger({
       jsonlPath: form.jsonlPath,
       mode: form.mode,
-      entityType: form.entity,  // Day 11 Phase 1 BUG FIX: 之前漏传, 后端硬编码 products
-      cascade: form.cascade,    // Day 11 Phase 1: cascade 安全锁
+      entityType: form.entity,
+      cascade: form.cascade,
       dryRun: form.dryRun
     })
-    ElMessage.success(form.dryRun ? t('admin.etlview.success.dry_run_validation_completed') : t('admin.etlview.success.triggered_etl_background_execute'))
-    // 触发后立即拉一次进度
-    await pollOnce()
-    // dry-run 模式下 r 是 { dryRun, file, mode, lines, sizeBytes }
+    ElMessage.success(form.dryRun
+      ? t('admin.etlview.success.dry_run_validation_completed')
+      : t('admin.etlview.success.triggered_etl_background_execute'))
     if (form.dryRun) {
       lastDryRun.value = r as any
     }
-  } catch (e: any) {
-    // 已被拦截器处理
+  } catch {
+    // 拦截器处理
   } finally {
     submitting.value = false
   }
 }
 
-// ===== 进度轮询 =====
-const task = ref<EtlActiveTaskInfo>({ inProgress: false })
-const lastFinished = ref<EtlProgress | null>(null)
-const lastDryRun = ref<EtlDryRunResult | null>(null)
-// Day 9.4: dry-run 样本展开/收起 (50 行太长, 默认只显示 10 行)
-const showAllSamples = ref(false)
-
-// Day 9.8: 取消原因 reason_code 饼图数据 (运营审计)
-const reasonCodeAgg = ref<EtlReasonCodeAggregate | null>(null)
-const historyItems = ref<EtlHistoryItem[]>([])
-const historyLoading = ref(false)
-
-async function refreshAudit() {
-  historyLoading.value = true
-  try {
-    const [agg, hist] = await Promise.all([
-      etlApi.reasonCodeAggregate(),
-      etlApi.history(20, 'cancelled')
-    ])
-    reasonCodeAgg.value = agg
-    historyItems.value = hist.items
-  } catch (e) {
-    // 已被拦截器处理
-  } finally {
-    historyLoading.value = false
-  }
-}
-
-// Day 9.1: 持久化最近一次完成结果到 localStorage (刷新页面不丢)
-const LS_KEY_FINISHED = 'sakura_etl_last_finished'
-try {
-  const cached = localStorage.getItem(LS_KEY_FINISHED)
-  if (cached) lastFinished.value = JSON.parse(cached)
-} catch {
-  // 忽略解析失败
-}
-
-let pollTimer: number | null = null
-
-async function pollOnce() {
-  try {
-    const r = await etlApi.progress()
-    task.value = r
-    // 任务刚结束 (inProgress 由 true 变 false) → 拉一次 legacy status 拿到最终结果
-    if (!r.inProgress && r.activeTask && r.activeTask.status === 'completed') {
-      const legacy = await etlApi.legacyStatus()
-      if (legacy && (legacy as any).status !== 'running') {
-        lastFinished.value = legacy
-        try {
-          localStorage.setItem(LS_KEY_FINISHED, JSON.stringify(legacy))
-        } catch {
-          // 忽略写入失败 (容量 / 隐私模式)
-        }
-      }
-    }
-  } catch (e: any) {
-    // 已被拦截器处理
-  }
-}
-
-// Day 9.4: SSE 替换 3s 轮询
-//   关闭 EventSource = 停止订阅, 不需要手动 clearInterval
-let eventSource: EventSource | null = null
-
-function connectSSE() {
-  if (eventSource) eventSource.close()
-  const es = new EventSource("/api/admin/etl/progress/stream")
-  es.onmessage = (e) => {
-    try {
-      const r = JSON.parse(e.data)
-      task.value = r
-      // 任务刚结束 (inProgress 由 true 变 false) → 拉一次 legacy status 拿到最终结果
-      if (!r.inProgress && r.activeTask && r.activeTask.status === 'completed') {
-        etlApi.legacyStatus().then((legacy) => {
-          if (legacy && (legacy as any).status !== 'running') {
-            lastFinished.value = legacy
-            try { localStorage.setItem(LS_KEY_FINISHED, JSON.stringify(legacy)) } catch {}
-          }
-        }).catch(() => {})
-      }
-      // Day 9.8: 任务进入终态 (completed/failed/cancelled) → 刷新审计饼图 + 历史列表
-      if (!r.inProgress && r.activeTask &&
-          ['completed', 'failed', 'cancelled'].includes(r.activeTask.status)) {
-        refreshAudit()
-      }
-      // P1.1 (Task 3): 任务进入 paused 状态 → 刷新t('common.action.resume')按钮可见性
-      if (r.activeTask && r.activeTask.status === 'paused') {
-        checkPausedTask()
-      }
-    } catch {}
-  }
-  es.onerror = () => {
-    // 浏览器会自动重连, 这里只打印 (debug 级避免污染生产控制台)
-    // WHY console.debug: SSE 临时断开是常态 (代理/网络抖动), 不应被监控告警捕获
-    console.debug(t('admin.etlview.string.sse_on_browser_will'))
-  }
-  eventSource = es
-}
-
-onMounted(() => {
-  connectSSE()
-  // Day 9.8: 进入页面立即拉一次审计 (避免要等下次 ETL 完结才显示)
-  refreshAudit()
-})
-
-onBeforeUnmount(() => {
-  if (eventSource) {
-    eventSource.close()
-    eventSource = null
-  }
-  if (pollTimer) {
-    clearInterval(pollTimer)
-    pollTimer = null
-  }
-})
-
-
-function clearLastFinished() {
-  lastFinished.value = null
-  try {
-    localStorage.removeItem(LS_KEY_FINISHED)
-  } catch {
-    // 忽略
-  }
-  ElMessage.success(t('admin.etlview.success.phrase_21459'))
-}
-
-// Day 9.6: 取消原因枚举白名单
-//   WHY 固定: 与后端 EtlProgress.AllowedReasonCodes 对齐, 避免传任意字符串
-//   运营审计按 reason_code 聚合 (USER_REQUEST/TIMEOUT/SYSTEM_SHUTDOWN/ADMIN_OVERRIDE/OTHER)
+// ===== 取消原因白名单 (与后端 AllowedReasonCodes 对齐) =====
 const reasonCodeOptions = [
   { value: 'USER_REQUEST', label: t('common.field.user_cancelled'), defaultReason: t('common.field.user_cancelled') },
   { value: 'ADMIN_OVERRIDE', label: t('common.field.admin_force_cancel'), defaultReason: t('common.field.admin_force_cancel') },
@@ -263,14 +149,10 @@ const reasonCodeOptions = [
   { value: 'OTHER', label: t('common.field.other_reason'), defaultReason: t('common.field.other_reason') }
 ] as const
 
-// Day 9.1: 取消当前活跃 ETL 任务
-//   Day 9.4: 用 ElMessageBox.prompt 让用户输入取消原因, 写到 etl_progress_log.cancel_reason
-//   Day 9.6: 改用枚举下拉 + 默认描述 (与后端 AllowedReasonCodes 对齐, 减少误分类)
 async function doCancel() {
   let reasonCode: string = 'USER_REQUEST'
   let reason: string = reasonCodeOptions[0].defaultReason
   try {
-    // 步骤 1: 选择 reason_code 枚举 (Element Plus ElMessageBox 自定义 HTML)
     await ElMessageBox({
       title: t('admin.etlview.string.cancel_etl_task'),
       message: `
@@ -295,7 +177,6 @@ async function doCancel() {
       type: 'warning',
       dangerouslyUseHTMLString: true
     })
-    // 提取选中的 code
     const checked = document.querySelector<HTMLInputElement>('input[name="cancel-reason-code"]:checked')
     reasonCode = checked?.value || 'USER_REQUEST'
     const picked = reasonCodeOptions.find(o => o.value === reasonCode) || reasonCodeOptions[0]
@@ -303,15 +184,17 @@ async function doCancel() {
   } catch {
     return
   }
-  // 步骤 2: 询问是否填写更详细的描述 (可选, 留空则用默认)
   try {
-    const r = await ElMessageBox.prompt(t('admin.etlview.info.description_empty_default'), t('admin.etlview.info.cancel_note'), {
-      confirmButtonText: t('admin.etlview.buttontext.confirm_cancel'),
-      cancelButtonText: t('common.field.no_cancel'),
-      inputPlaceholder: reason,
-      inputValue: reason,
-      inputValidator: undefined
-    })
+    const r = await ElMessageBox.prompt(
+      t('admin.etlview.info.description_empty_default'),
+      t('admin.etlview.info.cancel_note'),
+      {
+        confirmButtonText: t('admin.etlview.buttontext.confirm_cancel'),
+        cancelButtonText: t('common.field.no_cancel'),
+        inputPlaceholder: reason,
+        inputValue: reason
+      }
+    )
     const v = (r.value || '').trim()
     if (v) reason = v
   } catch {
@@ -325,35 +208,22 @@ async function doCancel() {
     } else {
       ElMessage.info(r.reason || t('common.field.no_active_task_to_cancel'))
     }
-  } catch (e: any) {
-    // 已被拦截器处理
+  } catch {
+    // 拦截器处理
   } finally {
     cancelling.value = false
   }
 }
 
-// ===== 计算 =====
-const status = computed(() => task.value.activeTask?.status ?? (task.value.inProgress ? 'running' : 'idle'))
-const stage = computed(() => task.value.activeTask?.stage ?? '-')
-const progressPct = computed(() => task.value.activeTask?.progressPct ?? null)
-// P1.1 (Task 3): 是否有 paused 状态的 ETL (前端根据此显示"恢复"按钮)
-const hasPausedTask = ref(false)
-async function checkPausedTask() {
-  try {
-    const hist = await etlApi.history(20, 'paused')
-    hasPausedTask.value = (hist?.items?.length ?? 0) > 0
-  } catch (e) { hasPausedTask.value = false }
-}
-onMounted(() => { checkPausedTask() })
-
-// P1.1 (Task 3): 暂停当前活跃 ETL 任务
-//   与 Cancel 区别: Cancel 走 cts.Cancel() 抛异常, Pause 走 flag 标记, 当前批次跑完后优雅退出
 async function doPause() {
   try {
     await ElMessageBox.confirm(
-      t('admin.etlview.string.pause_current_etl_task', { resume: t('common.action.resume'), cancel: t('common.field.cancel') }),
+      t('admin.etlview.string.pause_current_etl_task', {
+        resume: t('common.action.resume'),
+        cancel: t('common.field.cancel')
+      }),
       t('admin.etlview.string.pause_etl_task'),
-      { type: 'warning', confirmButtonText: t('admin.etlview.buttontext.pause'), cancelButtonText: t('admin.etlview.buttontext.pause') }
+      { type: 'warning', confirmButtonText: t('admin.etlview.buttontext.pause'), cancelButtonText: t('admin.etlview.buttontext.no_pause') }
     )
   } catch { return }
   pausing.value = true
@@ -364,14 +234,13 @@ async function doPause() {
     } else {
       ElMessage.info(r.reason || t('admin.etlview.info.task_pause'))
     }
-  } catch (e: any) {
-    // 已被拦截器处理
+  } catch {
+    // 拦截器处理
   } finally {
     pausing.value = false
   }
 }
 
-// P1.1 (Task 3): 恢复暂停的 ETL 任务 — 从最近 paused 记录的 checkpoint_id 续读
 async function doResume() {
   try {
     await ElMessageBox.confirm(
@@ -385,29 +254,60 @@ async function doResume() {
     const r = await etlApi.resume()
     if (r.resumed) {
       ElMessage.success(t('admin.etlview.string.resume_triggered_entity_entity', { entity: r.entity, checkpoint: r.checkpointId, line: r.nextLineNo }))
-      hasPausedTask.value = false  // Resume 已触发新的 ETL, paused 记录应已不算最新
+      hasPausedTask.value = false
     } else {
       ElMessage.warning(r.error || t('common.action.restore_failed'))
     }
-  } catch (e: any) {
-    // 已被拦截器处理
+  } catch {
+    // 拦截器处理
   } finally {
     resuming.value = false
   }
 }
 
+// ===== 计算属性 (供 EtlPipeline 传入) =====
+const status = computed(() => task.value.activeTask?.status ?? (task.value.inProgress ? 'running' : 'idle'))
+const stage = computed(() => task.value.activeTask?.stage ?? '-')
+const progressPct = computed(() => task.value.activeTask?.progressPct ?? null)
+
+const pipelineRows = computed(() => {
+  if (task.value.activeTask) {
+    return {
+      read: task.value.activeTask.read,
+      inserted: task.value.activeTask.inserted,
+      updated: task.value.activeTask.updated,
+      indexed: task.value.activeTask.indexed,
+      errors: task.value.activeTask.errors
+    }
+  }
+  if (lastFinished.value) {
+    return {
+      read: lastFinished.value.read,
+      inserted: lastFinished.value.inserted,
+      updated: lastFinished.value.updated,
+      indexed: lastFinished.value.indexed,
+      errors: lastFinished.value.errors
+    }
+  }
+  return {}
+})
+
+const elapsedSec = computed(() => task.value.activeTask?.elapsedSec)
+
+// ===== 工具 =====
 function fmt(n?: number) {
   if (n === undefined || n === null) return '-'
   return n.toLocaleString()
 }
-
 function fmtBytes(n?: number) {
   if (!n) return '-'
   if (n < 1024) return `${n} B`
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
   return `${(n / 1024 / 1024).toFixed(2)} MB`
 }
-
+function prettyJson(raw: string): string {
+  try { return JSON.stringify(JSON.parse(raw), null, 2) } catch { return raw }
+}
 function statusTagType(s: string): 'success' | 'warning' | 'info' | 'danger' | 'primary' {
   if (s === 'running') return 'primary'
   if (s === 'completed') return 'success'
@@ -415,39 +315,41 @@ function statusTagType(s: string): 'success' | 'warning' | 'info' | 'danger' | '
   if (s === 'idle') return 'info'
   return 'warning'
 }
-
-function stageLabel(s: string) {
-  return (
-    {
-      staging: t('admin.etlview.string.copy_staging'),
-      insert: t('admin.etlview.string.insert_write_db'),
-      commit: t('admin.etlview.string.commit_submit'),
-      meili: t('admin.etlview.string.meili_sync'),
-      done: t('admin.etlview.string.complete')
-    } as Record<string, string>
-  )[s] ?? s
-}
-
-// Day 9.1: 格式化 JSON 样本 (尝试 JSON.parse 失败则原样返回)
-function prettyJson(raw: string): string {
-  try {
-    return JSON.stringify(JSON.parse(raw), null, 2)
-  } catch {
-    return raw
-  }
-}
 </script>
 
 <template>
   <div class="p-3 max-w-screen-2xl mx-auto">
-    <!-- A11y axe: h1 标题 (page-has-heading-one) -->
-    <h1 class="text-lg font-medium mb-3">ETL 触发与监控</h1>
-    <!-- 顶部：触发表单 -->
+    <h1 class="text-lg font-medium mb-3">{{ t('admin.etlview.page_title') }}</h1>
+
+    <!-- 1. KPI 概览 -->
+    <div class="mb-3">
+      <EtlKpiCards />
+    </div>
+
+    <!-- 2. Pipeline 流程图 -->
     <el-card shadow="never" class="mb-3">
       <template #header>
         <div class="flex items-center gap-2">
-          <span class="font-semibold">手动 ETL 触发</span>
-          <el-tag size="small" type="info">Day 8.4</el-tag>
+          <span class="font-semibold">{{ t('admin.etlview.section.pipeline') }}</span>
+          <el-tag v-if="status !== 'idle'" :type="statusTagType(status)" size="small">
+            {{ t(`admin.etlview.pipeline.status_${status}`) }}
+          </el-tag>
+        </div>
+      </template>
+      <EtlPipeline
+        :stage="stage"
+        :status="status as any"
+        :rows="pipelineRows"
+        :progress-pct="progressPct"
+        :elapsed-sec="elapsedSec"
+      />
+    </el-card>
+
+    <!-- 3. 触发卡片 -->
+    <el-card shadow="never" class="mb-3">
+      <template #header>
+        <div class="flex items-center gap-2">
+          <span class="font-semibold">{{ t('admin.etlview.section.trigger') }}</span>
         </div>
       </template>
 
@@ -480,7 +382,6 @@ function prettyJson(raw: string): string {
         <el-form-item label=" ">
           <div class="flex items-center gap-3">
             <el-checkbox v-model="form.dryRun">dry-run (仅校验文件)</el-checkbox>
-            <!-- Day 11 Phase 1: cascade 安全锁, 仅 products + full-load 显示 -->
             <el-tooltip
               v-if="form.entity === 'products' && form.mode === 'full-load' && !form.dryRun"
               :content="t('admin.etlview.string.on_truncate_clear_xrefs')"
@@ -502,7 +403,7 @@ function prettyJson(raw: string): string {
               :loading="pausing"
               @click="doPause"
             >
-              暂停任务
+              {{ t('admin.etlview.buttontext.pause') }}
             </el-button>
             <el-button
               v-if="status === 'running'"
@@ -510,7 +411,7 @@ function prettyJson(raw: string): string {
               :loading="cancelling"
               @click="doCancel"
             >
-              取消任务
+              {{ t('admin.etlview.templatetext.cancel_task') }}
             </el-button>
             <el-button
               v-if="status !== 'running' && hasPausedTask"
@@ -518,114 +419,31 @@ function prettyJson(raw: string): string {
               :loading="resuming"
               @click="doResume"
             >
-              恢复暂停的任务
+              {{ t('admin.etlview.buttontext.resume') }}
             </el-button>
           </div>
         </el-form-item>
       </el-form>
     </el-card>
 
-    <!-- 实时进度 -->
+    <!-- 4. 告警状态 (P2 占位) -->
     <el-card shadow="never" class="mb-3">
       <template #header>
         <div class="flex items-center gap-2">
-          <span class="font-semibold">实时进度</span>
-          <el-tag :type="statusTagType(status)" size="small">{{ status }}</el-tag>
-          <el-tag v-if="status === 'running'" size="small" type="info">stage: {{ stageLabel(stage) }}</el-tag>
+          <span class="font-semibold">{{ t('admin.etlview.section.alert_status') }}</span>
         </div>
       </template>
-
-      <div v-if="!task.activeTask" class="text-[var(--color-text-muted)] text-sm">
-        当前无活跃任务. 等待触发或查看历史任务.
-      </div>
-
-      <div v-else>
-        <!-- 进度条 -->
-        <div class="mb-3">
-          <el-progress
-            v-if="progressPct !== null"
-            :percentage="progressPct"
-            :stroke-width="14"
-            :text-inside="true"
-            :status="status === 'failed' ? 'exception' : status === 'completed' ? 'success' : undefined"
-          />
-          <el-progress v-else :percentage="0" :stroke-width="14" :indeterminate="true" />
-          <div class="text-xs text-[var(--color-text-muted)] mt-1">
-            rows: {{ fmt(task.activeTask.rowsProcessed) }} /
-            {{ task.activeTask.rowsTotal !== null ? fmt(task.activeTask.rowsTotal) : '?' }}
-            · elapsed: {{ task.activeTask.elapsedSec ?? 0 }}s
-            · started: {{ task.activeTask.startedAt ?? '-' }}
-          </div>
-        </div>
-
-        <!-- 实时计数 -->
-        <el-descriptions :column="4" size="small" border>
-          <el-descriptions-item label="read">{{ fmt(task.activeTask.read) }}</el-descriptions-item>
-          <el-descriptions-item label="inserted">{{ fmt(task.activeTask.inserted) }}</el-descriptions-item>
-          <el-descriptions-item label="updated">{{ fmt(task.activeTask.updated) }}</el-descriptions-item>
-          <el-descriptions-item label="skipped">{{ fmt(task.activeTask.skipped) }}</el-descriptions-item>
-          <el-descriptions-item label="errors">{{ fmt(task.activeTask.errors) }}</el-descriptions-item>
-          <el-descriptions-item label="indexed">{{ fmt(task.activeTask.indexed) }}</el-descriptions-item>
-          <el-descriptions-item label="indexPending">{{ fmt(task.activeTask.indexPending) }}</el-descriptions-item>
-          <el-descriptions-item label="currentFile">
-            <el-tooltip :content="task.activeTask.currentFile ?? ''" placement="top" v-if="task.activeTask.currentFile">
-              <span class="text-xs">{{ task.activeTask.currentFile.length > 40 ? task.activeTask.currentFile.slice(0, 40) + '...' : task.activeTask.currentFile }}</span>
-            </el-tooltip>
-            <span v-else>-</span>
-          </el-descriptions-item>
-        </el-descriptions>
-
-        <!-- 错误信息 -->
-        <div v-if="task.activeTask.lastError" class="mt-3">
-          <el-alert :title="task.activeTask.lastError" type="error" :closable="false" />
-        </div>
-      </div>
+      <EtlAlertStatus />
     </el-card>
 
-    <!-- dry-run 结果 (Day 9.1: 含前 5 行样本) -->
-    <el-card v-if="lastDryRun" shadow="never" class="mb-3">
+    <!-- 5. 最近一次完成结果 -->
+    <el-card v-if="lastFinished" shadow="never" class="mb-3">
       <template #header>
         <div class="flex items-center gap-2">
-          <span class="font-semibold">最近 dry-run 校验</span>
-          <el-tag size="small" type="info">{{ lastDryRun.mode }}</el-tag>
-          <el-tag v-if="lastDryRun.samples && lastDryRun.samples.length > 0" size="small" type="success">
-            样本 {{ lastDryRun.samples.length }} 行
-          </el-tag>
-        </div>
-      </template>
-      <el-descriptions :column="2" size="small" border>
-        <el-descriptions-item :label="t('admin.etlview.label.file_v2')">{{ lastDryRun.file }}</el-descriptions-item>
-        <el-descriptions-item :label="t('admin.etlview.label.en')">{{ fmtBytes(lastDryRun.sizeBytes) }}</el-descriptions-item>
-        <el-descriptions-item :label="t('admin.etlview.label.rows_count')">{{ fmt(lastDryRun.lines) }}</el-descriptions-item>
-        <el-descriptions-item :label="t('common.field.mode')">{{ lastDryRun.mode }}</el-descriptions-item>
-      </el-descriptions>
-
-      <div v-if="lastDryRun.samples && lastDryRun.samples.length > 0" class="mt-3">
-        <div class="text-sm font-semibold mb-1">样本预览 (前 {{ lastDryRun.samples?.length || 0 }} 行 JSON)</div>
-        <el-table :data="(showAllSamples ? lastDryRun.samples : lastDryRun.samples.slice(0, 10)).map((s, i) => ({ idx: i + 1, raw: s }))" size="small" border max-height="320">
-          <el-table-column prop="idx" label="#" width="50" />
-          <el-table-column :label="t('admin.etlview.label.original_json')">
-            <template #default="{ row }">
-              <pre class="text-xs whitespace-pre-wrap break-all m-0">{{ prettyJson(row.raw) }}</pre>
-            </template>
-          </el-table-column>
-        </el-table>
-        <div class="mt-2 flex justify-end">
-          <el-button text size="small" @click="showAllSamples = !showAllSamples">
-            {{ showAllSamples ? t('admin.etlview.templatetext.collapse_show_front_rows') : t('admin.etlview.templatetext.expand_all') + (lastDryRun.samples?.length || 0) + $t('admin.etlview.templatetext.expand_all') }}
-          </el-button>
-        </div>
-      </div>
-    </el-card>
-
-    <!-- 最近完成 -->
-    <el-card v-if="lastFinished" shadow="never">
-      <template #header>
-        <div class="flex items-center gap-2">
-          <span class="font-semibold">最近一次完成结果</span>
+          <span class="font-semibold">{{ t('admin.etlview.section.last_finished') }}</span>
           <el-tag :type="statusTagType(lastFinished.status)" size="small">{{ lastFinished.status }}</el-tag>
           <div class="flex-1" />
-          <el-button size="small" text @click="clearLastFinished">清除</el-button>
+          <el-button size="small" text @click="clearLastFinished">{{ t('admin.etlview.success.phrase_21459') }}</el-button>
         </div>
       </template>
       <el-descriptions :column="4" size="small" border>
@@ -648,7 +466,7 @@ function prettyJson(raw: string): string {
       </div>
 
       <div v-if="lastFinished.recentErrors && lastFinished.recentErrors.length > 0" class="mt-3">
-        <div class="text-sm font-semibold mb-1">最近错误 (最多 10 条)</div>
+        <div class="text-sm font-semibold mb-1">{{ t('admin.etlview.section.recent_errors') }}</div>
         <el-table :data="lastFinished.recentErrors" size="small" max-height="240" border>
           <el-table-column prop="at" :label="t('admin.etlview.label.timestamp')" width="200" />
           <el-table-column prop="message" :label="t('admin.etlview.label.error')" show-overflow-tooltip />
@@ -656,32 +474,75 @@ function prettyJson(raw: string): string {
       </div>
     </el-card>
 
-    <!-- Day 9.8: ETL 取消审计 — reason_code 饼图 + 历史列表 -->
+    <!-- 6. dry-run 结果 (含样本预览) -->
+    <el-card v-if="lastDryRun" shadow="never" class="mb-3">
+      <template #header>
+        <div class="flex items-center gap-2">
+          <span class="font-semibold">{{ t('admin.etlview.section.dry_run') }}</span>
+          <el-tag size="small" type="info">{{ lastDryRun.mode }}</el-tag>
+          <el-tag v-if="lastDryRun.samples && lastDryRun.samples.length > 0" size="small" type="success">
+            {{ t('admin.etlview.dry_run.samples_count', { count: lastDryRun.samples.length }) }}
+          </el-tag>
+        </div>
+      </template>
+      <el-descriptions :column="2" size="small" border>
+        <el-descriptions-item :label="t('admin.etlview.label.file_v2')">{{ lastDryRun.file }}</el-descriptions-item>
+        <el-descriptions-item :label="t('admin.etlview.label.en')">{{ fmtBytes(lastDryRun.sizeBytes) }}</el-descriptions-item>
+        <el-descriptions-item :label="t('admin.etlview.label.rows_count')">{{ fmt(lastDryRun.lines) }}</el-descriptions-item>
+        <el-descriptions-item :label="t('common.field.mode')">{{ lastDryRun.mode }}</el-descriptions-item>
+      </el-descriptions>
+
+      <div v-if="lastDryRun.samples && lastDryRun.samples.length > 0" class="mt-3">
+        <div class="text-sm font-semibold mb-1">
+          {{ t('admin.etlview.dry_run.samples_preview', { count: lastDryRun.samples.length }) }}
+        </div>
+        <el-table
+          :data="(showAllSamples ? lastDryRun.samples : lastDryRun.samples.slice(0, 10)).map((s, i) => ({ idx: i + 1, raw: s }))"
+          size="small" border max-height="320"
+        >
+          <el-table-column prop="idx" label="#" width="50" />
+          <el-table-column :label="t('admin.etlview.label.original_json')">
+            <template #default="{ row }">
+              <pre class="text-xs whitespace-pre-wrap break-all m-0">{{ prettyJson(row.raw) }}</pre>
+            </template>
+          </el-table-column>
+        </el-table>
+        <div class="mt-2 flex justify-end">
+          <el-button text size="small" @click="showAllSamples = !showAllSamples">
+            {{ showAllSamples
+              ? t('admin.etlview.templatetext.collapse_show_front_rows')
+              : t('admin.etlview.templatetext.expand_all', { count: lastDryRun.samples.length }) }}
+          </el-button>
+        </div>
+      </div>
+    </el-card>
+
+    <!-- 7. 取消审计 (reason_code 饼图 + 历史) -->
     <el-card shadow="never">
       <template #header>
         <div class="flex items-center gap-2">
-          <span class="font-semibold">取消审计 (按 reason_code 聚合)</span>
-          <el-tag size="small" type="info">运营可观察</el-tag>
+          <span class="font-semibold">{{ t('admin.etlview.section.audit') }}</span>
+          <el-tag size="small" type="info">{{ t('admin.etlview.audit.observable_tag') }}</el-tag>
           <div class="flex-1" />
-          <el-button size="small" :loading="historyLoading" @click="refreshAudit">刷新</el-button>
+          <el-button size="small" :loading="historyLoading" @click="refreshAudit">{{ t('common.action.refresh') }}</el-button>
         </div>
       </template>
       <div class="audit-grid">
-        <!-- 饼图 -->
         <div class="audit-pie">
           <EtlReasonCodePie :data="reasonCodeAgg" />
         </div>
-        <!-- 历史表 -->
         <div class="audit-table">
-          <div class="text-xs text-[var(--color-text-muted)] mb-2">最近 20 条 cancelled 记录</div>
+          <div class="text-xs text-[var(--color-text-muted)] mb-2">
+            {{ t('admin.etlview.audit.recent_20_cancelled') }}
+          </div>
           <el-table :data="historyItems" size="small" max-height="380" border stripe>
             <el-table-column prop="id" label="#" width="60" />
             <el-table-column prop="entityType" label="entity" width="90" />
             <el-table-column prop="mode" label="mode" width="100" />
-            <el-table-column label="reasonCode" width="160">
+            <el-table-column :label="t('admin.etlview.audit.reason_code')" width="160">
               <template #default="{ row }">
                 <el-tag v-if="row.reasonCode" size="small" type="info">{{ row.reasonCode }}</el-tag>
-                <span v-else class="text-gray-400 text-xs">LEGACY</span>
+                <span v-else class="text-gray-400 text-xs">{{ t('admin.etlview.audit.legacy') }}</span>
               </template>
             </el-table-column>
             <el-table-column prop="cancelReason" :label="t('admin.etlview.label.en_v2')" show-overflow-tooltip min-width="180" />
@@ -716,15 +577,9 @@ function prettyJson(raw: string): string {
   gap: 24px;
   align-items: flex-start;
 }
-.audit-pie {
-  padding: 8px 0;
-}
-.audit-table {
-  min-width: 0;  /* 防止 grid item 内容溢出 */
-}
+.audit-pie { padding: 8px 0; }
+.audit-table { min-width: 0; }
 @media (max-width: 1024px) {
-  .audit-grid {
-    grid-template-columns: 1fr;
-  }
+  .audit-grid { grid-template-columns: 1fr; }
 }
 </style>

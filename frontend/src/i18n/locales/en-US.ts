@@ -99,29 +99,93 @@ export default {
       },
     },
     etlview: {
+      page_title: 'ETL Trigger & Monitor',
+      section: {
+        pipeline: 'Data Pipeline',
+        trigger: 'Manual ETL Trigger',
+        alert_status: 'Alert Status',
+        last_finished: 'Last Finished Result',
+        dry_run: 'Recent dry-run Validation',
+        recent_errors: 'Recent Errors (max 10)',
+        audit: 'Cancel Audit (aggregate by reason_code)'
+      },
+      pipeline: {
+        stage_read: 'Read',
+        stage_staging: 'Staging',
+        stage_insert: 'Insert',
+        stage_commit: 'Commit',
+        stage_meili: 'Meili',
+        stage_done: 'Done',
+        stage_idle: 'Idle',
+        status_running: 'Running',
+        status_completed: 'Completed',
+        status_failed: 'Failed',
+        status_paused: 'Paused',
+        status_cancelled: 'Cancelled',
+        status_idle: 'Idle',
+        elapsed_label: 'Elapsed',
+        errors_label: 'Errors'
+      },
+      kpi: {
+        trigger_24h: '24h Triggers',
+        success_24h: '24h Success',
+        failed_24h: '24h Failed',
+        avg_duration: '24h Avg Duration',
+        last_24h: 'Last 24 hours',
+        success_rate: 'Success rate {rate}%',
+        need_attention: 'Needs attention',
+        all_ok: 'All OK',
+        completed_only: 'Completed tasks only'
+      },
+      alert: {
+        p2_tag: 'P2 Pending',
+        title: 'Alert System',
+        description: 'Alert system (DingTalk / WeChat / Generic Webhook / WeChat MP) is planned for the next phase.',
+        planned_types: 'Alert types',
+        planned_channels: 'Channels',
+        type_etl: 'ETL Task',
+        type_perf: 'Performance',
+        type_security: 'Security',
+        type_access: 'Access',
+        type_resource: 'Resource',
+        channel_dingtalk: 'DingTalk',
+        channel_wechat: 'WeChat Work',
+        channel_webhook: 'Generic Webhook',
+        view_design_btn: 'View Alert Design Doc'
+      },
+      audit: {
+        observable_tag: 'Operational',
+        recent_20_cancelled: 'Recent 20 cancelled records',
+        reason_code: 'Reason Code',
+        legacy: 'Legacy'
+      },
+      dry_run: {
+        samples_count: '{count} samples',
+        samples_preview: 'Sample preview (top {count} JSON rows)'
+      },
       buttontext: {
         next: 'Next',
 
         confirm_cancel: 'Confirm Cancel',
 
         pause: 'Pause',
-        no_pause: '不Pause',
+        no_pause: "Don't Pause",
         resume: 'Resume',
-        no_resume: '不Resume',
+        no_resume: "Don't Resume",
       },
       info: {
-        description_empty_default: '可补充详细Description (留Empty 用Default)',
-        cancel_note: 'Cancel 原因Note',
+        description_empty_default: 'Optional detailed description (empty = use default)',
+        cancel_note: 'Cancel Reason Note',
 
-        task_pause: '无活跃Task 可Pause',
+        task_pause: 'No active task to pause',
       },
       label: {
         entity: 'Entity',
 
-        file: 'File 路径',
+        file: 'File Path',
         file_v2: 'File',
         en: '[EN] 大小',
-        rows_count: 'rows Count',
+        rows_count: 'Rows Count',
 
         original_json: 'Original JSON',
         timestamp: 'Timestamp',
@@ -132,18 +196,18 @@ export default {
         cancel_timestamp: 'Cancel Timestamp',
       },
       placeholder: {
-        jsonl_absolute_path: 'JSONL Absolute path',
+        jsonl_absolute_path: 'JSONL Absolute Path',
       },
       string: {
-        sse_on_browser_will: 'SSE 连接断On, Browser will Auto 重连',
+        sse_on_browser_will: 'SSE disconnected, browser will auto-reconnect',
 
 
 
 
         task_timeout: 'Task timeout',
-        task_execute: 'Task Execute 超时',
-        system_shutdown_restart: 'System shutdown/Restart',
-        service_close_restart: 'Service Close/Restart',
+        task_execute: 'Task execution timeout',
+        system_shutdown_restart: 'System shutdown/restart',
+        service_close_restart: 'Service close/restart',
 
 
         cancel_etl_task: 'Cancel ETL Task',
@@ -151,35 +215,36 @@ export default {
 
         pause_etl_task: 'Pause ETL Task',
 
-        pause_current_etl_task: 'Pause Current ETL Task?\n\nCurrent batch will Exit gracefully after Complete, checkpoint_id will Write etl_progress_log, the Follow "{resume}" button can be used to 续读 from 该 point.\n\n(Different from "{cancel}" — Cancel will Immediately Terminate and Rollback Current batch)',
+        pause_current_etl_task: 'Pause current ETL task?\n\nCurrent batch will exit gracefully after complete, checkpoint_id will be written to etl_progress_log, the following "{resume}" button can be used to continue from that point.\n\n(Different from "{cancel}" — cancel will immediately terminate and rollback current batch)',
 
-        resume_pause_etl_task: 'Resume Pause ETL Task?\\n\\nwill from Recent 一 items paused Record checkpoint_id+1 rows Start 续读, Skip COMMIT batch times.',
+        resume_pause_etl_task: 'Resume the paused ETL task?\n\nWill continue from the latest paused record\'s checkpoint_id+1 row, skipping committed batches.',
         resume_etl_task: 'Resume ETL Task',
-        resume_triggered_entity_entity: 'Resume Triggered: entity={entity} checkpoint={checkpoint} (from line {line})',
-        resume_triggered_entity_entity_alt: 'Resume Triggered: entity={entity} checkpoint={checkpoint} (from line {line} Continue)',
+        resume_triggered_entity_entity: 'Resume triggered: entity={entity} checkpoint={checkpoint} (from line {line})',
+        resume_triggered_entity_entity_alt: 'Resume triggered: entity={entity} checkpoint={checkpoint} (continue from line {line})',
         copy_staging: 'COPY Staging',
         insert_write_db: 'INSERT Write DB',
         commit_submit: 'COMMIT Submit',
         meili_sync: 'Meili Sync',
         complete: 'Complete',
-        on_truncate_clear_xrefs: 'On 启: TRUNCATE 同时 Clear xrefs/apps (首times 全Count 场景); Close: Only 清 products, 保留Off 联Table (单独 Refresh 主Table)',
+        on_truncate_clear_xrefs: 'On: TRUNCATE clears xrefs/apps too (initial full load); Off: only clear products, keep related tables (refresh main table separately)',
         auto_recognized_entity_entity: 'Auto-recognized entity={entity}, file: {name}',
-        file_filled_name_entity: 'File Filled: {name} (entity need manual select)',
+        file_filled_name_entity: 'File filled: {name} (entity needs manual select)',
         dropped_total_files_only: 'Dropped {total} files, only first used: {name}',
-        on_etl_file: '松On 以填入 ETL File 路径',
+        on_etl_file: 'Drop here to fill ETL file path',
 
-        cancel_signal_sent_code: 'Cancel Signal Sent (code: {code}), task will Terminate soon',
+        cancel_signal_sent_code: 'Cancel signal sent (code: {code}), task will terminate soon',
       },
       success: {
-        dry_run_validation_completed: 'dry-run Validation completed',
-        triggered_etl_background_execute: 'Triggered ETL, background Execute',
-        phrase_21459: '清除',
+        dry_run_validation_completed: 'dry-run validation completed',
+        triggered_etl_background_execute: 'Triggered ETL, background execute',
+        phrase_21459: 'Cleared',
       },
       templatetext: {
         immediately_import: 'Immediately Import',
         execute_dry_run: 'Execute dry-run',
-        expand_all: 'Expand All',
-        collapse_show_front_rows: 'Collapse (只Show Front 10 rows)',
+        expand_all: 'Expand All {count} rows',
+        collapse_show_front_rows: 'Collapse (show top 10 rows)',
+        cancel_task: 'Cancel Task',
       },
       warning: {
 
