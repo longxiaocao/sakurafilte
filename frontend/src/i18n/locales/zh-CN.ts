@@ -937,7 +937,9 @@ export default {
     showingFirst: '(显示前 {n} 条)',
     provider: '搜索引擎: {provider}',
     batchTitle: '批量搜索',
-    singleTitle: '单条搜索'
+    singleTitle: '单条搜索',
+    // 公开搜索页入口: 8 字段联想 + 明细表 + 加入对比 (面向客户/外网)
+    advancedSearch: '高级搜索'
   },
   product: {
     published: '已发布',

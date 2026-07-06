@@ -928,7 +928,9 @@ export default {
     showingFirst: '(showing first {n})',
     provider: 'Provider: {provider}',
     batchTitle: 'Batch Search',
-    singleTitle: 'Single Search'
+    singleTitle: 'Single Search',
+    // Entry to public search page (8-field typeahead + table + compare, for customers/public)
+    advancedSearch: 'Advanced Search'
   },
   product: {
     published: 'Published',

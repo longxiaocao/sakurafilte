@@ -271,6 +271,19 @@ onBeforeUnmount(() => {
             :loading="loading"
             :aria-label="t('common.search')"
           >{{ t('common.search') }}</el-button>
+          <!-- 入口: 跳转公开搜索 (8 字段联想 + 8 列明细 + 加入对比)
+               WHY: 两个页定位不同 — 本页是内部用户深度查询 (关键词 + 容差 + 批量粘贴),
+                    公开搜索页是给客户/外网用的友好界面 (联想/对比/极简)
+               客户被内部同事引导到 /search 后, 通过此按钮可一键到"客户友好"页面 -->
+          <el-button
+            size="large"
+            plain
+            @click="router.push('/public/search')"
+            :aria-label="t('search.advancedSearch', '高级搜索 (公开版)')"
+          >
+            <el-icon class="mr-1" aria-hidden="true"><Search /></el-icon>
+            {{ t('search.advancedSearch', '高级搜索') }}
+          </el-button>
         </div>
 
         <!-- Task 9 (P3.1): 容差切换结果数变化提示, 仅在切换后短暂出现 -->
