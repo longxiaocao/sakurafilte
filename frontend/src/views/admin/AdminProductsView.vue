@@ -320,11 +320,13 @@ onBeforeUnmount(() => {
 
     <!-- 表格 -->
     <!-- P1-5 修复: 表格容器加 overflow-x-auto - 13 列总宽 800+px, 移动端触发水平滚动而非列被裁切 -->
+    <!-- P-Admin-UX v2: tableLayout="auto" 让列按内容分配, 加一个无 width 的弹性列填满右侧空区 -->
     <div class="hairline overflow-x-auto">
       <el-table
         :data="items"
         v-loading="loading"
         size="small"
+        table-layout="auto"
         @selection-change="(rows: ProductListItem[]) => (selected = rows)"
         max-height="calc(100vh - 240px)"
       >
@@ -371,6 +373,8 @@ onBeforeUnmount(() => {
 
           </template>
         </el-table-column>
+        <!-- P-Admin-UX v2: 弹性列占满右侧空区 (无 width, tableLayout=auto 模式下自动吸收剩余空间) -->
+        <el-table-column min-width="1" label="" />
       </el-table>
     </div>
 

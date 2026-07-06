@@ -36,49 +36,42 @@ const dictItems = [
 //   改方案: nav 中 "产品详情" 改为 "OEM 查询", 点击后弹 ElMessageBox.prompt 收 oem, 再跳详情
 //   避免之前直接 router.push('/product') 触发 "No match found" 警告
 //
-// P-Admin-UX: 顶栏分类 — 解决 admin 路径下点击 "产品搜索/OEM 查询/产品对比" 跳出 admin 体验问题
-//   - 公共区 (仅非 admin 路径): 产品搜索 / OEM 查询 / 产品对比
-//   - 后台区 (仅 admin 路径): 产品管理 + "高级搜索" 入口 / 字典管理 / 用户管理 / ETL 触发 / 更多
-//   - 高级搜索: 复用公开搜索页 (/public/search 8 字段 + typeahead + 加入对比), 避免重复实现
-//   - OEM 查询 + 产品对比 + 产品搜索: 不在 admin 顶栏显示, 避免点击后跳出 admin 路径
-//   - 对比命名区分: 公开版 (/compare) = 游客, 高级版 (/admin/compare, 收纳"更多"下) = 运维
+// P-Admin-UX v2: 顶栏扁平化 — 解决"管理员跳到公开页像退出登录" + "更多里收纳太严"两个体验问题
+//   - 公共 + admin 顶栏合并显示, 管理员用公开功能时不"丢" admin 入口
+//   - "更多"只收纳 4 个低频运维功能 (性能/错误/API/帮助), 高级对比挪到主顶栏 (运维常用)
+//   - 1280px 视口: 10 个按钮 + 3 工具按钮, 加 gap-0.5 + whitespace-nowrap 可容纳
+//   - < 1024px (lg 以下): 全部挪到移动端 drawer, 桌面 nav 隐藏
 const navItems = computed(() => [
-  // ===== 公共区 (非 admin 路径可见) =====
-  ...(isAdminPath.value
-    ? []
-    : [
-        { label: '产品搜索', path: '/search', icon: 'Search' },
-        { label: 'OEM 查询', action: 'oemLookup', icon: 'Document' },
-        { label: '产品对比', path: '/compare', icon: 'DataLine' }
-      ]),
-  // ===== 后台区 (admin 路径可见) =====
+  // ===== 公共区 (始终显示) =====
+  { label: '产品搜索', path: '/search', icon: 'Search' },
+  { label: 'OEM 查询', action: 'oemLookup', icon: 'Document' },
+  { label: '产品对比', path: '/compare', icon: 'DataLine' },
+  // ===== 后台区 (仅 admin 路径显示) =====
   ...(isAdminPath.value
     ? [
         { label: '产品管理', path: '/admin/products', icon: 'Goods' },
-        // P-Admin-UX: 高级搜索入口 — 跳转公开搜索页 8 字段, 避免 admin 顶栏被公开入口污染
-        //   与 SearchView 加的 "高级搜索" 按钮一致, 内部用户从后台也能跳到对外友好搜索
-        { label: '高级搜索', path: '/public/search', icon: 'Search' },
-        // Day 10+: 字典管理下拉菜单 (P1.3 OEM 品牌 + P2.2 7 个新字典)
+        // 公开搜索页 (8 字段 typeahead) — admin 也能用, 用于快速查询/对比客户产品
+        { label: '高级搜索', path: '/public/search', icon: 'Filter' },
+        // Day 10+: 字典管理下拉菜单
         { label: '字典管理', dropdown: 'dict', icon: 'Collection' },
         // JWT 改造: 用户管理 (仅 admin 角色显示)
         ...(isAdmin() ? [{ label: '用户管理', path: '/admin/users', icon: 'User' }] : []),
         { label: 'ETL 触发', path: '/admin/etl', icon: 'Loading' },
-        // P-Admin-UX: 高级功能收纳到 "更多" 下拉, 减少顶栏按钮拥挤
-        //   包含: 高级对比 / 性能 / 错误 / API / 帮助
+        // 高级对比挪到主顶栏 (运维常用, 不应藏在二级菜单)
+        { label: '高级对比', path: '/admin/compare', icon: 'DataBoard' },
+        // P-Admin-UX v2: 收纳到 "更多" 的只剩 4 个低频运维功能
         { label: '更多', dropdown: 'more', icon: 'More' }
       ]
     : [])
 ])
 
-// P-Admin-UX: "更多"下拉菜单项 — 收纳高级功能
+// P-Admin-UX v2: "更多"下拉菜单项 — 只保留低频运维功能
 const moreItems = computed(() => [
-  // P3.5 (Task 12): 后台产品对比 (最多 6 个产品, 列可调序, 打印优化, 含下架)
-  { label: '高级对比', path: '/admin/compare', icon: 'DataBoard' },
-  // P5.5+: 性能监控 (P50/P95/P99 + 健康探针 + Token 轮转状态)
+  // P5.5+: 性能监控
   { label: '性能', path: '/admin/perf', icon: 'TrendCharts' },
   // 批次 6c: 错误日志
   { label: '错误', path: '/admin/errors', icon: 'Warning' },
-  // 批次 6d: API 文档 (OpenAPI 浏览器)
+  // 批次 6d: API 文档
   { label: 'API', path: '/admin/api-docs', icon: 'Document' },
   // P5.4: 帮助页
   { label: '帮助', path: '/admin/help', icon: 'QuestionFilled' }

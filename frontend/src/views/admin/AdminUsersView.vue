@@ -279,7 +279,7 @@ onMounted(() => {
       <h1 class="text-lg font-medium">用户管理</h1>
       <span class="text-xs text-muted">JWT 鉴权 · 仅 admin 角色可管理</span>
       <div class="flex-1" />
-      <el-button v-if="canManage" type="primary" size="small" @click="openCreate">新增用户</el-button>
+      <el-button v-if="canManage" type="primary" size="small" table-layout="auto" @click="openCreate">新增用户</el-button>
     </div>
 
     <el-tabs v-model="activeTab" @tab-change="onTabChange">
@@ -302,20 +302,20 @@ onMounted(() => {
             <div class="cell-id">{{ row.id }}</div>
             <div class="cell-username" :title="row.username">{{ row.username }}</div>
             <div class="cell-role">
-              <el-tag :type="roleTagType(row.role)" size="small">{{ roleLabel(row.role) }}</el-tag>
+              <el-tag :type="roleTagType(row.role)" size="small" table-layout="auto">{{ roleLabel(row.role) }}</el-tag>
             </div>
             <div class="cell-email" :title="row.email || ''">{{ row.email || '—' }}</div>
             <div class="cell-status">
-              <el-tag v-if="row.isActive" type="success" size="small">启用</el-tag>
-              <el-tag v-else type="danger" size="small">禁用</el-tag>
+              <el-tag v-if="row.isActive" type="success" size="small" table-layout="auto">启用</el-tag>
+              <el-tag v-else type="danger" size="small" table-layout="auto">禁用</el-tag>
             </div>
             <div class="cell-last-login">{{ fmtDate(row.lastLoginAt) || '—' }}</div>
             <div class="cell-created">{{ fmtDate(row.createdAt) }}</div>
             <div class="cell-action">
-              <el-button size="small" text @click="openEdit(row)">编辑</el-button>
-              <el-button size="small" text type="warning" @click="openReset(row)">重置密码</el-button>
+              <el-button size="small" table-layout="auto" text @click="openEdit(row)">编辑</el-button>
+              <el-button size="small" table-layout="auto" text type="warning" @click="openReset(row)">重置密码</el-button>
               <el-button
-                size="small"
+                size="small" table-layout="auto"
                 text
                 type="danger"
                 :disabled="row.username === auth.user?.username"
@@ -360,8 +360,8 @@ onMounted(() => {
             <div class="cell-ip" :title="row.ip || ''">{{ row.ip || '—' }}</div>
             <div class="cell-ua" :title="row.userAgent || ''">{{ row.userAgent || '—' }}</div>
             <div class="cell-status">
-              <el-tag v-if="row.success" type="success" size="small">成功</el-tag>
-              <el-tag v-else type="danger" size="small">失败</el-tag>
+              <el-tag v-if="row.success" type="success" size="small" table-layout="auto">成功</el-tag>
+              <el-tag v-else type="danger" size="small" table-layout="auto">失败</el-tag>
             </div>
             <div class="cell-reason" :title="row.failureReason || ''">{{ row.failureReason || '—' }}</div>
           </div>
@@ -385,7 +385,7 @@ onMounted(() => {
 
     <!-- 新增用户对话框 -->
     <el-dialog v-model="createOpen" :title="t('admin.usersview.title.add_user')" width="480px">
-      <el-form :model="createForm" label-width="80px" size="small">
+      <el-form :model="createForm" label-width="80px" size="small" table-layout="auto">
         <el-form-item :label="t('common.field.username')" required>
           <el-input v-model="createForm.username" :placeholder="t('admin.usersview.placeholder.login_username')" maxlength="50" show-word-limit />
         </el-form-item>
@@ -423,7 +423,7 @@ onMounted(() => {
 
     <!-- 编辑用户对话框 -->
     <el-dialog v-model="editOpen" :title="`t('admin.usersview.title.edit_user_user', { user: editForm.username })`" width="480px">
-      <el-form :model="editForm" label-width="80px" size="small">
+      <el-form :model="editForm" label-width="80px" size="small" table-layout="auto">
         <el-form-item :label="t('common.field.username')">
           <el-input :model-value="editForm.username" disabled />
         </el-form-item>
@@ -455,7 +455,7 @@ onMounted(() => {
 
     <!-- 重置密码对话框 -->
     <el-dialog v-model="resetOpen" :title="`t('admin.usersview.title.reset_password_user', { user: resetForm.username })`" width="480px">
-      <el-form :model="resetForm" label-width="80px" size="small">
+      <el-form :model="resetForm" label-width="80px" size="small" table-layout="auto">
         <el-form-item :label="t('admin.usersview.label.password_v2')" required>
           <el-input
             v-model="resetForm.newPassword"
