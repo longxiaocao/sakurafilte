@@ -109,10 +109,10 @@ onMounted(load)
       <h1 class="text-lg font-medium">发动机字典 (Engine)</h1>
       <span class="text-xs text-muted">P2.2 后台管理 · 2 字段: 品牌 + 型号 · 用于产品表单分区 7 发动机信息</span>
       <div class="flex-1" />
-      <el-input v-model="searchKw" :placeholder="t('common.field.search_any_field')" clearable size="small" table-layout="auto" style="width: 200px" @keyup.enter="onSearch" />
-      <el-button size="small" table-layout="auto" @click="onSearch">搜索</el-button>
-      <el-checkbox v-model="includeDeleted" @change="load" size="small" table-layout="auto">含已删</el-checkbox>
-      <el-button type="primary" size="small" table-layout="auto" @click="openCreate">新增发动机</el-button>
+      <el-input v-model="searchKw" :placeholder="t('common.field.search_any_field')" clearable size="small" style="width: 200px" @keyup.enter="onSearch" />
+      <el-button size="small" @click="onSearch">搜索</el-button>
+      <el-checkbox v-model="includeDeleted" @change="load" size="small">含已删</el-checkbox>
+      <el-button type="primary" size="small" @click="openCreate">新增发动机</el-button>
     </div>
 
     <div class="hairline" v-loading="loading">
@@ -139,13 +139,13 @@ onMounted(load)
         <div class="cell-xref">{{ row.xrefCount }}</div>
         <div class="cell-updated">{{ fmtDate(row.updatedAt) }}</div>
         <div class="cell-status">
-          <el-tag v-if="row.deletedAt" type="info" size="small" table-layout="auto">已删</el-tag>
-          <el-tag v-else type="success" size="small" table-layout="auto">启用</el-tag>
+          <el-tag v-if="row.deletedAt" type="info" size="small">已删</el-tag>
+          <el-tag v-else type="success" size="small">启用</el-tag>
         </div>
         <div class="cell-action">
-          <el-button size="small" table-layout="auto" text @click="openEdit(row)" :disabled="!!row.deletedAt">编辑</el-button>
-          <el-button v-if="!row.deletedAt" size="small" table-layout="auto" text type="warning" @click="softDelete(row)">删除</el-button>
-          <el-button v-else size="small" table-layout="auto" text type="success" @click="restore(row)">恢复</el-button>
+          <el-button size="small" text @click="openEdit(row)" :disabled="!!row.deletedAt">编辑</el-button>
+          <el-button v-if="!row.deletedAt" size="small" text type="warning" @click="softDelete(row)">删除</el-button>
+          <el-button v-else size="small" text type="success" @click="restore(row)">恢复</el-button>
         </div>
       </div>
       <div v-if="!loading && items.length === 0" class="dict-empty" > {{ t('common.action.no_data_click_top_right') }}新增发动机开始</div>
@@ -154,7 +154,7 @@ onMounted(load)
     <div class="mt-2 text-xs text-muted">{{ t("common.dictviewcommon.total_drag", { total, active: activeCount, soft: total - activeCount }) }}</div>
 
     <el-dialog v-model="dialogOpen" :title="dialogMode === 'create' ? t('admin.enginesview.title.add_engine') : t('admin.enginesview.title.edit_engine')" width="540px">
-      <el-form :model="dialogForm" label-width="120px" size="small" table-layout="auto">
+      <el-form :model="dialogForm" label-width="120px" size="small">
         <el-form-item :label="t('common.action.brand')" required>
           <el-input v-model="dialogForm.engineBrand" :placeholder="t('admin.enginesview.placeholder.e_g_cummins')" maxlength="200" show-word-limit />
         </el-form-item>

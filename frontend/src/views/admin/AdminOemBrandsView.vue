@@ -214,13 +214,13 @@ onMounted(load)
         v-model="searchKw"
         :placeholder="t('admin.oembrandsview.placeholder.search_brand')"
         clearable
-        size="small" table-layout="auto"
+        size="small"
         style="width: 200px"
         @keyup.enter="onSearch"
       />
-      <el-button size="small" table-layout="auto" @click="onSearch">搜索</el-button>
-      <el-checkbox v-model="includeDeleted" @change="load" size="small" table-layout="auto">含已删</el-checkbox>
-      <el-button type="primary" size="small" table-layout="auto" @click="openCreate">新增品牌</el-button>
+      <el-button size="small" @click="onSearch">搜索</el-button>
+      <el-checkbox v-model="includeDeleted" @change="load" size="small">含已删</el-checkbox>
+      <el-button type="primary" size="small" @click="openCreate">新增品牌</el-button>
     </div>
 
     <!-- 自定义可拖拽列表 (不用 el-table, 因为 el-table 行事件绑定复杂) -->
@@ -257,21 +257,21 @@ onMounted(load)
         <div class="cell-xref">{{ row.xrefCount }}</div>
         <div class="cell-updated">{{ fmtDate(row.updatedAt) }}</div>
         <div class="cell-status">
-          <el-tag v-if="row.deletedAt" type="info" size="small" table-layout="auto">已删</el-tag>
-          <el-tag v-else type="success" size="small" table-layout="auto">启用</el-tag>
+          <el-tag v-if="row.deletedAt" type="info" size="small">已删</el-tag>
+          <el-tag v-else type="success" size="small">启用</el-tag>
         </div>
         <div class="cell-action">
-          <el-button size="small" table-layout="auto" text @click="openEdit(row)" :disabled="!!row.deletedAt">编辑</el-button>
+          <el-button size="small" text @click="openEdit(row)" :disabled="!!row.deletedAt">编辑</el-button>
           <el-button
             v-if="!row.deletedAt"
-            size="small" table-layout="auto"
+            size="small"
             text
             type="warning"
             @click="softDelete(row)"
           >删除</el-button>
           <el-button
             v-else
-            size="small" table-layout="auto"
+            size="small"
             text
             type="success"
             @click="restore(row)"
@@ -295,7 +295,7 @@ onMounted(load)
       :title="dialogMode === 'create' ? t('admin.oembrandsview.title.add_oem_brand') : t('admin.oembrandsview.title.edit_oem_brand')"
       width="480px"
     >
-      <el-form :model="dialogForm" label-width="80px" size="small" table-layout="auto">
+      <el-form :model="dialogForm" label-width="80px" size="small">
         <el-form-item :label="t('common.action.brand')" required>
           <el-input v-model="dialogForm.brand" :placeholder="t('common.field.e_g_bosch')" maxlength="100" show-word-limit />
         </el-form-item>

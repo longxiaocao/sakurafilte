@@ -373,8 +373,8 @@ onBeforeUnmount(() => {
 
           </template>
         </el-table-column>
-        <!-- P-Admin-UX v2: 弹性列占满右侧空区 (无 width, tableLayout=auto 模式下自动吸收剩余空间) -->
-        <el-table-column min-width="1" label="" />
+        <!-- P-Admin-UX v3: 无 width 弹性列, fixed 模式下自动填充剩余空间 -->
+        <el-table-column label="" />
       </el-table>
     </div>
 
@@ -526,8 +526,10 @@ onBeforeUnmount(() => {
                 <template #default="{ row }">
                   <code class="text-xs">{{ row.newVal === null || row.newVal === undefined ? 'null' : typeof row.newVal === 'object' ? JSON.stringify(row.newVal) : String(row.newVal) }}</code>
                 </template>
-              </el-table-column>
-            </el-table>
+        </el-table-column>
+        <!-- P-Admin-UX v3: 历史表无 width 弹性列 (fixed 模式下自动填充剩余空间) -->
+        <el-table-column label="" />
+      </el-table>
             <div v-else class="text-xs text-muted">无字段级变更</div>
           </el-timeline-item>
         </el-timeline>
