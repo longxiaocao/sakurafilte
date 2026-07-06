@@ -6,6 +6,7 @@
 //   /admin/products/:id/edit — 后台编辑产品
 //   /admin/etl               — 后台 ETL 触发 + 进度
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
+import i18n from '@/i18n'
 import { useAdminAuthStore } from '@/composables/useAdminAuth'
 import { ElMessage } from 'element-plus'
 
@@ -227,13 +228,13 @@ router.beforeEach((to, _from, next) => {
     const auth = useAdminAuthStore()
     // token 完全缺失 → 未登录
     if (!auth.token) {
-      ElMessage.warning('请先登录')
+      ElMessage.warning(i18n.global.t('common.feedback.info_042'))
       next({ path: '/login', query: { redirect: to.fullPath } })
       return
     }
     // 角色检查 (仅当 store 已加载 user 时生效; 旧 dev token 无 user 时跳过, 由后端 403 兜底)
     if (to.meta.requireRole === 'admin' && auth.user && !auth.isAdmin()) {
-      ElMessage.warning('仅管理员可访问用户管理页')
+      ElMessage.warning(i18n.global.t('common.feedback.info_005'))
       next({ path: '/admin/products' })
       return
     }

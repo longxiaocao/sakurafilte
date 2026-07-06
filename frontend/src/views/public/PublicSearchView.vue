@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+const { t } = useI18n()
 // P3.4 (Task 11.5): 公开搜索页 8 字段多框模糊搜索
 //   URL 格式: /public/search?oemBrand=...&oemNo2=...&oemNo3=...&machineBrand=...&machineModel=...&modelName=...&engineBrand=...&engineType=...
 //   规格 (新思路.xlsx R2): 8 字段同时支持模糊搜索,任一字段命中即返回
@@ -137,7 +139,7 @@ watch(() => route.query, () => {
 // ===== 搜索执行 =====
 async function doSearch() {
   if (allEmpty.value) {
-    ElMessage.warning('至少需要输入 1 个搜索字段')
+    ElMessage.warning(t('common.feedback.warn_040'))
     return
   }
   loading.value = true
@@ -198,7 +200,7 @@ function clearAll() {
   results.value = []
   total.value = 0
   page.value = 1
-  ElMessage.info('已清空搜索条件')
+  ElMessage.info(t('common.feedback.success_016'))
 }
 
 // ===== 详情页跳转 =====

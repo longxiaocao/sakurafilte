@@ -9,6 +9,7 @@
 //   - P2-8.2: 错误码映射表 + 500+ 不透传 detail (防 SQL/堆栈泄露)
 import axios, { AxiosError, type AxiosInstance, type AxiosRequestConfig, type InternalAxiosRequestConfig } from 'axios'
 import { ElMessage } from 'element-plus'
+import i18n from '@/i18n'
 import { useAdminAuthStore } from '@/composables/useAdminAuth'
 import type { LoginResponse } from '@/api/types'
 import { captureException, addBreadcrumb } from './errorMonitor'
@@ -138,7 +139,7 @@ http.interceptors.response.use(
         return http.request(cfg)
       }
       // refresh 失败: 跳登录页 + 提示
-      ElMessage.error('登录已过期, 请重新登录')
+      ElMessage.error(i18n.global.t('common.feedback.info_030'))
       redirectToLogin()
       return Promise.reject(err)
     }
@@ -146,7 +147,7 @@ http.interceptors.response.use(
     if (status === undefined) {
       // 网络层错误 (无响应) — 批次 6c: 上报错误监控
       if (err?.code === 'ECONNABORTED') {
-        ElMessage.error('请求超时,请检查网络后重试')
+        ElMessage.error(i18n.global.t('common.feedback.info_043'))
         captureException(err, { level: 'warning', tags: { source: 'axios', type: 'timeout' } })
       } else if (err?.code === 'ERR_NETWORK') {
         ElMessage.error('网络连接失败,请检查网络')
@@ -178,7 +179,7 @@ http.interceptors.response.use(
       // 后端 ProblemDetails.errorCode 映射 (如 ERR_AUTH_FAILED)
       const errorCode = data?.errorCode
       if (errorCode === 'ERR_AUTH_FAILED') {
-        ElMessage.error('用户名或密码错误')
+        ElMessage.error(i18n.global.t('common.feedback.error_029'))
       } else if (isProblemDetails && data.title) {
         ElMessage.error(data.title)
       } else {

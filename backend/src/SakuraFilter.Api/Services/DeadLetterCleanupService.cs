@@ -138,31 +138,43 @@ public class DeadLetterCleanupService : BackgroundService
         _logger.LogInformation("开始清理 moved_at < {Cutoff} 的 status=recovered 死信, 候选 {Total} 条 (保留 {Days} 天, 批大小 {Batch})",
             cutoff, totalCandidate, retentionDays, batchSize);
 
-        // 4) 分批删除
+        // 4) 分批删除 — 优化: 用 ORDER BY moved_at ASC + LIMIT N (而不是 Id), 配合 moved_at 索引
+        //   经验: Take(N) 不带 OrderBy 在 PG 大表上会触发 seq scan + sort
+        //   加 .OrderBy(moved_at) 让 PG 用 idx_dead_letter_moved_at (如果有) 直接拿前 N 条
         long totalDeleted = 0;
+        var swClean = System.Diagnostics.Stopwatch.StartNew();
         while (!ct.IsCancellationRequested)
         {
+            // Step 1: 取要删的 Id (ORDER BY moved_at 走索引, LIMIT N)
             var idsToDelete = await db.SearchIndexDeadLetters
                 .Where(d => d.Status == "recovered" && d.RecoveredAt != null
                     && d.MovedAt < cutoff)
-                .OrderBy(d => d.Id)
+                .OrderBy(d => d.MovedAt)
+                .ThenBy(d => d.Id)  // 同 moved_at 时按 Id 保序
                 .Take(batchSize)
                 .Select(d => d.Id)
                 .ToListAsync(ct);
 
             if (idsToDelete.Count == 0) break;
 
+            // Step 2: 用主键批量删除 (PK 索引极快, 2000 行 < 10ms)
             var deleted = await db.SearchIndexDeadLetters
                 .Where(d => idsToDelete.Contains(d.Id))
                 .ExecuteDeleteAsync(ct);
 
             totalDeleted += deleted;
-            _logger.LogInformation("本批删除 {Deleted} 条, 累计 {Total}/{Candidate}",
-                deleted, totalDeleted, totalCandidate);
+            var rate = swClean.Elapsed.TotalSeconds > 0 ? totalDeleted / swClean.Elapsed.TotalSeconds : 0;
+            _logger.LogInformation("死信清理进度: 本批 {Deleted} 累计 {Total}/{Candidate} 速率 {Rate:F0} 条/秒 已用 {Elapsed:F0}s",
+                deleted, totalDeleted, totalCandidate, rate, swClean.Elapsed.TotalSeconds);
 
             if (deleted < batchSize) break;
         }
+        swClean.Stop();
 
-        _logger.LogInformation("死信清理完成: 共删除 {Total} 条 (cutoff={Cutoff})", totalDeleted, cutoff);
+        // 5) 报告: 总耗时 + 平均速率
+        _logger.LogInformation(
+            "死信清理完成: 共删除 {Total}/{Candidate} 条 (cutoff={Cutoff} 用时 {Elapsed:F1}s 平均 {Rate:F0} 条/秒)",
+            totalDeleted, totalCandidate, cutoff, swClean.Elapsed.TotalSeconds,
+            totalDeleted / Math.Max(swClean.Elapsed.TotalSeconds, 0.001));
     }
 }

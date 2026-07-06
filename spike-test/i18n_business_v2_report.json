@@ -1,0 +1,304 @@
+{
+  "total_items": 57,
+  "unique_chinese": 51,
+  "files_modified": [
+    {
+      "file": "components\\AppHeader.vue",
+      "replacements": 1
+    },
+    {
+      "file": "router\\index.ts",
+      "replacements": 2
+    },
+    {
+      "file": "utils\\http.ts",
+      "replacements": 3
+    },
+    {
+      "file": "views\\admin\\AdminApiDocsView.vue",
+      "replacements": 5
+    },
+    {
+      "file": "views\\admin\\AdminErrorView.vue",
+      "replacements": 4
+    },
+    {
+      "file": "views\\ChangePasswordView.vue",
+      "replacements": 1
+    },
+    {
+      "file": "views\\public\\PublicCompareView.vue",
+      "replacements": 4
+    },
+    {
+      "file": "views\\public\\PublicProductView.vue",
+      "replacements": 2
+    },
+    {
+      "file": "views\\public\\PublicSearchView.vue",
+      "replacements": 2
+    },
+    {
+      "file": "views\\SearchView.vue",
+      "replacements": 1
+    }
+  ],
+  "new_keys": [
+    {
+      "key": "common.feedback.error_003",
+      "zh": "产品不存在或已下架",
+      "en": "Product does not exist or has been deactivated"
+    },
+    {
+      "key": "common.feedback.error_008",
+      "zh": "复制失败",
+      "en": "Copy failed"
+    },
+    {
+      "key": "common.feedback.error_009",
+      "zh": "复制失败, 请手动选择",
+      "en": "Copy failed, please select manually"
+    },
+    {
+      "key": "common.feedback.error_018",
+      "zh": "已触发测试错误, 请查看下方列表",
+      "en": "Test error triggered, see list below"
+    },
+    {
+      "key": "common.feedback.error_022",
+      "zh": "无法加载 API 文档",
+      "en": "Unable to load API documentation"
+    },
+    {
+      "key": "common.feedback.error_023",
+      "zh": "无法加载 API 文档 (Swagger + 离线备份均失败)",
+      "en": "Unable to load API documentation (both Swagger + offline backups failed)"
+    },
+    {
+      "key": "common.feedback.error_027",
+      "zh": "服务器繁忙,请稍后重试 (错误码:${status})",
+      "en": "Server is busy, please try again later (Error code:) ${status}"
+    },
+    {
+      "key": "common.feedback.error_029",
+      "zh": "用户名或密码错误",
+      "en": "ユーザー名またはパスワードが正しくありません"
+    },
+    {
+      "key": "common.feedback.error_038",
+      "zh": "网络连接失败,请检查网络",
+      "en": "Network connection failed, please check the network"
+    },
+    {
+      "key": "common.feedback.error_045",
+      "zh": "请粘贴至少一个 OEM 编号",
+      "en": "Please paste at least one OEM number"
+    },
+    {
+      "key": "common.feedback.error_046",
+      "zh": "请输入密码",
+      "en": "Password"
+    },
+    {
+      "key": "common.feedback.error_047",
+      "zh": "请输入当前密码",
+      "en": "Please enter your current password."
+    },
+    {
+      "key": "common.feedback.error_048",
+      "zh": "请输入有效的产品 ID",
+      "en": "Please enter a valid Product ID"
+    },
+    {
+      "key": "common.feedback.error_049",
+      "zh": "请输入用户名",
+      "en": "Please, enter Username"
+    },
+    {
+      "key": "common.feedback.info_001",
+      "zh": "OEM 查询",
+      "en": "OEM Inquiry"
+    },
+    {
+      "key": "common.feedback.info_004",
+      "zh": "产品数据未加载",
+      "en": "Product data not loaded"
+    },
+    {
+      "key": "common.feedback.info_005",
+      "zh": "仅管理员可访问用户管理页",
+      "en": "Only administrators can access the user management page"
+    },
+    {
+      "key": "common.feedback.info_007",
+      "zh": "即将触发 ${form.entity} ETL (${form.mode}${form.dryRun ? ",
+      "en": "Soon to trigger ETL ($ {form.dryRun? ${form.entity} ${form.mode}"
+    },
+    {
+      "key": "common.feedback.info_013",
+      "zh": "已发送暂停信号, checkpoint_id=${r.checkpointId ?? ",
+      "en": "Pause signal sent, checkpoint_id = $ {r.checkpointId??"
+    },
+    {
+      "key": "common.feedback.info_017",
+      "zh": "已移除",
+      "en": "File was removed"
+    },
+    {
+      "key": "common.feedback.info_020",
+      "zh": "搜索 message / type / tags…",
+      "en": "Search message/type/tags…"
+    },
+    {
+      "key": "common.feedback.info_021",
+      "zh": "搜索路径 / 方法 / 摘要…",
+      "en": "Search Path/Method/Summary…"
+    },
+    {
+      "key": "common.feedback.info_024",
+      "zh": "替代 OEM 表格未就绪",
+      "en": "Alternate OEM Form Not Ready"
+    },
+    {
+      "key": "common.feedback.info_030",
+      "zh": "登录已过期, 请重新登录",
+      "en": "Session token has expired, please reload the page and try again."
+    },
+    {
+      "key": "common.feedback.info_036",
+      "zh": "粘贴 OEM 编号, 每行一个 (支持 tab/换行/逗号/分号分隔)&#10;例如:&#10;OEN-123&#10;AB/CD/456&#10;滤清器 1142",
+      "en": "Paste OEM numbers, one per line (tab/line break/comma/semicolon delimited)&#10;Example:&#10;OEN-123&#10;AB/CD/456&#10;Filter 1142"
+    },
+    {
+      "key": "common.feedback.info_037",
+      "zh": "网络异常: ${err.message || ",
+      "en": "Network exception: $ {err.message ||"
+    },
+    {
+      "key": "common.feedback.info_041",
+      "zh": "该产品已在对比列表中",
+      "en": "This product is already in the comparison list"
+    },
+    {
+      "key": "common.feedback.info_042",
+      "zh": "请先登录",
+      "en": "Please log in first."
+    },
+    {
+      "key": "common.feedback.info_043",
+      "zh": "请求超时,请检查网络后重试",
+      "en": "Request timed out, please check your network and try again"
+    },
+    {
+      "key": "common.feedback.info_044",
+      "zh": "请求频率超限, 请 ${retryAfter || 60}s 后重试",
+      "en": "Request frequency exceeded, please try again after s ${retryAfter || 60}"
+    },
+    {
+      "key": "common.feedback.info_050",
+      "zh": "输入 045090 试试",
+      "en": "Enter 045090 to try"
+    },
+    {
+      "key": "common.feedback.info_051",
+      "zh": "输入产品 ID 加入",
+      "en": "Enter product ID to join"
+    },
+    {
+      "key": "common.feedback.success_002",
+      "zh": "cURL 已复制",
+      "en": "cURL copied"
+    },
+    {
+      "key": "common.feedback.success_010",
+      "zh": "密码修改成功",
+      "en": "Password changed successfully"
+    },
+    {
+      "key": "common.feedback.success_011",
+      "zh": "已加入: ${data.items[0].oemNoDisplay}",
+      "en": "Joined: ${data.items[0].oemNoDisplay}"
+    },
+    {
+      "key": "common.feedback.success_012",
+      "zh": "已加载离线 openapi.json, 后端 Swagger 不可用",
+      "en": "Offline openapi.json loaded, backend Swagger unavailable"
+    },
+    {
+      "key": "common.feedback.success_014",
+      "zh": "已复制到剪贴板",
+      "en": "Copied to clipboard"
+    },
+    {
+      "key": "common.feedback.success_015",
+      "zh": "已清空",
+      "en": "Cleared"
+    },
+    {
+      "key": "common.feedback.success_016",
+      "zh": "已清空搜索条件",
+      "en": "Search criteria cleared"
+    },
+    {
+      "key": "common.feedback.success_019",
+      "zh": "已退出登录",
+      "en": "Logged out"
+    },
+    {
+      "key": "common.feedback.warn_006",
+      "zh": "再次输入新密码",
+      "en": "Retype Your New Password"
+    },
+    {
+      "key": "common.feedback.warn_025",
+      "zh": "最多 500 个 OEM, 当前 ${oems.length}",
+      "en": "Up to 500 OEMs, current ${oems.length}"
+    },
+    {
+      "key": "common.feedback.warn_026",
+      "zh": "最多对比 ${MAX_COMPARE} 个产品",
+      "en": "Compare up to products ${MAX_COMPARE}"
+    },
+    {
+      "key": "common.feedback.warn_028",
+      "zh": "清空确认",
+      "en": "Clear Confirm"
+    },
+    {
+      "key": "common.feedback.warn_031",
+      "zh": "确定停售产品 ",
+      "en": "Identify discontinued products"
+    },
+    {
+      "key": "common.feedback.warn_032",
+      "zh": "确定删除 ",
+      "en": "Confirm Deletion"
+    },
+    {
+      "key": "common.feedback.warn_033",
+      "zh": "确定删除品牌 ",
+      "en": "OK to delete brand"
+    },
+    {
+      "key": "common.feedback.warn_034",
+      "zh": "确定删除用户 ",
+      "en": "OK to delete user"
+    },
+    {
+      "key": "common.feedback.warn_035",
+      "zh": "确认",
+      "en": "OK"
+    },
+    {
+      "key": "common.feedback.warn_039",
+      "zh": "至少 8 个字符",
+      "en": "8 characters or more"
+    },
+    {
+      "key": "common.feedback.warn_040",
+      "zh": "至少需要输入 1 个搜索字段",
+      "en": "At least 1 search field is required"
+    }
+  ],
+  "translation_failures": []
+}

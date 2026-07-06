@@ -1,0 +1,168 @@
+{
+  "total_items": 32,
+  "unique_chinese": 26,
+  "files_modified": [],
+  "imports_fixed": 0,
+  "new_keys": [
+    {
+      "key": "common.feedback.error_001",
+      "zh": "服务器繁忙,请稍后重试 (错误码:${status})",
+      "en": "Server is busy, please try again later (Error code: ${status})",
+      "from_override": true
+    },
+    {
+      "key": "common.feedback.error_002",
+      "zh": "网络连接失败,请检查网络",
+      "en": "Network connection failed, please check the network",
+      "from_override": true
+    },
+    {
+      "key": "common.feedback.error_003",
+      "zh": "请输入密码",
+      "en": "Please enter password",
+      "from_override": true
+    },
+    {
+      "key": "common.feedback.error_004",
+      "zh": "请输入当前密码",
+      "en": "Please enter your current password",
+      "from_override": true
+    },
+    {
+      "key": "common.feedback.error_005",
+      "zh": "请输入用户名",
+      "en": "Please enter username",
+      "from_override": true
+    },
+    {
+      "key": "common.feedback.info_001",
+      "zh": "OEM 查询",
+      "en": "OEM Lookup",
+      "from_override": true
+    },
+    {
+      "key": "common.feedback.info_002",
+      "zh": "即将触发 ${form.entity} ETL (${form.mode}${form.dryRun ? ",
+      "en": "Soon to trigger ETL (${form.dryRun?${form.entity}${form.mode}",
+      "from_override": false
+    },
+    {
+      "key": "common.feedback.info_003",
+      "zh": "搜索 message / type / tags…",
+      "en": "Search message / type / tags…",
+      "from_override": true
+    },
+    {
+      "key": "common.feedback.info_004",
+      "zh": "搜索路径 / 方法 / 摘要…",
+      "en": "Search path / method / summary…",
+      "from_override": true
+    },
+    {
+      "key": "common.feedback.info_005",
+      "zh": "粘贴 OEM 编号, 每行一个 (支持 tab/换行/逗号/分号分隔)&#10;例如:&#10;OEN-123&#10;AB/CD/456&#10;滤清器 1142",
+      "en": "Paste OEM numbers, one per line (tab/line break/comma/semicolon delimited)&#10;Example:&#10;OEN-123&#10;AB/CD/456&#10;Filter 1142",
+      "from_override": false
+    },
+    {
+      "key": "common.feedback.info_006",
+      "zh": "网络异常: ${err.message || ",
+      "en": "Network error: ${err.message ||",
+      "from_override": false
+    },
+    {
+      "key": "common.feedback.info_007",
+      "zh": "请求频率超限, 请 ${retryAfter || 60}s 后重试",
+      "en": "Request rate limit exceeded, please try again in ${retryAfter || 60}s",
+      "from_override": true
+    },
+    {
+      "key": "common.feedback.info_008",
+      "zh": "输入 045090 试试",
+      "en": "Try entering 045090",
+      "from_override": true
+    },
+    {
+      "key": "common.feedback.info_009",
+      "zh": "输入产品 ID 加入",
+      "en": "Enter product ID to add",
+      "from_override": true
+    },
+    {
+      "key": "common.feedback.success_001",
+      "zh": "已加入: ${data.items[0].oemNoDisplay}",
+      "en": "Added: ${data.items[0].oemNoDisplay}",
+      "from_override": true
+    },
+    {
+      "key": "common.feedback.success_002",
+      "zh": "已发送暂停信号, checkpoint_id=${r.checkpointId ?? ",
+      "en": "Pause signal sent, checkpoint_id = ${r.checkpointId??",
+      "from_override": false
+    },
+    {
+      "key": "common.feedback.warn_001",
+      "zh": "再次输入新密码",
+      "en": "Re-enter the new password",
+      "from_override": true
+    },
+    {
+      "key": "common.feedback.warn_002",
+      "zh": "最多 500 个 OEM, 当前 ${oems.length}",
+      "en": "Up to 500 OEMs, currently ${oems.length} entered",
+      "from_override": true
+    },
+    {
+      "key": "common.feedback.warn_003",
+      "zh": "最多对比 ${MAX_COMPARE} 个产品",
+      "en": "Compare up to ${MAX_COMPARE} products",
+      "from_override": true
+    },
+    {
+      "key": "common.feedback.warn_004",
+      "zh": "清空确认",
+      "en": "Clear confirmation",
+      "from_override": true
+    },
+    {
+      "key": "common.feedback.warn_005",
+      "zh": "确定停售产品 ",
+      "en": "Confirm discontinued product ",
+      "from_override": true
+    },
+    {
+      "key": "common.feedback.warn_006",
+      "zh": "确定删除 ",
+      "en": "Confirm delete ",
+      "from_override": true
+    },
+    {
+      "key": "common.feedback.warn_007",
+      "zh": "确定删除品牌 ",
+      "en": "Confirm delete brand ",
+      "from_override": true
+    },
+    {
+      "key": "common.feedback.warn_008",
+      "zh": "确定删除用户 ",
+      "en": "Confirm delete user ",
+      "from_override": true
+    },
+    {
+      "key": "common.feedback.warn_009",
+      "zh": "确认",
+      "en": "Confirm",
+      "from_override": true
+    },
+    {
+      "key": "common.feedback.warn_010",
+      "zh": "至少 8 个字符",
+      "en": "8 characters or more",
+      "from_override": true
+    }
+  ],
+  "translation_failures": [],
+  "from_override_count": 22,
+  "from_dict_count": 4,
+  "from_mymemory_count": 4
+}

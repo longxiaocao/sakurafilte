@@ -164,7 +164,7 @@ async function doBatchSearch() {
       .filter(Boolean)
   )]
   if (oems.length === 0) {
-    ElMessage.warning('请粘贴至少一个 OEM 编号')
+    ElMessage.warning(t('common.feedback.error_045'))
     return
   }
   if (oems.length > 500) {

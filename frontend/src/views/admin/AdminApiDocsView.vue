@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+const { t } = useI18n()
 // 批次 6d: API 文档浏览器
 //   - 实时拉取 /swagger/v1/swagger.json (开发环境)
 //   - 按模块分组展示端点 (方法 + 路径 + 摘要 + 参数 + 响应)
@@ -34,12 +36,12 @@ async function fetchSchema() {
       const r2 = await fetch('/openapi.json')
       if (r2.ok) {
         schema.value = await r2.json()
-        ElMessage.warning('已加载离线 openapi.json, 后端 Swagger 不可用')
+        ElMessage.warning(t('common.feedback.success_012'))
       } else {
-        ElMessage.error('无法加载 API 文档 (Swagger + 离线备份均失败)')
+        ElMessage.error(t('common.feedback.error_023'))
       }
     } catch {
-      ElMessage.error('无法加载 API 文档')
+      ElMessage.error(t('common.feedback.error_022'))
     }
   } finally {
     loading.value = false
@@ -164,9 +166,9 @@ async function copyCurl(ep: Endpoint) {
   const text = lines.join(' \\\n')
   try {
     await navigator.clipboard.writeText(text)
-    ElMessage.success('cURL 已复制')
+    ElMessage.success(t('common.feedback.success_002'))
   } catch {
-    ElMessage.error('复制失败')
+    ElMessage.error(t('common.feedback.error_008'))
   }
 }
 

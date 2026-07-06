@@ -71,9 +71,9 @@ async function copyEvent(e: ErrorEvent) {
   const text = JSON.stringify(e, null, 2)
   try {
     await navigator.clipboard.writeText(text)
-    ElMessage.success('已复制到剪贴板')
+    ElMessage.success(t('common.feedback.success_014'))
   } catch {
-    ElMessage.error('复制失败, 请手动选择')
+    ElMessage.error(t('common.feedback.error_009'))
   }
 }
 
@@ -100,7 +100,7 @@ async function clearAll() {
   } catch { return }
   clearEvents()
   refresh()
-  ElMessage.success('已清空')
+  ElMessage.success(t('common.feedback.success_015'))
 }
 
 function triggerTestError() {
@@ -112,7 +112,7 @@ function triggerTestError() {
       extra: { triggeredAt: new Date().toISOString() },
     })
   }
-  ElMessage.success('已触发测试错误, 请查看下方列表')
+  ElMessage.success(t('common.feedback.error_018'))
   setTimeout(refresh, 100)
 }
 

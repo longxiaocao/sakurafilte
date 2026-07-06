@@ -130,7 +130,7 @@ async function handleLogout() {
     loading.close()
   }
   clearAuth()
-  ElMessage.success('已退出登录')
+  ElMessage.success(t('common.feedback.success_019'))
   router.push('/login')
 }
 

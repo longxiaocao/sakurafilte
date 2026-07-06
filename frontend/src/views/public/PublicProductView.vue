@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+const { t } = useI18n()
 // Day 9: 产品详情页 (后台/前台共用)
 // 重构 (2026-07): 工业极简融合风 — 大字号对比 + 大留白 + 1px hairline
 //   设计语言: Linear/Vercel/Stripe 工业极简 + Musk 极简主义
@@ -151,13 +153,13 @@ function goToAlternatives() {
   if (el) {
     el.scrollIntoView({ behavior: 'smooth', block: 'start' })
   } else {
-    ElMessage.warning('替代 OEM 表格未就绪')
+    ElMessage.warning(t('common.feedback.info_024'))
   }
 }
 
 function addToCompare() {
   if (!data.value?.id) {
-    ElMessage.warning('产品数据未加载')
+    ElMessage.warning(t('common.feedback.info_004'))
     return
   }
   // P0 (Day 14): 跳公开对比页 /compare (无 requireAuth), 游客可直接使用

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+const { t } = useI18n()
 // P0 权限改造 (Day 14): 公开产品对比页
 //   - 无需 token, 游客可直接访问 /compare?ids=1,2,3,4,5,6
 //   - 复用 AdminCompareView 6 字段组布局 (基础/尺寸/性能/包装/外箱/CrossRef)
@@ -184,7 +186,7 @@ function moveRight(idx: number) {
 function removeProduct(idx: number) {
   products.value = products.value.filter((_, i) => i !== idx)
   persistUrlOrder()
-  ElMessage.success('已移除')
+  ElMessage.success(t('common.feedback.info_017'))
 }
 
 function persistUrlOrder() {
@@ -196,11 +198,11 @@ function persistUrlOrder() {
 async function addProductById() {
   const id = parseInt(newIdInput.value.trim(), 10)
   if (!id || isNaN(id)) {
-    ElMessage.warning('请输入有效的产品 ID')
+    ElMessage.warning(t('common.feedback.error_048'))
     return
   }
   if (products.value.some((p) => p.id === id)) {
-    ElMessage.warning('该产品已在对比列表中')
+    ElMessage.warning(t('common.feedback.info_041'))
     return
   }
   if (products.value.length >= MAX_COMPARE) {
@@ -212,7 +214,7 @@ async function addProductById() {
     // 复用 compare API 拉单条: GET /api/public/compare?ids={id}
     const data = await publicCompareApi.compare([id])
     if (data.items.length === 0) {
-      ElMessage.warning('产品不存在或已下架')
+      ElMessage.warning(t('common.feedback.error_003'))
       return
     }
     products.value = [...products.value, data.items[0]]

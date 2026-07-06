@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+const { t } = useI18n()
 // 修改密码页 (JWT 改造版)
 //   - 表单: 旧密码 / 新密码 / 确认新密码
 //   - 校验: 新密码 ≥ 8 字符, 两次输入一致
@@ -37,7 +39,7 @@ async function handleSubmit() {
   loading.value = true
   try {
     await authApi.changePassword(form.oldPassword, form.newPassword)
-    ElMessage.success('密码修改成功')
+    ElMessage.success(t('common.feedback.success_010'))
     router.push('/admin/products')
   } catch {
     // axios 拦截器已统一弹错误提示, 这里不重复
