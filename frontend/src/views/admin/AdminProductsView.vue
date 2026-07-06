@@ -289,7 +289,9 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="p-3 max-w-screen-2xl mx-auto">
+  <!-- P-Admin-UX: 改 max-w-screen-2xl mx-auto → w-full, 让 el-table 撑满容器
+       WHY: 原 1536px 限制下 13 列表格 (宽 800+px) 只占左侧 ~50%, 右侧大量留白 -->
+  <div class="p-3 w-full">
     <!-- A11y axe: h1 标题 (page-has-heading-one) -->
     <h1 class="text-lg font-medium mb-3">产品管理</h1>
     <!-- 顶部工具条 -->

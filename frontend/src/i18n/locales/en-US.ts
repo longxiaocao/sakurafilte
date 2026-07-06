@@ -875,6 +875,41 @@ export default {
     noData: 'No data',
     noResult: 'No matching results',
     loadFailed: 'Load failed, Please Retry or Contact Admin',
+    // P-Admin-UX: Common feedback messages (ElMessage.success/warning/error/info)
+    //   Prefixed by severity: error/success/info/warn
+    //   vue-i18n falls back to key string when missing, so must declare explicitly
+    feedback: {
+      // ----- Error -----
+      error_002: 'Export failed',
+      error_003: 'You can compare up to 6 products',
+      error_008: 'Copy failed',
+      error_009: 'Clear failed',
+      error_018: 'Clear failed',
+      error_022: 'Failed to load API docs, please check backend Swagger',
+      error_023: 'Failed to load local API docs',
+      error_029: 'Request failed, please check your network',
+      error_045: 'Please enter a search keyword',
+      error_048: 'Please add products to compare first',
+      // ----- Success -----
+      success_002: 'Copied to clipboard',
+      success_010: 'Password changed',
+      success_012: 'Loaded cached API docs',
+      success_014: 'Error logs reloaded',
+      success_015: 'All error logs cleared',
+      success_016: 'Already in compare list, navigating',
+      success_019: 'Logged out',
+      // ----- Info -----
+      info_004: 'OEM cannot be empty',
+      info_005: 'Permission denied, redirected to product management',
+      info_017: 'Added to compare',
+      info_024: 'No product found for this OEM',
+      info_030: 'Network error, please check connection',
+      info_041: 'Please enter product ID',
+      info_042: 'Please sign in first',
+      info_043: 'Session expired, please sign in again',
+      // ----- Warning -----
+      warn_040: 'Compare list is full (6/6), please remove first'
+    },
     dictviewcommon: {
       total_drag: 'Total {total} (Active {active}, Soft-deleted {soft}) · Drag to Sort',
     },

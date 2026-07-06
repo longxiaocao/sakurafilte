@@ -335,7 +335,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="p-3 max-w-screen-xl mx-auto" v-loading="loading">
+  <div class="p-3 w-full" v-loading="loading">
     <div class="flex items-center gap-2 mb-3">
       <el-button @click="router.back()" size="small">返回</el-button>
       <h1 class="text-lg font-medium">{{ isEdit ? t('admin.productformview.string.edit_product_id', { id: productId }) : t('admin.productformview.templatetext.add_product') }}</h1>

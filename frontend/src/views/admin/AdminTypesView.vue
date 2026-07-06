@@ -108,7 +108,9 @@ onMounted(load)
 </script>
 
 <template>
-  <div class="p-3 max-w-screen-xl mx-auto">
+  <!-- P-Admin-UX: 改 max-w-screen-xl mx-auto → w-full px-3, 让 el-table 撑满容器
+       WHY: 原 1280px 限制下表格只占左侧 ~700px, 右侧 290px 留白; 改为全宽后表格列宽自适应扩展 -->
+  <div class="p-3 w-full">
     <div class="flex items-center gap-2 mb-3 flex-wrap">
       <h1 class="text-lg font-medium">类型字典 (Type)</h1>
       <span class="text-xs text-muted">P2.2 后台管理 · 固定 5 值: oil / fuel / air / cabin / others · P2.3 拖动排序后前台立即生效</span>

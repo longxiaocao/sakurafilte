@@ -35,32 +35,44 @@ const dictItems = [
 // Day 9.2: 修复 - "产品详情" 路由是 /product/:oem, 单独一个 nav 项无法满足参数化路径
 //   改方案: nav 中 "产品详情" 改为 "OEM 查询", 点击后弹 ElMessageBox.prompt 收 oem, 再跳详情
 //   避免之前直接 router.push('/product') 触发 "No match found" 警告
+//
+// P-Admin-UX: 顶栏分类 + 收纳 — 解决 9 个按钮挤在 1280px 视口导致文字换行
+//   - 核心 (始终显示): 产品搜索 / OEM 查询 / 产品对比 (公开) / 产品管理 / 字典管理 / 用户管理 / ETL 触发
+//   - 高级 (admin 路径, 收纳到下拉): 高级对比 / 性能 / 错误 / API / 帮助
+//   - 对比命名区分: 公开版 = 游客, 高级版 = 运维 (列可调序, 持久化, 含下架)
 const navItems = computed(() => [
+  // ===== 公共区 (所有页面可见) =====
   { label: '产品搜索', path: '/search', icon: 'Search' },
   { label: 'OEM 查询', action: 'oemLookup', icon: 'Document' },
-  // P0 (Day 14): 公开产品对比 — 游客无需登录可访问, 与后台 admin/compare 区分
-  { label: '产品对比', path: '/compare', icon: 'DataAnalysis' },
+  { label: '产品对比', path: '/compare', icon: 'DataLine' },
+  // ===== 后台区 (admin 路径可见) =====
   ...(isAdminPath.value
     ? [
         { label: '产品管理', path: '/admin/products', icon: 'Goods' },
-        // Day 10+: 字典管理 (P1.3 OEM 品牌 + P2.2 7 个新字典) — 改为 el-dropdown 下拉
+        // Day 10+: 字典管理下拉菜单 (P1.3 OEM 品牌 + P2.2 7 个新字典)
         { label: '字典管理', dropdown: 'dict', icon: 'Collection' },
         // JWT 改造: 用户管理 (仅 admin 角色显示)
         ...(isAdmin() ? [{ label: '用户管理', path: '/admin/users', icon: 'User' }] : []),
         { label: 'ETL 触发', path: '/admin/etl', icon: 'Loading' },
-        // P3.5 (Task 12): 后台产品对比 (最多 6 个产品, 列可调序, 打印优化)
-        //   注: admin 路径下保留此入口作为深度使用, 公开页 /compare 已覆盖大多数用例
-        { label: '高级对比', path: '/admin/compare', icon: 'DataAnalysis' },
-        // P5.5+: 性能监控 (P50/P95/P99 + 健康探针 + Token 轮转状态)
-        { label: '性能', path: '/admin/perf', icon: 'TrendCharts' },
-        // 批次 6c: 错误日志 (前端错误监控 + 导出 + 清空)
-        { label: '错误', path: '/admin/errors', icon: 'Warning' },
-        // 批次 6d: API 文档 (OpenAPI 浏览器)
-        { label: 'API', path: '/admin/api-docs', icon: 'Document' },
-        // P5.4 (Task 15): 帮助页 (字典规范 + 搜索 + 导入)
-        { label: '帮助', path: '/admin/help', icon: 'QuestionFilled' }
+        // P-Admin-UX: 高级功能收纳到 "更多" 下拉, 减少顶栏按钮拥挤
+        //   包含: 高级对比 / 性能 / 错误 / API / 帮助
+        { label: '更多', dropdown: 'more', icon: 'More' }
       ]
     : [])
+])
+
+// P-Admin-UX: "更多"下拉菜单项 — 收纳高级功能
+const moreItems = computed(() => [
+  // P3.5 (Task 12): 后台产品对比 (最多 6 个产品, 列可调序, 打印优化, 含下架)
+  { label: '高级对比', path: '/admin/compare', icon: 'DataBoard' },
+  // P5.5+: 性能监控 (P50/P95/P99 + 健康探针 + Token 轮转状态)
+  { label: '性能', path: '/admin/perf', icon: 'TrendCharts' },
+  // 批次 6c: 错误日志
+  { label: '错误', path: '/admin/errors', icon: 'Warning' },
+  // 批次 6d: API 文档 (OpenAPI 浏览器)
+  { label: 'API', path: '/admin/api-docs', icon: 'Document' },
+  // P5.4: 帮助页
+  { label: '帮助', path: '/admin/help', icon: 'QuestionFilled' }
 ])
 
 function goDict(path: string) {
@@ -172,7 +184,7 @@ function toggleLocale() {
         >
           <button
             :class="[
-              'px-2 py-1 text-sm hover:bg-[var(--color-bg-hover)]',
+              'px-2 py-1 text-sm hover:bg-[var(--color-bg-hover)] whitespace-nowrap',
               route.path.startsWith('/admin/dict/') ? 'text-accent font-medium' : 'text-neutral-700'
             ]"
             :aria-label="`展开${item.label}下拉菜单`"
@@ -195,11 +207,43 @@ function toggleLocale() {
             </el-dropdown-menu>
           </template>
         </el-dropdown>
+        <!-- P-Admin-UX: "更多"下拉 (收纳高级功能, 解决 9 按钮拥挤) -->
+        <el-dropdown
+          v-else-if="item.dropdown === 'more'"
+          :trigger="dictTrigger"
+          @command="(cmd: string) => router.push(cmd)"
+        >
+          <button
+            :class="[
+              'px-2 py-1 text-sm hover:bg-[var(--color-bg-hover)] whitespace-nowrap',
+              moreItems.some((m) => m.path === route.path) ? 'text-accent font-medium' : 'text-neutral-700'
+            ]"
+            aria-label="展开更多功能菜单"
+            :aria-expanded="false"
+          >
+            <el-icon class="mr-1" aria-hidden="true"><component :is="item.icon" /></el-icon>
+            {{ item.label }}
+            <el-icon class="ml-1" aria-hidden="true"><ArrowDown /></el-icon>
+          </button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item
+                v-for="m in moreItems"
+                :key="m.path"
+                :command="m.path"
+                :disabled="route.path === m.path"
+              >
+                <el-icon class="mr-2" aria-hidden="true"><component :is="m.icon" /></el-icon>
+                {{ m.label }}
+              </el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
         <button
           v-else
           @click="go(item)"
           :class="[
-            'px-2 py-1 text-sm hover:bg-[var(--color-bg-hover)]',
+            'px-2 py-1 text-sm hover:bg-[var(--color-bg-hover)] whitespace-nowrap',
             item.path && route.path === item.path ? 'text-accent font-medium' : 'text-neutral-700'
           ]"
           :aria-label="item.label"
@@ -304,6 +348,22 @@ function toggleLocale() {
               :aria-current="route.path === d.path ? 'page' : undefined"
             >
               {{ d.label }}
+            </button>
+          </div>
+          <!-- P-Admin-UX: "更多"在 drawer 内展开为分组列表, 保持与桌面端一致 -->
+          <div v-else-if="item.dropdown === 'more'" class="flex flex-col">
+            <div class="text-xs uppercase px-2 py-1 text-muted">更多</div>
+            <button
+              v-for="m in moreItems"
+              :key="m.path"
+              @click="router.push(m.path); closeMobileNav()"
+              class="px-2 py-2 text-left text-sm flex items-center hover:bg-[var(--color-bg-hover)]"
+              :class="route.path === m.path ? 'text-accent font-medium' : ''"
+              :aria-label="m.label"
+              :aria-current="route.path === m.path ? 'page' : undefined"
+            >
+              <el-icon class="mr-2" aria-hidden="true"><component :is="m.icon" /></el-icon>
+              {{ m.label }}
             </button>
           </div>
           <button

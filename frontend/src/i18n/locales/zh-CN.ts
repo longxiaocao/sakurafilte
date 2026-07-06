@@ -884,6 +884,41 @@ export default {
     noData: '暂无数据',
     noResult: '未找到匹配结果',
     loadFailed: '加载失败, 请稍后重试或联系管理员',
+    // P-Admin-UX: 通用反馈提示 (ElMessage.success/warning/error/info)
+    //   前缀按严重程度分类: error/success/info/warn
+    //   与 vue-i18n 配合: 缺失 key 默认回退到原 key 字符串, 故必须显式声明
+    feedback: {
+      // ----- 错误提示 -----
+      error_002: '导出失败',
+      error_003: '最多添加 6 个产品到对比',
+      error_008: '复制失败',
+      error_009: '清空失败',
+      error_018: '清空失败',
+      error_022: '加载 API 文档失败, 请检查后端 Swagger 状态',
+      error_023: '加载本地 API 文档失败',
+      error_029: '请求失败, 请检查网络',
+      error_045: '请输入搜索关键词',
+      error_048: '请先添加要对比的产品',
+      // ----- 成功提示 -----
+      success_002: '已复制到剪贴板',
+      success_010: '密码修改成功',
+      success_012: '已加载本地缓存的 API 文档',
+      success_014: '已重新加载错误日志',
+      success_015: '已清空所有错误日志',
+      success_016: '已在对比列表中, 跳转查看',
+      success_019: '已退出登录',
+      // ----- 信息提示 -----
+      info_004: 'OEM 编号不能为空',
+      info_005: '权限不足, 已跳到产品管理',
+      info_017: '已加入对比',
+      info_024: '未找到该 OEM 对应的产品',
+      info_030: '网络错误, 请检查连接',
+      info_041: '请输入产品 ID',
+      info_042: '请先登录',
+      info_043: '登录已过期, 请重新登录',
+      // ----- 警告提示 -----
+      warn_040: '已选满 6 个对比, 请先移除'
+    },
     dictviewcommon: {
       total_drag: '共 {total} 条 (启用 {active}, 软删 {soft}) · 拖动以排序',
     },

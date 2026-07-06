@@ -98,7 +98,7 @@ onMounted(load)
 </script>
 
 <template>
-  <div class="p-3 max-w-screen-xl mx-auto">
+  <div class="p-3 w-full">
     <div class="flex items-center gap-2 mb-3 flex-wrap">
       <h1 class="text-lg font-medium">OEM 3 字典</h1>
       <span class="text-xs text-muted">P2.2 后台管理 · 用于交叉引用分区 2 oem_no_3 自动补全</span>

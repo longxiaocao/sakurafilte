@@ -105,7 +105,7 @@ onMounted(load)
 </script>
 
 <template>
-  <div class="p-3 max-w-screen-xl mx-auto">
+  <div class="p-3 w-full">
     <div class="flex items-center gap-2 mb-3 flex-wrap">
       <h1 class="text-lg font-medium">介质字典 (Media)</h1>
       <span class="text-xs text-muted">P2.2 后台管理 · 2 字段: Media 名称 + 型号 · 用于产品表单分区 4 media/media_model 二合一</span>

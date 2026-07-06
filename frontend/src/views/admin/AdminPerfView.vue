@@ -189,7 +189,7 @@ function fmtTime(ts: string | null): string {
 </script>
 
 <template>
-  <div class="p-3 max-w-screen-xl mx-auto">
+  <div class="p-3 w-full">
     <div class="flex items-center justify-between mb-3">
       <div>
         <h1 class="text-lg font-medium">性能监控</h1>

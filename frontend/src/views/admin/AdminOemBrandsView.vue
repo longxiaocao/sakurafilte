@@ -204,7 +204,7 @@ onMounted(load)
 </script>
 
 <template>
-  <div class="p-3 max-w-screen-xl mx-auto">
+  <div class="p-3 w-full">
     <!-- 顶部工具条 -->
     <div class="flex items-center gap-2 mb-3 flex-wrap">
       <h1 class="text-lg font-medium">OEM 品牌字典</h1>
