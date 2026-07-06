@@ -90,33 +90,35 @@ let resizeObserver: ResizeObserver | null = null
 function recalcOverflow() {
   if (!navContainerRef.value) return
   const containerW = navContainerRef.value.clientWidth
-  // 已用宽度: 工具区 (logo + 浅色/中/EN + admin 角标 ≈ 280px, 留 60px 安全边距)
-  // 更准确做法: 测 nav 容器的 clientWidth, 测每个按钮 offsetWidth
-  // 简单做法: 假设每个按钮 90px, 加上 gap 4px, 5 个工具按钮 ≈ 250px
-  const RESERVED = 280
+  // P-Admin-UX v3.1: nav 是 flex-1 占据 logo + 工具按钮之间的所有空间, RESERVED 只需预留给 "更多" 按钮自身 + 一点 gap
+  const RESERVED = 80
   const GAP = 4
   const available = containerW - RESERVED
+  const newOverflow = new Set<string>()
   if (available <= 0) {
-    overflowKeys.value = new Set(allNavItems.value.map((i) => i.key))
-    return
-  }
-  const overflow = new Set<string>()
-  let used = 0
-  for (const item of allNavItems.value) {
-    // 首次测量后缓存宽度; 后续直接用缓存
-    const w = BUTTON_WIDTHS[item.key] ?? 90
-    if (used + w + GAP > available) {
-      overflow.add(item.key)
-    } else {
-      used += w + GAP
+    for (const i of allNavItems.value) newOverflow.add(i.key)
+  } else {
+    let used = 0
+    for (const item of allNavItems.value) {
+      const w = BUTTON_WIDTHS[item.key] ?? 90
+      if (used + w + GAP > available) {
+        newOverflow.add(item.key)
+      } else {
+        used += w + GAP
+      }
+    }
+    // 至少保留 1 个低优先级项可见 (避免 "更多" 是唯一按钮)
+    if (newOverflow.size === allNavItems.value.length && allNavItems.value.length > 0) {
+      newOverflow.delete(allNavItems.value[allNavItems.value.length - 1].key)
     }
   }
-  // 至少保留 1 个低优先级项可见 (避免 "更多" 是唯一按钮)
-  // 如果全部被收纳, 把优先级最低的(13 帮)强行拿出
-  if (overflow.size === allNavItems.value.length && allNavItems.value.length > 0) {
-    overflow.delete(allNavItems.value[allNavItems.value.length - 1].key)
+  // P-Admin-UX v3.1: 仅在新集合与当前不同时才更新, 避免 reactive 触发循环
+  if (
+    newOverflow.size !== overflowKeys.value.size ||
+    [...newOverflow].some((k) => !overflowKeys.value.has(k))
+  ) {
+    overflowKeys.value = newOverflow
   }
-  overflowKeys.value = overflow
 }
 
 function measureButtons() {
@@ -124,8 +126,11 @@ function measureButtons() {
   const buttons = navContainerRef.value.querySelectorAll('[data-nav-key]')
   buttons.forEach((el) => {
     const key = (el as HTMLElement).dataset.navKey
-    if (key && !BUTTON_WIDTHS[key]) {
-      BUTTON_WIDTHS[key] = (el as HTMLElement).offsetWidth
+    if (key) {
+      // P-Admin-UX v3.1: 每次都更新宽度 (去掉 !BUTTON_WIDTHS[key] 守卫),
+      //   避免首次测量时按钮尚未完全渲染 (i18n 文本未加载) 导致缓存值偏小
+      const w = (el as HTMLElement).offsetWidth
+      if (w > 0) BUTTON_WIDTHS[key] = w
     }
   })
   recalcOverflow()
@@ -149,8 +154,14 @@ onMounted(() => {
   nextTick(() => {
     measureButtons()
   })
+  // P-Admin-UX v3.1: ResizeObserver 回调里加防抖 (50ms) + 仅在结果变化时才更新 overflowKeys,
+  //   避免 "改 overflowKeys → 模板更新 → ResizeObserver 触发 → 改 overflowKeys" 反馈循环
+  let debounceTimer: number | null = null
   resizeObserver = new ResizeObserver(() => {
-    measureButtons()
+    if (debounceTimer !== null) window.clearTimeout(debounceTimer)
+    debounceTimer = window.setTimeout(() => {
+      measureButtons()
+    }, 50)
   })
   if (navContainerRef.value) {
     resizeObserver.observe(navContainerRef.value)
@@ -266,10 +277,11 @@ function toggleLocale() {
     </button>
     <div class="font-medium text-base tracking-tight">SakuraFilter</div>
     <!-- UX P0-1: 桌面端 nav (sm 以上显示, 移动端隐藏) -->
-    <!-- P-Admin-UX v3: ref 绑定到 nav 容器, ResizeObserver 监听宽度变化做动态收纳 -->
+    <!-- P-Admin-UX v3.1: flex-1 + min-w-0 让 nav 占据 logo 和工具按钮之间的所有可用空间, -->
+    <!--   这样 clientWidth 才是真实的"可用宽度"而非"内容宽度", 避免 v3 死循环 (nav 收窄 → 更多塞入 → nav 收窄) -->
     <nav
       ref="navContainerRef"
-      class="hidden sm:flex items-center gap-1 ml-3 overflow-hidden"
+      class="hidden sm:flex items-center gap-1 ml-3 flex-1 min-w-0 overflow-hidden"
       aria-label="主导航"
     >
       <template v-for="item in visibleNavItems" :key="item.key">
@@ -356,7 +368,7 @@ function toggleLocale() {
         </button>
       </template>
     </nav>
-    <div class="flex-1" />
+    <!-- P-Admin-UX v3.1: 原本 <div class="flex-1" /> spacer 已由 nav.flex-1 接管, 删除避免布局冲突 -->
     <!-- P5.3 主题切换按钮 (桌面端显示, 移动端由 drawer 接管) -->
     <button
       @click="theme.toggle()"
