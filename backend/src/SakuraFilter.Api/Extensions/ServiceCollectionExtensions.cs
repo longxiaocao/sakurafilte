@@ -379,8 +379,12 @@ public static class ServiceCollectionExtensions
     {
         // WHY: typeahead 候选项重复查询率高 (用户连续输入/同 q 多次请求),
         //      IMemoryCache 5 分钟 TTL 显著降低 PG distinct ILIKE 查询压力
-        //      (AddMemoryCache 默认 Singleton, 可被多个 Scoped 服务注入)
-        services.AddMemoryCache();
+        //      SizeLimit=10000: 防止缓存无限增长 (8 字段 × ~1250 个不同 q 即满),
+        //      超限时 LRU 淘汰, 配合 5 分钟 TTL 双重保护内存
+        services.AddMemoryCache(options =>
+        {
+            options.SizeLimit = 10000;
+        });
         services.AddScoped<AdminProductService>();
         services.AddScoped<AdminProductImageService>();
         services.AddScoped<PublicTypeaheadService>();

@@ -61,30 +61,43 @@ const fields = [
   { key: 'engineType',   label: 'Engine Type',    placeholder: '发动机型号',             typeaheadField: 'engine-type' }
 ] as const
 
-// ===== typeahead 候选项 (每字段独立 AbortController, 快速输入只保留最后一次请求) =====
-//   WHY: 用户快速输入 "CATER" 时, "C"/"CA"/"CAT"/"CATE"/"CATER" 5 次请求,
-//        只保留最后一次, 前 4 次用 AbortController 取消, 避免后端无效查询
+// ===== typeahead 候选项 (每字段独立 AbortController + 300ms debounce) =====
+//   WHY: 用户快速输入 "CATER" 时, "C"/"CA"/"CAT"/"CATE"/"CATER" 5 次按键,
+//        debounce 300ms 后只发最后一次请求, 显著减少 HTTP 创建/取消开销;
+//        另保留 AbortController 兜底, 防止 debounce 期间用户切字段或组件卸载
 const typeaheadControllers: Record<string, AbortController | null> = {}
+const typeaheadTimers: Record<string, ReturnType<typeof setTimeout> | null> = {}
 
 async function fetchSuggestions(fieldKey: string, typeaheadField: string, query: string, cb: (items: string[]) => void) {
-  // 输入 < 2 字符不查 (与后端一致, 避免全表扫描)
+  // 输入 < 2 字符不查 (与后端一致, 避免全表扫描), 同时清空已存在的 debounce 定时器
   if (!query || query.trim().length < 2) {
+    if (typeaheadTimers[fieldKey]) {
+      clearTimeout(typeaheadTimers[fieldKey]!)
+      typeaheadTimers[fieldKey] = null
+    }
     cb([])
     return
   }
-  // 取消上一次同字段的请求
-  const prev = typeaheadControllers[fieldKey]
-  if (prev) prev.abort()
-  const ctrl = new AbortController()
-  typeaheadControllers[fieldKey] = ctrl
-  try {
-    const resp = await publicSearchApi.typeahead(typeaheadField, query.trim(), 20, ctrl.signal)
-    cb(resp.items || [])
-  } catch {
-    cb([])
-  } finally {
-    if (typeaheadControllers[fieldKey] === ctrl) typeaheadControllers[fieldKey] = null
+  // 清除前序 debounce 定时器 (300ms 内多次输入只保留最后一次)
+  if (typeaheadTimers[fieldKey]) {
+    clearTimeout(typeaheadTimers[fieldKey]!)
   }
+  typeaheadTimers[fieldKey] = setTimeout(async () => {
+    typeaheadTimers[fieldKey] = null
+    // 取消上一次同字段的请求 (兜底: 即使 debounce 期间用户切字段也能取消)
+    const prev = typeaheadControllers[fieldKey]
+    if (prev) prev.abort()
+    const ctrl = new AbortController()
+    typeaheadControllers[fieldKey] = ctrl
+    try {
+      const resp = await publicSearchApi.typeahead(typeaheadField, query.trim(), 20, ctrl.signal)
+      cb(resp.items || [])
+    } catch {
+      cb([])
+    } finally {
+      if (typeaheadControllers[fieldKey] === ctrl) typeaheadControllers[fieldKey] = null
+    }
+  }, 300)
 }
 
 // ===== 搜索结果状态 =====
@@ -271,10 +284,22 @@ onMounted(() => {
 
 // P1-4 修复: 组件卸载时清理 debounceTimer, 防止内存泄漏 (规则 5.2 副作用清理)
 //   WHY: watch 内 setTimeout 若未清理, 组件卸载后仍会触发 doSearch, 访问已销毁的响应式状态
+//   同时清理 typeahead debounce 定时器与未完成请求的 AbortController
 onUnmounted(() => {
   if (debounceTimer) {
     window.clearTimeout(debounceTimer)
     debounceTimer = null
+  }
+  // 清理所有 typeahead 定时器与未完成请求
+  for (const key in typeaheadTimers) {
+    if (typeaheadTimers[key]) {
+      clearTimeout(typeaheadTimers[key]!)
+      typeaheadTimers[key] = null
+    }
+  }
+  for (const key in typeaheadControllers) {
+    typeaheadControllers[key]?.abort()
+    typeaheadControllers[key] = null
   }
 })
 </script>

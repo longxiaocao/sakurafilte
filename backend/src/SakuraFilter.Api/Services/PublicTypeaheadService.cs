@@ -75,8 +75,14 @@ public class PublicTypeaheadService
         try
         {
             var result = await QueryAsync(field, pattern, escape, limit, ct);
-            // 写入缓存 (5 分钟 TTL, 即使同一用户连续输入同 q 也只查一次 PG)
-            _cache.Set(cacheKey, result, TimeSpan.FromSeconds(CacheTtlSeconds));
+            // 写入缓存 (5 分钟 TTL, size=1 配合 SizeLimit=10000 防止内存膨胀)
+            // WHY: 必须显式指定 size, 否则 SizeLimit 配置不生效 (Microsoft.Extensions.Caching.Memory 要求)
+            var cacheEntryOptions = new MemoryCacheEntryOptions
+            {
+                AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(CacheTtlSeconds),
+                Size = 1
+            };
+            _cache.Set(cacheKey, result, cacheEntryOptions);
             return result;
         }
         catch (Exception ex)
