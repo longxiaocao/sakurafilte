@@ -36,19 +36,28 @@ const dictItems = [
 //   改方案: nav 中 "产品详情" 改为 "OEM 查询", 点击后弹 ElMessageBox.prompt 收 oem, 再跳详情
 //   避免之前直接 router.push('/product') 触发 "No match found" 警告
 //
-// P-Admin-UX: 顶栏分类 + 收纳 — 解决 9 个按钮挤在 1280px 视口导致文字换行
-//   - 核心 (始终显示): 产品搜索 / OEM 查询 / 产品对比 (公开) / 产品管理 / 字典管理 / 用户管理 / ETL 触发
-//   - 高级 (admin 路径, 收纳到下拉): 高级对比 / 性能 / 错误 / API / 帮助
-//   - 对比命名区分: 公开版 = 游客, 高级版 = 运维 (列可调序, 持久化, 含下架)
+// P-Admin-UX: 顶栏分类 — 解决 admin 路径下点击 "产品搜索/OEM 查询/产品对比" 跳出 admin 体验问题
+//   - 公共区 (仅非 admin 路径): 产品搜索 / OEM 查询 / 产品对比
+//   - 后台区 (仅 admin 路径): 产品管理 + "高级搜索" 入口 / 字典管理 / 用户管理 / ETL 触发 / 更多
+//   - 高级搜索: 复用公开搜索页 (/public/search 8 字段 + typeahead + 加入对比), 避免重复实现
+//   - OEM 查询 + 产品对比 + 产品搜索: 不在 admin 顶栏显示, 避免点击后跳出 admin 路径
+//   - 对比命名区分: 公开版 (/compare) = 游客, 高级版 (/admin/compare, 收纳"更多"下) = 运维
 const navItems = computed(() => [
-  // ===== 公共区 (所有页面可见) =====
-  { label: '产品搜索', path: '/search', icon: 'Search' },
-  { label: 'OEM 查询', action: 'oemLookup', icon: 'Document' },
-  { label: '产品对比', path: '/compare', icon: 'DataLine' },
+  // ===== 公共区 (非 admin 路径可见) =====
+  ...(isAdminPath.value
+    ? []
+    : [
+        { label: '产品搜索', path: '/search', icon: 'Search' },
+        { label: 'OEM 查询', action: 'oemLookup', icon: 'Document' },
+        { label: '产品对比', path: '/compare', icon: 'DataLine' }
+      ]),
   // ===== 后台区 (admin 路径可见) =====
   ...(isAdminPath.value
     ? [
         { label: '产品管理', path: '/admin/products', icon: 'Goods' },
+        // P-Admin-UX: 高级搜索入口 — 跳转公开搜索页 8 字段, 避免 admin 顶栏被公开入口污染
+        //   与 SearchView 加的 "高级搜索" 按钮一致, 内部用户从后台也能跳到对外友好搜索
+        { label: '高级搜索', path: '/public/search', icon: 'Search' },
         // Day 10+: 字典管理下拉菜单 (P1.3 OEM 品牌 + P2.2 7 个新字典)
         { label: '字典管理', dropdown: 'dict', icon: 'Collection' },
         // JWT 改造: 用户管理 (仅 admin 角色显示)
