@@ -784,8 +784,9 @@ export default {
       email: '邮箱',
 
       weight_kg: '重量 (kg)',
-
     },
+
+    feedback: {},
 
     action: {
 
@@ -939,9 +940,9 @@ export default {
     copyError: '复制错误',
     refreshPage: '刷新页面',
     technicalDetails: '查看技术详情',
-    timestamp: '时间'
+    timestamp: '时间',
   },
   a11y: {
-    skipToContent: '跳到主内容'
-  }
+    skipToContent: '跳到主内容',
+  },
 }

@@ -20,6 +20,7 @@ public class AuthTokenBroadcaster : IHostedService, IAsyncDisposable
     private NpgsqlConnection? _listenConn;
     private CancellationTokenSource? _cts;
     private Task? _listenTask;
+    private int consecutiveFailures;  // P0-7 修复: 连续失败计数, 驱动指数退避
     public bool IsListening { get; private set; }
 
     public AuthTokenBroadcaster(IServiceProvider services, ILogger<AuthTokenBroadcaster> logger, IConfiguration config, IHostedServiceStatus hostedStatus)
@@ -75,6 +76,7 @@ public class AuthTokenBroadcaster : IHostedService, IAsyncDisposable
                     await cmd.ExecuteNonQueryAsync(ct);
                 }
                 IsListening = true;
+                consecutiveFailures = 0;  // P0-7 修复: 重连成功重置计数, 让退避从 5s 重新开始
                 _logger.LogInformation("[AuthTokenBroadcaster] LISTEN auth_token_rotated 已启动");
 
                 _listenConn.Notification += async (sender, e) =>

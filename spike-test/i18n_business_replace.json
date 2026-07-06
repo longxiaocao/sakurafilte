@@ -1,0 +1,246 @@
+{
+  "modified_files": [
+    "components\\AppHeader.vue",
+    "views\\ChangePasswordView.vue",
+    "views\\DemoView.vue",
+    "views\\SearchView.vue",
+    "views\\admin\\AdminApiDocsView.vue",
+    "views\\admin\\AdminEnginesView.vue",
+    "views\\admin\\AdminErrorView.vue",
+    "views\\admin\\AdminEtlView.vue",
+    "views\\admin\\AdminMachinesView.vue",
+    "views\\admin\\AdminMediasView.vue",
+    "views\\admin\\AdminOemBrandsView.vue",
+    "views\\admin\\AdminOemNo3sView.vue",
+    "views\\admin\\AdminProductName1sView.vue",
+    "views\\admin\\AdminProductName2sView.vue",
+    "views\\admin\\AdminProductsView.vue",
+    "views\\admin\\AdminUsersView.vue",
+    "views\\public\\PublicCompareView.vue",
+    "views\\public\\PublicProductView.vue",
+    "views\\public\\PublicSearchView.vue"
+  ],
+  "new_keys": [
+    {
+      "key": "common.feedback.warn_001",
+      "zh": "请输入完整 OEM 编号",
+      "en": "Please enter 完整 OEM 编号"
+    },
+    {
+      "key": "common.feedback.info_002",
+      "zh": "OEM 查询",
+      "en": "OEM 查询"
+    },
+    {
+      "key": "common.feedback.info_003",
+      "zh": "确定退出登录吗?",
+      "en": "Logged out"
+    },
+    {
+      "key": "common.feedback.info_004",
+      "zh": "确认",
+      "en": "确认"
+    },
+    {
+      "key": "common.feedback.success_005",
+      "zh": "已退出登录",
+      "en": "Logged out"
+    },
+    {
+      "key": "common.feedback.success_006",
+      "zh": "密码修改成功",
+      "en": "密码修改 succeeded"
+    },
+    {
+      "key": "common.feedback.warn_007",
+      "zh": "请输入当前密码",
+      "en": "Please enter 当前密码"
+    },
+    {
+      "key": "common.feedback.warn_008",
+      "zh": "至少 8 个字符",
+      "en": "at least  8 个字符"
+    },
+    {
+      "key": "common.feedback.info_009",
+      "zh": "再次输入新密码",
+      "en": "Re-enter 新密码"
+    },
+    {
+      "key": "common.feedback.info_010",
+      "zh": "输入 045090 试试",
+      "en": "输入 045090 试试"
+    },
+    {
+      "key": "common.feedback.warn_011",
+      "zh": "请输入用户名",
+      "en": "Please enter 用户名"
+    },
+    {
+      "key": "common.feedback.warn_012",
+      "zh": "请输入密码",
+      "en": "Please enter 密码"
+    },
+    {
+      "key": "common.feedback.warn_013",
+      "zh": "请粘贴至少一个 OEM 编号",
+      "en": "Please paste 贴至少一个 OEM 编号"
+    },
+    {
+      "key": "common.feedback.info_014",
+      "zh": "最多 500 个 OEM, 当前 ${oems.length}",
+      "en": "最多 500 个 OEM, 当前 ${oems.length}"
+    },
+    {
+      "key": "common.feedback.info_015",
+      "zh": "粘贴 OEM 编号, 每行一个 (支持 tab/换行/逗号/分号分隔)&#10;例如:&#10;OEN-123&#10;AB/CD/456&#10;滤清器 1142",
+      "en": "粘贴 OEM 编号, 每行一个 (支持 tab/换行/逗号/分号分隔)&#10;例如:&#10;OEN-123&#10;AB/CD/456&#10;滤清器 1142"
+    },
+    {
+      "key": "common.feedback.info_016",
+      "zh": "已加载离线 openapi.json, 后端 Swagger 不可用",
+      "en": "已加载离线 openapi.json, 后端 Swagger 不可用"
+    },
+    {
+      "key": "common.feedback.error_017",
+      "zh": "无法加载 API 文档 (Swagger + 离线备份均失败)",
+      "en": "无法加载 API 文档 (Swagger + 离线备份均failed)"
+    },
+    {
+      "key": "common.feedback.warn_018",
+      "zh": "无法加载 API 文档",
+      "en": "Cannot 加载 API 文档"
+    },
+    {
+      "key": "common.feedback.info_019",
+      "zh": "cURL 已复制",
+      "en": "cURL 已复制"
+    },
+    {
+      "key": "common.feedback.error_020",
+      "zh": "复制失败",
+      "en": "复制failed"
+    },
+    {
+      "key": "common.feedback.info_021",
+      "zh": "搜索路径 / 方法 / 摘要…",
+      "en": "搜索路径 / 方法 / 摘要…"
+    },
+    {
+      "key": "common.feedback.info_022",
+      "zh": "确定删除 ",
+      "en": "确定删除 "
+    },
+    {
+      "key": "common.feedback.error_023",
+      "zh": "确认清空所有错误日志? 此操作不可恢复。",
+      "en": "确认清空所有错误日志? 此操作不可恢复。"
+    },
+    {
+      "key": "common.feedback.info_024",
+      "zh": "清空确认",
+      "en": "清空确认"
+    },
+    {
+      "key": "common.feedback.info_025",
+      "zh": "已复制到剪贴板",
+      "en": "已复制到剪贴板"
+    },
+    {
+      "key": "common.feedback.error_026",
+      "zh": "复制失败, 请手动选择",
+      "en": "复制failed, 请手动选择"
+    },
+    {
+      "key": "common.feedback.info_027",
+      "zh": "已清空",
+      "en": "已清空"
+    },
+    {
+      "key": "common.feedback.error_028",
+      "zh": "已触发测试错误, 请查看下方列表",
+      "en": "已触发测试错误, 请查看下方列表"
+    },
+    {
+      "key": "common.feedback.info_029",
+      "zh": "搜索 message / type / tags…",
+      "en": "搜索 message / type / tags…"
+    },
+    {
+      "key": "common.feedback.info_030",
+      "zh": "即将触发 ${form.entity} ETL (${form.mode}${form.dryRun ? ",
+      "en": "即将触发 ${form.entity} ETL (${form.mode}${form.dryRun ? "
+    },
+    {
+      "key": "common.feedback.info_031",
+      "zh": "确定删除品牌 ",
+      "en": "确定删除品牌 "
+    },
+    {
+      "key": "common.feedback.info_032",
+      "zh": "确定停售产品 ",
+      "en": "确定停售产品 "
+    },
+    {
+      "key": "common.feedback.info_033",
+      "zh": "确定删除用户 ",
+      "en": "确定删除用户 "
+    },
+    {
+      "key": "common.feedback.info_034",
+      "zh": "已移除",
+      "en": "已移除"
+    },
+    {
+      "key": "common.feedback.warn_035",
+      "zh": "请输入有效的产品 ID",
+      "en": "Please enter 有效的产品 ID"
+    },
+    {
+      "key": "common.feedback.info_036",
+      "zh": "该产品已在对比列表中",
+      "en": "该产品已在对比列表中"
+    },
+    {
+      "key": "common.feedback.info_037",
+      "zh": "最多对比 ${MAX_COMPARE} 个产品",
+      "en": "最多对比 ${MAX_COMPARE} 个产品"
+    },
+    {
+      "key": "common.feedback.info_038",
+      "zh": "产品不存在或已下架",
+      "en": "产品不存在或已下架"
+    },
+    {
+      "key": "common.feedback.info_039",
+      "zh": "已加入: ${data.items[0].oemNoDisplay}",
+      "en": "已加入: ${data.items[0].oemNoDisplay}"
+    },
+    {
+      "key": "common.feedback.info_040",
+      "zh": "输入产品 ID 加入",
+      "en": "输入产品 ID 加入"
+    },
+    {
+      "key": "common.feedback.info_041",
+      "zh": "替代 OEM 表格未就绪",
+      "en": "替代 OEM 表格未就绪"
+    },
+    {
+      "key": "common.feedback.info_042",
+      "zh": "产品数据未加载",
+      "en": "产品数据未加载"
+    },
+    {
+      "key": "common.feedback.warn_043",
+      "zh": "至少需要输入 1 个搜索字段",
+      "en": "at least 需要输入 1 个搜索字段"
+    },
+    {
+      "key": "common.feedback.info_044",
+      "zh": "已清空搜索条件",
+      "en": "已清空搜索条件"
+    }
+  ],
+  "total_keys_generated": 44
+}

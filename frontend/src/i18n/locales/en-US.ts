@@ -775,8 +775,9 @@ export default {
       email: 'Email',
 
       weight_kg: 'Weight (kg)',
-
     },
+
+    feedback: {},
 
     action: {
 
@@ -930,9 +931,9 @@ export default {
     copyError: 'Copy error',
     refreshPage: 'Refresh page',
     technicalDetails: 'Technical details',
-    timestamp: 'Time'
+    timestamp: 'Time',
   },
   a11y: {
-    skipToContent: 'Skip to main content'
-  }
+    skipToContent: 'Skip to main content',
+  },
 }
