@@ -271,7 +271,6 @@ onBeforeUnmount(() => {
             :loading="loading"
             :aria-label="t('common.search')"
           >{{ t('common.search') }}</el-button>
-          <span v-if="provider" class="text-xs text-muted" :aria-label="t('search.provider', { provider })">{{ t('search.provider', { provider }) }}</span>
         </div>
 
         <!-- Task 9 (P3.1): 容差切换结果数变化提示, 仅在切换后短暂出现 -->

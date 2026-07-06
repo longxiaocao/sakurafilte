@@ -61,43 +61,30 @@ const fields = [
   { key: 'engineType',   label: 'Engine Type',    placeholder: '发动机型号',             typeaheadField: 'engine-type' }
 ] as const
 
-// ===== typeahead 候选项 (每字段独立 AbortController + 300ms debounce) =====
-//   WHY: 用户快速输入 "CATER" 时, "C"/"CA"/"CAT"/"CATE"/"CATER" 5 次按键,
-//        debounce 300ms 后只发最后一次请求, 显著减少 HTTP 创建/取消开销;
-//        另保留 AbortController 兜底, 防止 debounce 期间用户切字段或组件卸载
+// ===== typeahead 候选项 (快速输入优化: 取消 300ms debounce, 改为立即查) =====
+//   WHY: 用户体验优先 — 输入即下拉, 不再等 300ms
+//   同时保留 AbortController: 快速输入时取消前序请求, 只保留最后一次 (避免响应错乱)
 const typeaheadControllers: Record<string, AbortController | null> = {}
-const typeaheadTimers: Record<string, ReturnType<typeof setTimeout> | null> = {}
 
 async function fetchSuggestions(fieldKey: string, typeaheadField: string, query: string, cb: (items: string[]) => void) {
-  // 输入 < 2 字符不查 (与后端一致, 避免全表扫描), 同时清空已存在的 debounce 定时器
+  // 输入 < 2 字符不查 (与后端一致, 避免全表扫描)
   if (!query || query.trim().length < 2) {
-    if (typeaheadTimers[fieldKey]) {
-      clearTimeout(typeaheadTimers[fieldKey]!)
-      typeaheadTimers[fieldKey] = null
-    }
     cb([])
     return
   }
-  // 清除前序 debounce 定时器 (300ms 内多次输入只保留最后一次)
-  if (typeaheadTimers[fieldKey]) {
-    clearTimeout(typeaheadTimers[fieldKey]!)
+  // 取消上一次同字段的请求 (快速输入时只保留最后一次)
+  const prev = typeaheadControllers[fieldKey]
+  if (prev) prev.abort()
+  const ctrl = new AbortController()
+  typeaheadControllers[fieldKey] = ctrl
+  try {
+    const resp = await publicSearchApi.typeahead(typeaheadField, query.trim(), 20, ctrl.signal)
+    cb(resp.items || [])
+  } catch {
+    cb([])
+  } finally {
+    if (typeaheadControllers[fieldKey] === ctrl) typeaheadControllers[fieldKey] = null
   }
-  typeaheadTimers[fieldKey] = setTimeout(async () => {
-    typeaheadTimers[fieldKey] = null
-    // 取消上一次同字段的请求 (兜底: 即使 debounce 期间用户切字段也能取消)
-    const prev = typeaheadControllers[fieldKey]
-    if (prev) prev.abort()
-    const ctrl = new AbortController()
-    typeaheadControllers[fieldKey] = ctrl
-    try {
-      const resp = await publicSearchApi.typeahead(typeaheadField, query.trim(), 20, ctrl.signal)
-      cb(resp.items || [])
-    } catch {
-      cb([])
-    } finally {
-      if (typeaheadControllers[fieldKey] === ctrl) typeaheadControllers[fieldKey] = null
-    }
-  }, 300)
 }
 
 // ===== 搜索结果状态 =====
@@ -108,6 +95,14 @@ const totalPages = ref(0)
 const elapsedMs = ref(0)
 const countMode = ref<string>('exact')
 const lastError = ref('')
+
+// P-Demo: 页面进入时展示的"最新产品"明细表 (未输入搜索条件时显示)
+const featuredItems = ref<PublicSearchHit[]>([])
+const featuredLoading = ref(false)
+
+// P-Demo: 对比功能 — 已加入对比的产品 ID 集合 (Set 用于 O(1) 查重)
+const compareIds = ref<Set<number>>(new Set())
+const MAX_COMPARE = 6  // 与 PublicCompareView 一致
 
 // 8 字段是否全部空 — 用于禁用搜索按钮 + 提示文案
 const allEmpty = computed(() =>
@@ -249,6 +244,50 @@ function viewDetail(row: PublicSearchHit) {
   if (oem) router.push(`/product/${encodeURIComponent(oem)}`)
 }
 
+// P-Demo: 拉取最新 20 条产品 (页面进入时调用, 用于"明细表"展示)
+async function loadFeatured() {
+  featuredLoading.value = true
+  try {
+    const resp = await publicSearchApi.featured(20)
+    featuredItems.value = resp.items || []
+  } catch (e) {
+    // 静默失败 — featured 失败不影响搜索功能
+    featuredItems.value = []
+  } finally {
+    featuredLoading.value = false
+  }
+}
+
+// P-Demo: 单条加入对比 — 跳到 /compare?ids=... (后端 PublicCompareView 解析)
+//   行为: 累加而非替换, 已加入的禁用按钮; 达 MAX_COMPARE 给提示
+//   WHY 跳页面而非弹窗: 与 PublicProductView 行为一致, 公开 URL 可分享
+function addToCompare(row: PublicSearchHit, event?: Event) {
+  if (event) event.stopPropagation()  // 阻止冒泡到 row-click (查看详情)
+  if (compareIds.value.has(row.id)) {
+    ElMessage.info('已在对比列表中, 跳转查看')
+    router.push('/compare?ids=' + Array.from(compareIds.value).join(','))
+    return
+  }
+  if (compareIds.value.size >= MAX_COMPARE) {
+    ElMessage.warning(`最多对比 ${MAX_COMPARE} 个产品`)
+    return
+  }
+  // 创建新 Set 触发响应式更新
+  const next = new Set(compareIds.value)
+  next.add(row.id)
+  compareIds.value = next
+  ElMessage.success(`已加入对比 (${next.size}/${MAX_COMPARE})`)
+}
+
+// P-Demo: 跳到对比页查看当前已选
+function goCompare() {
+  if (compareIds.value.size === 0) {
+    ElMessage.warning('请先在明细表中点击"加入对比"')
+    return
+  }
+  router.push('/compare?ids=' + Array.from(compareIds.value).join(','))
+}
+
 // ===== SEO meta =====
 let ogTags: HTMLMetaElement[] = []
 function applySeo() {
@@ -279,23 +318,18 @@ onUnmounted(() => {
 
 onMounted(() => {
   syncFormFromUrl()
+  // 进入页面拉一次 featured 明细表 (即使有搜索条件也拉, 用户清空后可看)
+  loadFeatured()
   if (filledCount.value > 0) doSearch()
 })
 
 // P1-4 修复: 组件卸载时清理 debounceTimer, 防止内存泄漏 (规则 5.2 副作用清理)
 //   WHY: watch 内 setTimeout 若未清理, 组件卸载后仍会触发 doSearch, 访问已销毁的响应式状态
-//   同时清理 typeahead debounce 定时器与未完成请求的 AbortController
+//   同时清理 typeahead 未完成请求的 AbortController (debounce 已移除, 无 timer)
 onUnmounted(() => {
   if (debounceTimer) {
     window.clearTimeout(debounceTimer)
     debounceTimer = null
-  }
-  // 清理所有 typeahead 定时器与未完成请求
-  for (const key in typeaheadTimers) {
-    if (typeaheadTimers[key]) {
-      clearTimeout(typeaheadTimers[key]!)
-      typeaheadTimers[key] = null
-    }
   }
   for (const key in typeaheadControllers) {
     typeaheadControllers[key]?.abort()
@@ -324,9 +358,9 @@ onUnmounted(() => {
           <label class="block text-xs text-muted mb-1">{{ f.label }}</label>
           <el-autocomplete
             v-model="form[f.key]"
-            :placeholder="f.placeholder"
+            :placeholder="`${f.placeholder} (输入 ≥2 字符联想)`"
             :fetch-suggestions="(q: any, cb: any) => fetchSuggestions(f.key, f.typeaheadField, String(q ?? ''), cb as any)"
-            :trigger-on-focus="false"
+            :trigger-on-focus="true"
             clearable
             size="default"
             class="w-full"
@@ -345,11 +379,66 @@ onUnmounted(() => {
     <!-- 错误提示 -->
     <div v-if="lastError" class="text-red-600 text-sm mb-2">{{ lastError }}</div>
 
-    <!-- 全部空 → 提示输入 -->
-    <div v-if="allEmpty" class="py-12 text-center text-muted">
-      <el-icon class="text-4xl mb-2"><Search /></el-icon>
-      <div>请输入至少 1 个搜索字段</div>
-      <div class="text-xs mt-2">多字段为 AND 关系, 全部走 P0.1 ILIKE ESCAPE 模糊匹配</div>
+    <!-- 全部空 → 显示最新产品明细表 (用户可点行查看/点按钮加入对比) -->
+    <div v-if="allEmpty">
+      <div class="flex items-center justify-between mb-2">
+        <div class="text-xs text-muted">
+          <el-icon class="mr-1 align-middle"><InfoFilled /></el-icon>
+          请输入搜索条件 (≥2 字符), 或浏览下方最新 20 条产品
+        </div>
+        <div class="flex items-center gap-2">
+          <span v-if="compareIds.size > 0" class="text-xs text-blue-600">
+            已选 {{ compareIds.size }} / {{ MAX_COMPARE }} 个对比
+          </span>
+          <el-button
+            v-if="compareIds.size > 0"
+            @click="goCompare"
+            type="primary"
+            size="small"
+            plain
+          >查看对比</el-button>
+        </div>
+      </div>
+      <el-table
+        v-loading="featuredLoading"
+        :data="featuredItems"
+        stripe
+        size="small"
+        :row-style="{ cursor: 'pointer' }"
+        @row-click="viewDetail"
+        max-height="calc(100vh - 320px)"
+      >
+        <el-table-column prop="id" label="ID" width="70" />
+        <el-table-column label="OEM" min-width="180" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span class="text-blue-600">{{ row.oemNoDisplay || row.oem2 || '—' }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="OEM 2" min-width="160" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.oem2 || '—' }}</template>
+        </el-table-column>
+        <el-table-column label="Product Name 1" min-width="200" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.productName1 || '—' }}</template>
+        </el-table-column>
+        <el-table-column prop="type" label="Type" width="100" />
+        <el-table-column label="D1 (mm)" width="100" align="right">
+          <template #default="{ row }">{{ row.d1Mm || '—' }}</template>
+        </el-table-column>
+        <el-table-column label="H1 (mm)" width="100" align="right">
+          <template #default="{ row }">{{ row.h1Mm || '—' }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="110" fixed="right">
+          <template #default="{ row }">
+            <el-button
+              @click="(e: any) => addToCompare(row, e)"
+              :disabled="compareIds.has(row.id)"
+              size="small"
+              plain
+              type="primary"
+            >{{ compareIds.has(row.id) ? '已加入' : '加入对比' }}</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
     </div>
 
     <!-- 结果区 -->
@@ -365,6 +454,16 @@ onUnmounted(() => {
           <span>显示第 {{ (page - 1) * pageSize + 1 }}-{{ Math.min(page * pageSize, total) }} 条</span>
         </div>
         <div class="flex items-center gap-2">
+          <span v-if="compareIds.size > 0" class="text-blue-600">
+            已选 {{ compareIds.size }} / {{ MAX_COMPARE }} 个对比
+          </span>
+          <el-button
+            v-if="compareIds.size > 0"
+            @click="goCompare"
+            size="small"
+            plain
+            type="primary"
+          >查看对比</el-button>
           <el-pagination
             v-model:current-page="page"
             v-model:page-size="pageSize"
@@ -405,6 +504,17 @@ onUnmounted(() => {
         </el-table-column>
         <el-table-column label="H1 (mm)" width="100" align="right">
           <template #default="{ row }">{{ row.h1Mm || '—' }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="110" fixed="right">
+          <template #default="{ row }">
+            <el-button
+              @click="(e: any) => addToCompare(row, e)"
+              :disabled="compareIds.has(row.id)"
+              size="small"
+              plain
+              type="primary"
+            >{{ compareIds.has(row.id) ? '已加入' : '加入对比' }}</el-button>
+          </template>
         </el-table-column>
       </el-table>
 

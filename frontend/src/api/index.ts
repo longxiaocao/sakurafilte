@@ -262,6 +262,14 @@ export const publicSearchApi = {
         if (err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED') return { count: 0, items: [] }
         throw err
       })
+  },
+
+  // P-Demo: 公开搜索页进入时展示的"最新产品明细表"
+  //   GET /api/public/featured?limit=20
+  //   返: { total, items: PublicSearchHit[] } (与 eightField.items 形状一致)
+  //   后端: OrderByDescending(Id) Take(limit), 仅排除 IsDiscontinued=true
+  featured(limit = 20): Promise<{ total: number; items: import('./types').PublicSearchHit[] }> {
+    return http.get('/public/featured', { params: { limit } }).then((r) => r.data)
   }
 }
 
