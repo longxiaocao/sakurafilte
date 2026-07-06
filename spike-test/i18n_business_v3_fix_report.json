@@ -1,16 +1,7 @@
 {
-  "total_feedback_keys": 178,
-  "poor_count": 1,
-  "fixed_count": 1,
+  "total_feedback_keys": 177,
+  "poor_count": 0,
+  "fixed_count": 0,
   "from_override": 0,
-  "fixes": [
-    {
-      "key": "loading",
-      "zh": "加载中...",
-      "old_en": "Loading.",
-      "new_en": "Loading",
-      "reason": "trailing_period",
-      "from_override": false
-    }
-  ]
+  "fixes": []
 }
