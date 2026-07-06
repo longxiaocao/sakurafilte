@@ -776,9 +776,33 @@ export default {
 
       weight_kg: 'Weight (kg)',
     },
-
-    feedback: {},
-
+      error_001: 'Server is busy, please try again later (Error code: ${status})',
+      error_002: 'Network connection failed, please check the network',
+      error_003: 'Please enter password',
+      error_004: 'Please enter your current password',
+      error_005: 'Please enter username',
+      info_001: 'OEM Lookup',
+      info_002: 'About to trigger ${entity} ETL (${mode}${dryRun ? \', dry run\' : \'\'}), continue?',
+      info_003: 'Search message / type / tags…',
+      info_004: 'Search path / method / summary…',
+      info_005: 'Paste OEM numbers, one per line (tab/line break/comma/semicolon delimited)&#10;Example:&#10;OEN-123&#10;AB/CD/456&#10;Filter 1142',
+      info_006: 'Network exception: ${err.message || \'please try again later\'}',
+      info_007: 'Request rate limit exceeded, please try again in ${retryAfter || 60}s',
+      info_008: 'Try entering 045090',
+      info_009: 'Enter product ID to add',
+      success_001: 'Added: ${data.items[0].oemNoDisplay}',
+      success_002: 'Pause signal sent (code: ${code}), task will terminate soon',
+      warn_001: 'Re-enter the new password',
+      warn_002: 'Up to 500 OEMs, currently ${oems.length} entered',
+      warn_003: 'Compare up to ${MAX_COMPARE} products',
+      warn_004: 'Clear confirmation',
+      warn_005: 'Confirm discontinued product ',
+      warn_006: 'Confirm delete ',
+      warn_007: 'Confirm delete brand ',
+      warn_008: 'Confirm delete user ',
+      warn_009: 'Confirm',
+      warn_010: '8 characters or more',
+    
     action: {
 
       product_name_1: 'Product Name 1',

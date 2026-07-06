@@ -785,9 +785,33 @@ export default {
 
       weight_kg: '重量 (kg)',
     },
-
-    feedback: {},
-
+      error_001: '服务器繁忙,请稍后重试 (错误码:${status})',
+      error_002: '网络连接失败,请检查网络',
+      error_003: '请输入密码',
+      error_004: '请输入当前密码',
+      error_005: '请输入用户名',
+      info_001: 'OEM 查询',
+      info_002: '即将触发 ${entity} ETL (${mode}${dryRun ? \', 试运行\' : \'\'}), 是否继续?',
+      info_003: '搜索 message / type / tags…',
+      info_004: '搜索路径 / 方法 / 摘要…',
+      info_005: '粘贴 OEM 编号, 每行一个 (支持 tab/换行/逗号/分号分隔)&#10;例如:&#10;OEN-123&#10;AB/CD/456&#10;滤清器 1142',
+      info_006: '网络异常: ${err.message || \'请稍后重试\'}',
+      info_007: '请求频率超限, 请 ${retryAfter || 60}s 后重试',
+      info_008: '输入 045090 试试',
+      info_009: '输入产品 ID 加入',
+      success_001: '已加入: ${data.items[0].oemNoDisplay}',
+      success_002: '已发送暂停信号 (码: ${code}), 任务即将终止',
+      warn_001: '再次输入新密码',
+      warn_002: '最多 500 个 OEM, 当前 ${oems.length}',
+      warn_003: '最多对比 ${MAX_COMPARE} 个产品',
+      warn_004: '清空确认',
+      warn_005: '确定停售产品 ',
+      warn_006: '确定删除 ',
+      warn_007: '确定删除品牌 ',
+      warn_008: '确定删除用户 ',
+      warn_009: '确认',
+      warn_010: '至少 8 个字符',
+    
     action: {
 
       product_name_1: '产品名 1',
