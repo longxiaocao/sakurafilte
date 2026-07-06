@@ -2,11 +2,11 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import path from 'node:path'
 
-// Day 9: Vite 配置
-//   - @ 别名: @/ -> src/
-//   - 开发服务器: 5173 (CORS 白名单)
-//   - API 代理: /api -> http://localhost:5148 (后端 Kestrel)
-//   P5.5+: /health 代理 (健康探针端点不在 /api 前缀下, 需独立代理)
+// Day 9: Vite 閰嶇疆
+//   - @ 鍒悕: @/ -> src/
+//   - 寮€鍙戞湇鍔″櫒: 5173 (CORS 鐧藉悕鍗?
+//   - API 浠ｇ悊: /api -> http://localhost:5148 (鍚庣 Kestrel)
+//   P5.5+: /health 浠ｇ悊 (鍋ュ悍鎺㈤拡绔偣涓嶅湪 /api 鍓嶇紑涓? 闇€鐙珛浠ｇ悊)
 export default defineConfig({
   plugins: [vue()],
   resolve: {
@@ -15,7 +15,7 @@ export default defineConfig({
     }
   },
   server: {
-    port: 5173,
+    port: 5175,
     host: '0.0.0.0',
     proxy: {
       '/api': {
@@ -34,3 +34,4 @@ export default defineConfig({
     chunkSizeWarningLimit: 1500
   }
 })
+
