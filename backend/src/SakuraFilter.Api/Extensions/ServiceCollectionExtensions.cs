@@ -17,6 +17,7 @@ using SakuraFilter.Infrastructure.Storage;
 using SakuraFilter.Search;
 using SakuraFilter.Etl;
 using SakuraFilter.Core.DTOs;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace SakuraFilter.Api.Extensions;
 
@@ -376,6 +377,10 @@ public static class ServiceCollectionExtensions
 
     private static IServiceCollection AddBusinessServices(this IServiceCollection services)
     {
+        // WHY: typeahead 候选项重复查询率高 (用户连续输入/同 q 多次请求),
+        //      IMemoryCache 5 分钟 TTL 显著降低 PG distinct ILIKE 查询压力
+        //      (AddMemoryCache 默认 Singleton, 可被多个 Scoped 服务注入)
+        services.AddMemoryCache();
         services.AddScoped<AdminProductService>();
         services.AddScoped<AdminProductImageService>();
         services.AddScoped<PublicTypeaheadService>();
