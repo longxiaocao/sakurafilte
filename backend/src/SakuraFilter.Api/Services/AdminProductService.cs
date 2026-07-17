@@ -58,6 +58,25 @@ public class AdminProductService
             if (exists)
                 throw new InvalidOperationException($"产品已存在 (oem_no_normalized={oemNormalized})");
 
+            // V2: MR.1 唯一性检查(部分唯一索引,WHERE mr_1 IS NOT NULL)
+            var mr1Exists = await _db.Products.AnyAsync(p => p.Mr1 == form.Mr1!.Trim(), ct);
+            if (mr1Exists)
+                throw new InvalidOperationException($"MR1_ALREADY_EXISTS: MR.1 已存在 (mr1={form.Mr1})");
+
+            // V2: OEM 3 唯一性检查(同 Brand 下未下架 OEM 3)
+            foreach (var x in form.CrossReferences)
+            {
+                if (!string.IsNullOrEmpty(x.OemBrand) && !string.IsNullOrEmpty(x.OemNo3))
+                {
+                    var oem3Exists = await _db.CrossReferences
+                        .AnyAsync(c => c.OemBrand == x.OemBrand!.Trim()
+                            && c.OemNo3 == x.OemNo3!.Trim()
+                            && !c.IsDiscontinued, ct);
+                    if (oem3Exists)
+                        throw new InvalidOperationException($"OEM3_ALREADY_EXISTS: OEM 3 已存在 (brand={x.OemBrand}, oem3={x.OemNo3})");
+                }
+            }
+
             var product = new Product
             {
                 OemNoDisplay = oemDisplay,
@@ -94,7 +113,7 @@ public class AdminProductService
             _db.Products.Add(product);
             await _db.SaveChangesAsync(ct);  // 拿到 product.Id
 
-            // 分区 2: xref
+            // 分区 2: xref (V2: 加 Oem2/SortOrder/MachineType/IsPublished)
             foreach (var x in form.CrossReferences)
             {
                 _db.CrossReferences.Add(new CrossReference
@@ -103,6 +122,10 @@ public class AdminProductService
                     ProductName1 = x.ProductName1?.Trim(),
                     OemBrand = x.OemBrand?.Trim(),
                     OemNo3 = x.OemNo3?.Trim(),
+                    Oem2 = x.Oem2?.Trim(),               // V2
+                    SortOrder = x.SortOrder,               // V2
+                    MachineType = string.IsNullOrEmpty(x.MachineType) ? "others" : x.MachineType,  // V2
+                    IsPublished = x.IsPublished,           // V2
                     CreatedAt = DateTime.UtcNow
                 });
             }
@@ -470,7 +493,7 @@ public class AdminProductService
 
         var xrefs = await _db.CrossReferences.AsNoTracking()
             .Where(x => x.ProductId == id)
-            .Select(x => new XrefInfo(x.Id, x.ProductName1, x.OemBrand, x.OemNo3))
+            .Select(x => new XrefInfo(x.Id, x.ProductName1, x.OemBrand, x.OemNo3, x.Oem2, x.SortOrder, x.MachineType, x.IsPublished, x.RowVersion))
             .ToListAsync(ct);
 
         var apps = await _db.MachineApplications.AsNoTracking()
@@ -511,7 +534,8 @@ public class AdminProductService
             imageInfos.Add(new ProductImageInfo(
                 img.Id, img.ProductId, img.Slot, img.ImageKey, urls[i],
                 img.FileSize, img.ContentType, img.Width, img.Height,
-                img.IsPrimary, img.UploadedAt, img.UploadedBy));
+                img.IsPrimary, img.UploadedAt, img.UploadedBy,
+                img.OemNo3, img.ImageRole));
         }
 
         return new ProductDetailDto(
@@ -956,7 +980,7 @@ public class AdminProductService
         var idList = ordered.Select(p => p.Id).ToList();
         var xrefs = await _db.CrossReferences.AsNoTracking()
             .Where(x => idList.Contains(x.ProductId))
-            .Select(x => new { x.ProductId, x.Id, x.ProductName1, x.OemBrand, x.OemNo3 })
+            .Select(x => new { x.ProductId, x.Id, x.ProductName1, x.OemBrand, x.OemNo3, x.Oem2, x.SortOrder, x.MachineType, x.IsPublished, x.RowVersion })
             .ToListAsync(ct);
         var apps = await _db.MachineApplications.AsNoTracking()
             .Where(m => idList.Contains(m.ProductId))
@@ -966,7 +990,7 @@ public class AdminProductService
         foreach (var p in ordered)
         {
             var pXrefs = xrefs.Where(x => x.ProductId == p.Id)
-                .Select(x => new XrefInfo(x.Id, x.ProductName1, x.OemBrand, x.OemNo3))
+                .Select(x => new XrefInfo(x.Id, x.ProductName1, x.OemBrand, x.OemNo3, x.Oem2, x.SortOrder, x.MachineType, x.IsPublished, x.RowVersion))
                 .ToList();
             var pApps = apps.Where(m => m.ProductId == p.Id)
                 .Select(m => new MachineAppInfo(
@@ -1007,6 +1031,13 @@ public class AdminProductService
     // ========== 辅助 ==========
     private static void ValidateForm(ProductFormDto form)
     {
+        // V2: MR.1 必填校验(内部主键,数据强制)
+        if (string.IsNullOrWhiteSpace(form.Mr1))
+            throw new ArgumentException("MR1_REQUIRED: MR.1 必填");
+        // V2: MR.1 格式校验(1-10 位字母数字)
+        if (!System.Text.RegularExpressions.Regex.IsMatch(form.Mr1.Trim(), @"^[A-Za-z0-9]{1,10}$"))
+            throw new ArgumentException("MR1_FORMAT_INVALID: MR.1 必须为 1-10 位字母数字");
+
         if (string.IsNullOrWhiteSpace(form.Oem2))
             throw new ArgumentException("Oem2 (主号) 必填");
         // P2-2 修复: 补充关键字段长度校验, 防止超长输入触发 PG 22001 而非 400
@@ -1018,7 +1049,8 @@ public class AdminProductService
             ("ProductName1", form.ProductName1, 100),
             ("ProductName2", form.ProductName2, 100),
             ("Type", form.Type, 50),
-            ("Mr1", form.Mr1, 100),
+            // V2: MR.1 最大长度 10(非 100)
+            ("Mr1", form.Mr1, 10),
             ("Media", form.Media, 100),
             ("MediaModel", form.MediaModel, 100),
             ("D7Thread", form.D7Thread, 100),
@@ -1032,6 +1064,14 @@ public class AdminProductService
         {
             if (!string.IsNullOrEmpty(value) && value.Length > max)
                 throw new ArgumentException($"{label} 不能超过 {max} 字符 (当前 {value.Length})");
+        }
+
+        // V2: machine_type 枚举校验
+        var validMachineTypes = new[] { "agriculture", "commercial", "construction", "industrial", "others" };
+        foreach (var x in form.CrossReferences)
+        {
+            if (!string.IsNullOrEmpty(x.MachineType) && !validMachineTypes.Contains(x.MachineType))
+                throw new ArgumentException($"MACHINE_TYPE_INVALID: machine_type 必须为 {string.Join("/", validMachineTypes)} 之一");
         }
     }
 

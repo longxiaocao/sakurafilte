@@ -36,6 +36,16 @@ public class Product
     [Column("d8_thread")] public string? D8Thread { get; set; }
     [Column("media")] public string? Media { get; set; }
 
+    // V2: 尺寸原始值(ETL 导入的原始文本,保留用于溯源)
+    [Column("d1_mm_raw")] public string? D1MmRaw { get; set; }
+    [Column("d2_mm_raw")] public string? D2MmRaw { get; set; }
+    [Column("d3_mm_raw")] public string? D3MmRaw { get; set; }
+    [Column("d4_mm_raw")] public string? D4MmRaw { get; set; }
+    [Column("h1_mm_raw")] public string? H1MmRaw { get; set; }
+    [Column("h2_mm_raw")] public string? H2MmRaw { get; set; }
+    [Column("h3_mm_raw")] public string? H3MmRaw { get; set; }
+    [Column("h4_mm_raw")] public string? H4MmRaw { get; set; }
+
     // ========== Day 8.1: 分区 3 (No. Check / Bypass Valves) ==========
     [Column("no_check_valves")]  public int? NoCheckValves { get; set; }
     [Column("no_bypass_valves")] public int? NoBypassValves { get; set; }
@@ -96,6 +106,7 @@ public class Product
 
 /// <summary>
 /// 产品图片 (Day 8.1: 规格分区 4, 1-6 张图)
+/// V2: 新增 oem_no_3 + image_role 字段,主图按 OEM 3 命名,详情图按 MR.1 共享
 /// </summary>
 public class ProductImage
 {
@@ -112,12 +123,17 @@ public class ProductImage
     [Column("uploaded_at")]  public DateTime UploadedAt { get; set; } = DateTime.UtcNow;
     [Column("uploaded_by")]  public string? UploadedBy { get; set; }
 
+    // V2: 图片分层(主图按 OEM 3 / 详情图按 MR.1)
+    [Column("oem_no_3")] public string? OemNo3 { get; set; }  // V2: 主图关联的 OEM 3
+    [Column("image_role")] public string ImageRole { get; set; } = "detail";  // V2: "primary" / "detail"
+
     // 导航
     public Product? Product { get; set; }
 }
 
 /// <summary>
 /// 交叉引用(替代品牌+替代号,5-20 个/产品)
+/// V2: oem_no_3 升级为对外展示主键,新增 sort_order/machine_type/is_published/oem_2 + xmin 并发令牌
 /// </summary>
 public class CrossReference
 {
@@ -126,13 +142,25 @@ public class CrossReference
     [Column("product_name_1")] public string? ProductName1 { get; set; }
     [Column("oem_brand")] public string? OemBrand { get; set; }
     [Column("oem_no_3")] public string? OemNo3 { get; set; }
+    [Column("oem_2")] public string? Oem2 { get; set; }  // V2: OEM 2 全量收纳
+    [Column("sort_order")] public int SortOrder { get; set; } = 0;  // V2: OEM 3 排序(类竞价排名)
+    [Column("machine_type")] public string? MachineType { get; set; } = "others";  // V2: 机型类型双轨
+    [Column("is_published")] public bool IsPublished { get; set; } = true;  // V2: 是否发布
     [Column("is_discontinued")] public bool IsDiscontinued { get; set; }
     [Column("created_at")] public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    // V2: xmin 乐观锁令牌(复用 PostgreSQL 系统列,与 Product.RowVersion 同机制)
+    [Column("xmin")]
+    public uint RowVersion { get; set; }
+
+    // 导航属性
+    public Product? Product { get; set; }
 }
 
 /// <summary>
 /// 机型适配(1-30 个/产品)
 /// Day 8.1: 扩展 18 字段支撑后台规格分区 7 录入
+/// V2: 新增 machine_category 字段(与 cross_references.machine_type 双轨存储,前端分类树读此字段)
 /// </summary>
 public class MachineApplication
 {
@@ -144,6 +172,9 @@ public class MachineApplication
     [Column("engine_brand")] public string? EngineBrand { get; set; }
     [Column("engine_type")] public string? EngineType { get; set; }
     [Column("engine_energy")] public string? EngineEnergy { get; set; }
+
+    // V2: 机型分类(与 cross_references.machine_type 枚举一致)
+    [Column("machine_category")] public string? MachineCategory { get; set; } = "others";  // V2: agriculture/commercial/construction/industrial/others
 
     // ========== Day 8.1: 分区 7 扩展 (生产日期 / 动力 / 车架号 / 车身 / 底盘 / 发动机 / 排放) ==========
     [Column("production_date_start")] public DateTime? ProductionDateStart { get; set; }

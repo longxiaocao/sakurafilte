@@ -71,11 +71,15 @@ public record ProductFormDto
     public List<MachineAppInput> MachineApplications { get; init; } = new();
 }
 
-/// <summary>交叉引用输入项 (Day 8.1: 分区 2)</summary>
+/// <summary>交叉引用输入项 (V2: 分区 2,加 Oem2/SortOrder/MachineType/IsPublished)</summary>
 public record XrefInput(
     string? ProductName1,
     string? OemBrand,
-    string? OemNo3
+    string? OemNo3,
+    string? Oem2,           // V2: OEM 2 全量收纳
+    int SortOrder,          // V2: OEM 3 排序(默认 0)
+    string? MachineType,    // V2: 机型类型(agriculture/commercial/construction/industrial/others)
+    bool IsPublished        // V2: 是否发布
 );
 
 /// <summary>机型适配输入项 (Day 8.1: 分区 7 全部字段)</summary>
@@ -107,9 +111,8 @@ public record MachineAppInput(
     string? EngineSerialNumber
 );
 
-/// <summary>产品图片信息 (Day 8.1: 分区 4, slot 1-6)
+/// <summary>产品图片信息 (V2: 加 oem_no_3/image_role)
 /// Day 11 Phase 1 BUG FIX D: 字段名对齐前端 (Url→ImageUrl, FileSize→SizeBytes)
-///   之前后端返回 url, 前端类型是 imageUrl, 导致图片上传后破图
 /// </summary>
 public record ProductImageInfo(
     long Id,
@@ -123,7 +126,9 @@ public record ProductImageInfo(
     int? Height,
     bool IsPrimary,
     DateTime UploadedAt,
-    string? UploadedBy
+    string? UploadedBy,
+    string? OemNo3,         // V2: 主图关联的 OEM 3
+    string? ImageRole       // V2: "primary" / "detail"
 );
 
 /// <summary>产品列表查询响应 (Day 8.1: 后台产品列表分页)</summary>
@@ -177,7 +182,7 @@ public record ProductDetailDto(
     List<ProductImageInfo> Images
 );
 
-public record XrefInfo(long Id, string? ProductName1, string? OemBrand, string? OemNo3);
+public record XrefInfo(long Id, string? ProductName1, string? OemBrand, string? OemNo3, string? Oem2, int SortOrder, string? MachineType, bool IsPublished, uint RowVersion);
 
 public record MachineAppInfo(
     long Id,

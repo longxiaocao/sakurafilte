@@ -35,6 +35,17 @@ public static class ProblemDetailsFactory
     private const string ErrDbConstraint = "ERR_DB_CONSTRAINT";    // 外键/非空约束
     private const string ErrDbTimeout = "ERR_DB_TIMEOUT";          // 超时/死锁
 
+    // V2 错误码(大写下划线格式,无 ERR_ 前缀)
+    private const string V2Mr1Required = "MR1_REQUIRED";
+    private const string V2Mr1FormatInvalid = "MR1_FORMAT_INVALID";
+    private const string V2Mr1AlreadyExists = "MR1_ALREADY_EXISTS";
+    private const string V2Oem3AlreadyExists = "OEM3_ALREADY_EXISTS";
+    private const string V2MachineTypeInvalid = "MACHINE_TYPE_INVALID";
+    private const string V2XrefConflict = "XREF_CONFLICT";
+    private const string V2SearchPageTooDeep = "SEARCH_PAGE_TOO_DEEP";
+    private const string V2CursorInvalid = "CURSOR_INVALID";
+    private const string V2CursorExpired = "CURSOR_EXPIRED";
+
     /// <summary>
     /// 把异常类型映射为 HTTP 状态码 (Day 8.4 MVP 范围)
     /// P0-2: 5xx 兜底分支需传 logger 记录原始异常, 不再把 ex.Message 写入 detail
@@ -71,7 +82,7 @@ public static class ProblemDetailsFactory
                 detail: ae.Message,
                 statusCode: StatusCodes.Status400BadRequest,
                 instance: ctx.Request.Path,
-                extensions: new Dictionary<string, object?> { ["errorCode"] = ErrValidationFailed }),
+                extensions: new Dictionary<string, object?> { ["errorCode"] = MapErrorCode(ae.Message) }),
 
             KeyNotFoundException ke => Results.Problem(
                 title: "Not Found",
@@ -80,12 +91,13 @@ public static class ProblemDetailsFactory
                 instance: ctx.Request.Path,
                 extensions: new Dictionary<string, object?> { ["errorCode"] = ErrNotFound }),
 
+            // V2: InvalidOperationException 根据消息内容映射到 V2 错误码(向后兼容旧 ERR_CONFLICT)
             InvalidOperationException io => Results.Problem(
                 title: "Conflict",
                 detail: io.Message,
                 statusCode: StatusCodes.Status409Conflict,
                 instance: ctx.Request.Path,
-                extensions: new Dictionary<string, object?> { ["errorCode"] = ErrConflict }),
+                extensions: new Dictionary<string, object?> { ["errorCode"] = MapErrorCode(io.Message) }),
 
             UnauthorizedAccessException ua => Results.Problem(
                 title: "Forbidden",
@@ -173,5 +185,21 @@ public static class ProblemDetailsFactory
             "40P01" => ErrDbTimeout,
             _ => ErrDbConstraint
         };
+    }
+
+    // V2: 根据异常消息内容映射到 V2 错误码(无 ERR_ 前缀),未匹配时回退到旧错误码
+    private static string MapErrorCode(string message)
+    {
+        if (message.Contains("MR1_REQUIRED")) return V2Mr1Required;
+        if (message.Contains("MR1_FORMAT_INVALID")) return V2Mr1FormatInvalid;
+        if (message.Contains("MR1_ALREADY_EXISTS")) return V2Mr1AlreadyExists;
+        if (message.Contains("OEM3_ALREADY_EXISTS")) return V2Oem3AlreadyExists;
+        if (message.Contains("MACHINE_TYPE_INVALID")) return V2MachineTypeInvalid;
+        if (message.Contains("XREF_CONFLICT")) return V2XrefConflict;
+        if (message.Contains("SEARCH_PAGE_TOO_DEEP")) return V2SearchPageTooDeep;
+        if (message.Contains("CURSOR_INVALID")) return V2CursorInvalid;
+        if (message.Contains("CURSOR_EXPIRED")) return V2CursorExpired;
+        // 向后兼容: 未匹配 V2 错误码时,根据 HTTP 语义返回旧错误码
+        return ErrValidationFailed;
     }
 }

@@ -81,7 +81,7 @@ public class PublicCompareController : ControllerBase
         //   用户需要看图可点击任一列进入 /product/{oem} 详情页 (该页面会查图)
         var xrefs = await _db.CrossReferences.AsNoTracking()
             .Where(x => matchedIds.Contains(x.ProductId))
-            .Select(x => new { x.ProductId, x.Id, x.ProductName1, x.OemBrand, x.OemNo3 })
+            .Select(x => new { x.ProductId, x.Id, x.ProductName1, x.OemBrand, x.OemNo3, x.Oem2, x.SortOrder, x.MachineType, x.IsPublished, x.RowVersion })
             .ToListAsync(ct);
         var apps = await _db.MachineApplications.AsNoTracking()
             .Where(m => matchedIds.Contains(m.ProductId))
@@ -91,7 +91,7 @@ public class PublicCompareController : ControllerBase
         foreach (var p in ordered)
         {
             var pXrefs = xrefs.Where(x => x.ProductId == p.Id)
-                .Select(x => new XrefInfo(x.Id, x.ProductName1, x.OemBrand, x.OemNo3))
+                .Select(x => new XrefInfo(x.Id, x.ProductName1, x.OemBrand, x.OemNo3, x.Oem2, x.SortOrder, x.MachineType, x.IsPublished, x.RowVersion))
                 .ToList();
             var pApps = apps.Where(m => m.ProductId == p.Id)
                 .Select(m => new MachineAppInfo(

@@ -30,6 +30,9 @@ public class ProductDbContext : DbContext
     public DbSet<DictMachine> DictMachines => Set<DictMachine>();     // 多字段 3
     public DbSet<DictEngine> DictEngines => Set<DictEngine>();         // 多字段 2
 
+    // V2: 分区 6 占位空表
+    public DbSet<Partition6Placeholder> Partition6Placeholders => Set<Partition6Placeholder>();
+
     // JWT 认证体系 (3 张表: users / refresh_tokens / login_audit_logs)
     public DbSet<User> Users => Set<User>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
@@ -59,49 +62,38 @@ public class ProductDbContext : DbContext
         {
             e.ToTable("products");
             e.HasKey(p => p.Id);
-            e.Property(p => p.OemNoNormalized).HasMaxLength(50).IsRequired();
+            // V2: oem_no_normalized 降级为普通索引(允许 NULL/重复),MR.1 为内部主键
+            e.Property(p => p.OemNoNormalized).HasMaxLength(50);
             e.Property(p => p.OemNoDisplay).HasMaxLength(50).IsRequired();
             e.Property(p => p.Type).HasMaxLength(50).IsRequired();
             e.Property(p => p.Remark).HasColumnType("text");
             e.Property(p => p.ImageKey).HasMaxLength(500);
             e.Property(p => p.ImageStatus).HasMaxLength(20).HasDefaultValue("pending");
-            // Day 9.12 v8: is_published 默认 true (Product.cs C# 默认值)
-            //   WHY: ETL INSERT 不显式插入 is_published 列, PG 列无默认值时 23502 违反 NOT NULL
-            //        之前本地数据库有旧 SQL migration 建过 DEFAULT true,CI 上 Migrate 无默认值 → ETL failed
             e.Property(p => p.IsPublished).HasDefaultValue(true);
-            // Day 9.12 v9: is_discontinued 默认 false, created_at 默认 now()
-            //   WHY: ETL INSERT 不插入这两列, PG 列 NOT NULL 无默认值 → 23502
-            //        CI 上逐个报错 (is_published → is_discontinued → created_at), 一次性全修复避免迭代
             e.Property(p => p.IsDiscontinued).HasDefaultValue(false);
             e.Property(p => p.CreatedAt).HasDefaultValueSql("now()");
-            // E2E BD.3 修复 v2: 乐观锁 xmin (uint, PG 系统列 xid)
-            //   WHY: 不能用 byte[] + [Timestamp], 因为 PG xmin 类型是 xid (uint32), Npgsql 抛 InvalidCastException
-            //   方案: uint 类型 + Fluent API IsRowVersion(), EF Core 在 UPDATE 时 SET WHERE xmin = @orig
-            //   防止 ApplyConfigurationsFromAssembly 加载的 IEntityTypeConfiguration<Product> 覆盖
+            // 乐观锁 xmin (uint, PG 系统列 xid)
             e.Property(p => p.RowVersion).IsRowVersion().IsConcurrencyToken();
-            // Day 9.12 v7: OemNoNormalized 必须为 UNIQUE 索引
-            //   WHY: EtlImportService.ImportProductsAsync INSERT 用 ON CONFLICT (oem_no_normalized) DO NOTHING/UPDATE
-            //        无 UNIQUE 约束时 PG 报 42P10: there is no unique or exclusion constraint matching the ON CONFLICT specification
-            //        之前本地数据库有旧 SQL migration 建的 uq_products_oem_normalized,CI 上 Migrate 只建普通索引 → ETL failed
-            e.HasIndex(p => p.OemNoNormalized).IsUnique();
+            // V2: oem_no_normalized 改普通部分索引(降级,允许 NULL)
+            e.HasIndex(p => p.OemNoNormalized)
+                .HasDatabaseName("idx_products_oem_no_normalized")
+                .HasFilter("oem_no_normalized IS NOT NULL");
+            // V2: MR.1 UNIQUE 部分索引(内部主键)
+            e.HasIndex(p => p.Mr1)
+                .IsUnique()
+                .HasDatabaseName("idx_products_mr_1_unique")
+                .HasFilter("mr_1 IS NOT NULL");
+            // V2: MR.1 格式 CHECK 约束(1-10 位字母数字)
+            e.HasCheckConstraint("chk_mr_1_format", "mr_1 IS NULL OR mr_1 ~ '^[A-Za-z0-9]{1,10}$'");
             e.HasIndex(p => p.OemNoDisplay);
             e.HasIndex(p => p.Type);
-            // WHY: 复合索引 (type, dX_mm) 让"按 Type 过滤 + ±5mm 范围"走 Index Scan,实测 0.2ms
-            //      1M 数据实测比物理 LIST 分区性能差 < 5%,但省去 EF Core 复合 PK 改造
             e.HasIndex(p => new { p.Type, p.D1Mm }).HasDatabaseName("idx_products_type_d1");
             e.HasIndex(p => new { p.Type, p.D2Mm }).HasDatabaseName("idx_products_type_d2");
             e.HasIndex(p => new { p.Type, p.H1Mm }).HasDatabaseName("idx_products_type_h1");
-            // 单字段索引保留(无 Type 过滤的纯范围查询)
             e.HasIndex(p => p.D1Mm);
             e.HasIndex(p => p.D2Mm);
             e.HasIndex(p => p.H1Mm);
-            // P3-2 改进: 为 Oem2 / Mr1 加索引, 优化 PublicProductController.GetBySlug 的 OR 查询
-            //   WHY: GetBySlug 用 (OemNoDisplay == x || Oem2 == x || Mr1 == x) OR 查询,
-            //        OemNoDisplay 已有索引, Oem2/Mr1 无索引时 PG 走 BitmapOr + 顺序扫描,
-            //        百万级数据下最坏 ~50ms, 加索引后全部走 Index Scan, ~2ms
-            //        (按需索引: 仅 GetBySlug 等公开端点使用, 写入开销可接受)
             e.HasIndex(p => p.Oem2);
-            e.HasIndex(p => p.Mr1);
         });
 
         // CrossReference
@@ -109,11 +101,31 @@ public class ProductDbContext : DbContext
         {
             e.ToTable("cross_references");
             e.HasKey(x => x.Id);
+            e.Property(x => x.ProductId).IsRequired();
             e.Property(x => x.ProductName1).HasMaxLength(100);
-            e.Property(x => x.OemBrand).HasMaxLength(100);
-            e.Property(x => x.OemNo3).HasMaxLength(100);
+            // V2: oem_brand / oem_no_3 升级为 NOT NULL(对外展示主键)
+            e.Property(x => x.OemBrand).HasMaxLength(100).IsRequired();
+            e.Property(x => x.OemNo3).HasMaxLength(200).IsRequired();
+            // V2: 新增字段
+            e.Property(x => x.Oem2).HasMaxLength(100);
+            e.Property(x => x.SortOrder).HasDefaultValue(0);
+            e.Property(x => x.MachineType).HasMaxLength(50).HasDefaultValue("others");
+            e.Property(x => x.IsPublished).HasDefaultValue(true);
+            // V2: xmin 乐观锁令牌(OEM 3 排序并发控制)
+            e.Property(x => x.RowVersion).IsRowVersion().IsConcurrencyToken();
+            // V2: machine_type CHECK 约束
+            e.HasCheckConstraint("chk_xref_machine_type",
+                "machine_type IS NULL OR machine_type IN ('agriculture', 'commercial', 'construction', 'industrial', 'others')");
             e.HasIndex(x => x.ProductId);
-            e.HasIndex(x => new { x.OemBrand, x.OemNo3 });
+            // V2: OEM 3 优先排序查询索引(仅未下架 + 已发布)
+            e.HasIndex(x => new { x.OemBrand, x.SortOrder, x.OemNo3 })
+                .HasDatabaseName("idx_xrefs_brand_oem3_sort")
+                .HasFilter("is_discontinued = false AND is_published = true");
+            // V2: (oem_brand, oem_no_3) 唯一约束(仅未下架,允许下架后重新上架)
+            e.HasIndex(x => new { x.OemBrand, x.OemNo3 })
+                .IsUnique()
+                .HasDatabaseName("uq_xrefs_brand_oem3")
+                .HasFilter("is_discontinued = false");
         });
 
         // MachineApplication
@@ -124,8 +136,15 @@ public class ProductDbContext : DbContext
             e.Property(m => m.MachineBrand).HasMaxLength(200);
             e.Property(m => m.MachineModel).HasMaxLength(200);
             e.Property(m => m.ModelName).HasMaxLength(100);
+            // V2: machine_category(与 cross_references.machine_type 枚举一致)
+            e.Property(m => m.MachineCategory).HasMaxLength(50).HasDefaultValue("others");
+            e.HasCheckConstraint("chk_machine_apps_category",
+                "machine_category IS NULL OR machine_category IN ('agriculture', 'commercial', 'construction', 'industrial', 'others')");
             e.HasIndex(m => m.ProductId);
             e.HasIndex(m => new { m.MachineBrand, m.MachineModel });
+            // V2: 机型分类树级联索引
+            e.HasIndex(m => new { m.MachineCategory, m.MachineBrand, m.MachineModel })
+                .HasDatabaseName("idx_machine_apps_category");
         });
 
         // ProductHistory
@@ -139,7 +158,7 @@ public class ProductDbContext : DbContext
             e.HasIndex(h => new { h.ProductId, h.ChangedAt });
         });
 
-        // ProductImage (Day 8.1: 规格分区 4, 1-6 张图)
+        // ProductImage (V2: 主图/详情图分层,DROP 旧 product_id+slot UNIQUE)
         mb.Entity<ProductImage>(e =>
         {
             e.ToTable("product_images");
@@ -149,8 +168,24 @@ public class ProductDbContext : DbContext
             e.Property(i => i.UploadedBy).HasMaxLength(100);
             e.Property(i => i.Slot).IsRequired();
             e.Property(i => i.DisplayOrder).HasDefaultValue(0);
-            // UNIQUE (product_id, slot) 由 SQL migration 保证 (slot=1-6 互斥)
-            e.HasIndex(i => new { i.ProductId, i.Slot }).IsUnique();
+            // V2: 新增字段
+            e.Property(i => i.OemNo3).HasMaxLength(200);
+            e.Property(i => i.ImageRole).HasMaxLength(20).IsRequired().HasDefaultValue("detail");
+            // V2: image_role CHECK 约束
+            e.HasCheckConstraint("chk_image_role", "image_role IN ('primary', 'detail')");
+            // V2: slot 与 image_role 一致性 CHECK
+            e.HasCheckConstraint("chk_image_role_slot",
+                "(image_role = 'primary' AND slot = 1) OR (image_role = 'detail' AND slot BETWEEN 2 AND 6)");
+            // V2: 主图唯一索引(按 oem_no_3)
+            e.HasIndex(i => i.OemNo3)
+                .IsUnique()
+                .HasDatabaseName("uq_product_images_primary")
+                .HasFilter("image_role = 'primary' AND oem_no_3 IS NOT NULL");
+            // V2: 详情图唯一索引(按 product_id + slot)
+            e.HasIndex(i => new { i.ProductId, i.Slot })
+                .IsUnique()
+                .HasDatabaseName("uq_product_images_detail_slot")
+                .HasFilter("image_role = 'detail'");
             e.HasIndex(i => i.ProductId);
         });
 
@@ -207,5 +242,13 @@ public class ProductDbContext : DbContext
 
         // XrefOemBrand 配置已抽出到 Configurations/XrefOemBrandConfiguration.cs (Day 10+ P2.1)
         //   DbContext 顶部 ApplyConfigurationsFromAssembly 自动注册
+
+        // V2: Partition6Placeholder 占位空表(不参与任何业务查询)
+        mb.Entity<Partition6Placeholder>(e =>
+        {
+            e.ToTable("partition6_placeholder");
+            e.HasKey(p => p.Id);
+            e.Property(p => p.CreatedAt).HasDefaultValueSql("now()");
+        });
     }
 }

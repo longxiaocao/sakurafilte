@@ -226,6 +226,6 @@ public class AdminProductImageService
     private static ProductImageInfo ToInfo(ProductImage i, string url) => new(
         i.Id, i.ProductId, i.Slot, i.ImageKey, url,
         i.FileSize, i.ContentType, i.Width, i.Height, i.IsPrimary,
-        i.UploadedAt, i.UploadedBy
+        i.UploadedAt, i.UploadedBy, i.OemNo3, i.ImageRole
     );
 }
