@@ -2565,3 +2565,305 @@ _待启动第五轮深度审查后追加_
 
 ### 第七轮审查(暂无,待第五轮审查后追加)
 _待启动第五轮深度审查后追加_
+
+---
+
+## v6 修订 37 项衍生漏洞修复验证清单
+
+> 第六轮(即第五轮迭代)审查发现 37 个衍生漏洞,本节为 v6 修复方案的逐项验证清单
+> 验证范围: 数据关联 8 项(D5-1~D5-8) + 检索逻辑 15 项(S5-1~S5-15) + 前后端联动 14 项(F4-1~F4-14)
+
+### 一、数据关联维度 v6 修复验证(8 项)
+
+- [ ] **D5-1** advisory_xact_lock 紧接 BeginTransactionAsync 后通过 GetDbConnection().CreateCommand() 执行,复用同一事务连接
+- [ ] **D5-1** lock 失败时立即 RollbackAsync + 抛 XREF_CONFLICT (409) + 日志 AdvisoryLockFailed
+- [ ] **D5-1** 单元测试 `AdvisoryXactLock_BindsToTransaction` + `AdvisoryXactLock_Failure_RollsBack` 通过
+- [ ] **D5-2** 对账 SQL `WHERE p.mr_1 IS NOT NULL AND p.mr_1 <> m.mr_1` 过滤 NULL
+- [ ] **D5-2** NULL 记录单独统计 + 告警阈值(NULL 比例 > 5% 时告警)
+- [ ] **D5-2** 单元测试 `Reconcile_SkipsNullMr1` + `Reconcile_NullRatioAlert` 通过
+- [ ] **D5-3** WriteTargets 改用 IOptionsMonitor<MeiliOptions> + OnChange 回调
+- [ ] **D5-3** WriteTargets 属性返回 IReadOnlyList<string>,内部存储为 ImmutableArray<string>
+- [ ] **D5-3** 配置变更时通过 CancellationToken 取消并重启正在进行的 DeleteAsync
+- [ ] **D5-3** 单元测试 `WriteTargets_HotSwap_NoException` 通过(并发 ToList 与配置变更)
+- [ ] **D5-4** 每个 IObjectStorage 实现的清理用 try-catch 包裹,失败记录到日志但继续下一个
+- [ ] **D5-4** 时间戳统一用 UTC: `uploaded_at < DateTime.UtcNow.AddHours(-1)` + 列类型 timestamptz
+- [ ] **D5-4** 清理失败记录到 cleanup_failures 表(id/storage_backend/last_failure_at/retry_count)
+- [ ] **D5-4** 单元测试 `CleanupOrphanImages_PartialFailure_Continues` + `CleanupOrphanImages_UtcTimezone` 通过
+- [ ] **D5-5** LoadExistingOemMapAsync 检测到 oem_2 多值时返回 Dictionary<string, List<string>>
+- [ ] **D5-5** 调用方检测到多值时拒绝 fallback + 记录 Oem2Ambiguous 告警 + 写入 import_skips 表
+- [ ] **D5-5** oem_2 多值比例 > 1% 时阻断 ETL 导入
+- [ ] **D5-5** 单元测试 `LoadOemMap_Oem2Ambiguous_SkipsRecord` 通过
+- [ ] **D5-6** brand_sort_order_min 改为 long? 可空类型,NULL 表示"无有效 brand"
+- [ ] **D5-6** ORDER BY 时显式声明 NULLS LAST,NULL 行排在最后
+- [ ] **D5-6** 全软删除时 brand_sort_order_min = NULL (而非 int.MaxValue)
+- [ ] **D5-6** oem_list_sort_order_min 同样处理
+- [ ] **D5-6** 单元测试 `BuildMr1Doc_AllBrandSoftDeleted_NullsLast` + `BuildMr1Doc_PartialBrandSoftDeleted` 通过
+- [ ] **D5-7** ETL TRUNCATE 改用 `TRUNCATE products, cross_references, machine_applications, product_images RESTART IDENTITY CASCADE` 单条 SQL
+- [ ] **D5-7** ProductDbContext.OnModelCreating 中显式添加 FK 配置(CrossReference/MachineApplication/ProductImage 三个 HasOne + OnDelete Cascade)
+- [ ] **D5-7** EF Core 迁移 AddForeignKeysV6 生成 + UP/DOWN 脚本正确
+- [ ] **D5-7** 单元测试 `Truncate_CascadesToChildren` + `Fk_AddedAndDropped` + `ProductDbContext_FkConfiguration` 通过
+- [ ] **D5-8** 文档明确调用顺序: StripControlChars 在 BuildSlug 之前
+- [ ] **D5-8** BuildSlug 方法头部加 WHY 注释
+- [ ] **D5-8** 单元测试 `StripControlChars_Before_BuildSlug_Order` 通过
+
+### 二、检索逻辑维度 v6 修复验证(15 项)
+
+- [ ] **S5-1** SanitizeFormatted 步骤 0(新增): 过滤用户输入 \uFDD0/\uFDD1 字面量
+- [ ] **S5-1** 步骤 3 还原逻辑改为 `if (c == 0xFDD0) sb.Append("<mark>"); else if (c == 0xFDD1) sb.Append("</mark>"); else sb.Append(c);` (而非过滤)
+- [ ] **S5-1** 步骤 4(新增): 还原后再次扫描残留 + 记日志 + 移除
+- [ ] **S5-1** 单元测试 `SanitizeFormatted_PreservesHighlight` + `SanitizeFormatted_StripsUserLiteralFDD0` 通过
+- [ ] **S5-2** keyset WHERE 条件改用显式方向: `WHERE ROW(b, o, u DESC, i DESC) < ROW(@prev_b, @prev_o, @prev_u, @prev_i)`
+- [ ] **S5-2** DESC 字段在行构造器中显式声明方向,整体用 `<` (向后翻页)
+- [ ] **S5-2** 单元测试 `Keyset_SecondPage_ReturnsCorrectRows` + `Keyset_DescDirection_Consistent` 通过
+- [ ] **S5-3** 用 COALESCE 替换 NULL 为哨兵值: `COALESCE(b, 9223372036854775807)`
+- [ ] **S5-3** long.MaxValue 作为"无有效 brand"的哨兵,与 NULLS LAST 语义对齐
+- [ ] **S5-3** 单元测试 `Keyset_NullBrandSortOrder_PaginatesCorrectly` 通过
+- [ ] **S5-4** 步骤 0 实现: `input = input.Replace("\uFDD0", "").Replace("\uFDD1", "");`
+- [ ] **S5-4** 单元测试 `SanitizeFormatted_UserInputFDD0_Stripped` + `SanitizeFormatted_XSS_Bypass_Prevented` 通过
+- [ ] **S5-5** 截断前先按 token 长度降序排序
+- [ ] **S5-5** 停用词优先剔除: 先过滤 stopWords,再 Take
+- [ ] **S5-5** MaxTokenCount 从配置注入,默认 10
+- [ ] **S5-5** 单元测试 `Tokens_Take_PreservesImportantTokens` + `Tokens_StopWordsFiltered` 通过
+- [ ] **S5-6** 实现 `EscapeMeiliFilterValue(string value)` 转义双引号和反斜杠
+- [ ] **S5-6** BuildBrandFilter 调用 EscapeMeiliFilterValue 转义品牌名
+- [ ] **S5-6** 单元测试 `BuildBrandFilter_EscapesQuote` + `BuildBrandFilter_EscapesBackslash` 通过
+- [ ] **S5-7** OemBrandsStr 内部分隔符改用 \u0001 (SOH)
+- [ ] **S5-7** Meilisearch separatorTokens 配置加入 \u0001
+- [ ] **S5-7** 单元测试 `OemBrandsStr_SpaceInBrandName_Preserved` + `OemBrandsStr_SohSeparator_Tokenized` 通过
+- [ ] **S5-8** Channel 容量限制为 10000: `Channel.CreateBounded<DeleteTask>(10000)`
+- [ ] **S5-8** 满时 WriteAsync 阻塞等待(默认超时 30 秒) + 日志告警 DeadLetterQueueFull
+- [ ] **S5-8** 超时后写入持久化 search_index_pending 表(DB 兜底)
+- [ ] **S5-8** 单元测试 `DeadLetterQueue_Full_FallsBackToDb` + `DeadLetterQueue_Full_LogsAlert` 通过
+- [ ] **S5-9** SignV2 签名内容: `mr1 + ":" + id + ":" + brandSortOrderMin + ":" + updatedAtTicks` (不含 expUnixTs)
+- [ ] **S5-9** expUnixTs 作为 cursor 前缀明文: `cursor = base64(expUnixTs + "." + hmac签名)`
+- [ ] **S5-9** 验签时 long.TryParse 防异常
+- [ ] **S5-9** 单元测试 `SignV2_StableSignature` + `VerifyAndExtractV2_MalformedCursor_NoException` 通过
+- [ ] **S5-10** oem_list_sort_order_min 计算时: `MIN(CASE WHEN b.is_deleted THEN NULL ELSE x.sort_order END)`
+- [ ] **S5-10** 与 brand_sort_order_min 统一规则(软删除 brand 用 NULL)
+- [ ] **S5-10** 单元测试 `SortOrderMin_SoftDeletedBrand_Null` + `SortOrderMin_ConsistentBetweenBrandAndOemList` 通过
+- [ ] **S5-11** PG 短关键词匹配改用 `LOWER(oem_brand) = LOWER(@q)`
+- [ ] **S5-11** Meilisearch 配置 matchingStrategy: last + 短关键词特殊处理
+- [ ] **S5-11** 单元测试 `ShortKeyword_CaseInsensitive_MeiliPgConsistent` 通过
+- [ ] **S5-12** 改用 BMP 私用区 U+E000/U+E001 (与 v5 spec 一致)
+- [ ] **S5-12** 跨组件兼容性测试矩阵: Meilisearch 索引/查询 + PostgreSQL JSONB + .NET JSON 序列化 + 浏览器
+- [ ] **S5-12** 单元测试 `PlaceholderBmp_CrossComponentCompatible` 通过
+- [ ] **S5-13** 文档明确要求 Meilisearch 1.6+
+- [ ] **S5-13** 降级方案: Meilisearch < 1.6 改用 HTML escape + 正则还原 <mark>
+- [ ] **S5-13** 启动时检测 Meilisearch 版本,低于 1.6 走降级路径
+- [ ] **S5-13** 单元测试 `PlaceholderBmp_Meili16_Supported` + `PlaceholderBmp_DegradedPath_OlderMeili` 通过
+- [ ] **S5-14** 轮转窗口缩短为 24 小时(从 7 天)
+- [ ] **S5-14** 文档明确: PreviousKey 必须与 CurrentKey 同等保护
+- [ ] **S5-14** 单元测试 `CursorHmac_DualKey_RotationWindow` 通过
+- [ ] **S5-15** search_index_pending 定期清理: 已处理且 updated_at < now() - 30 天的记录删除
+- [ ] **S5-15** BuildBrandFilter AND 模式品牌数上限 20,超出抛 BRAND_FILTER_TOO_LONG
+- [ ] **S5-15** 单元测试 `SearchIndexPending_Cleanup_30Days` + `BuildBrandFilter_TooManyBrands` 通过
+
+### 三、前后端联动维度 v6 修复验证(14 项)
+
+- [ ] **F4-1** mr1Suffix 也调用 BuildSlug 转义: `mr1Suffix = BuildSlug(mr1.Substring(Math.Max(0, mr1.Length - 6)))`
+- [ ] **F4-1** 单元测试 `BuildProductUrl_Mr1Suffix_Escaped` 通过
+- [ ] **F4-2** 实现 `TrimIncompletePercentEncoding(string s)`: 末尾 % 删除,末尾 %X (单 hex) 删除
+- [ ] **F4-2** 单元测试 `BuildSlug_Truncate_PreservesPercentEncoding` + `BuildSlug_Truncate_RemovesIncompletePercent` 通过
+- [ ] **F4-3** 改用 try-catch 404 fallback 实现 searchWithFallback 函数
+- [ ] **F4-3** 单元测试 `AggregateApi_Fallback_On404` + `AggregateApi_Non404Error_Rethrown` 通过
+- [ ] **F4-4** http.ts 改用动态 import: `const { default: router } = await import('@/router')`
+- [ ] **F4-4** 单元测试 `Http_401_DynamicImportRouter_NoCircular` 通过
+- [ ] **F4-5** BuildSlug 调整顺序: 先 EscapeDataString 再 lower (但只对非 %XX 部分 lower)
+- [ ] **F4-5** %XX 中的 hex 字母保持大写,其他字母转小写
+- [ ] **F4-5** 单元测试 `BuildSlug_PercentEncoding_UpperCase` + `BuildSlug_LowerCaseNonPercent` 通过
+- [ ] **F4-6** 文档明确: crossorigin="use-credentials" 必须配合 SameSite=None; Secure
+- [ ] **F4-6** appsettings.json 加 CookiePolicy 配置: SameSite=None, Secure=true
+- [ ] **F4-6** Program.cs 加 app.UseCookiePolicy(... MinimumSameSitePolicy = SameSiteMode.None, Secure = CookieSecurePolicy.Always)
+- [ ] **F4-6** 单元测试 `CookiePolicy_SameSiteNone_WithCrossOrigin` 通过
+- [ ] **F4-7** error 处理器先检查 document.getElementById('app').children.length > 0,已挂载则跳过
+- [ ] **F4-7** 检查 event.target 是否为 SCRIPT/LINK/IMG 标签
+- [ ] **F4-7** 单元测试 `ErrorListener_SkipsMountedApp` + `ErrorListener_OnlyScriptLoad` 通过
+- [ ] **F4-8** sessionStorage 写入用 try-catch 包裹,失败降级到内存 Map
+- [ ] **F4-8** 实现 safeSessionStorage 工具方法
+- [ ] **F4-8** 单元测试 `SessionStorage_SafariPrivateMode_FallbackToMemory` 通过
+- [ ] **F4-9** 实现 captureException 类型适配层(接受 unknown,内部转换为 Error)
+- [ ] **F4-9** 单元测试 `CaptureException_TypeAdapted` 通过
+- [ ] **F4-10** 表单数据自动持久化到 localStorage (debounce 500ms)
+- [ ] **F4-10** 409 时提示"是否恢复本地草稿?"
+- [ ] **F4-10** 单元测试 `FormDraft_AutoSaveAndRestore` 通过
+- [ ] **F4-11** 已在 F4-5 修复(BuildSlug 统一处理)
+- [ ] **F4-12** mount-fallback 加去重标志: `if (window.__fallbackMounted) return;`
+- [ ] **F4-12** 单元测试 `MountFallback_Dedup` 通过
+- [ ] **F4-13** errorMonitor 加 init 状态标志 + 缓冲队列(最多 50 条)
+- [ ] **F4-13** init 时把缓冲队列的事件 flush 到 Sentry
+- [ ] **F4-13** 单元测试 `CaptureException_BeforeInit_Buffered` 通过
+- [ ] **F4-14** router.replace 后 nextTick + 标志位 isRedirecting
+- [ ] **F4-14** PublicSearchView watch 中检查标志位跳过
+- [ ] **F4-14** 单元测试 `RouterReplace_NoUrlSyncLoop` 通过
+
+---
+
+## 33 个 v6 补丁任务验证清单
+
+> v6 补丁任务逐项验证清单,按 Phase 0/1/3/4/5 分布
+
+### Phase 0 v6 补丁任务验证(19 个)
+
+- [ ] **Task 0.1.25** ProductDbContext.OnModelCreating 添加 FK 配置(CrossReference/MachineApplication/ProductImage 三个 HasOne + OnDelete Cascade)
+- [ ] **Task 0.1.25** 导航属性 Product.CrossReferences/MachineApplications/Images 添加
+- [ ] **Task 0.1.25** 单元测试 `ProductDbContext_FkConfiguration` 通过
+- [ ] **Task 0.1.26** ETL TRUNCATE 改用 CASCADE 单条 SQL
+- [ ] **Task 0.1.26** 删除旧的 DROP CONSTRAINT + ADD CONSTRAINT SQL
+- [ ] **Task 0.1.26** 单元测试 `Truncate_CascadesToChildren` + `Fk_AddedAndDropped` 通过
+- [ ] **Task 0.2.25** EF Core 迁移 AddForeignKeysV6 生成 + UP/DOWN 脚本正确
+- [ ] **Task 0.2.25** `dotnet ef migrations script --idempotent` 无报错
+- [ ] **Task 0.2.25** `psql \d cross_references` 显示 FK
+- [ ] **Task 0.2.26** Product 类添加导航属性 ICollection<CrossReference>/MachineApplications/Images
+- [ ] **Task 0.2.26** `dotnet build` 通过 + ModelSnapshot 与迁移一致
+- [ ] **Task 0.3.21** AdminProductService advisory_xact_lock 紧接 BeginTransactionAsync 后执行
+- [ ] **Task 0.3.21** lock 失败立即 RollbackAsync + 抛 XREF_CONFLICT + 日志 AdvisoryLockFailed
+- [ ] **Task 0.3.21** 单元测试 `AdvisoryXactLock_BindsToTransaction` + `AdvisoryXactLock_Failure_RollsBack` 通过
+- [ ] **Task 0.3.22** ReconcileService.cs 对账 SQL `WHERE p.mr_1 IS NOT NULL AND p.mr_1 <> m.mr_1`
+- [ ] **Task 0.3.22** NULL 比例 > 5% 时告警
+- [ ] **Task 0.3.22** 单元测试 `Reconcile_SkipsNullMr1` + `Reconcile_NullRatioAlert` 通过
+- [ ] **Task 0.4.24** MeiliSearchProvider WriteTargets 改用 ImmutableArray + IOptionsMonitor.OnChange
+- [ ] **Task 0.4.24** 配置变更时通过 CancellationToken 取消并重启 DeleteAsync
+- [ ] **Task 0.4.24** 单元测试 `WriteTargets_HotSwap_NoException` 通过
+- [ ] **Task 0.4.25** Mr1IndexDoc.brand_sort_order_min 类型从 int 改为 long?
+- [ ] **Task 0.4.25** 全软删除时 brand_sort_order_min = NULL (而非 int.MaxValue)
+- [ ] **Task 0.4.25** ORDER BY 显式声明 NULLS LAST
+- [ ] **Task 0.4.25** 单元测试 `BuildMr1Doc_AllBrandSoftDeleted_NullsLast` + `BuildMr1Doc_PartialBrandSoftDeleted` 通过
+- [ ] **Task 0.4.26** oem_list_sort_order_min 计算时 `MIN(CASE WHEN b.is_deleted THEN NULL ELSE x.sort_order END)`
+- [ ] **Task 0.4.26** 单元测试 `SortOrderMin_SoftDeletedBrand_Null` + `SortOrderMin_ConsistentBetweenBrandAndOemList` 通过
+- [ ] **Task 0.4.27** BuildSlug 方法头部加 WHY 注释
+- [ ] **Task 0.4.27** 单元测试 `StripControlChars_Before_BuildSlug_Order` 通过
+- [ ] **Task 0.4.28** SanitizeFormatted 步骤 0 过滤用户输入 \uFDD0/\uFDD1 字面量
+- [ ] **Task 0.4.28** 步骤 3 还原逻辑改为 if-else (而非过滤)
+- [ ] **Task 0.4.28** 步骤 4 还原后扫描残留 + 记日志 + 移除
+- [ ] **Task 0.4.28** 改用 BMP 私用区 U+E000/U+E001
+- [ ] **Task 0.4.28** 单元测试 `SanitizeFormatted_PreservesHighlight` + `SanitizeFormatted_StripsUserLiteralFDD0` + `PlaceholderBmp_CrossComponentCompatible` 通过
+- [ ] **Task 0.4.29** PostgresSearchProvider keyset WHERE 条件改用显式 DESC + COALESCE 哨兵
+- [ ] **Task 0.4.29** 单元测试 `Keyset_SecondPage_ReturnsCorrectRows` + `Keyset_DescDirection_Consistent` + `Keyset_NullBrandSortOrder_PaginatesCorrectly` 通过
+- [ ] **Task 0.4.30** tokens.Take 前按 token 长度降序排序 + 停用词优先剔除
+- [ ] **Task 0.4.30** 单元测试 `Tokens_Take_PreservesImportantTokens` + `Tokens_StopWordsFiltered` 通过
+- [ ] **Task 0.4.31** 实现 `EscapeMeiliFilterValue` 工具方法
+- [ ] **Task 0.4.31** BuildBrandFilter AND 模式品牌数上限 20 + 抛 BRAND_FILTER_TOO_LONG
+- [ ] **Task 0.4.31** 单元测试 `BuildBrandFilter_EscapesQuote` + `BuildBrandFilter_EscapesBackslash` + `BuildBrandFilter_TooManyBrands` 通过
+- [ ] **Task 0.4.32** OemBrandsStr 内部分隔符改用 \u0001 (SOH)
+- [ ] **Task 0.4.32** Meilisearch separatorTokens 配置加入 \u0001
+- [ ] **Task 0.4.32** 单元测试 `OemBrandsStr_SpaceInBrandName_Preserved` + `OemBrandsStr_SohSeparator_Tokenized` 通过
+- [ ] **Task 0.4.33** Channel 容量限制为 10000
+- [ ] **Task 0.4.33** 满时阻塞等待(超时 30 秒) + 日志告警 DeadLetterQueueFull + DB 兜底
+- [ ] **Task 0.4.33** 单元测试 `DeadLetterQueue_Full_FallsBackToDb` + `DeadLetterQueue_Full_LogsAlert` 通过
+- [ ] **Task 0.4.34** CursorHmac SignV2 签名内容不含 expUnixTs
+- [ ] **Task 0.4.34** expUnixTs 作为 cursor 前缀明文 + long.TryParse 防异常
+- [ ] **Task 0.4.34** 单元测试 `SignV2_StableSignature` + `VerifyAndExtractV2_MalformedCursor_NoException` 通过
+- [ ] **Task 0.4.35** PG 短关键词匹配改用 `LOWER(oem_brand) = LOWER(@q)`
+- [ ] **Task 0.4.35** 单元测试 `ShortKeyword_CaseInsensitive_MeiliPgConsistent` 通过
+- [ ] **Task 0.4.36** 文档明确要求 Meilisearch 1.6+
+- [ ] **Task 0.4.36** 启动时检测版本 + 低于 1.6 走降级路径
+- [ ] **Task 0.4.36** 单元测试 `PlaceholderBmp_Meili16_Supported` + `PlaceholderBmp_DegradedPath_OlderMeili` 通过
+- [ ] **Task 0.4.37** 双 key 轮转窗口缩短为 24 小时
+- [ ] **Task 0.4.37** 单元测试 `CursorHmac_DualKey_RotationWindow` 通过
+- [ ] **Task 0.4.38** search_index_pending 后台清理任务(每天凌晨 3 点,删除 30 天前已处理记录)
+- [ ] **Task 0.4.38** 单元测试 `SearchIndexPending_Cleanup_30Days` 通过
+
+### Phase 1 v6 补丁任务验证(3 个)
+
+- [ ] **Task 1.3.9** AggregateSearchView.vue v-html 渲染前用 DOMPurify 白名单只允许 <mark>
+- [ ] **Task 1.3.9** 单元测试 `Search_Aggregate_XssDefense` 通过
+- [ ] **Task 1.3.10** html-sanitizer.ts DOMPurify 配置 ALLOWED_TAGS: ['mark'], ALLOWED_ATTR: []
+- [ ] **Task 1.3.10** 输入预处理: 移除 \uFDD0/\uFDD1 字面量
+- [ ] **Task 1.3.10** 单元测试 `HtmlSanitizer_StripsAllExceptMark` 通过
+- [ ] **Task 1.3.11** searchWithFallback 函数实现 try-catch 404 fallback
+- [ ] **Task 1.3.11** 单元测试 `AggregateApi_Fallback_On404` + `AggregateApi_Non404Error_Rethrown` 通过
+
+### Phase 3 v6 补丁任务验证(1 个)
+
+- [ ] **Task 3.2.13** CleanupOrphanImagesAsync 每个 IObjectStorage 用 try-catch 包裹
+- [ ] **Task 3.2.13** 时间戳统一用 UTC + 列类型 timestamptz
+- [ ] **Task 3.2.13** cleanup_failures 表记录失败存储后端
+- [ ] **Task 3.2.13** 单元测试 `CleanupOrphanImages_PartialFailure_Continues` + `CleanupOrphanImages_UtcTimezone` 通过
+
+### Phase 4 v6 补丁任务验证(7 个)
+
+- [ ] **Task 4.1.21** BuildProductUrl mr1Suffix 调用 BuildSlug 转义
+- [ ] **Task 4.1.21** 单元测试 `BuildProductUrl_Mr1Suffix_Escaped` 通过
+- [ ] **Task 4.1.22** BuildSlug 调整顺序: 先 EscapeDataString 再 lower (保留 %XX 大写)
+- [ ] **Task 4.1.22** 实现 TrimIncompletePercentEncoding
+- [ ] **Task 4.1.22** 单元测试 `BuildSlug_PercentEncoding_UpperCase` + `BuildSlug_Truncate_PreservesPercentEncoding` + `BuildSlug_Truncate_RemovesIncompletePercent` 通过
+- [ ] **Task 4.5.16** http.ts 401 处理改用动态 import router
+- [ ] **Task 4.5.16** 单元测试 `Http_401_DynamicImportRouter_NoCircular` 通过
+- [ ] **Task 4.5.17** Detail.cshtml crossorigin="use-credentials" + CookiePolicy SameSite=None; Secure
+- [ ] **Task 4.5.17** 单元测试 `CookiePolicy_SameSiteNone_WithCrossOrigin` 通过
+- [ ] **Task 4.5.18** error 事件处理器检查 #app 已挂载 + script 标签 + 去重标志
+- [ ] **Task 4.5.18** 单元测试 `ErrorListener_SkipsMountedApp` + `ErrorListener_OnlyScriptLoad` + `MountFallback_Dedup` 通过
+- [ ] **Task 4.5.19** safeSessionStorage.ts 工具方法 + Safari 隐私模式降级
+- [ ] **Task 4.5.19** 单元测试 `SessionStorage_SafariPrivateMode_FallbackToMemory` 通过
+- [ ] **Task 4.5.20** errorMonitor captureException 缓冲队列(最多 50 条) + 类型适配
+- [ ] **Task 4.5.20** 单元测试 `CaptureException_BeforeInit_Buffered` + `CaptureException_TypeAdapted` 通过
+
+### Phase 5 v6 补丁任务验证(3 个)
+
+- [ ] **Task 5.1.23** LoadExistingOemMapAsync 检测 oem_2 多值返回 Dictionary<string, List<string>>
+- [ ] **Task 5.1.23** 调用方拒绝 fallback + 记录 Oem2Ambiguous 告警 + 写入 import_skips 表
+- [ ] **Task 5.1.23** oem_2 多值比例 > 1% 阻断 ETL 导入
+- [ ] **Task 5.1.23** 单元测试 `LoadOemMap_Oem2Ambiguous_SkipsRecord` 通过
+- [ ] **Task 5.1.24** import_skips 表创建(id/file_name/row_number/reason/created_at)
+- [ ] **Task 5.1.24** 后台管理页面展示 import_skips 记录
+- [ ] **Task 5.1.24** 单元测试 `ImportSkips_RecordOem2Ambiguous` 通过
+- [ ] **Task 5.1.25** FormDraft 表单数据 localStorage 持久化(debounce 500ms)
+- [ ] **Task 5.1.25** 409 时提示"是否恢复本地草稿?" + 草稿 7 天过期清理
+- [ ] **Task 5.1.25** 单元测试 `FormDraft_AutoSaveAndRestore` 通过
+
+---
+
+## 第六轮深度审查验证点(v6 修复衍生风险)
+
+> 第六轮审查将在 v6 修订完成后启动,验证 v6 修复方案是否产生新的衍生问题。
+> 审查范围: 数据关联维度(D6)/检索逻辑维度(S6)/前后端联动维度(F5)
+
+### 一、数据关联维度第六轮审查重点(10 个验证点)
+
+- [ ] v6 advisory_xact_lock 通过 GetDbConnection().CreateCommand() 执行时,EF Core 是否复用同一事务连接(无新连接池借用)
+- [ ] v6 IProductWriteStrategy 对账脚本过滤 NULL 后,是否遗漏 mr_1 IS NULL 但 meili 有值的场景
+- [ ] v6 WriteTargets ImmutableArray + IOptionsMonitor.OnChange 配置变更时,正在进行的 DeleteAsync 是否被正确取消且无资源泄漏
+- [ ] v6 CleanupOrphanImagesAsync try-catch 包裹后,失败的 IObjectStorage 是否在下次清理时优先重试且不重复清理已成功的
+- [ ] v6 LoadExistingOemMapAsync oem_2 多值检测阈值 1% 是否合理(过高导致错误关联,过低导致 ETL 频繁阻断)
+- [ ] v6 brand_sort_order_min 改 long? NULL 后,Meilisearch 索引是否支持 long? 类型 + 排序 NULLS LAST
+- [ ] v6 ProductDbContext 添加 FK 配置后,EF Core 迁移是否会因已有数据违反 FK 而失败(需要先清理孤儿数据)
+- [ ] v6 TRUNCATE CASCADE 单条 SQL 是否会因 FK 循环引用而失败(虽然当前无循环,但需验证)
+- [ ] v6 StripControlChars 在 BuildSlug 之前调用时,是否影响 BuildSlug 的中文 EscapeDataString 编码
+- [ ] v6 cleanup_failures 表的 retry_count 是否有上限(无限重试可能导致存储后端雪崩)
+
+### 二、检索逻辑维度第六轮审查重点(10 个验证点)
+
+- [ ] v6 SanitizeFormatted 步骤 0 过滤用户输入 \uFDD0/\uFDD1 字面量后,是否影响合法的高亮还原
+- [ ] v6 BMP 私用区 U+E000/U+E001 在 Meilisearch 索引/查询/高亮全链路的兼容性
+- [ ] v6 keyset 显式 DESC + COALESCE 哨兵后,PostgreSQL 14+ 是否正确使用索引(无全表扫描)
+- [ ] v6 tokens.Take 按长度降序排序后,短但重要的 token(如品牌名缩写)是否被截断
+- [ ] v6 EscapeMeiliFilterValue 转义后,Meilisearch filter 语法是否完整(无遗漏的特殊字符)
+- [ ] v6 OemBrandsStr 改用 \u0001 分隔符后,Meilisearch separatorTokens 配置是否生效
+- [ ] v6 Channel 容量 10000 + 超时 30 秒 + DB 兜底链路是否完整(无丢任务)
+- [ ] v6 SignV2 expUnixTs 明文前缀是否会被客户端篡改(虽然不影响验签,但可能影响过期判断)
+- [ ] v6 短关键词 LOWER 大小写不敏感后,PG 性能是否下降(无索引命中)
+- [ ] v6 Meilisearch 1.6+ 版本检测 + 降级路径是否在启动时正确执行
+
+### 三、前后端联动维度第六轮审查重点(10 个验证点)
+
+- [ ] v6 BuildSlug %XX 大写 + TrimIncompletePercentEncoding 后,URL 反查 MR.1 是否正确
+- [ ] v6 http.ts 动态 import router 在生产构建(Vite)中是否生成独立 chunk
+- [ ] v6 CookiePolicy SameSite=None; Secure 在 HTTP 开发环境下是否导致 Cookie 不发送
+- [ ] v6 error 事件处理器检查 #app.children.length 后,Vue 应用挂载延迟期间是否漏捕获错误
+- [ ] v6 safeSessionStorage 内存降级后,页面刷新是否丢失数据(sessionStorage 通常用于会话内)
+- [ ] v6 captureException 缓冲队列 50 条上限是否足够(高并发错误场景)
+- [ ] v6 FormDraft localStorage 持久化是否在多标签页同时编辑时产生冲突
+- [ ] v6 mount-fallback 去重标志 __fallbackMounted 是否在 SPA 路由切换时重置
+- [ ] v6 router.replace isRedirecting 标志位在异步操作中是否有竞态条件
+- [ ] v6 searchWithFallback try-catch 404 fallback 是否会掩盖真实的 404 错误(如 API 路径配置错误)
+
+### 持续迭代验证点(每轮审查后追加)
+
+> 每完成一轮审查 + 修复后,在此追加下一轮验证点
+> 循环终止条件: 连续一轮审查无任何新漏洞检出
+
+### 第七轮审查(暂无,待第六轮审查后追加)
+_待启动第六轮深度审查后追加_
+
+### 第八轮审查(暂无,待第六轮审查后追加)
+_待启动第六轮深度审查后追加_
