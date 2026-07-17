@@ -1,130 +1,192 @@
 <script setup lang="ts">
-// EtlAlertStatus — 告警状态占位卡片 (P1)
-// WHY 新增 (P1 重构 2026-07-06):
-//   告警系统 (钉钉/微信/通用 webhook) 计划在 P2 阶段实施。
-//   本卡片作为 UI 锚点先占位, 避免 P2 时改整体布局, 同时给用户预告。
-//
-// 当前状态:
-//   - 显示"告警系统即将上线"提示
-//   - 列出已规划的告警类型 (ETL/性能/登录安全/资源监控)
-//   - 提供配置入口占位按钮 (跳转设计文档, P2 改为告警配置页)
+// EtlAlertStatus — ETL 页面内告警状态卡片 (P2-1)
+// WHY 重构: 之前 P1 阶段是占位卡, 现在接入真实告警系统
+//   - 展示全局开关 + 7 日 KPI
+//   - 跳转到 /admin/alerts 查看历史与规则
+//   - 显示最近一次告警 (失败/成功/抑制)
+// 复用 alertsApi (P2-1 新增)
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
+import { alertsApi } from '@/api'
+import type { AlertStats, AlertHistoryItem } from '@/api/types'
 
 const { t } = useI18n()
 const router = useRouter()
 
-const plannedTypes = [
-  { key: 'etl', icon: '⚙️', label: t('admin.etlview.alert.type_etl') },
-  { key: 'perf', icon: '📈', label: t('admin.etlview.alert.type_perf') },
-  { key: 'security', icon: '🔒', label: t('admin.etlview.alert.type_security') },
-  { key: 'access', icon: '🌐', label: t('admin.etlview.alert.type_access') },
-  { key: 'resource', icon: '💾', label: t('admin.etlview.alert.type_resource') }
-]
+const stats = ref<AlertStats | null>(null)
+const latest = ref<AlertHistoryItem | null>(null)
+const loading = ref(false)
+let timer: number | null = null
 
-const plannedChannels = [
-  { icon: '📱', label: t('admin.etlview.alert.channel_dingtalk') },
-  { icon: '💬', label: t('admin.etlview.alert.channel_wechat') },
-  { icon: '🔗', label: t('admin.etlview.alert.channel_webhook') }
-]
+async function fetchData() {
+  loading.value = true
+  try {
+    const [s, h] = await Promise.all([
+      alertsApi.stats(),
+      alertsApi.history({ limit: 1, offset: 0 })
+    ])
+    stats.value = s
+    latest.value = h.items[0] ?? null
+  } catch {
+    // 拦截器处理
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(() => {
+  fetchData()
+  // 30s 刷新 (KPI 卡片不需秒级)
+  timer = window.setInterval(fetchData, 30000)
+})
+
+onBeforeUnmount(() => {
+  if (timer) {
+    clearInterval(timer)
+    timer = null
+  }
+})
+
+const hasFailure = computed(() => (stats.value?.failed ?? 0) > 0)
+const hasCritical = computed(() => (stats.value?.p0 ?? 0) > 0)
+
+function severityTagType(sev: string): 'danger' | 'warning' | 'info' | 'success' {
+  if (sev === 'P0') return 'danger'
+  if (sev === 'P1') return 'warning'
+  if (sev === 'P2') return 'info'
+  return 'success'
+}
+
+function fmtTime(s: string | undefined) {
+  return s ? s.slice(0, 19).replace('T', ' ') : '-'
+}
+
+function goToAlerts() {
+  router.push('/admin/alerts')
+}
 </script>
 
 <template>
-  <div class="alert-status">
-    <div class="alert-left">
-      <div class="alert-header">
-        <el-tag size="small" type="info">{{ t('admin.etlview.alert.p2_tag') }}</el-tag>
-        <span class="alert-title">{{ t('admin.etlview.alert.title') }}</span>
-      </div>
-      <div class="alert-desc">{{ t('admin.etlview.alert.description') }}</div>
-      <div class="alert-rows">
-        <div class="alert-row">
-          <span class="row-label">{{ t('admin.etlview.alert.planned_types') }}</span>
-          <span class="row-items">
-            <span v-for="t in plannedTypes" :key="t.key" class="row-item">
-              <span class="row-icon">{{ t.icon }}</span>{{ t.label }}
-            </span>
-          </span>
+  <div class="alert-status" v-loading="loading">
+    <div class="alert-summary">
+      <!-- 关键指标 (左) -->
+      <div class="status-grid">
+        <div class="status-block">
+          <div class="status-num" :class="{ 'status-num-danger': hasFailure }">
+            {{ stats?.failed ?? 0 }}
+          </div>
+          <div class="status-cap">{{ t('admin.etlview.alert.7d_failed') }}</div>
         </div>
-        <div class="alert-row">
-          <span class="row-label">{{ t('admin.etlview.alert.planned_channels') }}</span>
-          <span class="row-items">
-            <span v-for="c in plannedChannels" :key="c.label" class="row-item">
-              <span class="row-icon">{{ c.icon }}</span>{{ c.label }}
-            </span>
-          </span>
+        <div class="status-block">
+          <div class="status-num" :class="{ 'status-num-danger': hasCritical }">
+            {{ stats?.p0 ?? 0 }}
+          </div>
+          <div class="status-cap">{{ t('admin.etlview.alert.7d_p0') }}</div>
+        </div>
+        <div class="status-block">
+          <div class="status-num">{{ stats?.sent ?? 0 }}</div>
+          <div class="status-cap">{{ t('admin.etlview.alert.7d_sent') }}</div>
         </div>
       </div>
-    </div>
-    <div class="alert-right">
-      <el-button
-        type="primary"
-        plain
-        size="small"
-        @click="router.push('/admin/help')"
-      >
-        {{ t('admin.etlview.alert.view_design_btn') }}
-      </el-button>
+
+      <!-- 最新告警 (中) -->
+      <div class="status-latest" v-if="latest">
+        <div class="latest-label">{{ t('admin.etlview.alert.latest') }}</div>
+        <div class="latest-content">
+          <el-tag :type="severityTagType(latest.severity)" size="small">{{ latest.severity }}</el-tag>
+          <span class="latest-type">{{ latest.type }}</span>
+          <el-tag v-if="latest.status !== 'sent'" size="small" type="warning">{{ latest.status }}</el-tag>
+        </div>
+        <div class="latest-time">{{ fmtTime(latest.sentAt) }}</div>
+      </div>
+      <div class="status-latest" v-else>
+        <div class="latest-label">{{ t('admin.etlview.alert.latest') }}</div>
+        <div class="latest-empty">{{ t('admin.etlview.alert.no_history') }}</div>
+      </div>
+
+      <!-- 操作 (右) -->
+      <div class="status-actions">
+        <el-button type="primary" plain size="small" @click="goToAlerts">
+          {{ t('admin.etlview.alert.view_all_btn') }}
+        </el-button>
+      </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.alert-status {
+.alert-status { padding: 4px 0; }
+.alert-summary {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 4px 0;
+  gap: 24px;
 }
-.alert-left { flex: 1 1 auto; min-width: 0; }
-.alert-header {
+.status-grid {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 6px;
+  gap: 24px;
+  flex: 0 0 auto;
 }
-.alert-title {
-  font-size: 14px;
+.status-block { text-align: center; }
+.status-num {
+  font-size: 24px;
   font-weight: 600;
-  color: var(--el-text-color-primary);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
 }
-.alert-desc {
-  font-size: 12px;
-  color: var(--color-text-muted);
-  margin-bottom: 12px;
-  line-height: 1.5;
-}
-.alert-rows { display: flex; flex-direction: column; gap: 6px; }
-.alert-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  font-size: 12px;
-}
-.row-label {
-  flex: 0 0 80px;
-  color: var(--color-text-muted);
-}
-.row-items {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.row-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
-  border: 1px solid var(--el-border-color-lighter);
-  border-radius: 10px;
+.status-num-danger { color: var(--el-color-danger); }
+.status-cap {
   font-size: 11px;
-  color: var(--el-text-color-regular);
+  color: var(--color-text-muted);
+  margin-top: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
-.row-icon { font-size: 12px; }
-.alert-right { flex: 0 0 auto; }
+.status-latest {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0 16px;
+  border-left: 1px solid var(--el-border-color-lighter);
+  border-right: 1px solid var(--el-border-color-lighter);
+}
+.latest-label {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 4px;
+}
+.latest-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.latest-type {
+  font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+  font-size: 12px;
+}
+.latest-time {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  margin-top: 2px;
+}
+.latest-empty {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  padding: 8px 0;
+}
+.status-actions { flex: 0 0 auto; }
 @media (max-width: 768px) {
-  .alert-status { flex-direction: column; align-items: flex-start; }
-  .alert-right { align-self: stretch; }
-  .alert-right :deep(.el-button) { width: 100%; }
+  .alert-summary { flex-direction: column; align-items: stretch; gap: 12px; }
+  .status-grid { justify-content: space-between; }
+  .status-latest {
+    padding: 12px 0;
+    border-left: 0;
+    border-right: 0;
+    border-top: 1px solid var(--el-border-color-lighter);
+    border-bottom: 1px solid var(--el-border-color-lighter);
+  }
+  .status-actions :deep(.el-button) { width: 100%; }
 }
 </style>

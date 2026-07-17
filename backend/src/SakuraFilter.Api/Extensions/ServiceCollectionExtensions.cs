@@ -11,6 +11,7 @@ using System.Threading.RateLimiting;
 using FluentValidation;
 using FluentValidation.AspNetCore;
 using SakuraFilter.Api.Services;
+using SakuraFilter.Api.Services.Alerts;
 using SakuraFilter.Core.Interfaces;
 using SakuraFilter.Infrastructure.Data;
 using SakuraFilter.Infrastructure.Storage;
@@ -396,6 +397,17 @@ public static class ServiceCollectionExtensions
         services.AddScoped<MediaDictService>();
         services.AddScoped<MachineDictService>();
         services.AddScoped<EngineDictService>();
+
+        // P2-1 告警渠道 (3 个实现 + 1 个中心, AlertCenter 注入 IEnumerable<IAlertChannel>)
+        services.AddSingleton<IAlertChannel, DingTalkChannel>();
+        services.AddSingleton<IAlertChannel, WeChatChannel>();
+        services.AddSingleton<IAlertChannel, GenericWebhookChannel>();
+        services.AddSingleton<AlertCenter>();
+        // 渠道统一 HttpClient, 5s 超时 (避免 webhook 阻塞告警流程)
+        services.AddHttpClient("AlertChannel", c =>
+        {
+            c.Timeout = TimeSpan.FromSeconds(5);
+        });
         return services;
     }
 

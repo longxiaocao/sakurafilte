@@ -82,6 +82,13 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/admin/AdminEtlView.vue'),
     meta: { title: 'ETL 触发', requireAuth: true }
   },
+  // ===== P2-1 告警系统: 历史与配置页 (admin 角色) =====
+  {
+    path: '/admin/alerts',
+    name: 'AdminAlerts',
+    component: () => import('@/views/admin/AdminAlertsView.vue'),
+    meta: { title: '告警中心', requireAuth: true }
+  },
   // ===== JWT 改造: 用户管理页 (仅 admin 角色) =====
   //   - requireRole='admin' 由路由守卫强制检查
   //   - UI 在 AppHeader 中仅 admin 角色显示入口

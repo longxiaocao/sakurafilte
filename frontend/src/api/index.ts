@@ -18,7 +18,13 @@ import type {
   UserListResp,
   UserCreateRequest,
   UserUpdateRequest,
-  LoginAuditResp
+  LoginAuditResp,
+  AlertHistoryResp,
+  AlertHistoryDetail,
+  AlertStats,
+  AlertRuleItem,
+  AlertTestRequest,
+  AlertTestResult
 } from './types'
 
 // ===== JWT 鉴权 API (commit aff3ac3 后端 JWT 体系) =====
@@ -368,6 +374,34 @@ export const etlApi = {
   },
   reasonCodeAggregate(): Promise<EtlReasonCodeAggregate> {
     return http.get('/admin/etl/history/aggregate').then((r) => r.data)
+  }
+}
+
+// ===== P2-1 告警系统 API (admin 角色) =====
+//   history:     GET    /api/admin/alerts/history?type=&severity=&status=&limit=&offset=
+//   detail:      GET    /api/admin/alerts/history/{id}
+//   stats:       GET    /api/admin/alerts/stats               (7 日 KPI)
+//   rules:       GET    /api/admin/alerts/rules
+//   updateRule:  PUT    /api/admin/alerts/rules/{id}         { enabled?, severity?, channels?, recipients? }
+//   test:        POST   /api/admin/alerts/test               { type?, severity?, title?, markdown? }
+export const alertsApi = {
+  history(opts: { type?: string; severity?: string; status?: string; limit?: number; offset?: number } = {}): Promise<AlertHistoryResp> {
+    return http.get('/admin/alerts/history', { params: opts }).then((r) => r.data)
+  },
+  detail(id: number): Promise<AlertHistoryDetail> {
+    return http.get(`/admin/alerts/history/${id}`).then((r) => r.data)
+  },
+  stats(): Promise<AlertStats> {
+    return http.get('/admin/alerts/stats').then((r) => r.data)
+  },
+  rules(): Promise<AlertRuleItem[]> {
+    return http.get('/admin/alerts/rules').then((r) => r.data)
+  },
+  updateRule(id: number, body: { enabled?: boolean; severity?: string; channels?: string[]; recipients?: string[]; description?: string }): Promise<{ success: boolean }> {
+    return http.put(`/admin/alerts/rules/${id}`, body).then((r) => r.data)
+  },
+  test(body: AlertTestRequest = {}): Promise<AlertTestResult> {
+    return http.post('/admin/alerts/test', body).then((r) => r.data)
   }
 }
 

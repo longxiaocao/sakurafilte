@@ -35,6 +35,11 @@ public class ProductDbContext : DbContext
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<LoginAuditLog> LoginAuditLogs => Set<LoginAuditLog>();
 
+    // P2-1 告警系统: alert_history / alert_rules / security_events
+    public DbSet<AlertHistory> AlertHistories => Set<AlertHistory>();
+    public DbSet<AlertRule> AlertRules => Set<AlertRule>();
+    public DbSet<SecurityEvent> SecurityEvents => Set<SecurityEvent>();
+
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
         base.OnConfiguring(optionsBuilder);

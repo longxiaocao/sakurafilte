@@ -140,7 +140,7 @@ export default {
       alert: {
         p2_tag: 'P2 Pending',
         title: 'Alert System',
-        description: 'Alert system (DingTalk / WeChat / Generic Webhook / WeChat MP) is planned for the next phase.',
+        description: 'Alert system (DingTalk / WeChat / Generic Webhook / WeChat MP) is now active.',
         planned_types: 'Alert types',
         planned_channels: 'Channels',
         type_etl: 'ETL Task',
@@ -151,7 +151,14 @@ export default {
         channel_dingtalk: 'DingTalk',
         channel_wechat: 'WeChat Work',
         channel_webhook: 'Generic Webhook',
-        view_design_btn: 'View Alert Design Doc'
+        view_design_btn: 'View Alert Design Doc',
+        // P2-1 real alert KPIs
+        '7d_failed': '7d Failed',
+        '7d_p0': '7d P0',
+        '7d_sent': '7d Sent',
+        latest: 'Latest',
+        no_history: 'No alert history',
+        view_all_btn: 'View Alert Center'
       },
       audit: {
         observable_tag: 'Operational',
@@ -249,6 +256,68 @@ export default {
       warning: {
 
       },
+    },
+    alertsview: {
+      page_title: 'Alert Center',
+      btn: {
+        test: 'Test Alert',
+        rules: 'Alert Rules'
+      },
+      kpi: {
+        total_7d: '7d Total',
+        sent: 'Sent',
+        failed: 'Failed',
+        suppressed: 'Suppressed',
+        p0: 'P0 Critical',
+        p1: 'P1 Data',
+        last_7d: 'Last 7 days',
+        send_success: 'Send success',
+        send_failed: 'Send failed',
+        suppressed_in_window: 'In suppress window',
+        severity_p0: 'Severity P0',
+        severity_p1: 'Severity P1'
+      },
+      filter: {
+        type: 'Type',
+        severity: 'Severity',
+        status: 'Status',
+        all: 'All'
+      },
+      table: {
+        title: 'Alert History',
+        records: 'records',
+        severity: 'Severity',
+        type: 'Type',
+        title_col: 'Title',
+        channel: 'Channel',
+        status: 'Status',
+        sent_at: 'Sent At',
+        actions: 'Actions',
+        detail: 'Detail'
+      },
+      detail: {
+        title: 'Alert Detail',
+        id: 'ID',
+        severity_type: 'Severity / Type',
+        title_col: 'Title',
+        channel_status: 'Channel / Status',
+        sent_at: 'Sent At',
+        recipients: 'Recipients',
+        error: 'Error',
+        content: 'Full Payload',
+        response: 'Channel Response'
+      },
+      rules: {
+        title: 'Alert Rules',
+        empty: 'No rules (insert into alert_rules table or call backend API)',
+        type: 'Type',
+        severity: 'Severity',
+        channels: 'Channels',
+        enabled: 'Enabled'
+      },
+      test: {
+        triggered_by_user: 'Manually triggered by current user'
+      }
     },
     helpview: {
       string: {

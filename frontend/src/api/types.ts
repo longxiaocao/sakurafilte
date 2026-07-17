@@ -461,6 +461,84 @@ export interface EtlReasonCodeAggregate {
   breakdown: EtlReasonCodeBreakdown[]
 }
 
+// ===== P2-1 告警系统 (来自 /api/admin/alerts/*) =====
+export interface AlertHistoryItem {
+  id: number
+  type: string
+  severity: string
+  title: string
+  channel: string
+  status: string
+  sentAt: string
+  correlationId?: string
+  error?: string | null
+}
+
+export interface AlertHistoryResp {
+  total: number
+  limit: number
+  offset: number
+  items: AlertHistoryItem[]
+}
+
+export interface AlertHistoryDetail {
+  id: number
+  type: string
+  severity: string
+  title: string
+  channel: string
+  status: string
+  sentAt: string
+  correlationId?: string
+  content: string         // 完整 JSON
+  recipients?: string     // JSON 数组
+  response?: string | null
+  error?: string | null
+}
+
+export interface AlertStats {
+  total: number
+  sent: number
+  failed: number
+  suppressed: number
+  p0: number
+  p1: number
+  p2: number
+  warn: number
+  info: number
+}
+
+export interface AlertRuleItem {
+  id: number
+  type: string
+  enabled: boolean
+  severity: string
+  channels: string         // JSON 数组
+  conditions?: string      // JSON 对象
+  recipients?: string      // JSON 数组
+  description?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface AlertTestRequest {
+  type?: string
+  severity?: string
+  title?: string
+  markdown?: string
+}
+
+export interface AlertTestResult {
+  success: boolean
+  disabled?: boolean
+  noChannel?: boolean
+  suppressed?: boolean
+  correlationId?: string
+  sentCount: number
+  failedCount: number
+  results: { channel: string; success: boolean; error?: string; response?: string }[]
+}
+
 // ===== P3.2 (Task 10): 批量 OEM 查询 (公开) =====
 export interface BatchOemRequest {
   oems: string[]

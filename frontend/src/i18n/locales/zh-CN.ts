@@ -148,7 +148,7 @@ export default {
       alert: {
         p2_tag: 'P2 待接入',
         title: '告警系统',
-        description: '告警系统 (钉钉 / 微信 / 通用 Webhook / 微信公众号) 计划在下一阶段实施,当前为占位。',
+        description: '告警系统 (钉钉 / 微信 / 通用 Webhook / 微信公众号) 已接入。',
         planned_types: '告警类型',
         planned_channels: '推送渠道',
         type_etl: 'ETL 任务',
@@ -159,7 +159,14 @@ export default {
         channel_dingtalk: '钉钉',
         channel_wechat: '企业微信',
         channel_webhook: '通用 Webhook',
-        view_design_btn: '查看告警设计文档'
+        view_design_btn: '查看告警设计文档',
+        // P2-1 真实告警 KPI
+        '7d_failed': '7 日失败',
+        '7d_p0': '7 日 P0',
+        '7d_sent': '7 日已发',
+        latest: '最近一次',
+        no_history: '暂无告警历史',
+        view_all_btn: '查看告警中心'
       },
       audit: {
         observable_tag: '运营可观察',
@@ -258,6 +265,68 @@ export default {
       warning: {
 
       },
+    },
+    alertsview: {
+      page_title: '告警中心',
+      btn: {
+        test: '测试告警',
+        rules: '告警规则'
+      },
+      kpi: {
+        total_7d: '7 日总数',
+        sent: '已发送',
+        failed: '失败',
+        suppressed: '已抑制',
+        p0: 'P0 严重',
+        p1: 'P1 数据',
+        last_7d: '最近 7 天',
+        send_success: '推送成功',
+        send_failed: '推送失败',
+        suppressed_in_window: '抑制窗口内',
+        severity_p0: '严重度 P0',
+        severity_p1: '严重度 P1'
+      },
+      filter: {
+        type: '类型',
+        severity: '严重度',
+        status: '状态',
+        all: '全部'
+      },
+      table: {
+        title: '告警历史',
+        records: '条记录',
+        severity: '严重度',
+        type: '类型',
+        title_col: '标题',
+        channel: '渠道',
+        status: '状态',
+        sent_at: '发送时间',
+        actions: '操作',
+        detail: '详情'
+      },
+      detail: {
+        title: '告警详情',
+        id: 'ID',
+        severity_type: '严重度 / 类型',
+        title_col: '标题',
+        channel_status: '渠道 / 状态',
+        sent_at: '发送时间',
+        recipients: '接收人',
+        error: '失败原因',
+        content: '完整 Payload',
+        response: '渠道响应'
+      },
+      rules: {
+        title: '告警规则',
+        empty: '暂无规则 (需在 alert_rules 表中插入或调用后端 API)',
+        type: '类型',
+        severity: '严重度',
+        channels: '渠道',
+        enabled: '启用'
+      },
+      test: {
+        triggered_by_user: '当前用户手动触发'
+      }
     },
     helpview: {
       string: {

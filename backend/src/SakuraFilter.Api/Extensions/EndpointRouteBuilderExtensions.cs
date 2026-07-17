@@ -14,6 +14,7 @@ public static class EndpointRouteBuilderExtensions
         app.MapEtlEndpoints();
         app.MapAdminProductEndpoints();
         app.MapAdminEtlEndpoints();
+        app.MapAdminAlertEndpoints();  // P2-1
         app.MapDeadLetterEndpoints();
         app.MapDictionaryEndpoints();
         app.MapPublicTypeaheadEndpoints();
