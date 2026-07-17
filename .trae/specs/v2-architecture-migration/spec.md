@@ -13444,3 +13444,204 @@ V21-F4 强化第十二重核实机制定义:
 - [ ] v21 新增 migration: 0 个
 - [ ] v21 已知问题: D7/D8 filter 遗漏(现有 bug,列 v22+ 处理)
 
+---
+
+# 第二十三章 v22 修订 — 第十三重核实机制(回归位置清单完整性验证)
+
+> 基于第二十一轮三维度并行深度审查(D21:2 / S21:0 / N21:1,共 3 项衍生漏洞,含 2 项严重),v22 引入第十三重核实机制(回归位置清单完整性验证),解决 v21 V21-F3 回归位置清单不完整(遗漏 v19 V19-F2/V19-F3/V19-F4 章节内 12 项 `p.OemBrand` 引用位置和错误判断)的问题。
+
+## 23.1 第二十一轮审查结果摘要(3 项衍生漏洞,含 2 项严重)
+
+### D21 数据关联维度(2 项,全部严重)
+
+| 编号 | 问题 | 危险等级 | v21 伪代码 | 实际代码事实(经 Grep 核实) |
+|------|------|---------|-----------|--------------------------------|
+| D21-1 | V21-F3 回归位置清单不完整 — 遗漏 v19 V19-F2/V19-F3 章节内伪代码 | **严重** | spec.md L13285-L13298: V21-F3 修正清单只列 10 项(L11870/L11983/L11986/L12316/L12317/L12369/L12396/L12513/L12522/L12525) | Grep `p.OemBrand` 在 spec.md 共 96 处匹配。V21-F3 修正清单遗漏 v19 V19-F2 章节伪代码(L12410-L12413)、V19-F3 伪代码(L12461),共 12 项回归位置未列入修正清单 |
+| D21-2 | V21-F3 修正清单遗漏 v19 V19-F2/V19-F4 章节描述错误判断 | **严重** | spec.md L12405/L12474/L12482: v19 描述错误判断"Product.OemBrand 存在" | [Product.cs#L8-L95](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Core/Entities/Product.cs#L8-L95): Product 类无 OemBrand 字段。v19 V19-F2/L12405 错误引用 `[Product.cs#L127]: public string? OemBrand`(L127 是 CrossReference 类,非 Product 类)。v19 V19-F4/L12471/L12479 错误判断"Product 无 CrossReferences 导航属性"(V20-F1 已修正 Product 有 CrossReferences L92) |
+
+### N21 第十二重核实机制应用维度(1 项)
+
+| 编号 | 问题 | 危险等级 | 根因 |
+|------|------|---------|------|
+| N21-1 | V21-F3 回归位置清单完整性验证失效 | 中 | v21 第十二重核实机制(伪代码内部字段引用存在性验证 + 跨版本回归验证)未覆盖"回归位置清单完整性验证"。V21-F3 列出 10 项回归位置,但未 Grep 验证是否完整覆盖所有 `p.OemBrand` 引用。第十二重只要求"跨版本回归验证",未要求"回归位置清单完整性验证" |
+
+## 23.2 v22 核心创新 — 第十三重核实机制(回归位置清单完整性验证)
+
+### 第十三重核实机制定义
+
+v21 第十二重核实机制(伪代码内部字段引用存在性验证 + 跨版本回归验证)存在一个盲区:
+1. **回归位置清单完整性验证**: v21 V21-F3 列出 10 项回归位置,但未 Grep 验证是否完整覆盖所有 `p.OemBrand` 引用。第十二重只要求"跨版本回归验证"(验证 vN 是否回归 v(N-K) 已修正错误),未要求"回归位置清单完整性验证"(验证修正清单是否覆盖所有回归位置) → D21-1/D21-2 遗漏。
+
+v22 引入第十三重核实机制,在第十二重基础上追加:
+
+1. **回归位置清单完整性验证**: 当 vN 列出回归位置修正清单时,必须 Grep 所有相关关键字(如 `p.OemBrand`),验证修正清单覆盖所有匹配位置。若 Grep 发现遗漏,必须追加到修正清单。
+
+### 十三重核实机制完整定义(v22)
+
+| 重数 | 名称 | 验证内容 | 工具 |
+|------|------|---------|------|
+| 第一重 | 代码存在性 | 类/方法是否存在 | Grep |
+| 第二重 | 字段名 | 字段名是否存在 | Grep |
+| 第三重 | API 签名 | 方法签名与代码一致 | Read |
+| 第四重 | 伪代码自洽性 | 伪代码逻辑无矛盾 | 人工审查 |
+| 第五重 | 运行时上下文自洽性 | 锁/事务/取消三层互斥自洽 | 人工审查 |
+| 第六重 | API 完整签名比对 | 参数类型/返回值/泛型一致 | Read |
+| 第七重 | 方法/字段名 Grep 零匹配 | 引用的方法/字段名实际存在 | Grep 零匹配验证 |
+| 第八重 | 类归属 + 代码语义对齐 | 字段所属类正确 + 方法不存在时语义已实现 | Grep + Read 类块范围 |
+| 第九重 | record 完整字段 + 现有实现语义 | record 构造提供所有字段 + 保留现有实现关键逻辑 | Read record 定义 + Read 现有实现 |
+| 第十重 | 版本间一致性 + 字段顺序对齐 | 伪代码与前序版本无冲突 + record 构造字段顺序与扩展定义一致 | Grep 前序版本 + Read record 扩展定义 |
+| 第十一重 | 跨伪代码片段字段名一致性 + 导航属性/字段存在性双重验证 | 跨片段字段名引用一致 + 字段存在性双向验证(存在/不存在) | Grep 跨片段字段名 + Grep 双向验证 |
+| 第十二重 | 伪代码内部字段引用存在性验证 + 跨版本回归验证 | 伪代码内部 `p.X` 引用类型 X 字段存在 + vN 不回归 v(N-K) 已修正错误 | Grep 伪代码内部字段引用 + Grep 前序版本已修正错误清单 |
+| **第十三重** | **回归位置清单完整性验证** | **vN 回归位置修正清单必须 Grep 验证覆盖所有匹配位置** | **Grep 所有相关关键字 + 比对修正清单** |
+
+## 23.3 V22-F1~F2 修复方案
+
+### V22-F1 [严重] D21-1/D21-2 补充 V21-F3 遗漏的 12 项回归位置
+
+**v21 错误位置**: spec.md 第二十二章 22.3 V21-F3(L13285-L13298)
+**v21 错误**: V21-F3 修正清单只列 10 项,遗漏 v19 V19-F2/V19-F3/V19-F4 章节内 12 项 `p.OemBrand` 引用位置和错误判断
+**真实代码事实**(经 Grep `p.OemBrand` 在 spec.md 核实):
+- Grep `p.OemBrand` 在 spec.md 共 96 处匹配
+- V21-F3 修正清单(10 项)只覆盖 L11870/L11983/L11986/L12316/L12317/L12369/L12396/L12513/L12522/L12525
+- 遗漏 12 项(全部在 v19 V19-F2/V19-F3/V19-F4 章节内)
+
+**v22 修正方案**: V21-F3 修正清单补充 12 项遗漏位置:
+
+```
+V22-F1 补充 V21-F3 遗漏的 12 项回归位置(在 V21-F3 修正清单 10 项基础上追加):
+
+11. v19 spec.md L12400: V19-F2 章节标题 "Brand 直接用 p.OemBrand,删除冗余子查询" → "Brand 通过 CrossReferences.FirstOrDefault().OemBrand,删除冗余子查询"
+12. v19 spec.md L12405: V19-F2 描述错误引用 "[Product.cs#L127]: public string? OemBrand" → "[CrossReference.cs#L127]: public string? OemBrand"(L127 是 CrossReference 类,非 Product 类)
+13. v19 spec.md L12407: V19-F2 描述 "Brand = (from x ... where x.Brand == p.OemBrand select x.Brand).FirstOrDefault() 返回的就是 p.OemBrand 本身" → "返回的就是 p.CrossReferences.FirstOrDefault().OemBrand 本身"
+14. v19 spec.md L12408: V19-F2 描述 "Brand 直接用 p.OemBrand,删除子查询" → "Brand 通过 CrossReferences.FirstOrDefault().OemBrand,删除子查询"
+15. v19 spec.md L12410: V19-F2 伪代码注释 "Brand 直接用 p.OemBrand" → "Brand 通过 CrossReferences.FirstOrDefault().OemBrand"
+16. v19 spec.md L12411: V19-F2 伪代码 "Brand = p.OemBrand" → "Brand = p.CrossReferences.FirstOrDefault().OemBrand"
+17. v19 spec.md L12413: V19-F2 伪代码 "where x.Brand == p.OemBrand" → "where x.Brand == p.CrossReferences.FirstOrDefault().OemBrand"
+18. v19 spec.md L12461: V19-F3 伪代码 "p.OemBrand, // 16. OemBrand" → "p.Brand, // 16. OemBrand(V20-F3 修正: 与 V19-F6 匿名类型字段名一致,V21-F1 修正后值来自 CrossReferences.OemBrand)"
+19. v19 spec.md L12471: V19-F4 描述错误判断 "Product 无 CrossReferences 导航属性" → "Product 有 CrossReferences 导航属性 L92(V20-F1 修正)"
+20. v19 spec.md L12474: V19-F4 描述错误判断 "Product.OemBrand 存在" → "CrossReferences.OemBrand 存在(Product 无 OemBrand,V21-F1 修正)"
+21. v19 spec.md L12479: V19-F4 伪代码错误判断 "Product 无 CrossReferences 导航属性" → "Product 有 CrossReferences 导航属性 L92(V20-F1 修正)"
+22. v19 spec.md L12482: V19-F4 描述错误判断 "Product.OemBrand 存在" → "CrossReferences.OemBrand 存在(Product 无 OemBrand,V21-F1 修正)"
+```
+
+**回归位置清单完整性验证表**(V22-F1):
+
+| 序号 | 位置 | v19 错误 | v22 修正 | V21-F3 覆盖 |
+|------|------|---------|---------|------------|
+| 1 | L11870 | `p.OemBrand,` | `p.CrossReferences.FirstOrDefault()?.OemBrand,` | ✓(V21-F3 第 1 项) |
+| 2 | L11983 | `where x.Brand == p.OemBrand` | `where x.Brand == p.CrossReferences.FirstOrDefault().OemBrand` | ✓(V21-F3 第 2 项) |
+| 3 | L11986 | `where x.Brand == p.OemBrand` | 同上 | ✓(V21-F3 第 3 项) |
+| 4 | L12316 | `where x.Brand == p.OemBrand` | 同上 | ✓(V21-F3 第 4 项) |
+| 5 | L12317 | "Brand 直接用 p.OemBrand" | "Brand 通过 CrossReferences.FirstOrDefault().OemBrand" | ✓(V21-F3 第 5 项) |
+| 6 | L12369 | "Brand 直接用 p.OemBrand" | 同上 | ✓(V21-F3 第 6 项) |
+| 7 | L12396 | `where x.Brand == p.OemBrand` | `where x.Brand == p.CrossReferences.FirstOrDefault().OemBrand` | ✓(V21-F3 第 7 项) |
+| 8 | L12513 | "Brand 直接用 p.OemBrand" | "Brand 通过 CrossReferences.FirstOrDefault().OemBrand" | ✓(V21-F3 第 8 项) |
+| 9 | L12522 | `Brand = p.OemBrand` | `Brand = p.CrossReferences.FirstOrDefault().OemBrand` | ✓(V21-F3 第 9 项) |
+| 10 | L12525 | `where x.Brand == p.OemBrand` | 同上 | ✓(V21-F3 第 10 项) |
+| 11 | L12400 | V19-F2 标题 "Brand 直接用 p.OemBrand" | "Brand 通过 CrossReferences.FirstOrDefault().OemBrand" | ✗(V22-F1 补充) |
+| 12 | L12405 | 错误引用 Product.cs L127 | 修正为 CrossReference.cs L127 | ✗(V22-F1 补充) |
+| 13 | L12407 | "返回的就是 p.OemBrand 本身" | "返回的就是 p.CrossReferences.FirstOrDefault().OemBrand 本身" | ✗(V22-F1 补充) |
+| 14 | L12408 | "Brand 直接用 p.OemBrand" | "Brand 通过 CrossReferences.FirstOrDefault().OemBrand" | ✗(V22-F1 补充) |
+| 15 | L12410 | 伪代码注释 "Brand 直接用 p.OemBrand" | "Brand 通过 CrossReferences.FirstOrDefault().OemBrand" | ✗(V22-F1 补充) |
+| 16 | L12411 | `Brand = p.OemBrand` | `Brand = p.CrossReferences.FirstOrDefault().OemBrand` | ✗(V22-F1 补充) |
+| 17 | L12413 | `where x.Brand == p.OemBrand` | `where x.Brand == p.CrossReferences.FirstOrDefault().OemBrand` | ✗(V22-F1 补充) |
+| 18 | L12461 | `p.OemBrand,` | `p.Brand,`(V20-F3 修正保留) | ✗(V22-F1 补充) |
+| 19 | L12471 | "Product 无 CrossReferences" | "Product 有 CrossReferences L92(V20-F1 修正)" | ✗(V22-F1 补充) |
+| 20 | L12474 | "Product.OemBrand 存在" | "CrossReferences.OemBrand 存在(V21-F1 修正)" | ✗(V22-F1 补充) |
+| 21 | L12479 | "Product 无 CrossReferences" | "Product 有 CrossReferences L92(V20-F1 修正)" | ✗(V22-F1 补充) |
+| 22 | L12482 | "Product.OemBrand 存在" | "CrossReferences.OemBrand 存在(V21-F1 修正)" | ✗(V22-F1 补充) |
+
+### V22-F2 [中] N21-1 强化第十三重核实机制 — 回归位置清单完整性验证
+
+**v21 盲区**: v21 第十二重核实机制未覆盖"回归位置清单完整性验证"
+**v22 修正方案**: 第十三重核实机制追加定义:
+```
+V22-F2 强化第十三重核实机制定义:
+1. 第十三重核实机制追加"回归位置清单完整性验证":
+   - 当 vN 列出回归位置修正清单时,必须 Grep 所有相关关键字(如 `p.OemBrand`)
+   - 验证修正清单覆盖所有匹配位置
+   - 若 Grep 发现遗漏,必须追加到修正清单
+2. v21 V21-F3 列出 10 项回归位置,但未 Grep 验证完整性 → D21-1/D21-2 遗漏 12 项
+3. v22 要求: 所有回归位置修正清单必须 Grep 验证完整性
+4. 应用范围: 所有 vN 回归位置修正清单(包括 v21 V21-F3 / v22 V22-F1 / 未来版本)
+```
+
+## 23.4 v22 前置任务(Pre-Task)
+
+### Pre-Task-V22-0 [必做] V21-F3 回归位置清单完整性验证
+
+**验证目标**: Grep `p.OemBrand` 在 spec.md,验证 V22-F1 补充后修正清单覆盖所有匹配位置
+**验证步骤**:
+1. Grep `p.OemBrand` 在 spec.md: 列出所有匹配行号
+2. 比对 V22-F1 修正清单(22 项 = V21-F3 10 项 + V22-F1 补充 12 项)
+3. 排除"错误案例描述"(v9/v10 V10-F7 修正方案描述中的 `p.OemBrand` 作为错误案例)
+4. 排除"v22 章节描述"(v22 章节本身描述 V21-F3 遗漏时引用 `p.OemBrand`)
+5. 确认所有 v17/v18/v19 伪代码和描述中的 `p.OemBrand` 引用已列入修正清单
+**通过条件**: V22-F1 修正清单覆盖所有 v17/v18/v19 `p.OemBrand` 引用位置
+**失败处理**: 若有遗漏,追加到 V22-F1 修正清单
+
+## 23.5 v22 vs v21 对比表
+
+| 维度 | v21(第十二重核实机制) | v22(第十三重核实机制) |
+|------|--------------------|--------------------|
+| 核实机制 | 12 重(伪代码内部字段引用存在性验证 + 跨版本回归验证) | **13 重**(v21 12 重 + 回归位置清单完整性验证) |
+| 核实机制盲区 | 回归位置清单完整性验证 | 无(v22 已补全) |
+| 衍生漏洞数 | 第二十一轮审查发现 3 项(D21:2 / N21:1,含 2 项严重) | 待第二十二轮审查验证 |
+| V21-F3 回归位置清单 | 10 项(遗漏 12 项) | 22 项(V21-F3 10 项 + V22-F1 补充 12 项) |
+| 第十二重核实机制盲区 | 未覆盖回归位置清单完整性验证(N21-1) | 第十三重补全(V22-F2) |
+| 新增 Pre-Task | 4 个 | 1 个(Pre-Task-V22-0) |
+| 修复方案数 | V21-F1~F4(4 项,针对 v20 衍生漏洞) | V22-F1~F2(2 项,针对 v21 衍生漏洞) |
+
+## 23.6 v22 文件清单
+
+### v22 实际新增代码文件(0 个)
+- v22 是 spec 修订版,不新增代码文件
+
+### v22 实际修改后端文件(0 个)
+- v22 仅修订 spec/tasks/checklist,不修改代码文件
+
+### v22 实际修改前端文件(0 个)
+- v22 不涉及前端文件修改
+
+### v22 纯文档修正(3 个文件)
+1. spec.md — 追加第二十三章(23.1~23.7)
+2. tasks.md — 追加 v22 任务清单(1 个 Pre-Task + 2 个修复任务)
+3. checklist.md — 追加 v22 验证清单
+
+### v22 新增 migration(0 个)
+- v22 不涉及 DB schema 变更
+
+## 23.7 v22 第二十二轮审查重点
+
+> **审查目标**: 验证 v22 修订是否真正消除 v21 衍生漏洞,且不引入新衍生漏洞。
+
+### D22 数据关联维度审查重点
+
+- [ ] D22-1: V22-F1 是否补充 V21-F3 遗漏的 12 项回归位置
+- [ ] D22-2: V22-F1 回归位置清单完整性验证表是否完整(22 行)
+- [ ] D22-3: V22 是否引入新衍生漏洞
+
+### 第十三重核实机制应用审查
+
+- [ ] N22-1: V22-F1 修复方案基于回归位置清单完整性验证
+- [ ] N22-2: V22-F2 强化第十三重核实机制定义
+- [ ] N22-3: V22 真正实现"0 项回归位置清单遗漏"+"0 项 v21 衍生漏洞"
+
+## 23.8 第二十二轮循环终止条件
+
+- [ ] 第二十二轮审查无任何新漏洞检出 → 完成 v22 修订,进入 v23 修订(如有新漏洞)或定稿
+- [ ] 第二十二轮审查发现新漏洞 → 进入 v23 修订,继续迭代
+- [ ] 第二十二轮审查重点: 第十三重核实机制(回归位置清单完整性验证)
+- [ ] 第二十二轮审查重点: v21 衍生漏洞是否真正消除(Grep 验证 V22-F1 修正清单 22 项覆盖所有 `p.OemBrand` 引用)
+- [ ] 第二十二轮审查重点: V22-F1 回归位置清单完整性验证表是否完整(22 行)
+- [ ] 第二十二轮审查重点: V22-F2 第十三重核实机制定义是否完整
+- [ ] 持续迭代直到连续一轮审查无任何新漏洞检出
+- [ ] v22 引入"第十三重核实机制"(回归位置清单完整性验证)
+- [ ] v22 目标: 真正实现"0 项回归位置清单遗漏"+"0 项 v21 衍生漏洞"
+- [ ] v22 实际新增代码: 0 个(v22 仅修订 spec/tasks/checklist)
+- [ ] v22 实际修改后端文件: 0 个(代码修改由 v17 任务清单执行)
+- [ ] v22 实际修改前端文件: 0 个
+- [ ] v22 纯文档修正: 3 个文件(spec.md / tasks.md / checklist.md)
+- [ ] v22 新增 migration: 0 个
+- [ ] v22 已知问题: D7/D8 filter 遗漏(现有 bug,列 v23+ 处理)
+
