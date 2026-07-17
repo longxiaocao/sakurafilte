@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using SakuraFilter.Api.Services;
 using SakuraFilter.Core.DTOs;
 using SakuraFilter.Infrastructure.Data;
@@ -24,17 +25,21 @@ public class PublicSearchController : ControllerBase
     // V2 Task 1.2: 聚合搜索直接注入两个 provider (不走 Resilient 包装,需区分 provider 标识)
     private readonly MeiliSearchProvider _meili;
     private readonly PostgresSearchProvider _pg;
+    // 改进 1.2: max_page_depth 配置缓存 (5 分钟, 避免每次请求查 DB)
+    private readonly IMemoryCache _cache;
 
     public PublicSearchController(
         ProductDbContext db,
         ILogger<PublicSearchController> logger,
         MeiliSearchProvider meili,
-        PostgresSearchProvider pg)
+        PostgresSearchProvider pg,
+        IMemoryCache cache)
     {
         _db = db;
         _logger = logger;
         _meili = meili;
         _pg = pg;
+        _cache = cache;
     }
 
     /// <summary>
@@ -414,17 +419,22 @@ public class PublicSearchController : ControllerBase
 
     /// <summary>
     /// 从 system_settings 读取 search.max_page_depth (默认 100)
-    /// WHY 单独方法: 便于未来加 IMemoryCache 缓存 (当前直接查 DB,5ms 可接受)
+    /// 改进 1.2: IMemoryCache 5 分钟缓存 (配置变更频率极低, 避免每次请求查 DB)
     /// </summary>
     private async Task<int> GetMaxPageDepthAsync(CancellationToken ct)
     {
+        // 改进 1.2: 缓存命中直接返回 (5 分钟 TTL, 配置变更后最多 5 分钟生效)
+        const string cacheKey = "search.max_page_depth";
+        if (_cache.TryGetValue(cacheKey, out int cached) && cached > 0)
+            return cached;
+
         var value = await _db.SystemSettings
             .AsNoTracking()
             .Where(s => s.Key == "search.max_page_depth")
             .Select(s => s.Value)
             .FirstOrDefaultAsync(ct);
-        if (string.IsNullOrEmpty(value) || !int.TryParse(value, out var depth) || depth < 1)
-            return 100;  // 默认 100 页
+        var depth = (string.IsNullOrEmpty(value) || !int.TryParse(value, out var d) || d < 1) ? 100 : d;
+        _cache.Set(cacheKey, depth, TimeSpan.FromMinutes(5));
         return depth;
     }
 }

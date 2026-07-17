@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using SakuraFilter.Api.Services;
 using SakuraFilter.Core.Entities;
 using SakuraFilter.Infrastructure.Data;
@@ -23,10 +24,17 @@ public static class AdminXrefReorderEndpoints
         var group = app.MapGroup("/api/admin/xrefs/reorder").WithTags("AdminXrefReorder");
 
         // ===== Task 2.1.2: GET /brands — 返回 Brand 列表 (brand / sortOrder / oem3Count) =====
+        //   改进 2.1: IMemoryCache 5 分钟缓存 (brand 字典变更频率低, 避免每次聚合查询)
+        //   失效时机: POST / 排序更新后自动清缓存 (见下方 POST 端点)
         group.MapGet("/brands", async (
             ProductDbContext db,
+            IMemoryCache cache,
             CancellationToken ct) =>
         {
+            const string cacheKey = "xref.brands.list";
+            if (cache.TryGetValue(cacheKey, out List<object>? cached) && cached != null)
+                return Results.Ok(new { total = cached.Count, items = cached });
+
             // 取 XrefOemBrand 字典 (仅未软删除),LEFT JOIN cross_references 统计 oem3 数量
             // WHY LEFT JOIN: 即使 brand 下 OEM 3 全部下架, 字典仍展示 (count=0),便于管理员清理
             var brands = await (
@@ -45,7 +53,9 @@ public static class AdminXrefReorderEndpoints
                     oem3Count = g.Count()
                 }).ToListAsync(ct);
 
-            return Results.Ok(new { total = brands.Count, items = brands });
+            var result = brands.Cast<object>().ToList();
+            cache.Set(cacheKey, result, TimeSpan.FromMinutes(5));
+            return Results.Ok(new { total = result.Count, items = result });
         })
         .WithSummary("获取 OEM 品牌列表 (含 sortOrder + oem3Count, 按 sortOrder 排序)")
         .WithName("AdminXrefReorder_ListBrands");
@@ -87,6 +97,7 @@ public static class AdminXrefReorderEndpoints
         group.MapPost("/", async (
             XrefReorderRequest req,
             ProductDbContext db,
+            IMemoryCache cache,
             ILoggerFactory loggerFactory,
             CancellationToken ct) =>
         {
@@ -133,6 +144,8 @@ public static class AdminXrefReorderEndpoints
                 }
 
                 await tx.CommitAsync(ct);
+                // 改进 2.1: 排序更新成功后清 brand 列表缓存 (oem3Count 可能变化)
+                cache.Remove("xref.brands.list");
                 logger.LogInformation("OEM 3 批量排序更新成功: brand={Brand} count={Count}", req.OemBrand, req.Items.Count);
                 return Results.Ok(new { updated = req.Items.Count });
             }
