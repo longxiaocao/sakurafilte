@@ -7728,3 +7728,77 @@ curl http://localhost:7700/indexes/products/documents/999999
 **新增 migration**: 0 个
 **已知问题**: D7/D8 filter 遗漏(现有 bug,列 v23+ 处理)
 
+## v23 前置任务(Pre-Task)
+
+### Pre-Task-V23-0 [必做] V22-F1 回归位置清单描述性引用完整性验证
+
+**对应 spec 章节**: 第二十四章 24.4 Pre-Task-V23-0
+**对应漏洞**: D22-1/D22-2(V22-F1 回归位置清单遗漏 8 项描述性引用)
+**任务目标**: Grep `p.OemBrand` 在 spec.md,验证 V23-F1 补充后修正清单(30 项)覆盖所有伪代码引用和描述性引用
+**验证步骤**:
+1. Grep `p.OemBrand` 在 spec.md: 列出所有匹配行号
+2. 比对 V23-F1 修正清单(30 项 = V22-F1 22 项 + V23-F1 补充 8 项)
+3. 排除"错误案例描述"(v9/v10 V10-F7 修正方案描述中的 `p.OemBrand` 作为错误案例)
+4. 排除"v22/v23 章节描述"(v22/v23 章节本身描述 V21-F3/V22-F1 遗漏时引用 `p.OemBrand`)
+5. 排除"v20/v21 章节描述性引用"(v20 V20-F3 章节 / v20 D20 表格 / v21 V21-F1/F2/F3 章节描述性引用 `p.OemBrand`,这些是历史记录,描述 v20/v21 当时的修正方案,不需要修正)
+6. 确认所有 v17/v18/v19 伪代码引用和描述性引用已列入修正清单
+**通过条件**: V23-F1 修正清单覆盖所有 v17/v18/v19 `p.OemBrand` 伪代码引用和描述性引用
+**失败处理**: 若有遗漏,追加到 V23-F1 修正清单
+**验证命令**: 无(纯 spec 修订)
+
+## v23 数据关联维度任务(对应 V23-F1)
+
+### V23-1.1 补充 V22-F1 遗漏的 8 项描述性引用
+
+**对应 spec 章节**: 第二十四章 24.3 V23-F1
+**对应漏洞**: D22-1/D22-2(V22-F1 回归位置清单遗漏 8 项描述性引用)
+**任务目标**: 在 V22-F1 修正清单 22 项基础上,补充 8 项遗漏的描述性引用,扩展为 30 项
+**具体修改**:
+1. v18 spec.md L12319: D18-4 表格 "v18 V18-F5: 用 p.OemBrand + x.Brand 子查询" → "用 CrossReferences.FirstOrDefault().OemBrand + x.Brand 子查询"(V21-F1 修正后)
+2. v19 spec.md L12643: 对比表 "直接用 p.OemBrand(V19-F2)" → "通过 CrossReferences.FirstOrDefault().OemBrand(V21-F1 修正后,V19-F2 已被覆盖)"
+3. v19 spec.md L12677: 验证点 "V19-F2 Brand 是否直接用 p.OemBrand" → "V19-F2 Brand 是否通过 CrossReferences.FirstOrDefault().OemBrand(V21-F1 修正后)"
+4. v19 spec.md L12710: 审查重点 "Brand 直接用 p.OemBrand" → "Brand 通过 CrossReferences.FirstOrDefault().OemBrand(V21-F1 修正后)"
+5. v19 spec.md L12738: D19-3 表格 "V19-F3 p.OemBrand 与 V19-F6 Brand 不一致" → "V19-F3 p.Brand(V20-F3 修正)与 V19-F6 Brand 一致(V21-F1 修正后 Brand 值来自 CrossReferences.OemBrand)"
+6. v19 spec.md L12751: N19-2 表格 "V19-F3 引用 p.OemBrand" → "V19-F3 引用 p.Brand(V20-F3 修正),V21-F1 修正后 Brand 值来自 CrossReferences.OemBrand"
+7. v19 spec.md L12758: 描述 "V19-F3 引用 p.OemBrand" → "V19-F3 引用 p.Brand(V20-F3 修正),V21-F1 修正后 Brand 值来自 CrossReferences.OemBrand"
+8. v19 spec.md L12788: 对比表 "V19-F3 引用 p.OemBrand" → "V19-F3 引用 p.Brand(V20-F3 修正),V21-F1 修正后 Brand 值来自 CrossReferences.OemBrand"
+**验证命令**: 无(纯 spec 修订)
+
+## v23 核实机制强化任务(对应 V23-F2)
+
+### V23-2.1 强化第十四重核实机制 — 描述性引用完整性验证
+
+**对应 spec 章节**: 第二十四章 24.3 V23-F2
+**对应漏洞**: N22-1(第十三重核实机制未覆盖描述性引用完整性验证)
+**任务目标**: 第十四重核实机制追加"描述性引用完整性验证"定义
+**具体修改**:
+1. 第十四重核实机制追加"描述性引用完整性验证":
+   - 当 vN 列出回归位置修正清单时,必须区分"伪代码引用"和"描述性引用"
+   - 必须验证修正清单覆盖所有伪代码引用和描述性引用
+   - 若 Grep 发现遗漏,必须追加到修正清单
+2. 描述性引用定义: 在 spec 中描述 vN 伪代码或修正方案时引用 p.OemBrand 的位置,包括:
+   - 对比表中描述 vN 修正方案的行
+   - 验证点中描述 vN 修正方案的行
+   - 审查重点中描述 vN 修正方案的行
+   - D 表格(D18/D19/D20/D21)中描述 vN 伪代码的行
+   - N 表格(N19/N20/N21)中描述 vN 伪代码的行
+   - 描述段落中引用 vN 伪代码的行
+3. v22 V22-F1 修正清单 22 项,但未区分伪代码引用和描述性引用,遗漏 8 项描述性引用 → D22-1/D22-2
+4. v23 要求: 所有回归位置修正清单必须区分伪代码引用和描述性引用,覆盖所有描述性引用
+5. 应用范围: 所有 vN 回归位置修正清单(包括 v21 V21-F3 / v22 V22-F1 / v23 V23-F1 / 未来版本)
+**验证命令**: 无(纯 spec 修订)
+
+## v23 任务总结
+
+- **前置任务**: 1 个(Pre-Task-V23-0)
+- **数据关联维度**: 1 个任务(V23-1.1,对应 V23-F1)
+- **核实机制强化**: 1 个任务(V23-2.1,对应 V23-F2)
+- **总任务数**: 3 个(1 前置 + 2 实施)
+
+**实际新增代码**: 0 个(v23 仅修订 spec/tasks/checklist)
+**实际修改后端文件**: 0 个(代码修改由 v17 任务清单执行)
+**实际修改前端文件**: 0 个
+**纯文档修正**: 3 个文件(spec.md / tasks.md / checklist.md)
+**新增 migration**: 0 个
+**已知问题**: D7/D8 filter 遗漏(现有 bug,列 v24+ 处理)
+
