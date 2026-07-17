@@ -2043,13 +2043,525 @@
 - [ ] v4 sessionStorage QuotaExceededError 降级在 Safari 隐私模式下的兼容性
 - [ ] v4 vue-gallery → gallery-app 命名同步在 E2E 测试基线截图的回归
 
+---
+
+## v5 修订 48 项衍生漏洞修复验证清单
+
+> 对照 spec.md 末尾"第四轮深度审查衍生漏洞修复清单(v5 修订)"第一节"数据关联维度衍生漏洞(21 项)" + 第二节"检索逻辑维度衍生漏洞(16 项)" + 第三节"前后端联动维度衍生漏洞(14 项)",逐项验证修复落地。
+> 48 项 = 21(D4) + 16(S4) + 14(F3) - 3 重复(D4-3/F3-6 同源 + D4-15/D4-16 关联 + S4-9/D4-6 关联)
+
+### 一、数据关联维度衍生漏洞修复验证(21 项)
+
+#### D4-1: CursorHmac LEGACY_CUTOFF_TS 硬编码已过期 [高]
+- [ ] `CursorHmacOptions` 配置类含 `CurrentKey` / `PreviousKey` / `LegacyCutoffTs` 三字段
+- [ ] `appsettings.json` 含 `CursorHmac:CurrentKey` + `CursorHmac:PreviousKey` + `CursorHmac:LegacyCutoffTs` 配置项
+- [ ] `CursorHmac.cs` 构造函数注入 `IOptions<CursorHmacOptions>`
+- [ ] `LegacyCutoffTs` 默认值 = `DateTimeOffset.UtcNow.AddDays(7).ToUnixTimeSeconds()`(部署时配置)
+- [ ] 单元测试 `CursorHmac_LegacyCutoffTs_FromConfig` 通过
+
+#### D4-2: AdminProductService UpdateAsync 与 ETL DELETE+INSERT 并发冲突 [中]
+- [ ] `AdminProductService.UpdateAsync` 事务内执行 `pg_try_advisory_xact_lock(7740002)`
+- [ ] 锁获取失败抛 `ETL_IN_PROGRESS` 错误码
+- [ ] 单元测试 `Admin_XrefLock_Acquired` 通过
+
+#### D4-3: IProductWriteStrategy 双写事务边界未明(与 F3-6 同源) [高]
+- [ ] `IProductWriteStrategy` 接口含 `WriteAsync` / `DeleteAsync` / `RestoreAsync` 三方法
+- [ ] `AdminProductService.CreateAsync` / `UpdateAsync` / `DeleteAsync` / `RestoreAsync` 全部注入 `IProductWriteStrategy`
+- [ ] 双写必须在同一事务内(`BeginTransactionAsync` → `_writeStrategy.WriteAsync` → `CommitAsync`)
+- [ ] 失败时 `RollbackAsync` 回滚
+- [ ] 对账脚本存在(`spike-test/_reconcile_mr1.py` 或类似)
+- [ ] 单元测试 `Product_Delete_WriteStrategyInvoked` + `Product_Restore_WriteStrategyInvoked` 通过
+
+#### D4-4: DeleteAsync/RestoreAsync 未覆盖 IProductWriteStrategy [中]
+- [ ] `AdminProductService.DeleteAsync` 调用 `_writeStrategy.DeleteAsync(productId, ct)`
+- [ ] `AdminProductService.RestoreAsync` 调用 `_writeStrategy.RestoreAsync(productId, ct)`
+- [ ] 两个方法均显式开启事务
+- [ ] 单元测试覆盖(见 D4-3)
+
+#### D4-5: ProductImage 多存储后端孤儿图片清理 [中]
+- [ ] `CleanupOrphanImagesAsync` 方法存在
+- [ ] 遍历所有 `IObjectStorage` 实现(MinIO + Aliyun OSS)
+- [ ] 时间戳过滤 `uploaded_at < now() - interval '1 hour'`
+- [ ] 单元测试 `Etl_CleanupOrphanImages_MultiBackend` 通过
+
+#### D4-6: Meilisearch 双索引 WriteTargets 阶段 3 _oldIndex 为 null(与 S4-9 关联) [中]
+- [ ] `MeiliSearchOptions.WriteTargets: List<string>` 字段存在
+- [ ] `MeiliSearchProvider._index` 加 `volatile` 关键字
+- [ ] `RefreshWriteTargets()` 方法根据 `WriteTargets` 重建列表
+- [ ] `DeleteAsync` 遍历 `_writeTargets` 全部删除
+- [ ] 单元测试 `Meili_DeleteAsync_AllWriteTargetsInvoked` 通过
+
+#### D4-7: Brand sort_order 变更无 Channel 写入 [中]
+- [ ] `XrefOemBrandService.ApplyChangeAsync(brand, isDeleted)` 方法存在
+- [ ] Update/SoftDelete/Restore 全部调用此方法
+- [ ] 内部 `Channel<string>.Writer.WriteAsync(brand)` 触发后台重建
+- [ ] 单元测试 `XrefOemBrand_ApplyChange_ChannelWrite` 通过
+
+#### D4-8: Channel 崩溃丢任务 [中]
+- [ ] Channel 写入失败 fallback 到 `search_index_pending` 表持久化
+- [ ] `INSERT INTO search_index_pending (mr_1, action, created_at) SELECT mr_1, 'rebuild', now() FROM cross_references WHERE oem_brand = @brand`
+- [ ] 单元测试 `XrefOemBrand_ApplyChange_FallbackToDb` 通过
+
+#### D4-9: ETL TRUNCATE 与 AdminProductService 并发冲突 [中]
+- [ ] ETL TRUNCATE 前执行 `LOCK TABLE products IN ACCESS EXCLUSIVE MODE NOWAIT`
+- [ ] NOWAIT 失败时 ETL 抛 `ETL_ADMIN_IN_PROGRESS` 错误码
+- [ ] AdminProductService 事务内 `pg_try_advisory_xact_lock(7740001)`
+- [ ] 单元测试 `Admin_LockConflict_Throws_ETL_IN_PROGRESS` 通过
+
+#### D4-10: AdminProductService xref 写入与 ETL 增量冲突 [中]
+- [ ] `CreateAsync` + `UpdateAsync` xref 写入前 `pg_try_advisory_xact_lock(7740002)`
+- [ ] 单元测试 `Admin_XrefLock_Acquired` 通过
+
+#### D4-11: AdminProductService Create/Update 与 ETL TRUNCATE 冲突 [中]
+- [ ] `CreateAsync` / `UpdateAsync` / `DeleteAsync` 事务开始时 `pg_try_advisory_xact_lock(7740001)`
+- [ ] 与 D4-9 协调(7740001 共享锁)
+- [ ] 单元测试覆盖
+
+#### D4-12: 增量更新误改下架记录 [中]
+- [ ] `UpdateAsync` xref 增量更新匹配条件附加 `WHERE is_published = true AND is_discontinued = false`
+- [ ] 单元测试 `Xref_IncrementalUpdate_SkipDiscontinued` 通过
+
+#### D4-13: oem_2 反向更新空指针风险 [中]
+- [ ] `oem_2` 取值逻辑: sort_order 排序后第一个非空 `FirstOrDefault(x => !string.IsNullOrEmpty(x.Oem2))?.Oem2`
+- [ ] 全空列表置 NULL
+- [ ] 单元测试 `Product_UpdateOem2_FallbackToFirstNonNull` 通过
+
+#### D4-14: naming_field NULL 时前端兜底 [低]
+- [ ] spec.md L489 含 'legacy' 兜底描述
+- [ ] 前端 `AdminProductFormView.vue` 含 `namingField ?? 'legacy'` 分支
+- [ ] 旧数据按 `image_key` 字段直接展示,不动态生成 URL
+
+#### D4-15: MinIO 孤儿图片清理(与 D4-16 关联) [中]
+- [ ] `CleanupOrphanImagesAsync` 遍历 MinIO 实现
+- [ ] 删除 `product_images WHERE uploaded_at < now() - interval '1 hour' AND product_id IS NULL`
+- [ ] 单元测试覆盖(见 D4-5)
+
+#### D4-16: Aliyun OSS 孤儿图片清理(与 D4-15 关联) [中]
+- [ ] `CleanupOrphanImagesAsync` 遍历 Aliyun OSS 实现
+- [ ] 删除 `product_images WHERE product_id IS NOT NULL AND product_id NOT IN (SELECT id FROM products)`
+- [ ] 单元测试覆盖(见 D4-5)
+
+#### D4-17: ETL 字段映射黑盒 [中]
+- [ ] spec.md D3-9 含完整 `xrefs_stage` 临时表定义 + COPY 列清单 + INSERT 列清单 SQL
+- [ ] `EtlImportService.ImportXrefsAsync` 实现与 spec 字段顺序一致
+- [ ] 字段顺序与 JSONL 严格对齐
+
+#### D4-18: products NUMERIC(10,2) 与 EF Core decimal(18,2) 不一致 [中]
+- [ ] `Product.cs` 8 个尺寸字段 `HasColumnType("numeric(10,2)")`
+- [ ] `ProductDbContext.cs` `HasPrecision(10,2)` 显式配置
+- [ ] `dotnet ef migrations script` 生成的 SQL 含 `numeric(10,2)`
+- [ ] 单元测试 `Product_DecimalPrecision_AllFields` 通过
+
+#### D4-19: cascade=false TRUNCATE 与 FK ON DELETE CASCADE 语义冲突 [高]
+- [ ] `EtlImportService` cascade=false 路径先 DROP 所有 FK
+- [ ] TRUNCATE products/cross_references/product_images/machine_applications
+- [ ] TRUNCATE 后再 ADD FK 重建
+- [ ] 单元测试 `Etl_FullLoad_CascadeFalse_NoChildTableWipe` 通过
+
+#### D4-20: LoadExistingOemMapAsync 旧数据无 mr_1 时无法关联 [中]
+- [ ] `LoadExistingOemMapAsync` 同时返回 mr_1 map + oem_2 map
+- [ ] JSONL 字段优先匹配 mr_1,mr_1 缺失时 fallback 到 oem_2
+- [ ] 单元测试 `Etl_Import_FallbackToOem2_WhenMr1Missing` 通过
+
+#### D4-21: 409 XREF_CONFLICT 前端无提示 [低]
+- [ ] `AdminProductController.UpdateAsync` 收到 409 返回 `errorCode: "XREF_CONFLICT"` + `detail: "数据已被 ETL 更新,请刷新页面重试"`
+- [ ] 前端 `AdminProductFormView.vue` catch 409 时 `ElMessage.warning`
+- [ ] 强制重新加载详情
+- [ ] 单元测试 `Admin_Update_XrefConflict_409` + 前端 `ProductForm_XrefConflict_ShowToast` 通过
+
+### 二、检索逻辑维度衍生漏洞修复验证(16 项)
+
+#### S4-1: 占位符法 XSS 防御被绕过(C0 控制字符非 BMP 私用区) [高]
+- [ ] `MeiliSearchProvider` `MARK_OPEN = "\uE000"` + `MARK_CLOSE = "\uE001"`(BMP 私用区单字符)
+- [ ] `SanitizeFormatted` 步骤 1: 暂存到 `\uFDD0`/`\uFDD1`(非字符)
+- [ ] 步骤 2: `WebUtility.HtmlEncode` 转义
+- [ ] 步骤 3: 移除 C0 控制字符(U+0000-U+001F,保留 \t \n \r) + BMP 私用区(U+E000-U+F8FF) + 非字符(U+FDD0-U+FDEF, U+FFFE/U+FFFF)
+- [ ] 步骤 4: 还原 `\uFDD0`→`<mark>` + `\uFDD1`→`</mark>`
+- [ ] `AdminProductService.ValidateForm` 加 `StripControlChars` 过滤
+- [ ] 单元测试 `Meili_SanitizeFormatted_StripsUserInputMarkerLiteral` 通过(用户输入 `\uE000MO\uE000` 字面量被过滤)
+- [ ] 单元测试 `ValidateForm_StripsControlChars` 通过
+
+#### S4-2: Meilisearch nested filter 语法不完整 [中]
+- [ ] `oem_list.oem_brand IN [BOSCH]` 语法支持
+- [ ] `oem_list.is_published = true` 语法支持
+- [ ] 单元测试 `Meili_NestedFilter_Syntax` 通过
+
+#### S4-3: PG 兜底 tokens 无上限 [中]
+- [ ] `SearchRequest.MaxTokenCount = 10` 常量存在
+- [ ] `PostgresSearchProvider` tokens.Take(MaxTokenCount) 限制
+- [ ] 单元测试 `PG_Search_TokenLimit_10` 通过
+
+#### S4-4: keyset 分页排序字段非 UNIQUE 导致跳页 [中]
+- [ ] PG 兜底 keyset 分页 SQL 末尾追加 `p.id` 作为 UNIQUE 兜底
+- [ ] 四元组比较 `(brand_sort_order_min, oem_list_sort_order_min, updated_at, id)`
+- [ ] CursorHmac `SignV2` 追加 `long id` 参数
+- [ ] 单元测试 `PG_KeysetPagination_FourTuple_NoSkip` 通过(连续翻页 50 次无重复无跳页)
+
+#### S4-5: Meilisearch nested sort 不支持 [中]
+- [ ] `sortableAttributes` 用扁平化 `brand_sort_order_min` + `oem_list_sort_order_min`
+- [ ] 单元测试 `Meili_Sort_FlatField` 通过
+
+#### S4-6: filter 语法不完整(单值/多值/AND/OR) [中]
+- [ ] `BuildBrandFilter(List<string>, string matchMode)` 方法存在
+- [ ] 单值 `IN [x]` / 多值 OR `IN [a, b, c]` / 多值 AND `oem_list_published_brands IN [a] AND ... IN [b]`
+- [ ] `SearchRequest.OemBrandMatchMode` 字段(默认 "OR")
+- [ ] 单元测试 `Meili_BuildBrandFilter_Single` / `Or` / `And` 通过
+
+#### S4-7: Channel 崩溃丢任务 [中]
+- [ ] Channel 写入失败 fallback 到 `search_index_pending` 表(见 D4-8)
+- [ ] 单元测试覆盖
+
+#### S4-8: 多实例重复处理 [中]
+- [ ] `IndexReplayWorker` `SELECT FOR UPDATE SKIP LOCKED LIMIT 100`
+- [ ] `pg_advisory_xact_lock(mr1_hash)` 防跨实例重复
+- [ ] retry_count > 3 标记 `is_dead = true`
+- [ ] 单元测试 `IndexReplayWorker_SkipLocked` + `AdvisoryLock_PreventsDuplicate` + `DeadLetter_After3Retries` 通过
+
+#### S4-9: _oldIndex 阶段 3 双写期为 null(与 D4-6 关联) [中]
+- [ ] `WriteTargets: List<string>` 替代 `IndexName` 单值
+- [ ] `_index` 加 `volatile`
+- [ ] `DeleteAsync` 遍历 WriteTargets(见 D4-6)
+- [ ] 单元测试覆盖
+
+#### S4-10: DeleteAsync 非事务 [中]
+- [ ] `DeleteAsync` 遍历 `_writeTargets` 全部删除
+- [ ] 任一失败写入死信队列(`Channel<DeleteTask>` + `search_index_pending`)
+- [ ] 单元测试 `Meili_DeleteAsync_DeadLetterOnFailure` 通过
+
+#### S4-11: S3-8 修复与 D21 决策语义冲突 [中]
+- [ ] `BuildMr1DocumentAsync` `oem_list` 保留软删除 brand 的 OEM 3(查询不过滤 `b.DeletedAt IS NULL`)
+- [ ] `brand_sort_order_min` 用 CASE WHEN(`publishedOemList.Where(x => x.BrandDeletedAt == null && x.BrandSortOrder.HasValue)`)
+- [ ] 单元测试 `Meili_BuildMr1Doc_BrandSoftDeleted_Oem3StillSearchable` 通过
+
+#### S4-12: 短关键词 ILIKE 全表扫 [低]
+- [ ] PG 兜底短关键词(< 3 字符)走精确匹配(`oem_no_3 = @token` 或 `oem_brand = @token`)
+- [ ] 不走 ILIKE
+- [ ] 单元测试 `PG_Search_ShortKeyword_ExactMatch` 通过
+
+#### S4-13: OemBrandsStr 分隔符 `|` 不在 separatorTokens 中 [中]
+- [ ] `OemBrandsStr` / `OemNo3sStr` 分隔符从 `|` 改为空格
+- [ ] 对齐 Meilisearch `separatorTokens` 配置
+- [ ] 单元测试 `Meili_OemBrandsStr_SpaceSeparated` 通过
+
+#### S4-14: trgm GIN 索引未覆盖 oem_2 [低]
+- [ ] `idx_products_oem_2_trgm` GIN 索引存在
+- [ ] 单元测试 `PG_Search_Oem2_TrgmHit` 通过
+
+#### S4-15: cursor 签名双 key 轮转期 payload 不一致 [低]
+- [ ] `VerifyKeyV2` 双 key 验签(_currentKey + _previousKey)
+- [ ] 单元测试 `CursorHmac_DualKey_RotationPeriod` 通过
+
+#### S4-16: sort_order 无冗余字段无法排序 [低]
+- [ ] `Mr1IndexDoc` record 含 `int OemListSortOrderMin` 字段
+- [ ] `sortableAttributes` 配置加 `oem_list_sort_order_min`
+- [ ] 单元测试 `Meili_Sort_ByOemListSortOrderMin` 通过
+
+### 三、前后端联动维度衍生漏洞修复验证(14 项)
+
+#### F3-1: JSON 数据岛安全描述不完整 [中]
+- [ ] spec.md L1899 含 `JavaScriptEncoder.Default` + `@Json.Serialize` + 严禁 `@Html.Raw` 三要素
+- [ ] `Detail.cshtml` 用 `@Json.Serialize` 而非 `@Html.Raw`
+
+#### F3-2: safeMount 无法捕获 module 加载失败 [中]
+- [ ] `Detail.cshtml` `<script type="module">` 后追加 `window.addEventListener('error', ...)` 捕获资源加载错误
+- [ ] 渲染 `mount-fallback` UI
+- [ ] 手动测试: 断网情况下挂载点显示 "JS 加载失败" 提示
+
+#### F3-3: BuildSlug 中文 slugify 顺序混乱 [中]
+- [ ] `BuildSlug` 单一逻辑: 先 `EscapeDataString` 再替换非字母数字(% 保留)
+- [ ] 单元测试 `BuildSlug_Chinese_EscapedPreserved` 通过(`"机油滤芯"` → `"%e6%9c%ba%e6%b2%b9%e6%bb%a4%e8%8a%af"`)
+- [ ] 单元测试 `BuildSlug_SpecialChar_Hyphenated` 通过
+
+#### F3-4: SEO URL 反向解析未覆盖 [低]
+- [ ] `Detail.cshtml.cs` `OnGetAsync(pn1, pn2, brand, oem3)` 反向解析 DB 查询
+- [ ] 单元测试 `Razor_DetailPage_ReverseResolve` 通过
+
+#### F3-5: CURSOR 自动重置整页刷新 [中]
+- [ ] `http.ts` CURSOR 重置改用 `router.replace` + `sessionStorage` 提示
+- [ ] 不触发 `window.location.reload`
+- [ ] 前端单元测试 `Http_CursorExpired_RouterReplace` 通过
+- [ ] `App.vue` mounted 时检查 sessionStorage 显示一次性 toast
+
+#### F3-6: IProductWriteStrategy 双写事务边界(与 D4-3 同源) [高]
+- [ ] 见 D4-3 验证点
+
+#### F3-7: ETL 进度 SSE 在 nginx 磁盘缓冲下的内存泄漏 [低]
+- [ ] nginx `proxy_buffering off` 配置 SSE 端点
+- [ ] 单元测试 `Sse_NoBuffering` 通过
+
+#### F3-8: spec L1128 vue-gallery 命名未同步 [中]
+- [ ] spec.md L1128 `<div id="vue-gallery">` → `<div id="gallery-app">`
+- [ ] 与 L1610-1612 的 `gallery-app` / `compare-app` / `inquiry-app` 三挂载点一致
+- [ ] 字符串搜索 `id="vue-gallery"` 无命中
+
+#### F3-9: JS 加载/挂载失败无监控 [中]
+- [ ] `product-detail-client.ts` `safeMount` catch 块调用 `captureException`
+- [ ] tags 含 mr1/oem3
+- [ ] 手动测试: Sentry dashboard 收到事件
+
+#### F3-10: 多产品同 pn1/pn2/brand/oem3 时 slug 冲突 [中]
+- [ ] `BuildProductUrl` 末尾附加 `mr_1` 末 6 位
+- [ ] 单元测试 `BuildProductUrl_Mr1Suffix_PreventsCollision` 通过
+- [ ] 单元测试 `BuildProductUrl_ShortMr1_FullString` 通过
+
+#### F3-11: sitemap 分片并发查询的内存峰值 [低]
+- [ ] sitemap 分片查询 LIMIT 50000 + 流式输出
+- [ ] 单元测试 `Sitemap_Shard_MemoryBounded` 通过
+
+#### F3-12: 跨域 module 加载的 CORS 配置 [低]
+- [ ] `Detail.cshtml` `<script type="module">` 加 `crossorigin="use-credentials"`
+- [ ] nginx 配置 ACAO + ACAC
+- [ ] 部署后 curl 验证 CORS 头
+
+#### F3-13: 旧 API 兼容性未明 [中]
+- [ ] `api/index.ts` + `SearchView.vue` 特性检测 `searchApi.aggregate`
+- [ ] 404 `ENDPOINT_NOT_FOUND` 时 fallback 到 `searchApi.search`
+- [ ] 前端单元测试 `Search_FallbackToOldApi_On404` 通过
+
+#### F3-14: 跨域 module 加载失败(与 F3-12 关联) [中]
+- [ ] 见 F3-12 验证点
+
+---
+
+## 36 个 v5 补丁任务验证清单
+
+> 对照 tasks.md 末尾"v5 补丁任务清单(共 36 个)",按 Phase 0/1/3/4/5 分布逐项验证。
+
+### Phase 0 v5 补丁任务验证(19 个)
+
+#### Task 0.2.19: Product.cs + ProductDbContext.cs 精度配置
+- [ ] 8 个尺寸字段 `HasColumnType("numeric(10,2)")` + `HasPrecision(10,2)`
+- [ ] `dotnet ef migrations script` SQL 含 `numeric(10,2)`
+- [ ] 单元测试 `Product_DecimalPrecision_AllFields` 通过
+
+#### Task 0.2.20: spec L1128 挂载点命名同步
+- [ ] spec.md L1128 `id="gallery-app"`
+- [ ] 字符串搜索 `id="vue-gallery"` 无命中
+
+#### Task 0.2.21: oem_2 反向更新 fallback 逻辑
+- [ ] `FirstOrDefault(x => !string.IsNullOrEmpty(x.Oem2))?.Oem2` 实现
+- [ ] 单元测试 `Product_UpdateOem2_FallbackToFirstNonNull` 通过
+
+#### Task 0.2.22: 增量更新匹配条件附加 WHERE
+- [ ] `WHERE is_published = true AND is_discontinued = false`
+- [ ] 单元测试 `Xref_IncrementalUpdate_SkipDiscontinued` 通过
+
+#### Task 0.2.23: naming_field NULL 时 'legacy' 策略
+- [ ] spec.md L489 含 'legacy' 兜底描述
+- [ ] 前端 `namingField ?? 'legacy'` 分支
+
+#### Task 0.2.24: xrefs_stage 完整 SQL
+- [ ] spec.md D3-9 含 CREATE TEMP TABLE + COPY + INSERT SQL
+- [ ] `EtlImportService.ImportXrefsAsync` 字段顺序一致
+
+#### Task 0.3.16: ValidateForm StripControlChars
+- [ ] `StripControlChars` 方法存在
+- [ ] 移除 U+0000-U+001F(保留 \t \n \r) + U+007F-U+009F + BMP 私用区 + 非字符
+- [ ] 单元测试 `ValidateForm_StripsControlChars` 通过
+
+#### Task 0.3.17: DeleteAsync + RestoreAsync 注入 IProductWriteStrategy
+- [ ] `AdminProductService` 构造函数注入 `IProductWriteStrategy`
+- [ ] `DeleteAsync` + `RestoreAsync` 调用 `_writeStrategy.DeleteAsync` / `RestoreAsync`
+- [ ] 单元测试 `Product_Delete_WriteStrategyInvoked` + `Product_Restore_WriteStrategyInvoked` 通过
+
+#### Task 0.3.18: Create/Update/Delete advisory_xact_lock(7740001)
+- [ ] 事务内 `pg_try_advisory_xact_lock(7740001)`
+- [ ] 失败抛 `ETL_IN_PROGRESS`
+- [ ] 单元测试 `Admin_LockConflict_Throws_ETL_IN_PROGRESS` 通过
+
+#### Task 0.3.19: xref 写入前 advisory_xact_lock(7740002)
+- [ ] `CreateAsync` + `UpdateAsync` xref 写入前 `pg_try_advisory_xact_lock(7740002)`
+- [ ] 单元测试 `Admin_XrefLock_Acquired` 通过
+
+#### Task 0.3.20: 409 XREF_CONFLICT 前端提示
+- [ ] `AdminProductController.UpdateAsync` 409 返回 `errorCode: "XREF_CONFLICT"` + detail
+- [ ] 前端 `ElMessage.warning` + 强制重新加载
+- [ ] 单元测试 + 前端单元测试通过
+
+#### Task 0.4.16: SearchQuery 高亮标签 BMP 私用区
+- [ ] `MARK_OPEN = "\uE000"` + `MARK_CLOSE = "\uE001"`
+- [ ] 单元测试 `Meili_HighlightTag_BmpPrivateArea` 通过
+
+#### Task 0.4.17: SanitizeFormatted 重构
+- [ ] 4 步骤实现(暂存 → HtmlEncode → 过滤 → 还原)
+- [ ] 单元测试 `Meili_SanitizeFormatted_StripsUserInputMarkerLiteral` + `RestoresMarkTag` 通过
+
+#### Task 0.4.18: BuildMr1DocumentAsync 保留软删除 brand
+- [ ] 查询不过滤 `b.DeletedAt IS NULL`
+- [ ] `brand_sort_order_min` 用 CASE WHEN
+- [ ] 单元测试 `Meili_BuildMr1Doc_BrandSoftDeleted_Oem3StillSearchable` 通过
+
+#### Task 0.4.19: Mr1IndexDoc OemListSortOrderMin
+- [ ] `Mr1IndexDoc` 含 `OemListSortOrderMin` 属性
+- [ ] `sortableAttributes` 含 `oem_list_sort_order_min`
+
+#### Task 0.4.20: MeiliSearchOptions WriteTargets
+- [ ] `WriteTargets: List<string>` 字段
+- [ ] `appsettings.json` 含 `MeiliSearch:WriteTargets`
+
+#### Task 0.4.21: MeiliSearchProvider volatile + RefreshWriteTargets + 死信队列
+- [ ] `_index` 加 `volatile`
+- [ ] `RefreshWriteTargets()` 方法
+- [ ] `DeleteAsync` 遍历 WriteTargets + 死信队列
+- [ ] 单元测试 `Meili_DeleteAsync_AllWriteTargetsInvoked` + `DeadLetterOnFailure` 通过
+
+#### Task 0.4.22: OemBrandsStr 分隔符改空格
+- [ ] `string.Join(" ", ...)` 替代 `string.Join("|", ...)`
+- [ ] 单元测试 `Meili_OemBrandsStr_SpaceSeparated` 通过
+
+#### Task 0.4.23: BuildBrandFilter 方法
+- [ ] 单值/多值/AND/OR 三模式
+- [ ] 单元测试 `Meili_BuildBrandFilter_Single` / `Or` / `And` 通过
+
+### Phase 1 v5 补丁任务验证(3 个)
+
+#### Task 1.2.13b: SearchRequest MaxTokenCount + OemBrandMatchMode
+- [ ] `MaxTokenCount = 10` 常量
+- [ ] `OemBrandMatchMode` 字段(默认 "OR")
+- [ ] 单元测试 `SearchRequest_DefaultMatchMode_IsOR` 通过
+
+#### Task 1.2.14a: PG 兜底 keyset 四元组
+- [ ] SQL 含 `p.id` UNIQUE 兜底
+- [ ] 四元组比较 `(brand_sort_order_min, oem_list_sort_order_min, updated_at, id)`
+- [ ] cursor 含 id 字段
+- [ ] 单元测试 `PG_KeysetPagination_FourTuple_NoSkip` + `CursorIncludesId` 通过
+
+#### Task 1.2.15a: PG 兜底 tokens.Take + 短关键词精确匹配
+- [ ] `tokens.Take(MaxTokenCount)` 限制
+- [ ] 短关键词(< 3 字符)走 `=` 不走 ILIKE
+- [ ] 单元测试 `PG_Search_TokenLimit_10` + `ShortKeyword_ExactMatch` 通过
+
+### Phase 3 v5 补丁任务验证(1 个)
+
+#### Task 3.2.12: ETL cascade=false DROP FK → TRUNCATE → ADD FK
+- [ ] cascade=false 路径先 DROP 所有 FK
+- [ ] TRUNCATE 后 ADD FK 重建
+- [ ] 单元测试 `Etl_FullLoad_CascadeFalse_NoChildTableWipe` 通过
+
+### Phase 4 v5 补丁任务验证(9 个)
+
+#### Task 4.1.17: Detail.cshtml error 事件捕获
+- [ ] `window.addEventListener('error', ...)` 捕获资源加载错误
+- [ ] 渲染 `mount-fallback` UI
+- [ ] 手动测试: 断网显示 "JS 加载失败"
+
+#### Task 4.1.18: crossorigin="use-credentials" + nginx CORS
+- [ ] `<script type="module">` 加 `crossorigin="use-credentials"`
+- [ ] nginx ACAO + ACAC 配置
+- [ ] curl 验证 CORS 头
+
+#### Task 4.1.19: safeMount captureException
+- [ ] `safeMount` catch 块调用 `captureException`
+- [ ] tags 含 mr1/oem3
+- [ ] 手动测试: Sentry 收到事件
+
+#### Task 4.1.20: spec L1899 JSON 数据岛描述修正
+- [ ] spec.md L1899 含 `JavaScriptEncoder.Default` + `@Json.Serialize` + 严禁 `@Html.Raw`
+- [ ] `Detail.cshtml` 用 `@Json.Serialize`
+
+#### Task 4.5.11: CursorHmac 配置化 + id 字段
+- [ ] `IOptions<CursorHmacOptions>` 注入
+- [ ] `SignV2` 追加 `long id` 参数
+- [ ] payload 格式 `v2:{expUnixTs}|{tsB64}|{mr1B64}|{pageNum}|{id}`
+- [ ] `VerifyAndExtractV2` 返回四元组
+- [ ] `pageNum > 1000` 抛 `CURSOR_PAGE_TOO_DEEP`
+- [ ] 单元测试 `CursorHmac_SignV2_IncludesId` + `VerifyAndExtractV2_ReturnsFourTuple` + `LegacyCutoffTs_FromConfig` 通过
+
+#### Task 4.5.12: BuildSlug 单一逻辑
+- [ ] 先 `EscapeDataString` 再替换非字母数字(% 保留)
+- [ ] 单元测试 `BuildSlug_Chinese_EscapedPreserved` + `SpecialChar_Hyphenated` + `Empty_ReturnsUntyped` 通过
+
+#### Task 4.5.13: BuildProductUrl mr_1 末 6 位
+- [ ] `mr1Suffix = p.Mr1.Length > 6 ? p.Mr1[^6..] : p.Mr1`
+- [ ] URL 格式 `/products/{pn1Slug}-{mr1Suffix}/{pn2Slug}/{brandSlug}/{oem3Slug}`
+- [ ] 单元测试 `BuildProductUrl_Mr1Suffix_PreventsCollision` + `ShortMr1_FullString` 通过
+
+#### Task 4.5.14: CURSOR router.replace + sessionStorage
+- [ ] `router.replace({ path, query: { ...query, page: 1 } })` 替代 `window.location.reload`
+- [ ] `sessionStorage.setItem('cursor-reset-toast', '1')`
+- [ ] `App.vue` mounted 检查 sessionStorage 显示一次性 toast
+- [ ] 前端单元测试 `Http_CursorExpired_RouterReplace` + `App_CursorResetToast_OneTimeShow` 通过
+
+#### Task 4.5.15: searchApi.aggregate 特性检测 + fallback
+- [ ] `typeof searchApi.aggregate === 'function'` 检测
+- [ ] 404 `ENDPOINT_NOT_FOUND` fallback 到 `searchApi.search`
+- [ ] 前端单元测试 `Search_FallbackToOldApi_On404` + `UseAggregate_WhenAvailable` 通过
+
+### Phase 5 v5 补丁任务验证(4 个)
+
+#### Task 5.1.19: LoadExistingOemMapAsync 双 key
+- [ ] 同时返回 mr_1 map + oem_2 map
+- [ ] 优先匹配 mr_1,缺失时 fallback 到 oem_2
+- [ ] 单元测试 `Etl_LoadExistingOemMap_DualKey` + `Etl_Import_FallbackToOem2_WhenMr1Missing` 通过
+
+#### Task 5.1.20: CleanupOrphanImagesAsync
+- [ ] 遍历所有 `IObjectStorage` 实现
+- [ ] 时间戳过滤 `uploaded_at < now() - interval '1 hour'`
+- [ ] 单元测试 `Etl_CleanupOrphanImages_MultiBackend` + `TimestampFilter` 通过
+
+#### Task 5.1.21: XrefOemBrandService.ApplyChangeAsync
+- [ ] Update/SoftDelete/Restore 全部调用
+- [ ] Channel 写入 + fallback 到 `search_index_pending`
+- [ ] 单元测试 `XrefOemBrand_ApplyChange_ChannelWrite` + `FallbackToDb` + `Restore_TriggersRebuild` 通过
+
+#### Task 5.1.22: IndexReplayWorker SKIP LOCKED + advisory_xact_lock
+- [ ] `SELECT FOR UPDATE SKIP LOCKED LIMIT 100`
+- [ ] `pg_advisory_xact_lock(mr1_hash)` 防跨实例重复
+- [ ] retry_count > 3 标记 `is_dead = true`
+- [ ] 单元测试 `IndexReplayWorker_SkipLocked` + `AdvisoryLock_PreventsDuplicate` + `DeadLetter_After3Retries` 通过
+
+---
+
+## 第五轮深度审查验证点(v5 修复衍生风险)
+
+> 第五轮审查将在 v5 修订完成后启动,验证 v5 修复方案是否产生新的衍生问题。
+
+### 一、数据关联维度第五轮审查重点(10 个验证点)
+
+- [ ] v5 advisory_xact_lock(7740001/7740002) 在 PostgreSQL 14+ 的事务级锁语义是否正确(事务结束自动释放)
+- [ ] v5 IProductWriteStrategy 双写在阶段 3(读切换)时,若新索引写入失败是否回滚到旧索引
+- [ ] v5 WriteTargets 配置热切换期间,正在进行的 DeleteAsync 是否会丢失目标
+- [ ] v5 CleanupOrphanImagesAsync 遍历多 IObjectStorage 时,若 1 个失败是否影响其他存储后端
+- [ ] v5 LoadExistingOemMapAsync 双 key fallback 时,oem_2 重复是否导致 mr_1 错误关联
+- [ ] v5 BuildMr1DocumentAsync 保留软删除 brand 的 OEM 3 后,brand_sort_order_min 全软删除时 int.MaxValue 是否影响排序
+- [ ] v5 cascade=false DROP FK → TRUNCATE → ADD FK 期间,并发 AdminProductService 写入是否被阻塞
+- [ ] v5 StripControlChars 过滤是否误删合法的 Unicode 辅助平面字符(如 emoji)
+- [ ] v5 IProductWriteStrategy 对账脚本的频率与 Meilisearch 索引延迟的容忍度
+- [ ] v5 IndexReplayWorker SKIP LOCKED 在 PostgreSQL 14+ 的行级锁兼容性
+
+### 二、检索逻辑维度第五轮审查重点(10 个验证点)
+
+- [ ] v5 BMP 私用区 U+E000/U+E001 在 Meilisearch 不同版本的高亮标签支持
+- [ ] v5 SanitizeFormatted 步骤 3 过滤 BMP 私用区后,是否影响合法的中文/日文/韩文字符
+- [ ] v5 keyset 四元组比较在 brand_sort_order_min = NULL时的 NULLS LAST 语义
+- [ ] v5 tokens.Take(10) 截断后,长查询的搜索召回率是否下降
+- [ ] v5 短关键词(< 3 字符)精确匹配在 100 万数据量下的性能
+- [ ] v5 BuildBrandFilter AND 模式在 5+ 品牌时的 filter 长度限制
+- [ ] v5 OemBrandsStr 空格分隔后,品牌名含空格(如 "AUDI AG")是否被错误分词
+- [ ] v5 Mr1IndexDoc OemListSortOrderMin 在 oem_list 为空时的默认值
+- [ ] v5 CursorHmac 双 key 轮转期,旧 key 签名的 cursor 在 LegacyCutoffTs 后的行为
+- [ ] v5 WriteTargets 死信队列的容量上限与溢出处理
+
+### 三、前后端联动维度第五轮审查重点(10 个验证点)
+
+- [ ] v5 BuildSlug `Uri.EscapeDataString` 在 .NET 8 的行为是否与 .NET 6 一致(中文编码)
+- [ ] v5 BuildProductUrl mr_1 末 6 位在 MR.1 长度 < 6 时的 URL 可读性
+- [ ] v5 router.replace CURSOR 重置在路由守卫期间的副作用
+- [ ] v5 sessionStorage 在 Safari 隐私模式下的 QuotaExceededError 处理
+- [ ] v5 searchApi.aggregate 特性检测在 SSR 预渲染阶段的行为
+- [ ] v5 `window.addEventListener('error', ...)` 是否误捕获非资源加载错误
+- [ ] v5 `crossorigin="use-credentials"` 在同源部署时的副作用
+- [ ] v5 `captureException` 在 Sentry SDK 未加载时的兜底
+- [ ] v5 409 XREF_CONFLICT 前端强制重新加载是否会丢失未保存的表单数据
+- [ ] v5 Detail.cshtml error 事件捕获在 React/Vue 框架内部的错误冒泡行为
+
 ### 持续迭代验证点(每轮审查后追加)
 
 > 每完成一轮审查 + 修复后,在此追加下一轮验证点
 > 循环终止条件: 连续一轮审查无任何新漏洞检出
 
-### 第五轮审查(暂无,待第四轮审查后追加)
-_待启动第四轮深度审查后追加_
+### 第六轮审查(暂无,待第五轮审查后追加)
+_待启动第五轮深度审查后追加_
 
-### 第六轮审查(暂无,待第四轮审查后追加)
-_待启动第四轮深度审查后追加_
+### 第七轮审查(暂无,待第五轮审查后追加)
+_待启动第五轮深度审查后追加_

@@ -763,6 +763,8 @@
 - [ ] **Task 3.2.10**: `AdminProductService.cs:243-244` UpdateAsync xref 全量替换改为增量更新(新增/更新/删除三类),更新类触发 xmin 乐观锁(修复 D3-21)
 - [ ] **Task 3.2.11**: spec v3 D16 修复调整:`naming_field` 字段语义改为"命名快照值"(审计/追溯),前端查 `image_key` 不动态生成(修复 D3-30)
 
+---
+
 ### Phase 4 v4 补丁任务(13 个)
 
 - [ ] **Task 4.1.11**: `Detail.cshtml` 改用 JSON 数据岛替代 `window.__PRODUCT__`(修复 F2-1);挂载点内 SSR 兜底主图(修复 F2-15);`<script type="module">` 替换 `<script defer>`(修复 F2-9)
@@ -872,3 +874,220 @@
 - Task 0.7: Program.cs 改造(修复漏洞 7,8,前端联动)
 - Task 4.5: Vue client mount 子组件(修复漏洞 3)
 - Task 4.6: CursorHmac 改造(修复漏洞 6)
+
+
+---
+
+## v5 补丁任务清单(共 36 个,Phase 0-5 分布)
+
+> 详见 spec.md 末尾"第四轮深度审查衍生漏洞修复清单(v5 修订)"第五节"v5 补丁任务清单"。
+> 修订历史: v5 修复第四轮深度审查发现的 48 个衍生漏洞(高危 2 / 中危 27 / 低危 19)
+> 关键设计调整 8 项: ① 占位符 XSS 防御彻底修复(BMP 私用区 U+E000/U+E001 + C0 控制字符全过滤) ② IProductWriteStrategy 显式事务边界 + Create/Update/Delete/Restore 全覆盖 ③ Meilisearch 双索引改用 WriteTargets 配置列表 + _index volatile + 死信队列 ④ CursorHmac 配置化 LEGACY_CUTOFF_TS + id 字段四元组比较 ⑤ OemBrandsStr 分隔符改空格(对齐 separatorTokens) ⑥ brand 软删除后 OEM 3 仍可搜索(oem_list 保留 + CASE WHEN) ⑦ BuildSlug 单一逻辑(先 EscapeDataString 再替换非字母数字,% 保留) + mr_1 末 6 位防冲突 ⑧ ETL 与 AdminProductService advisory lock 协调(7740001/7740002)
+
+### Phase 0 v5 补丁任务(15 个 — 通用)
+
+- [ ] **Task 0.2.19**: `SakuraFilter.Core/Entities/Product.cs` + `SakuraFilter.Infrastructure/Data/ProductDbContext.cs` 显式配置 `e.Property(p => p.D1Mm).HasColumnType("numeric(10,2)").HasPrecision(10,2)` 等 8 个尺寸字段(d1_mm/d2_mm/h1_mm/d3_mm/d4_mm/h2_mm/h3_mm/h4_mm),与 spec.md L106-114 PG schema NUMERIC(10,2) 对齐(修复 D4-18 精度不一致)
+  - **依赖**: Task 0.2.1
+  - **验证**: `dotnet ef migrations script` 生成的 SQL 含 `numeric(10,2)`;单元测试 `Product_DecimalPrecision_AllFields` 通过
+
+- [ ] **Task 0.2.20**: spec.md L1128 同步更新 Vue 挂载点命名: `<div id="vue-gallery">` → `<div id="gallery-app">`,确保与 L1610-1612 的 `gallery-app` / `compare-app` / `inquiry-app` 三挂载点一致(修复 F3-8 内部命名矛盾)
+  - **依赖**: 无
+  - **验证**: spec.md L1128 与 L1610-1612 字符串搜索 `id="vue-gallery"` 无命中;`id="gallery-app"` 命中 2 处
+
+- [ ] **Task 0.2.21**: spec.md D3-14 反向更新逻辑补充 `oem_2` 取值: 当 CrossReference.Oem2 字段在 sort_order 排序后第一个为空时,fallback 到 `FirstOrDefault(x => !string.IsNullOrEmpty(x.Oem2))?.Oem2`(修复 D4-13 oem_2 反向更新空指针风险)
+  - **依赖**: Task 0.3.15
+  - **验证**: 单元测试 `Product_UpdateOem2_FallbackToFirstNonNull` 通过(全空列表置 NULL,有非空取首个)
+
+- [ ] **Task 0.2.22**: spec.md D3-21 增量更新匹配条件附加 `WHERE is_published = true AND is_discontinued = false`,防止已下架 OEM 3 被错误匹配覆盖(修复 D4-12 增量更新误改下架记录)
+  - **依赖**: Task 3.2.10
+  - **验证**: 单元测试 `Xref_IncrementalUpdate_SkipDiscontinued` 通过(下架记录 sort_order 不变)
+
+- [ ] **Task 0.2.23**: spec.md L489 `image.primary_naming_field` NULL 时前端展示 'legacy' 策略说明,旧数据按 `image_key` 字段直接展示,不动态生成 URL(修复 D4-14 naming_field NULL 时的前端兜底)
+  - **依赖**: Task 3.2.11
+  - **验证**: spec.md L489 含 'legacy' 兜底描述;前端 `AdminProductFormView.vue` 含 `namingField ?? 'legacy'` 分支
+
+- [ ] **Task 0.2.24**: spec.md D3-9 明确给出 `xrefs_stage` 临时表完整定义 + COPY 列清单 + INSERT 列清单完整 SQL,字段顺序与 JSONL 严格对齐(修复 D4-17 ETL 字段映射黑盒)
+  - **依赖**: Task 0.1.1
+  - **验证**: spec.md D3-9 含完整 CREATE TEMP TABLE + COPY + INSERT SQL;`EtlImportService.ImportXrefsAsync` 实现与 spec 字段顺序一致
+
+- [ ] **Task 0.3.16**: `SakuraFilter.Api/Services/AdminProductService.cs:1008-1036` `ValidateForm` 加 `StripControlChars` 控制字符过滤方法,移除 U+0000-U+001F(保留 \t \n \r) + U+007F-U+009F + BMP 私用区 U+E000-U+F8FF + 非字符 U+FDD0-U+FDEF + U+FFFE/U+FFFF(修复 S4-1 用户输入字面量绕过 XSS 防御)
+  - **依赖**: Task 0.3.12
+  - **验证**: 单元测试 `ValidateForm_StripsControlChars` 通过(输入 `\u0001MO\u0001` 字面量被过滤)
+
+- [ ] **Task 0.3.17**: `SakuraFilter.Api/Services/AdminProductService.cs:307-342` `DeleteAsync` + `RestoreAsync` 注入 `IProductWriteStrategy`,显式开启事务 + 调用 `_writeStrategy.DeleteAsync(productId, ct)` / `RestoreAsync(productId, ct)` + 提交事务(修复 D4-4 Delete/Restore 未走双写策略)
+  - **依赖**: spec v5 调整 2(IProductWriteStrategy 接口扩展)
+  - **验证**: 单元测试 `Product_Delete_WriteStrategyInvoked` + `Product_Restore_WriteStrategyInvoked` 通过;`AdminProductService` 构造函数注入 `IProductWriteStrategy`
+
+- [ ] **Task 0.3.18**: `SakuraFilter.Api/Services/AdminProductService.cs:52/150/238` `CreateAsync`/`UpdateAsync`/`DeleteAsync` 事务开始时执行 `pg_try_advisory_xact_lock(7740001)` 防止与 ETL TRUNCATE 冲突,获取失败抛 `ETL_IN_PROGRESS`(修复 D4-11 Admin 与 ETL 并发冲突)
+  - **依赖**: Task 5.1.18(spec v5 ETL TRUNCATE 前 LOCK TABLE NOWAIT)
+  - **验证**: 单元测试 `Admin_LockConflict_Throws_ETL_IN_PROGRESS` 通过;`_db.Database.ExecuteSqlRawAsync("SELECT pg_try_advisory_xact_lock(7740001)")` 在事务内执行
+
+- [ ] **Task 0.3.19**: `SakuraFilter.Api/Services/AdminProductService.cs:57-59` `CreateAsync` + `UpdateAsync` 在 xref 写入前执行 `pg_try_advisory_xact_lock(7740002)` 防止与 ETL DELETE+INSERT 冲突(修复 D4-10 xref 写入与 ETL 增量冲突)
+  - **依赖**: Task 0.3.18
+  - **验证**: 单元测试 `Admin_XrefLock_Acquired` 通过;`ExecuteSqlRawAsync("SELECT pg_try_advisory_xact_lock(7740002)")` 在 xref 写入前调用
+
+- [ ] **Task 0.3.20**: `SakuraFilter.Api/Controllers/AdminProductController.cs:165` `UpdateAsync` 收到 409 `XREF_CONFLICT` 时返回 `errorCode: "XREF_CONFLICT"` + `detail: "数据已被 ETL 更新,请刷新页面重试"`,前端 `AdminProductFormView.vue` `catch` 409 时 `ElMessage.warning` + 强制重新加载详情(修复 D4-21 409 错误码前端无提示)
+  - **依赖**: Task 0.3.17
+  - **验证**: 单元测试 `Admin_Update_XrefConflict_409` 通过;前端单元测试 `ProductForm_XrefConflict_ShowToast` 通过
+
+- [ ] **Task 0.4.16**: `SakuraFilter.Api/Services/MeiliSearchProvider.cs` `SearchQuery` 高亮标签改用 `MARK_OPEN = "\uE000"` + `MARK_CLOSE = "\uE001"`(BMP 私用区单字符,非 C0 控制字符,修复 S4-1)
+  - **依赖**: Task 0.4.8a(v4 占位符法)
+  - **验证**: 单元测试 `Meili_HighlightTag_BmpPrivateArea` 通过;`SearchQuery.HighlightPreTag` 值为 `"\uE000"`
+
+- [ ] **Task 0.4.17**: `SakuraFilter.Api/Services/MeiliSearchProvider.cs` `SanitizeFormatted` 方法重构: ① 步骤 1 把 Meilisearch 标签暂存到 `\uFDD0`/`\uFDD1`(非字符) ② 步骤 2 `WebUtility.HtmlEncode` 转义 ③ 步骤 3 移除 C0 控制字符(U+0000-U+001F,保留 \t \n \r) + BMP 私用区(U+E000-U+F8FF) + 非字符(U+FDD0-U+FDEF, U+FFFE/U+FFFF) ④ 步骤 4 还原 `\uFDD0`→`<mark>` + `\uFDD1`→`</mark>`(修复 S4-1 递归 sanitization)
+  - **依赖**: Task 0.4.16
+  - **验证**: 单元测试 `Meili_SanitizeFormatted_StripsUserInputMarkerLiteral` 通过(用户输入 `\uE000MO\uE000` 字面量被步骤 3 过滤);`Meili_SanitizeFormatted_RestoresMarkTag` 通过
+
+- [ ] **Task 0.4.18**: `SakuraFilter.Api/Services/MeiliSearchProvider.cs` `BuildMr1DocumentAsync` 改用 `oem_list` 保留软删除 brand 的 OEM 3(查询不过滤 `b.DeletedAt IS NULL`),`brand_sort_order_min` 用 `publishedOemList.Where(x => x.BrandDeletedAt == null && x.BrandSortOrder.HasValue).Select(x => x.BrandSortOrder!.Value).DefaultIfEmpty(int.MaxValue).Min()`(修复 S4-11 brand 软删除与 OEM 3 可搜索语义冲突)
+  - **依赖**: Task 0.4.2a(v4)
+  - **验证**: 单元测试 `Meili_BuildMr1Doc_BrandSoftDeleted_Oem3StillSearchable` 通过;`Meili_BrandSortOrderMin_CaseWhen` 通过(brand 全软删除时返回 int.MaxValue)
+
+- [ ] **Task 0.4.19**: `SakuraFilter.Api/Services/MeiliSearchProvider.cs` `Mr1IndexDoc` record 补充 `int OemListSortOrderMin` 字段 + `sortableAttributes` 配置加 `oem_list_sort_order_min`(修复 S4-16 sort_order 无冗余字段无法排序)
+  - **依赖**: Task 0.4.14a(v4)
+  - **验证**: `Mr1IndexDoc` 含 `OemListSortOrderMin` 属性;`UpdateIndexSettingsAsync` 中 `sortableAttributes` 含 `oem_list_sort_order_min`
+
+### Phase 0 v5 补丁任务(Meilisearch 双索引 + Cursor 4 个)
+
+- [ ] **Task 0.4.20**: `SakuraFilter.Api/Options/MeiliSearchOptions.cs` 新增 `WriteTargets: List<string>` 字段(默认 `["products"]`,灰度期可配置 `["products", "products_v2"]`),废弃 `IndexName` 单值字段或保留作读索引名(修复 S4-9/D4-6 _oldIndex 阶段 3 双写期为 null)
+  - **依赖**: Task 0.4.13a(v4)
+  - **验证**: `MeiliSearchOptions.WriteTargets` 属性存在;`appsettings.json` 含 `MeiliSearch:WriteTargets` 配置项
+
+- [ ] **Task 0.4.21**: `SakuraFilter.Api/Services/MeiliSearchProvider.cs` ① `_index` 字段加 `volatile` 关键字 ② 新增 `RefreshWriteTargets()` 方法根据 `WriteTargets` 重建 `_writeTargets` 列表 ③ `DeleteAsync` 遍历 `_writeTargets` 全部删除,任一失败写入死信队列(`Channel<DeleteTask>` + `search_index_pending` 表持久化)(修复 S4-9/S4-10/D4-6 双索引状态机同步)
+  - **依赖**: Task 0.4.20
+  - **验证**: 单元测试 `Meili_DeleteAsync_AllWriteTargetsInvoked` 通过(2 个 WriteTargets 时 2 次 DeleteDocumentsAsync 调用);`Meili_DeleteAsync_DeadLetterOnFailure` 通过(模拟 1 个索引失败,死信队列写入)
+
+- [ ] **Task 0.4.22**: `SakuraFilter.Api/Services/MeiliSearchProvider.cs` `BuildMr1DocumentAsync` 中 `OemBrandsStr` / `OemNo3sStr` 分隔符从 `|` 改为空格(对齐 Meilisearch `separatorTokens` 配置,修复 S4-13 整 token 索引问题)
+  - **依赖**: Task 0.4.14a(v4)
+  - **验证**: 单元测试 `Meili_OemBrandsStr_SpaceSeparated` 通过(`["BOSCH", "DENSO"]` → `"BOSCH DENSO"`);Meilisearch filter `oem_list_published_brands IN [BOSCH]` 命中
+
+- [ ] **Task 0.4.23**: `SakuraFilter.Api/Services/MeiliSearchProvider.cs` 新增 `BuildBrandFilter(List<string> oemBrands, string matchMode)` 方法: 单值 `IN [x]` / 多值 OR `IN [a, b, c]` / 多值 AND `oem_list_published_brands IN [a] AND oem_list_published_brands IN [b]`(修复 S4-6 filter 语法不完整)
+  - **依赖**: Task 0.4.22
+  - **验证**: 单元测试 `Meili_BuildBrandFilter_Single` / `Meili_BuildBrandFilter_Or` / `Meili_BuildBrandFilter_And` 通过
+
+### Phase 1 v5 补丁任务(3 个)
+
+- [ ] **Task 1.2.13b**: `SakuraFilter.Api/Models/SearchRequest.cs` 新增 `public const int MaxTokenCount = 10;` 常量 + `public string OemBrandMatchMode { get; set; } = "OR";` 字段(单值/AND/OR,修复 S4-3 token 无上限 + S4-6 多品牌 filter 语义)
+  - **依赖**: Task 1.2.1(v4)
+  - **验证**: `SearchRequest.MaxTokenCount` 常量存在;`SearchRequest.OemBrandMatchMode` 属性存在;单元测试 `SearchRequest_DefaultMatchMode_IsOR` 通过
+
+- [ ] **Task 1.2.14a**: `SakuraFilter.Api/Services/PostgresSearchProvider.cs` PG 兜底 keyset 分页 SQL 末尾追加 `p.id` 作为 UNIQUE 兜底字段: `WITH ranked AS (... GROUP BY p.id, p.mr_1, p.updated_at) SELECT r.* FROM ranked r WHERE (@cursor_updated_at IS NULL OR (r.brand_sort_order_min, r.oem_list_sort_order_min, r.updated_at, r.id) > (@cursor_brand_sort, @cursor_oem_sort, @cursor_updated_at::timestamptz, @cursor_id::bigint)) ORDER BY r.brand_sort_order_min ASC NULLS LAST, r.oem_list_sort_order_min ASC NULLS LAST, r.updated_at DESC, r.id ASC LIMIT 20`(修复 S4-4 keyset 排序字段非 UNIQUE 跳页)
+  - **依赖**: Task 1.2.10a(v4)
+  - **验证**: 单元测试 `PG_KeysetPagination_FourTuple_NoSkip` 通过(连续翻页 50 次无重复无跳页);`PG_KeysetPagination_CursorIncludesId` 通过(cursor 字符串含 id 字段)
+
+- [ ] **Task 1.2.15a**: `SakuraFilter.Api/Services/PostgresSearchProvider.cs` PG 兜底 `tokens.Take(MaxTokenCount)` 限制查询 token 数量 + 短关键词(< 3 字符)走精确匹配(`oem_no_3 = @token` 或 `oem_brand = @token`,不走 ILIKE)(修复 S4-3 token 无上限 + S4-12 短关键词 ILIKE 全表扫)
+  - **依赖**: Task 1.2.13b
+  - **验证**: 单元测试 `PG_Search_TokenLimit_10` 通过(11 个 token 截断为 10);`PG_Search_ShortKeyword_ExactMatch` 通过(2 字符 "BO" 走 `=` 不走 ILIKE)
+
+### Phase 3 v5 补丁任务(1 个)
+
+- [ ] **Task 3.2.12**: `SakuraFilter.Api/Services/EtlImportService.cs:935-937` `cascade=false` 路径执行前先 `DROP CONSTRAINT fk_product_images_product` + `DROP CONSTRAINT fk_xrefs_product` 等所有 FK,TRUNCATE products/cross_references/product_images/machine_applications 后再 `ADD CONSTRAINT` 重建 FK;或直接改用 `DELETE FROM products; DELETE FROM cross_references; DELETE FROM product_images; DELETE FROM machine_applications;`(按 FK 反向顺序删除,修复 D4-19 cascade=false TRUNCATE 与 FK ON DELETE CASCADE 语义冲突导致级联清空)
+
+### Phase 4 v5 补丁任务(9 个)
+
+- [ ] **Task 4.1.17**: `SakuraFilter.Api/Pages/Products/Detail.cshtml` 在 `<script type="module" src="~/js/product-detail-client.js" defer></script>` 后追加 `<script>window.addEventListener('error', e => { if (e.target.tagName === 'SCRIPT' || e.target.tagName === 'LINK') { document.querySelectorAll('[id$="-app"]').forEach(el => el.innerHTML = '<div class="mount-fallback">JS 加载失败,请刷新重试</div>'); } }, true);</script>`(修复 F3-2 safeMount 无法捕获 module 加载失败)
+  - **依赖**: Task 4.1.4
+  - **验证**: 手动测试: 断网情况下访问 `/products/...` 页面,挂载点显示 "JS 加载失败" 提示而非空白
+
+- [ ] **Task 4.1.18**: `SakuraFilter.Api/Pages/Products/Detail.cshtml` `<script type="module">` 跨域部署时加 `crossorigin="use-credentials"` 属性 + nginx 配置 `add_header Access-Control-Allow-Origin "https://frontend.example.com" always;` + `add_header Access-Control-Allow-Credentials "true" always;`(修复 F3-14 跨域 module 加载失败)
+  - **依赖**: Task 4.1.17
+  - **验证**: 部署后 `curl -I -H "Origin: https://frontend.example.com" https://cdn.example.com/js/product-detail-client.js` 返回 `Access-Control-Allow-Origin: https://frontend.example.com` + `Access-Control-Allow-Credentials: true`
+
+- [ ] **Task 4.1.19**: `SakuraFilter.Api/wwwroot/js/product-detail-client.ts` `safeMount` catch 块内调用 `import { captureException } from '@sentry/browser'; captureException(err, { tags: { mr1: mount.dataset.mr1, oem3: mount.dataset.oem3 } });`(修复 F3-9 JS 加载/挂载失败无监控)
+  - **依赖**: Task 4.1.17
+  - **验证**: 手动测试: 注入错误版本的 product-detail-client.js,Sentry dashboard 收到事件 + tags 含 mr1/oem3
+
+- [ ] **Task 4.1.20**: spec.md L1899 修正 JSON 数据岛描述: "安全保证来自 `System.Text.Json.JsonSerializer.Serialize` 的 `JavaScriptEncoder.Default` 默认转义 `<`/`>`/`&`/`'`/`\"`,必须用 `@Json.Serialize(Model.Product)` 输出,严禁 `@Html.Raw(Model.ProductJson)`"(修复 F3-1 JSON 数据岛安全描述不完整)
+  - **依赖**: 无
+  - **验证**: spec.md L1899 含 `JavaScriptEncoder.Default` + `@Json.Serialize` + 严禁 `@Html.Raw` 三要素;`Detail.cshtml` 用 `@Json.Serialize` 而非 `@Html.Raw`
+
+- [ ] **Task 4.5.11**: `SakuraFilter.Api/Services/CursorHmac.cs` ① 改用 `IOptions<CursorHmacOptions>` 注入 `CurrentKey` + `PreviousKey` + `LegacyCutoffTs`(默认 `DateTimeOffset.UtcNow.AddDays(7).ToUnixTimeSeconds()`,部署时配置) ② `SignV2` 方法签名追加 `long id` 参数: `SignV2(string updatedAtIso, string mr1, int pageNum, long id)` ③ payload 格式 `v2:{expUnixTs}|{tsB64}|{mr1B64}|{pageNum}|{id}` ④ `VerifyAndExtractV2` 返回四元组 `(updatedAtIso, mr1, pageNum, id)` ⑤ `pageNum > 1000` 抛 `CURSOR_PAGE_TOO_DEEP`(修复 D4-1 LEGACY_CUTOFF_TS 硬编码 + S4-4 cursor 缺 id 字段)
+  - **依赖**: Task 4.5.10(v4)
+  - **验证**: 单元测试 `CursorHmac_SignV2_IncludesId` 通过;`CursorHmac_VerifyAndExtractV2_ReturnsFourTuple` 通过;`CursorHmac_LegacyCutoffTs_FromConfig` 通过;`appsettings.json` 含 `CursorHmac:CurrentKey` + `CursorHmac:PreviousKey` + `CursorHmac:LegacyCutoffTs` 配置项
+
+- [ ] **Task 4.5.12**: `SakuraFilter.Api/Services/IProductDetailService.cs` `BuildSlug` 方法改用单一逻辑(修复 F3-3 中文 slugify 顺序混乱):
+  ```csharp
+  public static string BuildSlug(string raw)
+  {
+      if (string.IsNullOrWhiteSpace(raw)) return "untyped";
+      var lower = raw.ToLowerInvariant();
+      var escaped = Uri.EscapeDataString(lower);  // 中文 → %XX%XX%XX
+      var slug = Regex.Replace(escaped, "[^a-zA-Z0-9%-]", "-");  // % 保留
+      slug = Regex.Replace(slug, "-+", "-").Trim('-');
+      if (slug.Length > 60) slug = slug[..60];
+      return string.IsNullOrEmpty(slug) ? "untyped" : slug;
+  }
+  ```
+  - **依赖**: 无
+  - **验证**: 单元测试 `BuildSlug_Chinese_EscapedPreserved` 通过(`"机油滤芯"` → `"%e6%9c%ba%e6%b2%b9%e6%bb%a4%e8%8a%af"`);`BuildSlug_SpecialChar_Hyphenated` 通过(`"Oil-Filter/SP"` → `"oil-filter-sp"`);`BuildSlug_Empty_ReturnsUntyped` 通过
+
+- [ ] **Task 4.5.13**: `SakuraFilter.Api/Services/IProductDetailService.cs` `BuildProductUrl` 方法末尾附加 `mr_1` 末 6 位防 slug 冲突: `var mr1Suffix = p.Mr1.Length > 6 ? p.Mr1[^6..] : p.Mr1; return $"/products/{pn1Slug}-{mr1Suffix}/{pn2Slug}/{brandSlug}/{oem3Slug}".ToLowerInvariant();`(修复 F3-10 多产品同 pn1/pn2/brand/oem3 时 slug 冲突)
+  - **依赖**: Task 4.5.12
+  - **验证**: 单元测试 `BuildProductUrl_Mr1Suffix_PreventsCollision` 通过(两个不同 MR.1 但同 pn1/pn2/brand/oem3 的产品 URL 不同);`BuildProductUrl_ShortMr1_FullString` 通过(MR.1 长度 < 6 时用完整字符串)
+
+- [ ] **Task 4.5.14**: `frontend/src/utils/http.ts` CURSOR 自动重置改用 `router.replace({ path: route.path, query: { ...route.query, page: 1 } })` + `sessionStorage.setItem('cursor-reset-toast', '1')`,在 `App.vue` mounted 时检查 sessionStorage 显示一次性 `ElMessage.warning('分页游标已过期,已重置到第 1 页')`(修复 F3-5 CURSOR 重置整页刷新体验差)
+  - **依赖**: Task 0.5.5(v4)
+  - **验证**: 前端单元测试 `Http_CursorExpired_RouterReplace` 通过(不触发 `window.location.reload`);`App_CursorResetToast_OneTimeShow` 通过
+
+- [ ] **Task 4.5.15**: `frontend/src/api/index.ts` + `frontend/src/views/public/SearchView.vue` 特性检测 `typeof searchApi.aggregate === 'function'` + 旧 API `searchApi.search` fallback: 优先调 `searchApi.aggregate(req, { signal })`,404 `ENDPOINT_NOT_FOUND` 时 fallback 到 `searchApi.search(req, { signal })` + 前端聚合 oemList(修复 F3-13 旧 API 兼容性未明)
+  - **依赖**: Task 1.3.6(v4)
+  - **验证**: 前端单元测试 `Search_FallbackToOldApi_On404` 通过(mock `aggregate` 返回 404,验证 `search` 被调用);`Search_UseAggregate_WhenAvailable` 通过(mock `aggregate` 返回 200,验证 `search` 不被调用)
+
+### Phase 5 v5 补丁任务(4 个)
+
+- [ ] **Task 5.1.19**: `SakuraFilter.Api/Services/EtlImportService.cs:1212-1220` `LoadExistingOemMapAsync` 同时返回 mr_1 map + oem_2 map,JSONL 字段优先匹配 mr_1,mr_1 缺失时 fallback 到 oem_2(修复 D4-20 旧数据无 mr_1 时 ETL 无法关联)
+  - **依赖**: Task 5.1.18(v4)
+  - **验证**: 单元测试 `Etl_LoadExistingOemMap_DualKey` 通过(返回 `Dictionary<(string mr1, string oem2), ExistingXref>`);`Etl_Import_FallbackToOem2_WhenMr1Missing` 通过(JSONL 行 mr_1 为空 + oem_2 = "ABC123" 时正确匹配)
+
+- [ ] **Task 5.1.20**: `SakuraFilter.Api/Services/EtlImportService.cs` 新增 `CleanupOrphanImagesAsync(CancellationToken ct)` 方法: ① 遍历所有 `IObjectStorage` 实现(MinIO + Aliyun OSS) ② 查 `product_images WHERE uploaded_at < now() - interval '1 hour' AND product_id IS NULL`(孤立主图) + `product_images WHERE product_id IS NOT NULL AND product_id NOT IN (SELECT id FROM products)`(产品已删除但图片残留) ③ 扠除 `IObjectStorage.DeleteObjectAsync(key)` + `product_images` 表对应行(修复 D4-15/D4-16 多存储后端孤儿图片清理)
+  - **依赖**: Task 5.1.19
+  - **验证**: 单元测试 `Etl_CleanupOrphanImages_MultiBackend` 通过(mock 2 个 IObjectStorage,验证 2 次删除调用);`Etl_CleanupOrphanImages_TimestampFilter` 通过(1 小时内的图片不删除)
+
+- [ ] **Task 5.1.21**: `SakuraFilter.Api/Services/XrefOemBrandService.cs` 实现 `ApplyChangeAsync(string brand, bool isDeleted)` 统一方法: ① Update/SoftDelete/Restore 全部调用此方法 ② 内部 `Channel<string>.Writer.WriteAsync(brand)` 触发 Brand sort_order 变更后台重建 ③ Channel 写入失败 fallback 到 `search_index_pending` 表持久化(`INSERT INTO search_index_pending (mr_1, action, created_at) SELECT mr_1, 'rebuild', now() FROM cross_references WHERE oem_brand = @brand`)(修复 D4-7 brand 变更无 Channel 写入 + D4-8 Channel 崩溃丢任务 + S4-7 单点故障)
+  - **依赖**: Task 0.4.15(v4 Brand sort_order 变更后台重建)
+  - **验证**: 单元测试 `XrefOemBrand_ApplyChange_ChannelWrite` 通过(Update/SoftDelete/Restore 都触发 Channel 写入);`XrefOemBrand_ApplyChange_FallbackToDb` 通过(Channel.Writer 抛异常时 fallback 到 `search_index_pending` 表 INSERT);`XrefOemBrand_Restore_TriggersRebuild` 通过(brand 从软删除恢复触发 Channel 写入)
+
+- [ ] **Task 5.1.22**: `SakuraFilter.Api/Workers/IndexReplayWorker.cs` 后台轮询改造: ① `SELECT mr_1, action FROM search_index_pending ORDER BY created_at LIMIT 100 FOR UPDATE SKIP LOCKED`(跳过其他实例锁定的行) ② 每行处理时 `pg_advisory_xact_lock(mr1_hash)` 防跨实例重复处理(mr1_hash = `hashtext(mr_1)` 取模 1000000) ③ 处理成功 `DELETE FROM search_index_pending WHERE mr_1 = @mr1` ④ 失败 `UPDATE search_index_pending SET retry_count = retry_count + 1, last_error = @err WHERE mr_1 = @mr1`,retry_count > 3 时标记 `is_dead = true`(修复 S4-8 多实例重复处理)
+  - **依赖**: Task 5.1.21
+  - **验证**: 单元测试 `IndexReplayWorker_SkipLocked` 通过(2 个实例并发处理 100 条,无重复);`IndexReplayWorker_AdvisoryLock_PreventsDuplicate` 通过(同 mr_1 被同时提交 2 次,只处理 1 次);`IndexReplayWorker_DeadLetter_After3Retries` 通过(retry_count = 4 时 is_dead = true)
+
+---
+
+## Task Dependencies(v5 补丁任务)
+
+> v5 补丁任务的关键依赖链:
+> - **Task 0.2.19** → 独立(精度配置)
+> - **Task 0.2.20** → 独立(spec 同步)
+> - **Task 0.2.21** → 依赖 Task 0.3.15(v4 oem_2 反向更新)
+> - **Task 0.2.22** → 依赖 Task 3.2.10(v4 增量更新)
+> - **Task 0.2.23** → 依赖 Task 3.2.11(v4 naming_field 语义)
+> - **Task 0.2.24** → 依赖 Task 0.1.1(v4 迁移脚本)
+> - **Task 0.3.16** → 依赖 Task 0.3.12(v4 ValidateForm 控制字符)
+> - **Task 0.3.17** → 依赖 spec v5 调整 2(IProductWriteStrategy 接口)
+> - **Task 0.3.18** → 依赖 Task 5.1.18(v4 ETL TRUNCATE LOCK TABLE)
+> - **Task 0.3.19** → 依赖 Task 0.3.18
+> - **Task 0.3.20** → 依赖 Task 0.3.17
+> - **Task 0.4.16** → 依赖 Task 0.4.8a(v4 占位符法)
+> - **Task 0.4.17** → 依赖 Task 0.4.16
+> - **Task 0.4.18** → 依赖 Task 0.4.2a(v4 oem_list 软删除 brand 过滤)
+> - **Task 0.4.19** → 依赖 Task 0.4.14a(v4 Mr1IndexDoc 扁平化)
+> - **Task 0.4.20** → 依赖 Task 0.4.13a(v4 双索引灰度)
+> - **Task 0.4.21** → 依赖 Task 0.4.20
+> - **Task 0.4.22** → 依赖 Task 0.4.14a
+> - **Task 0.4.23** → 依赖 Task 0.4.22
+> - **Task 1.2.13b** → 依赖 Task 1.2.1(v4 SearchRequest)
+> - **Task 1.2.14a** → 依赖 Task 1.2.10a(v4 keyset 分页)
+> - **Task 1.2.15a** → 依赖 Task 1.2.13b
+> - **Task 3.2.12** → 依赖 Task 0.1.2(v4 清理脚本)
+> - **Task 4.1.17** → 依赖 Task 4.1.4(v4 client mount)
+> - **Task 4.1.18** → 依赖 Task 4.1.17
+> - **Task 4.1.19** → 依赖 Task 4.1.17
+> - **Task 4.1.20** → 独立(spec 同步)
+> - **Task 4.5.11** → 依赖 Task 4.5.10(v4 CursorHmac)
+> - **Task 4.5.12** → 独立
+> - **Task 4.5.13** → 依赖 Task 4.5.12
+> - **Task 4.5.14** → 依赖 Task 0.5.5(v4 http.ts 拦截器)
+> - **Task 4.5.15** → 依赖 Task 1.3.6(v4 api/index.ts)
+> - **Task 5.1.19** → 依赖 Task 5.1.18(v4 LoadExistingOemMap)
+> - **Task 5.1.20** → 依赖 Task 5.1.19
+> - **Task 5.1.21** → 依赖 Task 0.4.15(v4 Brand sort_order 后台重建)
+> - **Task 5.1.22** → 依赖 Task 5.1.21
