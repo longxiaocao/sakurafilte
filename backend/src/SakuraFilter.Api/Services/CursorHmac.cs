@@ -8,7 +8,7 @@ namespace SakuraFilter.Api.Services;
 /// 用途: 防客户端篡改 cursor (改 updatedAt/id 越权访问任意产品位置)
 /// 设计:
 ///   - HMAC-SHA256(secret, payload) → 32 字节 → Base64URL → 截断 16 字符 (≈96 位强度)
-///   - cursor 格式: "<ISO8601 updatedAt>|<id>|<sig16>"
+///   - cursor 格式: "&lt;ISO8601 updatedAt&gt;|&lt;id&gt;|&lt;sig16&gt;"
 ///   - 旧格式 (无 sig) 视作非法, 直接 400 拒绝
 ///   - secret 来自 appsettings.json Search:CursorHmacKey (生产请用环境变量覆盖)
 ///
@@ -87,7 +87,7 @@ public class CursorHmac
     }
 
     /// <summary>
-    /// 验证 cursor 三段式格式: <ISO8601>|<mr1>|<sig16>
+    /// 验证 cursor 三段式格式: &lt;ISO8601&gt;|&lt;mr1&gt;|&lt;sig16&gt;
     /// 验证失败抛 ArgumentException (由 Endpoint 转 400)
     /// Day 9.6: 双 key 验证 — CurrentKey 不过试 PreviousKey (轮转过渡期兼容)
     /// V2 Task 4.6: 返回值从 (string, long id) 改为 (string, string mr1)

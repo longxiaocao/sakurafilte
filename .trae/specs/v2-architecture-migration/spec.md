@@ -13984,7 +13984,7 @@ dotnet test backend/SakuraFilter.sln
 - [x] v24 实际修改测试文件: 1 个(ReindexAllMutexTests)
 - [x] v24 新增 migration: 0 个
 - [x] v24 已知问题: Api 层 shim 已移除(5 个调用方 + 1 个测试文件改 using Core.Extensions,见 V24-F4)
-- [x] v24 已知问题: AdminProductImageService.BuildKeyAsync 和 CursorHmac 单元测试待补充(留 v25+ 处理)
+- [x] v24 已知问题: AdminProductImageService.BuildKeyAsync 和 CursorHmac 单元测试已存在(CursorHmacTests 16 用例 + V2BuildKeyPathTraversalTests 20+ 用例),CursorHmac XML 注释 warning 已修复(见 V24-F5)
 
 ## 25.7 v24 后续追加修复(V24-F4)
 
@@ -14004,4 +14004,16 @@ dotnet test backend/SakuraFilter.sln
 - SakuraFilter.Etl.Tests: 21/21 通过
 - SakuraFilter.Api.Tests: 191/191 通过
 - 总计 212/212 通过
+
+### V24-F5: CursorHmac XML 注释 warning 修复 [代码质量]
+
+**问题**: CursorHmac.cs 的 XML 注释中包含 `<ISO8601>` `<id>` `<mr1>` `<sig16>` 等尖括号文本,被编译器当成未闭合的 XML 标签,产生 CS1570 warning。
+
+**修复方案**: XML 注释中的尖括号统一转义为 `&lt;` `&gt;`
+- L11: `"<ISO8601 updatedAt>|<id>|<sig16>"` → `"&lt;ISO8601 updatedAt&gt;|&lt;id&gt;|&lt;sig16&gt;"`
+- L90: `<ISO8601>|<mr1>|<sig16>` → `&lt;ISO8601&gt;|&lt;mr1&gt;|&lt;sig16&gt;`
+
+**单元测试已存在**: 经核查,CursorHmacTests.cs(16 用例)和 V2BuildKeyPathTraversalTests.cs(20+ 用例)已覆盖核心场景,无需新增:
+- CursorHmacTests: 构造函数校验(短 key/空 key/同 key)/签名生成(截断 16 字符/空 mr1/null mr1)/验签(篡改 mr1/篡改 updatedAt/无签名/垃圾输入/空 cursor/空 mr1)/双 key 轮转(过渡期接受/过渡期后拒绝)/向后兼容(id 字符串载荷)
+- V2BuildKeyPathTraversalTests: 路径穿越防御(../..\/空格/特殊字符)/imageRole-slot 一致性/namingField 配置切换(oem_no_3↔mr_1)/空命名值/扩展名/完整 key 格式
 
