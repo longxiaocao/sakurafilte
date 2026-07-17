@@ -46,6 +46,7 @@ public class EtlProgress
     private long _updated;
     private long _skipped;                   // 兼容旧字段,=missing_oem + null_field
     private long _skippedMissingOem;         // Day 7.5: OEM 在 products 中找不到
+    private long _skippedMissingMr1;         // V2 Task 5.1: mr_1 在 products 中找不到 (xrefs/apps 关联用 mr_1)
     private long _skippedNullField;          // Day 7.5: 必填字段为 null
     private long _skippedDuplicate;          // Day 7.6: DISTINCT ON 去重掉的行
     private long _errors;
@@ -85,6 +86,7 @@ public class EtlProgress
     public long Updated => Interlocked.Read(ref _updated);
     public long Skipped => Interlocked.Read(ref _skipped);
     public long SkippedMissingOem => Interlocked.Read(ref _skippedMissingOem);
+    public long SkippedMissingMr1 => Interlocked.Read(ref _skippedMissingMr1);  // V2 Task 5.1
     public long SkippedNullField => Interlocked.Read(ref _skippedNullField);
     public long SkippedDuplicate => Interlocked.Read(ref _skippedDuplicate);
     public long Errors => Interlocked.Read(ref _errors);
@@ -224,6 +226,8 @@ public class EtlProgress
     public void IncrSkipped() => Interlocked.Increment(ref _skipped);
     public void IncrSkippedBy(long n) => Interlocked.Add(ref _skipped, n);
     public void IncrSkippedMissingOem() { Interlocked.Increment(ref _skipped); Interlocked.Increment(ref _skippedMissingOem); }
+    // V2 Task 5.1: xrefs/apps 关联 mr_1 找不到产品时调用 (替代 IncrSkippedMissingOem)
+    public void IncrSkippedMissingMr1() { Interlocked.Increment(ref _skipped); Interlocked.Increment(ref _skippedMissingMr1); }
     public void IncrSkippedNullField() { Interlocked.Increment(ref _skipped); Interlocked.Increment(ref _skippedNullField); }
     public void IncrSkippedDuplicate() { Interlocked.Increment(ref _skipped); Interlocked.Increment(ref _skippedDuplicate); }
     public void IncrErrors()
@@ -264,6 +268,7 @@ public class EtlProgress
         Interlocked.Exchange(ref _updated, 0);
         Interlocked.Exchange(ref _skipped, 0);
         Interlocked.Exchange(ref _skippedMissingOem, 0);
+        Interlocked.Exchange(ref _skippedMissingMr1, 0);  // V2 Task 5.1
         Interlocked.Exchange(ref _skippedNullField, 0);
         Interlocked.Exchange(ref _skippedDuplicate, 0);
         Interlocked.Exchange(ref _errors, 0);
@@ -287,6 +292,7 @@ public class EtlProgress
         updated = Updated,
         skipped = Skipped,
         skippedMissingOem = SkippedMissingOem,
+        skippedMissingMr1 = SkippedMissingMr1,  // V2 Task 5.1: mr_1 关联失败计数 (运行时, 不持久化到 etl_progress_log)
         skippedNullField = SkippedNullField,
         skippedDuplicate = SkippedDuplicate,  // Day 7.6
         errors = Errors,
@@ -832,7 +838,10 @@ public class EtlImportService
             await using (var writer = await conn.BeginBinaryImportAsync(@"
                 COPY products_stage (oem_no_normalized, oem_no_display, type,
                     product_name_1, product_name_2, product_name_3,
-                    remark, d1_mm, d2_mm, d3_mm, h1_mm, h2_mm, h3_mm,
+                    mr_1, oem_2, is_published,
+                    remark, d1_mm, d2_mm, d3_mm, d4_mm, h1_mm, h2_mm, h3_mm, h4_mm,
+                    d1_mm_raw, d2_mm_raw, d3_mm_raw, d4_mm_raw,
+                    h1_mm_raw, h2_mm_raw, h3_mm_raw, h4_mm_raw,
                     d7_thread, d8_thread, media, sealing_material,
                     efficiency_1, efficiency_2, bypass_valve_lr, bypass_valve_hr,
                     collapse_pressure_bar, temp_range, bypass_pressure)
@@ -849,23 +858,49 @@ public class EtlImportService
                     try
                     {
                         var doc = JsonSerializer.Deserialize<JsonElement>(line);
-                        var oemNorm = doc.GetProperty("oem_no_normalized").GetString()!;
+                        // V2 Task 5.1.2: mr_1 为 V2 主键, 必填校验
+                        //   - mr_1 缺失或空 → IncrSkippedNullField + continue (避免 NOT NULL 约束失败)
+                        //   - oem_no_normalized 从 mr_1 派生: 转大写 + 去特殊字符 (临时方案, 与 spec L265 对齐)
+                        var mr1 = GetStringOrNull(doc, "mr_1");
+                        if (string.IsNullOrWhiteSpace(mr1))
+                        {
+                            Progress.IncrSkippedNullField();
+                            _logger.LogWarning("products 行 {LineNo} mr_1 为空, 跳过", lineNo);
+                            continue;
+                        }
+                        mr1 = mr1.Trim();
+                        var oemNorm = NormalizeMr1ToOemNo(mr1);
 
                         await writer.StartRowAsync(ct);
                         await writer.WriteAsync(oemNorm, NpgsqlDbType.Varchar, ct);
                         await writer.WriteAsync(doc.GetProperty("oem_no_display").GetString() ?? "", NpgsqlDbType.Varchar, ct);
                         await writer.WriteAsync(doc.GetProperty("type").GetString() ?? "UNKNOWN", NpgsqlDbType.Varchar, ct);
-                        // WHY 新增: product_name_1/2 写入 stage (分区 1 主信息区, 之前 COPY 漏读导致 products 表这两列全 NULL)
                         await WriteNullableStringAsync(writer, GetStringOrNull(doc, "product_name_1"), ct);
                         await WriteNullableStringAsync(writer, GetStringOrNull(doc, "product_name_2"), ct);
                         await WriteNullableStringAsync(writer, GetStringOrNull(doc, "product_name_3"), ct);
+                        // V2 字段: mr_1 / oem_2 / is_published
+                        await writer.WriteAsync(mr1, NpgsqlDbType.Varchar, ct);
+                        await WriteNullableStringAsync(writer, GetStringOrNull(doc, "oem_2"), ct);
+                        await writer.WriteAsync(GetBoolOrFalse(doc, "is_published"), NpgsqlDbType.Boolean, ct);
                         await WriteNullableStringAsync(writer, GetStringOrNull(doc, "remark"), ct);
+                        // V2 字段: d4_mm / h4_mm (新增)
                         await WriteNullableDecimalAsync(writer, GetDecimalOrNull(doc, "d1_mm"), ct);
                         await WriteNullableDecimalAsync(writer, GetDecimalOrNull(doc, "d2_mm"), ct);
                         await WriteNullableDecimalAsync(writer, GetDecimalOrNull(doc, "d3_mm"), ct);
+                        await WriteNullableDecimalAsync(writer, GetDecimalOrNull(doc, "d4_mm"), ct);
                         await WriteNullableDecimalAsync(writer, GetDecimalOrNull(doc, "h1_mm"), ct);
                         await WriteNullableDecimalAsync(writer, GetDecimalOrNull(doc, "h2_mm"), ct);
                         await WriteNullableDecimalAsync(writer, GetDecimalOrNull(doc, "h3_mm"), ct);
+                        await WriteNullableDecimalAsync(writer, GetDecimalOrNull(doc, "h4_mm"), ct);
+                        // V2 字段: d*_mm_raw / h*_mm_raw (8 个原始字符串, 溯源用)
+                        await WriteNullableStringAsync(writer, GetStringOrNull(doc, "d1_mm_raw"), ct);
+                        await WriteNullableStringAsync(writer, GetStringOrNull(doc, "d2_mm_raw"), ct);
+                        await WriteNullableStringAsync(writer, GetStringOrNull(doc, "d3_mm_raw"), ct);
+                        await WriteNullableStringAsync(writer, GetStringOrNull(doc, "d4_mm_raw"), ct);
+                        await WriteNullableStringAsync(writer, GetStringOrNull(doc, "h1_mm_raw"), ct);
+                        await WriteNullableStringAsync(writer, GetStringOrNull(doc, "h2_mm_raw"), ct);
+                        await WriteNullableStringAsync(writer, GetStringOrNull(doc, "h3_mm_raw"), ct);
+                        await WriteNullableStringAsync(writer, GetStringOrNull(doc, "h4_mm_raw"), ct);
                         await WriteNullableStringAsync(writer, GetStringOrNull(doc, "d7_thread"), ct);
                         await WriteNullableStringAsync(writer, GetStringOrNull(doc, "d8_thread"), ct);
                         await WriteNullableStringAsync(writer, GetStringOrNull(doc, "media"), ct);
@@ -937,6 +972,9 @@ public class EtlImportService
                 : "TRUNCATE products RESTART IDENTITY CASCADE;";
             string finalSql = mode switch
             {
+                // V2 Task 5.1.2: 主键改用 mr_1 (NOT NULL UNIQUE)
+                //   - DISTINCT ON (mr_1) + ORDER BY mr_1, ctid DESC: 同 mr_1 取最后一行
+                //   - 列表补 V2 字段: mr_1 / oem_2 / is_published / d4_mm / h4_mm / d*_mm_raw / h*_mm_raw
                 // WHY: RESTART IDENTITY 让 serial 列从 1 重新开始,首次全量场景下 id 连续
                 //      CASCADE 防御性写法,即使未来加 FK 也不会破坏 ETL
                 //      Day 7 修复: 同时清 cross_references/machine_applications 避免孤儿行 (无 FK 约束时不会失败)
@@ -944,65 +982,96 @@ public class EtlImportService
                     {truncateClause}
                     INSERT INTO products (oem_no_normalized, oem_no_display, type,
                         product_name_1, product_name_2, product_name_3,
-                        remark, d1_mm, d2_mm, d3_mm, h1_mm, h2_mm, h3_mm,
+                        mr_1, oem_2, is_published,
+                        remark, d1_mm, d2_mm, d3_mm, d4_mm, h1_mm, h2_mm, h3_mm, h4_mm,
+                        d1_mm_raw, d2_mm_raw, d3_mm_raw, d4_mm_raw,
+                        h1_mm_raw, h2_mm_raw, h3_mm_raw, h4_mm_raw,
                         d7_thread, d8_thread, media, sealing_material,
                         efficiency_1, efficiency_2, bypass_valve_lr, bypass_valve_hr,
                         collapse_pressure_bar, temp_range, bypass_pressure, updated_at)
-                    SELECT DISTINCT ON (oem_no_normalized)
+                    SELECT DISTINCT ON (mr_1)
                         oem_no_normalized, oem_no_display, type,
                         product_name_1, product_name_2, product_name_3,
-                        remark, d1_mm, d2_mm, d3_mm, h1_mm, h2_mm, h3_mm,
+                        mr_1, oem_2, is_published,
+                        remark, d1_mm, d2_mm, d3_mm, d4_mm, h1_mm, h2_mm, h3_mm, h4_mm,
+                        d1_mm_raw, d2_mm_raw, d3_mm_raw, d4_mm_raw,
+                        h1_mm_raw, h2_mm_raw, h3_mm_raw, h4_mm_raw,
                         d7_thread, d8_thread, media, sealing_material,
                         efficiency_1, efficiency_2, bypass_valve_lr, bypass_valve_hr,
                         collapse_pressure_bar, temp_range, bypass_pressure, now()
                     FROM products_stage
-                    ORDER BY oem_no_normalized, ctid DESC;",
+                    ORDER BY mr_1, ctid DESC;",
                 "insert-only" => @"
                     INSERT INTO products (oem_no_normalized, oem_no_display, type,
                         product_name_1, product_name_2, product_name_3,
-                        remark, d1_mm, d2_mm, d3_mm, h1_mm, h2_mm, h3_mm,
+                        mr_1, oem_2, is_published,
+                        remark, d1_mm, d2_mm, d3_mm, d4_mm, h1_mm, h2_mm, h3_mm, h4_mm,
+                        d1_mm_raw, d2_mm_raw, d3_mm_raw, d4_mm_raw,
+                        h1_mm_raw, h2_mm_raw, h3_mm_raw, h4_mm_raw,
                         d7_thread, d8_thread, media, sealing_material,
                         efficiency_1, efficiency_2, bypass_valve_lr, bypass_valve_hr,
                         collapse_pressure_bar, temp_range, bypass_pressure, updated_at)
-                    SELECT DISTINCT ON (oem_no_normalized)
+                    SELECT DISTINCT ON (mr_1)
                         oem_no_normalized, oem_no_display, type,
                         product_name_1, product_name_2, product_name_3,
-                        remark, d1_mm, d2_mm, d3_mm, h1_mm, h2_mm, h3_mm,
+                        mr_1, oem_2, is_published,
+                        remark, d1_mm, d2_mm, d3_mm, d4_mm, h1_mm, h2_mm, h3_mm, h4_mm,
+                        d1_mm_raw, d2_mm_raw, d3_mm_raw, d4_mm_raw,
+                        h1_mm_raw, h2_mm_raw, h3_mm_raw, h4_mm_raw,
                         d7_thread, d8_thread, media, sealing_material,
                         efficiency_1, efficiency_2, bypass_valve_lr, bypass_valve_hr,
                         collapse_pressure_bar, temp_range, bypass_pressure, now()
                     FROM products_stage
-                    ORDER BY oem_no_normalized, ctid DESC
-                    ON CONFLICT (oem_no_normalized) DO NOTHING;",
+                    ORDER BY mr_1, ctid DESC
+                    ON CONFLICT (mr_1) WHERE mr_1 IS NOT NULL DO NOTHING;",
                 _ => @"
                     INSERT INTO products (oem_no_normalized, oem_no_display, type,
                         product_name_1, product_name_2, product_name_3,
-                        remark, d1_mm, d2_mm, d3_mm, h1_mm, h2_mm, h3_mm,
+                        mr_1, oem_2, is_published,
+                        remark, d1_mm, d2_mm, d3_mm, d4_mm, h1_mm, h2_mm, h3_mm, h4_mm,
+                        d1_mm_raw, d2_mm_raw, d3_mm_raw, d4_mm_raw,
+                        h1_mm_raw, h2_mm_raw, h3_mm_raw, h4_mm_raw,
                         d7_thread, d8_thread, media, sealing_material,
                         efficiency_1, efficiency_2, bypass_valve_lr, bypass_valve_hr,
                         collapse_pressure_bar, temp_range, bypass_pressure, updated_at)
-                    SELECT DISTINCT ON (oem_no_normalized)
+                    SELECT DISTINCT ON (mr_1)
                         oem_no_normalized, oem_no_display, type,
                         product_name_1, product_name_2, product_name_3,
-                        remark, d1_mm, d2_mm, d3_mm, h1_mm, h2_mm, h3_mm,
+                        mr_1, oem_2, is_published,
+                        remark, d1_mm, d2_mm, d3_mm, d4_mm, h1_mm, h2_mm, h3_mm, h4_mm,
+                        d1_mm_raw, d2_mm_raw, d3_mm_raw, d4_mm_raw,
+                        h1_mm_raw, h2_mm_raw, h3_mm_raw, h4_mm_raw,
                         d7_thread, d8_thread, media, sealing_material,
                         efficiency_1, efficiency_2, bypass_valve_lr, bypass_valve_hr,
                         collapse_pressure_bar, temp_range, bypass_pressure, now()
                     FROM products_stage
-                    ORDER BY oem_no_normalized, ctid DESC
-                    ON CONFLICT (oem_no_normalized) DO UPDATE SET
+                    ORDER BY mr_1, ctid DESC
+                    ON CONFLICT (mr_1) WHERE mr_1 IS NOT NULL DO UPDATE SET
+                        oem_no_normalized = EXCLUDED.oem_no_normalized,
                         oem_no_display = EXCLUDED.oem_no_display,
                         type = EXCLUDED.type,
                         product_name_1 = EXCLUDED.product_name_1,
                         product_name_2 = EXCLUDED.product_name_2,
                         product_name_3 = EXCLUDED.product_name_3,
+                        oem_2 = EXCLUDED.oem_2,
+                        is_published = EXCLUDED.is_published,
                         remark = EXCLUDED.remark,
                         d1_mm = EXCLUDED.d1_mm,
                         d2_mm = EXCLUDED.d2_mm,
                         d3_mm = EXCLUDED.d3_mm,
+                        d4_mm = EXCLUDED.d4_mm,
                         h1_mm = EXCLUDED.h1_mm,
                         h2_mm = EXCLUDED.h2_mm,
                         h3_mm = EXCLUDED.h3_mm,
+                        h4_mm = EXCLUDED.h4_mm,
+                        d1_mm_raw = EXCLUDED.d1_mm_raw,
+                        d2_mm_raw = EXCLUDED.d2_mm_raw,
+                        d3_mm_raw = EXCLUDED.d3_mm_raw,
+                        d4_mm_raw = EXCLUDED.d4_mm_raw,
+                        h1_mm_raw = EXCLUDED.h1_mm_raw,
+                        h2_mm_raw = EXCLUDED.h2_mm_raw,
+                        h3_mm_raw = EXCLUDED.h3_mm_raw,
+                        h4_mm_raw = EXCLUDED.h4_mm_raw,
                         d7_thread = EXCLUDED.d7_thread,
                         d8_thread = EXCLUDED.d8_thread,
                         media = EXCLUDED.media,
@@ -1212,12 +1281,19 @@ public class EtlImportService
 
     private static async Task<Dictionary<string, long>> LoadExistingOemMapAsync(NpgsqlConnection conn, CancellationToken ct)
     {
+        // V2 Task 5.1.1: xrefs/apps 关联主键改用 mr_1 (替代 oem_no_normalized)
+        //   - 仅加载 mr_1 NOT NULL 的产品, 避免空 key 污染 Dictionary
+        //   - 字典 key 为 mr_1, value 为 products.id
         var map = new Dictionary<string, long>(StringComparer.Ordinal);
-        await using var cmd = new NpgsqlCommand("SELECT id, oem_no_normalized FROM products", conn);
+        await using var cmd = new NpgsqlCommand("SELECT id, mr_1 FROM products WHERE mr_1 IS NOT NULL", conn);
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))
         {
-            map[reader.GetString(1)] = reader.GetInt64(0);
+            var mr1 = reader.GetString(1);
+            if (!mr1.Equals("untitled", StringComparison.Ordinal) && !map.ContainsKey(mr1))
+            {
+                map[mr1] = reader.GetInt64(0);
+            }
         }
         return map;
     }
@@ -1395,21 +1471,25 @@ public class EtlImportService
             await begin.ExecuteNonQueryAsync(ct);
         try
         {
-            // P1.1: 用 regular table 而非 TEMP, 跨批持久 (每批 TRUNCATE 即可, 不用 CREATE/DROP)
+            // V2 Task 5.1.3: xrefs_stage 补 V2 字段 oem_2 / sort_order / machine_type / is_published
             await using (var ensureStage = new NpgsqlCommand(@"
                 CREATE TABLE IF NOT EXISTS xrefs_stage (
                     product_id BIGINT,
                     product_name_1 VARCHAR(100),
                     oem_brand VARCHAR(100),
-                    oem_no_3 VARCHAR(100)
+                    oem_no_3 VARCHAR(100),
+                    oem_2 VARCHAR(100),
+                    sort_order INT DEFAULT 0,
+                    machine_type VARCHAR(50),
+                    is_published BOOLEAN DEFAULT TRUE
                 );", conn))
                 await ensureStage.ExecuteNonQueryAsync(ct);
             await using (var trunc = new NpgsqlCommand("TRUNCATE xrefs_stage", conn))
                 await trunc.ExecuteNonQueryAsync(ct);
 
-            // COPY 写入 staging
+            // COPY 写入 staging (V2: 列表补 oem_2 / sort_order / machine_type / is_published)
             await using (var writer = await conn.BeginBinaryImportAsync(@"
-                COPY xrefs_stage (product_id, product_name_1, oem_brand, oem_no_3) FROM STDIN (FORMAT BINARY)
+                COPY xrefs_stage (product_id, product_name_1, oem_brand, oem_no_3, oem_2, sort_order, machine_type, is_published) FROM STDIN (FORMAT BINARY)
             ", ct))
             {
                 var idx = 0;
@@ -1418,18 +1498,42 @@ public class EtlImportService
                     try
                     {
                         var doc = JsonSerializer.Deserialize<JsonElement>(jsonLine);
-                        var oem = doc.GetProperty("product_oem").GetString();
-                        if (oem is null || !oemMap.TryGetValue(oem, out var pid))
+                        // V2 Task 5.1.3: 关联主键改用 mr_1 (替代 product_oem)
+                        //   找不到 mr_1 关联的产品 → IncrSkippedMissingMr1 (替代 IncrSkippedMissingOem)
+                        var mr1 = GetStringOrNull(doc, "mr_1");
+                        if (string.IsNullOrWhiteSpace(mr1) || !oemMap.TryGetValue(mr1!, out var pid))
                         {
                             missing++;
-                            Progress.IncrSkippedMissingOem();
+                            Progress.IncrSkippedMissingMr1();
                             continue;
                         }
+                        // V2 Task 5.1.7: machine_type 枚举预检 (DB CHECK 兜底, 但 ETL 层提前跳过避免整批 ROLLBACK)
+                        //   合法值: agriculture / commercial / construction / industrial / others (与 DB CHECK 一致)
+                        //   空/null: 允许 (machine_type 可空); 非法非空: 计错误 + continue
+                        var machineType = GetStringOrNull(doc, "machine_type");
+                        if (!string.IsNullOrEmpty(machineType) && !AllowedMachineCategories.Contains(machineType))
+                        {
+                            errors++;
+                            var globalLineNo = batchStartLineNo + idx + 1;
+                            Progress.IncrErrorsWith($"xrefs 行 {globalLineNo}: MACHINE_TYPE_INVALID (machine_type='{machineType}' 不在白名单)");
+                            _logger.LogWarning("xrefs 行 {LineNo} machine_type 非法: {Val}", globalLineNo, machineType);
+                            idx++;
+                            continue;
+                        }
+                        // sort_order: int, 缺失或非数字默认 0
+                        var sortOrder = 0;
+                        if (doc.TryGetProperty("sort_order", out var soEl) && soEl.ValueKind == JsonValueKind.Number)
+                            sortOrder = soEl.GetInt32();
                         await writer.StartRowAsync(ct);
                         await writer.WriteAsync(pid, NpgsqlDbType.Bigint, ct);
                         await WriteNullableStringAsync(writer, GetStringOrNull(doc, "product_name_1"), ct);
                         await WriteNullableStringAsync(writer, GetStringOrNull(doc, "oem_brand"), ct);
                         await WriteNullableStringAsync(writer, GetStringOrNull(doc, "oem_no_3"), ct);
+                        // V2 字段
+                        await WriteNullableStringAsync(writer, GetStringOrNull(doc, "oem_2"), ct);
+                        await writer.WriteAsync(sortOrder, NpgsqlDbType.Integer, ct);
+                        await WriteNullableStringAsync(writer, machineType, ct);
+                        await writer.WriteAsync(GetBoolOrFalse(doc, "is_published"), NpgsqlDbType.Boolean, ct);
                     }
                     catch (Exception ex)
                     {
@@ -1450,35 +1554,40 @@ public class EtlImportService
             await using (var countCmd = new NpgsqlCommand("SELECT count(*) FROM xrefs_stage", conn))
                 stageCount = (long)(await countCmd.ExecuteScalarAsync(ct))!;
 
-            // full-load 仅在首批 TRUNCATE, 续读模式强制 upsert
+            // V2 Task 5.1.3: 三个 mode 的 INSERT 列表补 V2 字段 oem_2 / sort_order / machine_type / is_published
+            //   ON CONFLICT 谓词保持 (product_id, oem_brand, oem_no_3) WHERE ... (V2 部分唯一索引 uq_xrefs_brand_oem3)
             string truncClause = (isFirstBatch && mode == "full-load") ? "TRUNCATE cross_references;" : "";
             string finalSql = mode switch
             {
                 "full-load" => $@"
                     {truncClause}
-                    INSERT INTO cross_references (product_id, product_name_1, oem_brand, oem_no_3, created_at)
+                    INSERT INTO cross_references (product_id, product_name_1, oem_brand, oem_no_3, oem_2, sort_order, machine_type, is_published, created_at)
                     SELECT DISTINCT ON (product_id, oem_brand, oem_no_3)
-                        product_id, product_name_1, oem_brand, oem_no_3, now()
+                        product_id, product_name_1, oem_brand, oem_no_3, oem_2, sort_order, machine_type, is_published, now()
                     FROM xrefs_stage
                     WHERE oem_brand IS NOT NULL AND oem_no_3 IS NOT NULL
                     ORDER BY product_id, oem_brand, oem_no_3, ctid DESC;",
                 "insert-only" => @"
-                    INSERT INTO cross_references (product_id, product_name_1, oem_brand, oem_no_3, created_at)
+                    INSERT INTO cross_references (product_id, product_name_1, oem_brand, oem_no_3, oem_2, sort_order, machine_type, is_published, created_at)
                     SELECT DISTINCT ON (product_id, oem_brand, oem_no_3)
-                        product_id, product_name_1, oem_brand, oem_no_3, now()
+                        product_id, product_name_1, oem_brand, oem_no_3, oem_2, sort_order, machine_type, is_published, now()
                     FROM xrefs_stage
                     WHERE oem_brand IS NOT NULL AND oem_no_3 IS NOT NULL
                     ORDER BY product_id, oem_brand, oem_no_3, ctid DESC
                     ON CONFLICT (product_id, oem_brand, oem_no_3) WHERE oem_brand IS NOT NULL AND oem_no_3 IS NOT NULL DO NOTHING;",
                 _ => @"  -- upsert 默认
-                    INSERT INTO cross_references (product_id, product_name_1, oem_brand, oem_no_3, created_at)
+                    INSERT INTO cross_references (product_id, product_name_1, oem_brand, oem_no_3, oem_2, sort_order, machine_type, is_published, created_at)
                     SELECT DISTINCT ON (product_id, oem_brand, oem_no_3)
-                        product_id, product_name_1, oem_brand, oem_no_3, now()
+                        product_id, product_name_1, oem_brand, oem_no_3, oem_2, sort_order, machine_type, is_published, now()
                     FROM xrefs_stage
                     WHERE oem_brand IS NOT NULL AND oem_no_3 IS NOT NULL
                     ORDER BY product_id, oem_brand, oem_no_3, ctid DESC
                     ON CONFLICT (product_id, oem_brand, oem_no_3) WHERE oem_brand IS NOT NULL AND oem_no_3 IS NOT NULL DO UPDATE SET
                         product_name_1 = EXCLUDED.product_name_1,
+                        oem_2 = EXCLUDED.oem_2,
+                        sort_order = EXCLUDED.sort_order,
+                        machine_type = EXCLUDED.machine_type,
+                        is_published = EXCLUDED.is_published,
                         created_at = now();"
             };
 
@@ -1634,7 +1743,8 @@ public class EtlImportService
                     engine_type VARCHAR(100),
                     engine_energy VARCHAR(50),
                     production_date_start DATE,
-                    is_ongoing BOOLEAN
+                    is_ongoing BOOLEAN,
+                    machine_category VARCHAR(50)  -- V2 Task 5.1.4: 机型分类(与 cross_references.machine_type 双轨存储)
                 ) ON COMMIT DROP;
             ", conn))
                 await create.ExecuteNonQueryAsync(ct);
@@ -1644,7 +1754,7 @@ public class EtlImportService
             long missing = 0;
             await using (var writer = await conn.BeginBinaryImportAsync(@"
                 COPY apps_stage (product_id, machine_brand, machine_model, model_name,
-                    engine_brand, engine_type, engine_energy, production_date_start, is_ongoing)
+                    engine_brand, engine_type, engine_energy, production_date_start, is_ongoing, machine_category)
                 FROM STDIN (FORMAT BINARY)
             ", ct))
             {
@@ -1658,11 +1768,13 @@ public class EtlImportService
                     try
                     {
                         var doc = JsonSerializer.Deserialize<JsonElement>(line);
-                        var oem = doc.GetProperty("product_oem").GetString();
-                        if (oem is null || !oemMap.TryGetValue(oem, out var pid))
+                        // V2 Task 5.1.4: 关联主键改用 mr_1 (替代 product_oem), 与 ProcessXrefBatchAsync 一致
+                        //   找不到 mr_1 关联的产品 → IncrSkippedMissingMr1 (替代 IncrSkippedMissingOem)
+                        var mr1 = GetStringOrNull(doc, "mr_1");
+                        if (string.IsNullOrWhiteSpace(mr1) || !oemMap.TryGetValue(mr1!, out var pid))
                         {
                             missing++;
-                            Progress.IncrSkippedMissingOem();  // Day 7.5
+                            Progress.IncrSkippedMissingMr1();
                             continue;
                         }
                         // Day 7.5: 必填字段预检 (SQL 的 WHERE machine_brand IS NOT NULL 静默过滤在这里显式化)
@@ -1675,6 +1787,16 @@ public class EtlImportService
                             _logger.LogDebug("apps 行 {LineNo} 必填字段空: brand={Brand}, model={Model}", lineNo, brand ?? "null", model ?? "null");
                             continue;
                         }
+                        // V2 Task 5.1.4: machine_category 枚举预检 (与 ProcessXrefBatchAsync machine_type 一致)
+                        //   合法值: agriculture / commercial / construction / industrial / others (与 DB CHECK 一致)
+                        //   空/null: 允许 (machine_category 可空); 非法非空: 计错误 + continue
+                        var machineCategory = GetStringOrNull(doc, "machine_category");
+                        if (!string.IsNullOrEmpty(machineCategory) && !AllowedMachineCategories.Contains(machineCategory))
+                        {
+                            Progress.IncrErrorsWith($"apps 行 {lineNo}: MACHINE_CATEGORY_INVALID (machine_category='{machineCategory}' 不在白名单)");
+                            _logger.LogWarning("apps 行 {LineNo} machine_category 非法: {Val}", lineNo, machineCategory);
+                            continue;
+                        }
                         await writer.StartRowAsync(ct);
                         await writer.WriteAsync(pid, NpgsqlDbType.Bigint, ct);
                         await writer.WriteAsync(brand, NpgsqlDbType.Varchar, ct);
@@ -1685,6 +1807,7 @@ public class EtlImportService
                         await WriteNullableStringAsync(writer, GetStringOrNull(doc, "engine_energy"), ct);
                         await WriteNullableDateAsync(writer, GetDateOrNull(doc, "production_date_start"), ct);
                         await writer.WriteAsync(GetBoolOrFalse(doc, "is_ongoing"), NpgsqlDbType.Boolean, ct);
+                        await WriteNullableStringAsync(writer, machineCategory, ct);  // V2 Task 5.1.4
                     }
                     catch (Exception ex)
                     {
@@ -1703,10 +1826,10 @@ public class EtlImportService
             long appStageCount;
             await using (var appCountCmd = new NpgsqlCommand("SELECT count(*) FROM apps_stage", conn))
                 appStageCount = (long)(await appCountCmd.ExecuteScalarAsync(ct))!;
-            _logger.LogInformation("[AUDIT] apps_stage: read={Read} stage={Stage} errors={Errors} missingOem={Missing}", Progress.Read, appStageCount, Progress.Errors, Progress.SkippedMissingOem);
-            if (appStageCount + Progress.Errors + Progress.SkippedMissingOem != Progress.Read)
+            _logger.LogInformation("[AUDIT] apps_stage: read={Read} stage={Stage} errors={Errors} missingMr1={Missing}", Progress.Read, appStageCount, Progress.Errors, Progress.SkippedMissingMr1);
+            if (appStageCount + Progress.Errors + Progress.SkippedMissingMr1 != Progress.Read)
             {
-                var msg = $"数据完整性校验失败: read={Progress.Read} stage={appStageCount} errors={Progress.Errors} missingOem={Progress.SkippedMissingOem} (期望 stage+errors+missingOem=read)";
+                var msg = $"数据完整性校验失败: read={Progress.Read} stage={appStageCount} errors={Progress.Errors} missingMr1={Progress.SkippedMissingMr1} (期望 stage+errors+missingMr1=read)";
                 _logger.LogError(msg);
                 Progress.Fail(msg);
                 _ = Progress.PersistLogAsync("apps", mode);
@@ -1716,34 +1839,35 @@ public class EtlImportService
             // Day 9.10: 删除 pre-INSERT 的 COUNT(DISTINCT) 统计查询 (同 xrefs,改用 stage_count - affected 推算)
 
             // Day 7: 加 mode + DISTINCT ON + ON CONFLICT
+            // V2 Task 5.1.4: 三个 mode 的 INSERT 列表补 machine_category (与 staging 表对齐)
             string finalSql = mode switch
             {
                 "full-load" => @"
                     TRUNCATE machine_applications;
                     INSERT INTO machine_applications (product_id, machine_brand, machine_model, model_name,
-                        engine_brand, engine_type, engine_energy, production_date_start, is_ongoing, created_at)
+                        engine_brand, engine_type, engine_energy, production_date_start, is_ongoing, machine_category, created_at)
                     SELECT DISTINCT ON (product_id, machine_brand, machine_model)
                         product_id, machine_brand, machine_model, model_name,
-                        engine_brand, engine_type, engine_energy, production_date_start, is_ongoing, now()
+                        engine_brand, engine_type, engine_energy, production_date_start, is_ongoing, machine_category, now()
                     FROM apps_stage
                     WHERE machine_brand IS NOT NULL AND machine_model IS NOT NULL
                     ORDER BY product_id, machine_brand, machine_model, ctid DESC;",
                 "insert-only" => @"
                     INSERT INTO machine_applications (product_id, machine_brand, machine_model, model_name,
-                        engine_brand, engine_type, engine_energy, production_date_start, is_ongoing, created_at)
+                        engine_brand, engine_type, engine_energy, production_date_start, is_ongoing, machine_category, created_at)
                     SELECT DISTINCT ON (product_id, machine_brand, machine_model)
                         product_id, machine_brand, machine_model, model_name,
-                        engine_brand, engine_type, engine_energy, production_date_start, is_ongoing, now()
+                        engine_brand, engine_type, engine_energy, production_date_start, is_ongoing, machine_category, now()
                     FROM apps_stage
                     WHERE machine_brand IS NOT NULL AND machine_model IS NOT NULL
                     ORDER BY product_id, machine_brand, machine_model, ctid DESC
                     ON CONFLICT (product_id, machine_brand, machine_model) WHERE machine_brand IS NOT NULL AND machine_model IS NOT NULL DO NOTHING;",
                 _ => @"
                     INSERT INTO machine_applications (product_id, machine_brand, machine_model, model_name,
-                        engine_brand, engine_type, engine_energy, production_date_start, is_ongoing, created_at)
+                        engine_brand, engine_type, engine_energy, production_date_start, is_ongoing, machine_category, created_at)
                     SELECT DISTINCT ON (product_id, machine_brand, machine_model)
                         product_id, machine_brand, machine_model, model_name,
-                        engine_brand, engine_type, engine_energy, production_date_start, is_ongoing, now()
+                        engine_brand, engine_type, engine_energy, production_date_start, is_ongoing, machine_category, now()
                     FROM apps_stage
                     WHERE machine_brand IS NOT NULL AND machine_model IS NOT NULL
                     ORDER BY product_id, machine_brand, machine_model, ctid DESC
@@ -1754,6 +1878,7 @@ public class EtlImportService
                         engine_energy = EXCLUDED.engine_energy,
                         production_date_start = EXCLUDED.production_date_start,
                         is_ongoing = EXCLUDED.is_ongoing,
+                        machine_category = EXCLUDED.machine_category,
                         created_at = now();"
             };
 
@@ -1827,6 +1952,9 @@ public class EtlImportService
         await using var begin = new NpgsqlCommand("BEGIN;", conn);
         await begin.ExecuteNonQueryAsync(ct);
 
+        // V2 Task 5.1.5: staging 表补 V2 字段
+        //   - mr_1 (V2 主键, NOT NULL 在此不约束 — COPY 时已预检, 空 mr_1 在循环内 continue 跳过)
+        //   - oem_2 / is_published / d4_mm / h4_mm / d*_mm_raw / h*_mm_raw
         await using var create = new NpgsqlCommand(@"
             CREATE TEMP TABLE products_stage (
                 oem_no_normalized VARCHAR(50),
@@ -1835,9 +1963,14 @@ public class EtlImportService
                 product_name_1 VARCHAR(100),
                 product_name_2 VARCHAR(100),
                 product_name_3 VARCHAR(100),
+                mr_1 VARCHAR(50),
+                oem_2 VARCHAR(100),
+                is_published BOOLEAN DEFAULT TRUE,
                 remark TEXT,
-                d1_mm NUMERIC(8,2), d2_mm NUMERIC(8,2), d3_mm NUMERIC(8,2),
-                h1_mm NUMERIC(8,2), h2_mm NUMERIC(8,2), h3_mm NUMERIC(8,2),
+                d1_mm NUMERIC(10,2), d2_mm NUMERIC(10,2), d3_mm NUMERIC(10,2), d4_mm NUMERIC(10,2),
+                h1_mm NUMERIC(10,2), h2_mm NUMERIC(10,2), h3_mm NUMERIC(10,2), h4_mm NUMERIC(10,2),
+                d1_mm_raw VARCHAR(50), d2_mm_raw VARCHAR(50), d3_mm_raw VARCHAR(50), d4_mm_raw VARCHAR(50),
+                h1_mm_raw VARCHAR(50), h2_mm_raw VARCHAR(50), h3_mm_raw VARCHAR(50), h4_mm_raw VARCHAR(50),
                 d7_thread VARCHAR(50), d8_thread VARCHAR(50),
                 media VARCHAR(100), sealing_material VARCHAR(100),
                 efficiency_1 VARCHAR(100), efficiency_2 VARCHAR(100),
@@ -1848,6 +1981,34 @@ public class EtlImportService
         ", conn);
         await create.ExecuteNonQueryAsync(ct);
     }
+
+    /// <summary>
+    /// V2 Task 5.1.2: 从 mr_1 派生 oem_no_normalized (临时方案, spec L265)
+    ///   - 规则: mr_1 转大写 + 去特殊字符 (仅保留字母数字)
+    ///   - 用途: oem_no_normalized 在 V2 已降级为可空普通索引, 但兼容旧查询逻辑仍需派生
+    ///   - 示例: "mr-0001" → "MR0001", "Mr_001" → "MR001"
+    /// </summary>
+    private static string NormalizeMr1ToOemNo(string mr1)
+    {
+        if (string.IsNullOrEmpty(mr1)) return "";
+        var upper = mr1.ToUpperInvariant();
+        // 仅保留字母数字, 其他字符全部移除
+        var sb = new System.Text.StringBuilder(upper.Length);
+        foreach (var c in upper)
+        {
+            if ((uint)(c - 'A') < 26u || (uint)(c - '0') < 10u)
+                sb.Append(c);
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// V2 Task 5.1.7: machine_type / machine_category 枚举白名单 (与 DB CHECK 约束一致)
+    ///   用途: xrefs.machine_type 与 machine_applications.machine_category 共用同一枚举集
+    ///   非法值在 ETL 层预检跳过, 避免触发 DB CHECK 导致整批 ROLLBACK
+    /// </summary>
+    private static readonly string[] AllowedMachineCategories =
+        { "agriculture", "commercial", "construction", "industrial", "others" };
 
     private static string? GetStringOrNull(JsonElement e, string prop) =>
         e.TryGetProperty(prop, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;

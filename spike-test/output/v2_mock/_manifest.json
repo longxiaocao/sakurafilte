@@ -1,0 +1,25 @@
+{
+  "seed": 20260717,
+  "generated_at": "2026-07-17T22:38:02+0800",
+  "counts": {
+    "products": 100,
+    "xrefs": 300,
+    "apps": 500,
+    "primary_images": 300,
+    "detail_images": 200
+  },
+  "files": {
+    "products": "spike-test\\output\\v2_mock\\mock_products_v2.jsonl",
+    "xrefs": "spike-test\\output\\v2_mock\\mock_xrefs_v2.jsonl",
+    "apps": "spike-test\\output\\v2_mock\\mock_apps_v2.jsonl"
+  },
+  "machine_category_distribution": {
+    "others": 96,
+    "commercial": 89,
+    "industrial": 98,
+    "agriculture": 96,
+    "construction": 94
+  },
+  "verification_errors": [],
+  "skip_upload": true
+}

@@ -1,0 +1,300 @@
+{"mr_1": "MR000001", "product_name_1": "OIL FILTER", "oem_brand": "AC DELCO", "oem_no_3": "ACXF02AE8", "oem_2": null, "sort_order": 37, "machine_type": "commercial", "is_published": true}
+{"mr_1": "MR000001", "product_name_1": "OIL FILTER", "oem_brand": "BOSCH", "oem_no_3": "BOS00843D", "oem_2": null, "sort_order": 69, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000002", "product_name_1": "AIR FILTER", "oem_brand": "HIFLO", "oem_no_3": "HIF13D10E", "oem_2": "ZYKZQ2SM", "sort_order": 81, "machine_type": "construction", "is_published": true}
+{"mr_1": "MR000002", "product_name_1": "AIR FILTER", "oem_brand": "PUROLATOR", "oem_no_3": "PUR3B8216", "oem_2": "B7WFJA7M", "sort_order": 72, "machine_type": "agriculture", "is_published": true}
+{"mr_1": "MR000002", "product_name_1": "AIR FILTER", "oem_brand": "OPTIMAL", "oem_no_3": "OPT04AF45", "oem_2": "CU38RAJE", "sort_order": 15, "machine_type": "industrial", "is_published": true}
+{"mr_1": "MR000002", "product_name_1": "AIR FILTER", "oem_brand": "VAICO", "oem_no_3": "VAI73D21E", "oem_2": null, "sort_order": 94, "machine_type": null, "is_published": true}
+{"mr_1": "MR000003", "product_name_1": "AIR/OIL SEPARATOR", "oem_brand": "K&N", "oem_no_3": "K&N64B852", "oem_2": "WDT7RMGD", "sort_order": 76, "machine_type": "commercial", "is_published": true}
+{"mr_1": "MR000003", "product_name_1": "AIR/OIL SEPARATOR", "oem_brand": "WIX", "oem_no_3": "WIXA19259", "oem_2": "APK4UFLG", "sort_order": 86, "machine_type": "industrial", "is_published": true}
+{"mr_1": "MR000004", "product_name_1": "AIR FILTER", "oem_brand": "BLUE PRINT", "oem_no_3": "BLUF3C830", "oem_2": "VVY7PXTK", "sort_order": 18, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000004", "product_name_1": "AIR FILTER", "oem_brand": "DENCKERMANN", "oem_no_3": "DEN188E4A", "oem_2": "VAVVDTV3", "sort_order": 26, "machine_type": "industrial", "is_published": true}
+{"mr_1": "MR000004", "product_name_1": "AIR FILTER", "oem_brand": "VAICO", "oem_no_3": "VAI1A86F7", "oem_2": null, "sort_order": 33, "machine_type": "agriculture", "is_published": true}
+{"mr_1": "MR000005", "product_name_1": "FUEL FILTER", "oem_brand": "PUROLATOR", "oem_no_3": "PUR1E039F", "oem_2": null, "sort_order": 46, "machine_type": "construction", "is_published": false}
+{"mr_1": "MR000005", "product_name_1": "FUEL FILTER", "oem_brand": "HENGST", "oem_no_3": "HEN342C12", "oem_2": "6FBFS7FA", "sort_order": 85, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000005", "product_name_1": "FUEL FILTER", "oem_brand": "FRAM", "oem_no_3": "FRA57AB9E", "oem_2": "JBFZGZK2", "sort_order": 2, "machine_type": "agriculture", "is_published": false}
+{"mr_1": "MR000006", "product_name_1": "CARTRIDGE FILTER", "oem_brand": "MAPCO", "oem_no_3": "MAPE8B447", "oem_2": "C6LRYMHT", "sort_order": 60, "machine_type": "industrial", "is_published": true}
+{"mr_1": "MR000006", "product_name_1": "CARTRIDGE FILTER", "oem_brand": "HENGST", "oem_no_3": "HENFB8476", "oem_2": "PGR95KKW", "sort_order": 6, "machine_type": "others", "is_published": false}
+{"mr_1": "MR000006", "product_name_1": "CARTRIDGE FILTER", "oem_brand": "BOSCH", "oem_no_3": "BOS09FDF0", "oem_2": null, "sort_order": 7, "machine_type": "agriculture", "is_published": true}
+{"mr_1": "MR000007", "product_name_1": "PETROL FILTER Long Life", "oem_brand": "BOSCH", "oem_no_3": "BOSADD93B", "oem_2": "QYL8ML6L", "sort_order": 97, "machine_type": "construction", "is_published": true}
+{"mr_1": "MR000007", "product_name_1": "PETROL FILTER Long Life", "oem_brand": "FLEETGUARD", "oem_no_3": "FLE9C2C9D", "oem_2": "675GBJJ6", "sort_order": 20, "machine_type": "construction", "is_published": false}
+{"mr_1": "MR000007", "product_name_1": "PETROL FILTER Long Life", "oem_brand": "FEBI", "oem_no_3": "FEB28309E", "oem_2": null, "sort_order": 73, "machine_type": "industrial", "is_published": true}
+{"mr_1": "MR000007", "product_name_1": "PETROL FILTER Long Life", "oem_brand": "MANN", "oem_no_3": "MAN5E1CDA", "oem_2": null, "sort_order": 17, "machine_type": "industrial", "is_published": true}
+{"mr_1": "MR000007", "product_name_1": "PETROL FILTER Long Life", "oem_brand": "BOSCH", "oem_no_3": "BOS28A02C", "oem_2": "NQ3QLYU6", "sort_order": 8, "machine_type": "construction", "is_published": false}
+{"mr_1": "MR000008", "product_name_1": "AIR FILTER", "oem_brand": "JAPKO", "oem_no_3": "JAP436A64", "oem_2": "4SJ7BVQ8", "sort_order": 92, "machine_type": "commercial", "is_published": true}
+{"mr_1": "MR000008", "product_name_1": "AIR FILTER", "oem_brand": "HENGST", "oem_no_3": "HENC1787B", "oem_2": null, "sort_order": 13, "machine_type": "construction", "is_published": true}
+{"mr_1": "MR000008", "product_name_1": "AIR FILTER", "oem_brand": "MAHLE", "oem_no_3": "MAH917A54", "oem_2": "2Q5NAHHK", "sort_order": 49, "machine_type": "others", "is_published": false}
+{"mr_1": "MR000009", "product_name_1": "OIL FILTER", "oem_brand": "FILTRON", "oem_no_3": "FIL74878F", "oem_2": null, "sort_order": 43, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000009", "product_name_1": "OIL FILTER", "oem_brand": "MANN", "oem_no_3": "MAN07221B", "oem_2": "33JYXCF5", "sort_order": 67, "machine_type": "construction", "is_published": true}
+{"mr_1": "MR000010", "product_name_1": "AIR/OIL SEPARATOR", "oem_brand": "HENGST", "oem_no_3": "HENE7E2FC", "oem_2": "J8L7AJ9C", "sort_order": 45, "machine_type": "commercial", "is_published": true}
+{"mr_1": "MR000010", "product_name_1": "AIR/OIL SEPARATOR", "oem_brand": "MAHLE", "oem_no_3": "MAH0B7875", "oem_2": "DKB24EJA", "sort_order": 49, "machine_type": "industrial", "is_published": false}
+{"mr_1": "MR000011", "product_name_1": "FUEL FILTER Standard", "oem_brand": "BOSCH", "oem_no_3": "BOS40D000", "oem_2": null, "sort_order": 80, "machine_type": "commercial", "is_published": true}
+{"mr_1": "MR000011", "product_name_1": "FUEL FILTER Standard", "oem_brand": "BOSCH", "oem_no_3": "BOS8D98B4", "oem_2": "WN3E4TNN", "sort_order": 97, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000012", "product_name_1": "CARTRIDGE FILTER", "oem_brand": "DONALDSON", "oem_no_3": "DON09B773", "oem_2": "ZR4CFUUE", "sort_order": 66, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000012", "product_name_1": "CARTRIDGE FILTER", "oem_brand": "BLUE PRINT", "oem_no_3": "BLUACFC59", "oem_2": "26LMNMLT", "sort_order": 51, "machine_type": "agriculture", "is_published": true}
+{"mr_1": "MR000013", "product_name_1": "PETROL FILTER", "oem_brand": "FILTRON", "oem_no_3": "FILDAA310", "oem_2": "GM4BGLT4", "sort_order": 24, "machine_type": "industrial", "is_published": true}
+{"mr_1": "MR000013", "product_name_1": "PETROL FILTER", "oem_brand": "WIX", "oem_no_3": "WIX2CAC3E", "oem_2": "FMM2DVTT", "sort_order": 78, "machine_type": "commercial", "is_published": false}
+{"mr_1": "MR000014", "product_name_1": "AIR FILTER Heavy Duty", "oem_brand": "MOTORCRAFT", "oem_no_3": "MOT609525", "oem_2": "33DCQY74", "sort_order": 59, "machine_type": "industrial", "is_published": true}
+{"mr_1": "MR000014", "product_name_1": "AIR FILTER Heavy Duty", "oem_brand": "PUROLATOR", "oem_no_3": "PURCB84E0", "oem_2": "NXDFSJ43", "sort_order": 31, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000014", "product_name_1": "AIR FILTER Heavy Duty", "oem_brand": "FRAM", "oem_no_3": "FRAB3B194", "oem_2": "Q5DESNM5", "sort_order": 24, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000014", "product_name_1": "AIR FILTER Heavy Duty", "oem_brand": "AC DELCO", "oem_no_3": "ACX424513", "oem_2": "S3JV89GE", "sort_order": 1, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000015", "product_name_1": "HYDRAULIC FILTER", "oem_brand": "FEBI", "oem_no_3": "FEBDDA78D", "oem_2": null, "sort_order": 4, "machine_type": "commercial", "is_published": false}
+{"mr_1": "MR000015", "product_name_1": "HYDRAULIC FILTER", "oem_brand": "FLEETGUARD", "oem_no_3": "FLEF9860B", "oem_2": "3DHT24UE", "sort_order": 57, "machine_type": "agriculture", "is_published": true}
+{"mr_1": "MR000015", "product_name_1": "HYDRAULIC FILTER", "oem_brand": "MAHLE", "oem_no_3": "MAH590180", "oem_2": "K2F4AG4J", "sort_order": 20, "machine_type": "construction", "is_published": true}
+{"mr_1": "MR000016", "product_name_1": "AIR FILTER Long Life", "oem_brand": "BOSCH", "oem_no_3": "BOS905ED7", "oem_2": null, "sort_order": 52, "machine_type": "construction", "is_published": false}
+{"mr_1": "MR000016", "product_name_1": "AIR FILTER Long Life", "oem_brand": "DENCKERMANN", "oem_no_3": "DEN28B092", "oem_2": "84B6RPYW", "sort_order": 90, "machine_type": "industrial", "is_published": true}
+{"mr_1": "MR000017", "product_name_1": "AIR FILTER High Flow", "oem_brand": "PUROLATOR", "oem_no_3": "PURBBF87F", "oem_2": null, "sort_order": 31, "machine_type": "construction", "is_published": true}
+{"mr_1": "MR000017", "product_name_1": "AIR FILTER High Flow", "oem_brand": "AC DELCO", "oem_no_3": "ACXACAEF0", "oem_2": "D27SQVWR", "sort_order": 8, "machine_type": "industrial", "is_published": true}
+{"mr_1": "MR000017", "product_name_1": "AIR FILTER High Flow", "oem_brand": "PUROLATOR", "oem_no_3": "PUR7FB9D4", "oem_2": null, "sort_order": 35, "machine_type": "construction", "is_published": true}
+{"mr_1": "MR000018", "product_name_1": "CARTRIDGE FILTER", "oem_brand": "BOSCH", "oem_no_3": "BOSB9E691", "oem_2": "JD3QCV9S", "sort_order": 57, "machine_type": "agriculture", "is_published": true}
+{"mr_1": "MR000018", "product_name_1": "CARTRIDGE FILTER", "oem_brand": "MEYLE", "oem_no_3": "MEY2F61D4", "oem_2": null, "sort_order": 10, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000018", "product_name_1": "CARTRIDGE FILTER", "oem_brand": "FEBI", "oem_no_3": "FEB4AC6DE", "oem_2": "JFUSZRNL", "sort_order": 20, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000019", "product_name_1": "OIL FILTER", "oem_brand": "MOTORCRAFT", "oem_no_3": "MOT3DC45F", "oem_2": "DP35HACF", "sort_order": 8, "machine_type": "construction", "is_published": true}
+{"mr_1": "MR000019", "product_name_1": "OIL FILTER", "oem_brand": "WIX", "oem_no_3": "WIX059924", "oem_2": null, "sort_order": 79, "machine_type": "industrial", "is_published": true}
+{"mr_1": "MR000019", "product_name_1": "OIL FILTER", "oem_brand": "BOSCH", "oem_no_3": "BOS4B18E2", "oem_2": "LB5DCUNB", "sort_order": 19, "machine_type": "industrial", "is_published": true}
+{"mr_1": "MR000019", "product_name_1": "OIL FILTER", "oem_brand": "MAPCO", "oem_no_3": "MAP54A5BF", "oem_2": "XT2CJK7W", "sort_order": 42, "machine_type": "commercial", "is_published": true}
+{"mr_1": "MR000020", "product_name_1": "FUEL FILTER", "oem_brand": "FLEETGUARD", "oem_no_3": "FLE6BF3D8", "oem_2": "D56STTMS", "sort_order": 57, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000020", "product_name_1": "FUEL FILTER", "oem_brand": "ASHIKA", "oem_no_3": "ASH226E2C", "oem_2": null, "sort_order": 12, "machine_type": "industrial", "is_published": false}
+{"mr_1": "MR000021", "product_name_1": "OIL FILTER", "oem_brand": "MOTORCRAFT", "oem_no_3": "MOT8AE806", "oem_2": "9PYHANWR", "sort_order": 89, "machine_type": "industrial", "is_published": true}
+{"mr_1": "MR000021", "product_name_1": "OIL FILTER", "oem_brand": "HENGST", "oem_no_3": "HEND62837", "oem_2": "HKFRXLG4", "sort_order": 10, "machine_type": "agriculture", "is_published": true}
+{"mr_1": "MR000022", "product_name_1": "COOLANT FILTER", "oem_brand": "FILTRON", "oem_no_3": "FIL6A1783", "oem_2": null, "sort_order": 61, "machine_type": "agriculture", "is_published": true}
+{"mr_1": "MR000022", "product_name_1": "COOLANT FILTER", "oem_brand": "JAPANPARTS", "oem_no_3": "JAP32E97A", "oem_2": "A5QWL9ZX", "sort_order": 96, "machine_type": "construction", "is_published": true}
+{"mr_1": "MR000022", "product_name_1": "COOLANT FILTER", "oem_brand": "OPTIMAL", "oem_no_3": "OPTA78F2B", "oem_2": "C457M3VA", "sort_order": 65, "machine_type": "industrial", "is_published": true}
+{"mr_1": "MR000022", "product_name_1": "COOLANT FILTER", "oem_brand": "LUBER-FINER", "oem_no_3": "LUBAEBE8C", "oem_2": "P7J888LB", "sort_order": 8, "machine_type": "commercial", "is_published": true}
+{"mr_1": "MR000023", "product_name_1": "ACTIVATED CARBON FILTER Long Life", "oem_brand": "BOSCH", "oem_no_3": "BOS947255", "oem_2": "7ZXVM8A7", "sort_order": 41, "machine_type": "industrial", "is_published": true}
+{"mr_1": "MR000023", "product_name_1": "ACTIVATED CARBON FILTER Long Life", "oem_brand": "ASHIKA", "oem_no_3": "ASHA3BB0D", "oem_2": "QBU6G57P", "sort_order": 56, "machine_type": null, "is_published": true}
+{"mr_1": "MR000023", "product_name_1": "ACTIVATED CARBON FILTER Long Life", "oem_brand": "FLEETGUARD", "oem_no_3": "FLEF70D46", "oem_2": "NU9EMZ3W", "sort_order": 10, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000024", "product_name_1": "FUEL FILTER", "oem_brand": "VAICO", "oem_no_3": "VAI243172", "oem_2": null, "sort_order": 95, "machine_type": "agriculture", "is_published": false}
+{"mr_1": "MR000024", "product_name_1": "FUEL FILTER", "oem_brand": "ASHIKA", "oem_no_3": "ASH40087F", "oem_2": "YH3HWCAV", "sort_order": 35, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000025", "product_name_1": "FUEL FILTER", "oem_brand": "BOSCH", "oem_no_3": "BOSE1C0B1", "oem_2": "L8YBSTBJ", "sort_order": 69, "machine_type": "construction", "is_published": false}
+{"mr_1": "MR000025", "product_name_1": "FUEL FILTER", "oem_brand": "BOSCH", "oem_no_3": "BOS326FB0", "oem_2": "8PDT4X7B", "sort_order": 45, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000026", "product_name_1": "OIL FILTER", "oem_brand": "BOSCH", "oem_no_3": "BOS8839DF", "oem_2": null, "sort_order": 31, "machine_type": "others", "is_published": false}
+{"mr_1": "MR000026", "product_name_1": "OIL FILTER", "oem_brand": "FRAM", "oem_no_3": "FRAAC832D", "oem_2": null, "sort_order": 16, "machine_type": "commercial", "is_published": true}
+{"mr_1": "MR000026", "product_name_1": "OIL FILTER", "oem_brand": "SWAG", "oem_no_3": "SWAADA9D7", "oem_2": "GY5B43D7", "sort_order": 73, "machine_type": "industrial", "is_published": true}
+{"mr_1": "MR000027", "product_name_1": "AIR FILTER Long Life", "oem_brand": "BOSCH", "oem_no_3": "BOSF8C998", "oem_2": "BR54KBYV", "sort_order": 3, "machine_type": "construction", "is_published": true}
+{"mr_1": "MR000027", "product_name_1": "AIR FILTER Long Life", "oem_brand": "NAPA", "oem_no_3": "NAPABF7E0", "oem_2": "HDT9MKAY", "sort_order": 3, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000028", "product_name_1": "WATER SEPARATOR Heavy Duty", "oem_brand": "K&N", "oem_no_3": "K&N75FFBB", "oem_2": "FCC3WGEQ", "sort_order": 78, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000028", "product_name_1": "WATER SEPARATOR Heavy Duty", "oem_brand": "K&N", "oem_no_3": "K&N129133", "oem_2": "9FP8ZYY6", "sort_order": 76, "machine_type": "industrial", "is_published": false}
+{"mr_1": "MR000028", "product_name_1": "WATER SEPARATOR Heavy Duty", "oem_brand": "HENGST", "oem_no_3": "HEN87B6E5", "oem_2": null, "sort_order": 34, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000028", "product_name_1": "WATER SEPARATOR Heavy Duty", "oem_brand": "DONALDSON", "oem_no_3": "DONA5226D", "oem_2": "BC3LYNR9", "sort_order": 49, "machine_type": "industrial", "is_published": true}
+{"mr_1": "MR000029", "product_name_1": "OIL FILTER", "oem_brand": "PUROLATOR", "oem_no_3": "PUR2E8F53", "oem_2": "N2KXCDKR", "sort_order": 36, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000029", "product_name_1": "OIL FILTER", "oem_brand": "HIFLO", "oem_no_3": "HIFA603F0", "oem_2": "HDR3BFR8", "sort_order": 58, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000029", "product_name_1": "OIL FILTER", "oem_brand": "ASHIKA", "oem_no_3": "ASHE4A8F7", "oem_2": null, "sort_order": 13, "machine_type": "industrial", "is_published": true}
+{"mr_1": "MR000030", "product_name_1": "OIL FILTER Compact", "oem_brand": "AC DELCO", "oem_no_3": "ACXCF3A3A", "oem_2": "B4VQDAHR", "sort_order": 0, "machine_type": "agriculture", "is_published": true}
+{"mr_1": "MR000030", "product_name_1": "OIL FILTER Compact", "oem_brand": "BOSCH", "oem_no_3": "BOSE394BB", "oem_2": "Q9TCCVTM", "sort_order": 56, "machine_type": "construction", "is_published": true}
+{"mr_1": "MR000031", "product_name_1": "CARTRIDGE FILTER", "oem_brand": "VAICO", "oem_no_3": "VAIE36D27", "oem_2": null, "sort_order": 43, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000031", "product_name_1": "CARTRIDGE FILTER", "oem_brand": "BOSCH", "oem_no_3": "BOS5C6F53", "oem_2": null, "sort_order": 40, "machine_type": "construction", "is_published": false}
+{"mr_1": "MR000031", "product_name_1": "CARTRIDGE FILTER", "oem_brand": "MAPCO", "oem_no_3": "MAP16B4A1", "oem_2": "XVM7UGWE", "sort_order": 61, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000032", "product_name_1": "AIR FILTER Industrial", "oem_brand": "OPTIMAL", "oem_no_3": "OPT520474", "oem_2": "LG9UT9T7", "sort_order": 50, "machine_type": "agriculture", "is_published": true}
+{"mr_1": "MR000032", "product_name_1": "AIR FILTER Industrial", "oem_brand": "MOTORCRAFT", "oem_no_3": "MOTCCC733", "oem_2": "2VRFA8QQ", "sort_order": 70, "machine_type": "construction", "is_published": false}
+{"mr_1": "MR000032", "product_name_1": "AIR FILTER Industrial", "oem_brand": "MAHLE", "oem_no_3": "MAH544D1C", "oem_2": "DU727H2T", "sort_order": 41, "machine_type": "industrial", "is_published": true}
+{"mr_1": "MR000033", "product_name_1": "HYDRAULIC FILTER", "oem_brand": "WIX", "oem_no_3": "WIXC79B49", "oem_2": null, "sort_order": 48, "machine_type": "industrial", "is_published": false}
+{"mr_1": "MR000033", "product_name_1": "HYDRAULIC FILTER", "oem_brand": "DONALDSON", "oem_no_3": "DONDC82F4", "oem_2": "4LQ4U8WN", "sort_order": 98, "machine_type": "agriculture", "is_published": true}
+{"mr_1": "MR000033", "product_name_1": "HYDRAULIC FILTER", "oem_brand": "MOTORCRAFT", "oem_no_3": "MOT56F2D0", "oem_2": "C92VG4AH", "sort_order": 32, "machine_type": "construction", "is_published": true}
+{"mr_1": "MR000033", "product_name_1": "HYDRAULIC FILTER", "oem_brand": "FLEETGUARD", "oem_no_3": "FLE49D0AA", "oem_2": "HSWPDUED", "sort_order": 42, "machine_type": "commercial", "is_published": true}
+{"mr_1": "MR000034", "product_name_1": "AIR FILTER", "oem_brand": "UFI", "oem_no_3": "UFID36C59", "oem_2": "UQWPR5J2", "sort_order": 25, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000034", "product_name_1": "AIR FILTER", "oem_brand": "BLUE PRINT", "oem_no_3": "BLU6FC418", "oem_2": "E8LBA8UK", "sort_order": 88, "machine_type": "industrial", "is_published": false}
+{"mr_1": "MR000034", "product_name_1": "AIR FILTER", "oem_brand": "MEYLE", "oem_no_3": "MEYDBB95D", "oem_2": "JBFXRPL8", "sort_order": 91, "machine_type": "agriculture", "is_published": true}
+{"mr_1": "MR000035", "product_name_1": "FUEL FILTER", "oem_brand": "FEBI", "oem_no_3": "FEBCE8941", "oem_2": "FPYSM582", "sort_order": 74, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000035", "product_name_1": "FUEL FILTER", "oem_brand": "FLEETGUARD", "oem_no_3": "FLE788459", "oem_2": "VU8KYVVU", "sort_order": 61, "machine_type": "industrial", "is_published": true}
+{"mr_1": "MR000035", "product_name_1": "FUEL FILTER", "oem_brand": "BOSCH", "oem_no_3": "BOS626A45", "oem_2": "J3FTVFSP", "sort_order": 53, "machine_type": "industrial", "is_published": true}
+{"mr_1": "MR000035", "product_name_1": "FUEL FILTER", "oem_brand": "SWAG", "oem_no_3": "SWAFC7957", "oem_2": "KDQ9K9G7", "sort_order": 7, "machine_type": "commercial", "is_published": true}
+{"mr_1": "MR000036", "product_name_1": "AIR/OIL SEPARATOR", "oem_brand": "FRAM", "oem_no_3": "FRA97A161", "oem_2": "BF4HMW2G", "sort_order": 67, "machine_type": "construction", "is_published": true}
+{"mr_1": "MR000036", "product_name_1": "AIR/OIL SEPARATOR", "oem_brand": "BOSCH", "oem_no_3": "BOS5DD79B", "oem_2": "ZJUKKHH9", "sort_order": 28, "machine_type": "agriculture", "is_published": true}
+{"mr_1": "MR000036", "product_name_1": "AIR/OIL SEPARATOR", "oem_brand": "SWAG", "oem_no_3": "SWA9D2D9E", "oem_2": "E7QPMYUJ", "sort_order": 52, "machine_type": "construction", "is_published": true}
+{"mr_1": "MR000037", "product_name_1": "OIL FILTER", "oem_brand": "AC DELCO", "oem_no_3": "ACXA66FE9", "oem_2": "7VE7R9B5", "sort_order": 44, "machine_type": "industrial", "is_published": true}
+{"mr_1": "MR000037", "product_name_1": "OIL FILTER", "oem_brand": "BOSCH", "oem_no_3": "BOS8C8C9B", "oem_2": "62ZXR4M8", "sort_order": 23, "machine_type": "agriculture", "is_published": true}
+{"mr_1": "MR000037", "product_name_1": "OIL FILTER", "oem_brand": "JAPANPARTS", "oem_no_3": "JAP957F8A", "oem_2": null, "sort_order": 74, "machine_type": "industrial", "is_published": true}
+{"mr_1": "MR000038", "product_name_1": "AIR FILTER", "oem_brand": "AC DELCO", "oem_no_3": "ACX0C8307", "oem_2": null, "sort_order": 55, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000038", "product_name_1": "AIR FILTER", "oem_brand": "FRAM", "oem_no_3": "FRA84F1B4", "oem_2": "N3APK9ZE", "sort_order": 25, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000038", "product_name_1": "AIR FILTER", "oem_brand": "BOSCH", "oem_no_3": "BOSAFD18A", "oem_2": "6TS5EZ4L", "sort_order": 56, "machine_type": "agriculture", "is_published": true}
+{"mr_1": "MR000038", "product_name_1": "AIR FILTER", "oem_brand": "BOSCH", "oem_no_3": "BOSE739F3", "oem_2": "66S2WSBV", "sort_order": 32, "machine_type": "construction", "is_published": true}
+{"mr_1": "MR000039", "product_name_1": "AIR FILTER", "oem_brand": "ASHIKA", "oem_no_3": "ASH761B83", "oem_2": null, "sort_order": 19, "machine_type": "agriculture", "is_published": true}
+{"mr_1": "MR000039", "product_name_1": "AIR FILTER", "oem_brand": "PUROLATOR", "oem_no_3": "PUR224170", "oem_2": "6BN3J3GG", "sort_order": 99, "machine_type": "commercial", "is_published": true}
+{"mr_1": "MR000039", "product_name_1": "AIR FILTER", "oem_brand": "FRAM", "oem_no_3": "FRA9B8003", "oem_2": "MRQ9CVYK", "sort_order": 78, "machine_type": "industrial", "is_published": true}
+{"mr_1": "MR000040", "product_name_1": "CARTRIDGE FILTER", "oem_brand": "PUROLATOR", "oem_no_3": "PURD86C73", "oem_2": "3Y52K92W", "sort_order": 38, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000040", "product_name_1": "CARTRIDGE FILTER", "oem_brand": "K&N", "oem_no_3": "K&N47AD24", "oem_2": "KKCVKZFA", "sort_order": 82, "machine_type": "agriculture", "is_published": true}
+{"mr_1": "MR000041", "product_name_1": "FUEL FILTER", "oem_brand": "DONALDSON", "oem_no_3": "DONDE4BAC", "oem_2": null, "sort_order": 56, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000041", "product_name_1": "FUEL FILTER", "oem_brand": "AC DELCO", "oem_no_3": "ACXED9DA1", "oem_2": "RLERCQ9J", "sort_order": 28, "machine_type": "construction", "is_published": true}
+{"mr_1": "MR000041", "product_name_1": "FUEL FILTER", "oem_brand": "PUROLATOR", "oem_no_3": "PUR6CD970", "oem_2": "W83YKD3N", "sort_order": 95, "machine_type": "agriculture", "is_published": true}
+{"mr_1": "MR000041", "product_name_1": "FUEL FILTER", "oem_brand": "MEYLE", "oem_no_3": "MEY77B17C", "oem_2": "YAP32CJP", "sort_order": 35, "machine_type": "commercial", "is_published": true}
+{"mr_1": "MR000042", "product_name_1": "AIR/OIL SEPARATOR", "oem_brand": "K&N", "oem_no_3": "K&N04608A", "oem_2": null, "sort_order": 19, "machine_type": "agriculture", "is_published": true}
+{"mr_1": "MR000042", "product_name_1": "AIR/OIL SEPARATOR", "oem_brand": "K&N", "oem_no_3": "K&NFA5E81", "oem_2": null, "sort_order": 98, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000042", "product_name_1": "AIR/OIL SEPARATOR", "oem_brand": "BOSCH", "oem_no_3": "BOSB97C3A", "oem_2": null, "sort_order": 65, "machine_type": "construction", "is_published": true}
+{"mr_1": "MR000043", "product_name_1": "FUEL FILTER Eco", "oem_brand": "K&N", "oem_no_3": "K&N5BCF79", "oem_2": "WR63W2VP", "sort_order": 44, "machine_type": "industrial", "is_published": true}
+{"mr_1": "MR000043", "product_name_1": "FUEL FILTER Eco", "oem_brand": "BOSCH", "oem_no_3": "BOSF92F89", "oem_2": "LU9XY74X", "sort_order": 46, "machine_type": "commercial", "is_published": true}
+{"mr_1": "MR000044", "product_name_1": "SPIN-ON FILTER", "oem_brand": "CHAMPION", "oem_no_3": "CHAA6AD9C", "oem_2": "YD47YCA5", "sort_order": 58, "machine_type": "agriculture", "is_published": true}
+{"mr_1": "MR000044", "product_name_1": "SPIN-ON FILTER", "oem_brand": "MAHLE", "oem_no_3": "MAH76A235", "oem_2": "DHFHZY4U", "sort_order": 16, "machine_type": "commercial", "is_published": true}
+{"mr_1": "MR000045", "product_name_1": "AIR FILTER", "oem_brand": "MANN", "oem_no_3": "MANB3216C", "oem_2": "DDW2FMGJ", "sort_order": 91, "machine_type": "industrial", "is_published": true}
+{"mr_1": "MR000045", "product_name_1": "AIR FILTER", "oem_brand": "HIFLO", "oem_no_3": "HIF06FE43", "oem_2": null, "sort_order": 30, "machine_type": "construction", "is_published": true}
+{"mr_1": "MR000045", "product_name_1": "AIR FILTER", "oem_brand": "BOSCH", "oem_no_3": "BOS38B262", "oem_2": "MS57UCVR", "sort_order": 86, "machine_type": "commercial", "is_published": true}
+{"mr_1": "MR000045", "product_name_1": "AIR FILTER", "oem_brand": "MAHLE", "oem_no_3": "MAH938CFC", "oem_2": "AZRJ2JR5", "sort_order": 98, "machine_type": "construction", "is_published": true}
+{"mr_1": "MR000046", "product_name_1": "ACTIVATED CARBON FILTER", "oem_brand": "K&N", "oem_no_3": "K&N498229", "oem_2": null, "sort_order": 4, "machine_type": "others", "is_published": false}
+{"mr_1": "MR000046", "product_name_1": "ACTIVATED CARBON FILTER", "oem_brand": "BOSCH", "oem_no_3": "BOS9A4DB3", "oem_2": "4D3YVM9D", "sort_order": 15, "machine_type": "commercial", "is_published": true}
+{"mr_1": "MR000046", "product_name_1": "ACTIVATED CARBON FILTER", "oem_brand": "BOSCH", "oem_no_3": "BOS8D980C", "oem_2": null, "sort_order": 63, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000046", "product_name_1": "ACTIVATED CARBON FILTER", "oem_brand": "MAHLE", "oem_no_3": "MAH44D2E9", "oem_2": "3HQ8ZELX", "sort_order": 50, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000047", "product_name_1": "CARTRIDGE FILTER Long Life", "oem_brand": "FLEETGUARD", "oem_no_3": "FLE8B3B15", "oem_2": "WE2KF2TL", "sort_order": 50, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000047", "product_name_1": "CARTRIDGE FILTER Long Life", "oem_brand": "HIFLO", "oem_no_3": "HIF732DFE", "oem_2": "GLB3E44K", "sort_order": 44, "machine_type": "construction", "is_published": true}
+{"mr_1": "MR000047", "product_name_1": "CARTRIDGE FILTER Long Life", "oem_brand": "MAHLE", "oem_no_3": "MAH21F9D2", "oem_2": "P9YM95JN", "sort_order": 59, "machine_type": "commercial", "is_published": true}
+{"mr_1": "MR000047", "product_name_1": "CARTRIDGE FILTER Long Life", "oem_brand": "K&N", "oem_no_3": "K&N06D7C9", "oem_2": "M7JQ52SU", "sort_order": 63, "machine_type": "construction", "is_published": true}
+{"mr_1": "MR000048", "product_name_1": "AIR FILTER", "oem_brand": "CHAMPION", "oem_no_3": "CHA4361DF", "oem_2": "63YMSL9H", "sort_order": 76, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000048", "product_name_1": "AIR FILTER", "oem_brand": "WIX", "oem_no_3": "WIX375581", "oem_2": "FKYDDNHW", "sort_order": 26, "machine_type": "industrial", "is_published": true}
+{"mr_1": "MR000049", "product_name_1": "AIR FILTER", "oem_brand": "PUROLATOR", "oem_no_3": "PURC2E9B9", "oem_2": null, "sort_order": 25, "machine_type": "construction", "is_published": true}
+{"mr_1": "MR000049", "product_name_1": "AIR FILTER", "oem_brand": "K&N", "oem_no_3": "K&N15A2EA", "oem_2": "LHNFCZYM", "sort_order": 22, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000050", "product_name_1": "INDUSTRIAL FILTER Standard", "oem_brand": "MANN", "oem_no_3": "MAN0F68BC", "oem_2": "MW4LXFBG", "sort_order": 97, "machine_type": "commercial", "is_published": true}
+{"mr_1": "MR000050", "product_name_1": "INDUSTRIAL FILTER Standard", "oem_brand": "WIX", "oem_no_3": "WIXF3F5FA", "oem_2": "RLV2NJAV", "sort_order": 33, "machine_type": "industrial", "is_published": false}
+{"mr_1": "MR000050", "product_name_1": "INDUSTRIAL FILTER Standard", "oem_brand": "BALDWIN", "oem_no_3": "BALCDF9A2", "oem_2": "Y3N7D5SP", "sort_order": 8, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000050", "product_name_1": "INDUSTRIAL FILTER Standard", "oem_brand": "OPTIMAL", "oem_no_3": "OPT6C6206", "oem_2": "DEHFAZ76", "sort_order": 1, "machine_type": "commercial", "is_published": true}
+{"mr_1": "MR000051", "product_name_1": "CABIN AIR FILTER Eco", "oem_brand": "BOSCH", "oem_no_3": "BOSEAB615", "oem_2": "W7AP4T3B", "sort_order": 96, "machine_type": "agriculture", "is_published": true}
+{"mr_1": "MR000051", "product_name_1": "CABIN AIR FILTER Eco", "oem_brand": "DONALDSON", "oem_no_3": "DON66BAA0", "oem_2": null, "sort_order": 32, "machine_type": "agriculture", "is_published": true}
+{"mr_1": "MR000051", "product_name_1": "CABIN AIR FILTER Eco", "oem_brand": "BOSCH", "oem_no_3": "BOSC3B7A7", "oem_2": "EERN3259", "sort_order": 78, "machine_type": "commercial", "is_published": true}
+{"mr_1": "MR000051", "product_name_1": "CABIN AIR FILTER Eco", "oem_brand": "BLUE PRINT", "oem_no_3": "BLU27D23A", "oem_2": "BL9ET7UA", "sort_order": 87, "machine_type": "agriculture", "is_published": true}
+{"mr_1": "MR000051", "product_name_1": "CABIN AIR FILTER Eco", "oem_brand": "DENCKERMANN", "oem_no_3": "DEND63DCC", "oem_2": null, "sort_order": 47, "machine_type": "agriculture", "is_published": true}
+{"mr_1": "MR000052", "product_name_1": "AIR FILTER Heavy Duty", "oem_brand": "MAHLE", "oem_no_3": "MAH5B1FD9", "oem_2": "KNMJ8TWR", "sort_order": 15, "machine_type": "construction", "is_published": true}
+{"mr_1": "MR000052", "product_name_1": "AIR FILTER Heavy Duty", "oem_brand": "BOSCH", "oem_no_3": "BOS99AEDF", "oem_2": "55R9XX8F", "sort_order": 5, "machine_type": "agriculture", "is_published": true}
+{"mr_1": "MR000053", "product_name_1": "CARTRIDGE FILTER", "oem_brand": "FLEETGUARD", "oem_no_3": "FLE662049", "oem_2": "FNJUS4CF", "sort_order": 93, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000053", "product_name_1": "CARTRIDGE FILTER", "oem_brand": "BOSCH", "oem_no_3": "BOS2F4471", "oem_2": "USM5CVSV", "sort_order": 74, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000053", "product_name_1": "CARTRIDGE FILTER", "oem_brand": "UFI", "oem_no_3": "UFI37FCED", "oem_2": "M975FLPN", "sort_order": 49, "machine_type": "agriculture", "is_published": false}
+{"mr_1": "MR000054", "product_name_1": "FUEL FILTER", "oem_brand": "HIFLO", "oem_no_3": "HIF25041B", "oem_2": "REBRCB9V", "sort_order": 82, "machine_type": "commercial", "is_published": false}
+{"mr_1": "MR000054", "product_name_1": "FUEL FILTER", "oem_brand": "BOSCH", "oem_no_3": "BOSE2B05E", "oem_2": null, "sort_order": 35, "machine_type": "industrial", "is_published": true}
+{"mr_1": "MR000054", "product_name_1": "FUEL FILTER", "oem_brand": "ASHIKA", "oem_no_3": "ASH1C37F9", "oem_2": "RV5QX6FV", "sort_order": 64, "machine_type": "industrial", "is_published": true}
+{"mr_1": "MR000055", "product_name_1": "FUEL FILTER High Flow", "oem_brand": "MEYLE", "oem_no_3": "MEYC6FC19", "oem_2": "3KQVSQXG", "sort_order": 18, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000055", "product_name_1": "FUEL FILTER High Flow", "oem_brand": "WIX", "oem_no_3": "WIX8BB61E", "oem_2": "TDBUP6AM", "sort_order": 51, "machine_type": "construction", "is_published": false}
+{"mr_1": "MR000055", "product_name_1": "FUEL FILTER High Flow", "oem_brand": "BLUE PRINT", "oem_no_3": "BLU929F07", "oem_2": null, "sort_order": 38, "machine_type": "construction", "is_published": true}
+{"mr_1": "MR000056", "product_name_1": "CARTRIDGE FILTER", "oem_brand": "JAPKO", "oem_no_3": "JAP7967C9", "oem_2": "CWPQNQG4", "sort_order": 73, "machine_type": "construction", "is_published": true}
+{"mr_1": "MR000056", "product_name_1": "CARTRIDGE FILTER", "oem_brand": "OPTIMAL", "oem_no_3": "OPTD7DE42", "oem_2": "HEDA55V3", "sort_order": 64, "machine_type": "agriculture", "is_published": true}
+{"mr_1": "MR000057", "product_name_1": "INDUSTRIAL FILTER", "oem_brand": "FRAM", "oem_no_3": "FRA912573", "oem_2": null, "sort_order": 74, "machine_type": "industrial", "is_published": true}
+{"mr_1": "MR000057", "product_name_1": "INDUSTRIAL FILTER", "oem_brand": "FLEETGUARD", "oem_no_3": "FLE93880A", "oem_2": "3BKNPKBX", "sort_order": 2, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000057", "product_name_1": "INDUSTRIAL FILTER", "oem_brand": "AC DELCO", "oem_no_3": "ACX1BC0EF", "oem_2": "TT2T23YH", "sort_order": 98, "machine_type": "commercial", "is_published": true}
+{"mr_1": "MR000058", "product_name_1": "SPIN-ON FILTER", "oem_brand": "K&N", "oem_no_3": "K&N57E8CF", "oem_2": "2TSQ2HLH", "sort_order": 41, "machine_type": "industrial", "is_published": true}
+{"mr_1": "MR000058", "product_name_1": "SPIN-ON FILTER", "oem_brand": "BOSCH", "oem_no_3": "BOS3FBD4B", "oem_2": null, "sort_order": 40, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000058", "product_name_1": "SPIN-ON FILTER", "oem_brand": "BOSCH", "oem_no_3": "BOS54CDB1", "oem_2": null, "sort_order": 59, "machine_type": "agriculture", "is_published": true}
+{"mr_1": "MR000059", "product_name_1": "AIR FILTER", "oem_brand": "LUBER-FINER", "oem_no_3": "LUB2EFDF2", "oem_2": null, "sort_order": 66, "machine_type": "industrial", "is_published": true}
+{"mr_1": "MR000059", "product_name_1": "AIR FILTER", "oem_brand": "SWAG", "oem_no_3": "SWA1D943E", "oem_2": null, "sort_order": 83, "machine_type": "commercial", "is_published": true}
+{"mr_1": "MR000060", "product_name_1": "ACTIVATED CARBON FILTER Pro", "oem_brand": "MAHLE", "oem_no_3": "MAH0A4A1B", "oem_2": null, "sort_order": 36, "machine_type": "industrial", "is_published": true}
+{"mr_1": "MR000060", "product_name_1": "ACTIVATED CARBON FILTER Pro", "oem_brand": "AC DELCO", "oem_no_3": "ACX299D71", "oem_2": "4A6YSTTK", "sort_order": 40, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000060", "product_name_1": "ACTIVATED CARBON FILTER Pro", "oem_brand": "NAPA", "oem_no_3": "NAP040380", "oem_2": "N5KGEKX3", "sort_order": 50, "machine_type": "commercial", "is_published": true}
+{"mr_1": "MR000061", "product_name_1": "HYDRAULIC FILTER", "oem_brand": "FRAM", "oem_no_3": "FRAD23665", "oem_2": "T63SDQ6H", "sort_order": 83, "machine_type": "agriculture", "is_published": true}
+{"mr_1": "MR000061", "product_name_1": "HYDRAULIC FILTER", "oem_brand": "DONALDSON", "oem_no_3": "DON653D86", "oem_2": "DQNFNYTC", "sort_order": 96, "machine_type": "construction", "is_published": true}
+{"mr_1": "MR000061", "product_name_1": "HYDRAULIC FILTER", "oem_brand": "MAPCO", "oem_no_3": "MAP5A3B44", "oem_2": "CKPNMA88", "sort_order": 61, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000062", "product_name_1": "AIR FILTER", "oem_brand": "HENGST", "oem_no_3": "HENFEDC67", "oem_2": null, "sort_order": 96, "machine_type": "agriculture", "is_published": true}
+{"mr_1": "MR000062", "product_name_1": "AIR FILTER", "oem_brand": "BOSCH", "oem_no_3": "BOS4BF709", "oem_2": null, "sort_order": 2, "machine_type": "commercial", "is_published": true}
+{"mr_1": "MR000062", "product_name_1": "AIR FILTER", "oem_brand": "SWAG", "oem_no_3": "SWA3E2E54", "oem_2": "V3KMNGET", "sort_order": 18, "machine_type": "agriculture", "is_published": true}
+{"mr_1": "MR000062", "product_name_1": "AIR FILTER", "oem_brand": "BOSCH", "oem_no_3": "BOS657D11", "oem_2": "JX6RUA4L", "sort_order": 35, "machine_type": "agriculture", "is_published": true}
+{"mr_1": "MR000063", "product_name_1": "OIL FILTER Premium", "oem_brand": "FLEETGUARD", "oem_no_3": "FLE747487", "oem_2": "JWDBYJPG", "sort_order": 52, "machine_type": "agriculture", "is_published": true}
+{"mr_1": "MR000063", "product_name_1": "OIL FILTER Premium", "oem_brand": "NAPA", "oem_no_3": "NAP92B979", "oem_2": "ZLDKANQL", "sort_order": 50, "machine_type": "agriculture", "is_published": true}
+{"mr_1": "MR000063", "product_name_1": "OIL FILTER Premium", "oem_brand": "BOSCH", "oem_no_3": "BOSDECFDF", "oem_2": "EXU9XRM2", "sort_order": 65, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000063", "product_name_1": "OIL FILTER Premium", "oem_brand": "MANN", "oem_no_3": "MANC18566", "oem_2": "A98FRA7P", "sort_order": 4, "machine_type": "construction", "is_published": true}
+{"mr_1": "MR000063", "product_name_1": "OIL FILTER Premium", "oem_brand": "DENCKERMANN", "oem_no_3": "DEN34F5C7", "oem_2": "MU7KHDTA", "sort_order": 34, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000064", "product_name_1": "AIR FILTER", "oem_brand": "BOSCH", "oem_no_3": "BOSD918A4", "oem_2": "6BG2Q8PX", "sort_order": 33, "machine_type": "agriculture", "is_published": true}
+{"mr_1": "MR000064", "product_name_1": "AIR FILTER", "oem_brand": "HENGST", "oem_no_3": "HEN2459A0", "oem_2": null, "sort_order": 83, "machine_type": "agriculture", "is_published": true}
+{"mr_1": "MR000064", "product_name_1": "AIR FILTER", "oem_brand": "BOSCH", "oem_no_3": "BOS34266E", "oem_2": null, "sort_order": 96, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000065", "product_name_1": "AIR/OIL SEPARATOR", "oem_brand": "AC DELCO", "oem_no_3": "ACX9E4729", "oem_2": "D34RBYMG", "sort_order": 59, "machine_type": "construction", "is_published": false}
+{"mr_1": "MR000065", "product_name_1": "AIR/OIL SEPARATOR", "oem_brand": "MOTORCRAFT", "oem_no_3": "MOTC3C6EB", "oem_2": null, "sort_order": 13, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000065", "product_name_1": "AIR/OIL SEPARATOR", "oem_brand": "FLEETGUARD", "oem_no_3": "FLE0FF07E", "oem_2": "CNW88H9B", "sort_order": 63, "machine_type": "commercial", "is_published": true}
+{"mr_1": "MR000066", "product_name_1": "AIR FILTER", "oem_brand": "DONALDSON", "oem_no_3": "DONC661C8", "oem_2": null, "sort_order": 17, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000066", "product_name_1": "AIR FILTER", "oem_brand": "MAHLE", "oem_no_3": "MAH6197C6", "oem_2": null, "sort_order": 74, "machine_type": "construction", "is_published": false}
+{"mr_1": "MR000067", "product_name_1": "WATER SEPARATOR", "oem_brand": "FLEETGUARD", "oem_no_3": "FLEE3292E", "oem_2": "L8YNDQEQ", "sort_order": 72, "machine_type": "industrial", "is_published": true}
+{"mr_1": "MR000067", "product_name_1": "WATER SEPARATOR", "oem_brand": "BOSCH", "oem_no_3": "BOSEC1CAA", "oem_2": "NQP9CDG3", "sort_order": 90, "machine_type": null, "is_published": true}
+{"mr_1": "MR000067", "product_name_1": "WATER SEPARATOR", "oem_brand": "BALDWIN", "oem_no_3": "BAL978BC9", "oem_2": null, "sort_order": 28, "machine_type": "agriculture", "is_published": false}
+{"mr_1": "MR000068", "product_name_1": "ACTIVATED CARBON FILTER", "oem_brand": "CHAMPION", "oem_no_3": "CHAF88105", "oem_2": "9E3GR2C9", "sort_order": 94, "machine_type": "commercial", "is_published": true}
+{"mr_1": "MR000068", "product_name_1": "ACTIVATED CARBON FILTER", "oem_brand": "BOSCH", "oem_no_3": "BOS638A66", "oem_2": "GJLRTY7V", "sort_order": 22, "machine_type": "agriculture", "is_published": true}
+{"mr_1": "MR000069", "product_name_1": "HYDRAULIC FILTER", "oem_brand": "FEBI", "oem_no_3": "FEB932DE1", "oem_2": "SAD4VK8Y", "sort_order": 24, "machine_type": "agriculture", "is_published": true}
+{"mr_1": "MR000069", "product_name_1": "HYDRAULIC FILTER", "oem_brand": "WIX", "oem_no_3": "WIXBC42DA", "oem_2": null, "sort_order": 95, "machine_type": "commercial", "is_published": true}
+{"mr_1": "MR000069", "product_name_1": "HYDRAULIC FILTER", "oem_brand": "FEBI", "oem_no_3": "FEB867A85", "oem_2": null, "sort_order": 0, "machine_type": "commercial", "is_published": true}
+{"mr_1": "MR000070", "product_name_1": "OIL FILTER", "oem_brand": "PUROLATOR", "oem_no_3": "PUR557DA9", "oem_2": null, "sort_order": 33, "machine_type": "commercial", "is_published": false}
+{"mr_1": "MR000070", "product_name_1": "OIL FILTER", "oem_brand": "AC DELCO", "oem_no_3": "ACX97BBA4", "oem_2": "VHN6NVLV", "sort_order": 94, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000070", "product_name_1": "OIL FILTER", "oem_brand": "AC DELCO", "oem_no_3": "ACX0AE342", "oem_2": "P9HHQZT9", "sort_order": 47, "machine_type": "commercial", "is_published": true}
+{"mr_1": "MR000071", "product_name_1": "FUEL FILTER", "oem_brand": "FEBI", "oem_no_3": "FEBC23FFD", "oem_2": "SPXZLGAW", "sort_order": 19, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000071", "product_name_1": "FUEL FILTER", "oem_brand": "AC DELCO", "oem_no_3": "ACXE8ABF5", "oem_2": "5XW4KBEM", "sort_order": 100, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000071", "product_name_1": "FUEL FILTER", "oem_brand": "PUROLATOR", "oem_no_3": "PUR420748", "oem_2": null, "sort_order": 77, "machine_type": "construction", "is_published": true}
+{"mr_1": "MR000072", "product_name_1": "HYDRAULIC FILTER", "oem_brand": "MOTORCRAFT", "oem_no_3": "MOTD58C97", "oem_2": "2JQGV47Z", "sort_order": 90, "machine_type": "construction", "is_published": true}
+{"mr_1": "MR000072", "product_name_1": "HYDRAULIC FILTER", "oem_brand": "WIX", "oem_no_3": "WIX80FB36", "oem_2": "UCTFYHBS", "sort_order": 87, "machine_type": "commercial", "is_published": true}
+{"mr_1": "MR000072", "product_name_1": "HYDRAULIC FILTER", "oem_brand": "DONALDSON", "oem_no_3": "DON695EE8", "oem_2": null, "sort_order": 64, "machine_type": "commercial", "is_published": true}
+{"mr_1": "MR000072", "product_name_1": "HYDRAULIC FILTER", "oem_brand": "VAICO", "oem_no_3": "VAID6DF43", "oem_2": "8CM28GRP", "sort_order": 35, "machine_type": "industrial", "is_published": true}
+{"mr_1": "MR000073", "product_name_1": "OIL FILTER", "oem_brand": "K&N", "oem_no_3": "K&NFB27CD", "oem_2": null, "sort_order": 69, "machine_type": "industrial", "is_published": false}
+{"mr_1": "MR000073", "product_name_1": "OIL FILTER", "oem_brand": "JAPKO", "oem_no_3": "JAP75DBBD", "oem_2": null, "sort_order": 10, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000074", "product_name_1": "AIR FILTER", "oem_brand": "UFI", "oem_no_3": "UFI2692CF", "oem_2": null, "sort_order": 76, "machine_type": "commercial", "is_published": true}
+{"mr_1": "MR000074", "product_name_1": "AIR FILTER", "oem_brand": "DONALDSON", "oem_no_3": "DON473589", "oem_2": null, "sort_order": 40, "machine_type": "industrial", "is_published": false}
+{"mr_1": "MR000074", "product_name_1": "AIR FILTER", "oem_brand": "FLEETGUARD", "oem_no_3": "FLEF0DD74", "oem_2": "5KTK7YNL", "sort_order": 88, "machine_type": "commercial", "is_published": false}
+{"mr_1": "MR000075", "product_name_1": "SPIN-ON FILTER", "oem_brand": "HENGST", "oem_no_3": "HENE175A6", "oem_2": null, "sort_order": 52, "machine_type": "commercial", "is_published": true}
+{"mr_1": "MR000075", "product_name_1": "SPIN-ON FILTER", "oem_brand": "CHAMPION", "oem_no_3": "CHA29D3FC", "oem_2": null, "sort_order": 66, "machine_type": "commercial", "is_published": true}
+{"mr_1": "MR000076", "product_name_1": "AIR FILTER", "oem_brand": "FEBI", "oem_no_3": "FEB6AF455", "oem_2": "J2N4EYRY", "sort_order": 53, "machine_type": "agriculture", "is_published": true}
+{"mr_1": "MR000076", "product_name_1": "AIR FILTER", "oem_brand": "HENGST", "oem_no_3": "HENDDF263", "oem_2": "Z6LRWQG8", "sort_order": 2, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000076", "product_name_1": "AIR FILTER", "oem_brand": "HENGST", "oem_no_3": "HENABBB8A", "oem_2": "W8S5DAYR", "sort_order": 91, "machine_type": "agriculture", "is_published": true}
+{"mr_1": "MR000077", "product_name_1": "OIL FILTER", "oem_brand": "HIFLO", "oem_no_3": "HIF9002DB", "oem_2": null, "sort_order": 27, "machine_type": "agriculture", "is_published": false}
+{"mr_1": "MR000077", "product_name_1": "OIL FILTER", "oem_brand": "WIX", "oem_no_3": "WIX1ABFC7", "oem_2": "VZG3LX3J", "sort_order": 57, "machine_type": "agriculture", "is_published": true}
+{"mr_1": "MR000078", "product_name_1": "ACTIVATED CARBON FILTER Standard", "oem_brand": "BOSCH", "oem_no_3": "BOSB62B79", "oem_2": "TVMAN8M7", "sort_order": 64, "machine_type": "construction", "is_published": true}
+{"mr_1": "MR000078", "product_name_1": "ACTIVATED CARBON FILTER Standard", "oem_brand": "HIFLO", "oem_no_3": "HIF4DBE1F", "oem_2": "EEKJ6LPT", "sort_order": 26, "machine_type": "agriculture", "is_published": true}
+{"mr_1": "MR000079", "product_name_1": "OIL FILTER Heavy Duty", "oem_brand": "WIX", "oem_no_3": "WIX81AF30", "oem_2": "RT6493HY", "sort_order": 59, "machine_type": "agriculture", "is_published": true}
+{"mr_1": "MR000079", "product_name_1": "OIL FILTER Heavy Duty", "oem_brand": "HENGST", "oem_no_3": "HEN395948", "oem_2": null, "sort_order": 88, "machine_type": "agriculture", "is_published": true}
+{"mr_1": "MR000079", "product_name_1": "OIL FILTER Heavy Duty", "oem_brand": "MANN", "oem_no_3": "MANB710A2", "oem_2": "LKMUHPS5", "sort_order": 73, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000079", "product_name_1": "OIL FILTER Heavy Duty", "oem_brand": "BOSCH", "oem_no_3": "BOSE9F2CE", "oem_2": "CTZ2UBJK", "sort_order": 82, "machine_type": "industrial", "is_published": true}
+{"mr_1": "MR000080", "product_name_1": "ACTIVATED CARBON FILTER", "oem_brand": "SWAG", "oem_no_3": "SWAB7C332", "oem_2": null, "sort_order": 50, "machine_type": "industrial", "is_published": true}
+{"mr_1": "MR000080", "product_name_1": "ACTIVATED CARBON FILTER", "oem_brand": "BOSCH", "oem_no_3": "BOS68BEE3", "oem_2": null, "sort_order": 62, "machine_type": "agriculture", "is_published": true}
+{"mr_1": "MR000080", "product_name_1": "ACTIVATED CARBON FILTER", "oem_brand": "MAPCO", "oem_no_3": "MAP3E35C8", "oem_2": "UXALRTSU", "sort_order": 24, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000080", "product_name_1": "ACTIVATED CARBON FILTER", "oem_brand": "BOSCH", "oem_no_3": "BOS885E65", "oem_2": null, "sort_order": 24, "machine_type": "agriculture", "is_published": true}
+{"mr_1": "MR000080", "product_name_1": "ACTIVATED CARBON FILTER", "oem_brand": "BOSCH", "oem_no_3": "BOS4645D9", "oem_2": "B756M9AM", "sort_order": 31, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000081", "product_name_1": "AIR FILTER", "oem_brand": "BOSCH", "oem_no_3": "BOS462A3C", "oem_2": "S2XXU3MF", "sort_order": 31, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000081", "product_name_1": "AIR FILTER", "oem_brand": "HENGST", "oem_no_3": "HEN38E4C8", "oem_2": null, "sort_order": 33, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000082", "product_name_1": "COOLANT FILTER Long Life", "oem_brand": "DENCKERMANN", "oem_no_3": "DEN187E70", "oem_2": "G2KGUBHE", "sort_order": 56, "machine_type": "construction", "is_published": true}
+{"mr_1": "MR000082", "product_name_1": "COOLANT FILTER Long Life", "oem_brand": "BOSCH", "oem_no_3": "BOSBD527C", "oem_2": "VBXSY732", "sort_order": 0, "machine_type": "commercial", "is_published": true}
+{"mr_1": "MR000083", "product_name_1": "AIR FILTER", "oem_brand": "UFI", "oem_no_3": "UFI31CF6F", "oem_2": "PR5KF55G", "sort_order": 57, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000083", "product_name_1": "AIR FILTER", "oem_brand": "CHAMPION", "oem_no_3": "CHA63B708", "oem_2": "9ZH2ERBY", "sort_order": 27, "machine_type": "industrial", "is_published": true}
+{"mr_1": "MR000083", "product_name_1": "AIR FILTER", "oem_brand": "MEYLE", "oem_no_3": "MEY8DAF39", "oem_2": "XMYJKAGP", "sort_order": 71, "machine_type": "industrial", "is_published": true}
+{"mr_1": "MR000084", "product_name_1": "OIL FILTER Long Life", "oem_brand": "FLEETGUARD", "oem_no_3": "FLED8F2D4", "oem_2": null, "sort_order": 2, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000084", "product_name_1": "OIL FILTER Long Life", "oem_brand": "HENGST", "oem_no_3": "HENE9C77B", "oem_2": "RS9PTBLV", "sort_order": 22, "machine_type": "industrial", "is_published": true}
+{"mr_1": "MR000084", "product_name_1": "OIL FILTER Long Life", "oem_brand": "BOSCH", "oem_no_3": "BOSA3990E", "oem_2": null, "sort_order": 42, "machine_type": "industrial", "is_published": true}
+{"mr_1": "MR000085", "product_name_1": "WATER SEPARATOR High Flow", "oem_brand": "PUROLATOR", "oem_no_3": "PUR4594CE", "oem_2": "EDLPSQ4N", "sort_order": 62, "machine_type": "industrial", "is_published": true}
+{"mr_1": "MR000085", "product_name_1": "WATER SEPARATOR High Flow", "oem_brand": "MAHLE", "oem_no_3": "MAHF51EDF", "oem_2": "LDXSFD8Z", "sort_order": 34, "machine_type": "agriculture", "is_published": true}
+{"mr_1": "MR000085", "product_name_1": "WATER SEPARATOR High Flow", "oem_brand": "BOSCH", "oem_no_3": "BOSDE3158", "oem_2": null, "sort_order": 61, "machine_type": "agriculture", "is_published": true}
+{"mr_1": "MR000086", "product_name_1": "AIR/OIL SEPARATOR", "oem_brand": "BOSCH", "oem_no_3": "BOS408849", "oem_2": "HC42JSYH", "sort_order": 61, "machine_type": "agriculture", "is_published": false}
+{"mr_1": "MR000086", "product_name_1": "AIR/OIL SEPARATOR", "oem_brand": "BOSCH", "oem_no_3": "BOSCCC5D9", "oem_2": "3AE5B3PF", "sort_order": 23, "machine_type": "others", "is_published": false}
+{"mr_1": "MR000086", "product_name_1": "AIR/OIL SEPARATOR", "oem_brand": "DONALDSON", "oem_no_3": "DOND97D8A", "oem_2": "6Y8DURFU", "sort_order": 68, "machine_type": "commercial", "is_published": true}
+{"mr_1": "MR000087", "product_name_1": "FUEL FILTER", "oem_brand": "MEYLE", "oem_no_3": "MEY851EB9", "oem_2": "8EJA6HCB", "sort_order": 72, "machine_type": "commercial", "is_published": true}
+{"mr_1": "MR000087", "product_name_1": "FUEL FILTER", "oem_brand": "BOSCH", "oem_no_3": "BOSEBBEF8", "oem_2": "K7PN5G3C", "sort_order": 64, "machine_type": "industrial", "is_published": true}
+{"mr_1": "MR000088", "product_name_1": "OIL FILTER", "oem_brand": "MAHLE", "oem_no_3": "MAH4B0E49", "oem_2": null, "sort_order": 42, "machine_type": "commercial", "is_published": true}
+{"mr_1": "MR000088", "product_name_1": "OIL FILTER", "oem_brand": "PUROLATOR", "oem_no_3": "PURC1A7B2", "oem_2": "A8JEFKV5", "sort_order": 6, "machine_type": "agriculture", "is_published": true}
+{"mr_1": "MR000088", "product_name_1": "OIL FILTER", "oem_brand": "BALDWIN", "oem_no_3": "BAL8BA1F3", "oem_2": "F89ZG5EU", "sort_order": 25, "machine_type": "construction", "is_published": true}
+{"mr_1": "MR000089", "product_name_1": "AIR/OIL SEPARATOR", "oem_brand": "HENGST", "oem_no_3": "HENE8E818", "oem_2": null, "sort_order": 33, "machine_type": "agriculture", "is_published": true}
+{"mr_1": "MR000089", "product_name_1": "AIR/OIL SEPARATOR", "oem_brand": "PUROLATOR", "oem_no_3": "PUR9E28EA", "oem_2": "WFLNAAVR", "sort_order": 37, "machine_type": "construction", "is_published": true}
+{"mr_1": "MR000090", "product_name_1": "HYDRAULIC FILTER Long Life", "oem_brand": "FLEETGUARD", "oem_no_3": "FLE98611C", "oem_2": "HQAF3WM2", "sort_order": 59, "machine_type": "agriculture", "is_published": true}
+{"mr_1": "MR000090", "product_name_1": "HYDRAULIC FILTER Long Life", "oem_brand": "BOSCH", "oem_no_3": "BOS23281D", "oem_2": null, "sort_order": 43, "machine_type": "industrial", "is_published": true}
+{"mr_1": "MR000090", "product_name_1": "HYDRAULIC FILTER Long Life", "oem_brand": "BOSCH", "oem_no_3": "BOSF79978", "oem_2": "NAEJ2QNG", "sort_order": 38, "machine_type": "construction", "is_published": true}
+{"mr_1": "MR000091", "product_name_1": "FUEL FILTER", "oem_brand": "JAPKO", "oem_no_3": "JAP803CC7", "oem_2": null, "sort_order": 99, "machine_type": "industrial", "is_published": true}
+{"mr_1": "MR000091", "product_name_1": "FUEL FILTER", "oem_brand": "BLUE PRINT", "oem_no_3": "BLUBF7272", "oem_2": "X7BKGJUJ", "sort_order": 91, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000092", "product_name_1": "OIL FILTER", "oem_brand": "BALDWIN", "oem_no_3": "BAL085742", "oem_2": "B9XPHSRC", "sort_order": 64, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000092", "product_name_1": "OIL FILTER", "oem_brand": "PUROLATOR", "oem_no_3": "PURF4DDBB", "oem_2": "C3D3LMWL", "sort_order": 85, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000092", "product_name_1": "OIL FILTER", "oem_brand": "UFI", "oem_no_3": "UFIC28434", "oem_2": null, "sort_order": 71, "machine_type": null, "is_published": true}
+{"mr_1": "MR000092", "product_name_1": "OIL FILTER", "oem_brand": "BOSCH", "oem_no_3": "BOS39FE5D", "oem_2": "ZT6JPUA8", "sort_order": 26, "machine_type": "commercial", "is_published": true}
+{"mr_1": "MR000092", "product_name_1": "OIL FILTER", "oem_brand": "PUROLATOR", "oem_no_3": "PURB8468F", "oem_2": "LVLYCPFG", "sort_order": 52, "machine_type": "agriculture", "is_published": true}
+{"mr_1": "MR000093", "product_name_1": "PETROL FILTER", "oem_brand": "BOSCH", "oem_no_3": "BOSBB647B", "oem_2": "XAFDFTFP", "sort_order": 90, "machine_type": "industrial", "is_published": true}
+{"mr_1": "MR000093", "product_name_1": "PETROL FILTER", "oem_brand": "MAHLE", "oem_no_3": "MAHA25811", "oem_2": null, "sort_order": 90, "machine_type": "commercial", "is_published": true}
+{"mr_1": "MR000093", "product_name_1": "PETROL FILTER", "oem_brand": "MANN", "oem_no_3": "MAN51FF7E", "oem_2": "293WRA52", "sort_order": 69, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000093", "product_name_1": "PETROL FILTER", "oem_brand": "HENGST", "oem_no_3": "HEN100129", "oem_2": "GDLSFEVK", "sort_order": 77, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000094", "product_name_1": "AIR FILTER", "oem_brand": "FRAM", "oem_no_3": "FRAC89F90", "oem_2": null, "sort_order": 73, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000094", "product_name_1": "AIR FILTER", "oem_brand": "ASHIKA", "oem_no_3": "ASH4DD847", "oem_2": "VXMHNQPV", "sort_order": 7, "machine_type": "commercial", "is_published": false}
+{"mr_1": "MR000095", "product_name_1": "CARTRIDGE FILTER", "oem_brand": "FRAM", "oem_no_3": "FRA6A2E73", "oem_2": null, "sort_order": 27, "machine_type": "agriculture", "is_published": false}
+{"mr_1": "MR000095", "product_name_1": "CARTRIDGE FILTER", "oem_brand": "LUBER-FINER", "oem_no_3": "LUBD45FE8", "oem_2": "LYPHSGE3", "sort_order": 19, "machine_type": "construction", "is_published": true}
+{"mr_1": "MR000095", "product_name_1": "CARTRIDGE FILTER", "oem_brand": "MANN", "oem_no_3": "MAN9C2E34", "oem_2": "VPXNVNBJ", "sort_order": 76, "machine_type": "commercial", "is_published": true}
+{"mr_1": "MR000095", "product_name_1": "CARTRIDGE FILTER", "oem_brand": "CHAMPION", "oem_no_3": "CHA230C66", "oem_2": "SNLEX9NJ", "sort_order": 9, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000096", "product_name_1": "WATER SEPARATOR", "oem_brand": "BALDWIN", "oem_no_3": "BALD5B050", "oem_2": "EFEGUXHM", "sort_order": 93, "machine_type": "agriculture", "is_published": true}
+{"mr_1": "MR000096", "product_name_1": "WATER SEPARATOR", "oem_brand": "FLEETGUARD", "oem_no_3": "FLED1AA35", "oem_2": "BFFFND8D", "sort_order": 40, "machine_type": "industrial", "is_published": true}
+{"mr_1": "MR000096", "product_name_1": "WATER SEPARATOR", "oem_brand": "AC DELCO", "oem_no_3": "ACXDEA5E4", "oem_2": "JEH77CF9", "sort_order": 44, "machine_type": "industrial", "is_published": true}
+{"mr_1": "MR000096", "product_name_1": "WATER SEPARATOR", "oem_brand": "FLEETGUARD", "oem_no_3": "FLE15FAAB", "oem_2": "4QWRE9P5", "sort_order": 82, "machine_type": "commercial", "is_published": true}
+{"mr_1": "MR000096", "product_name_1": "WATER SEPARATOR", "oem_brand": "FLEETGUARD", "oem_no_3": "FLEED5A28", "oem_2": "RQKJGEVZ", "sort_order": 28, "machine_type": null, "is_published": true}
+{"mr_1": "MR000097", "product_name_1": "OIL FILTER", "oem_brand": "MEYLE", "oem_no_3": "MEY977646", "oem_2": "924GUMEV", "sort_order": 76, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000097", "product_name_1": "OIL FILTER", "oem_brand": "CHAMPION", "oem_no_3": "CHA3FCBAF", "oem_2": "X85Z9JYM", "sort_order": 9, "machine_type": "agriculture", "is_published": true}
+{"mr_1": "MR000097", "product_name_1": "OIL FILTER", "oem_brand": "BOSCH", "oem_no_3": "BOS577BA8", "oem_2": "VZK3UQ6T", "sort_order": 24, "machine_type": null, "is_published": true}
+{"mr_1": "MR000097", "product_name_1": "OIL FILTER", "oem_brand": "BOSCH", "oem_no_3": "BOS627E53", "oem_2": null, "sort_order": 3, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000097", "product_name_1": "OIL FILTER", "oem_brand": "AC DELCO", "oem_no_3": "ACX2C05E5", "oem_2": "FYYLUKRJ", "sort_order": 31, "machine_type": "commercial", "is_published": true}
+{"mr_1": "MR000098", "product_name_1": "PETROL FILTER Heavy Duty", "oem_brand": "MAPCO", "oem_no_3": "MAP3C9425", "oem_2": null, "sort_order": 43, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000098", "product_name_1": "PETROL FILTER Heavy Duty", "oem_brand": "SWAG", "oem_no_3": "SWA046AB1", "oem_2": "7M65ND7L", "sort_order": 23, "machine_type": "industrial", "is_published": true}
+{"mr_1": "MR000098", "product_name_1": "PETROL FILTER Heavy Duty", "oem_brand": "BOSCH", "oem_no_3": "BOS7EED81", "oem_2": null, "sort_order": 82, "machine_type": "agriculture", "is_published": true}
+{"mr_1": "MR000098", "product_name_1": "PETROL FILTER Heavy Duty", "oem_brand": "AC DELCO", "oem_no_3": "ACXEB5DE3", "oem_2": null, "sort_order": 40, "machine_type": "commercial", "is_published": true}
+{"mr_1": "MR000098", "product_name_1": "PETROL FILTER Heavy Duty", "oem_brand": "FLEETGUARD", "oem_no_3": "FLEFB5470", "oem_2": "GP524A68", "sort_order": 8, "machine_type": "construction", "is_published": false}
+{"mr_1": "MR000099", "product_name_1": "FUEL FILTER", "oem_brand": "DONALDSON", "oem_no_3": "DON76ED63", "oem_2": "AFWC5S29", "sort_order": 83, "machine_type": null, "is_published": false}
+{"mr_1": "MR000099", "product_name_1": "FUEL FILTER", "oem_brand": "BOSCH", "oem_no_3": "BOS68572B", "oem_2": "T83KHZGS", "sort_order": 69, "machine_type": "industrial", "is_published": true}
+{"mr_1": "MR000099", "product_name_1": "FUEL FILTER", "oem_brand": "BLUE PRINT", "oem_no_3": "BLUAF2E04", "oem_2": null, "sort_order": 72, "machine_type": "agriculture", "is_published": true}
+{"mr_1": "MR000100", "product_name_1": "COOLANT FILTER", "oem_brand": "OPTIMAL", "oem_no_3": "OPT3FA458", "oem_2": null, "sort_order": 46, "machine_type": "others", "is_published": true}
+{"mr_1": "MR000100", "product_name_1": "COOLANT FILTER", "oem_brand": "FILTRON", "oem_no_3": "FILDAB8B0", "oem_2": "YMFGVHW9", "sort_order": 8, "machine_type": "industrial", "is_published": true}
+{"mr_1": "MR000100", "product_name_1": "COOLANT FILTER", "oem_brand": "FRAM", "oem_no_3": "FRA4A3F1D", "oem_2": "TU59HCFL", "sort_order": 55, "machine_type": "others", "is_published": true}
