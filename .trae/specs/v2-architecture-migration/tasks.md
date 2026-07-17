@@ -7822,7 +7822,7 @@ curl http://localhost:7700/indexes/products/documents/999999
 | v22 | v22 任务清单 | ✅ 全部实现 | commit `9890193`(v22 backup) |
 | v23 | 3 任务(纯文档) | ✅ 全部实现 | commit `acd2cb5`(v23 backup) |
 
-## v24 修订任务(12 项 F1-F12)
+## v24 修订任务(13 项 F1-F13)
 
 | 任务 ID | 类型 | 说明 | Commit |
 |---------|------|------|--------|
@@ -7836,8 +7836,9 @@ curl http://localhost:7700/indexes/products/documents/999999
 | V24-F10 | fix(deps) | NuGet 版本对齐消除全部 warning(21→0) | `fbe2ffe` |
 | V24-F11 | feat(auth) | AuthTokenBroadcaster 指数退避重连(5s→60s 封顶) | `879c8c5` |
 | V24-F12 | feat(etl) | EtlProgressBroadcaster 指数退避重连(3s→60s 封顶) | `c3ee1c9` |
+| V24-F13 | fix(schema) | schema 端点 nullable 改用 EF metadata 判断 + DictMachine.MachineCategory 补 IsRequired() | `0679af4` |
 
-## v24 最终验证结果(2026-07-18)
+## v24 最终验证结果(2026-07-18 更新)
 
 - **后端 build**: `dotnet build backend/SakuraFilter.sln --no-incremental` → **0 warning 0 error**
   - 全部消除:CS1570/CS8620/CS8601/CS8602/CS8604/CS0414/CS1573/CS1587/CS0618/NU1603/MSB3277
@@ -7845,12 +7846,11 @@ curl http://localhost:7700/indexes/products/documents/999999
   - Etl.Tests: 21 个
   - Api.Tests: 191 个
 - **前端 unit**: `npx vitest run tests/unit/` → **137/137 通过**(9 个测试文件)
-- **前端 contract**: 12 个失败均为 ECONNREFUSED(本地后端未启动,与代码无关)
-- **远程仓库**: 已推送至 origin/master(`312919b`)
+- **前端 contract**: `npx vitest run tests/contract/` → **12/12 通过**(V24-F13 修复后,含 V2 兼容性 4 项)
+- **远程仓库**: 已推送至 origin/master(`b420b02`)
 
 ## 待办事项(下一阶段可选方向)
 
-1. **contract 集成测试**: 启动本地后端(PG:5432 + Meilisearch:7700)后跑 12 个 contract 测试
-2. **v24 backup commit**: 已完成(`312919b`),无单独 backup 标记
-3. **新需求/bug**: 等待用户输入
+1. **v24 backup commit**: 已完成(`b420b02`),无单独 backup 标记
+2. **新需求/bug**: 等待用户输入
 

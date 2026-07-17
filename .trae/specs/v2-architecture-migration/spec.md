@@ -14090,6 +14090,8 @@ dotnet test backend/SakuraFilter.sln
 | fbe2ffe | fix(deps) | V24-F10 NuGet 版本对齐消除全部 warning(21→0) |
 | 879c8c5 | feat(auth) | V24-F11 AuthTokenBroadcaster 实现指数退避重连(5s→10s→20s→40s→60s 封顶) |
 | c3ee1c9 | feat(etl) | V24-F12 EtlProgressBroadcaster 实现指数退避重连(3s→6s→12s→24s→60s 封顶, 与 F11 对称) |
+| 0679af4 | fix(schema) | V24-F13 schema 端点 nullable 改用 EF metadata 判断 + DictMachine.MachineCategory 补 IsRequired() |
+| b420b02 | chore | V24-F13 删除临时 DB 诊断脚本(check-*.sql + fix-migration-history.sql) |
 
 ### V24-F9: 剩余 CS0414/CS1573/CS1587/CS0618 warning 修复 [代码质量]
 
@@ -14164,10 +14166,43 @@ dotnet test backend/SakuraFilter.sln
 
 **验证**: dotnet build 0 warning;dotnet test 212/212 通过。
 
+### V24-F13: schema 端点 nullable 改用 EF metadata 判断 [契约修复]
+
+**问题**: contract 测试 `dict-schema.test.ts` 第 10 个用例 `DictMachine.MachineCategory nullable=false` 失败,实际返回 `true`。
+
+**根因分析**:
+- `DictionaryEndpoints._schema` 端点的 `Nullable` 字段使用 `ReflectionExtensions.IsNullable()` 判断
+- 该方法实现为 `if (!p.PropertyType.IsValueType) return true;` — 对所有引用类型(string/XrefOemBrand 等)一律返回 `true`
+- 未考虑 EF Core Fluent API 的 `.IsRequired()` 配置,与 DB 列实际 NOT NULL 不一致
+- `DictMachine.MachineCategory` 是 `string`(非 nullable),且 `DictMachineConfiguration` 配置了 `.IsRequired()`,DB 列也是 NOT NULL,但 schema 端点仍返回 `nullable=true`
+
+**修复方案**:
+1. `DictMachineConfiguration.cs` L26: `MachineCategory` 补 `.IsRequired()`(原仅 `HasMaxLength(50).HasDefaultValue("others")`,未显式声明 NOT NULL)
+2. `DictionaryEndpoints._schema` 端点: nullable 字段从纯反射改为 EF Core metadata
+   - 注入 `ProductDbContext db` 参数
+   - `var et = db.Model.FindEntityType(t);` 取 IEntityType
+   - `var efProp = et?.FindProperty(p.Name);` 取 IProperty
+   - `Nullable = efProp?.IsNullable ?? p.IsNullable()` — 优先用 EF metadata,未注册时回退反射
+3. DB 列已通过 `ALTER TABLE dict_machine ALTER COLUMN machine_category SET NOT NULL` 改为 NOT NULL(诊断脚本已删除)
+
+**EF metadata 优势**:
+- 综合考虑 CLR 类型 + Fluent API 配置 + Data Annotation
+- 与 EF Core 生成的 migration DB 列定义一致
+- 与 DB 实际 NOT NULL 状态一致
+
+**兜底设计**: 若属性未在 EF metadata 中注册(如导航属性、shadow property),回退到 `ReflectionExtensions.IsNullable()`,避免 NRE。
+
+**验证**:
+- 后端 build: 0 warning 0 error
+- `/api/admin/dict/_schema` 端点 `DictMachine.MachineCategory.nullable = false` ✓
+- contract 测试: 12/12 全部通过(含 V2 兼容性 4 项)
+- 全部 8 个字典的 nullable 字段验证通过
+
 ## 25.9 v24 最终验证结果
 
 - **后端**: dotnet test backend/SakuraFilter.sln 212/212 通过(Etl.Tests 21 + Api.Tests 191)
 - **后端 warning**: dotnet build **0 warning 0 error**(全部消除:CS1570/CS8620/CS8601/CS8602/CS8604/CS0414/CS1573/CS1587/CS0618/NU1603/MSB3277)
 - **前端**: npx vitest run tests/unit/ 137/137 通过(9 个测试文件)
-- **前端 contract**: 12 个失败均为 ECONNREFUSED(后端未启动,与代码无关)
+- **前端 contract**: npx vitest run tests/contract/ **12/12 通过**(V24-F13 修复后,含 V2 兼容性 4 项)
+- **远程仓库**: 已推送至 origin/master(`b420b02`)
 
