@@ -3550,6 +3550,114 @@ _待启动第七轮深度审查后追加_
 
 ---
 
+# 第七部分 v9/v10/v11 历史回归验证 + v12 综合验证清单
+
+> **历史事实**: v9/v10/v11 修订已完成,但验证清单未追加到 checklist.md(检查显示文件停在第八轮审查 L3518)。
+> **v12 处理**: 本部分合并 v9-v11 关键修复点的回归验证 + v12 全部验证点,确保审查证据链完整。
+> **回归验证范围**: v8 验证清单已覆盖 v7 之前的修复,本部分仅覆盖 v9-v11 关键修复点。
+
+## 七、v9/v10/v11 关键修复点回归验证(15 项)
+
+- [ ] REG-1: v9 E1 CrossReference FK HasOne<Product>() 无参重载已应用且无 schema diff
+- [ ] REG-2: v9 E5 TRUNCATE 动态白名单已实施,无 cleanup_failures 硬编码引用
+- [ ] REG-3: v9 E6 IObjectStorage 接口已扩展,ListAllAsync 在 MinIO/Aliyun OSS 实现正确
+- [ ] REG-4: v10 V10-F1~F11 11 项凭空假设纠正已实施(代码存在性 + API 签名双重核实)
+- [ ] REG-5: v10 V10-F12~F22 11 项中低危问题修正已实施
+- [ ] REG-6: v10 A1-A20 20 项设计调整已实施
+- [ ] REG-7: v11 V11-F1~F10 10 项凭空假设纠正已实施(方法存在性 + API 签名双重核实)
+- [ ] REG-8: v11 V11-F11~F17 7 项中低危问题修正已实施
+- [ ] REG-9: v11 A1-A17 17 项设计调整已实施
+- [ ] REG-10: v11 6 项前置任务(Pre-Task-V11-1~6)已全部完成
+- [ ] REG-11: v11 11 个任务(V11-1.1~3.3)已全部完成
+- [ ] REG-12: v10 第十轮审查 35 项验证点已通过
+- [ ] REG-13: v11 第十一轮审查 22 项漏洞已识别并纳入 v12 修订
+- [ ] REG-14: v9/v10/v11 实施过程中未引入 v12 之外的衍生漏洞
+- [ ] REG-15: v9-v11 修订的代码改动 dotnet build / npm run build 全部通过
+
+## 八、v12 前置任务验证(Pre-Task-V12-1 ~ V12-10,10 项,全部已完成)
+
+- [ ] Pre-Task-V12-1: ISearchProvider.cs L32-44 ProductIndexDoc 字段定义已核实(12 字段,无 Oem2,字段名 UpdatedAtUnix)
+- [ ] Pre-Task-V12-2: Grep `isSafeRedirect` 全项目无匹配,函数不存在
+- [ ] Pre-Task-V12-3: Grep `VerifyAndExtractV2` 全后端无匹配,方法不存在
+- [ ] Pre-Task-V12-4: Grep `SignV2` 全后端无匹配,现有方法名是 Sign
+- [ ] Pre-Task-V12-5: Grep `router.isReady` 全前端无匹配
+- [ ] Pre-Task-V12-6: Grep `name: 'login'` 全前端无匹配(name 已是 'Login' 大写)
+- [ ] Pre-Task-V12-7: Read LoginView.vue L46-47 确认 router.push(redirect) 未校验(真实 Open Redirect 漏洞)
+- [ ] Pre-Task-V12-8: Read EtlImportService.cs L1146-1147 确认 Where(p.UpdatedAt >= importStartedAt) 时间窗过滤
+- [ ] Pre-Task-V12-9: Read ResilientSearchProvider.cs L21/L118-125/L154 确认 volatile bool 无 lock
+- [ ] Pre-Task-V12-10: Read IndexReplayWorker.cs L78-108 确认整批 catch UpdateRetryAsync
+
+## 九、v12 凭空假设纠正验证(V12-F1 ~ V12-F13,13 项高危)
+
+### V12-F1: ProductIndexDoc 字段缺失
+- [ ] ISearchProvider.cs ProductIndexDoc 当前 12 字段(无 Oem2,字段名 UpdatedAtUnix)
+- [ ] V9/V10 扩展字段是 Mr1/OemBrand/BrandSortOrder(三个)
+- [ ] tasks V12-1.2 子任务 1.2.1 明确 ProductIndexDoc 完整字段定义
+- [ ] v11 子任务 2.2.1 伪代码字段名 `UpdatedAtUnix`(非 UpdatedAt)
+- [ ] v11 子任务 2.2.5 单元测试用 `doc.OemBrand`(非 doc.Oem2)
+
+### V12-F2: BuildProductIndexDocs private static 跨程序集无法调用
+- [ ] tasks V12-2.2 子任务 2.2.1 BuildProductIndexDocs 改为 `public static`
+- [ ] AdminSearchEndpoints.cs 在 SakuraFilter.Api 程序集可调用
+- [ ] `dotnet build` 编译通过(无 CS0122 错误)
+
+### V12-F3: doc with { ... } 当 doc 为 null 时抛 NRE
+- [ ] tasks V12-2.4 子任务 2.4.1 伪代码先判 `if (doc is null) continue`
+- [ ] doc with 表达式仅在 doc 非 null 时执行
+- [ ] 单元测试: null payload 删除不抛 NRE
+
+### V12-F4: V2 cursor 构造丢失 iso 和 id 信息
+- [ ] tasks V12-2.3 子任务 2.3.1 V2 cursor 格式 = "V2:" + iso + "|" + id + "|" + sig
+- [ ] V2 cursor 包含 iso 和 id(非仅 16 字符 sig)
+- [ ] VerifyAndExtractV2 解析 V2 cursor 时 Split('|') 得到 3 段
+- [ ] 单元测试: V2 cursor 验签通过
+
+### V12-F5: ReindexAllAsync sinceDate=null 零量重建
+- [ ] tasks V12-2.1 子任务 2.1.1 ReindexAllAsync sinceDate=null 用 `DateTime.MinValue`
+- [ ] 非用 DateTime.UtcNow(零量重建)
+- [ ] 单元测试: ReindexAllAsync(null, ct) 委托到 SyncSearchIndexAsync(DateTime.MinValue, ct)
+
+### V12-F6: 全量重建 .Include + ToListAsync 1M 行 OOM 风险
+- [ ] tasks V12-2.1 子任务 2.1.2 全量重建改用流式分批(keyset 分页,每批 1000)
+- [ ] 去掉 .Include(p => p.CrossReferences)
+- [ ] 集成测试: 全量重建 1M 行不 OOM
+
+### V12-F7: finally 无条件 SetPrimaryAvailable(true) 异常路径数据不一致
+- [ ] tasks V12-2.1 子任务 2.1.2 finally 改为条件性(`if (success) searchProvider.Initialize(true)`)
+- [ ] 失败时保持 false(走 PG 兜底)
+- [ ] 集成测试: 全量重建失败时主索引保持 false
+
+### V12-F8: isSafeRedirect 全项目不存在
+- [ ] tasks V12-3.2 子任务 3.2.1 新建 frontend/src/utils/security.ts
+- [ ] isSafeRedirect 函数实现完整(协议校验 + URL 编码绕过防护 + 同源/白名单)
+- [ ] 单元测试: 7 个用例(相对路径/同源/白名单外/javascript/data/URL 编码/协议相对)
+
+### V12-F9: VerifyAndExtractV2 全后端不存在
+- [ ] tasks V12-2.3 子任务 2.3.1 实现 VerifyAndExtractV2 方法
+- [ ] 方法签名: (string iso, long id, int version) VerifyAndExtractV2(string cursor)
+- [ ] V2 优先,V1 兜底
+- [ ] 单元测试: V2 cursor 解析返回 version=2
+
+### V12-F10: SignV2 全后端不存在
+- [ ] spec.md L7468 中 "SignV2" 改为 "Sign"
+- [ ] Grep `SignV2` spec.md 无匹配
+
+### V12-F11: router.isReady() 全前端不存在
+- [ ] tasks V12-3.3 删除 Task V11-3.3
+- [ ] tasks.md Task V11-3.3 标记为"v12 已删除"
+
+### V12-F12: name: 'login' 全前端不存在
+- [ ] tasks V12-3.3 删除子任务 3.3.4
+- [ ] Grep `name: 'login'`(小写) 全前端仍无匹配
+
+### V12-F13: LoginView.vue Open Redirect 漏洞
+- [ ] LoginView.vue L46-47 引入 isSafeRedirect 校验
+- [ ] redirect 参数未通过校验时回退到 /admin/products
+- [ ] 集成测试: redirect=https://evil.com 不跳转 evil.com
+- [ ] 集成测试: redirect=javascript:alert(1) 不执行
+
+---
+
 # v9 修订验证清单(第八轮审查衍生漏洞修复 + v8 凭空假设纠正)
 
 > **修订日期**: 2026-07-17
@@ -4301,4 +4409,237 @@ _待启动第七轮深度审查后追加_
 - [ ] 第十一轮审查发现新漏洞 → 进入 v12 修订,继续迭代
 - [ ] 持续迭代直到连续一轮审查无任何新漏洞检出
 - [ ] v11 引入"方法存在性 + API 签名"双重核实机制,目标仍是 v12 实现真正的"0 项凭空假设"
+
+---
+
+# v12 验证清单(对应 v12 spec.md 第十三章 + tasks.md v12 任务清单)
+
+> **修订背景**: v11 自称"0 项凭空假设",但第十一轮三维度并行深度审查发现 v11 仍存在 13 项高危凭空假设 + 7 项中危 + 2 项低危(共 22 项)。
+> **修订原则**: 代码存在性 + 字段名 + API 签名三重核实机制(区分大小写)。
+> **修订目标**: 实现 v11 自称但未达成的"真正 0 项凭空假设"。
+> **本章节与第七部分关系**: 第七部分(七/八/九)已覆盖回归验证 + 前置任务 + 13 项凭空假设纠正,本章节覆盖中低危 + 设计调整 + 任务执行 + 三重核实 + 第十二轮审查。
+
+## 二十、v12 中低危问题修正验证(V12-F14 ~ V12-F22,9 项)
+
+- [ ] V12-F14: V2 cursor 格式统一为 iso(spec ticks / tasks iso → 统一 iso,删除 spec.md L7243-7261 ticks 方案)
+- [ ] V12-F15: .Include(p => p.CrossReferences) 去掉(临时方案用 Product.Oem2 不需要 CrossReferences)
+- [ ] V12-F16: 损坏 payload 处理改为 db.Remove(非 continue 跳过,避免无限重试)
+- [ ] V12-F17: SetPrimaryAvailable lock 统一为无 lock(volatile bool 单赋值是原子的)
+- [ ] V12-F18: npm run test 改为 npm run test:contract(package.json scripts 无 test 命令)
+- [ ] V12-F19: 历史页 cursor 描述补充 base64url 包装说明(内部 payload {ticks}|{id}|{sig})
+- [ ] V12-F20: Task V12-3.1 范围明确(仅注释 + 实现 VerifyAndExtractV2,不涉及前端分页方式切换)
+- [ ] V12-F21: SetPrimaryAvailable 与 Initialize 功能合并(复用 Initialize,删除子任务 2.1.3)
+- [ ] V12-F22: IndexReplayWorker 完整伪代码(含 IndexAsync 和 RemoveRange 调用)
+
+## 二十一、v12 设计调整验证(A1 ~ A18,18 项)
+
+- [ ] A1: ProductIndexDoc 字段(无 Oem2,字段名 UpdatedAtUnix)
+- [ ] A2: BuildProductIndexDocs 改 public static
+- [ ] A3: V2 cursor 格式 "V2:" + iso + "|" + id + "|" + sig
+- [ ] A4: ReindexAllAsync sinceDate=null 用 DateTime.MinValue
+- [ ] A5: 全量重建改流式分批(keyset,每批 1000)
+- [ ] A6: finally 条件性 SetPrimaryAvailable(success 才 true)
+- [ ] A7: 新建 isSafeRedirect 实现(security.ts)
+- [ ] A8: 新增前置子任务实现 VerifyAndExtractV2
+- [ ] A9: spec L7468 SignV2 改为 Sign
+- [ ] A10: 删除 Task V11-3.3(router.isReady 不存在)
+- [ ] A11: 删除子任务 3.3.4(name: 'login' 不存在)
+- [ ] A12: LoginView.vue 引入 isSafeRedirect 校验
+- [ ] A13: V2 cursor 格式统一为 iso
+- [ ] A14: 去掉 .Include(CrossReferences)
+- [ ] A15: 损坏 payload db.Remove
+- [ ] A16: SetPrimaryAvailable 统一无 lock
+- [ ] A17: npm run test:contract
+- [ ] A18: 历史页 cursor base64url 包装说明
+
+## 二十二、v12 任务执行验证(12 个任务)
+
+### Task V12-1.1: ModelSnapshot 描述精确化
+- [ ] V11-1.1 子任务 1.1.5 描述改为"ModelSnapshot 文件会重新生成,这是预期行为"
+- [ ] 或选择 `.WithMany("CrossReferences")` 字符串方案,ModelSnapshot 完全不变
+- [ ] 描述精确化,无代码改动
+
+### Task V12-1.2: ProductIndexDoc 完整字段定义
+- [ ] 子任务 1.2.1 明确 ProductIndexDoc 扩展后字段定义(含 Mr1/OemBrand/BrandSortOrder,无 Oem2,字段名 UpdatedAtUnix)
+- [ ] 子任务 1.2.2 修正 v11 子任务 2.2.1 伪代码字段名(UpdatedAtUnix 非 UpdatedAt)
+- [ ] 子任务 1.2.3 修正 v11 子任务 2.2.5 单元测试(doc.OemBrand 非 doc.Oem2)
+- [ ] 子任务 1.2.4 修正 v11 子任务 2.4.1 doc with 表达式(先判 null)
+- [ ] 子任务 1.2.5 `dotnet build` 编译通过
+
+### Task V12-1.3: DevTokenAuthMiddleware 复核
+- [ ] 子任务 1.3.1 DevTokenAuthMiddleware 设置 ClaimsPrincipal(沿用 V11-1.3)
+- [ ] 子任务 1.3.2 AdminEtlEndpoints 加 RequireAuthorization("Admin")(沿用 V11-1.3)
+- [ ] 子任务 1.3.3 集成测试: ctx.User.HasClaim(ClaimTypes.Role, "admin") == true
+- [ ] 子任务 1.3.4 集成测试: 无 token 返回 401,X-Admin-Token 返回 200
+
+### Task V12-2.1: 全量重建端点综合修正(5 子任务)
+- [ ] 子任务 2.1.1 ReindexAllAsync sinceDate=null 改用 DateTime.MinValue(V12-F5)
+- [ ] 子任务 2.1.2 全量重建改用流式分批(keyset,每批 1000)(V12-F6, V12-F15)
+- [ ] 子任务 2.1.3 ResilientSearchProvider 复用 Initialize,删除 SetPrimaryAvailable(V12-F17, V12-F21)
+- [ ] 子任务 2.1.4 TruncateSearchIndexPendingAsync 实现(沿用 V11-2.1.4)
+- [ ] 子任务 2.1.5 注册 AdminSearchEndpoints(沿用 V11-2.1.5)
+- [ ] 集成测试: 1M 行不 OOM,失败保持 false,成功恢复 true
+- [ ] 单元测试: ReindexAllAsync(null, ct) 委托到 SyncSearchIndexAsync(DateTime.MinValue, ct)
+- [ ] 单元测试: Initialize(false) 后 SearchAsync 走 PG 兜底
+
+### Task V12-2.2: BuildProductIndexDocs 综合修正(2 子任务)
+- [ ] 子任务 2.2.1 BuildProductIndexDocs 改为 public static,字段名 UpdatedAtUnix(V12-F1, V12-F2)
+- [ ] 子任务 2.2.2 单元测试 BuildProductIndexDocs_ReturnsCorrectDoc
+- [ ] `dotnet build` 编译通过
+
+### Task V12-2.3: V2 cursor 格式修正 + VerifyAndExtractV2 实现
+- [ ] 子任务 2.3.1 V2 cursor = "V2:" + iso + "|" + id + "|" + sig(V12-F4)
+- [ ] 子任务 2.3.1 实现 VerifyAndExtractV2 方法(V12-F9)
+- [ ] 子任务 2.3.2 AdminProductService.cs L603 调用改为 VerifyAndExtractV2
+- [ ] 子任务 2.3.3 单元测试 V2 优先 V1 兼容
+
+### Task V12-2.4: IndexReplayWorker 完整伪代码
+- [ ] 子任务 2.4.1 改为单条 try-catch + db.Remove(损坏 payload)(V12-F3, V12-F16, V12-F22)
+- [ ] 子任务 2.4.2 单元测试: 旧 payload(无 OemBrand)反序列化不报错,OemBrand 兜底为 Mr1
+- [ ] 子任务 2.4.3 单元测试: 损坏 payload 抛 JsonException 时删除,不阻塞队列
+- [ ] 子任务 2.4.4 单元测试: null payload 删除,不抛 NRE
+- [ ] `dotnet test` 全部通过
+
+### Task V12-3.1: 实现 VerifyAndExtractV2 + 注释精确化
+- [ ] 子任务 3.1.0 实现 VerifyAndExtractV2(配合 Task V12-2.3)
+- [ ] 子任务 3.1.1 spec.md L7468 SignV2 → Sign(V12-F10)
+- [ ] 子任务 3.1.2 spec.md L7466 补充 base64url 包装说明(V12-F19)
+- [ ] 子任务 3.1.3 明确 Task V12-3.1 范围(不涉及前端分页方式切换)(V12-F20)
+
+### Task V12-3.2: 新建 isSafeRedirect + LoginView.vue 校验(4 子任务)
+- [ ] 子任务 3.2.1 新建 frontend/src/utils/security.ts(V12-F8)
+- [ ] 子任务 3.2.2 LoginView.vue 引入 isSafeRedirect(V12-F13)
+- [ ] 子任务 3.2.3 补充测试用例(7 个:相对路径/同源/白名单外/javascript/data/URL 编码/协议相对)
+- [ ] 子任务 3.2.4 `npm run test:contract` 全部通过(V12-F18)
+- [ ] `npm run build` 编译通过
+
+### Task V12-3.3: 删除 Task V11-3.3
+- [ ] 子任务 3.3.1 删除 Task V11-3.3(因 v10 Task V10-3.5 伪代码从未实施到代码,无需修复)
+- [ ] 子任务 3.3.2 删除子任务 3.3.4(已核实无 name: 'login' 引用)
+- [ ] 子任务 3.3.3 tasks.md Task V11-3.3 位置加注释:"v12 已删除"
+- [ ] Grep `router.isReady` 全前端仍无匹配(无需修改)
+- [ ] Grep `name: 'login'` 全前端仍无匹配(无需修改)
+
+## 二十三、v12 spec 自身凭空假设检查(三重核实机制,20 项)
+
+> **三重核实机制**: 代码存在性 + 字段名 + API 签名(区分大小写)
+> **目标**: 实现 v11 自称但未达成的"真正 0 项凭空假设"
+
+- [ ] CHK-1: ProductIndexDoc 字段名 UpdatedAtUnix(非 UpdatedAt)已三重核实(ISearchProvider.cs L32-44)
+- [ ] CHK-2: BuildProductIndexDocs public static(非 private static)已三重核实(tasks V12-2.2)
+- [ ] CHK-3: V2 cursor 格式 "V2:" + iso + "|" + id + "|" + sig 已三重核实(tasks V12-2.3)
+- [ ] CHK-4: ReindexAllAsync DateTime.MinValue(非 UtcNow)已三重核实(tasks V12-2.1)
+- [ ] CHK-5: 全量重建流式分批(非 .Include + ToListAsync)已三重核实(tasks V12-2.1)
+- [ ] CHK-6: finally 条件性 SetPrimaryAvailable(非无条件 true)已三重核实(tasks V12-2.1)
+- [ ] CHK-7: isSafeRedirect 新建(非假设已存在)已三重核实(Pre-Task-V12-2 Grep 无匹配)
+- [ ] CHK-8: VerifyAndExtractV2 新建(非仅添加注释)已三重核实(Pre-Task-V12-3 Grep 无匹配)
+- [ ] CHK-9: spec.md L7468 Sign(非 SignV2)已三重核实(Pre-Task-V12-4 Grep 无匹配)
+- [ ] CHK-10: 删除 Task V11-3.3(因 router.isReady 全前端无匹配)已三重核实(Pre-Task-V12-5)
+- [ ] CHK-11: 删除子任务 3.3.4(因 name: 'login' 全前端无匹配)已三重核实(Pre-Task-V12-6)
+- [ ] CHK-12: LoginView.vue router.push(redirect) 未校验(真实 Open Redirect)已三重核实(Pre-Task-V12-7 Read L46-47)
+- [ ] CHK-13: CursorHmac.cs L77 Sign(string updatedAtIso, long id) 返回 16 字符 sig 已三重核实
+- [ ] CHK-14: EtlImportService.cs L1146-1147 Where(p.UpdatedAt >= importStartedAt) 已三重核实(Pre-Task-V12-8)
+- [ ] CHK-15: ResilientSearchProvider.cs L21 volatile bool 无 lock 已三重核实(Pre-Task-V12-9)
+- [ ] CHK-16: IndexReplayWorker.cs L78-108 整批 catch UpdateRetryAsync 已三重核实(Pre-Task-V12-10)
+- [ ] CHK-17: AdminProductService.cs L866-868 主列表 cursor 明文格式已三重核实
+- [ ] CHK-18: AdminProductService.cs L395-404 历史页 cursor base64url 包装已三重核实
+- [ ] CHK-19: frontend/package.json 无 `test` 命令(实际是 test:contract)已三重核实
+- [ ] CHK-20: AdminProductsView.vue L109 实际用 page/pageSize offset 分页(非 cursor)已三重核实
+
+## 二十四、v12 tasks.md 任务可执行性检查(12 项)
+
+- [ ] EXEC-1: Task V12-1.1 描述精确化,无代码改动,可执行
+- [ ] EXEC-2: Task V12-1.2 ProductIndexDoc 字段定义明确,可执行
+- [ ] EXEC-3: Task V12-1.3 DevTokenAuthMiddleware 复核,沿用 V11-1.3,可执行
+- [ ] EXEC-4: Task V12-2.1 5 子任务依赖链清晰,可执行
+- [ ] EXEC-5: Task V12-2.2 2 子任务依赖 BuildProductIndexDocs 抽取,可执行
+- [ ] EXEC-6: Task V12-2.3 V2 cursor 格式 + VerifyAndExtractV2 实现,可执行
+- [ ] EXEC-7: Task V12-2.4 IndexReplayWorker 完整伪代码,可执行
+- [ ] EXEC-8: Task V12-3.1 实现 VerifyAndExtractV2 + 注释,可执行
+- [ ] EXEC-9: Task V12-3.2 新建 isSafeRedirect + LoginView.vue 校验,可执行
+- [ ] EXEC-10: Task V12-3.3 删除 Task V11-3.3,无代码改动,可执行
+- [ ] EXEC-11: 10 前置任务(Pre-Task-V12-1~10)已全部完成
+- [ ] EXEC-12: 任务依赖链无循环依赖
+
+## 二十五、v12 修复方案一致性检查(10 项)
+
+- [ ] CONS-1: spec.md 13.2 V12-F1~F13 与 tasks.md V12-1.1~V12-3.3 任务对应
+- [ ] CONS-2: spec.md 13.3 V12-F14~F22 与 tasks.md 任务子项对应
+- [ ] CONS-3: spec.md 13.4 A1~A18 与 tasks.md 任务实现对应
+- [ ] CONS-4: spec.md 13.5 Pre-Task-V12-1~10 与 tasks.md 前置任务对应
+- [ ] CONS-5: V2 cursor 格式 spec/tasks 一致("V2:" + iso + "|" + id + "|" + sig)
+- [ ] CONS-6: ReindexAllAsync sinceDate=null spec/tasks 一致(DateTime.MinValue)
+- [ ] CONS-7: SetPrimaryAvailable/Initialize spec/tasks 一致(无 lock,复用 Initialize)
+- [ ] CONS-8: isSafeRedirect spec/tasks 一致(security.ts 新建)
+- [ ] CONS-9: VerifyAndExtractV2 spec/tasks 一致(新增前置子任务实现)
+- [ ] CONS-10: 损坏 payload 处理 spec/tasks 一致(db.Remove)
+
+## 二十六、第十二轮深度审查验证点
+
+> 第十二轮审查将验证 v12 修复方案是否引入新的衍生问题。
+> **三重核实机制**: 代码存在性 + 字段名 + API 签名(区分大小写)
+> **审查维度**:
+> 1. v11 22 项衍生漏洞修复是否引入新问题
+> 2. v12 13 项凭空假设纠正是否真实可实施
+> 3. v12 9 项中低危问题修正是否引入新问题
+> 4. v12 18 项设计调整是否引入新冲突
+> 5. v12 10 项前置任务依赖链是否合理
+> 6. v12 12 个任务是否覆盖所有漏洞
+> 7. v12 是否再次"凭空假设"代码状态(三重核实)
+> 8. v12 是否引入新的字段/方法/类型引用错误
+> 9. v12 是否引入新的 SQL 语法错误
+> 10. v12 是否引入新的 API 契约破坏
+
+### 数据关联维度(D12)验证点(12 个)
+
+- [ ] D12-1: ProductIndexDoc 扩展后字段定义(Mr1/OemBrand/BrandSortOrder)是否与 V9/V10 实际扩展一致
+- [ ] D12-2: BuildProductIndexDocs public static 在 EtlImportService.cs 是否与现有公开方法风格一致(如 ImportProductsAsync)
+- [ ] D12-3: 临时方案 Product.Oem2 赋给 OemBrand 是否符合 V2 架构过渡期设计
+- [ ] D12-4: BrandSortOrder 默认 null 是否影响 Meilisearch 排序(空值处理)
+- [ ] D12-5: ModelSnapshot 描述精确化是否产生新的 migration 误判
+- [ ] D12-6: DevTokenAuthMiddleware ClaimsPrincipal 是否能通过 AdminPolicy.RequireRole("admin") 校验
+- [ ] D12-7: AdminSearchEndpoints 新建是否与现有 EndpointRouteBuilderExtensions 风格一致
+- [ ] D12-8: TruncateSearchIndexPendingAsync 是否与现有 TruncateAsync 风格一致
+- [ ] D12-9: 全量重建 keyset 分页(p.Id > lastId)是否与现有 SyncSearchIndexAsync 一致
+- [ ] D12-10: 历史页 cursor base64url 解码后 Split('|') 是否得到 [ticks, id, sig]
+- [ ] D12-11: 主列表 cursor 明文 Split('|') 是否得到 [iso, id, sig]
+- [ ] D12-12: VerifyAndExtractV2 V2 优先 V1 兼容期是否引入安全风险
+
+### 检索逻辑维度(S12)验证点(12 个)
+
+- [ ] S12-1: ReindexAllAsync DateTime.MinValue 是否触发真正全量重建(非零量)
+- [ ] S12-2: SyncSearchIndexAsync Where(p.UpdatedAt >= DateTime.MinValue) 是否查询到所有 Product
+- [ ] S12-3: 流式分批每批 1000 在 1M 行是否产生 1000 批,是否影响性能
+- [ ] S12-4: meili.IndexAsync(docs, ct) 是否支持批次写入(非单条)
+- [ ] S12-5: finally 条件性 SetPrimaryAvailable 失败时 PG 兜底是否正常工作
+- [ ] S12-6: IndexReplayWorker 单条 try-catch 是否影响整批性能(从批量改为单条)
+- [ ] S12-7: db.Remove(损坏 payload) 后 SaveChanges 是否正常
+- [ ] S12-8: doc with { OemBrand = doc.Mr1 ?? "unknown" } 在 doc 非 null 时是否安全
+- [ ] S12-9: doc.Mr1 为 null 时 OemBrand 兜底为 "unknown" 是否符合业务预期
+- [ ] S12-10: V2 cursor 验签失败时是否抛 ArgumentException(与 V1 一致)
+- [ ] S12-11: V2 cursor 与 V1 cursor 兼容期是否引入 cursor 解析歧义
+- [ ] S12-12: IndexReplayWorker 单条 try-catch 后 validDocs 为空时是否跳过 IndexAsync
+
+### 前后端联动维度(F11)验证点(12 个)
+
+- [ ] F11-1: isSafeRedirect 实现是否覆盖所有 Open Redirect 场景
+- [ ] F11-2: isSafeRedirect URL 编码绕过防护 decodeURIComponent 是否正确
+- [ ] F11-3: SAFE_REDIRECT_HOSTS 环境变量配置是否在部署文档中说明
+- [ ] F11-4: LoginView.vue 引入 isSafeRedirect 后默认 redirect=/admin/products 仍可正常跳转
+- [ ] F11-5: LoginView.vue redirect=https://evil.com 不跳转 evil.com
+- [ ] F11-6: LoginView.vue redirect=javascript:alert(1) 不执行
+- [ ] F11-7: security.test.ts 7 个用例覆盖完整(相对路径/同源/白名单外/javascript/data/URL 编码/协议相对)
+- [ ] F11-8: npm run test:contract 命令在 package.json scripts 中存在
+- [ ] F11-9: VerifyAndExtractV2 与 AdminProductService.cs L603 调用方签名匹配
+- [ ] F11-10: AdminProductsView.vue 主列表 offset 分页(非 cursor)与 V12-F20 描述一致
+- [ ] F11-11: router/index.ts name: 'Login' 大写未被 v12 误改
+- [ ] F11-12: spec.md L7468 Sign(非 SignV2)与 CursorHmac.cs L77 Sign 方法签名一致
+
+## 二十七、第十二轮循环终止条件
+
+- [ ] 第十二轮审查无任何新漏洞检出 → 完成 v12 修订,进入 v13 修订(如有新漏洞)或定稿
+- [ ] 第十二轮审查发现新漏洞 → 进入 v13 修订,继续迭代
+- [ ] 第十二轮审查发现 v12 仍有凭空假设 → 进入 v13 修订,加强核实机制(四重核实?)
+- [ ] 持续迭代直到连续一轮审查无任何新漏洞检出
+- [ ] v12 引入"代码存在性 + 字段名 + API 签名"三重核实机制,目标: 真正实现"0 项凭空假设"
 
