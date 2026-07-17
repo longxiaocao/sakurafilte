@@ -13,6 +13,7 @@ import type {
   EtlActiveTaskInfo,
   EtlHistoryItem,
   EtlReasonCodeAggregate,
+  ReindexResult,
   LoginResponse,
   AuthUser,
   UserListResp,
@@ -439,6 +440,11 @@ export const etlApi = {
 
   progress(): Promise<EtlActiveTaskInfo> {
     return http.get('/admin/etl/progress').then((r) => r.data)
+  },
+  // V2 Task V17-3.1: 全量重建 Meilisearch 索引
+  //   后端 ReindexAllAsync 内部 AcquireActiveCts 防止与 ETL 并发,冲突返回 409
+  reindexAll(): Promise<ReindexResult> {
+    return http.post('/admin/etl/reindex-all', {}).then((r) => r.data)
   },
   legacyStatus(): Promise<EtlProgress> {
     return http.get('/etl/status').then((r) => r.data)

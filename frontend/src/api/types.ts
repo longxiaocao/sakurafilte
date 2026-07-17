@@ -414,6 +414,16 @@ export interface EtlActiveTaskInfo {
   }
 }
 
+// V2 Task V17-3.1: 全量重建结果 (POST /api/admin/etl/reindex-all)
+//   与后端 SakuraFilter.Core.DTOs.ReindexResult 对齐
+export interface ReindexResult {
+  message: string
+  direct: number
+  queued: number
+  elapsedMs: number
+  error?: string | null
+}
+
 // Day 9.1: dry-run 返回的样本行 (最多 5 行原始 JSON)
 export interface EtlDryRunResult {
   dryRun: boolean

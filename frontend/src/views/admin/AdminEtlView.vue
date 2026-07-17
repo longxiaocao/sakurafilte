@@ -16,7 +16,7 @@ import { ref, reactive, onMounted, onBeforeUnmount, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { etlApi } from '@/api'
-import type { EtlDryRunResult, EtlProgress } from '@/api/types'
+import type { EtlDryRunResult, EtlProgress, ReindexResult } from '@/api/types'
 import EtlReasonCodePie from '@/components/EtlReasonCodePie.vue'
 import EtlPipeline from '@/components/EtlPipeline.vue'
 import EtlKpiCards from '@/components/EtlKpiCards.vue'
@@ -265,6 +265,59 @@ async function doResume() {
   }
 }
 
+// ===== 全量重建 Meilisearch 索引 (V17-3.1) =====
+//   后端 ReindexAllAsync:
+//     - AcquireActiveCts 与 ETL 互斥, 冲突返回 409
+//     - advisory_lock 防止并发重建
+//     - DeleteAllDocumentsAsync → TruncateSearchIndexPending → SyncAllSearchIndexAsync
+//   前端职责: 二次确认 + loading + 409 错误码映射 + 结果展示
+const reindexing = ref(false)
+const lastReindex = ref<ReindexResult | null>(null)
+
+async function doReindexAll() {
+  // 二次确认: 全量重建会清空 Meilisearch 全部文档, 期间搜索不可用
+  try {
+    await ElMessageBox.confirm(
+      '全量重建将清空 Meilisearch 全部文档并从 PostgreSQL 重新同步, 期间搜索将短暂不可用。是否继续?',
+      '危险操作确认',
+      { type: 'warning', confirmButtonText: '执行全量重建', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
+  reindexing.value = true
+  try {
+    const r = await etlApi.reindexAll()
+    lastReindex.value = r
+    if (r.error === 'CANCELLED') {
+      ElMessage.warning('全量重建已被取消')
+    } else if (r.error) {
+      ElMessage.error(`全量重建失败: ${r.error}`)
+    } else {
+      ElMessage.success(`全量重建完成: ${r.message}`)
+    }
+  } catch (err: any) {
+    // V17-3.1: 后端 409 表示已有 ETL 任务在运行 (互斥冲突)
+    //   拦截器默认会弹通用错误, 此处补充业务语义提示
+    const status = err?.response?.status
+    if (status === 409) {
+      ElMessage.warning('已有 ETL 任务在运行, 请等待完成后再触发全量重建')
+    } else if (lastReindex.value == null) {
+      // 未拿到结果对象, 显示原始错误兜底
+      const msg = err?.response?.data?.error || err?.message || '未知错误'
+      lastReindex.value = {
+        message: '全量重建失败',
+        direct: 0,
+        queued: 0,
+        elapsedMs: 0,
+        error: msg
+      }
+    }
+  } finally {
+    reindexing.value = false
+  }
+}
+
 // ===== 计算属性 (供 EtlPipeline 传入) =====
 const status = computed(() => task.value.activeTask?.status ?? (task.value.inProgress ? 'running' : 'idle'))
 const stage = computed(() => task.value.activeTask?.stage ?? '-')
@@ -424,6 +477,60 @@ function statusTagType(s: string): 'success' | 'warning' | 'info' | 'danger' | '
           </div>
         </el-form-item>
       </el-form>
+    </el-card>
+
+    <!-- 3.5 全量重建 Meilisearch 索引 (V17-3.1 危险操作) -->
+    <el-card shadow="never" class="mb-3">
+      <template #header>
+        <div class="flex items-center gap-2">
+          <span class="font-semibold">全量重建</span>
+          <el-tag size="small" type="danger">DANGER</el-tag>
+          <el-tooltip
+            content="清空 Meilisearch 全部文档并从 PostgreSQL 全量同步, 与 ETL 任务互斥"
+            placement="top"
+          >
+            <el-icon class="text-gray-400 cursor-help"><InfoFilled /></el-icon>
+          </el-tooltip>
+        </div>
+      </template>
+      <el-alert
+        type="warning"
+        :closable="false"
+        class="mb-3"
+        title="执行后将清空 Meilisearch 全部文档并重新同步, 期间搜索短暂不可用"
+        description="适用场景: 索引结构变更后强制重建 / 数据漂移修复 / schema 字段更新后生效"
+      />
+      <div class="flex items-center gap-3 mb-3">
+        <el-button
+          type="danger"
+          :loading="reindexing"
+          :disabled="status === 'running'"
+          @click="doReindexAll"
+        >
+          执行全量重建
+        </el-button>
+        <span v-if="status === 'running'" class="text-xs text-[var(--color-text-muted)]">
+          ETL 任务进行中, 全量重建不可用
+        </span>
+      </div>
+      <el-descriptions
+        v-if="lastReindex"
+        :column="4"
+        size="small"
+        border
+      >
+        <el-descriptions-item label="message">{{ lastReindex.message }}</el-descriptions-item>
+        <el-descriptions-item label="direct">{{ fmt(lastReindex.direct) }}</el-descriptions-item>
+        <el-descriptions-item label="queued">{{ fmt(lastReindex.queued) }}</el-descriptions-item>
+        <el-descriptions-item label="elapsed">{{ (lastReindex.elapsedMs / 1000).toFixed(2) }}s</el-descriptions-item>
+      </el-descriptions>
+      <el-alert
+        v-if="lastReindex && lastReindex.error"
+        class="mt-3"
+        :title="lastReindex.error"
+        type="error"
+        :closable="false"
+      />
     </el-card>
 
     <!-- 4. 告警状态 (P2 占位) -->
