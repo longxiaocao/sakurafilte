@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using SakuraFilter.Core.DTOs;
 using SakuraFilter.Core.Entities;
+using SakuraFilter.Core.Extensions;
 using SakuraFilter.Infrastructure.Data;
 
 namespace SakuraFilter.Search;
@@ -95,15 +96,15 @@ public class PostgresSearchProvider : ISearchProvider
 
         // v24 修复: D7/D8 螺纹规格文本匹配 (与 MeiliSearchProvider.SearchAsync 对齐)
         //   WHY ILIKE 模糊匹配: PG 兜底场景允许部分匹配 (如 "M14" 匹配 "M14×1.5"),Meili 用精确匹配
-        //   安全: 手动转义 \, %, _ (Search 项目不引用 Api.EscapeLikePattern, 避免架构层次倒置)
+        //   v24 架构清理: 改用 Core.Extensions.LikeEscapeExtensions (消除与 Api.EscapeLikePattern 重复)
         if (!string.IsNullOrWhiteSpace(req.D7Thread))
         {
-            var pattern = EscapeLike(req.D7Thread);
+            var pattern = req.D7Thread.EscapeLikePattern();
             q = q.Where(p => p.D7Thread != null && EF.Functions.ILike(p.D7Thread, $"%{pattern}%", "\\"));
         }
         if (!string.IsNullOrWhiteSpace(req.D8Thread))
         {
-            var pattern = EscapeLike(req.D8Thread);
+            var pattern = req.D8Thread.EscapeLikePattern();
             q = q.Where(p => p.D8Thread != null && EF.Functions.ILike(p.D8Thread, $"%{pattern}%", "\\"));
         }
 
@@ -207,15 +208,15 @@ public class PostgresSearchProvider : ISearchProvider
 
         // v24 修复: D7/D8 螺纹规格文本匹配 (与 MeiliSearchProvider.SearchAsync 对齐)
         //   WHY ILIKE 模糊匹配: PG 兜底场景允许部分匹配 (如 "M14" 匹配 "M14×1.5"),Meili 用精确匹配
-        //   安全: 手动转义 \, %, _ (Search 项目不引用 Api.EscapeLikePattern, 避免架构层次倒置)
+        //   v24 架构清理: 改用 Core.Extensions.LikeEscapeExtensions (消除与 Api.EscapeLikePattern 重复)
         if (!string.IsNullOrWhiteSpace(req.D7Thread))
         {
-            var pattern = EscapeLike(req.D7Thread);
+            var pattern = req.D7Thread.EscapeLikePattern();
             q = q.Where(p => p.D7Thread != null && EF.Functions.ILike(p.D7Thread, $"%{pattern}%", "\\"));
         }
         if (!string.IsNullOrWhiteSpace(req.D8Thread))
         {
-            var pattern = EscapeLike(req.D8Thread);
+            var pattern = req.D8Thread.EscapeLikePattern();
             q = q.Where(p => p.D8Thread != null && EF.Functions.ILike(p.D8Thread, $"%{pattern}%", "\\"));
         }
 
@@ -347,16 +348,5 @@ public class PostgresSearchProvider : ISearchProvider
     {
         await Task.CompletedTask;
         _logger.LogDebug("PostgresSearchProvider.DeleteAsync: no-op");
-    }
-
-    /// <summary>
-    /// v24 修复: LIKE 模式转义 (与 SakuraFilter.Api.EscapeLikePattern 等价)
-    ///   WHY 本地实现: Search 项目不引用 Api (架构层次倒置), 且只此一处使用
-    ///   转义字符: \ → \\, % → \%, _ → \_ (用 ESCAPE '\\' 声明反斜杠为转义符)
-    /// </summary>
-    private static string EscapeLike(string input)
-    {
-        if (string.IsNullOrEmpty(input)) return string.Empty;
-        return input.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
     }
 }

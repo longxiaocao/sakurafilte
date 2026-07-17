@@ -1,24 +1,21 @@
-using SakuraFilter.Core.Extensions;
-
-namespace SakuraFilter.Api.Services;
+namespace SakuraFilter.Core.Extensions;
 
 /// <summary>
-/// LIKE/ILIKE 模式转义扩展 (Day 10+ P0.1)
+/// LIKE/ILIKE 模式转义扩展 (v24 架构清理)
 ///
-/// v24 架构清理: 实现已上移到 SakuraFilter.Core.Extensions.LikeEscapeExtensions
-///   WHY 上移: PostgresSearchProvider (SakuraFilter.Search) 也需要同样的转义逻辑,
-///   原本 Search 项目不引用 Api (架构层次倒置), 抽到 Core 供两层共同引用
-///
-/// 本文件保留作为转发 shim, 避免破坏 SakuraFilter.Api 内现有调用:
-///   AdminProductService / BaseDictService / PublicTypeaheadService / PublicSearchController
-///   均已 using SakuraFilter.Api.Services, 通过本 shim 调用 Core 实现
-///
-/// 用途: 用户输入文本字段查询 (AdminProduct / AdminDict / Search) 前先转义
+/// 用途: 用户输入文本字段查询 (AdminProduct / AdminDict / Search / PostgresSearchProvider) 前先转义
 ///       把 %, _, \ 三个通配符当字面量处理, 防止:
 ///         1) LIKE 注入 (用户输入 % 拖出整列)
 ///         2) 下划线/百分号被 PG 当通配符导致误命中
+///
 /// 必须配合 EF.Functions.ILike 三参重载 + ESCAPE '\\' 使用:
 ///   query.Where(x => EF.Functions.ILike(x.Col, $"%{input.EscapeLikePattern()}%", "\\"));
+/// 三参重载: (matchExpression, string pattern, string escapeCharacter)
+///
+/// 顺序: 先转义反斜杠, 再转义 %, 再转义 _ (顺序错会导致双重转义)
+///
+/// WHY 抽到 Core: v24 修复 D7/D8 filter 时发现 PostgresSearchProvider (SakuraFilter.Search)
+///   与 SakuraFilter.Api.EscapeLikePattern 重复实现, 抽到 Core 供两层引用, 避免架构层次倒置
 /// </summary>
 public static class LikeEscapeExtensions
 {
@@ -29,5 +26,8 @@ public static class LikeEscapeExtensions
     /// <param name="input">用户原始输入 (已 Trim 过的查询关键字)</param>
     /// <returns>转义后的 pattern, 可直接拼到 LIKE 模式两侧 (例: $"%{escaped}%")</returns>
     public static string EscapeLikePattern(this string input)
-        => global::SakuraFilter.Core.Extensions.LikeEscapeExtensions.EscapeLikePattern(input);
+    {
+        if (string.IsNullOrEmpty(input)) return input;
+        return input.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
+    }
 }
