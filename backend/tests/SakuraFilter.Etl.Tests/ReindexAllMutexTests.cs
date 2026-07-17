@@ -106,20 +106,23 @@ public class ReindexAllMutexTests
     {
         // WHY: AcquireActiveCts 检查 _activeCts != null && !IsCancellationRequested
         //   已取消的 _activeCts 视为已释放, 允许新任务获取锁
-        //   本测试验证互斥逻辑不阻塞已取消的 cts (虽然后续会因 IServiceProvider 失败而抛其他异常)
+        // v24 修复后: 后续 _sp.CreateScope() / GetRequiredService 异常被 catch (Exception) 捕获,
+        //   返回 ReindexResult (Error 字段含异常信息), 而非抛异常给调用方
+        //   修复前: 这些代码在 try 块外, 异常直接抛出 (测试原期望 ThrowAsync<Exception>)
         var svc = BuildService();
         var cancelledCts = new CancellationTokenSource();
         cancelledCts.Cancel();
         ActiveCtsField.SetValue(svc, cancelledCts);
         ActiveTaskEntityField.SetValue(svc, "products");
 
-        var act = async () => await svc.ReindexAllAsync(CancellationToken.None);
-
         // 互斥检查通过, 但后续 _sp.CreateScope() / GetRequiredService 会失败
         //   空 IServiceProvider 无法解析 ProductDbContext, 抛 InvalidOperationException
-        //   但异常消息不应包含 "已有 ETL 任务在运行"
-        var ex = await act.Should().ThrowAsync<Exception>();
-        ex.Which.Message.Should().NotContain("已有 ETL 任务在运行");
+        //   v24 修复: catch (Exception) 返回 ReindexResult, 不抛异常给调用方
+        var result = await svc.ReindexAllAsync(CancellationToken.None);
+
+        result.Should().NotBeNull();
+        result.Error.Should().NotBeNull("空 IServiceProvider 解析 ProductDbContext 失败, 应返回失败结果");
+        result.Error.Should().NotContain("已有 ETL 任务在运行", "互斥检查已通过, 失败原因应是其他异常");
     }
 
     // ===== CancelledToken 传播测试 =====
@@ -128,25 +131,26 @@ public class ReindexAllMutexTests
     public async Task ReindexAll_WithCancelledToken_DoesNotOccupyActiveCtsAfterCall()
     {
         // WHY: 传入已取消的 CancellationToken, AcquireActiveCts 会创建 linked cts (也已取消)
-        //   但后续 conn.OpenAsync(ct) 会抛 OperationCanceledException (在 try 块之前)
-        //   异常在 try 块之前抛出, finally 块不执行, _activeCts 不会被释放
-        //   本测试验证: 调用后 _activeCts 已被设置为已取消的 cts (可被下次 AcquireActiveCts 覆盖)
+        // v24 修复: 后续代码 (StartSnapshotTimerIfNeeded/CreateScope/conn.OpenAsync) 移入 try 块,
+        //   异常被 catch (OperationCanceledException) 捕获, finally 执行 ReleaseActiveCts,
+        //   _activeCts 被释放 (不再泄漏)
+        //   修复前: conn.OpenAsync(ct) 在 try 块外抛异常, finally 不执行, _activeCts 不释放
+        //   (但因 cts 已取消, 下次 AcquireActiveCts 不阻塞 — 这是当时的"可接受泄漏"折中)
         var svc = BuildService();
         using var cts = new CancellationTokenSource();
         cts.Cancel();
 
-        try
-        {
-            await svc.ReindexAllAsync(cts.Token);
-        }
-        catch { /* 预期抛异常 (OperationCanceledException 或其他) */ }
+        var result = await svc.ReindexAllAsync(cts.Token);
 
+        // v24 修复: finally 块执行 ReleaseActiveCts, _activeCts 被释放 (为 null, 不再泄漏)
         var activeCts = GetActiveCts(svc);
-        // AcquireActiveCts 设置了 _activeCts, 即使后续失败 (try 块之前) 也不会释放
-        //   这是已知的资源泄漏风险 (V17-3.5 改进建议: 把 AcquireActiveCts 之后的代码移入 try 块)
-        //   但因 cts 已取消, 下次 AcquireActiveCts 不会阻塞 (互斥检查允许覆盖已取消的 cts)
-        activeCts.Should().NotBeNull("AcquireActiveCts 已设置 _activeCts (即使后续异常也不会释放)");
-        activeCts!.IsCancellationRequested.Should().BeTrue("linked cts 继承 externalCt 的取消状态");
+        activeCts.Should().BeNull("v24 修复: AcquireActiveCts 之后的代码移入 try 块, finally 释放 _activeCts");
+
+        // 验证返回值: 空 IServiceProvider 解析 ProductDbContext 抛 InvalidOperationException,
+        //   被 catch (Exception) 捕获, 返回失败 ReindexResult (Error 含异常信息)
+        //   注意: 不会走到 conn.OpenAsync(ct), 所以不会抛 OperationCanceledException
+        result.Error.Should().NotBeNull("空 IServiceProvider 解析 ProductDbContext 失败, 应返回失败结果");
+        result.Error.Should().NotContain("已有 ETL 任务在运行", "互斥检查已通过, 失败原因应是其他异常");
     }
 
     // ===== ReindexResult 字段映射测试 =====

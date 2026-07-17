@@ -1301,20 +1301,24 @@ public class EtlImportService
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
         var cts = AcquireActiveCts("reindex-all", ct);
-        var broadcastCtx = StartSnapshotTimerIfNeeded();
-        // advisory lock key: 与 ImportProductsAsync 不同,避免与 ETL 互斥 (但 reindex 本身仍互斥)
-        const long reindexLockKey = 8812345678901234L;
-
-        using var scope = _sp.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<ProductDbContext>();
-        var meili = scope.ServiceProvider.GetRequiredService<MeiliSearchProvider>();
-
-        await using var conn = new Npgsql.NpgsqlConnection(_pgConn);
-        await conn.OpenAsync(ct);
-
-        bool lockAcquired = false;
+        // v24 修复: broadcastCtx 在 try 外声明为 null, 确保 finally 始终能 StopSnapshotTimer
+        //   WHY: 之前 StartSnapshotTimerIfNeeded / CreateScope / conn.OpenAsync 都在 try 块外,
+        //        若其中任一抛异常, finally 不执行, _activeCts 不释放 (资源泄漏)
+        BroadcastCtx? broadcastCtx = null;
         try
         {
+            broadcastCtx = StartSnapshotTimerIfNeeded();
+            // advisory lock key: 与 ImportProductsAsync 不同,避免与 ETL 互斥 (但 reindex 本身仍互斥)
+            const long reindexLockKey = 8812345678901234L;
+
+            using var scope = _sp.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<ProductDbContext>();
+            var meili = scope.ServiceProvider.GetRequiredService<MeiliSearchProvider>();
+
+            await using var conn = new Npgsql.NpgsqlConnection(_pgConn);
+            await conn.OpenAsync(ct);
+
+            bool lockAcquired = false;
             // 1. advisory lock (事务级,commit/rollback 自动释放)
             lockAcquired = await TryAcquireAdvisoryLockAsync(conn, reindexLockKey, ct);
             if (!lockAcquired)
@@ -1356,8 +1360,7 @@ public class EtlImportService
         finally
         {
             // advisory lock 事务级,连接关闭自动释放 (tx.RollbackAsync 在异常路径已执行)
-            if (conn.State != System.Data.ConnectionState.Closed)
-                await conn.CloseAsync();
+            // 注: conn 已在 try 块内通过 await using 自动 Dispose, finally 不再手动 CloseAsync
             StopSnapshotTimer(broadcastCtx);
             ReleaseActiveCts(cts);
         }
