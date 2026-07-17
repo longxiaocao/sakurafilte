@@ -14086,11 +14086,34 @@ dotnet test backend/SakuraFilter.sln
 | d3236b0 | fix(api) | V24-F6 批量修复 CS1570 XML 注释 warning(66→0) |
 | 717b42a | fix(nullable) | V24-F7 修复 11 个可空性 warning(CS8601/8602/8604/8620) |
 | 8ac2cd4 | test(etl) | V24-F8 补充 AdminEtlView 全量重建危险操作流程 Vitest 测试(8 用例) |
+| bbe90f3 | fix(quality) | V24-F9 修复剩余 CS0414/CS1573/CS1587/CS0618 warning(8 个) |
+
+### V24-F9: 剩余 CS0414/CS1573/CS1587/CS0618 warning 修复 [代码质量]
+
+**问题**: V24-F6/F7 修复了 CS1570/CS86xx,但还剩 8 个 v24 之前遗留的 warning:
+- CS0414(1 个): `AuthTokenBroadcaster.consecutiveFailures` 字段声明+重置但从未读取
+- CS1573(1 个): `AdminProductImageService.BuildKeyAsync` 的 `ct` 参数无 XML 注释
+- CS1587(5 个): `AdminXrefReorderEndpoints` record 主构造函数参数上的 `/// <summary>` 注释位置错误
+- CS0618(5 个,实际是 5 处 CHECK 约束分布在 4 个实体): `ProductDbContext.HasCheckConstraint` 已过时
+
+**修复方案**:
+- `AuthTokenBroadcaster.cs`: 删除 `consecutiveFailures` 字段(注释声称"驱动指数退避"但实际未实现,误导性代码);同时删除 L79 的 `consecutiveFailures = 0` 重置语句
+- `AdminProductImageService.cs` L59: 添加 `<param name="ct">取消令牌</param>`
+- `AdminXrefReorderEndpoints.cs`: record 主构造函数参数上的 `/// <summary>` 改为在 record 上方用 `<param name="...">` 标签(XrefReorderRequest + XrefReorderItem 共 5 个参数)
+- `ProductDbContext.cs`: 4 个实体的 `e.HasCheckConstraint(...)` 改为 EF Core 8 推荐的 `e.ToTable("table", t => t.HasCheckConstraint(...))` 配置器形式
+  - Product: chk_mr_1_format
+  - CrossReference: chk_xref_machine_type
+  - MachineApplication: chk_machine_apps_category
+  - ProductImage: chk_image_role + chk_image_role_slot(合并到一个 ToTable 配置器)
+
+**语义等价性验证**: `ProductDbContextModelSnapshot.cs` 已记录全部 5 个 CHECK 约束(旧 API 生成),新 API 生成的 CHECK 约束完全相同,ModelSnapshot 不变,无需新 migration。
+
+**验证**: dotnet build 全部 CS* warning 消除(剩 21 个 NU1603/MSB3277 第三方依赖版本警告);dotnet test 212/212 通过。
 
 ## 25.9 v24 最终验证结果
 
 - **后端**: dotnet test backend/SakuraFilter.sln 212/212 通过(Etl.Tests 21 + Api.Tests 191)
-- **后端 warning**: dotnet build 全部 0 warning(CS1570 / CS8620 / CS8601 / CS8602 / CS8604 全部修复)
+- **后端 warning**: dotnet build 全部 0 CS* warning(CS1570/CS8620/CS8601/CS8602/CS8604/CS0414/CS1573/CS1587/CS0618 全部修复;剩 21 个 NU1603/MSB3277 第三方依赖版本警告,与代码无关)
 - **前端**: npx vitest run tests/unit/ 137/137 通过(9 个测试文件)
 - **前端 contract**: 12 个失败均为 ECONNREFUSED(后端未启动,与代码无关)
 
