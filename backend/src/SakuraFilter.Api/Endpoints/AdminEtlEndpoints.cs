@@ -261,6 +261,8 @@ public static class AdminEtlEndpoints
                 l.UpdatedCount,
                 l.SkippedCount,
                 l.SkippedMissingOem,
+                // V2 改进 1: 暴露 mr_1 关联失败计数 (前端 Dashboard 可展示 V2 关键指标)
+                l.SkippedMissingMr1,
                 l.SkippedNullField,
                 l.SkippedDuplicate,
                 l.ErrorCount,

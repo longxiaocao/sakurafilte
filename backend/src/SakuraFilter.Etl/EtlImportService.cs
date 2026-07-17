@@ -322,6 +322,8 @@ public class EtlProgress
             UpdatedCount = Updated,
             SkippedCount = Skipped,
             SkippedMissingOem = SkippedMissingOem,
+            // V2 改进 1: 持久化 mr_1 关联失败计数 (替代 SkippedMissingOem 的 V2 角色)
+            SkippedMissingMr1 = SkippedMissingMr1,
             SkippedNullField = SkippedNullField,
             SkippedDuplicate = SkippedDuplicate,
             ErrorCount = Errors,

@@ -312,6 +312,10 @@ public class EtlProgressLog
     [Column("updated_count")] public long UpdatedCount { get; set; }
     [Column("skipped_count")] public long SkippedCount { get; set; }
     [Column("skipped_missing_oem")] public long SkippedMissingOem { get; set; }
+    // V2 改进 1: xrefs/apps 关联 mr_1 找不到产品时计数 (V2 Task 5.1 替代 SkippedMissingOem)
+    //   WHY 持久化: V2 后 SkippedMissingOem 永远为 0, 暂停日志丢失 V2 关键指标
+    //     运维查"昨天 xrels/apps 跳过了多少 mr_1 关联失败"必须依赖此列
+    [Column("skipped_missing_mr1")] public long SkippedMissingMr1 { get; set; }
     [Column("skipped_null_field")] public long SkippedNullField { get; set; }
     [Column("skipped_duplicate")] public long SkippedDuplicate { get; set; }
     [Column("error_count")] public long ErrorCount { get; set; }
