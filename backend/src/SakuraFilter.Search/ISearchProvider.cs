@@ -65,6 +65,10 @@ public record Mr1IndexDoc(
     decimal? D1Mm, decimal? D2Mm, decimal? D3Mm, decimal? D4Mm,
     decimal? H1Mm, decimal? H2Mm, decimal? H3Mm, decimal? H4Mm,
 
+    // v24 修复: 螺纹规格 (filterable, 文本精确匹配)
+    string? D7Thread,
+    string? D8Thread,
+
     // ===== 状态字段 (filterable) =====
     bool IsPublished,                        // 顶层 MR.1 上架
     bool IsDiscontinued,                     // 顶层 MR.1 下架

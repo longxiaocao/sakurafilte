@@ -146,6 +146,17 @@ public class MeiliSearchProvider : ISearchProvider
             filters.Add($"h3_mm >= {lo} AND h3_mm <= {hi}");
         }
 
+        // v24 修复: D7/D8 螺纹规格文本精确匹配 (修复 v18 起已知 bug)
+        //   WHY 文本匹配: 螺纹规格如 "M14×1.5" 无法用数值范围表达,与 Product.D7Thread/D8Thread 类型对齐
+        if (!string.IsNullOrWhiteSpace(req.D7Thread))
+        {
+            filters.Add($"d7_thread = \"{EscapeFilter(req.D7Thread)}\"");
+        }
+        if (!string.IsNullOrWhiteSpace(req.D8Thread))
+        {
+            filters.Add($"d8_thread = \"{EscapeFilter(req.D8Thread)}\"");
+        }
+
         if (req.IncludeDiscontinued)
         {
             // 用户显式要求含下架,移除 is_discontinued filter
@@ -237,6 +248,12 @@ public class MeiliSearchProvider : ISearchProvider
         if (req.H1.HasValue) { var (lo, hi) = (req.H1.Value - req.Tolerance, req.H1.Value + req.Tolerance); filters.Add($"h1_mm >= {lo} AND h1_mm <= {hi}"); }
         if (req.H2.HasValue) { var (lo, hi) = (req.H2.Value - req.Tolerance, req.H2.Value + req.Tolerance); filters.Add($"h2_mm >= {lo} AND h2_mm <= {hi}"); }
         if (req.H3.HasValue) { var (lo, hi) = (req.H3.Value - req.Tolerance, req.H3.Value + req.Tolerance); filters.Add($"h3_mm >= {lo} AND h3_mm <= {hi}"); }
+
+        // v24 修复: D7/D8 螺纹规格文本精确匹配 (与 SearchAsync 一致)
+        if (!string.IsNullOrWhiteSpace(req.D7Thread))
+            filters.Add($"d7_thread = \"{EscapeFilter(req.D7Thread)}\"");
+        if (!string.IsNullOrWhiteSpace(req.D8Thread))
+            filters.Add($"d8_thread = \"{EscapeFilter(req.D8Thread)}\"");
 
         if (req.IncludeDiscontinued)
             filters.RemoveAll(f => f.StartsWith("is_discontinued"));
@@ -530,6 +547,9 @@ public class MeiliSearchProvider : ISearchProvider
             Media: p.Media,
             D1Mm: p.D1Mm, D2Mm: p.D2Mm, D3Mm: p.D3Mm, D4Mm: p.D4Mm,
             H1Mm: p.H1Mm, H2Mm: p.H2Mm, H3Mm: p.H3Mm, H4Mm: p.H4Mm,
+            // v24 修复: 螺纹规格填充 (与 Product.D7Thread/D8Thread 对齐)
+            D7Thread: p.D7Thread,
+            D8Thread: p.D8Thread,
             IsPublished: p.IsPublished,
             IsDiscontinued: p.IsDiscontinued,
             OemList: oemList,
@@ -668,6 +688,8 @@ public class MeiliSearchProvider : ISearchProvider
                     "mr_1", "type", "is_published", "is_discontinued",
                     "d1_mm", "d2_mm", "d3_mm", "d4_mm",
                     "h1_mm", "h2_mm", "h3_mm", "h4_mm",
+                    // v24 修复: 螺纹规格 (文本精确匹配)
+                    "d7_thread", "d8_thread",
                     // 嵌套数组字段 (V2 新增)
                     "oem_list.oem_brand", "oem_list.oem_no_3", "oem_list.is_published", "oem_list.machine_type",
                     "machine_list.machine_brand", "machine_list.machine_model", "machine_list.machine_category",

@@ -24,7 +24,10 @@ public record AggregateSearchRequest(
     decimal? D3 = null,
     decimal? H1 = null,
     decimal? H2 = null,
-    decimal? H3 = null
+    decimal? H3 = null,
+    // v24 修复: 螺纹规格 (与 SearchRequest.D7Thread/D8Thread 对齐, 文本精确匹配)
+    string? D7Thread = null,
+    string? D8Thread = null
 );
 
 /// <summary>

@@ -12,8 +12,8 @@ public record SearchRequest(
     decimal? H1,
     decimal? H2,
     decimal? H3,
-    decimal? D7,                // 螺纹
-    decimal? D8,
+    string? D7Thread,           // v24 修复: 螺纹规格 1 (文本精确匹配, 与 Product.D7Thread 对齐)
+    string? D8Thread,           // v24 修复: 螺纹规格 2
     decimal Tolerance = 5,      // ±容差 (用户可调 1/5/10)
     bool IncludeDiscontinued = false,
     int Page = 1,

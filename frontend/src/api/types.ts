@@ -117,8 +117,9 @@ export interface SearchRequest {
   h1?: number
   h2?: number
   h3?: number
-  d7?: number
-  d8?: number
+  // v24 修复: D7/D8 螺纹规格改为文本字段 (与后端 SearchRequest.D7Thread/D8Thread 对齐)
+  d7Thread?: string
+  d8Thread?: string
   tolerance?: number
   includeDiscontinued?: boolean
   page?: number

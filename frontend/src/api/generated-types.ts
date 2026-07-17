@@ -271,8 +271,9 @@ export interface SearchRequest {
   h1?: number | null
   h2?: number | null
   h3?: number | null
-  d7?: number | null
-  d8?: number | null
+  // v24 修复: D7/D8 螺纹规格改为文本字段
+  d7Thread?: string | null
+  d8Thread?: string | null
   tolerance?: number | null
   includeDiscontinued?: boolean | null
   page?: number | null
