@@ -707,22 +707,96 @@
   - **依赖**: Task 3.3
 
 - [ ] **Task 4.9**: 创建 html-sanitizer.ts + 安装 dompurify 依赖(修复 F14)
-  - [ ] 4.9.1: `npm install dompurify @types/dompurify`
-  - [ ] 4.9.2: `frontend/src/utils/html-sanitizer.ts`:
-    ```ts
-    import DOMPurify from 'dompurify'
-    const config: DOMPurify.Config = {
-      ALLOWED_TAGS: ['mark'],
-      ALLOWED_ATTR: [],
-      FORBID_SCRIPT: true,
-    }
-    export function sanitizeHtml(dirty: string): string {
-      return DOMPurify.sanitize(dirty, config) as string
-    }
-    ```
-  - [ ] 4.9.3: ESLint 规则禁止直接 `v-html`,必须经 `sanitizeHtml`
-  - **验证**: 单元测试 `sanitizeHtml('<script>alert(1)</script>')` 返回空字符串
-  - **依赖**: Task 1.3
+  - [ ] 4.9.1: `frontend/package.json` 加 `"dompurify": "^3.0.0"` 依赖
+  - [ ] 4.9.2: 新增 `frontend/src/utils/html-sanitizer.ts` 封装 DOMPurify,白名单只允许 `<mark>` 标签
+  - [ ] 4.9.3: `AggregateSearchView.vue` 使用 `v-html` 渲染 `_formatted` 时调用 `sanitize()` 双保险
+  - **验证**: 前端单元测试 `Search_Aggregate_XssDefense` 通过(验证 `<script>`/`<iframe>`/`<img onerror>` 被移除,`<mark>` 保留)
+
+---
+
+## v4 补丁任务清单(共 48 个,Phase 0-5 分布)
+
+> 详见 spec.md 末尾"第三轮深度审查衍生漏洞修复清单(v4 修订)"第五节"v4 补丁任务清单"。
+> 修订历史: v4 修复第三轮深度审查发现的 70 个衍生漏洞(高危 29 / 中危 41 / 低危 12)
+
+### Phase 0 v4 补丁任务(11 个)
+
+- [ ] **Task 0.2.8**: `Product.cs:122-131` CrossReference 实体加 SortOrder/MachineType/IsPublished/Oem2/RowVersion(uint)5 个属性(修复 D3-2/D3-20)
+- [ ] **Task 0.2.9**: `ProductDbContext.cs:108-117` CrossReference 配置加 IsRowVersion + UNIQUE 部分索引 `uq_xrefs_brand_oem3` + sort_order 索引(修复 D3-2/D3-20)
+- [ ] **Task 0.2.10**: `ProductDbContext.cs:86` 移除 OemNoNormalized 的 IsUnique(),改为部分普通索引(修复 D3-7)
+- [ ] **Task 0.2.11**: `ProductDbContext.cs:104` `e.HasIndex(p => p.Mr1)` 替换为 UNIQUE 部分索引 `idx_products_mr_1_unique`(修复 D3-16/D3-19)
+- [ ] **Task 0.2.12**: `ProductDbContext.cs:116` `e.HasIndex(x => new { x.OemBrand, x.OemNo3 })` 替换为 `idx_xrefs_brand_oem3_sort`(修复 D3-28)
+- [ ] **Task 0.2.13**: 新增 `Partition6Placeholder.cs` 实体 + ProductDbContext 注册(修复 D3-17)
+- [ ] **Task 0.2.14**: `Product.cs:195/77` 移除 UpdatedAt/CreatedAt 的 C# 默认值,DbContext 加 `HasDefaultValueSql("now()")`(修复 D3-15)
+- [ ] **Task 0.2.15**: spec L489 后补 `ALTER TABLE cross_references ALTER COLUMN is_discontinued SET NOT NULL/DEFAULT false`(修复 D3-22)
+- [ ] **Task 0.2.16**: spec L316-318 "主图被删除后再次上传"边界补充:重新上架 UPDATE 旧下架行,不 INSERT 新行(修复 D3-22)
+- [ ] **Task 0.2.17**: spec L521 "ulong?" 改为 "uint",CrossReference xmin 配置统一(修复 D3-20)
+- [ ] **Task 0.2.18**: spec v3 D4 修复补充:DROP CONSTRAINT 前先查询实际外键名(修复 D3-29)
+
+- [ ] **Task 0.3.10**: `AdminProductService.cs:43/57/1038-1044` 移除 NormalizeOem 方法,oem_no_normalized 派生改为 mr_1 原值(修复 D3-1)
+- [ ] **Task 0.3.11**: `AdminProductService.cs:100-108/247-254` 写 CrossReference 时补全 sort_order/machine_type/is_published/oem_2(修复 D3-2)
+- [ ] **Task 0.3.12**: `AdminProductService.cs:1008-1036` ValidateForm 加 MR.1 必填/格式校验 + 长度上限改 10 + 控制字符过滤(修复 D3-3/D3-12)
+- [ ] **Task 0.3.13**: `AdminProductService.cs:184-185` UpdateAsync 同步更新 OemNoNormalized = Mr1(修复 D3-4)
+- [ ] **Task 0.3.14**: `AdminProductService.cs:57-59` 唯一性检查改用 Mr1(修复 D3-5)
+- [ ] **Task 0.3.15**: `AdminProductService.cs:114-115` CreateAsync 保存 xrefs 后反向更新 products.oem_2(按 sort_order 排序后取第一个,空列表置 NULL)(修复 D3-14)
+
+- [ ] **Task 0.4.2a**: `BuildMr1DocumentAsync` 过滤软删除 brand(b.deleted_at IS NULL)+ 预计算 OemListPublishedBrands/OemListPublishedNo3s/OemBrandsStr/OemNo3sStr/OemListSortOrderMin(修复 S3-7/S3-8/S3-21)
+- [ ] **Task 0.4.4a**: Meilisearch filter 注入防御改为移除 `"` 和 `\` 策略 + 嵌套字段 filter 单元测试(修复 S3-23)
+- [ ] **Task 0.4.6a**: typoTolerance stopWords 移除 "a" + separatorTokens 不加 `nonSeparatorTokens: ["-"]`(修复 S3-19/S3-20)
+- [ ] **Task 0.4.8a**: Meilisearch 高亮标签专属化(`\u0001MO\u0001`/`\u0001MC\u0001`)+ 后端只还原专属标签 + 递归 `SanitizeFormatted(JToken)`(修复 D3-12/D3-13/S3-1)
+- [ ] **Task 0.4.13a**: Meilisearch 双索引灰度改为 5 阶段(双写 + 读切换 + 停双写)+ `IOptionsMonitor<MeiliSearchOptions>` 热切换 + DeleteAsync 双索引同步(修复 S3-6/S3-17/S3-18)
+- [ ] **Task 0.4.14a**: `Mr1IndexDoc` record 新增扁平化冗余字段(`OemListPublishedBrands`/`OemListPublishedNo3s`/`OemBrandsStr`/`OemNo3sStr`)+ filterableAttributes 补充(修复 S3-7/S3-21)
+- [ ] **Task 0.4.15**: Brand sort_order 变更后台重建(`IHostedService` + `Channel<string>` + `IMemoryCache` 5 秒去重 + `search_index_pending` 表持久化兜底)(修复 S3-22)
+
+- [ ] **Task 0.5.5**: `frontend/src/utils/http.ts` 拦截器改造:`ERROR_CODE_I18N` 字符串映射(V2 新码 + 旧 ERR_ 别名)+ `data.errorCode` 优先 + CURSOR_EXPIRED/INVALID 自动重置(修复 F2-5/F2-21)
+- [ ] **Task 0.5.6**: `frontend/src/i18n/locales/zh-CN.ts` + `en-US.ts` 新增 `common.error.*` 命名空间 13 个错误码翻译(修复 F2-18)
+
+### Phase 1 v4 补丁任务(4 个)
+
+- [ ] **Task 1.2.9a**: PG 兜底分词 OR 拼接(`req.Q.Split` 拆 token + `EscapeLikePattern` + 参数化)(修复 S3-3)
+- [ ] **Task 1.2.10a**: PG 兜底 `ORDER BY` 第 3 字段改为相关性评分(`CASE WHEN ... THEN 100 ...`)+ keyset 分页(修复 S3-5/S3-15)
+- [ ] **Task 1.2.11a**: PG 兜底 `lat_machine` LATERAL 子查询完整实现(过滤 `is_discontinued=false` + LIMIT 50)(修复 S3-4)
+- [ ] **Task 1.2.12**: trgm GIN 索引补充 5 个(`idx_xrefs_oem_no_3_trgm` / `idx_xrefs_oem_brand_trgm` / `idx_products_pn1_trgm` / `idx_products_pn2_trgm` / `idx_products_oem_2_trgm`)+ `pg_trgm` extension 确认(修复 S3-16)
+
+### Phase 3 v4 补丁任务(2 个)
+
+- [ ] **Task 3.2.10**: `AdminProductService.cs:243-244` UpdateAsync xref 全量替换改为增量更新(新增/更新/删除三类),更新类触发 xmin 乐观锁(修复 D3-21)
+- [ ] **Task 3.2.11**: spec v3 D16 修复调整:`naming_field` 字段语义改为"命名快照值"(审计/追溯),前端查 `image_key` 不动态生成(修复 D3-30)
+
+### Phase 4 v4 补丁任务(13 个)
+
+- [ ] **Task 4.1.11**: `Detail.cshtml` 改用 JSON 数据岛替代 `window.__PRODUCT__`(修复 F2-1);挂载点内 SSR 兜底主图(修复 F2-15);`<script type="module">` 替换 `<script defer>`(修复 F2-9)
+- [ ] **Task 4.1.12**: `product-detail-client.ts` 实现 `safeMount(id, Comp, props)` ErrorBoundary + try-catch 降级 UI(修复 F2-8)
+- [ ] **Task 4.1.13**: `frontend/vite.config.ts` 多入口 build + `manualChunks: { vue: ['vue', 'vue-router', 'pinia'] }`(修复 F2-9)
+- [ ] **Task 4.1.14**: `018_v2_legacy_data_cleanup.sql` 阶段 4 外键安全切换顺序(分阶段 DROP/ADD CONSTRAINT)(修复 D3-11/D3-24/F2-3/F2-4/F2-11)
+- [ ] **Task 4.1.15**: spec L1128 `vue-gallery` 命名同步更新为 `gallery-app`/`compare-app`/`inquiry-app`;`product-detail-client.js` 示例代码同步(修复 F2-24)
+- [ ] **Task 4.1.16**: Meilisearch 双索引切换回滚预案:阶段 5a/5b/5c 拆分 + 旧索引保留 7 天(修复 F2-23)
+
+- [ ] **Task 4.5.6**: `CursorHmac.cs` 验签顺序调整(先 HMAC 后 TTL)+ 统一 Base64Url 编码 + 旧 cursor 过渡期分支(`LEGACY_CUTOFF_TS`)+ 双 key 验签 + `pageNum` 字段(修复 S3-9/S3-13/S3-14/S3-24/F2-2/F2-10/F2-17)
+- [ ] **Task 4.5.7**: `IProductWriteStrategy` / `IProductReadStrategy` 接口 + 阶段 3 双写策略表(修复 F2-19)
+- [ ] **Task 4.5.8**: `frontend/src/utils/build-product-url.ts` 实现 `buildProductUrl(p)` 工具函数 + 中文 slugify 兜底(`Uri.EscapeDataString`)(修复 F2-6/F2-12)
+- [ ] **Task 4.5.9**: 全局 grep 替换 `router.push('/product/...')` 4 处遗漏(`SearchView.vue:121,207` / `AppHeader.vue:202` / `PublicCompareView.vue:336` / `PublicProductView.vue:59`)(修复 F2-12)
+- [ ] **Task 4.5.10**: `PublicCompareView.vue` 对比列表 sessionStorage 仅持久化 ID 数组 + `QuotaExceededError` 降级(修复 F2-13)
+
+- [ ] **Task 4.6.6**: `docker/nginx.conf` Googlebot UA 白名单限定 location(仅 `^/(products|product|sitemap.xml|sitemaps|robots.txt)`),admin 路径严格 RateLimit 无视 UA(修复 F2-14)
+- [ ] **Task 4.6.7**: `Detail.cshtml.cs` OnGetAsync 404 渲染友好页 + 站内搜索入口(修复 F2-16)
+- [ ] **Task 4.6.8**: `AdminProductService` 注入 `IProductWriteStrategy`,CreateAsync/UpdateAsync 按 strategy 决定写入目标;ETL `EtlImportService` 同理(修复 F2-19)
+
+- [ ] **Task 4.8.1**: `frontend/src/api/types.ts` 新增 `AggregateSearchHit`(含 mr1/productName1/oemList[]/machineList[]/_formatted/_rankingScore)+ `AggregateSearchResponse` 类型;`SearchHit` 补 `mr1`/`productName1`/`oemList` 字段(修复 F2-7)
+- [ ] **Task 4.8.2**: `frontend/src/api/index.ts` 新增 `searchApi.aggregate(req)` 对接 `POST /api/public/search/aggregate`;`SearchView.vue` 改用新 API + 新类型(修复 F2-7)
+- [ ] **Task 4.9.1**: `frontend/src/utils/__tests__/` 新增单元测试:`html-sanitizer.test.ts` / `build-product-url.test.ts` / `GalleryApp.test.ts` / `error-code-map.test.ts`(修复 F2-20)
+
+### Phase 5 v4 补丁任务(9 个)
+
+- [ ] **Task 5.1.10**: `EtlImportService.cs:1832-1845` products_stage 表定义加 `mr_1`/`oem_2`/`d4_mm`/`h4_mm`/`d*_raw`/`h*_raw` 字段 + 精度改 `NUMERIC(10,2)`(修复 D3-6/D3-19/D3-25)
+- [ ] **Task 5.1.11**: `EtlImportService.cs:832-879` products COPY 列清单 + JSONL 解析加 `mr_1` 字段(必填 + 格式校验 `^[A-Za-z0-9]{1,10}$`)(修复 D3-6)
+- [ ] **Task 5.1.12**: `EtlImportService.cs:945-992` INSERT INTO products 列清单加 `mr_1` + ON CONFLICT 改为 `(mr_1) WHERE mr_1 IS NOT NULL`(修复 D3-7)
+- [ ] **Task 5.1.13**: `EtlImportService.cs:1212-1218` `LoadExistingOemMapAsync` 改为查 `mr_1`,JSONL 字段名 `product_oem` → `mr_1`(修复 D3-8)
+- [ ] **Task 5.1.14**: `EtlImportService.cs:1398-1480` xrefs_stage + COPY + INSERT 加 `sort_order`/`machine_type`/`is_published`/`oem_2` 字段(修复 D3-9)
+- [ ] **Task 5.1.15**: `EtlImportService.cs:935-937` cascade 语义重新定义: cascade=false 时显式 TRUNCATE products + product_images(修复 D3-10)
+- [ ] **Task 5.1.16**: `EtlImportService.cs:1457-1480` xrefs INSERT 前 DELETE 旧下架行,避免下架后重新上架时 23505(修复 D3-18)
+- [ ] **Task 5.1.17**: `EtlImportService.cs:1850-1851` `GetStringOrNull` 加控制字符过滤(允许 `\t` `\n` `\r`)(修复 D3-27)
+- [ ] **Task 5.1.18**: `CleanupOrphanImagesAsync` 应用层脚本:TRUNCATE product_images 后扫描 OSS 清理孤儿文件(修复 D3-23)
 
 - [ ] **Task 4.10**: 更新 E2E 测试 URL + 创建 SEO 基线(修复 F15)
   - [ ] 4.10.1: 更新 `public-product.spec.ts` / `smoke.spec.ts` / `public-search-flow.spec.ts` 访问 SEO URL
