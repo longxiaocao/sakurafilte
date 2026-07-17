@@ -178,21 +178,21 @@ public static class AdminXrefReorderEndpoints
 /// <summary>
 /// V2 Task 2.1.4: OEM 3 批量排序请求体
 /// </summary>
+/// <param name="OemBrand">品牌名 (与 XrefOemBrand.Brand 一致)</param>
+/// <param name="Items">OEM 3 列表 (含 sortOrder + rowVersion 乐观锁令牌)</param>
 public record XrefReorderRequest(
-    /// <summary>品牌名 (与 XrefOemBrand.Brand 一致)</summary>
     string OemBrand,
-    /// <summary>OEM 3 列表 (含 sortOrder + rowVersion 乐观锁令牌)</summary>
     List<XrefReorderItem> Items
 );
 
 /// <summary>
 /// V2 Task 2.1.4: OEM 3 排序单项
 /// </summary>
+/// <param name="OemNo3">OEM 3 号</param>
+/// <param name="SortOrder">新排序值 (类竞价排名, 数值越小越靠前)</param>
+/// <param name="RowVersion">xmin 乐观锁令牌 (GET 接口返回的 rowVersion, 透传回来比对)</param>
 public record XrefReorderItem(
-    /// <summary>OEM 3 号</summary>
     string OemNo3,
-    /// <summary>新排序值 (类竞价排名, 数值越小越靠前)</summary>
     int SortOrder,
-    /// <summary>xmin 乐观锁令牌 (GET 接口返回的 rowVersion, 透传回来比对)</summary>
     uint RowVersion
 );

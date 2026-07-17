@@ -56,6 +56,7 @@ public class AdminProductImageService
     /// <param name="mr1">MR.1 (detail 必填, 也是 primary 的 fallback)</param>
     /// <param name="slot">图片 slot (primary=1, detail=2-6)</param>
     /// <param name="ext">扩展名 (jpg/png/webp)</param>
+    /// <param name="ct">取消令牌</param>
     public async Task<string> BuildKeyAsync(string imageRole, string? oemNo3, string? mr1, short slot, string ext, CancellationToken ct = default)
     {
         // V2 Task 3.1.2/3.1.3: 根据 image_role 选命名字段 + 目录分层

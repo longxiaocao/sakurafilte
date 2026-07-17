@@ -60,7 +60,11 @@ public class ProductDbContext : DbContext
         // Product
         mb.Entity<Product>(e =>
         {
-            e.ToTable("products");
+            // V2: MR.1 格式 CHECK 约束(1-10 位字母数字) — EF Core 8 推荐 ToTable 配置器形式
+            e.ToTable("products", t =>
+            {
+                t.HasCheckConstraint("chk_mr_1_format", "mr_1 IS NULL OR mr_1 ~ '^[A-Za-z0-9]{1,10}$'");
+            });
             e.HasKey(p => p.Id);
             // V2: oem_no_normalized 降级为普通索引(允许 NULL/重复),MR.1 为内部主键
             e.Property(p => p.OemNoNormalized).HasMaxLength(50);
@@ -83,8 +87,6 @@ public class ProductDbContext : DbContext
                 .IsUnique()
                 .HasDatabaseName("idx_products_mr_1_unique")
                 .HasFilter("mr_1 IS NOT NULL");
-            // V2: MR.1 格式 CHECK 约束(1-10 位字母数字)
-            e.HasCheckConstraint("chk_mr_1_format", "mr_1 IS NULL OR mr_1 ~ '^[A-Za-z0-9]{1,10}$'");
             e.HasIndex(p => p.OemNoDisplay);
             e.HasIndex(p => p.Type);
             e.HasIndex(p => new { p.Type, p.D1Mm }).HasDatabaseName("idx_products_type_d1");
@@ -99,7 +101,12 @@ public class ProductDbContext : DbContext
         // CrossReference
         mb.Entity<CrossReference>(e =>
         {
-            e.ToTable("cross_references");
+            // V2: machine_type CHECK 约束 — EF Core 8 推荐 ToTable 配置器形式
+            e.ToTable("cross_references", t =>
+            {
+                t.HasCheckConstraint("chk_xref_machine_type",
+                    "machine_type IS NULL OR machine_type IN ('agriculture', 'commercial', 'construction', 'industrial', 'others')");
+            });
             e.HasKey(x => x.Id);
             e.Property(x => x.ProductId).IsRequired();
             e.Property(x => x.ProductName1).HasMaxLength(100);
@@ -113,9 +120,6 @@ public class ProductDbContext : DbContext
             e.Property(x => x.IsPublished).HasDefaultValue(true);
             // V2: xmin 乐观锁令牌(OEM 3 排序并发控制)
             e.Property(x => x.RowVersion).IsRowVersion().IsConcurrencyToken();
-            // V2: machine_type CHECK 约束
-            e.HasCheckConstraint("chk_xref_machine_type",
-                "machine_type IS NULL OR machine_type IN ('agriculture', 'commercial', 'construction', 'industrial', 'others')");
             e.HasIndex(x => x.ProductId);
             // V2: OEM 3 优先排序查询索引(仅未下架 + 已发布)
             e.HasIndex(x => new { x.OemBrand, x.SortOrder, x.OemNo3 })
@@ -131,15 +135,18 @@ public class ProductDbContext : DbContext
         // MachineApplication
         mb.Entity<MachineApplication>(e =>
         {
-            e.ToTable("machine_applications");
+            // V2: machine_category CHECK 约束 — EF Core 8 推荐 ToTable 配置器形式
+            e.ToTable("machine_applications", t =>
+            {
+                t.HasCheckConstraint("chk_machine_apps_category",
+                    "machine_category IS NULL OR machine_category IN ('agriculture', 'commercial', 'construction', 'industrial', 'others')");
+            });
             e.HasKey(m => m.Id);
             e.Property(m => m.MachineBrand).HasMaxLength(200);
             e.Property(m => m.MachineModel).HasMaxLength(200);
             e.Property(m => m.ModelName).HasMaxLength(100);
             // V2: machine_category(与 cross_references.machine_type 枚举一致)
             e.Property(m => m.MachineCategory).HasMaxLength(50).HasDefaultValue("others");
-            e.HasCheckConstraint("chk_machine_apps_category",
-                "machine_category IS NULL OR machine_category IN ('agriculture', 'commercial', 'construction', 'industrial', 'others')");
             e.HasIndex(m => m.ProductId);
             e.HasIndex(m => new { m.MachineBrand, m.MachineModel });
             // V2: 机型分类树级联索引
@@ -161,7 +168,13 @@ public class ProductDbContext : DbContext
         // ProductImage (V2: 主图/详情图分层,DROP 旧 product_id+slot UNIQUE)
         mb.Entity<ProductImage>(e =>
         {
-            e.ToTable("product_images");
+            // V2: image_role CHECK 约束 + slot 与 image_role 一致性 CHECK (EF Core 8 推荐 ToTable 配置器形式)
+            e.ToTable("product_images", t =>
+            {
+                t.HasCheckConstraint("chk_image_role", "image_role IN ('primary', 'detail')");
+                t.HasCheckConstraint("chk_image_role_slot",
+                    "(image_role = 'primary' AND slot = 1) OR (image_role = 'detail' AND slot BETWEEN 2 AND 6)");
+            });
             e.HasKey(i => i.Id);
             e.Property(i => i.ImageKey).HasMaxLength(500).IsRequired();
             e.Property(i => i.ContentType).HasMaxLength(50);
@@ -171,11 +184,6 @@ public class ProductDbContext : DbContext
             // V2: 新增字段
             e.Property(i => i.OemNo3).HasMaxLength(200);
             e.Property(i => i.ImageRole).HasMaxLength(20).IsRequired().HasDefaultValue("detail");
-            // V2: image_role CHECK 约束
-            e.HasCheckConstraint("chk_image_role", "image_role IN ('primary', 'detail')");
-            // V2: slot 与 image_role 一致性 CHECK
-            e.HasCheckConstraint("chk_image_role_slot",
-                "(image_role = 'primary' AND slot = 1) OR (image_role = 'detail' AND slot BETWEEN 2 AND 6)");
             // V2: 主图唯一索引(按 oem_no_3)
             e.HasIndex(i => i.OemNo3)
                 .IsUnique()
