@@ -1511,3 +1511,494 @@
 > - **Task 5.1.23** → 依赖 Task 5.1.19(v5 LoadExistingOemMapAsync)
 > - **Task 5.1.24** → 依赖 Task 5.1.23
 > - **Task 5.1.25** → 依赖 Task 4.5.14(v5 http.ts 拦截器)
+
+---
+
+## v7 补丁任务清单(共 27 个,Phase 0-5 分布)
+
+> v7 修订: 修复第六轮(即第七轮迭代)审查发现的 33 个衍生漏洞 + 3 项 v6 事实性误判纠正
+> 关键调整: E1/E2/E3 纠正 v6 对当前代码状态的事实性误判(AddForeignKeysV6 必失败/LoadExistingOemMapAsync 读 oem_no_normalized/TRUNCATE CASCADE 遗漏 product_images)
+
+### Phase 0 v7 补丁任务(14 个 — 数据关联 6 + 检索 7 + FK 1)
+
+- [ ] **Task 0.1.4**: 数据库迁移 `SyncFkConfigurationsV7`(修复 E1/D6-2 — 取消 AddForeignKeysV6)
+  - [ ] 0.1.4.1: 删除 v6 计划的 `AddForeignKeysV6` 迁移文件(如已创建)
+  - [ ] 0.1.4.2: 新建空迁移 `SyncFkConfigurationsV7`(Up/Down 为空,仅同步 ModelSnapshot)
+  - [ ] 0.1.4.3: `ProductDbContext.OnModelCreating` 添加显式 HasOne 配置:
+    ```csharp
+    modelBuilder.Entity<ProductImage>()
+        .HasOne(p => p.Product).WithMany(p => p.Images)
+        .HasForeignKey(p => p.ProductId).OnDelete(DeleteBehavior.Cascade);
+    modelBuilder.Entity<CrossReference>()
+        .HasOne(x => x.Product).WithMany(p => p.CrossReferences)
+        .HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Cascade);
+    modelBuilder.Entity<MachineApplication>()
+        .HasOne(m => m.Product).WithMany(p => p.MachineApplications)
+        .HasForeignKey(m => m.ProductId).OnDelete(DeleteBehavior.Cascade);
+    ```
+  - [ ] 0.1.4.4: 迁移头注释: "FK 已存在(20260702025150_InitialCreate),本迁移为占位同步 ModelSnapshot"
+  - **验证**: `dotnet ef migrations script --idempotent` 无 42710 错误;ModelSnapshot 包含 HasOne 配置
+  - **依赖**: 无(独立修复 v6 D5-7 误判)
+
+- [ ] **Task 0.1.5**: 数据库迁移 `AddKeysetRedundantFieldsV7`(修复 S6-4)
+  - [ ] 0.1.5.1: products 表加冗余字段:
+    ```sql
+    ALTER TABLE products ADD COLUMN brand_sort_order_min int;
+    ALTER TABLE products ADD COLUMN oem_list_sort_order_min int;
+    ```
+  - [ ] 0.1.5.2: 创建复合表达式索引:
+    ```sql
+    CREATE INDEX CONCURRENTLY idx_products_keyset_v7
+    ON products (
+      COALESCE(brand_sort_order_min, 2147483647) ASC,
+      COALESCE(oem_list_sort_order_min, 2147483647) ASC,
+      updated_at DESC, id DESC
+    )
+    WHERE deleted_at IS NULL AND mr_1 IS NOT NULL;
+    ```
+  - [ ] 0.1.5.3: Product 实体加 `BrandSortOrderMin` / `OemListSortOrderMin` 属性
+  - [ ] 0.1.5.4: EF Core 配置(`HasDefaultValue(null)` + 索引声明)
+  - **验证**: EXPLAIN ANALYZE 显示使用 `idx_products_keyset_v7`(非 Seq Scan)
+  - **依赖**: Task 0.1.4
+
+- [ ] **Task 0.1.6**: 数据库迁移 `AddLowerExpressionIndexesV7`(修复 S6-10)
+  - [ ] 0.1.6.1: 启用扩展:
+    ```sql
+    CREATE EXTENSION IF NOT EXISTS pg_trgm;
+    ```
+  - [ ] 0.1.6.2: 创建 LOWER 表达式索引:
+    ```sql
+    CREATE INDEX CONCURRENTLY idx_products_name1_lower 
+        ON products (LOWER(product_name_1)) 
+        WHERE deleted_at IS NULL AND mr_1 IS NOT NULL;
+    CREATE INDEX CONCURRENTLY idx_products_name2_lower 
+        ON products (LOWER(product_name_2))
+        WHERE deleted_at IS NULL AND mr_1 IS NOT NULL;
+    CREATE INDEX CONCURRENTLY idx_xrefs_oem3_lower 
+        ON cross_references (LOWER(oem_no_3))
+        WHERE is_published = true AND is_discontinued = false;
+    ```
+  - [ ] 0.1.6.3: 创建 trigram GIN 索引(模糊匹配):
+    ```sql
+    CREATE INDEX CONCURRENTLY idx_products_name1_trgm 
+        ON products USING gin (product_name_1 gin_trgm_ops)
+        WHERE deleted_at IS NULL AND mr_1 IS NOT NULL;
+    ```
+  - **验证**: EXPLAIN ANALYZE 显示使用 `idx_products_name1_lower`(非 Seq Scan)
+  - **依赖**: 无
+
+- [ ] **Task 0.1.7**: 数据库迁移 `AddCleanupFailuresStatusV7`(修复 D6-6/D6-9)
+  - [ ] 0.1.7.1: cleanup_failures 表加字段:
+    ```sql
+    ALTER TABLE cleanup_failures ADD COLUMN status varchar(20) NOT NULL DEFAULT 'pending';
+    ALTER TABLE cleanup_failures ADD COLUMN cleaned_at timestamptz;
+    ALTER TABLE cleanup_failures ADD COLUMN retry_count int NOT NULL DEFAULT 0;
+    ALTER TABLE cleanup_failures ADD COLUMN last_error text;
+    ALTER TABLE cleanup_failures ADD CONSTRAINT chk_cleanup_status 
+        CHECK (status IN ('pending', 'in_progress', 'success', 'failed', 'failed_permanent'));
+    CREATE INDEX idx_cleanup_failures_status 
+        ON cleanup_failures(status) 
+        WHERE status IN ('pending', 'failed');
+    ```
+  - [ ] 0.1.7.2: CleanupFailure 实体加对应属性
+  - [ ] 0.1.7.3: EF Core 配置(`HasDefaultValue` + CHECK 约束声明)
+  - **验证**: `psql \d cleanup_failures` 显示新字段 + 约束 + 索引
+  - **依赖**: 无
+
+- [ ] **Task 0.3.7**: AdminProductService.PurgeAllAsync 实现(修复 E3/D6-1)
+  - [ ] 0.3.7.1: 新增 `PurgeAllAsync(CancellationToken ct)` 方法,步骤:
+    1. 查询所有图片 URL: `_db.ProductImages.Select(img => img.ImageUrl).ToListAsync(ct)`
+    2. 批量删除对象存储中的图片: `_storage.DeleteBatchAsync(imageUrls, ct)`
+    3. TRUNCATE 所有业务表(显式列出):
+       ```sql
+       TRUNCATE products, cross_references, machine_applications, product_images, 
+                search_index_pending, cleanup_failures, partition6_placeholder
+       RESTART IDENTITY CASCADE;
+       ```
+    4. 清理 Meilisearch 索引:遍历 WriteTargets 调用 `DeleteAllDocumentsAsync`
+  - [ ] 0.3.7.2: TRUNCATE 包在事务中 + try-catch 回滚
+  - [ ] 0.3.7.3: 步骤 2 失败不阻断(记录警告,继续 TRUNCATE)
+  - **验证**: 集成测试 `PurgeAll_ImagesDeleted` + `PurgeAll_StorageFailure_NoBlock` 通过
+  - **依赖**: Task 0.1.4
+
+- [ ] **Task 0.3.8**: AdminProductService.UpdateProductRedundantFieldsAsync 实现(修复 S6-4)
+  - [ ] 0.3.8.1: 新增方法,查询 cross_references + oem_brand_dict 计算 brand_sort_order_min + oem_list_sort_order_min
+  - [ ] 0.3.8.2: CreateAsync/UpdateAsync 末尾调用此方法(同事务内)
+  - [ ] 0.3.8.3: cross_references 变更(sort_order/oem_brand_id)也触发更新
+  - **验证**: 单元测试 `UpdateRedundantFields_ConsistentWithJoin` 通过
+  - **依赖**: Task 0.1.5
+
+- [ ] **Task 0.4.12**: MeiliSearchProvider.BuildMr1DocumentAsync 数组字段改造(修复 S6-5/S6-8/S6-12)
+  - [ ] 0.4.12.1: `oem_list_published_brands` 改数组类型:
+    ```csharp
+    doc["oem_list_published_brands"] = publishedOemList
+        .Select(x => x.OemBrand).Distinct().ToArray();
+    doc["oem_list_published_oem3s"] = publishedOemList
+        .Select(x => x.OemNo3).Distinct().ToArray();
+    ```
+  - [ ] 0.4.12.2: `brand_sort_order_min_or_max` 冗余字段(NULL → long.MaxValue,修复 D6-5):
+    ```csharp
+    var brandSortOrderMin = publishedOemList
+        .Select(x => x.OemBrand?.SortOrder ?? int.MaxValue)
+        .DefaultIfEmpty(int.MaxValue).Min();
+    doc["brand_sort_order_min"] = brandSortOrderMin == int.MaxValue ? null : (long?)brandSortOrderMin;
+    doc["brand_sort_order_min_or_max"] = brandSortOrderMin == int.MaxValue 
+        ? long.MaxValue : (long)brandSortOrderMin;
+    ```
+  - [ ] 0.4.12.3: 入口过滤用户数据中的 PUA 字符(修复 S6-12):
+    ```csharp
+    var name1 = StripPua(p.ProductName1);
+    var name2 = StripPua(p.ProductName2);
+    // 其他字段同样过滤
+    ```
+  - [ ] 0.4.12.4: 短品牌缩写(<= 3 字符)追加完整品牌名到 `brands_aliases` 字段
+  - [ ] 0.4.12.5: sortableAttributes 配置改为 `brand_sort_order_min_or_max`(非 `brand_sort_order_min`)
+  - [ ] 0.4.12.6: searchableAttributes 配置数组字段(`oem_list_published_brands` / `oem_list_published_oem3s`)
+  - [ ] 0.4.12.7: 移除 separatorTokens 配置(数组字段自动处理)
+  - [ ] 0.4.12.8: stopWords 配置 `["AG", "SA", "Co", "Ltd"]`(短品牌缩写)
+  - **验证**: 单元测试 `Search_BrandWithSpace_Matched` + `Search_BrandSortOrder_NullLast` + `BuildDocument_PuaStripped` 通过
+  - **依赖**: Task 0.1.5, Task 0.4.28(v6 SanitizeFormatted)
+
+- [ ] **Task 0.4.13**: MeiliSearchProvider.SanitizeFormatted 步骤 0 字符集统一(修复 S6-1)
+  - [ ] 0.4.13.1: 步骤 0 改为过滤 U+E000/U+E001(主)+ 兼容 \uFDD0/\uFDD1(历史):
+    ```csharp
+    input = input.Replace("\uE000", "")
+                 .Replace("\uE001", "")
+                 .Replace("\uFDD0", "")
+                 .Replace("\uFDD1", "");
+    ```
+  - [ ] 0.4.13.2: 步骤 3 还原逻辑改为 if-else(S5-1 已修复,本任务确认字符集一致)
+  - **验证**: 单元测试 `SanitizeFormatted_XssDefense_E000Literal` 通过(用户输入 U+E000 字面量被过滤)
+  - **依赖**: Task 0.4.28(v6 SanitizeFormatted)
+
+- [ ] **Task 0.4.14**: MeiliSearchProvider.DeleteAsync 幂等 404 处理(修复 D6-7)
+  - [ ] 0.4.14.1: 捕获 MeilisearchApiException 404 异常,记录日志但不重试:
+    ```csharp
+    catch (MeilisearchApiException ex) when (ex.Code == "document_not_found" || ex.StatusCode == 404)
+    {
+        _logger.LogInformation("Meilisearch 文档已不存在,跳过删除,索引 {Index},IDs {Ids}", 
+            idx.Uid, string.Join(",", ids));
+    }
+    ```
+  - [ ] 0.4.14.2: CleanupService.CleanupOneAsync 重试前先 GetDocumentAsync 检查存在性
+  - **验证**: 单元测试 `Delete_Idempotent_404` + `Cleanup_CheckExistence_First` 通过
+  - **依赖**: 无
+
+- [ ] **Task 0.4.15**: MeiliSearchProvider.ChannelWriteTimeout 超时降级(修复 S6-7)
+  - [ ] 0.4.15.1: IndexAsync 用 `CancellationTokenSource.CreateLinkedTokenSource` + 5s 超时:
+    ```csharp
+    using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+    cts.CancelAfter(TimeSpan.FromSeconds(5));
+    try { await _channel.Writer.WriteAsync(doc, cts.Token); }
+    catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+    {
+        _logger.LogWarning("Channel 入队 5s 超时,降级到 DB,MR.1={Mr1}", doc.Mr1);
+        await FallbackToDb(new IndexTask(doc), ct);
+    }
+    ```
+  - [ ] 0.4.15.2: appsettings.json 加 `MeiliSearch:ChannelWriteTimeoutSeconds: 5`
+  - [ ] 0.4.15.3: IOptionsMonitor 监听配置变更动态调整超时
+  - **验证**: 单元测试 `ChannelWrite_Timeout_DbFallback` 通过
+  - **依赖**: 无
+
+- [ ] **Task 0.4.16**: MeiliSearchProvider.FallbackToDb 不重置 retry_count(修复 S6-6)
+  - [ ] 0.4.16.1: ExecuteUpdateAsync 改为递增 retry_count + 永久失败标记:
+    ```csharp
+    await _db.SearchIndexPending
+        .Where(t => t.Mr1 == task.Mr1 && t.IndexName == task.IndexName)
+        .ExecuteUpdateAsync(s => s
+            .SetProperty(t => t.RetryCount, t => t.RetryCount + 1)
+            .SetProperty(t => t.Status, t => t.RetryCount + 1 >= 5 ? "failed_permanent" : "pending")
+            .SetProperty(t => t.LastError, task.Error)
+            .SetProperty(t => t.UpdatedAt, DateTimeOffset.UtcNow), ct);
+    ```
+  - [ ] 0.4.16.2: 永久失败任务数 > 0 触发告警(同 D6-9)
+  - **验证**: 单元测试 `DbFallback_NoResetRetryCount` + `DbFallback_PermanentFailure` 通过
+  - **依赖**: Task 0.1.7
+
+- [ ] **Task 0.4.17**: PostgresSearchProvider 聚合搜索降级路径用 BMP PUA 占位符(修复 S6-3)
+  - [ ] 0.4.17.1: SQL 用 `concat(U&E'\\uE000', field, U&E'\\uE001')` 包裹匹配字段:
+    ```sql
+    SELECT p.mr_1, p.product_name_1, p.product_name_2,
+           concat(U&E'\\uE000', p.product_name_1, U&E'\\uE001') AS _formatted_name1,
+           concat(U&E'\\uE000', p.product_name_2, U&E'\\uE001') AS _formatted_name2
+    FROM products p
+    WHERE p.deleted_at IS NULL AND p.mr_1 IS NOT NULL
+      AND (LOWER(p.product_name_1) LIKE LOWER(@q) OR 
+           LOWER(p.product_name_2) LIKE LOWER(@q))
+    ```
+  - [ ] 0.4.17.2: 调用 SanitizeFormatted(与主路径共用,无 XSS 风险)
+  - [ ] 0.4.17.3: 移除"正则还原 <mark>"逻辑(S5-13 降级方案废弃)
+  - **验证**: 单元测试 `Search_Fallback_XssDefense` 通过(用户输入 `<mark>` 字面量被过滤)
+  - **依赖**: Task 0.4.13
+
+- [ ] **Task 0.4.18**: CursorHmac.VerifyAndExtractV2 long.TryParse + 范围校验(修复 S6-2)
+  - [ ] 0.4.18.1: long.Parse 改 long.TryParse,失败抛 CURSOR_INVALID
+  - [ ] 0.4.18.2: expUnixTs 范围校验:`now - 86400 <= expUnixTs <= now + 86400 * 7`
+  - [ ] 0.4.18.3: int.Parse / long.Parse 全部改 TryParse
+  - **验证**: 单元测试 `Cursor_TamperedExpUnixTs_Rejected` + `Cursor_MalformedExp_Rejected` 通过
+  - **依赖**: 无
+
+- [ ] **Task 0.4.19**: MeiliFilterEscapeExtensions 补全转义(修复 S6-9)
+  - [ ] 0.4.19.1: EscapeMeiliFilterValue 新增转义:
+    - `\\` → `\\\\`
+    - `"` → `\\"`
+    - `'` → `\\'`(单引号)
+    - `[` → `\\[`(方括号开)
+    - `]` → `\\]`(方括号闭)
+    - `\0` → 丢弃(null 字节)
+  - **验证**: 单元测试 `EscapeMeiliFilter_AllSpecialChars` 通过
+  - **依赖**: 无
+
+- [ ] **Task 0.4.20**: StringUtils.StripControlChars 补全不可见字符(修复 D6-8)
+  - [ ] 0.4.20.1: 新增 InvisibleChars HashSet:
+    ```csharp
+    private static readonly HashSet<char> InvisibleChars = new()
+    {
+        '\u200B', '\u200C', '\u200D', '\uFEFF', '\u00A0', '\u2060',
+        '\u2028', '\u2029', '\u00AD'
+    };
+    ```
+  - [ ] 0.4.20.2: StripControlChars 过滤 char.IsControl + InvisibleChars
+  - **验证**: 单元测试 `StripControlChars_InvisibleChars` 通过(覆盖所有 9 个不可见字符)
+  - **依赖**: 无
+
+- [ ] **Task 0.4.21**: AllowPuaJavaScriptEncoder 自定义编码器(修复 S6-11)
+  - [ ] 0.4.21.1: 新建 `SakuraFilter.JsonEncoders.cs`,实现 AllowPuaJavaScriptEncoder(允许 BMP PUA U+E000~U+F8FF 原样输出)
+  - [ ] 0.4.21.2: Program.cs `AddJsonOptions` 配置自定义 encoder
+  - **验证**: 单元测试 `JsonSerializer_PuaPreserved` 通过(U+E000/U+E001 不被转义)
+  - **依赖**: 无
+
+### Phase 1 v7 补丁任务(4 个 — 前端 XSS/Session/FormDraft)
+
+- [ ] **Task 1.3.12**: frontend/src/utils/html-sanitizer.ts 步骤 0 字符集同步(修复 S6-1 前端)
+  - [ ] 1.3.12.1: DOMPurify 预处理改为过滤 U+E000/U+E001(主)+ 兼容 \uFDD0/\uFDD1:
+    ```typescript
+    function preprocess(input: string): string {
+      return input.replace(/[\uE000\uE001\uFDD0\uFDD1]/g, '')
+    }
+    ```
+  - [ ] 1.3.12.2: 与后端 SanitizeFormatted 步骤 0 字符集一致
+  - **验证**: 前端单元测试 `HtmlSanitizer_E000Stripped` 通过
+  - **依赖**: Task 1.3.10(v6 html-sanitizer)
+
+- [ ] **Task 1.3.13**: frontend/src/utils/safeStorage.ts 重构(修复 F5-2)
+  - [ ] 1.3.13.1: 启动时检测 sessionStorage 可用性(try-catch setItem/removeItem 测试)
+  - [ ] 1.3.13.2: safeGetItem sessionStorage 返回 null 时尝试 memoryStore:
+    ```typescript
+    if (sessionStorageAvailable) {
+      try {
+        const value = sessionStorage.getItem(key)
+        if (value !== null) return value
+      } catch {}
+    }
+    return memoryStore.has(key) ? memoryStore.get(key)! : null
+    ```
+  - [ ] 1.3.13.3: safeSetItem 总是写入 memoryStore + 尝试写 sessionStorage
+  - [ ] 1.3.13.4: safeRemoveItem 同步删除 memoryStore + sessionStorage
+  - **验证**: 前端单元测试 `SafeStorage_SafariPrivateMode_ReadFromMemory` 通过
+  - **依赖**: 无
+
+- [ ] **Task 1.3.14**: frontend/src/composables/useFormDraft.ts 多标签冲突修复(修复 F5-3)
+  - [ ] 1.3.14.1: 草稿 key 加 sessionId(UUID v4):
+    ```typescript
+    const SESSION_ID = uuidv4()
+    const draftKey = computed(() => `draft_${mr1.value || `new_${SESSION_ID}`}`)
+    ```
+  - [ ] 1.3.14.2: BroadcastChannel 多标签同步(`draft_${mr1.value || 'new'}` 频道)
+  - [ ] 1.3.14.3: 草稿加 expiresAt(7 天 TTL),loadDraft 检查过期自动清理
+  - [ ] 1.3.14.4: cleanupExpiredDrafts 启动时清理过期草稿
+  - **验证**: 前端单元测试 `FormDraft_MultiTab_BroadcastSync` + `FormDraft_Expired_Cleanup` 通过
+  - **依赖**: 无
+
+- [ ] **Task 1.3.15**: frontend/src/utils/errorMonitor.ts captureException 去重 + 兜底 flush(修复 F5-10)
+  - [ ] 1.3.15.1: buffer 改 Map<string, unknown>,key = `${message}|${stack[0]}`
+  - [ ] 1.3.15.2: buffer 容量 50,LRU 淘汰
+  - [ ] 1.3.15.3: init 后 flush buffer 到 Sentry
+  - [ ] 1.3.15.4: 30s 安全兜底,init 未调用时 console.error 缓冲内容
+  - **验证**: 前端单元测试 `CaptureException_Dedup` + `CaptureException_BufferLimit` 通过
+  - **依赖**: 无
+
+### Phase 3 v7 补丁任务(1 个 — 孤儿图片清理)
+
+- [ ] **Task 3.2.13.1**: CleanupOrphanImagesService 定期孤儿文件清理(修复 E3/D6-1)
+  - [ ] 3.2.13.1.1: 新增 `CleanupOrphanImagesService.cs`,实现 `CleanupOrphansAsync`:
+    1. 列出对象存储所有图片: `_storage.ListAllAsync("products/", ct)`
+    2. 列出 DB 所有图片 URL: `_db.ProductImages.Select(img => img.ImageUrl).ToListAsync(ct)`
+    3. 差集 = 孤儿文件,批量删除
+  - [ ] 3.2.13.1.2: 注册为 HostedService,每周日凌晨 3 点执行(Cron 表达式 `0 3 * * 0`)
+  - [ ] 3.2.13.1.3: 告警: 孤儿文件数 > 100 触发告警
+  - **验证**: 集成测试 `CleanupOrphans_NoFalsePositive` + `CleanupOrphans_DeletedFiles` 通过
+  - **依赖**: Task 0.3.7
+
+### Phase 4 v7 补丁任务(7 个 — 前端 URL/Cookie/Error 修复)
+
+- [ ] **Task 4.5.21**: frontend/src/utils/url.ts buildProductUrl mr1Suffix 直接 URL 编码(修复 F5-1)
+  - [ ] 4.5.21.1: mr1Suffix 不走 buildSlug,直接 `encodeURIComponent(p.mr1)`:
+    ```typescript
+    export function buildProductUrl(p: Product): string {
+      const pn1 = buildSlug(p.productName1)
+      const pn2 = buildSlug(p.productName2)
+      const brand = buildSlug(p.oemBrand)
+      const mr1Suffix = encodeURIComponent(p.mr1)  // F5-1: 保留大小写
+      return `/products/${pn1}/${pn2}/${brand}/${mr1Suffix}`
+    }
+    ```
+  - [ ] 4.5.21.2: 后端 Detail.cshtml.cs OnGetAsync 用 Uri.UnescapeDataString 解码 + 大小写敏感查询
+  - **验证**: 集成测试 `Url_Mr1_CasePreserved` 通过(ABC123 → /products/.../ABC123 → 反查 ABC123)
+  - **依赖**: Task 4.5.14(v5 http.ts)
+
+- [ ] **Task 4.5.22**: frontend/src/utils/http.ts handle401 同步设置 isRedirecting(修复 F5-4)
+  - [ ] 4.5.22.1: handle401 同步设置 isRedirecting = true(在 router.replace 之前):
+    ```typescript
+    export function handle401() {
+      if (isRedirecting) return
+      isRedirecting = true  // 同步设置
+      // ... 动态 import router
+    }
+    ```
+  - [ ] 4.5.22.2: router.replace.finally 延迟 1500ms 重置 isRedirecting
+  - [ ] 4.5.22.3: 导出 isHttpRedirecting() 供 PublicSearchView 检查
+  - [ ] 4.5.22.4: PublicSearchView watch route.query 同步检查 isHttpRedirecting
+  - **验证**: 前端单元测试 `Http401_NoUrlSyncLoop` 通过
+  - **依赖**: Task 4.5.14
+
+- [ ] **Task 4.5.23**: frontend/src/utils/http.ts handle401 保留 returnUrl + chunk 加载失败兜底(修复 F5-9)
+  - [ ] 4.5.23.1: 计算 returnUrl = `encodeURIComponent(window.location.pathname + window.location.search)`
+  - [ ] 4.5.23.2: 动态 import router 成功: `router.replace('/login?return=' + returnUrl)`
+  - [ ] 4.5.23.3: 动态 import 失败: `window.location.href = '/login?return=' + returnUrl`
+  - [ ] 4.5.23.4: LoginView.vue 接收 returnUrl query,登录成功后跳转
+  - **验证**: 前端单元测试 `Http401_ReturnUrlPreserved` + `Http401_ChunkFailure_NativeRedirect` 通过
+  - **依赖**: Task 4.5.22
+
+- [ ] **Task 4.5.24**: Program.cs CookiePolicy 环境区分(修复 F5-5)
+  - [ ] 4.5.24.1: Development 环境用 `CookieSecurePolicy.SameAsRequest` + `SameSiteMode.Lax`
+  - [ ] 4.5.24.2: Production 环境用 `CookieSecurePolicy.Always` + `SameSiteMode.Strict`
+  - [ ] 4.5.24.3: 认证 Cookie 同步配置 `Cookie.SecurePolicy`
+  - **验证**: 集成测试 `CookiePolicy_Dev_HttpWorks` + `CookiePolicy_Prod_HttpsOnly` 通过
+  - **依赖**: 无
+
+- [ ] **Task 4.5.25**: frontend/src/main.ts error 事件捕获运行时错误 + unhandledrejection(修复 F5-6)
+  - [ ] 4.5.25.1: error 事件区分资源加载错误和运行时错误:
+    ```javascript
+    if (event.target && event.target !== window && event.target.tagName) {
+      // 资源加载错误
+      const tag = event.target.tagName.toUpperCase()
+      if (['SCRIPT', 'LINK', 'IMG'].includes(tag)) {
+        handleResourceError(event); return
+      }
+    }
+    // 运行时错误
+    handleRuntimeError(event)
+    // mount-fallback 逻辑
+    ```
+  - [ ] 4.5.25.2: 新增 `unhandledrejection` 事件监听(Promise 异常)
+  - **验证**: 前端单元测试 `ErrorEvent_RuntimeError_Captured` 通过
+  - **依赖**: Task 4.5.17(v6 mount-fallback)
+
+- [ ] **Task 4.5.26**: frontend/src/main.ts __fallbackMounted 路由切换重置(修复 F5-7)
+  - [ ] 4.5.26.1: `router.afterEach` 延迟 1000ms 重置 `window.__fallbackMounted = false`:
+    ```typescript
+    router.afterEach(() => {
+      setTimeout(() => { window.__fallbackMounted = false }, 1000)
+    })
+    ```
+  - **验证**: 前端单元测试 `FallbackMount_ResetOnRouteChange` 通过
+  - **依赖**: Task 4.5.17
+
+- [ ] **Task 4.5.27**: frontend/src/api/index.ts searchWithFallback 404 上报 + 配置开关(修复 F5-8)
+  - [ ] 4.5.27.1: 404 时 `console.error` + `captureException`(Sentry 上报)
+  - [ ] 4.5.27.2: 仅在 `import.meta.env.VITE_ENABLE_LEGACY_FALLBACK === 'true'` 时才 fallback:
+    ```typescript
+    if (!import.meta.env.VITE_ENABLE_LEGACY_FALLBACK) {
+      throw new Error('聚合搜索 API 不可用,请联系管理员')
+    }
+    ```
+  - [ ] 4.5.27.3: .env.development 设 `VITE_ENABLE_LEGACY_FALLBACK=true`
+  - [ ] 4.5.27.4: .env.production 设 `VITE_ENABLE_LEGACY_FALLBACK=false`
+  - **验证**: 前端单元测试 `SearchFallback_404_ReportsError` + `SearchFallback_NoFallback_Throws` 通过
+  - **依赖**: Task 1.3.11(v6 searchWithFallback)
+
+### Phase 5 v7 补丁任务(2 个 — ETL oem_2 + 启动版本检测)
+
+- [ ] **Task 5.1.26**: EtlImportService.LoadExistingOem2MapAsync 新增(修复 E2/D6-3)
+  - [ ] 5.1.26.1: 新增独立方法(不影响现有 LoadExistingOemMapAsync):
+    ```csharp
+    private async Task<Dictionary<string, List<string>>> LoadExistingOem2MapAsync(
+        IReadOnlyCollection<Guid> productIds, CancellationToken ct)
+    {
+        var rows = await _db.CrossReferences
+            .Where(x => productIds.Contains(x.ProductId) && x.Oem2 != null)
+            .GroupBy(x => x.ProductId)
+            .Select(g => new { ProductId = g.Key, Oem2List = g.Select(x => x.Oem2!).Distinct().ToList() })
+            .ToListAsync(ct);
+        return rows.ToDictionary(r => r.ProductId.ToString(), r => r.Oem2List);
+    }
+    ```
+  - [ ] 5.1.26.2: ETL 流程中调用,oem_2 多值占比 > 1% 记录告警(不阻断)
+  - [ ] 5.1.26.3: 单元测试 `Etl_Oem2MultiValue_Detection` 通过
+  - **依赖**: Task 0.2.2(CrossReference 实体 Oem2 属性)
+
+- [ ] **Task 5.1.27**: Program.cs 启动时 Meilisearch 版本检测 + 健康检查服务(修复 S6-13)
+  - [ ] 5.1.27.1: `CheckMeiliVersionAsync` 方法,3s 超时:
+    - 不可达时记录警告,搜索自动降级到 PG
+    - 版本 < 1.6.0 记录警告,部分功能受限
+    - 版本 >= 1.6.0 记录信息,正常启动
+  - [ ] 5.1.27.2: `MeiliHealthCheckService` BackgroundService 每 60s 重试连接:
+    - 不可达时 SetAvailability(false) 降级到 PG
+    - 恢复时 SetAvailability(true) 切回 Meilisearch
+  - [ ] 5.1.27.3: ISearchProvider 加 `SetAvailability(bool)` + `IsMeiliAvailable` 属性
+  - **验证**: 集成测试 `Startup_MeiliUnreachable_PgFallback` + `HealthCheck_MeiliRecover_SwitchBack` 通过
+  - **依赖**: 无
+
+### Phase 0 v7 补丁任务(数据关联对账脚本 1 个)
+
+- [ ] **Task 0.1.8**: v7 对账脚本三维度 NULL 漂移检测(修复 D6-4)
+  - [ ] 0.1.8.1: 修改对账脚本为 FULL OUTER JOIN + 三维度计数:
+    ```sql
+    SELECT
+      COUNT(*) FILTER (WHERE p.id IS NULL) AS v2_only,
+      COUNT(*) FILTER (WHERE m.id IS NULL) AS v1_only,
+      COUNT(*) FILTER (WHERE p.mr_1 IS NULL AND m.mr_1 IS NOT NULL) AS null_to_nonnull,
+      COUNT(*) FILTER (WHERE p.mr_1 IS NOT NULL AND m.mr_1 IS NULL) AS nonnull_to_null,
+      COUNT(*) FILTER (WHERE p.mr_1 IS NOT NULL AND m.mr_1 IS NOT NULL AND p.mr_1 <> m.mr_1) AS value_mismatch
+    FROM products p
+    FULL OUTER JOIN products_v2 m ON p.id = m.id;
+    ```
+  - [ ] 0.1.8.2: 任一指标 > 0 触发告警,阻断进入阶段 4
+  - **验证**: 集成测试 `Reconciliation_NullDrift_Detected` 通过
+  - **依赖**: 无
+
+## Task Dependencies(v7 补丁任务)
+
+> - **Task 0.1.4** → 独立(修复 v6 D5-7 误判)
+> - **Task 0.1.5** → 依赖 Task 0.1.4
+> - **Task 0.1.6** → 独立
+> - **Task 0.1.7** → 独立
+> - **Task 0.1.8** → 独立
+> - **Task 0.3.7** → 依赖 Task 0.1.4
+> - **Task 0.3.8** → 依赖 Task 0.1.5
+> - **Task 0.4.12** → 依赖 Task 0.1.5, Task 0.4.28
+> - **Task 0.4.13** → 依赖 Task 0.4.28
+> - **Task 0.4.14** → 独立
+> - **Task 0.4.15** → 独立
+> - **Task 0.4.16** → 依赖 Task 0.1.7
+> - **Task 0.4.17** → 依赖 Task 0.4.13
+> - **Task 0.4.18** → 独立
+> - **Task 0.4.19** → 独立
+> - **Task 0.4.20** → 独立
+> - **Task 0.4.21** → 独立
+> - **Task 1.3.12** → 依赖 Task 1.3.10
+> - **Task 1.3.13** → 独立
+> - **Task 1.3.14** → 独立
+> - **Task 1.3.15** → 独立
+> - **Task 3.2.13.1** → 依赖 Task 0.3.7
+> - **Task 4.5.21** → 依赖 Task 4.5.14
+> - **Task 4.5.22** → 依赖 Task 4.5.14
+> - **Task 4.5.23** → 依赖 Task 4.5.22
+> - **Task 4.5.24** → 独立
+> - **Task 4.5.25** → 依赖 Task 4.5.17
+> - **Task 4.5.26** → 依赖 Task 4.5.17
+> - **Task 4.5.27** → 依赖 Task 1.3.11
+> - **Task 5.1.26** → 依赖 Task 0.2.2
+> - **Task 5.1.27** → 独立

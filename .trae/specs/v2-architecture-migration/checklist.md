@@ -2560,11 +2560,24 @@
 > 每完成一轮审查 + 修复后,在此追加下一轮验证点
 > 循环终止条件: 连续一轮审查无任何新漏洞检出
 
-### 第六轮审查(暂无,待第五轮审查后追加)
-_待启动第五轮深度审查后追加_
+### 第六轮审查(已完成,发现 33 个衍生漏洞)
 
-### 第七轮审查(暂无,待第五轮审查后追加)
-_待启动第五轮深度审查后追加_
+第六轮三维度并行深度审查已完成,发现 33 个衍生漏洞:
+- 数据关联维度 9 项(D6-1 ~ D6-9):高危 3 / 中危 4 / 低危 2
+- 检索逻辑维度 13 项(S6-1 ~ S6-13):高危 3 / 中危 7 / 低危 3
+- 前后端联动维度 11 项(F5-1 ~ F5-11):高危 4 / 中危 5 / 低危 2
+
+**关键发现**: v6 修复方案存在 3 项对当前代码状态的事实性误判:
+- E1 [高] v6 D5-7 误判 ProductDbContext 无 FK,实际已有 3 个 FK CASCADE(AddForeignKeysV6 必失败,42710 错误)
+- E2 [高] v6 D5-5 误判 LoadExistingOemMapAsync 读 oem_2,实际读 oem_no_normalized
+- E3 [高] v6 D5-1 TRUNCATE CASCADE 遗漏 product_images 表级联(已有 FK)
+
+详见 spec.md L3584+ "第七轮深度审查衍生漏洞修复清单(v7 修订)"
+v7 修复方案: 11 项关键设计调整 + 27 个补丁任务(Phase 0/1/3/4/5 分布)
+
+### 第七轮审查(待启动,验证 v7 修复衍生风险)
+
+_待启动第七轮深度审查后追加验证点_
 
 ---
 
@@ -2862,8 +2875,220 @@ _待启动第五轮深度审查后追加_
 > 每完成一轮审查 + 修复后,在此追加下一轮验证点
 > 循环终止条件: 连续一轮审查无任何新漏洞检出
 
-### 第七轮审查(暂无,待第六轮审查后追加)
-_待启动第六轮深度审查后追加_
+### 第七轮审查(待启动,验证 v7 修复衍生风险)
 
-### 第八轮审查(暂无,待第六轮审查后追加)
-_待启动第六轮深度审查后追加_
+_待启动第七轮深度审查后追加验证点(详见下方"第七轮深度审查验证点")_
+
+### 第八轮审查(暂无,待第七轮审查后追加)
+_待启动第七轮深度审查后追加_
+
+---
+
+## v7 修订 33 项衍生漏洞 + 3 项 v6 事实性误判纠正验证清单
+
+> 第七轮(即第六轮迭代)审查发现 33 个衍生漏洞 + 3 项 v6 事实性误判,本节为 v7 修复方案的逐项验证清单
+> 验证范围: 误判纠正 3 项(E1~E3) + 数据关联 9 项(D6-1~D6-9) + 检索逻辑 13 项(S6-1~S6-13) + 前后端联动 11 项(F5-1~F5-11)
+
+### 零、v6 事实性误判纠正验证(3 项)
+
+- [ ] **E1** `SyncFkConfigurationsV7` 迁移为空 Up/Down,`dotnet ef migrations script --idempotent` 无 42710 错误
+- [ ] **E1** `ProductDbContext.OnModelCreating` 含 3 个 HasOne Cascade 配置,ModelSnapshot 与 DB 现状一致
+- [ ] **E1** `AddForeignKeysV6` 迁移文件已删除(若曾创建)
+- [ ] **E2** `LoadExistingOem2MapAsync` 独立方法不影响现有 `LoadExistingOemMapAsync`(读 oem_no_normalized)
+- [ ] **E2** ETL 流程调用 `LoadExistingOem2MapAsync`,oem_2 多值占比 > 1% 记录告警(不阻断)
+- [ ] **E3** `PurgeAllAsync` 步骤 1 查询所有图片 URL + 步骤 2 批量删除对象存储图片
+- [ ] **E3** TRUNCATE 显式列出所有业务表(避免依赖 CASCADE 隐式行为)
+- [ ] **E3** 步骤 2 失败不阻断(记录警告,继续 TRUNCATE)
+- [ ] **E3** `CleanupOrphanImagesService` 每周日凌晨 3 点扫描孤儿文件,> 100 触发告警
+
+### 一、数据关联维度 v7 修复验证(9 项)
+
+- [ ] **D6-1** `PurgeAll_ImagesDeleted` 集成测试通过(TRUNCATE 前先清理图片文件)
+- [ ] **D6-1** `PurgeAll_StorageFailure_NoBlock` 集成测试通过(存储失败不阻断 TRUNCATE)
+- [ ] **D6-2** `SyncFkConfigurationsV7` 迁移无 42710 错误,ModelSnapshot 含 HasOne
+- [ ] **D6-3** `Etl_Oem2MultiValue_Detection` 单元测试通过(oem_2 多值占比 > 1% 告警)
+- [ ] **D6-4** `Reconciliation_NullDrift_Detected` 集成测试通过(三维度 NULL 漂移检测)
+- [ ] **D6-5** `Search_BrandSortOrder_NullLast` 单元测试通过(NULL 品牌排最末)
+- [ ] **D6-5** `brand_sort_order_min_or_max` 冗余字段(NULL → long.MaxValue)
+- [ ] **D6-6** `Cleanup_NoRepeat_Success` 单元测试通过(成功后 status='success' 不重试)
+- [ ] **D6-6** `Cleanup_RetryLimit_Permanent` 单元测试通过(retry_count >= 5 标记永久失败)
+- [ ] **D6-6** cleanup_failures 表含 status/cleaned_at/retry_count/last_error 字段 + chk_cleanup_status 约束
+- [ ] **D6-6** 定期清理 status='success' AND cleaned_at < now() - INTERVAL '7 days'
+- [ ] **D6-7** `Delete_Idempotent_404` 单元测试通过(404 异常不重试)
+- [ ] **D6-7** `Cleanup_CheckExistence_First` 单元测试通过(重试前 GetDocumentAsync 检查)
+- [ ] **D6-8** `StripControlChars_InvisibleChars` 单元测试通过(覆盖 9 个不可见字符)
+- [ ] **D6-9** 永久失败任务数 > 0 触发告警 + 每日报告
+
+### 二、检索逻辑维度 v7 修复验证(13 项)
+
+- [ ] **S6-1** `SanitizeFormatted_XssDefense_E000Literal` 单元测试通过(用户输入 U+E000 字面量被过滤)
+- [ ] **S6-1** 步骤 0 过滤 U+E000/U+E001(主)+ 兼容 \uFDD0/\uFDD1(历史)
+- [ ] **S6-2** `Cursor_TamperedExpUnixTs_Rejected` 单元测试通过(expUnixTs 范围校验)
+- [ ] **S6-2** `Cursor_MalformedExp_Rejected` 单元测试通过(long.TryParse 防异常)
+- [ ] **S6-2** expUnixTs 范围:`now - 86400 <= expUnixTs <= now + 86400 * 7`
+- [ ] **S6-3** `Search_Fallback_XssDefense` 单元测试通过(用户输入 `<mark>` 字面量被过滤)
+- [ ] **S6-3** PG 降级用 `concat(U&E'\\uE000', field, U&E'\\uE001')` 占位符 + SanitizeFormatted 共用
+- [ ] **S6-4** EXPLAIN ANALYZE 显示使用 `idx_products_keyset_v7`(非 Seq Scan)
+- [ ] **S6-4** products 表含 brand_sort_order_min + oem_list_sort_order_min 冗余字段
+- [ ] **S6-4** `UpdateProductRedundantFieldsAsync` 在 CreateAsync/UpdateAsync 末尾调用
+- [ ] **S6-5** `Search_BrandWithSpace_Matched` 单元测试通过("BMW AG" 完整匹配)
+- [ ] **S6-5** `oem_list_published_brands` 改数组类型,移除 separatorTokens 配置
+- [ ] **S6-6** `DbFallback_NoResetRetryCount` 单元测试通过(retry_count 递增不重置)
+- [ ] **S6-6** `DbFallback_PermanentFailure` 单元测试通过(retry_count >= 5 标记永久失败)
+- [ ] **S6-7** `ChannelWrite_Timeout_DbFallback` 单元测试通过(5s 超时降级)
+- [ ] **S6-7** appsettings.json 含 `MeiliSearch:ChannelWriteTimeoutSeconds: 5`
+- [ ] **S6-8** `Search_ShortBrandAlias` 单元测试通过(短品牌缩写追加完整名)
+- [ ] **S6-8** stopWords 配置 `["AG", "SA", "Co", "Ltd"]`
+- [ ] **S6-9** `EscapeMeiliFilter_AllSpecialChars` 单元测试通过(覆盖 \\"/'/[/]/null)
+- [ ] **S6-10** EXPLAIN ANALYZE 显示使用 `idx_products_name1_lower`(非 Seq Scan)
+- [ ] **S6-10** 启用 pg_trgm 扩展 + GIN trigram 索引
+- [ ] **S6-11** `JsonSerializer_PuaPreserved` 单元测试通过(U+E000/U+E001 不被转义)
+- [ ] **S6-11** `AllowPuaJavaScriptEncoder` 注册到 `AddJsonOptions`
+- [ ] **S6-12** `BuildDocument_PuaStripped` 单元测试通过(用户数据中 PUA 字符被过滤)
+- [ ] **S6-12** `StripPua` 移除 BMP 私用区(U+E000~U+F8FF)字符
+- [ ] **S6-13** `Startup_MeiliUnreachable_PgFallback` 集成测试通过(启动时降级)
+- [ ] **S6-13** `HealthCheck_MeiliRecover_SwitchBack` 集成测试通过(恢复后切回)
+- [ ] **S6-13** `MeiliHealthCheckService` BackgroundService 每 60s 重试连接
+- [ ] **S6-13** ISearchProvider 含 `SetAvailability(bool)` + `IsMeiliAvailable` 属性
+
+### 三、前后端联动维度 v7 修复验证(11 项)
+
+- [ ] **F5-1** `Url_Mr1_CasePreserved` 集成测试通过(ABC123 → /products/.../ABC123 → 反查 ABC123)
+- [ ] **F5-1** mr1Suffix 用 `encodeURIComponent` 保留大小写,不走 buildSlug
+- [ ] **F5-1** 后端 OnGetAsync 用 `Uri.UnescapeDataString` + 大小写敏感查询
+- [ ] **F5-2** `SafeStorage_SafariPrivateMode_ReadFromMemory` 单元测试通过
+- [ ] **F5-2** 启动时检测 sessionStorage 可用性(try-catch setItem/removeItem 测试)
+- [ ] **F5-2** safeGetItem sessionStorage 返回 null 时尝试 memoryStore
+- [ ] **F5-2** safeSetItem 总是写入 memoryStore + 尝试写 sessionStorage
+- [ ] **F5-3** `FormDraft_MultiTab_BroadcastSync` 单元测试通过(多标签页同步)
+- [ ] **F5-3** `FormDraft_Expired_Cleanup` 单元测试通过(7 天 TTL 自动清理)
+- [ ] **F5-3** 草稿 key 加 sessionId(UUID v4)
+- [ ] **F5-3** BroadcastChannel 多标签同步
+- [ ] **F5-4** `Http401_NoUrlSyncLoop` 单元测试通过
+- [ ] **F5-4** handle401 同步设置 isRedirecting(在 router.replace 之前)
+- [ ] **F5-4** router.replace.finally 延迟 1500ms 重置 isRedirecting
+- [ ] **F5-4** PublicSearchView watch route.query 检查 isHttpRedirecting
+- [ ] **F5-5** `CookiePolicy_Dev_HttpWorks` 集成测试通过(dev HTTP 接受)
+- [ ] **F5-5** `CookiePolicy_Prod_HttpsOnly` 集成测试通过(prod 强制 HTTPS)
+- [ ] **F5-5** Development 用 `CookieSecurePolicy.SameAsRequest` + `SameSiteMode.Lax`
+- [ ] **F5-5** Production 用 `CookieSecurePolicy.Always` + `SameSiteMode.Strict`
+- [ ] **F5-6** `ErrorEvent_RuntimeError_Captured` 单元测试通过
+- [ ] **F5-6** error 事件区分资源加载错误和运行时错误(event.target null 检查)
+- [ ] **F5-6** `unhandledrejection` 事件监听(Promise 异常)
+- [ ] **F5-7** `FallbackMount_ResetOnRouteChange` 单元测试通过
+- [ ] **F5-7** `router.afterEach` 延迟 1000ms 重置 `window.__fallbackMounted = false`
+- [ ] **F5-8** `SearchFallback_404_ReportsError` 单元测试通过(console.error + Sentry)
+- [ ] **F5-8** `SearchFallback_NoFallback_Throws` 单元测试通过(默认不降级直接抛错)
+- [ ] **F5-8** .env.development 含 `VITE_ENABLE_LEGACY_FALLBACK=true`
+- [ ] **F5-8** .env.production 含 `VITE_ENABLE_LEGACY_FALLBACK=false`
+- [ ] **F5-9** `Http401_ReturnUrlPreserved` 单元测试通过(returnUrl 透传)
+- [ ] **F5-9** `Http401_ChunkFailure_NativeRedirect` 单元测试通过(chunk 失败用 window.location.href)
+- [ ] **F5-9** LoginView.vue 接收 returnUrl query,登录成功后跳转
+- [ ] **F5-10** `CaptureException_Dedup` 单元测试通过(Map 去重)
+- [ ] **F5-10** `CaptureException_BufferLimit` 单元测试通过(容量 50 + LRU)
+- [ ] **F5-10** init 后 flush buffer + 30s 安全兜底 console.error
+- [ ] **F5-11** `TrimPercentEncoding_InvalidUtf8_Truncated` 单元测试通过
+- [ ] **F5-11** TrimIncompletePercentEncoding 验证剩余 %XX 序列构成有效 UTF-8
+- [ ] **F5-11** `FindLastCompletePercent` 找到最后一个完整 %XX
+
+## 27 个 v7 补丁任务验证清单
+
+> v7 补丁任务逐项验证清单,按 Phase 0/1/3/4/5 分布
+
+### Phase 0 v7 补丁任务验证(15 个)
+
+- [ ] **Task 0.1.4** `SyncFkConfigurationsV7` 迁移:空 Up/Down + ModelSnapshot 含 HasOne + 无 42710
+- [ ] **Task 0.1.5** `AddKeysetRedundantFieldsV7` 迁移:products 表含冗余字段 + `idx_products_keyset_v7` 索引
+- [ ] **Task 0.1.6** `AddLowerExpressionIndexesV7` 迁移:LOWER 表达式索引 + trigram GIN 索引
+- [ ] **Task 0.1.7** `AddCleanupFailuresStatusV7` 迁移:cleanup_failures 表含 status/cleaned_at/retry_count/last_error
+- [ ] **Task 0.1.8** v7 对账脚本:FULL OUTER JOIN + 三维度 NULL 漂移检测
+- [ ] **Task 0.3.7** `PurgeAllAsync`:4 步流程 + 事务回滚 + 存储失败不阻断
+- [ ] **Task 0.3.8** `UpdateProductRedundantFieldsAsync`:CreateAsync/UpdateAsync 末尾调用
+- [ ] **Task 0.4.12** `BuildMr1DocumentAsync` 数组字段改造:oem_list_published_brands 数组 + brand_sort_order_min_or_max + PUA 过滤 + 短品牌别名
+- [ ] **Task 0.4.13** `SanitizeFormatted` 步骤 0 字符集统一:U+E000/U+E001 + 兼容 \uFDD0/\uFDD1
+- [ ] **Task 0.4.14** `DeleteAsync` 幂等 404:MeilisearchApiException 捕获 + 文档存在性检查
+- [ ] **Task 0.4.15** `ChannelWriteTimeout`:5s 超时 + DB 兜底 + IOptionsMonitor 动态调整
+- [ ] **Task 0.4.16** `FallbackToDb` 不重置 retry_count:递增 + 永久失败标记
+- [ ] **Task 0.4.17** PG 降级路径用 BMP PUA 占位符:`concat(U&E'\\uE000', field, U&E'\\uE001')`
+- [ ] **Task 0.4.18** `VerifyAndExtractV2` long.TryParse + 范围校验
+- [ ] **Task 0.4.19** `EscapeMeiliFilterValue` 补全转义:\\"/'/[/]/null
+- [ ] **Task 0.4.20** `StripControlChars` 补全 9 个不可见字符
+- [ ] **Task 0.4.21** `AllowPuaJavaScriptEncoder` 自定义编码器:允许 BMP PUA 原样输出
+
+### Phase 1 v7 补丁任务验证(4 个)
+
+- [ ] **Task 1.3.12** `html-sanitizer.ts` 步骤 0 字符集同步:U+E000/U+E001 + 兼容 \uFDD0/\uFDD1
+- [ ] **Task 1.3.13** `safeStorage.ts` 重构:启动检测 + sessionStorage 返回 null 时 memoryStore
+- [ ] **Task 1.3.14** `useFormDraft.ts` 多标签冲突修复:sessionId + BroadcastChannel + 7 天 TTL
+- [ ] **Task 1.3.15** `errorMonitor.ts` captureException 去重:Map + LRU + 30s 兜底 flush
+
+### Phase 3 v7 补丁任务验证(1 个)
+
+- [ ] **Task 3.2.13.1** `CleanupOrphanImagesService` 定期孤儿清理:每周日 3 点 + > 100 告警
+
+### Phase 4 v7 补丁任务验证(7 个)
+
+- [ ] **Task 4.5.21** `buildProductUrl` mr1Suffix 直接 URL 编码:encodeURIComponent 保留大小写
+- [ ] **Task 4.5.22** `handle401` 同步设置 isRedirecting:在 router.replace 之前 + 延迟重置
+- [ ] **Task 4.5.23** `handle401` 保留 returnUrl + chunk 加载失败兜底:window.location.href
+- [ ] **Task 4.5.24** `Program.cs` CookiePolicy 环境区分:dev SameAsRequest + prod Always
+- [ ] **Task 4.5.25** `main.ts` error 事件捕获运行时错误 + unhandledrejection
+- [ ] **Task 4.5.26** `main.ts` __fallbackMounted 路由切换重置:router.afterEach 延迟 1000ms
+- [ ] **Task 4.5.27** `searchWithFallback` 404 上报 + 配置开关:console.error + Sentry + env 开关
+
+### Phase 5 v7 补丁任务验证(2 个)
+
+- [ ] **Task 5.1.26** `LoadExistingOem2MapAsync` 新增:独立方法 + oem_2 多值占比 > 1% 告警
+- [ ] **Task 5.1.27** `Program.cs` 启动版本检测 + `MeiliHealthCheckService`:3s 超时 + 60s 重试
+
+## 第七轮深度审查验证点(v7 修复衍生风险)
+
+> 第七轮审查将在 v7 修订完成后启动,验证 v7 修复方案是否产生新的衍生问题。
+> 审查范围: 数据关联维度(D7)/检索逻辑维度(S7)/前后端联动维度(F6)
+
+### 一、数据关联维度第七轮审查重点(10 个验证点)
+
+- [ ] v7 `SyncFkConfigurationsV7` 空迁移是否会导致 EF Core 模型与 DB 不一致(HasOne 配置但迁移无操作)
+- [ ] v7 `PurgeAllAsync` 4 步流程非原子性(步骤 2 失败后步骤 3 TRUNCATE 仍执行),是否产生孤儿文件
+- [ ] v7 `CleanupOrphanImagesService` 每周扫描时,如果对象存储 ListAllAsync 返回大量文件(> 10万),是否会 OOM 或超时
+- [ ] v7 `LoadExistingOem2MapAsync` 查询 cross_references 全表,oem_2 字段无索引时是否会全表扫描
+- [ ] v7 `UpdateProductRedundantFieldsAsync` 在 CreateAsync/UpdateAsync 末尾调用,是否会因 cross_references 未提交查不到数据(同事务内可见性)
+- [ ] v7 对账脚本 FULL OUTER JOIN 在千万级数据量下是否会超时(需分批 + 索引)
+- [ ] v7 cleanup_failures 状态机 in_progress 状态在服务崩溃时是否会卡死(无超时回收机制)
+- [ ] v7 `brand_sort_order_min_or_max` 用 long.MaxValue 兜底,如果产品真实 brand_sort_order 接近 long.MaxValue 是否会冲突
+- [ ] v7 `DeleteAsync` 404 异常捕获范围过宽,是否会掩盖真实的 Meilisearch API 错误(如索引不存在)
+- [ ] v7 `StripControlChars` 过滤 U+00A0 (NBSP) 是否会影响合法的法语/芬兰语产品名
+
+### 二、检索逻辑维度第七轮审查重点(10 个验证点)
+
+- [ ] v7 `SanitizeFormatted` 步骤 0 过滤 U+E000/U+E001 后,如果用户产品名合法包含 PUA 字符(传统字体)是否丢失数据
+- [ ] v7 `AllowPuaJavaScriptEncoder` 使用 `UnsafeRelaxedJsonEscaping` 作为 inner,是否会引入其他 XSS 风险(如 `<` `>` 不转义)
+- [ ] v7 PG 降级路径用 `concat(U&E'\\uE000', field, U&E'\\uE001')` 包裹整个字段,如果字段本身含 U+E000 字面量(历史数据)是否会被误识别
+- [ ] v7 keyset 复合表达式索引 `idx_products_keyset_v7` 在数据量 < 1000 时 PostgreSQL 是否会选 Index Scan(可能 Full Scan 更快)
+- [ ] v7 `oem_list_published_brands` 改数组类型后,Meilisearch filter `IN [BMW]` 是否支持多值匹配
+- [ ] v7 `FallbackToDb` 用 ExecuteUpdateAsync 批量更新,如果同 MR.1 + 同 IndexName 有多条记录,是否会全部更新(需唯一约束)
+- [ ] v7 `ChannelWriteTimeout` 5s 超时,如果 Channel 容量从 500 改为 10000,5s 是否还合理
+- [ ] v7 `EscapeMeiliFilterValue` 转义 `\\` 为 `\\\\`,但 Meilisearch filter 语法是否真的支持 `\\\\` 转义(需验证)
+- [ ] v7 LOWER 表达式索引在 PostgreSQL 14+ 是否支持 INCLUDE 子句(覆盖索引优化)
+- [ ] v7 `MeiliHealthCheckService` 60s 重试间隔,在 Meilisearch 短暂抖动(5s 不可达)时是否会误判降级
+
+### 三、前后端联动维度第七轮审查重点(10 个验证点)
+
+- [ ] v7 `buildProductUrl` mr1Suffix 用 encodeURIComponent,如果 MR.1 含 `/` 字符(虽然 CHK 约束禁止)是否会被编码为 %2F 影响路由匹配
+- [ ] v7 `handle401` isRedirecting 延迟 1500ms 重置,如果用户在 1500ms 内主动登出再登录,是否会因 isRedirecting 仍 true 导致 401 处理被跳过
+- [ ] v7 `handle401` chunk 加载失败用 `window.location.href`,如果 returnUrl 含 `#fragment` 是否会丢失 fragment
+- [ ] v7 `CookiePolicy` dev 用 SameAsRequest,如果反向代理(nginx)将 HTTPS 终止为 HTTP,dev 模式是否仍能正常工作
+- [ ] v7 `error` 事件捕获运行时错误,如果 Vue 组件内 try-catch 捕获错误未 rethrow,是否会漏捕获
+- [ ] v7 `__fallbackMounted` 路由切换重置延迟 1000ms,如果用户在 1000ms 内快速点击导航,是否会重复 mount fallback
+- [ ] v7 `searchWithFallback` 404 上报 Sentry,如果 Sentry 本身初始化失败,是否会引发二次错误
+- [ ] v7 `useFormDraft` BroadcastChannel 在 IE/旧 Edge 不支持,是否会降级为 localStorage event
+- [ ] v7 `safeStorage` 启动检测 sessionStorage 可用性,如果 sessionStorage 配额满(ItemFullError),后续写入是否会抛错
+- [ ] v7 `TrimIncompletePercentEncoding` 验证 UTF-8 有效性,如果产品名含 4 字节 emoji(如 U+1F600),截断后是否会破坏代理对
+
+### 持续迭代验证点(每轮审查后追加)
+
+> 每完成一轮审查 + 修复后,在此追加下一轮验证点
+> 循环终止条件: 连续一轮审查无任何新漏洞检出
+
+### 第八轮审查(暂无,待第七轮审查后追加)
+_待启动第七轮深度审查后追加_
