@@ -22,7 +22,8 @@ public class DictMachineConfiguration : IEntityTypeConfiguration<DictMachine>
         e.Property(p => p.MachineModel).HasMaxLength(200);
         e.Property(p => p.MachineName).HasMaxLength(200);
         // P2.3: machine_category 默认 'others', max 50 (与 type 字典保持一致)
-        e.Property(p => p.MachineCategory).HasMaxLength(50).HasDefaultValue("others");
+        //   V24-F13: 补 IsRequired() 让 DB 列 NOT NULL, 与实体 string (非 nullable) 一致
+        e.Property(p => p.MachineCategory).HasMaxLength(50).IsRequired().HasDefaultValue("others");
         e.Property(p => p.SortOrder).HasDefaultValue(0);
         e.Property(p => p.CreatedAt).HasDefaultValueSql("now()");
         e.Property(p => p.UpdatedAt).HasDefaultValueSql("now()");

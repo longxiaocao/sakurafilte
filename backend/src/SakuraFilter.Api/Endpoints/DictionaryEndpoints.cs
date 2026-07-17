@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using SakuraFilter.Api.Extensions;
 using SakuraFilter.Api.Services;
+using SakuraFilter.Infrastructure.Data;
 
 namespace SakuraFilter.Api.Endpoints;
 
@@ -527,7 +529,13 @@ public static class DictionaryEndpoints
 
     private static void MapSchemaEndpoint(IEndpointRouteBuilder group)
     {
-        group.MapGet("/_schema", () =>
+        // V24-F13: nullable 字段改用 EF Core metadata 判断 (而非纯反射)
+        //   WHY: ReflectionExtensions.IsNullable() 对所有引用类型一律返回 true,
+        //        无法识别 DictMachine.MachineCategory 配置了 .IsRequired() (DB 列 NOT NULL)
+        //   方案: 从 ProductDbContext.Model 取 IEntityType.FindProperty().IsNullable,
+        //        它综合 CLR 类型 + Fluent API 配置, 与 DB 列实际 NOT NULL 一致
+        //   兜底: 若属性未在 EF metadata 中注册 (如导航属性), 回退到反射判断
+        group.MapGet("/_schema", (ProductDbContext db) =>
         {
             var dictTypes = new[]
             {
@@ -540,19 +548,27 @@ public static class DictionaryEndpoints
                 typeof(SakuraFilter.Core.Entities.DictMachine),
                 typeof(SakuraFilter.Core.Entities.DictEngine)
             };
-            var schema = dictTypes.Select(t => new
+            var schema = dictTypes.Select(t =>
             {
-                Entity = t.Name,
-                Table = SakuraFilter.Api.Extensions.TableNameMapper.GetPgTableName(t),
-                Fields = t.GetProperties()
-                    .Select(p => new
-                    {
-                        Name = p.Name,
-                        CSharpType = p.PropertyType.ToCSharpTypeName(),
-                        Nullable = p.IsNullable(),
-                        HasColumn = p.GetCustomAttributes(typeof(System.ComponentModel.DataAnnotations.Schema.ColumnAttribute), false).Any()
-                    })
-                    .ToArray()
+                var et = db.Model.FindEntityType(t);
+                return new
+                {
+                    Entity = t.Name,
+                    Table = SakuraFilter.Api.Extensions.TableNameMapper.GetPgTableName(t),
+                    Fields = t.GetProperties()
+                        .Select(p =>
+                        {
+                            var efProp = et?.FindProperty(p.Name);
+                            return new
+                            {
+                                Name = p.Name,
+                                CSharpType = p.PropertyType.ToCSharpTypeName(),
+                                Nullable = efProp?.IsNullable ?? p.IsNullable(),
+                                HasColumn = p.GetCustomAttributes(typeof(System.ComponentModel.DataAnnotations.Schema.ColumnAttribute), false).Any()
+                            };
+                        })
+                        .ToArray()
+                };
             });
             return Results.Ok(new
             {
