@@ -18,6 +18,8 @@ public class EtlProgressBroadcaster : IEtlProgressBroadcaster, IAsyncDisposable
     private NpgsqlConnection? _listenConn;
     private CancellationTokenSource? _listenCts;
     private Task? _listenTask;
+    // 连续失败计数, 驱动指数退避重连 (3s -> 6s -> 12s -> 24s -> 60s 封顶)
+    private int _consecutiveFailures;
     private readonly ConcurrentDictionary<Guid, Func<string, Task>> _subscribers = new();
 
     public bool IsListening => _listenConn?.State == System.Data.ConnectionState.Open && _listenTask?.IsCompleted == false;
@@ -54,6 +56,8 @@ public class EtlProgressBroadcaster : IEtlProgressBroadcaster, IAsyncDisposable
     {
         while (!ct.IsCancellationRequested)
         {
+            // 重连延迟 (秒): 正常断开 3s, 异常时指数退避 3s->6s->12s->24s->60s 封顶
+            var delaySec = 3;
             try
             {
                 _listenConn = new NpgsqlConnection(_connectionString);
@@ -64,6 +68,7 @@ public class EtlProgressBroadcaster : IEtlProgressBroadcaster, IAsyncDisposable
                     await cmd.ExecuteNonQueryAsync(ct);
                 }
                 _logger.LogInformation("LISTEN {Channel} 已建立连接", Channel);
+                _consecutiveFailures = 0;  // 重连成功重置计数, 让退避从 3s 重新开始
                 // 阻塞等待, Notification 事件回调触发
                 while (!ct.IsCancellationRequested && _listenConn.State == System.Data.ConnectionState.Open)
                 {
@@ -81,7 +86,11 @@ public class EtlProgressBroadcaster : IEtlProgressBroadcaster, IAsyncDisposable
             catch (OperationCanceledException) { return; }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "LISTEN 循环异常, 3s 后重连");
+                // 指数退避: 3s -> 6s -> 12s -> 24s -> 60s 封顶
+                //   WHY: PG 长时间不可用时固定 3s 重连会产生大量失败日志, 退避减少无效重试
+                delaySec = Math.Min(60, 3 * (int)Math.Pow(2, _consecutiveFailures));
+                _consecutiveFailures++;
+                _logger.LogWarning(ex, "LISTEN 循环异常, {Delay}s 后重连 (第 {N} 次)", delaySec, _consecutiveFailures);
             }
             finally
             {
@@ -89,8 +98,8 @@ public class EtlProgressBroadcaster : IEtlProgressBroadcaster, IAsyncDisposable
                 _listenConn?.Dispose();
                 _listenConn = null;
             }
-            // 重连前等 3s (避免 PG 抖动时狂打日志)
-            try { await Task.Delay(3000, ct); } catch { return; }
+            // 重连前指数退避 (避免 PG 抖动时狂打日志)
+            try { await Task.Delay(delaySec * 1000, ct); } catch { return; }
         }
     }
 
