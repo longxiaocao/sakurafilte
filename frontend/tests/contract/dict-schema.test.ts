@@ -138,4 +138,72 @@ describe('P4.2 字典 schema 契约 (后端 _schema 端点)', () => {
     const mc = machine.fields.find((f: any) => f.name === 'MachineCategory')
     expect(mc, 'DictMachine 缺 MachineCategory 字段').toBeTruthy()
   })
+
+  // ========== V2 Task 5.3.3: V2 架构迁移兼容性契约 ==========
+
+  test('9. V2 兼容: 8 个 dict 表在 V2 迁移后仍全部存在 (主表迁移不影响字典)', async () => {
+    // WHY V2 兼容性: V2 将 products 主键从 oem_no_normalized 迁移到 mr_1,
+    //   但 8 个字典表 (XrefOemBrand/DictProductName1/...) 是独立实体, 不受主表迁移影响
+    //   此测试确保 V2 迁移未误删/重命名任何字典表
+    const res = await fetch(`${BASE}/api/admin/dict/_schema`, {
+      headers: { 'X-Admin-Token': TOKEN }
+    })
+    const body = await res.json()
+    expect(body.count, 'V2 迁移后 dict 数量仍应为 8').toBe(8)
+    expect(body.dictionaries, 'V2 迁移后 dict 数组长度仍应为 8').toHaveLength(8)
+  })
+
+  test('10. V2 兼容: DictMachine.MachineCategory 在 V2 machine_type 枚举引入后仍保留', async () => {
+    // WHY 双轨字段区分:
+    //   - DictMachine.MachineCategory: 字典表自带字段 (P2.3 4 大类, 后台字典管理)
+    //   - cross_references.MachineType: V2 新增字段 (5 类白名单 agriculture/commercial/construction/industrial/others)
+    //   两者是不同概念, V2 引入 machine_type 不应影响 DictMachine.MachineCategory
+    const res = await fetch(`${BASE}/api/admin/dict/_schema`, {
+      headers: { 'X-Admin-Token': TOKEN }
+    })
+    const body = await res.json()
+    const machine = body.dictionaries.find((d: any) => d.entity === 'DictMachine')
+    expect(machine, 'V2 后 DictMachine 仍应存在').toBeTruthy()
+    const mc = machine.fields.find((f: any) => f.name === 'MachineCategory')
+    expect(mc, 'V2 后 DictMachine.MachineCategory 仍应存在 (不被 machine_type 替代)').toBeTruthy()
+    expect(mc.nullable, 'MachineCategory nullable 应保持稳定').toBe(false)
+  })
+
+  test('11. V2 兼容: DictOemNo3 字段结构在 V2 主键迁移后不变 (Mr1 在主表不在字典)', async () => {
+    // WHY V2 主键迁移边界:
+    //   - V2 把 products 主键改为 mr_1, 但 DictOemNo3 是 OEM 3 编号字典, 不含 mr_1 字段
+    //   - DictOemNo3 字段: Id, OemNo3, SortOrder, CreatedAt, UpdatedAt, DeletedAt (V2 不变)
+    //   此测试确保 V2 主键迁移未误给 DictOemNo3 加 mr_1 字段 (主键迁移仅作用于 products 主表)
+    const res = await fetch(`${BASE}/api/admin/dict/_schema`, {
+      headers: { 'X-Admin-Token': TOKEN }
+    })
+    const body = await res.json()
+    const oemNo3 = body.dictionaries.find((d: any) => d.entity === 'DictOemNo3')
+    expect(oemNo3, '缺 DictOemNo3').toBeTruthy()
+    const fieldNames = oemNo3.fields.map((f: any) => f.name)
+    // V2 后 DictOemNo3 仍应有 OemNo3 主字段
+    expect(fieldNames, 'DictOemNo3.OemNo3 应仍存在').toContain('OemNo3')
+    // V2 后 DictOemNo3 不应有 Mr1 (Mr1 是 products 主表字段, 不污染字典)
+    expect(fieldNames, 'DictOemNo3 不应含 Mr1 (主键迁移仅作用于 products 主表)').not.toContain('Mr1')
+    // V2 后 DictOemNo3 不应有 MachineType (MachineType 是 cross_references 字段, 不污染字典)
+    expect(fieldNames, 'DictOemNo3 不应含 MachineType').not.toContain('MachineType')
+  })
+
+  test('12. V2 兼容: XrefOemBrand 字段结构稳定 (V2 SortOrder 改进不影响字典表)', async () => {
+    // WHY V2 SortOrder 改进边界:
+    //   - V2 在 cross_references 表加了 SortOrder (OEM 3 排序管理, AdminXrefReorderView)
+    //   - 但 XrefOemBrand 字典表自带 SortOrder (P1.3 字典排序), 字段独立
+    //   - 此测试确保 V2 改进未误删 XrefOemBrand.SortOrder
+    const res = await fetch(`${BASE}/api/admin/dict/_schema`, {
+      headers: { 'X-Admin-Token': TOKEN }
+    })
+    const body = await res.json()
+    const brand = body.dictionaries.find((d: any) => d.entity === 'XrefOemBrand')
+    expect(brand, '缺 XrefOemBrand').toBeTruthy()
+    const fieldNames = brand.fields.map((f: any) => f.name)
+    expect(fieldNames, 'XrefOemBrand.Brand 应仍存在').toContain('Brand')
+    expect(fieldNames, 'XrefOemBrand.SortOrder 应仍存在 (字典表自带, 不受 V2 cross_references.SortOrder 影响)').toContain('SortOrder')
+    // V2 不应给 XrefOemBrand 加 MachineType (那是 cross_references 字段)
+    expect(fieldNames, 'XrefOemBrand 不应含 MachineType').not.toContain('MachineType')
+  })
 })
