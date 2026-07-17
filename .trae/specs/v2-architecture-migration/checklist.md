@@ -3548,3 +3548,291 @@ _待启动第七轮深度审查后追加_
 - [ ] 第八轮审查无任何新漏洞检出 → 完成
 - [ ] 第八轮审查发现新漏洞 → 进入 v9 修订,继续迭代
 
+---
+
+# v9 修订验证清单(第八轮审查衍生漏洞修复 + v8 凭空假设纠正)
+
+> **修订日期**: 2026-07-17
+> **验证范围**: v9 spec 第十章 + tasks.md v9 补丁任务清单(20 个任务)
+> **核心原则**: 所有验证项必须基于真实代码,杜绝凭空假设
+
+## 一、v8 凭空假设纠正验证(10 项 V9-F)
+
+### V9-F1: SyncFkConfigurationsV7 迁移不存在
+- [ ] v9 spec 中所有 `SyncFkConfigurationsV7` 引用已改为 `InitMr1PrimaryKey`
+- [ ] tasks.md Task V9-1.1 已创建 `dotnet ef migrations add InitMr1PrimaryKey` 命令
+- [ ] 双重核实: `Grep -r "SyncFkConfigurationsV7" backend/` 无匹配
+
+### V9-F2: CrossReferenceConfiguration.cs 文件不存在
+- [ ] v9 spec 中所有 `CrossReferenceConfiguration.cs (修改)` 已改为 `(新建)`
+- [ ] tasks.md Task V9-1.2 已创建 IEntityTypeConfiguration<CrossReference> 实现
+- [ ] 双重核实: `Glob backend/src/SakuraFilter.Infrastructure/Data/Configurations/CrossReferenceConfiguration.cs` 返回不存在
+- [ ] 现有配置位置确认: [ProductDbContext.cs#L108-L117](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Infrastructure/Data/ProductDbContext.cs#L108-L117)
+
+### V9-F3: ResetAllDataAsync 方法不存在
+- [ ] v9 spec 中所有 `ResetAllDataAsync` 引用已改为 `ImportProductsAsync L935-937`
+- [ ] tasks.md Task V9-1.3 修改目标改为 ImportProductsAsync
+- [ ] 双重核实: `Grep -r "ResetAllDataAsync" backend/` 无匹配
+- [ ] 现有 TRUNCATE 位置确认: [EtlImportService.cs#L935-L937](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Etl/EtlImportService.cs#L935-L937)
+
+### V9-F4: VerifySignature 方法不存在
+- [ ] v9 spec 中所有 `VerifySignature` 已改为 `VerifyKey`(私有方法)
+- [ ] tasks.md Task V9-3.1 SignV2/VerifyAndExtractV2 伪代码使用 VerifyKey
+- [ ] 双重核实: `Grep -r "VerifySignature" backend/src/SakuraFilter.Api/Services/CursorHmac.cs` 无匹配
+- [ ] 私有方法位置确认: [CursorHmac.cs#L120](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Services/CursorHmac.cs#L120)
+
+### V9-F5: is_dead 字段方案与现有死信表机制冲突
+- [ ] v9 spec 中所有 `ALTER TABLE search_index_pending ADD is_dead` 已删除
+- [ ] v9 spec 中所有 `UPDATE ... SET is_dead = true` 已删除
+- [ ] tasks.md Task V9-1.4 保持现有 ProcessDeadLetterAsync 逻辑不变
+- [ ] 双重核实: [SearchIndexPending 实体](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Core/Entities/Product.cs#L224-L233) 无 is_dead 字段
+- [ ] 现有死信机制确认: [IndexReplayWorker.cs#L138-L218](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Services/IndexReplayWorker.cs#L138-L218) 移动到 search_index_dead_letter 表
+
+### V9-F6: VerifyAndExtract 返回类型破坏性变更
+- [ ] v9 spec 保留原 `VerifyAndExtract` 返回 `(string, long)`
+- [ ] v9 spec 新增 `VerifyAndExtractV2` 返回 `(long, long)?`
+- [ ] tasks.md Task V9-3.1 不修改原方法,新增 V2 方法
+- [ ] 双重核实: [CursorHmac.cs#L89](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Services/CursorHmac.cs#L89) 返回 `(string updatedAtIso, long id)`
+
+### V9-F7: ProductIndexDoc 破坏性变更
+- [ ] v9 spec 保持 ProductIndexDoc 位置参数 record
+- [ ] v9 spec 新增字段作为可选位置参数(有默认值)
+- [ ] tasks.md Task V9-1.5 追加 Mr1/OemBrand/BrandSortOrder 可选参数
+- [ ] 双重核实: [ISearchProvider.cs#L32-L45](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Search/ISearchProvider.cs#L32-L45) 是位置参数 record
+- [ ] 现有调用方确认: [EtlImportService.cs#L1158-L1166](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Etl/EtlImportService.cs#L1158) 使用位置构造
+
+### V9-F8: C31 基线部分错误
+- [ ] v9 spec C31 基线改为"V1 历史页用 Ticks(合规),主列表用 ISO8601(违反硬约束)"
+- [ ] 双重核实: 
+  - 历史页用 Ticks: [AdminProductService.cs#L400-L401](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Services/AdminProductService.cs#L400-L401)
+  - 主列表用 ISO8601: [AdminProductService.cs#L866-L868](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Services/AdminProductService.cs#L866)
+
+### V9-F9: E20 标题过于笼统
+- [ ] v9 spec E20 标题改为"CursorHmac 主列表用 ISO8601 违反硬约束(历史页已合规)"
+
+### V9-F10: Mr1Validator CHK 算法凭空假设
+- [ ] v9 spec Mr1Validator 伪代码标注 `// TODO: 待业务方确认 CHK 算法`
+- [ ] tasks.md Pre-Task-V9-1 阻塞 Task V9-1.6
+- [ ] 占位实现: 前 9 位 ASCII 求和取模 36
+- [ ] 双重核实: `Grep -r "Mr1Validator" backend/` 无匹配(确认不存在)
+
+## 二、第八轮审查错误结论纠正验证(5 项 V9-R)
+
+### V9-R1: D8-14/S8-11 "product.OemBrand 不存在" — 错误
+- [ ] v9 spec 确认 [Product.cs#L127](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Core/Entities/Product.cs#L127) 存在 `OemBrand` 字段
+- [ ] v8 Task V8-1.5 引用 `product.OemBrand` 保留不变
+- [ ] 双重核实: `Grep "OemBrand" backend/src/SakuraFilter.Core/Entities/Product.cs` 返回 L127
+
+### V9-R2: D8-12 "LoadExistingOem2MapAsync 方法名错误" — 错误
+- [ ] v9 spec 确认 `LoadExistingOem2MapAsync` 是 v8 新增方法(非凭空假设)
+- [ ] 现有方法 [LoadExistingOemMapAsync](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Etl/EtlImportService.cs#L1211)(无"2")查询 oem_no_normalized
+- [ ] 新增方法 LoadExistingOem2MapAsync 查询 oem_2,两者并存
+
+### V9-R3: F7-6 三 "v8 spec E20 传入整个 cursor 字符串" — 错误
+- [ ] v9 spec 确认 v8 spec L5446 传 `VerifySignature(body, parts[2])`,body 是两段格式
+- [ ] 仅方法名错误(V9-F4),payload 格式正确
+
+### V9-R4: F7-11 "V2 破坏历史页 cursor 兼容性" — 错误
+- [ ] v9 spec 确认历史页 cursor 已用 Ticks,与 V2 天然兼容
+- [ ] V2 兼容期仅针对主列表(用 ISO8601)
+- [ ] tasks.md Task V9-3.1 历史页 L400-401 保持不变
+
+### V9-R5: F7-10 "漏过滤 CanceledError" — 错误
+- [ ] v9 spec 确认 [http.ts#L107](file:///d:/projects/sakurafilter/frontend/src/utils/http.ts#L107) 已过滤 ERR_CANCELED/CanceledError
+- [ ] v9 不新增过滤逻辑(冗余)
+
+## 三、第八轮真实衍生漏洞修复验证(22 项)
+
+### 数据关联维度(7 项 D8)
+
+#### D8-17: EtlEndpoints 限流与认证评估
+- [ ] Task V9-1.7 核实 EtlEndpoints.cs 现状
+- [ ] 若缺失,补充 RequireAuthorization + RequireRateLimiting
+- [ ] 验证: 无 token 返回 401,超过 30/min 返回 429
+
+#### D8-18: setTimeout 1500ms 凭空假设
+- [ ] v9 spec 注释说明 1500ms 用途
+- [ ] 注释: `// 1500ms: 等待 refresh 失败的错误提示展示后跳转`
+
+#### D8-19: ListAllAsync 签名不一致
+- [ ] Task V9-1.8 核实 IObjectStorage 现有签名
+- [ ] ListAllAsync 返回 IAsyncEnumerable<string>
+- [ ] MinIO/Aliyun OSS 实现同步更新
+
+#### D8-20: _sp.CreateScope 描述不准确
+- [ ] v9 确认 [IndexReplayWorker.cs#L140](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Services/IndexReplayWorker.cs#L140) 确实用 _sp.CreateScope()
+- [ ] v8 描述准确,无需修改
+
+#### D8-21: retry_count/last_error 字段已存在
+- [ ] v9 确认 [SearchIndexPending.cs#L229-L230](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Core/Entities/Product.cs#L229) 已存在
+- [ ] D7-12 修复方案改为"复用现有字段,不新增迁移"
+
+### 检索逻辑维度(7 项 S8)
+
+#### S8-4: EscapeFilter 未转义反斜杠
+- [ ] Task V9-2.2 修改 EscapeFilter:
+  ```csharp
+  s.Replace("\\", "\\\\").Replace("\"", "\\\"")
+  ```
+- [ ] 单元测试: EscapeFilter(`test\"path`) 返回 `test\\\"path`
+
+#### S8-6: CONCURRENTLY 事务冲突
+- [ ] Task V9-2.3 迁移 Up 方法中 CONCURRENTLY 索引单独执行
+- [ ] 验证: `dotnet ef database update` 成功
+
+#### S8-10: synonyms 影响现有搜索
+- [ ] v9 spec synonyms 配置先在 products_v2 测试索引验证
+- [ ] 确认无负面影响后再应用到主索引
+
+#### S8-14: filter 字段名不一致
+- [ ] Task V9-2.1 filter 字段名从 snake_case 改为 camelCase
+- [ ] 重建 Meili 索引(Pre-Task-V9-2 方案 A)
+- [ ] 配置 filterableAttributes 为 camelCase
+- [ ] 验证: 搜索带 type/d1Mm/isDiscontinued 过滤返回正确结果
+
+#### S8-15: N+1 查询
+- [ ] Task V9-2.4 BuildProductIndexDocAsync 批量预拉 XrefOemBrand
+- [ ] 验证: 1M 产品索引构建,DB 查询次数 ≤ 2
+- [ ] 验证: 索引构建时间 < 60s
+
+#### S8-18: 未要求删除旧 EscapeFilter
+- [ ] S8-4 修复方案已包含替换原方法
+
+### 前后端联动维度(8 项 F7)
+
+#### F7-2: isSafeRedirect 正则绕过
+- [ ] Task V9-3.2 创建 url.ts,先规范化 URL 再校验
+- [ ] 单元测试覆盖 `/\evil.com`、`//evil.com`、`https://evil.com`
+
+#### F7-3: Promise.finally IE 11 不支持
+- [ ] v9 spec 标注"需 polyfill 或避免使用 finally"
+- [ ] 推荐用 try/catch/then 链替代
+
+#### F7-4: 旧数据迁移缺失
+- [ ] Pre-Task-V9-8(注: 应为 Pre-Task-V9-1 关联)提供迁移脚本
+- [ ] SQL: `UPDATE products SET mr_1 = oem_2 WHERE mr_1 IS NULL AND oem_2 IS NOT NULL`
+
+#### F7-7: Mr1Validator CHK 算法凭空假设
+- [ ] 见 V9-F10 + Pre-Task-V9-1
+- [ ] 占位实现 + 待业务方确认
+
+#### F7-9: 隐私模式 BroadcastChannel 构造异常
+- [ ] v9 spec try/catch 包裹 BroadcastChannel 构造
+- [ ] 失败时降级为 null
+
+#### F7-12: router.isReady 硬跳转逻辑错误
+- [ ] v9 spec 用 router.push 替代 window.location.href
+- [ ] 验证: 跳转保留上下文(router.currentRoute.value.fullPath)
+
+#### F7-13: ErrorBoundary 与 errorMonitor key 不一致
+- [ ] Task V9-3.3 ErrorBoundary 改为调用 errorMonitor.captureException
+- [ ] 删除原 localStorage `sakura_error_log` 写入逻辑
+- [ ] 验证: AdminErrorView 能读取到 ErrorBoundary 捕获的错误
+
+#### F7-14: Mr1Validator 大小写
+- [ ] Mr1Validator 字符集改为 `0123456789A-Za-z` 或 `0123456789A-Z`
+- [ ] 待 Pre-Task-V9-1 确认
+
+## 四、v9 关键设计调整验证(15 项 A1-A15)
+
+- [ ] A1: 迁移命名 SyncFkConfigurationsV7 → InitMr1PrimaryKey
+- [ ] A2: CrossReference 配置 → 新建独立 Configuration 文件
+- [ ] A3: TRUNCATE 修改目标 → ImportProductsAsync L935-937
+- [ ] A4: 死信机制 → 复用 search_index_dead_letter 表
+- [ ] A5: CursorHmac V2 → 新增 VerifyAndExtractV2(不修改原方法)
+- [ ] A6: C31 基线 → 区分历史页 Ticks + 主列表 ISO8601
+- [ ] A7: E20 标题 → "主列表用 ISO8601 违反(历史页已合规)"
+- [ ] A8: VerifySignature → 私有 VerifyKey
+- [ ] A9: ProductIndexDoc → 位置参数 + 可选参数
+- [ ] A10: Mr1Validator CHK → 待业务方确认 + 占位实现
+- [ ] A11: Meili filter 字段名 → camelCase
+- [ ] A12: SearchIndexPending 字段 → 保持现有不变
+- [ ] A13: Promise.finally → IE 11 polyfill 说明
+- [ ] A14: isSafeRedirect → 先规范化 URL 再校验
+- [ ] A15: axios 取消过滤 → 不修改(已存在)
+
+## 五、v9 前置任务验证(5 项)
+
+- [ ] Pre-Task-V9-1: 业务方确认 CHK 算法(阻塞 Task V9-1.6)
+- [ ] Pre-Task-V9-2: 确认 Meili filter 字段名方案(阻塞 Task V9-2.1)
+- [ ] Pre-Task-V9-3: 确认 isSafeRedirect URL 规范化方案(阻塞 Task V9-3.2)
+- [ ] Pre-Task-V9-4: 确认 ErrorBoundary 与 errorMonitor 统一方案(阻塞 Task V9-3.3)
+- [ ] Pre-Task-V9-5: 确认 V2 cursor 兼容窗口期(阻塞 Task V9-3.1)
+
+## 六、v9 补丁任务验证(20 项)
+
+### Phase 0: 前置任务(5 个)
+- [ ] Pre-Task-V9-1: CHK 算法确认
+- [ ] Pre-Task-V9-2: Meili filter 方案确认
+- [ ] Pre-Task-V9-3: isSafeRedirect 方案确认
+- [ ] Pre-Task-V9-4: errorMonitor 方案确认
+- [ ] Pre-Task-V9-5: V2 cursor 兼容期确认
+
+### Phase 1: 数据关联(8 个)
+- [ ] Task V9-1.1: InitMr1PrimaryKey 迁移
+- [ ] Task V9-1.2: CrossReferenceConfiguration 独立文件
+- [ ] Task V9-1.3: ImportProductsAsync TRUNCATE 修改
+- [ ] Task V9-1.4: 死信表机制复用
+- [ ] Task V9-1.5: ProductIndexDoc 扩展字段
+- [ ] Task V9-1.6: Mr1Validator 静态工具
+- [ ] Task V9-1.7: EtlEndpoints 限流与认证核实
+- [ ] Task V9-1.8: ListAllAsync 签名调整
+
+### Phase 2: 检索逻辑(4 个)
+- [ ] Task V9-2.1: Meili filter 字段名统一 camelCase
+- [ ] Task V9-2.2: EscapeFilter 转义反斜杠
+- [ ] Task V9-2.3: CONCURRENTLY 索引事务外执行
+- [ ] Task V9-2.4: BuildProductIndexDocAsync 批量预拉
+
+### Phase 3: 前后端联动(3 个)
+- [ ] Task V9-3.1: CursorHmac V2 SignV2 + VerifyAndExtractV2
+- [ ] Task V9-3.2: isSafeRedirect URL 规范化
+- [ ] Task V9-3.3: ErrorBoundary 统一到 errorMonitor
+
+## 七、第九轮审查验证点(30 项)
+
+### 7.1 v9 spec 自身凭空假设检查(10 项)
+
+- [ ] V9-CHK-1: v9 spec 中所有 `SyncFkConfigurationsV7` 已替换为 `InitMr1PrimaryKey`
+- [ ] V9-CHK-2: v9 spec 中所有 `CrossReferenceConfiguration.cs` 标注为新建
+- [ ] V9-CHK-3: v9 spec 中所有 `ResetAllDataAsync` 已替换为 `ImportProductsAsync L935-937`
+- [ ] V9-CHK-4: v9 spec 中所有 `VerifySignature` 已替换为 `VerifyKey`
+- [ ] V9-CHK-5: v9 spec 中所有 `is_dead` 字段方案已删除
+- [ ] V9-CHK-6: v9 spec 中 `VerifyAndExtract` 返回类型保持 `(string, long)`
+- [ ] V9-CHK-7: v9 spec 中 `ProductIndexDoc` 保持位置参数 record
+- [ ] V9-CHK-8: v9 spec C31 基线区分历史页 Ticks + 主列表 ISO8601
+- [ ] V9-CHK-9: v9 spec E20 标题标注"主列表违反,历史页已合规"
+- [ ] V9-CHK-10: v9 spec Mr1Validator CHK 算法标注"待业务方确认"
+
+### 7.2 v9 tasks.md 任务可执行性检查(10 项)
+
+- [ ] V9-CHK-11: Task V9-1.1 `dotnet ef migrations add InitMr1PrimaryKey` 命令可在项目根目录执行
+- [ ] V9-CHK-12: Task V9-1.2 新建 CrossReferenceConfiguration.cs 路径正确
+- [ ] V9-CHK-13: Task V9-1.3 修改 EtlImportService.cs L935-937 行号正确
+- [ ] V9-CHK-14: Task V9-1.5 ProductIndexDoc 扩展字段在 ISearchProvider.cs L32-45
+- [ ] V9-CHK-15: Task V9-1.6 Mr1Validator.cs 新建路径正确
+- [ ] V9-CHK-16: Task V9-2.1 MeiliSearchProvider.cs L75-94 行号正确
+- [ ] V9-CHK-17: Task V9-2.2 MeiliSearchProvider.cs L141 EscapeFilter 位置正确
+- [ ] V9-CHK-18: Task V9-3.1 CursorHmac.cs VerifyKey 私有方法位置正确
+- [ ] V9-CHK-19: Task V9-3.2 url.ts 新建路径正确
+- [ ] V9-CHK-20: Task V9-3.3 ErrorBoundary.vue L21-38 行号正确
+
+### 7.3 v9 修复方案一致性检查(10 项)
+
+- [ ] V9-CHK-21: v9 spec 与 tasks.md 任务编号一致(V9-F1 → Task V9-1.1)
+- [ ] V9-CHK-22: v9 spec 与 checklist.md 验证项一致
+- [ ] V9-CHK-23: v9 任务依赖链无循环依赖
+- [ ] V9-CHK-24: v9 前置任务均阻塞对应实现任务
+- [ ] V9-CHK-25: v9 修复方案不引入新的破坏性变更
+- [ ] V9-CHK-26: v9 修复方案不引入新的凭空假设
+- [ ] V9-CHK-27: v9 修复方案不与现有代码机制冲突(如死信表)
+- [ ] V9-CHK-28: v9 修复方案保持向后兼容(V2 cursor 兼容期、ProductIndexDoc 可选参数)
+- [ ] V9-CHK-29: v9 修复方案提供单元测试用例
+- [ ] V9-CHK-30: v9 修复方案提供验证命令(`dotnet build`/`dotnet test`/`vitest`)
+
+## 八、循环终止条件
+
+- [ ] 第九轮审查无任何新漏洞检出 → 完成
+- [ ] 第九轮审查发现新漏洞 → 进入 v10 修订,继续迭代
+- [ ] 持续迭代直到连续一轮审查无任何新漏洞检出
+

@@ -6204,3 +6204,455 @@ window.addEventListener('unhandledrejection', (e) => {
 ⏳ 第八轮深度审查将验证 v8 修复方案是否引入新的衍生问题
 ⏳ 持续迭代直到无漏洞检出
 
+---
+
+# 第十章 v9 修订 — 第八轮深度审查结果 + v8 凭空假设纠正
+
+> **修订日期**: 2026-07-17
+> **触发原因**: 第八轮三维度并行深度审查发现 v8 仍存在 10 项凭空假设(其中 6 项高危引用了不存在的方法/字段/文件),同时第八轮审查自身也存在 5 项错误结论需纠正
+> **核心目标**: (1) 纠正 v8 的 10 项凭空假设 (2) 纠正第八轮审查的 5 项错误结论 (3) 修复第八轮审查发现的 13 项真实衍生漏洞 (4) 引入"双重核实"机制: v9 spec 中所有引用的字段/方法/文件名必须经 Grep + Read 双重核实
+
+## 10.1 第八轮深度审查结果摘要
+
+### 审查维度与发现
+
+| 维度 | 子代理 | 发现总数 | 高危 | 中危 | 低危 | 真实漏洞 | 错误结论 |
+|------|--------|---------|------|------|------|---------|---------|
+| 数据关联 | D8 | 12 | 6 | 5 | 1 | 7 | 5 |
+| 检索逻辑 | S8 | 8 | 6 | 4 | 1 | 7 | 1 |
+| 前后端联动 | F7 | 5 | 3 | 6 | 3 | 8 | 0 |
+| **合计** | — | **25** | **15** | **15** | **5** | **22** | **6** |
+
+### 关键发现
+
+1. **v8 仍存在同类"凭空假设"问题**: 10 项凭空假设中 6 项高危引用了不存在的方法/字段/文件
+2. **v8 最大讽刺**: Task V8-1.5 在"代码现状对齐"章节中引用 `product.OemBrand` —— 经核实该字段**实际存在**([Product.cs#L127](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Core/Entities/Product.cs#L127)),但第八轮审查错误判定为"不存在"
+3. **v8 is_dead 方案与现有机制冲突**: [IndexReplayWorker.cs#L138-L218](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Services/IndexReplayWorker.cs#L138-L218) 已实现 `search_index_dead_letter` 表移动机制,v8 引入 is_dead 标记造成设计冲突
+4. **v8 C31 基线部分错误**: 笼统说"V1 用 ISO8601",实际历史页用 Ticks([AdminProductService.cs#L400-L401](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Services/AdminProductService.cs#L400-L401)),主列表用 ISO8601(L866-868)
+5. **v8 CHK 算法凭空假设**: "前 9 位加权求和取模 36"无业务文档支撑
+6. **第八轮审查自身错误**: 5 项结论基于"未找到字段"的负面证据,但 Grep 范围过窄导致漏判
+
+## 10.2 v8 凭空假设纠正(V9-F1 ~ V9-F10)
+
+### V9-F1 [高] SyncFkConfigurationsV7 迁移不存在
+
+**v8 spec 位置**: L3626, L5023, tasks.md L1524
+**v8 错误描述**: "生成迁移 `SyncFkConfigurationsV7`(空 Up/Down,仅 ModelSnapshot 同步)"
+**真实代码事实**: 全项目无 `SyncFkConfigurationsV7` 迁移文件
+**修正方案**: 废弃 `SyncFkConfigurationsV7` 迁移名,新建 `InitMr1PrimaryKey` 迁移:
+```bash
+# 后端命令
+dotnet ef migrations add InitMr1PrimaryKey --project backend/src/SakuraFilter.Infrastructure --startup-project backend/src/SakuraFilter.Api
+```
+迁移内容: ALTER TABLE products ADD COLUMN mr_1 VARCHAR(10) + CREATE UNIQUE INDEX + 数据回填脚本(从 oem_2 派生)
+
+### V9-F2 [高] CrossReferenceConfiguration.cs 文件不存在
+
+**v8 spec 位置**: tasks.md L2220
+**v8 错误描述**: "文件: `backend/src/SakuraFilter.Infrastructure/Data/Configurations/CrossReferenceConfiguration.cs` (修改)"
+**真实代码事实**: 该文件不存在,CrossReference 配置内联在 [ProductDbContext.cs#L108-L117](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Infrastructure/Data/ProductDbContext.cs#L108-L117)
+**修正方案**: 修改目标改为 `ProductDbContext.cs` L108-117,或新建独立 Configuration 文件(二选一,推荐后者以降低 ProductDbContext 复杂度):
+```csharp
+// 新建: backend/src/SakuraFilter.Infrastructure/Data/Configurations/CrossReferenceConfiguration.cs
+public class CrossReferenceConfiguration : IEntityTypeConfiguration<CrossReference>
+{
+    public void Configure(EntityTypeBuilder<CrossReference> e)
+    {
+        e.ToTable("cross_references");
+        e.HasKey(x => x.Id);
+        e.Property(x => x.ProductName1).HasMaxLength(100);
+        e.Property(x => x.OemBrand).HasMaxLength(100);
+        e.Property(x => x.OemNo3).HasMaxLength(100);
+        e.HasIndex(x => x.ProductId);
+        e.HasIndex(x => new { x.OemBrand, x.OemNo3 });
+        // V2 新增: Product 导航属性(HasOne 无参重载,不暴露 FK 反向导航)
+        e.HasOne<Product>().WithMany().HasForeignKey(x => x.ProductId);
+    }
+}
+```
+然后在 ProductDbContext.OnModelCreating 中替换内联配置为 `modelBuilder.ApplyConfiguration(new CrossReferenceConfiguration())`
+
+### V9-F3 [高] ResetAllDataAsync 方法不存在
+
+**v8 spec 位置**: tasks.md L2236
+**v8 错误描述**: "文件: `backend/src/SakuraFilter.Etl/EtlImportService.cs` (修改,ResetAllDataAsync 方法)"
+**真实代码事实**: 无 `ResetAllDataAsync` 方法,TRUNCATE 实际在 [EtlImportService.cs#L935-L937](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Etl/EtlImportService.cs#L935-L937) ImportProductsAsync 方法内:
+```csharp
+string truncateClause = cascade
+    ? "TRUNCATE products, cross_references, machine_applications RESTART IDENTITY CASCADE;"
+    : "TRUNCATE products RESTART IDENTITY CASCADE;";
+```
+**修正方案**: 修改目标改为 ImportProductsAsync L935-937,TRUNCATE 列表保持现有 8 张真实表(products/cross_references/machine_applications),不新增 product_images(该表无 FK 约束,CASCADE 已覆盖)
+
+### V9-F4 [高] VerifySignature 方法不存在
+
+**v8 spec 位置**: spec.md L5446, L5456
+**v8 错误描述**: `VerifySignature(body, parts[2])` 和 `VerifySignature(cursor, v1parts[2])`
+**真实代码事实**: CursorHmac 无 `VerifySignature` 公共方法,私有方法是 [CursorHmac.cs#L120](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Services/CursorHmac.cs#L120) `VerifyKey(byte[] key, string updatedAtIso, long id, string sig)`
+**修正方案**: v9 伪代码改为调用私有 `VerifyKey` 方法,且 V2 签名时 payload 应为 `<ticks>|<id>`(与 V1 一致的两段格式),非整个 body:
+```csharp
+public string SignV2(long ticks, long id)
+{
+    var payload = $"{ticks}|{id}";  // 与 V1 一致的两段格式
+    var hash = HMACSHA256.HashData(_currentKey, Encoding.UTF8.GetBytes(payload));
+    return $"V2:{ticks}|{id}|{ToBase64Url(hash)[..16]}";
+}
+
+public (long Ticks, long Id)? VerifyAndExtractV2(string cursor)
+{
+    if (!cursor.StartsWith("V2:")) return null;
+    var body = cursor[3..];
+    var parts = body.Split('|', 3);
+    if (parts.Length != 3) throw new ArgumentException("V2 cursor 格式错误");
+    if (!long.TryParse(parts[0], out var ticks)) throw new ArgumentException("V2 cursor ticks 段解析失败");
+    if (!long.TryParse(parts[1], out var id)) throw new ArgumentException("V2 cursor id 段解析失败");
+    // 复用现有 VerifyKey,payload 为两段格式
+    if (!VerifyKey(_currentKey, parts[0], id, parts[2])
+        && (_previousKey == null || !VerifyKey(_previousKey, parts[0], id, parts[2])))
+        throw new ArgumentException("V2 cursor 签名验证失败");
+    return (ticks, id);
+}
+```
+**保留原 VerifyAndExtract**: 不修改返回类型 `(string, long)`,新增 `VerifyAndExtractV2` 返回 `(long, long)?`(V2 优先,V1 兜底)
+
+### V9-F5 [高] is_dead 字段方案与现有死信表机制冲突
+
+**v8 spec 位置**: spec.md L5468, L5806, L5918, L5925; tasks.md L2432, L2436
+**v8 错误描述**: "ALTER TABLE search_index_pending ADD COLUMN IF NOT EXISTS is_dead" + "retry_count >= 5 时标记 is_dead = true"
+**真实代码事实**:
+- [SearchIndexPending 实体](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Core/Entities/Product.cs#L224-L233) 无 is_dead/updated_at 字段,仅有 retry_count/last_error/created_at/next_retry_at
+- [IndexReplayWorker.ProcessDeadLetterAsync L138-218](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Services/IndexReplayWorker.cs#L138-L218) 已实现死信机制: retry_count >= MaxRetryCount 时从 `search_index_pending` **移动**到 `search_index_dead_letter` 表(非 is_dead 标记)
+- 死信表支持复用机制: 同 payload 已 recovered 的死信会复用 recovery_count
+**修正方案**:
+1. **废弃 is_dead 字段方案**: 删除 v8 spec 中所有 `ALTER TABLE ... ADD is_dead` 和 `UPDATE ... SET is_dead = true` 语句
+2. **复用现有死信表机制**: IndexReplayWorker 保持现有 ProcessDeadLetterAsync 逻辑不变
+3. **SearchIndexPending 不新增字段**: 仅保持现有 retry_count/last_error/next_retry_at
+4. **D7-12 修复调整**: 不再"标记 is_dead",改为"调用现有 ProcessDeadLetterAsync 移动到死信表"
+
+### V9-F6 [高] VerifyAndExtract 返回类型破坏性变更
+
+**v8 spec 位置**: spec.md L5436
+**v8 错误描述**: `public (long Ticks, long Id) VerifyAndExtract(string cursor)` 改返回类型为 `(long, long)`
+**真实代码事实**: [CursorHmac.cs#L89](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Services/CursorHmac.cs#L89) 返回 `(string updatedAtIso, long id)`,现有调用方依赖 string ISO8601
+**修正方案**: 见 V9-F4,保留原 `VerifyAndExtract` 返回 `(string, long)`,新增 `VerifyAndExtractV2` 返回 `(long, long)?`
+
+### V9-F7 [高] ProductIndexDoc 破坏性变更
+
+**v8 spec 位置**: spec.md L5234
+**v8 错误描述**: `public record ProductIndexDoc { ... init record }` 从位置参数改为 init record
+**真实代码事实**: [ISearchProvider.cs#L32-L45](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Search/ISearchProvider.cs#L32-L45) 是位置参数 record,[EtlImportService.cs#L1158-L1166](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Etl/EtlImportService.cs#L1158) 使用位置构造 `new ProductIndexDoc(p.Id, ...)`
+**修正方案**: 保持位置参数 record,扩展字段时**追加位置参数**(向后兼容):
+```csharp
+public record ProductIndexDoc(
+    long Id,
+    string OemNoNormalized,
+    string OemNoDisplay,
+    string? Remark,
+    string Type,
+    decimal? D1Mm,
+    decimal? D2Mm,
+    decimal? H3Mm,
+    decimal? H1Mm,
+    string? Media,
+    bool IsDiscontinued,
+    long UpdatedAtUnix,
+    // V2 新增字段(追加位置参数,现有调用方需补充实参或用 with 表达式)
+    string? Mr1 = null,
+    string? OemBrand = null,
+    int? BrandSortOrder = null
+);
+```
+所有现有调用方 `new ProductIndexDoc(p.Id, ...)` 需补充 3 个可选参数(或保持 12 个位置参数,因新增参数有默认值)。EtlImportService L1158-1166 同步更新。
+
+### V9-F8 [中] C31 基线部分错误
+
+**v8 spec 位置**: spec.md L5132
+**v8 错误描述**: "C31 | CursorHmac 格式 | V1 三段 `<ISO8601>|<id>|<sig16>`,**用 ISO8601 字符串(违反硬约束)**"
+**真实代码事实**:
+- 历史页 cursor 用 Ticks: [AdminProductService.cs#L400-L401](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Services/AdminProductService.cs#L400-L401) `Sign(changedAt.Ticks.ToString(), id)` + cursor 格式 `<ticks>|<id>|<sig>`
+- 主列表 cursor 用 ISO8601: [AdminProductService.cs#L866-L868](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Services/AdminProductService.cs#L866) `Sign(iso, last.Id)` + cursor 格式 `<iso>|<id>|<sig>`
+**修正方案**: C31 基线改为:
+```
+| C31 | CursorHmac 格式 | V1 三段 `<updatedAt>|<id>|<sig16>`,updatedAt 段历史页用 Ticks(合规),主列表用 ISO8601(违反硬约束) |
+```
+
+### V9-F9 [中] E20 标题过于笼统
+
+**v8 spec 位置**: spec.md L5419
+**v8 错误描述**: "E20 [高] CursorHmac 用 ISO8601 违反硬约束"
+**真实代码事实**: 仅主列表违反,历史页已合规
+**修正方案**: E20 标题改为 "E20 [高] CursorHmac 主列表用 ISO8601 违反硬约束(历史页已合规)"
+
+### V9-F10 [高] Mr1Validator CHK 算法凭空假设
+
+**v8 spec 位置**: spec.md L5507
+**v8 错误描述**: "CHK 校验位(第 10 位)算法:前 9 位加权求和取模 36"
+**真实代码事实**: 全项目无 Mr1Validator(Grep 确认),无业务文档说明 CHK 算法
+**修正方案**:
+1. **CHK 算法标注"待业务方确认"**: v9 spec 中 Mr1Validator 伪代码保留 CHK 算法框架,但明确标注 `// TODO: 待业务方确认 CHK 算法`
+2. **提供占位实现**: 采用"前 9 位字符 ASCII 求和取模 36"作为占位,业务方确认后替换
+3. **长度+字符集校验先行**: Mr1Validator.IsValid 优先实现长度(10)+字符集(0-9A-Z)校验,CHK 校验作为可选二级校验
+4. **Pre-Task-V9-1**: 业务方确认 CHK 算法(阻塞 Task V8-1.6 Mr1Validator 实现)
+
+## 10.3 第八轮审查错误结论纠正(V9-R1 ~ V9-R5)
+
+### V9-R1 [纠正] D8-14/S8-11 "product.OemBrand 不存在" — 错误
+
+**第八轮审查结论**: "Product 实体只有 Oem2 字段,无 OemBrand"
+**真实代码事实**: [Product.cs#L127](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Core/Entities/Product.cs#L127) 存在 `[Column("oem_brand")] public string? OemBrand { get; set; }`
+**v8 spec Task V8-1.5 引用 `product.OemBrand` 是正确的**,第八轮审查结论错误
+**根因分析**: 第八轮审查子代理 Grep 范围过窄,仅匹配 `class Product\b` 附近字段,漏读 L127
+**v9 处理**: 保留 v8 Task V8-1.5 原设计(通过 product.OemBrand 关联 XrefOemBrand),无需修改
+
+### V9-R2 [纠正] D8-12 "LoadExistingOem2MapAsync 方法名错误" — 错误
+
+**第八轮审查结论**: "真实方法名是 LoadExistingOemMapAsync(无'2'),v8 错误引用为 LoadExistingOem2MapAsync"
+**真实代码事实**: 
+- 现有方法 [LoadExistingOemMapAsync](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Etl/EtlImportService.cs#L1211)(无"2")查询 `oem_no_normalized`
+- v8 spec L3640 设计的 `LoadExistingOem2MapAsync`(带"2")是**新增方法**,用于查询 `oem_2` 字段(修复 E2/D6-3)
+- 两个方法是**并存关系**,非"凭空假设"
+**v9 处理**: 保留 v8 spec 新增 `LoadExistingOem2MapAsync` 的设计,第八轮审查结论错误
+
+### V9-R3 [纠正] F7-6 三 "v8 spec E20 传入整个 cursor 字符串作为 payload" — 错误
+
+**第八轮审查结论**: "v8 spec 传入整个 cursor 字符串作为 payload,但真实代码 payload 仅 `<iso>|<id>` 两段"
+**真实代码事实**: v8 spec L5446 实际传 `VerifySignature(body, parts[2])`,其中 `body` 是 `<ticks>|<id>` 两段(非整个 cursor),payload 格式正确
+**v8 真实问题**: 方法名 `VerifySignature` 错误(应为 `VerifyKey`,见 V9-F4),但 payload 格式正确
+**v9 处理**: 仅修正方法名,不修改 payload 格式
+
+### V9-R4 [纠正] F7-11 "V2 与现有 AdminProductService 不兼容破坏历史页 cursor" — 错误
+
+**第八轮审查结论**: "V2 cursor 格式破坏历史页 cursor 兼容性"
+**真实代码事实**: 历史页 cursor 已用 Ticks([AdminProductService.cs#L400-L401](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Services/AdminProductService.cs#L400-L401)),与 V2 格式天然兼容
+**v8 真实问题**: 仅主列表 cursor 用 ISO8601,与 V2 不兼容(见 V9-F4/F6)
+**v9 处理**: V2 cursor 兼容期仅针对主列表,历史页无需修改
+
+### V9-R5 [纠正] F7-10 "漏过滤 CanceledError" — 错误
+
+**第八轮审查结论**: "axios 取消错误有 3 种命名,v8 漏过滤 CanceledError"
+**真实代码事实**: [http.ts#L107](file:///d:/projects/sakurafilter/frontend/src/utils/http.ts#L107) 已过滤 `err?.code === 'ERR_CANCELED' || err?.name === 'CanceledError'`,覆盖两种命名
+**v8 真实问题**: v8 spec 要求新增过滤是冗余(F7-8 结论正确,F7-10 结论错误)
+**v9 处理**: 不新增过滤逻辑,v8 spec F6-22 修复方案标注"已存在,无需修改"
+
+## 10.4 v9 关键设计调整(A1-A15)
+
+| 编号 | 决策点 | v8 方案 | v9 调整 | 理由 |
+|------|--------|---------|---------|------|
+| A1 | 迁移命名 | SyncFkConfigurationsV7 | InitMr1PrimaryKey | V9-F1:原迁移名不存在 |
+| A2 | CrossReference 配置 | 修改 CrossReferenceConfiguration.cs | 新建独立 Configuration 文件 | V9-F2:原文件不存在 |
+| A3 | TRUNCATE 修改目标 | ResetAllDataAsync 方法 | ImportProductsAsync L935-937 | V9-F3:原方法不存在 |
+| A4 | 死信机制 | is_dead 字段标记 | 复用 search_index_dead_letter 表 | V9-F5:与现有机制冲突 |
+| A5 | CursorHmac V2 | 修改 VerifyAndExtract 返回类型 | 新增 VerifyAndExtractV2 | V9-F6:避免破坏性变更 |
+| A6 | C31 基线 | V1 用 ISO8601 | V1 历史页用 Ticks,主列表用 ISO8601 | V9-F8:部分错误 |
+| A7 | E20 标题 | CursorHmac 用 ISO8601 违反硬约束 | 主列表用 ISO8601 违反(历史页已合规) | V9-F9:过于笼统 |
+| A8 | VerifySignature 方法 | 公共方法 | 私有 VerifyKey | V9-F4:方法名错误 |
+| A9 | ProductIndexDoc | init record | 位置参数 record + 追加可选参数 | V9-F7:破坏性变更 |
+| A10 | Mr1Validator CHK | 加权求和取模 36 | 待业务方确认 + 占位实现 | V9-F10:凭空假设 |
+| A11 | Meili filter 字段名 | snake_case(d1_mm/is_discontinued) | camelCase(d1Mm/isDiscontinued) | S8-14:与 SDK 序列化不一致 |
+| A12 | SearchIndexPending 字段 | 新增 is_dead/updated_at | 保持现有字段不变 | V9-F5:复用死信表 |
+| A13 | Promise.finally | 直接使用 | IE 11 polyfill 说明 | F7-3:兼容性 |
+| A14 | isSafeRedirect | 正则校验 | 先规范化 URL 再正则 | F7-2/F7-5:绕过风险 |
+| A15 | axios 取消过滤 | 新增 AbortError 过滤 | 不修改(已存在) | V9-R5:冗余 |
+
+## 10.5 v9 前置任务(Pre-Task-V9-1 ~ Pre-Task-V9-5)
+
+### Pre-Task-V9-1: 业务方确认 MR.1 CHK 校验算法
+- **阻塞**: Task V8-1.6 (Mr1Validator 实现)
+- **交付物**: 业务方提供的 CHK 算法文档(或确认无 CHK 校验,仅长度+字符集)
+- **占位方案**: 前位 ASCII 求和取模 36(业务方确认前使用)
+
+### Pre-Task-V9-2: 确认 Meili filter 字段名统一方案
+- **阻塞**: Task V8-2.x (MeiliSearchProvider 修改)
+- **决策点**: 
+  - 方案 A: filter 字段名改 camelCase(与 SDK 序列化一致),需重建 Meili 索引
+  - 方案 B: 保持 snake_case,但需配置 Meili filterableAttributes 为 snake_case(当前可能未配置)
+- **推荐**: 方案 A(与 SDK 默认行为一致,长期可维护)
+
+### Pre-Task-V9-3: 确认 isSafeRedirect URL 规范化方案
+- **阻塞**: Task V8-4.x (url.ts 实现)
+- **决策点**:
+  - 方案 A: 先 `new URL(path, window.location.origin)` 规范化,再校验 hostname
+  - 方案 B: 拒绝所有以 `\` 或 `//` 开头的 path
+- **推荐**: 方案 A(更彻底,防 `/\evil.com` → `//evil.com` 浏览器规范化绕过)
+
+### Pre-Task-V9-4: 确认 ErrorBoundary 与 errorMonitor 统一方案
+- **阻塞**: Task V8-4.x (errorMonitor 统一)
+- **现状**: 
+  - ErrorBoundary 写 `sakura_error_log`(L32)
+  - errorMonitor 写 `sakurafilter:error-monitor:v1`(L17)
+  - AdminErrorView 从 errorMonitor 读取(L11/L26)
+- **决策点**:
+  - 方案 A: ErrorBoundary 改为调用 errorMonitor.captureException
+  - 方案 B: 保留双 key,AdminErrorView 同时读取两个 key
+- **推荐**: 方案 A(单一数据源)
+
+### Pre-Task-V9-5: 确认 V2 cursor 兼容窗口期
+- **阻塞**: Task V8-1.x (CursorHmac V2 实现)
+- **决策点**:
+  - 方案 A: V2 上线后保留 V1 Verify 30 天,30 天后 V1 cursor 全部失效
+  - 方案 B: V2 上线即废弃 V1 Verify(主列表 cursor 立即失效,用户需重新刷新)
+- **推荐**: 方案 A(平滑过渡,30 天覆盖 cursor 最大生命周期)
+
+## 10.6 第八轮真实衍生漏洞修复方案(22 项)
+
+> 仅保留第八轮审查中经 v9 双重核实的 22 项真实漏洞,排除 V9-R1~R5 的 5 项错误结论
+
+### 10.6.1 数据关联维度(D8)真实漏洞(7 项)
+
+#### D8-17 [中] EtlEndpoints 限流与认证评估
+**问题**: v8 spec C15 基线称"EtlEndpoints 限流 30/min + X-Admin-Token",但第八轮审查质疑是否完整
+**真实代码事实**: 需核实 EtlEndpoints.cs 是否同时配置 RateLimit + Authorize
+**修复方案**: Pre-Task-V9-6 核实 EtlEndpoints 现状,若缺失则补充:
+```csharp
+// EtlEndpoints.cs
+.RequireAuthorization("AdminPolicy")
+.RequireRateLimiting("etl")  // 30/min
+```
+
+#### D8-18 [中] setTimeout 1500ms 凭空假设
+**问题**: v8 spec 前端伪代码引用 `setTimeout(1500)` 但无说明
+**修复方案**: v9 spec 明确: setTimeout(1500) 用于 401 重试后短暂延迟跳转登录页,避免在 refresh token 失败时立即跳转造成体验断崖。注释为 `// 1500ms: 等待 refresh 失败的错误提示展示后跳转`
+
+#### D8-19 [中] ListAllAsync 签名不一致
+**问题**: v8 spec Pre-Task-V8-3 定义 IObjectStorage.ListAllAsync 签名与 MinIO/Aliyun OSS 实现不匹配
+**修复方案**: Pre-Task-V9-7 核实 IObjectStorage 现有签名,v9 spec 中 ListAllAsync 签名调整为:
+```csharp
+Task<IAsyncEnumerable<string>> ListAllAsync(string? prefix = null, CancellationToken ct = default);
+```
+返回 IAsyncEnumerable 避免一次性加载 1M 图片 key 到内存
+
+#### D8-20 [低] _sp.CreateScope 描述不准确
+**问题**: v8 spec 描述 IndexReplayWorker 用 `_sp.CreateScope()`,但第八轮审查质疑
+**真实代码事实**: [IndexReplayWorker.cs#L140](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Services/IndexReplayWorker.cs#L140) 确实用 `_sp.CreateScope()`,v8 描述正确
+**v9 处理**: 无需修改,v8 描述准确
+
+#### D8-21 [中] retry_count/last_error 字段已存在
+**问题**: v8 spec D7-12 要求新增 retry_count/last_error 字段
+**真实代码事实**: [SearchIndexPending.cs#L229-L230](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Core/Entities/Product.cs#L229) 已存在 `retry_count`/`last_error`
+**修复方案**: D7-12 修复方案改为"复用现有字段,不新增迁移"
+
+### 10.6.2 检索逻辑维度(S8)真实漏洞(7 项)
+
+#### S8-4 [中] EscapeFilter 未转义反斜杠
+**问题**: [MeiliSearchProvider.cs#L141](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Search/MeiliSearchProvider.cs#L141) `EscapeFilter` 只转义 `"` 不转义 `\`
+**修复方案**:
+```csharp
+private static string EscapeFilter(string s) => s.Replace("\\", "\\\\").Replace("\"", "\\\"");
+```
+
+#### S8-6 [中] CONCURRENTLY 事务冲突
+**问题**: v8 spec 迁移脚本使用 `CREATE INDEX CONCURRENTLY`,但 EF Core 迁移在事务内执行,CONCURRENTLY 不支持事务
+**修复方案**: 迁移脚本中 CONCURRENTLY 索引单独执行,不在迁移事务内:
+```csharp
+// 迁移 Up 方法
+migrationBuilder.Sql("COMMIT;");  // 先提交迁移事务
+migrationBuilder.Sql("CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_products_mr1 ON products (mr1);");
+migrationBuilder.Sql("BEGIN;");  // 重新开启事务
+```
+
+#### S8-10 [中] synonyms 影响现有搜索
+**问题**: v8 spec 要求新增 synonyms 配置,但 synonyms 会影响现有搜索行为
+**修复方案**: synonyms 配置先在 `products_v2` 测试索引验证,确认无负面影响后再应用到主索引
+
+#### S8-15 [中] N+1 查询
+**问题**: v8 spec BuildProductIndexDocAsync 伪代码在循环内查询 XrefOemBrand
+**修复方案**: 批量预拉 XrefOemBrand,内存按 OemBrand 分组:
+```csharp
+var brands = await db.XrefOemBrands.ToDictionaryAsync(b => b.Brand, b => b.SortOrder, ct);
+foreach (var p in products)
+{
+    var sortOrder = p.OemBrand != null && brands.TryGetValue(p.OemBrand, out var so) ? so : int.MaxValue;
+    // ...
+}
+```
+
+#### S8-18 [低] 未要求删除旧 EscapeFilter
+**问题**: S8-4 修复后,旧 EscapeFilter 应删除
+**修复方案**: S8-4 修复方案已包含替换原方法,无需额外删除
+
+### 10.6.3 前后端联动维度(F7)真实漏洞(8 项)
+
+#### F7-2 [中] isSafeRedirect 正则绕过
+**问题**: v8 spec isSafeRedirect 用正则校验 hostname,但 `/\evil.com` 会被浏览器规范化为 `//evil.com`
+**修复方案**: 先规范化 URL 再校验(Pre-Task-V9-3 方案 A):
+```typescript
+// frontend/src/utils/url.ts
+export function isSafeRedirect(target: string): boolean {
+  try {
+    const url = new URL(target, window.location.origin)
+    return url.hostname === window.location.hostname
+  } catch {
+    return false  // 无效 URL
+  }
+}
+```
+
+#### F7-3 [中] Promise.finally IE 11 不支持
+**问题**: v8 spec 前端伪代码使用 `Promise.finally`,IE 11 不支持
+**修复方案**: v9 spec 标注"需 polyfill 或避免使用 finally",推荐用 try/catch/then 链:
+```typescript
+// 不用 finally
+try { await doSomething() } catch (e) { handle(e) } then(() => cleanup())
+```
+
+#### F7-4 [中] 旧数据迁移缺失
+**问题**: v8 spec 要求 ProductIndexDoc 新增 Mr1 字段,但未提供旧数据迁移脚本
+**修复方案**: Pre-Task-V9-8 提供迁移脚本:
+```sql
+-- 从 oem_2 派生 mr_1 (临时方案,业务方确认后替换)
+UPDATE products SET mr_1 = oem_2 WHERE mr_1 IS NULL AND oem_2 IS NOT NULL;
+-- 标记需业务方复核的记录
+UPDATE products SET mr_1_needs_review = true WHERE mr_1 IS NULL;
+```
+
+#### F7-7 [高] Mr1Validator CHK 算法凭空假设
+**问题**: 见 V9-F10
+**修复方案**: 见 V9-F10 + Pre-Task-V9-1
+
+#### F7-9 [低] 隐私模式 BroadcastChannel 构造异常
+**问题**: BroadcastChannel 在隐私模式下构造抛 SecurityError
+**修复方案**: try/catch 包裹构造,失败时降级为无 BroadcastChannel:
+```typescript
+let channel: BroadcastChannel | null = null
+try { channel = new BroadcastChannel('sakura-auth') } catch { channel = null }
+```
+
+#### F7-12 [中] router.isReady 硬跳转逻辑错误
+**问题**: v8 spec 前端伪代码在 router.isReady 前 `window.location.href` 硬跳转
+**修复方案**: 用 router.push 替代硬跳转:
+```typescript
+await router.isReady()
+if (needsRedirect) await router.push({ path: '/login', query: { redirect: router.currentRoute.value.fullPath } })
+```
+
+#### F7-13 [中] ErrorBoundary 与 errorMonitor key 不一致
+**问题**: ErrorBoundary 写 `sakura_error_log`,errorMonitor 写 `sakurafilter:error-monitor:v1`,AdminErrorView 只读后者
+**真实代码事实**: 
+- [ErrorBoundary.vue#L32](file:///d:/projects/sakurafilter/frontend/src/components/ErrorBoundary.vue#L32) 写 `sakura_error_log`
+- [errorMonitor.ts#L17](file:///d:/projects/sakurafilter/frontend/src/utils/errorMonitor.ts#L17) 写 `sakurafilter:error-monitor:v1`
+**修复方案**: Pre-Task-V9-4 方案 A,ErrorBoundary 改为调用 errorMonitor.captureException
+
+#### F7-14 [低] Mr1Validator 大小写
+**问题**: MR.1 字符集应支持大小写
+**修复方案**: Mr1Validator 字符集改为 `0123456789A-Za-z` 或 `0123456789A-Z`(待 Pre-Task-V9-1 确认)
+
+## 10.7 v9 与 v8 根本区别对比表
+
+| 维度 | v8 | v9 |
+|------|-----|-----|
+| 凭空假设数量 | 10 项(6 高危) | 0 项(双重核实) |
+| 第八轮审查错误结论 | 未识别 | 纠正 5 项(V9-R1~R5) |
+| is_dead 方案 | 新增字段(冲突) | 复用死信表 |
+| ProductIndexDoc | init record(破坏性) | 位置参数 + 可选参数 |
+| CursorHmac V2 | 修改返回类型(破坏性) | 新增 VerifyAndExtractV2 |
+| C31 基线 | 笼统"V1 用 ISO8601" | 区分历史页 Ticks + 主列表 ISO8601 |
+| Mr1Validator CHK | 加权求和取模 36 | 待业务方确认 + 占位 |
+| Meili filter 字段名 | snake_case(不一致) | camelCase(统一) |
+| isSafeRedirect | 正则(可绕过) | URL 规范化(防绕过) |
+| ErrorBoundary | 双 key(不一致) | 统一到 errorMonitor |
+
+## 10.8 v9 待启动第九轮深度审查
+
+⏳ 第九轮深度审查将验证 v9 修复方案是否引入新的衍生问题
+⏳ 持续迭代直到连续一轮审查无任何新漏洞检出
+
