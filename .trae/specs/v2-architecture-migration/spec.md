@@ -14087,6 +14087,8 @@ dotnet test backend/SakuraFilter.sln
 | 717b42a | fix(nullable) | V24-F7 修复 11 个可空性 warning(CS8601/8602/8604/8620) |
 | 8ac2cd4 | test(etl) | V24-F8 补充 AdminEtlView 全量重建危险操作流程 Vitest 测试(8 用例) |
 | bbe90f3 | fix(quality) | V24-F9 修复剩余 CS0414/CS1573/CS1587/CS0618 warning(8 个) |
+| fbe2ffe | fix(deps) | V24-F10 NuGet 版本对齐消除全部 warning(21→0) |
+| 879c8c5 | feat(auth) | V24-F11 AuthTokenBroadcaster 实现指数退避重连(5s→10s→20s→40s→60s 封顶) |
 
 ### V24-F9: 剩余 CS0414/CS1573/CS1587/CS0618 warning 修复 [代码质量]
 
@@ -14110,10 +14112,39 @@ dotnet test backend/SakuraFilter.sln
 
 **验证**: dotnet build 全部 CS* warning 消除(剩 21 个 NU1603/MSB3277 第三方依赖版本警告);dotnet test 212/212 通过。
 
+### V24-F10: NuGet 版本对齐消除全部 warning [依赖管理]
+
+**问题**: V24-F9 后还剩 21 个 warning,全部是 NuGet 依赖版本问题:
+- NU1603(18 个): `EFCore.BulkExtensions 8.0.10` 在 NuGet 不存在(实际解析到 8.1.0); `HtmlSanitizer 8.0.0` 不存在(实际解析到 8.0.601)
+- MSB3277(3 个): Cli 项目通过 Infrastructure 传递得到 EFCore 8.0.10,但 EFCore.BulkExtensions 8.1.0 又传递了 EFCore 8.0.7,造成 8.0.7 vs 8.0.10 冲突
+
+**修复方案**:
+- `Infrastructure.csproj`: `EFCore.BulkExtensions` 8.0.10 → 8.1.0(声明版本对齐实际解析版本)
+- `Api.csproj`: `HtmlSanitizer` 8.0.0 → 8.0.601(同上)
+- `Cli.csproj`: 显式引用 `Microsoft.EntityFrameworkCore` 8.0.10 + `Microsoft.EntityFrameworkCore.Relational` 8.0.10,统一传递依赖版本
+
+**验证**: dotnet build **0 warning 0 error**(全部 21 个 warning 消除);dotnet test 212/212 通过。
+
+### V24-F11: AuthTokenBroadcaster 指数退避重连 [可用性改进]
+
+**问题**: V24-F9 删除了 `consecutiveFailures` 字段(声明+重置但从未读取),但原设计意图是"驱动指数退避"。固定 5s 重连在 PG 长时间不可用时会产生大量失败日志。
+
+**修复方案**: 恢复 `_consecutiveFailures` 字段,实现真正的指数退避:
+- 重连失败时 `_consecutiveFailures++`,成功时 `_consecutiveFailures = 0`
+- Delay 秒数 = `Math.Min(60, 5 * (int)Math.Pow(2, _consecutiveFailures))`
+  - 第 1 次失败: 5s
+  - 第 2 次失败: 10s
+  - 第 3 次失败: 20s
+  - 第 4 次失败: 40s
+  - 第 5+ 次失败: 60s(封顶)
+- 日志增加 `delaySec` 和失败次数,便于排查
+
+**验证**: dotnet build 0 warning;dotnet test 212/212 通过。
+
 ## 25.9 v24 最终验证结果
 
 - **后端**: dotnet test backend/SakuraFilter.sln 212/212 通过(Etl.Tests 21 + Api.Tests 191)
-- **后端 warning**: dotnet build 全部 0 CS* warning(CS1570/CS8620/CS8601/CS8602/CS8604/CS0414/CS1573/CS1587/CS0618 全部修复;剩 21 个 NU1603/MSB3277 第三方依赖版本警告,与代码无关)
+- **后端 warning**: dotnet build **0 warning 0 error**(全部消除:CS1570/CS8620/CS8601/CS8602/CS8604/CS0414/CS1573/CS1587/CS0618/NU1603/MSB3277)
 - **前端**: npx vitest run tests/unit/ 137/137 通过(9 个测试文件)
 - **前端 contract**: 12 个失败均为 ECONNREFUSED(后端未启动,与代码无关)
 
