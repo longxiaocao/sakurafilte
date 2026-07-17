@@ -1,10 +1,13 @@
 // Day 9: 路由
 //   /search                  — 前台产品搜索
-//   /product/:oem            — 前台产品详情
+//   /products/:pn1/:pn2/:brand/:oem3 — V2 SEO URL (主要走后端 Razor SSR, SPA 路由仅作预览兜底)
 //   /admin/products          — 后台产品管理列表
 //   /admin/products/new      — 后台新增产品
 //   /admin/products/:id/edit — 后台编辑产品
 //   /admin/etl               — 后台 ETL 触发 + 进度
+//
+// V2 Task 4.4: 移除 /product/:oem 路由 (交由后端 Razor SSR 处理 + /product/{oem} 301 重定向)
+//   浏览器访问 /product/{oem} 时, 后端 PublicProductController.LegacyRedirect 301 到新 SEO URL
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import i18n from '@/i18n'
 import { useAdminAuthStore } from '@/composables/useAdminAuth'
@@ -47,8 +50,12 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/admin/AdminXrefReorderView.vue'),
     meta: { title: 'OEM 排序管理', requireAuth: true }
   },
+  // ===== V2 Task 4.4: /products/:pn1/:pn2/:brand/:oem3 (SEO URL, SPA 预览兜底) =====
+  //   主要走后端 Razor SSR (/products/... 由 Pages/Products/Detail.cshtml 渲染)
+  //   此 SPA 路由仅作开发预览/SSR 不可用时的兜底, 不影响 SEO (搜索引擎抓到的是后端 HTML)
+  //   旧 /product/:oem 路由已移除, 改由后端 PublicProductController.LegacyRedirect 301 处理
   {
-    path: '/product/:oem',
+    path: '/products/:pn1/:pn2/:brand/:oem3',
     name: 'ProductDetail',
     component: () => import('@/views/public/PublicProductView.vue'),
     meta: { title: '产品详情' }

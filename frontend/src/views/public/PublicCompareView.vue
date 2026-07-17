@@ -12,6 +12,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { publicCompareApi } from '@/api'
 import type { ProductDetail, XrefInfo, MachineAppInfo } from '@/api/types'
+import { buildProductUrl } from '@/utils/build-product-url'
 
 const route = useRoute()
 const router = useRouter()
@@ -332,10 +333,18 @@ function doPrint() {
           <div class="flex items-start justify-between gap-1">
             <div class="flex-1 min-w-0">
               <div class="font-medium text-sm truncate" :title="p.oemNoDisplay">
-                <router-link
-                  :to="`/product/${encodeURIComponent(p.oemNoDisplay)}`"
+                <!-- V2 Task 4.4: SEO URL (ProductDetail 含完整字段, a 标签触发整页 SSR 渲染) -->
+                <a
+                  :href="buildProductUrl({
+                    productName1: p.productName1,
+                    productName2: p.productName2,
+                    oemBrand: p.crossReferences?.[0]?.oemBrand,
+                    oemNo3: p.crossReferences?.[0]?.oemNo3,
+                    oemNoDisplay: p.oemNoDisplay,
+                    mr1: p.mr1
+                  })"
                   class="hover:underline"
-                >{{ p.oemNoDisplay }}</router-link>
+                >{{ p.oemNoDisplay }}</a>
               </div>
               <div class="text-xs text-muted truncate" :title="p.oem2 || ''">{{ p.oem2 || '—' }}</div>
             </div>

@@ -71,55 +71,62 @@ public class CursorHmac
     }
 
     /// <summary>
-    /// 给 (updatedAt, id) 签名, 返回截断的 Base64URL 字符串
+    /// 给 (updatedAt, mr1) 签名, 返回截断的 Base64URL 字符串
     /// Day 9.6: 始终用 CurrentKey 签名 (避免新 cursor 走 PreviousKey 导致后续 CurrentKey 切换时再失效)
+    /// V2 Task 4.6: 签名载荷从 long id 改为 string mr1 (修复漏洞 6: cursor 不暴露内部自增 Id)
+    ///   WHY: V2 对外主键改用 mr1, cursor 内若含 long Id 会泄露内部自增位置 (信息泄漏)
+    ///   兼容: 第二个参数语义为 "唯一载荷字符串", 调用方可传 mr1 或 id.ToString() (历史记录场景)
     /// </summary>
-    public string Sign(string updatedAtIso, long id)
+    public string Sign(string updatedAtIso, string mr1)
     {
-        var payload = $"{updatedAtIso}|{id}";
+        if (string.IsNullOrEmpty(mr1))
+            throw new ArgumentException("mr1 载荷不能为空", nameof(mr1));
+        var payload = $"{updatedAtIso}|{mr1}";
         var hash = HMACSHA256.HashData(_currentKey, Encoding.UTF8.GetBytes(payload));
         return ToBase64Url(hash)[..16]; // 截断到 16 字符, 约 96 位安全强度, 够用且 URL 友好
     }
 
     /// <summary>
-    /// 验证 cursor 三段式格式: <ISO8601>|<id>|<sig16>
+    /// 验证 cursor 三段式格式: <ISO8601>|<mr1>|<sig16>
     /// 验证失败抛 ArgumentException (由 Endpoint 转 400)
     /// Day 9.6: 双 key 验证 — CurrentKey 不过试 PreviousKey (轮转过渡期兼容)
+    /// V2 Task 4.6: 返回值从 (string, long id) 改为 (string, string mr1)
     /// </summary>
-    public (string updatedAtIso, long id) VerifyAndExtract(string cursor)
+    public (string updatedAtIso, string mr1) VerifyAndExtract(string cursor)
     {
         if (string.IsNullOrEmpty(cursor))
             throw new ArgumentException("cursor 为空");
 
         var parts = cursor.Split('|', 3);
         if (parts.Length != 3)
-            throw new ArgumentException($"cursor 格式错, 期望 <ISO8601 updatedAt>|<id>|<sig16>, 实际: {cursor}");
+            throw new ArgumentException($"cursor 格式错, 期望 <ISO8601 updatedAt>|<mr1>|<sig16>, 实际: {cursor}");
 
         var updatedAtIso = parts[0];
-        var idStr = parts[1];
+        var mr1 = parts[1];
         var sig = parts[2];
 
-        if (!long.TryParse(idStr, out var id))
-            throw new ArgumentException($"cursor id 段解析失败, 实际: {idStr}");
+        if (string.IsNullOrEmpty(mr1))
+            throw new ArgumentException($"cursor mr1 段为空, 实际: {mr1}");
 
         // Day 9.6: 双 key 验证
         // 先试 CurrentKey (绝大多数情况), 不过再试 PreviousKey
-        if (VerifyKey(_currentKey, updatedAtIso, id, sig))
-            return (updatedAtIso, id);
-        if (_previousKey != null && VerifyKey(_previousKey, updatedAtIso, id, sig))
+        if (VerifyKey(_currentKey, updatedAtIso, mr1, sig))
+            return (updatedAtIso, mr1);
+        if (_previousKey != null && VerifyKey(_previousKey, updatedAtIso, mr1, sig))
         {
             _logger.LogDebug("cursor 用 PreviousKey 验签通过 (轮转过渡期)");
-            return (updatedAtIso, id);
+            return (updatedAtIso, mr1);
         }
         throw new ArgumentException("cursor 签名验证失败, 可能被篡改或使用过期 secret");
     }
 
     /// <summary>
     /// 用指定 key 重算签名并常时比较 (抗时序攻击)
+    /// V2 Task 4.6: 载荷类型从 long id 改为 string mr1
     /// </summary>
-    private static bool VerifyKey(byte[] key, string updatedAtIso, long id, string sig)
+    private static bool VerifyKey(byte[] key, string updatedAtIso, string mr1, string sig)
     {
-        var payload = $"{updatedAtIso}|{id}";
+        var payload = $"{updatedAtIso}|{mr1}";
         var hash = HMACSHA256.HashData(key, Encoding.UTF8.GetBytes(payload));
         var expected = ToBase64Url(hash)[..16];
         return CryptographicOperations.FixedTimeEquals(

@@ -15,6 +15,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { publicSearchApi } from '@/api'
 import type { PublicSearchHit, PublicEightResponse } from '@/api/types'
+import { buildProductUrl } from '@/utils/build-product-url'
 
 const route = useRoute()
 const router = useRouter()
@@ -240,8 +241,15 @@ function clearAll() {
 
 // ===== 详情页跳转 =====
 function viewDetail(row: PublicSearchHit) {
+  // V2 Task 4.4: 改用 SEO URL (PublicSearchHit 仅含 oemNoDisplay/oem2/productName1, 降级走 /product/{oem} 301)
   const oem = row.oemNoDisplay || row.oem2
-  if (oem) router.push(`/product/${encodeURIComponent(oem)}`)
+  if (oem) {
+    const url = buildProductUrl({
+      oemNoDisplay: oem,
+      productName1: row.productName1
+    })
+    window.location.href = url
+  }
 }
 
 // P-Demo: 拉取最新 20 条产品 (页面进入时调用, 用于"明细表"展示)

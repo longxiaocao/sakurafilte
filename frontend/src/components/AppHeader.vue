@@ -7,6 +7,7 @@ import { useThemeStore } from '@/stores/theme'  // P5.3
 import { authApi } from '@/api'
 import { useI18n } from 'vue-i18n'  // P2.6
 import { setLocale } from '@/i18n'  // P2.6
+import { buildProductUrl } from '@/utils/build-product-url'  // V2 Task 4.4
 
 // UX P0-1: 移动端汉堡菜单 drawer 状态
 const mobileNavOpen = ref(false)
@@ -201,7 +202,8 @@ async function go(item: { path?: string; action?: string }) {
         cancelButtonText: '取消'
       })
       if (oem && oem.trim()) {
-        router.push(`/product/${encodeURIComponent(oem.trim())}`)
+        // V2 Task 4.4: 仅有 OEM 编号, buildProductUrl 自动降级为 /product/{oem} 触发后端 301 → SEO URL
+        window.location.href = buildProductUrl({ oemNoDisplay: oem.trim() })
       }
     } catch {
       // 用户取消

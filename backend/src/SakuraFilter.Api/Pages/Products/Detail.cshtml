@@ -1,0 +1,169 @@
+@page "/products/{pn1}/{pn2}/{brand}/{oem3}"
+@model SakuraFilter.Api.Pages.Products.DetailModel
+@using System.Text.Json
+
+@{
+    ViewData["Title"] = Model.SeoTitle;
+}
+
+@section Head {
+    <meta name="description" content="@Model.SeoDescription" />
+    <link rel="canonical" href="@Model.CanonicalUrl" />
+    <meta property="og:title" content="@Model.SeoTitle" />
+    <meta property="og:description" content="@Model.SeoDescription" />
+    <meta property="og:image" content="@Model.OgImage" />
+    <meta property="og:type" content="product" />
+    <meta property="og:url" content="@Model.CanonicalUrl" />
+    <meta name="twitter:card" content="summary_large_image" />
+}
+
+@* F2-16: 404 友好页 (OnGetAsync 查不到时设置 StatusCode=404 + 渲染此分支) *@
+@if (Model.Product == null)
+{
+    <div class="not-found">
+        <h1>产品不存在</h1>
+        <p>抱歉, 未找到该产品。可能已下架或 URL 错误。</p>
+        <p>
+            <a href="/search">前往搜索</a> &nbsp;|&nbsp;
+            <a href="/search/aggregate">聚合搜索</a> &nbsp;|&nbsp;
+            <a href="/">返回首页</a>
+        </p>
+    </div>
+    return;
+}
+
+@* V2 Task 4.1.8: SSR 内容独立容器 (修复 F2 — Vue 挂载点必须独立于 SSR 内容) *@
+<div id="seo-content">
+    <h1>@Model.Product.OemNoDisplay @Model.Product.ProductName1 @Model.Product.ProductName2</h1>
+
+    @if (!string.IsNullOrWhiteSpace(Model.Product.Remark))
+    {
+        <p class="remark">@Model.Product.Remark</p>
+    }
+
+    @* V2 Task 4.1.2: 参数表格 (静态 HTML, SEO 友好) *@
+    <div class="section">
+        <h2>规格参数</h2>
+        <table class="spec-table">
+            <tbody>
+                <tr><th>OEM 编号</th><td>@Model.Product.OemNoDisplay</td></tr>
+                <tr><th>MR.1</th><td>@(Model.Product.Mr1 ?? "-")</td></tr>
+                <tr><th>OEM 2</th><td>@(Model.Product.Oem2 ?? "-")</td></tr>
+                <tr><th>类型</th><td>@(Model.Product.Type ?? "-")</td></tr>
+                <tr><th>产品名称 1</th><td>@(Model.Product.ProductName1 ?? "-")</td></tr>
+                <tr><th>产品名称 2</th><td>@(Model.Product.ProductName2 ?? "-")</td></tr>
+                @if (Model.Product.D1Mm.HasValue) { <tr><th>D1 (mm)</th><td>@Model.Product.D1Mm</td></tr> }
+                @if (Model.Product.D2Mm.HasValue) { <tr><th>D2 (mm)</th><td>@Model.Product.D2Mm</td></tr> }
+                @if (Model.Product.D3Mm.HasValue) { <tr><th>D3 (mm)</th><td>@Model.Product.D3Mm</td></tr> }
+                @if (Model.Product.D4Mm.HasValue) { <tr><th>D4 (mm)</th><td>@Model.Product.D4Mm</td></tr> }
+                @if (Model.Product.H1Mm.HasValue) { <tr><th>H1 (mm)</th><td>@Model.Product.H1Mm</td></tr> }
+                @if (Model.Product.H2Mm.HasValue) { <tr><th>H2 (mm)</th><td>@Model.Product.H2Mm</td></tr> }
+                @if (Model.Product.H3Mm.HasValue) { <tr><th>H3 (mm)</th><td>@Model.Product.H3Mm</td></tr> }
+                @if (Model.Product.H4Mm.HasValue) { <tr><th>H4 (mm)</th><td>@Model.Product.H4Mm</td></tr> }
+                @if (!string.IsNullOrWhiteSpace(Model.Product.D7Thread)) { <tr><th>D7 螺纹</th><td>@Model.Product.D7Thread</td></tr> }
+                @if (!string.IsNullOrWhiteSpace(Model.Product.D8Thread)) { <tr><th>D8 螺纹</th><td>@Model.Product.D8Thread</td></tr> }
+                @if (Model.Product.NoCheckValves.HasValue) { <tr><th>止回阀数量</th><td>@Model.Product.NoCheckValves</td></tr> }
+                @if (Model.Product.NoBypassValves.HasValue) { <tr><th>旁通阀数量</th><td>@Model.Product.NoBypassValves</td></tr> }
+                @if (!string.IsNullOrWhiteSpace(Model.Product.Media)) { <tr><th>滤材</th><td>@Model.Product.Media</td></tr> }
+                @if (!string.IsNullOrWhiteSpace(Model.Product.MediaModel)) { <tr><th>滤材型号</th><td>@Model.Product.MediaModel</td></tr> }
+                @if (Model.Product.BypassValveLr.HasValue) { <tr><th>旁通阀 LR</th><td>@Model.Product.BypassValveLr</td></tr> }
+                @if (Model.Product.BypassValveHr.HasValue) { <tr><th>旁通阀 HR</th><td>@Model.Product.BypassValveHr</td></tr> }
+                @if (!string.IsNullOrWhiteSpace(Model.Product.Efficiency1)) { <tr><th>效率 1</th><td>@Model.Product.Efficiency1</td></tr> }
+                @if (!string.IsNullOrWhiteSpace(Model.Product.Efficiency2)) { <tr><th>效率 2</th><td>@Model.Product.Efficiency2</td></tr> }
+                @if (Model.Product.BypassPressure.HasValue) { <tr><th>旁通压力 (bar)</th><td>@Model.Product.BypassPressure</td></tr> }
+                @if (Model.Product.CollapsePressureBar.HasValue) { <tr><th>抗压强度 (bar)</th><td>@Model.Product.CollapsePressureBar</td></tr> }
+                @if (!string.IsNullOrWhiteSpace(Model.Product.SealingMaterial)) { <tr><th>密封材料</th><td>@Model.Product.SealingMaterial</td></tr> }
+                @if (!string.IsNullOrWhiteSpace(Model.Product.TempRange)) { <tr><th>温度范围</th><td>@Model.Product.TempRange</td></tr> }
+                @if (Model.Product.QtyPerCarton.HasValue) { <tr><th>每箱数量</th><td>@Model.Product.QtyPerCarton</td></tr> }
+                @if (Model.Product.WeightKgs.HasValue) { <tr><th>重量 (kg)</th><td>@Model.Product.WeightKgs</td></tr> }
+                @if (Model.Product.CartonLengthMm.HasValue) { <tr><th>箱长 (mm)</th><td>@Model.Product.CartonLengthMm</td></tr> }
+                @if (Model.Product.CartonWidthMm.HasValue) { <tr><th>箱宽 (mm)</th><td>@Model.Product.CartonWidthMm</td></tr> }
+                @if (Model.Product.CartonHeightMm.HasValue) { <tr><th>箱高 (mm)</th><td>@Model.Product.CartonHeightMm</td></tr> }
+            </tbody>
+        </table>
+    </div>
+
+    @* 适配机型列表 (静态 HTML) *@
+    @if (Model.Product.MachineApplications != null && Model.Product.MachineApplications.Count > 0)
+    {
+        <div class="section">
+            <h2>适配机型 (@Model.Product.MachineApplications.Count)</h2>
+            <ul class="machine-list">
+                @foreach (var m in Model.Product.MachineApplications)
+                {
+                    <li>
+                        <strong>@m.MachineBrand @m.MachineModel</strong>
+                        @if (!string.IsNullOrWhiteSpace(m.ModelName)) { <span> — @m.ModelName</span> }
+                        @if (!string.IsNullOrWhiteSpace(m.EngineBrand)) { <span> | 发动机: @m.EngineBrand @m.EngineType</span> }
+                        @if (!string.IsNullOrWhiteSpace(m.Power)) { <span> | 功率: @m.Power</span> }
+                        @if (m.ProductionDateStart.HasValue || m.ProductionDateEnd.HasValue)
+                        {
+                            <span> | 生产: @(m.ProductionDateStart?.ToString("yyyy-MM") ?? "?") ~ @(m.ProductionDateEnd?.ToString("yyyy-MM") ?? "至今")</span>
+                        }
+                    </li>
+                }
+            </ul>
+        </div>
+    }
+
+    @* 同 MR.1 其他 OEM 3 推荐 (静态 HTML) *@
+    @if (Model.SiblingOem3List.Count > 0)
+    {
+        <div class="section">
+            <h2>同 MR.1 其他 OEM 3 (@Model.SiblingOem3List.Count)</h2>
+            <ul class="sibling-list">
+                @foreach (var s in Model.SiblingOem3List)
+                {
+                    <li>
+                        <a href="/products/@s.ProductName1/@s.ProductName2/@s.OemBrand/@s.OemNo3">
+                            <strong>@s.OemBrand</strong> @s.OemNo3
+                        </a>
+                        @if (!string.IsNullOrWhiteSpace(s.MachineType)) { <span> — @s.MachineType</span> }
+                    </li>
+                }
+            </ul>
+        </div>
+    }
+</div>
+
+@* V2 Task 4.1.8: Vue 挂载点独立 (修复 F2) — gallery-app 内含 SSR 兜底主图 (修复 F2-15) *@
+<div id="gallery-app">
+    @if (Model.PrimaryImage != null)
+    {
+        <img src="@Model.PrimaryImage.ImageUrl" alt="@Model.Product.OemNoDisplay" loading="lazy" />
+    }
+    else
+    {
+        <img src="/static/placeholder.png" alt="暂无主图" loading="lazy" />
+    }
+    <noscript>请启用 JavaScript 查看完整画廊</noscript>
+</div>
+<div id="compare-app"></div>
+<div id="inquiry-app"></div>
+
+@* V2 Task 4.1.11 (修复 F2-1): JSON 数据岛模式 — 安全保证来自 @Json.Serialize (Razor @ 自动 HTML 编码)
+        禁止使用 @Html.Raw, 防止 Product.remark/productName1 中 </script> 截断攻击
+        JS 端用 JSON.parse(document.getElementById('product-data').textContent) 读取 *@
+<script type="application/json" id="product-data">
+@Json.Serialize(Model.Product)
+</script>
+
+@* V2 Task 4.1.11 (修复 F2-9): script type="module" 替代 defer (ES module 必须用 type="module", defer 对 module 无效)
+        V2 Task 4.1.18 (修复 F3-14): 跨域部署加 crossorigin="use-credentials" + nginx/CDN 配 ACAO *@
+<script type="module" src="/assets/product-detail-client.js" crossorigin="use-credentials"></script>
+
+@* V2 Task 4.1.17 (修复 F3-2): 捕获资源加载错误 (SCRIPT/LINK) + 渲染 mount-fallback
+        safeMount 无法捕获 module 加载失败, 需用 window error 事件 (捕获阶段) 兜底 *@
+<script>
+    window.addEventListener('error', function (e) {
+        var target = e.target;
+        if (target && (target.tagName === 'SCRIPT' || target.tagName === 'LINK')) {
+            var apps = document.querySelectorAll('[id$="-app"]');
+            apps.forEach(function (el) {
+                if (!el.dataset.vueMounted) {
+                    el.innerHTML = '<div class="mount-fallback">JS 加载失败, <button onclick="location.reload()">刷新重试</button></div>';
+                }
+            });
+        }
+    }, true);
+</script>

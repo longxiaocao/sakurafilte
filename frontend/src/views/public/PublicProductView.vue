@@ -16,6 +16,7 @@ import { ElMessage } from 'element-plus'
 import { productApi } from '@/api'
 import type { ProductDetail } from '@/api/types'
 import SkeletonCard from '@/components/SkeletonCard.vue'
+import { buildProductUrl } from '@/utils/build-product-url'
 
 const route = useRoute()
 const router = useRouter()
@@ -55,8 +56,16 @@ function applySeo() {
   if (d.images && d.images.length > 0 && d.images[0].imageUrl) {
     ensureOgTag('og:image', d.images[0].imageUrl)
   }
-  // canonical link
-  ensureLinkTag('canonical', `${location.origin}/product/${encodeURIComponent(slug.value)}`)
+  // canonical link (V2 Task 4.4: SEO URL, 与后端 BuildProductUrl 逻辑对齐)
+  const seoPath = buildProductUrl({
+    productName1: d.productName1,
+    productName2: d.productName2,
+    oemBrand: d.crossReferences?.[0]?.oemBrand,
+    oemNo3: d.crossReferences?.[0]?.oemNo3,
+    oemNoDisplay: d.oemNoDisplay,
+    mr1: d.mr1
+  })
+  ensureLinkTag('canonical', `${location.origin}${seoPath}`)
 }
 function ensureOgTag(property: string, content: string) {
   let el = document.head.querySelector<HTMLMetaElement>(`meta[property="${property}"]`)

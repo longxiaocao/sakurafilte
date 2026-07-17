@@ -1,0 +1,78 @@
+@{
+    // V2 Task 4.1: SSR 详情页最小化布局
+    //   设计: 不依赖前端 Vue SPA 壳, 直接 SSR 输出完整 HTML (SEO 友好)
+    //   风格: Musk 极简 (纯黑白 + 单一强调色 + 1px 边框 + 8px 网格)
+}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"]</title>
+    @RenderSection("Head", required: false)
+    <style>
+        /* V2 Task 4.1: SSR 页面最小内联样式 (避免依赖前端 CSS 构建产物) */
+        :root {
+            --color-primary: #000;
+            --color-accent: #2563eb;
+            --color-border: #e5e7eb;
+            --color-text: #111827;
+            --color-muted: #6b7280;
+            --color-bg: #ffffff;
+            --color-bg-soft: #f9fafb;
+        }
+        * { box-sizing: border-box; }
+        html, body {
+            margin: 0; padding: 0;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            color: var(--color-text);
+            background: var(--color-bg);
+            line-height: 1.6;
+        }
+        a { color: var(--color-accent); text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 24px; }
+        .site-header {
+            border-bottom: 1px solid var(--color-border);
+            padding: 16px 24px;
+            display: flex; align-items: center; gap: 16px;
+        }
+        .site-header .logo { font-weight: 700; font-size: 18px; color: var(--color-primary); }
+        .site-header nav { display: flex; gap: 16px; font-size: 14px; }
+        .product-detail { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; margin-top: 24px; }
+        @@media (max-width: 768px) { .product-detail { grid-template-columns: 1fr; } }
+        .spec-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        .spec-table th, .spec-table td {
+            border: 1px solid var(--color-border);
+            padding: 8px 12px; text-align: left;
+        }
+        .spec-table th { background: var(--color-bg-soft); font-weight: 600; width: 40%; }
+        .section { margin-top: 32px; }
+        .section h2 { font-size: 18px; margin: 0 0 12px 0; padding-bottom: 8px; border-bottom: 1px solid var(--color-border); }
+        .machine-list, .sibling-list { list-style: none; padding: 0; margin: 0; }
+        .machine-list li, .sibling-list li {
+            padding: 8px 12px; border-bottom: 1px solid var(--color-border); font-size: 14px;
+        }
+        .not-found { padding: 48px 24px; text-align: center; }
+        .not-found h1 { font-size: 24px; margin: 0 0 12px 0; }
+        .mount-fallback {
+            padding: 16px; border: 1px solid var(--color-border); text-align: center; color: var(--color-muted);
+        }
+        .gallery-app, .compare-app, .inquiry-app { min-height: 48px; }
+    </style>
+</head>
+<body>
+    <header class="site-header">
+        <a href="/" class="logo">SakuraFilter</a>
+        <nav>
+            <a href="/search">搜索</a>
+            <a href="/search/aggregate">聚合搜索</a>
+            <a href="/compare">对比</a>
+        </nav>
+    </header>
+    <main class="container">
+        @RenderBody()
+    </main>
+    @RenderSection("Scripts", required: false)
+</body>
+</html>

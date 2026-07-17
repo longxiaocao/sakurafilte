@@ -12,6 +12,7 @@ import { ElMessage } from 'element-plus'
 import { publicSearchApi } from '@/api'
 import type { AggregateSearchHit, AggregateSearchResponse } from '@/api/types'
 import { sanitizeFormatted } from '@/utils/html-sanitizer'
+import { buildProductUrl } from '@/utils/build-product-url'
 
 const route = useRoute()
 const router = useRouter()
@@ -126,10 +127,19 @@ function toggleExpand(mr1: string) {
   expandedMr1.value = next
 }
 
-// 跳转产品详情 (V2 SEO URL 暂未实现, 用旧 /product/:oem 跳转)
+// V2 Task 4.4: 跳转产品详情 SEO URL
+//   AggregateSearchHit 含完整字段 (mr1/pn1/pn2/oemList[0].brand&oemNo3), 可拼完整 SEO URL
 function viewDetail(hit: AggregateSearchHit) {
-  const oem = hit.oem2 || hit.mr1
-  if (oem) router.push(`/product/${encodeURIComponent(oem)}`)
+  const firstOem = hit.oemList?.[0]
+  const url = buildProductUrl({
+    productName1: hit.productName1,
+    productName2: hit.productName2,
+    oemBrand: firstOem?.oemBrand,
+    oemNo3: firstOem?.oemNo3,
+    oemNoDisplay: hit.oem2 || hit.mr1,
+    mr1: hit.mr1
+  })
+  window.location.href = url
 }
 
 // 清空搜索

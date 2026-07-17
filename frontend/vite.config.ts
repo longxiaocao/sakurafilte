@@ -2,11 +2,16 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import path from 'node:path'
 
-// Day 9: Vite 閰嶇疆
-//   - @ 鍒悕: @/ -> src/
-//   - 寮€鍙戞湇鍔″櫒: 5173 (CORS 鐧藉悕鍗?
-//   - API 浠ｇ悊: /api -> http://localhost:5148 (鍚庣 Kestrel)
-//   P5.5+: /health 浠ｇ悊 (鍋ュ悍鎺㈤拡绔偣涓嶅湪 /api 鍓嶇紑涓? 闇€鐙珛浠ｇ悊)
+// Vite 配置
+//   - @ 别名: @/ -> src/
+//   - 开发服务器: 5175 (CORS 白名单)
+//   - API 代理: /api -> http://localhost:5148 (后端 Kestrel)
+//   - /health 代理 (健康探针端点不在 /api 前缀中, 需独立代理)
+//   V2 Task 4.5.5: 多入口 + manualChunks vue
+//     - main: index.html (SPA)
+//     - product-detail-client: src/product-detail-client.ts (SEO 详情页 client mount)
+//       产物 /assets/product-detail-client.js, 由 Detail.cshtml 静态引用 (无 hash)
+//     - manualChunks: vue/vue-router/pinia 单独 chunk, 主 bundle 更小
 export default defineConfig({
   plugins: [vue()],
   resolve: {
@@ -31,7 +36,24 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: false,
-    chunkSizeWarningLimit: 1500
+    chunkSizeWarningLimit: 1500,
+    rollupOptions: {
+      // V2 Task 4.5.5: 多入口 (SPA main + SEO 详情页 client mount)
+      input: {
+        main: path.resolve(__dirname, 'index.html'),
+        'product-detail-client': path.resolve(__dirname, 'src/product-detail-client.ts')
+      },
+      output: {
+        // 入口文件: product-detail-client 固定文件名 (Detail.cshtml 静态引用), 其他入口带 hash
+        entryFileNames: 'assets/[name].js',
+        // chunk 文件: 带 hash (缓存策略)
+        chunkFileNames: 'assets/[name]-[hash].js',
+        assetFileNames: 'assets/[name]-[hash].[ext]',
+        // V2 Task 4.5.5: vue 系列单独 chunk, 避免重复打包
+        manualChunks: {
+          vue: ['vue', 'vue-router', 'pinia']
+        }
+      }
+    }
   }
 })
-

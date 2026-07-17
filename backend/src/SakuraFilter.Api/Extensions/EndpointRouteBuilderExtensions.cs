@@ -19,6 +19,8 @@ public static class EndpointRouteBuilderExtensions
         app.MapDeadLetterEndpoints();
         app.MapDictionaryEndpoints();
         app.MapPublicTypeaheadEndpoints();
+        // V2 Task 4.3: sitemap.xml 端点
+        app.MapSitemapEndpoints();
         // P3.2 (Task 10): MVC 控制器路由 (PublicSearchController 等)
         app.MapControllers();
         return app;

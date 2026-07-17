@@ -439,6 +439,8 @@ public static class ServiceCollectionExtensions
     {
         services.AddSingleton<CursorHmac>();
         services.AddSingleton<PerfMetrics>();
+        // V2 Task 4.7: ProductDetailService 公共服务 (Razor Pages + Controller 共用)
+        services.AddScoped<IProductDetailService, ProductDetailService>();
         services.AddSingleton<IHostedServiceStatus, HostedServiceStatus>();
         services.AddSingleton<BusinessMetrics>();
         services.AddSingleton<IAuthTokenStore, AuthTokenStore>();

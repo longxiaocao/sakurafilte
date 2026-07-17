@@ -12,6 +12,7 @@ namespace SakuraFilter.Api.Controllers;
 /// 设计:
 ///   - P2.3 by-type: 按 dict_type.sort_order 分组聚合产品摘要
 ///   - P3.3 by-slug: 单产品详情 (复用了 AdminProductService.GetByIdAsync 避免重写投影)
+///   - V2 Task 4.2: 旧 URL /product/{oem} 301 重定向到新 SEO URL /products/{pn1}/{pn2}/{brand}/{oem3}
 /// </summary>
 [ApiController]
 [AllowAnonymous]
@@ -20,20 +21,26 @@ public class PublicProductController : ControllerBase
 {
     private readonly ProductDbContext _db;
     private readonly AdminProductService _adminService;
+    private readonly IProductDetailService _detailService;  // V2 Task 4.7: 公共服务
+    private readonly IConfiguration _configuration;  // V2 Task 4.2: 读 Seo:UrlLegacyRedirectEnabled
     private readonly ILogger<PublicProductController> _logger;
 
     public PublicProductController(
         ProductDbContext db,
         AdminProductService adminService,
+        IProductDetailService detailService,
+        IConfiguration configuration,
         ILogger<PublicProductController> logger)
     {
         _db = db;
         _adminService = adminService;
+        _detailService = detailService;
+        _configuration = configuration;
         _logger = logger;
     }
 
     /// <summary>
-    /// P3.3 (Task 11): 单产品详情 (公开)
+    /// P3.3 (Task 11): 单产品详情 (公开, JSON 响应)
     /// URL 格式: /api/public/product/{slug}
     /// slug 格式 (按 R1 规格): {name1}-{name2}-{oemBrand}-{oemNo}
     /// 解析策略: 取 slug 最后一段作为 oem (支持 OEM 自身含 - 的场景,如 "AB-123-X")
@@ -41,47 +48,82 @@ public class PublicProductController : ControllerBase
     ///   - 2) Oem2 匹配 (alt OEM)
     ///   - 3) Mr1 匹配
     /// 排除 is_discontinued=true (前台不展示下架产品)
+    ///
+    /// V2 Task 4.7: 查询逻辑抽取到 IProductDetailService.GetByOemAsync
+    ///   V2 Task 4.2: 标记 [Obsolete], 由 Razor Pages /products/... 取代 (此 API 端点保留供 SPA/客户端 JSON 调用)
     /// </summary>
     [HttpGet("product/{slug}")]
+    [Obsolete("V2: 改用 Razor Pages /products/{pn1}/{pn2}/{brand}/{oem3} (Task 4.1); 此 API 端点保留供 JSON 客户端调用, 浏览器访问走 /product/{oem} 301 重定向")]
     public async Task<IActionResult> GetBySlug(string slug, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(slug))
             return BadRequest(new { error = "slug 不能为空" });
         // P2-3 修复: slug 长度校验, 防止恶意超长输入浪费 DB 资源
-        //   WHY: slug 切分后 oem 用于 3 次 WHERE 等值匹配 (列长 50), 无上限会接受 10MB 输入
         if (slug.Length > 200)
             return BadRequest(new { error = "slug 长度不能超过 200" });
 
         // 解析 slug: 取最后一段作为 oem (支持 OEM 含 '-')
         var oem = slug.Contains('-') ? slug[(slug.LastIndexOf('-') + 1)..] : slug;
 
-        // P3-2 修复: 3 次 fallback 合并为 1 次 OR 查询, 用 CASE 表达式实现优先级
-        //   原实现: worst case 3 次 SQL (OemNoDisplay → Oem2 → Mr1 顺序等值)
-        //   现实现: 1 次 SQL + ORDER BY priority (1=OemNoDisplay, 2=Oem2, 3=Mr1)
-        //   性能: DB 往返 3→1, fallback 命中场景从 ~6ms 降到 ~2ms
-        //   优先级保持: OemNoDisplay 命中优于 Oem2, Oem2 优于 Mr1
-        var matched = await _db.Products.AsNoTracking()
-            .Where(p => !p.IsDiscontinued &&
-                        (p.OemNoDisplay == oem || p.Oem2 == oem || p.Mr1 == oem))
-            .Select(p => new
-            {
-                Id = (long?)p.Id,
-                Priority = p.OemNoDisplay == oem ? 1 : (p.Oem2 == oem ? 2 : 3)
-            })
-            .OrderBy(x => x.Priority)
-            .FirstOrDefaultAsync(ct);
-
-        if (matched == null || !matched.Id.HasValue)
+        // V2 Task 4.7: 调用公共 IProductDetailService.GetByOemAsync
+        var detail = await _detailService.GetByOemAsync(oem, ct);
+        if (detail == null)
         {
             _logger.LogInformation("GetBySlug: 404 slug={Slug} oem={Oem}", slug, oem);
             return NotFound(new { error = $"产品不存在: {slug}" });
         }
-        var productId = matched.Id.Value;
-
-        // 复用 AdminProductService.GetByIdAsync: 投影逻辑统一
-        var detail = await _adminService.GetByIdAsync(productId, ct);
-        _logger.LogInformation("GetBySlug: 200 slug={Slug} id={Id}", slug, productId);
+        _logger.LogInformation("GetBySlug: 200 slug={Slug} mr1={Mr1}", slug, detail.Mr1);
         return Ok(detail);
+    }
+
+    /// <summary>
+    /// V2 Task 4.2: 旧 URL /product/{oem} 301 重定向到新 SEO URL /products/{pn1}/{pn2}/{brand}/{oem3}
+    ///
+    /// 触发场景:
+    ///   - 搜索引擎索引的旧 URL (/product/F000000001) 需要迁移到新 SEO URL
+    ///   - 用户书签中的旧 URL 需要重定向到新页面
+    ///   - 第三方网站外链的旧 URL 需要迁移链接权重
+    ///
+    /// 配置开关: Seo:UrlLegacyRedirectEnabled (默认 true)
+    ///   - true: 返回 301 永久重定向 (生产环境推荐, SEO 友好)
+    ///   - false: 返回 410 Gone 或 404 (用于彻底废弃旧 URL)
+    ///
+    /// 安全:
+    ///   - 开放重定向防御: 新 URL 由 BuildProductUrl 生成 (服务端拼接), 不接受用户输入作为 redirect target
+    ///   - 404 友好: 查不到产品时返回 404 (不创建新页, 也不重定向到首页, 避免软 404)
+    /// </summary>
+    /// <param name="oem">旧 URL 末段 OEM 字符串 (OemNoDisplay / Oem2 / Mr1 三级 fallback)</param>
+    /// <param name="ct">取消令牌</param>
+    /// <returns>301 Redirect 到新 SEO URL; 查不到返回 404</returns>
+    [HttpGet("/product/{oem}")]  // 绝对路由, 覆盖控制器级 [Route("api/public")]
+    public async Task<IActionResult> LegacyRedirect(string oem, CancellationToken ct)
+    {
+        // V2 Task 4.2: 检查配置开关
+        var redirectEnabled = _configuration.GetValue<bool?>("Seo:UrlLegacyRedirectEnabled") ?? true;
+        if (!redirectEnabled)
+        {
+            _logger.LogInformation("LegacyRedirect: 410 Gone (disabled) oem={Oem}", oem);
+            return StatusCode(410, new { error = "旧 URL 已废弃, 请使用新 SEO URL /products/{pn1}/{pn2}/{brand}/{oem3}" });
+        }
+
+        if (string.IsNullOrWhiteSpace(oem))
+            return BadRequest(new { error = "oem 不能为空" });
+        if (oem.Length > 200)
+            return BadRequest(new { error = "oem 长度不能超过 200" });
+
+        // 调公共 IProductDetailService.GetByOemAsync (三级 fallback)
+        var detail = await _detailService.GetByOemAsync(oem, ct);
+        if (detail == null)
+        {
+            _logger.LogInformation("LegacyRedirect: 404 oem={Oem}", oem);
+            return NotFound(new { error = $"产品不存在: {oem}" });
+        }
+
+        // V2 Task 4.2: 用 BuildProductUrl 拼新 SEO URL (服务端拼接, 防开放重定向)
+        var newUrl = _detailService.BuildProductUrl(detail);
+
+        _logger.LogInformation("LegacyRedirect: 301 oem={Oem} -> {NewUrl}", oem, newUrl);
+        return RedirectPermanent(newUrl);
     }
 
     /// <summary>

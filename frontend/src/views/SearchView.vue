@@ -19,6 +19,7 @@ import { searchApi } from '@/api'
 import type { SearchResult, SearchHit, BatchOemResult } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import { useI18n } from 'vue-i18n'
+import { buildProductUrl } from '@/utils/build-product-url'
 
 const router = useRouter()
 const { t } = useI18n()
@@ -116,9 +117,17 @@ watch(q, (newVal) => {
 })
 
 function viewDetail(row: SearchHit) {
+  // V2 Task 4.4: 改用 SEO URL /products/{pn1}/{pn2}/{brand}/{oem3}
+  //   WHY window.location.href: 新 SEO URL 由后端 Razor SSR 渲染, 不走 SPA 路由
+  //   降级: SearchHit 无 pn1/pn2/brand 字段, buildProductUrl 自动降级为 /product/{oem} 走后端 301
   // Day 9.2: 兼容 snake_case 和 PascalCase 字段
   const oem = row.oemNoDisplay ?? row.oem_no_display ?? ''
-  router.push(`/product/${encodeURIComponent(oem)}`)
+  const url = buildProductUrl({
+    oemNoDisplay: oem,
+    productName1: row.product_name_1,
+    mr1: row.mr_1
+  })
+  window.location.href = url
 }
 
 function fmtDate(iso?: string) {
@@ -202,9 +211,16 @@ function clearBatch() {
 }
 
 function viewProductById(row: BatchOemResult) {
-  // 命中时, 尝试从 oem2 或原 oem 字段拼详情页 URL
-  const oem = row.oem2 || row.oem
-  router.push(`/product/${encodeURIComponent(oem)}`)
+  // V2 Task 4.4: 改用 SEO URL
+  //   BatchOemResult 含 oemBrand + productName1 + oem2, 用 oem2 作为 oem3 段降级
+  //   buildProductUrl 缺 productName2 → slug="untitled", 缺 oemNo3 → 用 oem2
+  const url = buildProductUrl({
+    productName1: row.productName1,
+    oemBrand: row.oemBrand,
+    oemNo3: row.oem2,  // oem2 作 oem3 降级 (BatchOemResult 无 oemNo3 字段)
+    oemNoDisplay: row.oem2 ?? row.oem
+  })
+  window.location.href = url
 }
 
 onMounted(() => {

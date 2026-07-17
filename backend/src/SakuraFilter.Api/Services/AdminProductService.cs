@@ -420,7 +420,7 @@ public class AdminProductService
         // WHY 用 raw ticks 不用 ToString("o"): ISO "o" 格式对 Kind 敏感
         //   (Local/Utc/Unspecified 输出不同, +08:00 vs Z vs 无后缀)
         //   raw ticks 唯一标识一个时间点, 跨 Kind 稳定
-        var sig = _cursorHmac.Sign(changedAt.Ticks.ToString(), id);
+        var sig = _cursorHmac.Sign(changedAt.Ticks.ToString(), id.ToString());
         var s = string.Format("{0}|{1}|{2}", changedAt.Ticks, id, sig);
         return Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(s))
             .TrimEnd('=').Replace('+', '-').Replace('/', '_');
@@ -611,7 +611,8 @@ public class AdminProductService
         // Day 8.2.2: paging 模式 (offset 默认, cursor 走 keyset 二元组)
         var pagingMode = req.NormalizePagingMode();
         DateTime? cursorUpdatedAt = null;
-        long? cursorId = null;
+        long? cursorId = null;          // keyset 排序仍用 Id (数据库主键, 数值排序稳定)
+        string? cursorMr1 = null;       // V2 Task 4.6: cursor 签名载荷改用 mr1 (不暴露内部 Id)
         if (pagingMode == "cursor")
         {
             // cursor 模式强制 sortBy=updated_at DESC (keyset 要求有序键, 忽略客户端 sortBy)
@@ -634,8 +635,10 @@ public class AdminProductService
             //     PG CST 解释 → 2026-07-01 05:22:17 CST = 2026-06-30 21:22:17 UTC ✓
             if (!string.IsNullOrEmpty(req.Cursor))
             {
-                // Day 8.3: HMAC 验签 + 提取 updatedAt/id
-                var (iso, cid) = _cursorHmac.VerifyAndExtract(req.Cursor);
+                // Day 8.3: HMAC 验签 + 提取 updatedAt/mr1
+                // V2 Task 4.6: cursor 载荷从 id 改为 mr1, 验签返回 (iso, mr1)
+                //   仍需 id 用于 keyset 排序: 通过 mr1 反查 Product.Id (单次查询, O(1) 索引)
+                var (iso, cmr1) = _cursorHmac.VerifyAndExtract(req.Cursor);
                 if (!DateTime.TryParse(iso, null,
                     System.Globalization.DateTimeStyles.RoundtripKind,
                     out var cdt))
@@ -650,7 +653,17 @@ public class AdminProductService
                 // 抵消 Npgsql legacy 行为的 8h 偏差
                 cdt = cdt.ToLocalTime();
                 cursorUpdatedAt = cdt;
-                cursorId = cid;
+                cursorMr1 = cmr1;
+                // V2 Task 4.6: 通过 mr1 反查 Product.Id 用于 keyset 排序
+                //   WHY: keyset 二元组 (UpdatedAt, Id) 数值排序稳定, mr1 字符串字典序在变长 mr1 下不稳定
+                //   O(1) 索引查询: mr1 已有 unique 索引, 1 次单行查找
+                var pid = await _db.Products.AsNoTracking()
+                    .Where(p => p.Mr1 == cmr1)
+                    .Select(p => (long?)p.Id)
+                    .FirstOrDefaultAsync(ct);
+                if (pid == null)
+                    throw new ArgumentException($"cursor mr1={cmr1} 对应产品不存在, 可能已被删除");
+                cursorId = pid.Value;
             }
         }
 
@@ -899,8 +912,12 @@ public class AdminProductService
                 // 同一毫秒内多次写入 (e.g. 5 个产品间隔 0.05s) 会命中同一毫秒, .fff 截断后游标"跳过"这些行
                 // Day 8.3: cursor 末尾追加 HMAC 签名, 防止客户端篡改 updatedAt/id 越权访问
                 var iso = $"{new DateTimeOffset(lastUtc, TimeSpan.Zero):yyyy-MM-ddTHH:mm:ss.ffffffZ}";
-                var sig = _cursorHmac.Sign(iso, last.Id);
-                nextCursor = $"{iso}|{last.Id}|{sig}";
+                // V2 Task 4.6: cursor 载荷从 long Id 改为 string Mr1 (不暴露内部自增 Id)
+                //   WHY: mr1 是 V2 对外主键, 客户端可见; Id 是内部自增, 暴露会泄露产品创建顺序/数量
+                //   keyset 排序仍用 Id (查询内通过 mr1 反查), 但 cursor 字符串只含 mr1
+                var lastMr1 = last.Mr1 ?? throw new InvalidOperationException($"产品 id={last.Id} 的 Mr1 为空, 无法生成 cursor (V2 要求 Mr1 必填)");
+                var sig = _cursorHmac.Sign(iso, lastMr1);
+                nextCursor = $"{iso}|{lastMr1}|{sig}";
             }
         }
         return (items, total, nextCursor, countModeUsed);
