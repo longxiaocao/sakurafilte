@@ -4093,7 +4093,212 @@ _待启动第七轮深度审查后追加_
 ## 十八、循环终止条件(更新)
 
 - [ ] 第十轮审查无任何新漏洞检出 → 完成
-- [ ] 第十轮审查发现新漏洞 → 进入 v11 修订,继续迭代
+- [x] 第十轮审查发现新漏洞 → 进入 v11 修订,继续迭代(17 项漏洞)
 - [ ] 持续迭代直到连续一轮审查无任何新漏洞检出
-- [ ] v10 引入"行号+类名"双重核实机制,目标是 v11 实现真正的"0 项凭空假设"
+- [x] v10 引入"行号+类名"双重核实机制,目标是 v11 实现真正的"0 项凭空假设"
+- [x] v11 引入"方法存在性 + API 签名"双重核实机制,强化凭空假设防护
+
+---
+
+# v11 验证清单(对应 v11 任务清单 17 项)
+
+> **验证原则**: 每个子任务对应至少 1 个验证点,验证点必须可执行(命令/检查项/测试用例)。
+> **验证目标**: 确认 v11 修订无凭空假设、无类型不匹配、无访问修饰符错误、无内存爆炸风险。
+
+## v11 前置任务验证(Pre-Task-V11-1 ~ V11-6,6 项,全部已完成)
+
+- [x] V11-CHK-1: Pre-Task-V11-1 — Grep `BuildProductIndexDocAsync` 全项目无匹配(已核实)
+- [x] V11-CHK-2: Pre-Task-V11-2 — Glob `LocalStorage.cs` + Grep `class LocalStorage` 全项目无匹配(已核实)
+- [x] V11-CHK-3: Pre-Task-V11-3 — ISearchProvider.cs L33 是 `long Id`,Product.cs L10 是 `long Id`(已核实)
+- [x] V11-CHK-4: Pre-Task-V11-4 — EtlImportService.cs L1127 是 `private async Task SyncSearchIndexAsync`(已核实)
+- [x] V11-CHK-5: Pre-Task-V11-5 — frontend/package.json L29 `vue-router: ^4.5.0`,isReady() 返回 Promise<void>(已核实)
+- [ ] V11-CHK-6: Pre-Task-V11-6 — 业务方确认 Product.Oem2 vs CrossReferences.OemBrand 业务语义(待确认,临时用 Product.Oem2)
+
+## v11 数据关联任务验证(V11-1.1 ~ V11-1.4)
+
+### Task V11-1.1: WithMany() 改为带参数
+- [ ] V11-CHK-7: CrossReferenceConfiguration.cs(或 OnModelCreating) WithMany 调用带参数(`p => p.CrossReferences` 或 `"CrossReferences"`)
+- [ ] V11-CHK-8: `dotnet build` 编译通过
+- [ ] V11-CHK-9: 新 migration `FixCrossReferenceNavProperty` 创建成功
+- [ ] V11-CHK-10: `dotnet ef migrations script --idempotent` 输出无 DDL 变更(纯 metadata 修正)
+- [ ] V11-CHK-11: 单元测试 Product.C_crossReferences.Add(...) 能正确反查 Product
+
+### Task V11-1.2: ProductIndexDoc.Id 保持 long
+- [ ] V11-CHK-12: ISearchProvider.cs L33 显示 `public record ProductIndexDoc(long Id, ...)`(非 int)
+- [ ] V11-CHK-13: Grep `ProductIndexDoc` 全项目所有引用位置类型一致(无 int 强制转换)
+- [ ] V11-CHK-14: Meilisearch 主键配置 `.PrimaryKey("id")` 与 long 序列化兼容
+- [ ] V11-CHK-15: IndexReplayWorker.cs L97 `JsonSerializer.Deserialize<ProductIndexDoc>` 兼容 long
+- [ ] V11-CHK-16: `dotnet build` 编译通过
+- [ ] V11-CHK-17: 现有 ETL 流程不报 InvalidCastException
+
+### Task V11-1.3: DevTokenAuthMiddleware 设置 ClaimsPrincipal
+- [ ] V11-CHK-18: DevTokenAuthMiddleware.cs L142-172 验证成功后设置 `ctx.User = new ClaimsPrincipal(...)` 包含 RoleClaim "admin"
+- [ ] V11-CHK-19: AdminEtlEndpoints.cs L21 加 `.RequireAuthorization("Admin")`
+- [ ] V11-CHK-20: `dotnet build` 编译通过
+- [ ] V11-CHK-21: 集成测试 X-Admin-Token 访问 /api/etl/trigger-all 通过 AdminPolicy 校验返回 200
+- [ ] V11-CHK-22: 集成测试 无 token 访问 /api/etl/trigger-all 返回 401
+- [ ] V11-CHK-23: DevTokenAuthMiddleware 验证成功后 `ctx.User.HasClaim(ClaimTypes.Role, "admin")` == true
+- [ ] V11-CHK-24: 普通用户 Cookie 通道未受影响(并行支持两种认证)
+
+### Task V11-1.4: 删除 LocalStorage 子任务 1.8.4
+- [ ] V11-CHK-25: Grep `class LocalStorage` 全项目仍无匹配(确认未误创建)
+- [ ] V11-CHK-26: IObjectStorage 接口 ListAllAsync 签名存在
+- [ ] V11-CHK-27: MinioStorage.ListAllAsync 实现存在
+- [ ] V11-CHK-28: AliyunOssStorage.ListAllAsync 实现存在
+- [ ] V11-CHK-29: tasks.md Task V10-1.8 子任务 1.8.4 已删除(标记删除线)
+
+## v11 检索逻辑任务验证(V11-2.1 ~ V11-2.4)
+
+### Task V11-2.1: 全量重建端点综合修正
+- [ ] V11-CHK-30: EtlImportService.cs 新增 `public async Task ReindexAllAsync(DateTime?, CancellationToken)` 包装方法
+- [ ] V11-CHK-31: AdminSearchEndpoints.cs 文件已新建,注册 POST /api/admin/search/reindex
+- [ ] V11-CHK-32: AdminSearchEndpoints.cs 端点加 `.RequireAuthorization("Admin")`
+- [ ] V11-CHK-33: ResilientSearchProvider.cs 新增 `public void SetPrimaryAvailable(bool)` 方法
+- [ ] V11-CHK-34: EtlImportService.cs 新增 `public async Task TruncateSearchIndexPendingAsync(CancellationToken)` 方法
+- [ ] V11-CHK-35: EndpointRouteBuilderExtensions.cs 调用 `app.MapAdminSearchEndpoints()`
+- [ ] V11-CHK-36: `dotnet build` 编译通过
+- [ ] V11-CHK-37: 集成测试 POST /api/admin/search/reindex 无 token 返回 401
+- [ ] V11-CHK-38: 集成测试 POST /api/admin/search/reindex 用 X-Admin-Token 返回 200
+- [ ] V11-CHK-39: 单元测试 ReindexAllAsync 委托到 SyncSearchIndexAsync(importStartedAt, ct)
+- [ ] V11-CHK-40: 单元测试 SetPrimaryAvailable(false) 后 SearchAsync 走 PG 兜底
+- [ ] V11-CHK-41: 单元测试 TruncateSearchIndexPendingAsync 清空后表 row count == 0
+- [ ] V11-CHK-42: 全量重建流程正确顺序: SetPrimaryAvailable(false) → TRUNCATE → ReindexAllAsync → SetPrimaryAvailable(true)(finally 块)
+
+### Task V11-2.2: BuildProductIndexDocs 综合修正
+- [ ] V11-CHK-43: EtlImportService.cs 新增 `private static ProductIndexDoc BuildProductIndexDocs(Product)` 方法
+- [ ] V11-CHK-44: BuildProductIndexDocs 方法名无 Async 后缀(因为不返回 Task)
+- [ ] V11-CHK-45: BuildProductIndexDocs 内 Id 字段类型为 long(V11-F3)
+- [ ] V11-CHK-46: BuildProductIndexDocs 内 OemBrand 字段来源为 Product.Oem2(V11-F12 临时方案)
+- [ ] V11-CHK-47: BuildProductIndexDocs 内 UpdatedAt 字段保留 Day 9.9 修复(SpecifyKind + ToUnixTimeSeconds)
+- [ ] V11-CHK-48: EtlImportService.cs L1158-1166 内联 lambda 改为调用 `BuildProductIndexDocs(p)`
+- [ ] V11-CHK-49: 全量重建查询用 `.Include(p => p.CrossReferences)` 而非投影
+- [ ] V11-CHK-50: 全量重建查询返回类型为 `List<Product>`(与签名 IEnumerable<Product> 兼容)
+- [ ] V11-CHK-51: Grep `.ToList().FirstOrDefault()` 全项目无匹配(改为 `.FirstOrDefault()` 直接调用)
+- [ ] V11-CHK-52: 单元测试 BuildProductIndexDocs_ReturnsCorrectDoc 通过
+- [ ] V11-CHK-53: Grep `BuildProductIndexDocAsync` 全项目无匹配(确认未误用旧名)
+- [ ] V11-CHK-54: Grep `BuildProductIndexDocs` 全项目有 2 处匹配(方法定义 + 单元测试)
+- [ ] V11-CHK-55: `dotnet build` + `dotnet test` 全部通过
+- [ ] V11-CHK-56: ETL 增量导入流程不报错(内联 lambda 改为方法调用后行为一致)
+
+### Task V11-2.3: VerifyAndExtractV2 恢复 V1 兜底
+- [ ] V11-CHK-57: CursorHmac.cs 新增 `public (string, long, int) VerifyAndExtractV2(string cursor)` 方法
+- [ ] V11-CHK-58: VerifyAndExtractV2 先尝试 V2 验签(cursor.StartsWith "V2:")
+- [ ] V11-CHK-59: VerifyAndExtractV2 V2 失败时 V1 兜底(原 VerifyAndExtract 逻辑)
+- [ ] V11-CHK-60: AdminProductService 主列表 cursor L866-868 加 "V2:" 前缀
+- [ ] V11-CHK-61: AdminProductService 历史页 cursor L400-401 保持 V1 格式(Ticks,不动)
+- [ ] V11-CHK-62: 主列表分页查询用 VerifyAndExtractV2(自动兼容 V1/V2)
+- [ ] V11-CHK-63: 单元测试 V2 cursor 验签成功,返回 version=2
+- [ ] V11-CHK-64: 单元测试 V1 cursor(无前缀)验签成功,返回 version=1
+- [ ] V11-CHK-65: 单元测试 篡改 cursor(改 Ticks)抛出 UnauthorizedAccessException
+- [ ] V11-CHK-66: `dotnet build` 编译通过
+
+### Task V11-2.4: IndexReplayWorker 旧 payload 兼容性
+- [ ] V11-CHK-67: IndexReplayWorker.cs L97 反序列化包 try-catch(JsonException)
+- [ ] V11-CHK-68: 损坏 payload 抛 JsonException 时 continue 跳过(不阻塞队列)
+- [ ] V11-CHK-69: doc.OemBrand 为 null 时用 `doc with { OemBrand = doc.Mr1 ?? "unknown" }` 兜底
+- [ ] V11-CHK-70: 单元测试 旧 payload(无 OemBrand)反序列化不报错,OemBrand 兜底为 Mr1
+- [ ] V11-CHK-71: 单元测试 损坏 payload 抛 JsonException 时跳过,不阻塞队列
+- [ ] V11-CHK-72: `dotnet build` + `dotnet test` 全部通过
+
+## v11 前后端联动任务验证(V11-3.1 ~ V11-3.3)
+
+### Task V11-3.1: 历史页 V1 路径描述精确化
+- [ ] V11-CHK-73: spec.md 第 12.2 节 V11-F16 描述已修正(已完成)
+- [ ] V11-CHK-74: CursorHmac.cs VerifyAndExtractV2 方法注释明确 V2/V1 路径区分
+- [ ] V11-CHK-75: AdminProductService.cs L400-401 加注释说明 V1 cursor(历史页)保持 Ticks 格式
+- [ ] V11-CHK-76: 历史页 cursor 格式不变(向后兼容,已有书签可用)
+- [ ] V11-CHK-77: 主列表 cursor 用 V2 格式("V2:" + ISO8601)
+
+### Task V11-3.2: isSafeRedirect 补充合法绝对路径测试
+- [ ] V11-CHK-78: isSafeRedirect 测试用例包含"合法绝对路径(白名单内)"返回 true
+- [ ] V11-CHK-79: isSafeRedirect 测试用例包含"非法绝对路径(白名单外)"返回 false
+- [ ] V11-CHK-80: isSafeRedirect 测试用例包含"javascript: 协议"返回 false
+- [ ] V11-CHK-81: isSafeRedirect 测试用例包含"data: 协议"返回 false
+- [ ] V11-CHK-82: `npm run test` 全部通过
+
+### Task V11-3.3: router.isReady() await 模式
+- [ ] V11-CHK-83: Grep `if (router.isReady())` 全前端无匹配(全部改为 await/then 模式)
+- [ ] V11-CHK-84: router.isReady() 调用方式为 `.then(() => {...}).catch(err => {...})` 或 `await router.isReady()`
+- [ ] V11-CHK-85: Grep `name: 'login'` 全前端无匹配(全部改为 `name: 'Login'`)
+- [ ] V11-CHK-86: router.push 调用使用 `{ name: 'Login' }`(首字母大写,与 router/index.ts L52 一致)
+- [ ] V11-CHK-87: `npm run build` 编译通过
+- [ ] V11-CHK-88: 手动测试 未登录访问 /admin/* 跳转到 /login 正常
+
+## v11 综合验证
+
+- [ ] V11-CHK-89: `dotnet build` 整个解决方案编译通过(无 warning)
+- [ ] V11-CHK-90: `dotnet test` 所有单元测试通过
+- [ ] V11-CHK-91: `npm run build` 前端编译通过
+- [ ] V11-CHK-92: `npm run test` 前端测试通过
+- [ ] V11-CHK-93: 集成测试 ETL 增量导入流程未受影响(向后兼容)
+- [ ] V11-CHK-94: 集成测试 全量重建端点 POST /api/admin/search/reindex 正常工作
+- [ ] V11-CHK-95: 集成测试 V1 cursor(已有书签)继续可用
+- [ ] V11-CHK-96: 集成测试 V2 cursor(新格式)验签成功
+- [ ] V11-CHK-97: 性能验证 1M 行 Product 全量重建不 OOM(.Include + FirstOrDefault 不 ToList)
+- [ ] V11-CHK-98: 安全验证 篡改 cursor 抛出异常
+- [ ] V11-CHK-99: 安全验证 X-Admin-Token 通道继续可用
+- [ ] V11-CHK-100: 安全验证 普通用户 Cookie 通道未受影响
+
+---
+
+# 第十一轮深度审查验证点(V11-AUDIT-1 ~ V11-AUDIT-40)
+
+> **审查原则**: 三维度并行深度审查(数据关联 D11 / 检索逻辑 S11 / 前后端联动 F10),每个维度独立审查。
+> **审查目标**: 验证 v11 修订是否引入新的衍生问题,持续迭代直到无漏洞检出。
+
+## D11 数据关联维度审查(15 项)
+
+- [ ] V11-AUDIT-1: Task V11-1.1 WithMany 带参数形式 `p => p.CrossReferences` 是否与 ModelSnapshot L1707-1715 `.WithMany("CrossReferences")`(字符串参数)冲突
+- [ ] V11-AUDIT-2: Task V11-1.1 新 migration `FixCrossReferenceNavProperty` 是否真的无 DDL 变更(纯 metadata 修正)
+- [ ] V11-AUDIT-3: Task V11-1.2 ProductIndexDoc.Id 保持 long,Meilisearch 主键 `id` 字段是否需要重新建索引(类型变更影响)
+- [ ] V11-AUDIT-4: Task V11-1.2 IndexReplayWorker.cs L97 JsonSerializer.Deserialize 是否正确处理 long 类型(反序列化默认行为)
+- [ ] V11-AUDIT-5: Task V11-1.3 DevTokenAuthMiddleware 设置 ClaimsPrincipal 后,是否影响其他中间件读取 ctx.User 的逻辑
+- [ ] V11-AUDIT-6: Task V11-1.3 AdminPolicy RequireRole("admin") 与 ClaimsIdentity RoleClaim 类型是否匹配(ClaimTypes.Role vs custom)
+- [ ] V11-AUDIT-7: Task V11-1.3 DevTokenAuthMiddleware 验证失败时是否清空 ctx.User(防止前一请求残留)
+- [ ] V11-AUDIT-8: Task V11-1.4 删除 LocalStorage 子任务后,是否有其他代码引用 LocalStorage(确认无悬空引用)
+- [ ] V11-AUDIT-9: Task V11-2.1 TruncateSearchIndexPendingAsync 使用 ExecuteSqlRawAsync 是否有 SQL 注入风险(参数为常量字符串)
+- [ ] V11-AUDIT-10: Task V11-2.1 TRUNCATE TABLE search_index_pending 是否会级联影响其他表(外键约束)
+- [ ] V11-AUDIT-11: Task V11-2.2 BuildProductIndexDocs 是 private static,AdminSearchEndpoints.cs(不同程序集)能否调用
+- [ ] V11-AUDIT-12: Task V11-2.2 OemBrand 临时方案 Product.Oem2 是否会与 CrossReferences.OemBrand 数据语义冲突
+- [ ] V11-AUDIT-13: Task V11-2.2 .Include(p => p.CrossReferences) 是否会导致 1+N 查询问题(Cartesian explosion)
+- [ ] V11-AUDIT-14: Task V11-2.3 VerifyAndExtractV2 V2 cursor 格式 "V2:" + Sign(iso, id) 中 Sign 返回的字符串是否包含 ":"(分隔符冲突)
+- [ ] V11-AUDIT-15: Task V11-2.4 IndexReplayWorker `doc with { OemBrand = ... }` record with 表达式是否兼容(必须是 record 类型)
+
+## S11 检索逻辑维度审查(15 项)
+
+- [ ] V11-AUDIT-16: Task V11-2.1 ReindexAllAsync(DateTime?, CancellationToken) 中 sinceDate=null 是否真的触发全量(SyncSearchIndexAsync 内部逻辑)
+- [ ] V11-AUDIT-17: Task V11-2.1 SetPrimaryAvailable(false) 后,正在进行的 SearchAsync 请求是否被中断(线程安全)
+- [ ] V11-AUDIT-18: Task V11-2.1 SetPrimaryAvailable 使用 volatile bool 是否足够(无原子性保证)
+- [ ] V11-AUDIT-19: Task V11-2.1 全量重建期间用户搜索请求全部走 PG 兜底,PG 查询性能是否可接受(无索引fallback)
+- [ ] V11-AUDIT-20: Task V11-2.1 全量重建 finally 块 SetPrimaryAvailable(true),若 ReindexAllAsync 抛异常,主索引是否真的可用(可能数据不一致)
+- [ ] V11-AUDIT-21: Task V11-2.2 BuildProductIndexDocs 是 private,但 AdminSearchEndpoints 在不同程序集(Api 项目),无法直接调用
+- [ ] V11-AUDIT-22: Task V11-2.2 全量重建查询 .Include(p => p.CrossReferences) 是否会因数据量大(1M Product × 5-20M xref)导致 OOM
+- [ ] V11-AUDIT-23: Task V11-2.2 products.Select(BuildProductIndexDocs).ToList() 是否是流式处理(内存爆炸风险)
+- [ ] V11-AUDIT-24: Task V11-2.2 全量重建是否需要分批处理(避免 1M 行一次性加载)
+- [ ] V11-AUDIT-25: Task V11-2.3 VerifyAndExtractV2 V2 失败时 V1 兜底,但 V1 验签也失败时是否抛出明确异常(而非静默)
+- [ ] V11-AUDIT-26: Task V11-2.3 cursor.StartsWith("V2:") 使用 StringComparison.Ordinal 是否与 CursorHmac 其他比较一致
+- [ ] V11-AUDIT-27: Task V11-2.3 cursor.Substring(3) 是否有 IndexOutOfRange 风险(若 cursor 长度 < 3)
+- [ ] V11-AUDIT-28: Task V11-2.4 IndexReplayWorker continue 跳过损坏 payload 后,该 payload 是否标记为已处理(避免无限重试)
+- [ ] V11-AUDIT-29: Task V11-2.4 `doc with { OemBrand = doc.Mr1 ?? "unknown" }` 中 doc 可能为 null(已 catch JsonException 但 doc 可能仍为 null)
+- [ ] V11-AUDIT-30: Task V11-2.4 旧 payload 兼容性: 当 OemBrand 字段类型变更(如 string → string?)时,反序列化行为是否符合预期
+
+## F10 前后端联动维度审查(10 项)
+
+- [ ] V11-AUDIT-31: Task V11-3.1 历史页 V1 cursor 与主列表 V2 cursor 在前端 URL 参数中是否区分(query 参数 vs path 参数)
+- [ ] V11-AUDIT-32: Task V11-3.1 前端是否有 cursor 缓存( localStorage / sessionStorage ),V1/V2 切换时缓存是否失效
+- [ ] V11-AUDIT-33: Task V11-3.2 isSafeRedirect 白名单是否通过环境变量配置(避免硬编码)
+- [ ] V11-AUDIT-34: Task V11-3.2 isSafeRedirect 是否考虑 URL 编码绕过(如 %2F%2Fevil.com)
+- [ ] V11-AUDIT-35: Task V11-3.3 router.isReady().then() 模式在 SSR 场景下是否兼容(若有 SSR)
+- [ ] V11-AUDIT-36: Task V11-3.3 router.push({ name: 'Login' }) 在路由未就绪时是否丢失(需兜底)
+- [ ] V11-AUDIT-37: Task V11-3.3 全前端 Grep `name: 'login'`(小写)是否真的无匹配
+- [ ] V11-AUDIT-38: Task V11-3.3 全前端 Grep `if (router.isReady())` 是否真的无匹配
+- [ ] V11-AUDIT-39: v11 修订是否引入新的前端依赖(应无新增)
+- [ ] V11-AUDIT-40: v11 修订是否影响既有 API 契约(应无破坏性变更)
+
+## 十九、第十一轮循环终止条件
+
+- [ ] 第十一轮审查无任何新漏洞检出 → 完成
+- [ ] 第十一轮审查发现新漏洞 → 进入 v12 修订,继续迭代
+- [ ] 持续迭代直到连续一轮审查无任何新漏洞检出
+- [ ] v11 引入"方法存在性 + API 签名"双重核实机制,目标仍是 v12 实现真正的"0 项凭空假设"
 
