@@ -2002,3 +2002,665 @@
 > - **Task 4.5.27** → 依赖 Task 1.3.11
 > - **Task 5.1.26** → 依赖 Task 0.2.2
 > - **Task 5.1.27** → 独立
+
+---
+
+# v8 补丁任务清单(27 个)
+
+> **修订时间**: 2026-07-17
+> **触发原因**: 第七轮深度审查发现 64 项衍生漏洞 + v7 24 项高危事实性误判
+> **执行顺序**: Phase 0(前置任务 8) → Phase 1(数据关联 7) → Phase 3(检索逻辑 6) → Phase 4(前后端联动 6)
+
+## Phase 0: v8 前置任务(8 个)
+
+### Pre-Task-V8-1: 创建 cleanup_failures 表 + CleanupFailure 实体 [高]
+
+**修复**: D7-8 / E11
+**文件**:
+- `backend/src/SakuraFilter.Core/Entities/CleanupFailure.cs` (新建)
+- `backend/src/SakuraFilter.Infrastructure/Data/Configurations/CleanupFailureConfiguration.cs` (新建)
+- `backend/src/SakuraFilter.Infrastructure/Data/Migrations/<timestamp>_AddCleanupFailuresTable.cs` (新建)
+
+**子任务**:
+- [ ] 1.1: 创建 CleanupFailure 实体:
+  ```csharp
+  public class CleanupFailure
+  {
+      public long Id { get; set; }
+      [Column("file_key")] public string FileKey { get; set; } = "";
+      [Column("backend")] public string Backend { get; set; } = ""; // minio | aliyun
+      [Column("failure_type")] public string FailureType { get; set; } = ""; // delete_failed | list_failed
+      [Column("error_message")] public string ErrorMessage { get; set; } = "";
+      [Column("retry_count")] public int RetryCount { get; set; }
+      [Column("status")] public string Status { get; set; } = "pending"; // pending|in_progress|success|failed|failed_permanent
+      [Column("last_attempt_at")] public DateTime? LastAttemptAt { get; set; }
+      [Column("next_retry_at")] public DateTime? NextRetryAt { get; set; }
+      [Column("created_at")] public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+      [Column("updated_at")] public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+  }
+  ```
+- [ ] 1.2: 创建 EF 配置 + ToTable("cleanup_failures")
+- [ ] 1.3: 创建迁移文件,DDL 见 spec.md E11
+- [ ] 1.4: 注册到 ProductDbContext: `public DbSet<CleanupFailure> CleanupFailures => Set<CleanupFailure>();`
+
+**验证**:
+- `dotnet ef migrations has-pending-model-changes` 无 diff
+- `dotnet ef database update` 成功
+- 表存在性查询 `SELECT 1 FROM cleanup_failures LIMIT 1` 成功
+
+**依赖**: 无
+
+### Pre-Task-V8-2: 扩展 IObjectStorage 接口 [高]
+
+**修复**: D7-3 / E6
+**文件**:
+- `backend/src/SakuraFilter.Core/Interfaces/IObjectStorage.cs` (修改)
+- `backend/src/SakuraFilter.Infrastructure/Storage/MinioStorage.cs` (修改)
+- `backend/src/SakuraFilter.Infrastructure/Storage/AliyunOssStorage.cs` (修改)
+
+**子任务**:
+- [ ] 2.1: IObjectStorage 新增 2 方法:
+  ```csharp
+  Task<IAsyncEnumerable<string>> ListAllAsync(string? prefix = null, CancellationToken ct = default);
+  Task DeleteBatchAsync(IEnumerable<string> keys, CancellationToken ct = default);
+  ```
+- [ ] 2.2: MinioStorage 实现 ListAllAsync(用 ListObjectsAsync 迭代器)
+- [ ] 2.3: MinioStorage 实现 DeleteBatchAsync(批量 DeleteObjectsAsync,1000 条/批)
+- [ ] 2.4: AliyunOssStorage 实现 ListAllAsync(用 ListObjectsV2 迭代)
+- [ ] 2.5: AliyunOssStorage 实现 DeleteBatchAsync(批量 DeleteObjects,1000 条/批)
+
+**验证**:
+- 单元测试 `MinioStorage_ListAll_Pagination` 通过
+- 单元测试 `MinioStorage_DeleteBatch_Idempotent` 通过(404 静默)
+- 单元测试 `AliyunOssStorage_ListAll_Pagination` 通过
+- 单元测试 `AliyunOssStorage_DeleteBatch_Idempotent` 通过
+
+**依赖**: 无
+
+### Pre-Task-V8-3: SEO 多段 URL 独立路由(可选,低优先级) [低]
+
+**修复**: E14
+**文件**:
+- `frontend/src/router/index.ts` (修改)
+- `frontend/src/views/public/PublicProductView.vue` (修改)
+
+**子任务**:
+- [ ] 3.1: 新增路由 `/products/:pn1/:pn2/:brand/:mr1Suffix`(与现有 /product/:oem 并存)
+- [ ] 3.2: PublicProductView.vue 兼容两种路由参数读取
+- [ ] 3.3: 现有 /product/:oem 路由保持不变(后向兼容)
+
+**验证**:
+- 现有路由 `/product/ABC123` 仍可访问
+- 新路由 `/products/pn1/pn2/brand/mr1suffix` 可访问且解析正确
+
+**依赖**: 无
+
+### Pre-Task-V8-4: 创建 frontend/src/utils/url.ts [高]
+
+**修复**: F6-1 / F6-17 / F6-20 / E19
+**文件**: `frontend/src/utils/url.ts` (新建)
+
+**子任务**:
+- [ ] 4.1: 实现 buildProductUrl:
+  ```typescript
+  export function buildProductUrl(oem: string): string {
+    return `/product/${encodeURIComponent(oem)}`
+  }
+  ```
+- [ ] 4.2: 实现 getProductSlugFromRoute
+- [ ] 4.3: 实现 isSafeRedirect(开放重定向防护):
+  ```typescript
+  export function isSafeRedirect(path: string): boolean {
+    if (!path) return false
+    if (!path.startsWith('/')) return false
+    if (path.startsWith('//')) return false
+    if (/^\/[^/].*/.test(path) === false) return false
+    return true
+  }
+  ```
+- [ ] 4.4: 重构 LoginView.vue 使用 isSafeRedirect
+- [ ] 4.5: 重构 http.ts redirectToLogin 使用 isSafeRedirect
+
+**验证**:
+- 单元测试 `isSafeRedirect_RejectsExternalUrl` 通过(`//evil.com` 拒绝)
+- 单元测试 `isSafeRedirect_RejectsProtocolRelative` 通过(`//attacker.com` 拒绝)
+- 单元测试 `buildProductUrl_EncodesSpecialChars` 通过(`&`/`?`/`#` 编码)
+
+**依赖**: 无
+
+### Pre-Task-V8-5: 创建 frontend/src/utils/safeStorage.ts [高]
+
+**修复**: F6-21 / E19
+**文件**: `frontend/src/utils/safeStorage.ts` (新建)
+
+**子任务**:
+- [ ] 5.1: 实现 safeLocalStorage(getItem/setItem/removeItem,try-catch 包裹)
+- [ ] 5.2: 实现 safeSessionStorage(同上,改 sessionStorage)
+- [ ] 5.3: quota exceeded 时静默失败,返回 false
+- [ ] 5.4: 重构 errorMonitor.ts 使用 safeLocalStorage
+- [ ] 5.5: 重构 ErrorBoundary.vue 使用 safeLocalStorage
+
+**验证**:
+- 单元测试 `safeLocalStorage_HandlesQuotaExceeded` 通过(模拟 QuotaExceededError 返回 false)
+- 单元测试 `safeLocalStorage_GetItemReturnsNullOnException` 通过
+
+**依赖**: 无
+
+### Pre-Task-V8-6: 创建 Mr1Validator 静态工具 [高]
+
+**修复**: F6-2 / E23
+**文件**: `backend/src/SakuraFilter.Core/Validation/Mr1Validator.cs` (新建)
+
+**子任务**:
+- [ ] 6.1: 实现 Mr1Validator.IsValid(见 spec.md E23)
+  - 长度校验:10 位
+  - 字符集校验:0-9 A-Z
+  - CHK 校验位算法:前 9 位加权求和取模 36
+- [ ] 6.2: ETL 导入时调用 Mr1Validator.IsValid,失败记录到错误日志
+- [ ] 6.3: Admin 创建/编辑产品时调用 Mr1Validator.IsValid,失败返回 400
+
+**验证**:
+- 单元测试 `Mr1Validator_ValidChk` 通过(合法 MR.1 通过)
+- 单元测试 `Mr1Validator_InvalidLength` 通过(9 位/11 位拒绝)
+- 单元测试 `Mr1Validator_InvalidCharset` 通过(小写/特殊字符拒绝)
+- 单元测试 `Mr1Validator_InvalidChk` 通过(CHK 位错误拒绝)
+- 单元测试 `Mr1Validator_NullOrEmpty` 通过(空值拒绝)
+
+**依赖**: 无
+
+### Pre-Task-V8-7: 升级 Meilisearch SDK 到 1.6+(可选,延后执行) [中]
+
+**修复**: S7-2
+**文件**: `backend/src/SakuraFilter.Search/SakuraFilter.Search.csproj` (修改)
+
+**子任务**:
+- [ ] 7.1: 评估升级风险(API 签名变更)
+- [ ] 7.2: 升级 MeiliSearch 包到 1.6+
+- [ ] 7.3: 修复 MeiliSearchProvider 全部方法签名
+- [ ] 7.4: 全量回归测试
+
+**注意**: v8 不强制执行,列入 v9 评估。当前保持 0.15.4。
+
+**验证**:
+- 所有 MeiliSearchProvider 单元测试通过
+- 集成测试通过
+
+**依赖**: 无
+
+### Pre-Task-V8-8: 创建 MeiliFilterEscapeExtensions [中]
+
+**修复**: S7-6 / S7-14
+**文件**: `backend/src/SakuraFilter.Search/Extensions/MeiliFilterEscapeExtensions.cs` (新建)
+
+**子任务**:
+- [ ] 8.1: 实现 EscapeMeiliFilterValue:
+  ```csharp
+  public static string EscapeMeiliFilterValue(string value)
+  {
+      if (string.IsNullOrEmpty(value)) return "\"\"";
+      var escaped = value.Replace("\\", "\\\\").Replace("\"", "\\\"");
+      return $"\"{escaped}\"";
+  }
+  ```
+- [ ] 8.2: 在 MeiliSearchProvider.SearchAsync 中使用此方法
+
+**验证**:
+- 单元测试 `EscapeMeiliFilter_Backslash` 通过(`\` → `\\`)
+- 单元测试 `EscapeMeiliFilter_DoubleQuote` 通过(`"` → `\"`)
+- 单元测试 `EscapeMeiliFilter_EmptyString` 通过(返回 `""`)
+- 单元测试 `EscapeMeiliFilter_NormalString` 通过(原样返回带引号)
+
+**依赖**: 无
+
+## Phase 1: v8 数据关联修复任务(7 个)
+
+### Task V8-1.1: CrossReference FK 配置修正 [高]
+
+**修复**: D7-1 / D7-16 / E4
+**文件**: `backend/src/SakuraFilter.Infrastructure/Data/Configurations/CrossReferenceConfiguration.cs` (修改)
+
+**子任务**:
+- [ ] 1.1.1: 改用 `HasOne<Product>()` 无参重载
+- [ ] 1.1.2: HasConstraintName 与 InitialCreate 一致: `fk_cross_references_products_product_id`
+- [ ] 1.1.3: OnDelete(Cascade)
+
+**验证**:
+- `dotnet ef migrations has-pending-model-changes` 无 diff
+- 现有 FK 不被重建
+
+**依赖**: 无
+
+### Task V8-1.2: TRUNCATE 列表修正 [高]
+
+**修复**: D7-2 / D7-15 / E5
+**文件**: `backend/src/SakuraFilter.Etl/EtlImportService.cs` (修改,ResetAllDataAsync 方法)
+
+**子任务**:
+- [ ] 1.2.1: TRUNCATE 列表改为动态白名单(见 spec.md D7-15):
+  ```sql
+  DO $$ DECLARE tbl TEXT;
+  BEGIN
+    FOR tbl IN SELECT table_name FROM information_schema.tables
+      WHERE table_schema='public' AND table_name IN (
+        'products','cross_references','machine_applications','product_images',
+        'product_history','search_index_pending','search_index_dead_letter',
+        'etl_progress_log','cleanup_failures'
+      )
+    LOOP EXECUTE format('TRUNCATE TABLE %I RESTART IDENTITY CASCADE', tbl);
+    END LOOP;
+  END $$;
+  ```
+- [ ] 1.2.2: 移除对 cleanup_failures / partition6_placeholder 的硬编码引用
+
+**验证**:
+- 全量重置后 9 张表(含 cleanup_failures)均清空
+- 不存在的表不报错(白名单过滤)
+
+**依赖**: Pre-Task-V8-1
+
+### Task V8-1.3: ProductImage 字段名统一 [高]
+
+**修复**: D7-4 / E7
+**文件**: 项目全局搜索 `ImageUrl` 引用 ProductImage 字段处
+
+**子任务**:
+- [ ] 1.3.1: grep `pi\.ImageUrl` / `image\.ImageUrl` 全部改为 `ImageKey`
+- [ ] 1.3.2: 核实无遗漏
+
+**验证**:
+- `dotnet build` 无错误
+- 单元测试 `ProductImage_ImageKey_FieldName` 通过
+
+**依赖**: 无
+
+### Task V8-1.4: CrossReference 字段引用修正 [高]
+
+**修复**: D7-5 / E8
+**文件**: 项目全局搜索 CrossReference.IsPublished/OemBrandId/SortOrder 引用处
+
+**子任务**:
+- [ ] 1.4.1: grep `IsPublished`/`OemBrandId`/`SortOrder` 引用 CrossReference 处,全部移除或改用替代方案
+- [ ] 1.4.2: Brand 排序改用 JOIN xref_oem_brand(见 spec.md D7-12)
+- [ ] 1.4.3: IsPublished 概念改用 `!IsDiscontinued`
+
+**验证**:
+- `dotnet build` 无错误
+- 搜索结果 Brand 排序正确
+
+**依赖**: 无
+
+### Task V8-1.5: ProductIndexDoc 扩展 + BuildProductIndexDocAsync [高]
+
+**修复**: D7-6 / E9
+**文件**:
+- `backend/src/SakuraFilter.Search/ISearchProvider.cs` (修改 ProductIndexDoc)
+- `backend/src/SakuraFilter.Search/MeiliSearchProvider.cs` (新增 BuildProductIndexDocAsync)
+
+**子任务**:
+- [ ] 1.5.1: ProductIndexDoc 新增字段(见 spec.md E9):
+  - Mr1
+  - BrandSortOrder
+  - OemListPublishedBrands (string[])
+  - OemListPublishedOem3s (string[])
+- [ ] 1.5.2: 新增 BuildProductIndexDocAsync 方法替代 BuildMr1DocumentAsync:
+  ```csharp
+  private async Task<ProductIndexDoc> BuildProductIndexDocAsync(Product product, CancellationToken ct)
+  {
+      using var scope = _sp.CreateScope();
+      var db = scope.ServiceProvider.GetRequiredService<ProductDbContext>();
+      var xref = await db.XrefOemBrands
+          .Where(x => x.Brand == product.OemBrand && x.DeletedAt == null)
+          .Select(x => new { x.SortOrder })
+          .FirstOrDefaultAsync(ct);
+      var published = await db.CrossReferences
+          .Where(c => c.ProductId == product.Id && !c.IsDiscontinued)
+          .Select(c => new { c.OemBrand, c.OemNo3 })
+          .ToListAsync(ct);
+      return new ProductIndexDoc
+      {
+          Id = product.Id,
+          OemNoNormalized = product.OemNoNormalized,
+          OemNoDisplay = product.OemNoDisplay,
+          Mr1 = product.Mr1,
+          Remark = product.Remark,
+          Type = product.Type,
+          D1Mm = product.D1Mm,
+          D2Mm = product.D2Mm,
+          H3Mm = product.H3Mm,
+          H1Mm = product.H1Mm,
+          Media = product.Media,
+          IsDiscontinued = product.IsDiscontinued,
+          UpdatedAtUnix = new DateTimeOffset(product.UpdatedAt).ToUnixTimeSeconds(),
+          BrandSortOrder = xref?.SortOrder ?? int.MaxValue,
+          OemListPublishedBrands = published.Select(p => p.OemBrand ?? "").Distinct().ToArray(),
+          OemListPublishedOem3s = published.Select(p => p.OemNo3 ?? "").Distinct().ToArray()
+      };
+  }
+  ```
+
+**验证**:
+- `dotnet build` 无错误
+- 单元测试 `BuildProductIndexDocAsync_IncludesMr1AndBrandSort` 通过
+- 单元测试 `BuildProductIndexDocAsync_NullBrandSortDefaultsToMax` 通过
+
+**依赖**: 无
+
+### Task V8-1.6: EtlImportService 调用方式修正 [中]
+
+**修复**: D7-9 / D7-17 / E9
+**文件**: `backend/src/SakuraFilter.Etl/EtlImportService.cs` (修改)
+
+**子任务**:
+- [ ] 1.6.1: SyncFkConfigurationsV7 中 LoadExistingOem2MapAsync 调用改为:
+  ```csharp
+  await using var conn = new NpgsqlConnection(_pgConn);
+  await conn.OpenAsync(ct);
+  var existingMap = await LoadExistingOem2MapAsync(conn, ct);
+  ```
+- [ ] 1.6.2: 所有 ProductDbContext 调用改为 `_sp.CreateScope()` 动态获取
+
+**验证**:
+- `dotnet build` 无错误
+- ETL 全量导入测试通过
+
+**依赖**: 无
+
+### Task V8-1.7: cleanup_failures 状态机 + 超时回收 [中]
+
+**修复**: D7-10
+**文件**: `backend/src/SakuraFilter.Api/Services/CleanupOrphanImagesService.cs` (新建,因 C26 不存在)
+
+**子任务**:
+- [ ] 1.7.1: 创建 CleanupOrphanImagesService(BackgroundService)
+- [ ] 1.7.2: 实现 5min 超时回收(见 spec.md D7-10)
+- [ ] 1.7.3: 实现孤儿文件检测(对比 product_images.image_key 与 ListAllAsync)
+- [ ] 1.7.4: 失败记录到 cleanup_failures 表
+- [ ] 1.7.5: 注册到 ServiceCollectionExtensions.AddHostedServices
+
+**验证**:
+- 单元测试 `CleanupOrphanImages_DetectsOrphans` 通过
+- 单元测试 `CleanupFailures_StuckInProgressReset` 通过
+- 单元测试 `CleanupFailures_RetryAfter5Min` 通过
+
+**依赖**: Pre-Task-V8-1, Pre-Task-V8-2
+
+## Phase 3: v8 检索逻辑修复任务(6 个)
+
+### Task V8-3.1: PG SQL Unicode 转义语法修正 [高]
+
+**修复**: S7-3 / S7-17 / E12
+**文件**: 项目全局搜索 `U&E'` 引用处
+
+**子任务**:
+- [ ] 3.1.1: grep `U&E'\\\\uE000'` 全部改为 `U&'\uE000'`
+- [ ] 3.1.2: grep `U&E'\\\\uE001'` 全部改为 `U&'\uE001'`
+
+**验证**:
+- `dotnet build` 无错误
+- 集成测试 `PgHighlight_UnicodeEscape_SingleBackslash` 通过
+
+**依赖**: 无
+
+### Task V8-3.2: Product 软删除字段统一 [高]
+
+**修复**: S7-18 / E13
+**文件**: 项目全局搜索 `deleted_at` 引用 Product 处
+
+**子任务**:
+- [ ] 3.2.1: grep `deleted_at IS NULL` 在 Product 查询中改为 `is_discontinued = false`
+- [ ] 3.2.2: XrefOemBrand 查询保持 `deleted_at IS NULL`(此实体真实有此字段)
+
+**验证**:
+- `dotnet build` 无错误
+- 单元测试 `ProductQuery_FiltersByIsDiscontinued` 通过
+
+**依赖**: 无
+
+### Task V8-3.3: IndexReplayWorker 死信判定 + 字段补充 [中]
+
+**修复**: S7-7 / S7-8 / S7-22 / E21
+**文件**:
+- `backend/src/SakuraFilter.Core/Entities/SearchIndexPending.cs` (修改,核实字段)
+- `backend/src/SakuraFilter.Infrastructure/Data/Migrations/<timestamp>_AddSearchIndexPendingRetryColumns.cs` (新建,如需)
+- `backend/src/SakuraFilter.Api/Services/IndexReplayWorker.cs` (修改)
+
+**子任务**:
+- [ ] 3.3.1: 核实 SearchIndexPending 实体字段
+- [ ] 3.3.2: 若无 retry_count/is_dead/last_error 字段,新增迁移:
+  ```sql
+  ALTER TABLE search_index_pending ADD COLUMN IF NOT EXISTS retry_count INT NOT NULL DEFAULT 0;
+  ALTER TABLE search_index_pending ADD COLUMN IF NOT EXISTS is_dead BOOLEAN NOT NULL DEFAULT false;
+  ALTER TABLE search_index_pending ADD COLUMN IF NOT EXISTS last_error TEXT;
+  ```
+- [ ] 3.3.3: IndexReplayWorker 失败时 UPDATE retry_count = retry_count + 1
+- [ ] 3.3.4: retry_count >= MaxRetryCount(5) 时标记 is_dead = true
+
+**验证**:
+- 单元测试 `IndexReplayWorker_RetryCountIncrement` 通过
+- 单元测试 `IndexReplayWorker_MarkDeadAfter5Retries` 通过
+- 集成测试 `SearchIndexPending_RetryCountFieldExists` 通过
+
+**依赖**: 无
+
+### Task V8-3.4: Meilisearch filter 转义修正 [中]
+
+**修复**: S7-6 / S7-14
+**文件**: 项目全局搜索 Meilisearch filter 调用处
+
+**子任务**:
+- [ ] 3.4.1: 移除对 `'`/`[`/`]` 的转义(Meilisearch 不支持)
+- [ ] 3.4.2: 统一使用 Pre-Task-V8-8 的 EscapeMeiliFilterValue
+
+**验证**:
+- 单元测试 `MeiliFilter_NoSingleQuoteEscape` 通过
+- 单元测试 `MeiliFilter_NoBracketEscape` 通过
+
+**依赖**: Pre-Task-V8-8
+
+### Task V8-3.5: stopWords 配置修正 [中]
+
+**修复**: S7-5
+**文件**: `backend/src/SakuraFilter.Search/MeiliSearchProvider.cs` (修改)
+
+**子任务**:
+- [ ] 3.5.1: 移除 stopWords 配置(或仅配置 "the"/"a"/"an")
+- [ ] 3.5.2: 添加 synonyms 配置:品牌名缩写映射
+
+**验证**:
+- 单元测试 `Search_BrandWithSpace_Matched` 通过("BMW AG" 完整匹配)
+- 单元测试 `Search_NoStopWordFiltering` 通过("Johnson" 不被过滤)
+
+**依赖**: 无
+
+### Task V8-3.6: JavaScriptEncoder 全局配置 [中]
+
+**修复**: S7-9 / E22
+**文件**: `backend/src/SakuraFilter.Api/Program.cs` (修改)
+
+**子任务**:
+- [ ] 3.6.1: 注册全局 JsonSerializerOptions:
+  ```csharp
+  services.ConfigureHttpJsonOptions(options =>
+  {
+      options.SerializerOptions.Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping;
+      options.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+  });
+  ```
+- [ ] 3.6.2: 移除 AllowPuaJavaScriptEncoder 引用(若存在)
+
+**验证**:
+- 集成测试 `ApiResponse_PuaCharsNotEscaped` 通过
+- 集成测试 `ApiResponse_CamelCaseNaming` 通过
+
+**依赖**: 无
+
+## Phase 4: v8 前后端联动修复任务(6 个)
+
+### Task V8-4.1: LoginView 开放重定向防护 [高]
+
+**修复**: F6-16 / F6-17 / E16
+**文件**: `frontend/src/views/LoginView.vue` (修改)
+
+**子任务**:
+- [ ] 4.1.1: 引入 isSafeRedirect(来自 Pre-Task-V8-4)
+- [ ] 4.1.2: L46-47 改为:
+  ```typescript
+  import { isSafeRedirect } from '@/utils/url'
+  const rawRedirect = (route.query.redirect as string) || '/admin/products'
+  const safeRedirect = isSafeRedirect(rawRedirect) ? rawRedirect : '/admin/products'
+  router.push(safeRedirect)
+  ```
+
+**验证**:
+- 单元测试 `LoginView_RejectsExternalRedirect` 通过(`//evil.com` 重定向到 /admin/products)
+- 单元测试 `LoginView_AcceptsInternalRedirect` 通过(`/admin/users` 接受)
+
+**依赖**: Pre-Task-V8-4
+
+### Task V8-4.2: http.ts isRedirecting 防并发 [高]
+
+**修复**: F6-4 / F6-6 / E17
+**文件**: `frontend/src/utils/http.ts` (修改)
+
+**子任务**:
+- [ ] 4.2.1: 顶部新增 `let isRedirecting = false`
+- [ ] 4.2.2: redirectToLogin 函数加入并发锁(见 spec.md E17)
+- [ ] 4.2.3: 释放改为 router.isReady().finally(替代 setTimeout 1500ms)
+
+**验证**:
+- 单元测试 `Http_NoConcurrentRedirect` 通过(多个 401 仅触发一次跳转)
+- 单元测试 `Http_isRedirectingReleasesAfterRouteChange` 通过
+
+**依赖**: 无
+
+### Task V8-4.3: ErrorBoundary 集成 errorMonitor [中]
+
+**修复**: F6-9 / F6-12 / E18
+**文件**: `frontend/src/components/ErrorBoundary.vue` (修改)
+
+**子任务**:
+- [ ] 4.3.1: 移除 localStorage.setItem('sakura_error_log', ...) 代码
+- [ ] 4.3.2: 引入 captureException 来自 @/utils/errorMonitor
+- [ ] 4.3.3: onErrorCaptured 内调用 captureException(err, { tags: { source: 'ErrorBoundary' } })
+
+**验证**:
+- 单元测试 `ErrorBoundary_WritesToErrorMonitor` 通过
+- 单元测试 `ErrorBoundary_NoLocalStorageDirectWrite` 通过
+
+**依赖**: Pre-Task-V8-5
+
+### Task V8-4.4: errorMonitor AbortError 过滤 + window 事件绑定 [中]
+
+**修复**: F6-10 / F6-15 / F6-13 / F6-18 / F6-19
+**文件**: `frontend/src/utils/errorMonitor.ts` (修改)
+
+**子任务**:
+- [ ] 4.4.1: initMonitor 内绑定 window.onerror:
+  ```typescript
+  window.addEventListener('error', (e) => {
+    captureException(e.error || e.message, { tags: { source: 'window.onerror' } })
+  })
+  ```
+- [ ] 4.4.2: initMonitor 内绑定 unhandledrejection,过滤 AbortError:
+  ```typescript
+  window.addEventListener('unhandledrejection', (e) => {
+    if (e.reason?.name === 'AbortError') return
+    captureException(e.reason, { tags: { source: 'unhandledrejection' } })
+  })
+  ```
+- [ ] 4.4.3: initMonitor 内不调用 setTimeout(所有定时器由 installVueErrorHandler 与 shutdownMonitor 管理)
+- [ ] 4.4.4: shutdownMonitor 解绑 window 事件监听
+
+**验证**:
+- 单元测试 `ErrorMonitor_FiltersAbortError` 通过
+- 单元测试 `ErrorMonitor_CapturesWindowError` 通过
+- 单元测试 `ErrorMonitor_CapturesUnhandledRejection` 通过
+- 单元测试 `ErrorMonitor_NoSetTimeoutInInit` 通过
+
+**依赖**: Pre-Task-V8-5
+
+### Task V8-4.5: CursorHmac V2 Ticks 格式 + V1 兼容 [高]
+
+**修复**: E20(硬约束违反)
+**文件**: `backend/src/SakuraFilter.Api/Services/CursorHmac.cs` (修改)
+
+**子任务**:
+- [ ] 4.5.1: 新增 Sign(long ticks, long id) 方法,V2 格式(见 spec.md E20)
+- [ ] 4.5.2: 修改 VerifyAndExtract 支持 V2 优先 + V1 兼容
+- [ ] 4.5.3: 所有调用方改为传 ticks(非 ISO8601)
+- [ ] 4.5.4: 旧 V1 cursor 在兼容期内仍可验证
+
+**验证**:
+- 单元测试 `CursorHmac_V2SignAndVerify` 通过
+- 单元测试 `CursorHmac_V1BackwardCompat` 通过(旧 cursor 仍可验证)
+- 单元测试 `CursorHmac_TicksFormat` 通过(验证返回 long.Ticks 非 ISO8601)
+- 单元测试 `CursorHmac_RejectsTamperedTicks` 通过(签名错误拒绝)
+
+**依赖**: 无
+
+### Task V8-4.6: BroadcastChannelCompat 多标签页同步 [中]
+
+**修复**: F6-8 / F6-11 / F6-22
+**文件**: `frontend/src/utils/broadcast.ts` (新建)
+
+**子任务**:
+- [ ] 4.6.1: 实现 BroadcastChannelCompat(见 spec.md F6-8)
+- [ ] 4.6.2: 降级到 localStorage storage 事件
+- [ ] 4.6.3: 应用到 auth-logout 频道(多标签页同步登出)
+- [ ] 4.6.4: 应用到 form-draft 频道(多标签页草稿同步,可选)
+
+**验证**:
+- 单元测试 `BroadcastChannelCompat_PostMessageWithChannel` 通过
+- 单元测试 `BroadcastChannelCompat_FallbackToStorage` 通过(模拟 BroadcastChannel 不存在)
+- 单元测试 `BroadcastChannelCompat_MultiTabLogoutSync` 通过
+
+**依赖**: 无
+
+## v8 任务依赖链
+
+```
+Pre-Task-V8-1 (cleanup_failures) ──┐
+                                    ├──→ Task V8-1.2 (TRUNCATE 列表)
+                                    ├──→ Task V8-1.7 (CleanupOrphanImagesService)
+                                    │
+Pre-Task-V8-2 (IObjectStorage 扩展) ─┤
+                                    ├──→ Task V8-1.7
+                                    │
+Pre-Task-V8-3 (SEO 多段 URL, 可选) ──→ 独立
+                                    │
+Pre-Task-V8-4 (url.ts) ─────────────┐
+                                    ├──→ Task V8-4.1 (LoginView 防护)
+                                    │
+Pre-Task-V8-5 (safeStorage.ts) ─────┐
+                                    ├──→ Task V8-4.3 (ErrorBoundary)
+                                    ├──→ Task V8-4.4 (errorMonitor)
+                                    │
+Pre-Task-V8-6 (Mr1Validator) ───────→ 独立
+                                    │
+Pre-Task-V8-7 (SDK 升级, 延后) ─────→ 独立
+                                    │
+Pre-Task-V8-8 (MeiliFilterEscape) ──┐
+                                    ├──→ Task V8-3.4 (filter 转义)
+                                    │
+Task V8-1.1 (CrossReference FK) ───→ 独立
+Task V8-1.2 (TRUNCATE) ───────────→ 依赖 Pre-Task-V8-1
+Task V8-1.3 (ImageKey 统一) ──────→ 独立
+Task V8-1.4 (CrossReference 字段) → 独立
+Task V8-1.5 (ProductIndexDoc 扩展) → 独立
+Task V8-1.6 (EtlImportService 调用) → 独立
+Task V8-1.7 (CleanupOrphanImages) → 依赖 Pre-Task-V8-1, Pre-Task-V8-2
+Task V8-3.1 (PG SQL 转义) ────────→ 独立
+Task V8-3.2 (软删除字段) ─────────→ 独立
+Task V8-3.3 (IndexReplayWorker) ──→ 独立
+Task V8-3.4 (filter 转义) ────────→ 依赖 Pre-Task-V8-8
+Task V8-3.5 (stopWords) ─────────→ 独立
+Task V8-3.6 (JavaScriptEncoder) ─→ 独立
+Task V8-4.1 (LoginView 防护) ─────→ 依赖 Pre-Task-V8-4
+Task V8-4.2 (http.ts isRedirecting) → 独立
+Task V8-4.3 (ErrorBoundary) ─────→ 依赖 Pre-Task-V8-5
+Task V8-4.4 (errorMonitor) ──────→ 依赖 Pre-Task-V8-5
+Task V8-4.5 (CursorHmac V2) ─────→ 独立
+Task V8-4.6 (BroadcastChannelCompat) → 独立
+```
+
+**总计**: 27 个 v8 补丁任务(8 前置 + 7 数据关联 + 6 检索逻辑 + 6 前后端联动)

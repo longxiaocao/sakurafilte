@@ -3092,3 +3092,459 @@ _待启动第七轮深度审查后追加_
 
 ### 第八轮审查(暂无,待第七轮审查后追加)
 _待启动第七轮深度审查后追加_
+
+---
+
+# v8 修订验证清单(64 项衍生漏洞 + 24 项 v7 误判纠正 + 8 项前置任务 + 27 项 v8 任务)
+
+> **修订时间**: 2026-07-17
+> **触发原因**: 第七轮深度审查发现 64 项衍生漏洞 + v7 24 项高危事实性误判
+> **核心改进**: 引入"代码现状对齐审计"(30 项硬性基线 C1-C55),所有修复方案基于真实代码
+
+## 一、代码现状对齐审计验证(30 项硬性基线)
+
+> 每项必须基于实际代码读取,确认 v8 修复方案引用的字段/方法/类型/表真实存在。
+
+### 后端实体字段对齐(C1-C12)
+
+- [ ] C1: Product.Id 类型为 `long`(Product.cs L10)
+- [ ] C2: Product.Mr1 字段名 `Mr1`,列名 `mr_1`(Product.cs L22)
+- [ ] C3: Product 软删除用 `IsDiscontinued`(L74) + `DiscontinuedAt`(L75),无 deleted_at
+- [ ] C4: Product 无 SearchIndexPending 字段(独立实体)
+- [ ] C5: Product 无 brand_sort_order_min_or_max 字段
+- [ ] C6: CrossReference 无 Product 导航属性(仅 ProductId 外键)
+- [ ] C7: CrossReference 无 IsPublished 字段
+- [ ] C8: CrossReference 无 OemBrandId 字段(用 OemBrand 字符串)
+- [ ] C9: CrossReference 无 SortOrder 字段
+- [ ] C10: ProductImage 字段名 `ImageKey`(L106),非 ImageUrl
+- [ ] C11: XrefOemBrand 字段名 `SortOrder`(列名 `sort_order`),非 brand_sort_order
+- [ ] C12: XrefOemBrand 软删除用 `DeletedAt`(列名 `deleted_at`)
+
+### 后端基础设施对齐(C13-C30)
+
+- [ ] C13: ProductDbContext DbSet 名为 `XrefOemBrands`(L23)
+- [ ] C14: InitialCreate 仅 3 个 CASCADE FK(cross_references/machine_applications/product_images)
+- [ ] C15: cleanup_failures 表不存在(v8 Pre-Task-V8-1 创建前)
+- [ ] C16: partition6_placeholder 表不存在
+- [ ] C17: IObjectStorage 仅 5 方法(无 DeleteBatchAsync/ListAllAsync)
+- [ ] C18: ISearchProvider 仅 4 方法(无 GetWriteTargets/DeleteAllDocumentsAsync)
+- [ ] C19: MeiliSearchProvider 字段名 `_client`(L28)
+- [ ] C20: MeiliSearchProvider 删除方法 `DeleteDocumentsAsync`(L137)
+- [ ] C21: BuildMr1DocumentAsync 不存在
+- [ ] C22: Mr1Document 类型不存在
+- [ ] C23: Meili 索引文档类型为 `ProductIndexDoc`
+- [ ] C24: EtlImportService 是 Singleton,无 _db 字段
+- [ ] C25: LoadExistingOem2MapAsync 是 static 方法
+- [ ] C26: CleanupOrphanImagesService 不存在(v8 Task V8-1.7 创建前)
+- [ ] C27: CleanupFailure 实体不存在(v8 Pre-Task-V8-1 创建前)
+- [ ] C28: Meilisearch SDK 版本 0.15.4
+- [ ] C29: 认证方案仅 JWT Bearer,无 CookiePolicy
+- [ ] C30: PublicProductController 路由 `/api/public/product/{slug}` 单段
+
+### API 服务层对齐(C31-C43)
+
+- [ ] C31: CursorHmac V1 三段 ISO8601(违反硬约束,v8 Task V8-4.5 修复)
+- [ ] C32: ResilientSearchProvider Polly v8 配置(1s 超时 + 1 次重试 + 50% 熔断)
+- [ ] C33: IndexReplayWorker MaxRetryCount=5,不用 Channel<T>
+- [ ] C34: PostgresSearchProvider 用 EF.Functions.ILike + ESCAPE
+- [ ] C35: MeiliHealthCheckService 不存在
+- [ ] C36: HistoryCursorService 不存在
+- [ ] C37: Mr1Controller/Mr1Service 不存在
+- [ ] C38: System.Threading.Channels 全项目未使用
+- [ ] C39: AllowPuaJavaScriptEncoder 不存在
+- [ ] C40: EtlAlertService 文件在 `SakuraFilter.Api/Services/`
+- [ ] C41: EtlAlertService 注释与代码不符(v8 E24 修复)
+- [ ] C42: NpgsqlDataSource 全局未注册
+- [ ] C43: ETL 公开端点无限流(v8 E25 修复)
+
+### 前端代码对齐(C44-C55)
+
+- [ ] C44: http.ts 用 refreshPromise,无 isRedirecting(v8 Task V8-4.2 修复)
+- [ ] C45: errorMonitor.ts 自研,写 localStorage
+- [ ] C46: LoginView 参数名 `redirect`,无开放重定向防护(v8 Task V8-4.1 修复)
+- [ ] C47: 产品详情路由 `/product/:oem` 单段
+- [ ] C48: 路由守卫 redirect 传递 to.fullPath
+- [ ] C49: ErrorBoundary 写 sakura_error_log,未集成 errorMonitor(v8 Task V8-4.3 修复)
+- [ ] C50: utils/url.ts 不存在(v8 Pre-Task-V8-4 创建)
+- [ ] C51: utils/safeStorage.ts 不存在(v8 Pre-Task-V8-5 创建)
+- [ ] C52: 产品详情视图 `views/public/PublicProductView.vue`
+- [ ] C53: BroadcastChannel 全 frontend/src 未使用
+- [ ] C54: package.json vue ^3.5.13 / vue-router ^4.5.0 / pinia ^2.3.0
+- [ ] C55: Sentry 依赖未引入
+
+## 二、v7 24 项高危事实性误判纠正验证(E4-E27)
+
+- [ ] E4: CrossReference 用 `HasOne<Product>()` 无参重载,FK 名 `fk_cross_references_products_product_id`
+- [ ] E5: TRUNCATE 列表仅 8 张真实表(动态白名单)
+- [ ] E6: IObjectStorage 新增 ListAllAsync + DeleteBatchAsync
+- [ ] E7: ProductImage 字段统一 `ImageKey`
+- [ ] E8: Brand 排序下沉到 XrefOemBrand.SortOrder,IsPublished 改用 `!IsDiscontinued`
+- [ ] E9: ProductIndexDoc 扩展(Mr1/BrandSortOrder/OemListPublishedBrands/OemListPublishedOem3s),新增 BuildProductIndexDocAsync
+- [ ] E10: ISearchProvider 不扩展,直接用 DeleteAsync 批量删除
+- [ ] E11: cleanup_failures 表 + CleanupFailure 实体 + 状态机创建
+- [ ] E12: PG SQL 改为 `U&'\uE000'` 单反斜杠
+- [ ] E13: Product 用 `is_discontinued = false`,XrefOemBrand 用 `deleted_at IS NULL`
+- [ ] E14: 保持 /product/:oem 单段路由,4 段 URL 列为可选 Pre-Task-V8-3
+- [ ] E15: 废弃 CookiePolicy 修复方案
+- [ ] E16: LoginView 统一参数名 `redirect` + isSafeRedirect 防护
+- [ ] E17: http.ts 新增 isRedirecting 防并发
+- [ ] E18: ErrorBoundary 集成 errorMonitor,废弃 localStorage 直写
+- [ ] E19: 新建 utils/url.ts + utils/safeStorage.ts
+- [ ] E20: CursorHmac V2 Ticks + V1 兼容(硬约束修复)
+- [ ] E21: IndexReplayWorker 保持 Task.Delay 轮询,废弃 Channel
+- [ ] E22: 使用 UnsafeRelaxedJsonEscaping,不新建 AllowPuaJavaScriptEncoder
+- [ ] E23: 新增 Mr1Validator 静态工具,不新建 Controller
+- [ ] E24: EtlAlertService 显式排除 `status != "cancelled"`
+- [ ] E25: EtlEndpoints.cs 应用 RequireRateLimiting("etl")
+- [ ] E26: 不新建 HistoryCursorService,直接用 CursorHmac
+- [ ] E27: 不新建 MeiliHealthCheckService,复用 ResilientSearchProvider
+
+## 三、第七轮 64 项衍生漏洞修复验证
+
+### 数据关联维度(D7-1 ~ D7-20)
+
+- [ ] D7-1 [高]: CrossReference 用 HasOne<Product>() 无参重载(同 E4)
+- [ ] D7-2 [高]: TRUNCATE 列表仅 8 张真实表(同 E5)
+- [ ] D7-3 [高]: IObjectStorage 扩展(同 E6)
+- [ ] D7-4 [高]: ProductImage 字段名 ImageKey(同 E7)
+- [ ] D7-5 [高]: CrossReference 不引用 IsPublished/OemBrandId/SortOrder(同 E8)
+- [ ] D7-6 [高]: BuildProductIndexDocAsync 替代 BuildMr1DocumentAsync(同 E9)
+- [ ] D7-7 [高]: ISearchProvider 不扩展(同 E10)
+- [ ] D7-8 [高]: cleanup_failures 表创建(同 E11)
+- [ ] D7-9 [中]: LoadExistingOem2MapAsync static 调用方式,传 NpgsqlConnection
+- [ ] D7-10 [中]: cleanup_failures in_progress 5min 超时回收
+- [ ] D7-11 [中]: ListAllAsync 返回 IAsyncEnumerable,流式处理避免 OOM
+- [ ] D7-12 [中]: 不引入 brand_sort_order_min_or_max,Brand 排序 JOIN xref_oem_brand
+- [ ] D7-13 [中]: StripControlChars NBSP 可选过滤
+- [ ] D7-14 [中]: UpdateProductRedundantFieldsAsync 拆分独立事务
+- [ ] D7-15 [中]: TRUNCATE 动态白名单(同 E5)
+- [ ] D7-16 [中]: E1 显式 HasOne 用 InitialCreate FK 名(同 E4)
+- [ ] D7-17 [中]: EtlImportService Singleton 用 _sp.CreateScope
+- [ ] D7-18 [低]: 合并 D7-15
+- [ ] D7-19 [低]: 合并 D7-16
+- [ ] D7-20 [低]: ProductImage 字段统一(同 E7)
+
+### 检索逻辑维度(S7-1 ~ S7-22)
+
+- [ ] S7-1 [高]: 步骤 0 仅在写入索引时过滤 PUA,搜索时不过滤
+- [ ] S7-2 [中]: 保持 Meilisearch SDK 0.15.4,SDK 升级延后
+- [ ] S7-3 [高]: PG SQL `U&'\uE000'` 单反斜杠(同 E12)
+- [ ] S7-4 [高]: CrossReference 不引用不存在字段(同 E8)
+- [ ] S7-5 [中]: stopWords 仅配置 "the"/"a"/"an",不误过滤品牌名
+- [ ] S7-6 [中]: Meilisearch filter 仅转义 `\\` 和 `"`,不转义 `'`/`[`/`]`
+- [ ] S7-7 [中]: IndexReplayWorker retry_count 字段核实,缺失则新增列
+- [ ] S7-8 [高]: SearchIndexPending 字段按真实引用
+- [ ] S7-9 [中]: 使用 UnsafeRelaxedJsonEscaping(同 E22)
+- [ ] S7-10 [中]: 不新建 MeiliHealthCheckService(同 E27)
+- [ ] S7-11 [中]: 不新增 FallbackToDb,直接 UPDATE search_index_pending
+- [ ] S7-12 [低]: 不新增 SanitizeFormatted,保持现状
+- [ ] S7-13 [中]: 废弃 Channel(同 E21)
+- [ ] S7-14 [低]: 新增 MeiliFilterEscapeExtensions(Pre-Task-V8-8)
+- [ ] S7-15 [中]: keyset 索引基于真实字段(is_discontinued, updated_at, id)
+- [ ] S7-16 [中]: 数组字段索引配置确认 SDK 0.15.4 支持
+- [ ] S7-17 [高]: SQL U&E 全部改为 U&'(同 E12)
+- [ ] S7-18 [高]: deleted_at 引用统一(同 E13)
+- [ ] S7-19 [中]: DB 兜底 retry_count + 1(同 S7-11)
+- [ ] S7-20 [低]: 不配置 separatorTokens
+- [ ] S7-21 [中]: DeleteDocumentsAsync 不捕获 404(天然幂等)
+- [ ] S7-22 [中]: IndexReplayWorker retry_count >= 5 标记 is_dead
+
+### 前后端联动维度(F6-1 ~ F6-22)
+
+- [ ] F6-1 [高]: buildProductUrl 返回单段 URL(同 E14)
+- [ ] F6-2 [高]: Mr1Validator 静态工具(同 E23)
+- [ ] F6-3 [低]: FormDraft 24h TTL
+- [ ] F6-4 [中]: isRedirecting 用 router.isReady().finally 释放
+- [ ] F6-5 [高]: 合并 F6-3
+- [ ] F6-6 [中]: 合并 F6-4
+- [ ] F6-7 [高]: 废弃 CookiePolicy(同 E15)
+- [ ] F6-8 [中]: BroadcastChannelCompat 降级 localStorage storage
+- [ ] F6-9 [中]: ErrorBoundary 集成 errorMonitor(同 E18)
+- [ ] F6-10 [中]: errorMonitor 过滤 AbortError
+- [ ] F6-11 [中]: 多标签页同步用 BroadcastChannelCompat
+- [ ] F6-12 [高]: 保留自研 errorMonitor(同 E18)
+- [ ] F6-13 [中]: initMonitor 不调用 setTimeout
+- [ ] F6-14 [低]: 合并 F6-11
+- [ ] F6-15 [中]: errorMonitor 绑定 window.onerror + unhandledrejection
+- [ ] F6-16 [高]: 统一参数名 redirect(同 E16)
+- [ ] F6-17 [高]: isSafeRedirect 防护(同 E16)
+- [ ] F6-18 [中]: 合并 F6-13
+- [ ] F6-19 [高]: 合并 F6-13
+- [ ] F6-20 [高]: 新建 url.ts(同 E19)
+- [ ] F6-21 [中]: 新建 safeStorage.ts(同 E19)
+- [ ] F6-22 [中]: 合并 F6-11
+
+## 四、27 个 v8 任务验证清单
+
+### Phase 0: 前置任务验证(8 个)
+
+#### Pre-Task-V8-1: cleanup_failures 表 + CleanupFailure 实体
+- [ ] CleanupFailure.cs 实体创建,字段完整(Id/FileKey/Backend/FailureType/ErrorMessage/RetryCount/Status/LastAttemptAt/NextRetryAt/CreatedAt/UpdatedAt)
+- [ ] CleanupFailureConfiguration.cs EF 配置创建,ToTable("cleanup_failures")
+- [ ] 迁移文件创建,DDL 含 2 个索引(idx_cleanup_failures_status_next_retry / idx_cleanup_failures_file_key)
+- [ ] ProductDbContext 注册 DbSet<CleanupFailure> CleanupFailures
+- [ ] `dotnet ef migrations has-pending-model-changes` 无 diff
+- [ ] `dotnet ef database update` 成功
+- [ ] `SELECT 1 FROM cleanup_failures LIMIT 1` 成功
+
+#### Pre-Task-V8-2: IObjectStorage 接口扩展
+- [ ] IObjectStorage.cs 新增 ListAllAsync + DeleteBatchAsync 方法签名
+- [ ] MinioStorage.cs 实现 ListAllAsync(IAsyncEnumerable 迭代器)
+- [ ] MinioStorage.cs 实现 DeleteBatchAsync(1000 条/批)
+- [ ] AliyunOssStorage.cs 实现 ListAllAsync
+- [ ] AliyunOssStorage.cs 实现 DeleteBatchAsync
+- [ ] 单元测试 `MinioStorage_ListAll_Pagination` 通过
+- [ ] 单元测试 `MinioStorage_DeleteBatch_Idempotent` 通过(404 静默)
+- [ ] 单元测试 `AliyunOssStorage_ListAll_Pagination` 通过
+- [ ] 单元测试 `AliyunOssStorage_DeleteBatch_Idempotent` 通过
+
+#### Pre-Task-V8-3: SEO 多段 URL 独立路由(可选)
+- [ ] 新增路由 `/products/:pn1/:pn2/:brand/:mr1Suffix`
+- [ ] PublicProductView.vue 兼容两种路由参数
+- [ ] 现有 `/product/:oem` 路由仍可访问
+- [ ] 新路由解析正确
+
+#### Pre-Task-V8-4: utils/url.ts 创建
+- [ ] buildProductUrl 实现并返回单段 URL
+- [ ] getProductSlugFromRoute 实现
+- [ ] isSafeRedirect 实现(拒绝 `//evil.com`)
+- [ ] LoginView.vue 重构使用 isSafeRedirect
+- [ ] http.ts redirectToLogin 重构使用 isSafeRedirect
+- [ ] 单元测试 `isSafeRedirect_RejectsExternalUrl` 通过
+- [ ] 单元测试 `isSafeRedirect_RejectsProtocolRelative` 通过
+- [ ] 单元测试 `buildProductUrl_EncodesSpecialChars` 通过
+
+#### Pre-Task-V8-5: utils/safeStorage.ts 创建
+- [ ] safeLocalStorage 实现(getItem/setItem/removeItem,try-catch)
+- [ ] safeSessionStorage 实现
+- [ ] quota exceeded 静默失败返回 false
+- [ ] errorMonitor.ts 重构使用 safeLocalStorage
+- [ ] ErrorBoundary.vue 重构使用 safeLocalStorage
+- [ ] 单元测试 `safeLocalStorage_HandlesQuotaExceeded` 通过
+- [ ] 单元测试 `safeLocalStorage_GetItemReturnsNullOnException` 通过
+
+#### Pre-Task-V8-6: Mr1Validator 静态工具
+- [ ] Mr1Validator.cs 创建,实现 IsValid
+- [ ] 长度校验 10 位
+- [ ] 字符集校验 0-9 A-Z
+- [ ] CHK 校验位算法(前 9 位加权求和取模 36)
+- [ ] ETL 导入时调用 IsValid,失败记录错误日志
+- [ ] Admin 创建/编辑产品时调用 IsValid,失败返回 400
+- [ ] 单元测试 `Mr1Validator_ValidChk` 通过
+- [ ] 单元测试 `Mr1Validator_InvalidLength` 通过
+- [ ] 单元测试 `Mr1Validator_InvalidCharset` 通过
+- [ ] 单元测试 `Mr1Validator_InvalidChk` 通过
+- [ ] 单元测试 `Mr1Validator_NullOrEmpty` 通过
+
+#### Pre-Task-V8-7: Meilisearch SDK 升级(延后)
+- [ ] 评估升级风险
+- [ ] v8 不强制执行,列入 v9 评估
+
+#### Pre-Task-V8-8: MeiliFilterEscapeExtensions
+- [ ] MeiliFilterEscapeExtensions.cs 创建
+- [ ] EscapeMeiliFilterValue 实现(仅转义 `\\` 和 `"`,包裹双引号)
+- [ ] MeiliSearchProvider.SearchAsync 使用此方法
+- [ ] 单元测试 `EscapeMeiliFilter_Backslash` 通过
+- [ ] 单元测试 `EscapeMeiliFilter_DoubleQuote` 通过
+- [ ] 单元测试 `EscapeMeiliFilter_EmptyString` 通过
+- [ ] 单元测试 `EscapeMeiliFilter_NormalString` 通过
+
+### Phase 1: 数据关联修复任务验证(7 个)
+
+#### Task V8-1.1: CrossReference FK 配置修正
+- [ ] CrossReferenceConfiguration.cs 改用 `HasOne<Product>()` 无参重载
+- [ ] HasConstraintName 与 InitialCreate 一致
+- [ ] OnDelete(Cascade)
+- [ ] `dotnet ef migrations has-pending-model-changes` 无 diff
+- [ ] 现有 FK 不被重建
+
+#### Task V8-1.2: TRUNCATE 列表修正
+- [ ] EtlImportService.cs ResetAllDataAsync 改用动态白名单 SQL
+- [ ] 移除对 cleanup_failures / partition6_placeholder 的硬编码引用
+- [ ] 全量重置后 9 张表(含 cleanup_failures)均清空
+- [ ] 不存在的表不报错
+
+#### Task V8-1.3: ProductImage 字段名统一
+- [ ] grep `pi\.ImageUrl` / `image\.ImageUrl` 全部改为 `ImageKey`
+- [ ] `dotnet build` 无错误
+- [ ] 单元测试 `ProductImage_ImageKey_FieldName` 通过
+
+#### Task V8-1.4: CrossReference 字段引用修正
+- [ ] grep `IsPublished`/`OemBrandId`/`SortOrder` 引用 CrossReference 处全部移除
+- [ ] Brand 排序改用 JOIN xref_oem_brand
+- [ ] IsPublished 改用 `!IsDiscontinued`
+- [ ] `dotnet build` 无错误
+- [ ] 搜索结果 Brand 排序正确
+
+#### Task V8-1.5: ProductIndexDoc 扩展 + BuildProductIndexDocAsync
+- [ ] ProductIndexDoc 新增字段:Mr1/BrandSortOrder/OemListPublishedBrands/OemListPublishedOem3s
+- [ ] BuildProductIndexDocAsync 方法实现
+- [ ] `dotnet build` 无错误
+- [ ] 单元测试 `BuildProductIndexDocAsync_IncludesMr1AndBrandSort` 通过
+- [ ] 单元测试 `BuildProductIndexDocAsync_NullBrandSortDefaultsToMax` 通过
+
+#### Task V8-1.6: EtlImportService 调用方式修正
+- [ ] LoadExistingOem2MapAsync 调用改为传 NpgsqlConnection
+- [ ] ProductDbContext 调用改为 _sp.CreateScope()
+- [ ] `dotnet build` 无错误
+- [ ] ETL 全量导入测试通过
+
+#### Task V8-1.7: CleanupOrphanImagesService 创建
+- [ ] CleanupOrphanImagesService.cs 创建(BackgroundService)
+- [ ] 5min 超时回收逻辑实现
+- [ ] 孤儿文件检测实现(对比 product_images.image_key 与 ListAllAsync)
+- [ ] 失败记录到 cleanup_failures 表
+- [ ] 注册到 ServiceCollectionExtensions.AddHostedServices
+- [ ] 单元测试 `CleanupOrphanImages_DetectsOrphans` 通过
+- [ ] 单元测试 `CleanupFailures_StuckInProgressReset` 通过
+- [ ] 单元测试 `CleanupFailures_RetryAfter5Min` 通过
+
+### Phase 3: 检索逻辑修复任务验证(6 个)
+
+#### Task V8-3.1: PG SQL Unicode 转义语法修正
+- [ ] grep `U&E'\\\\uE000'` 全部改为 `U&'\uE000'`
+- [ ] grep `U&E'\\\\uE001'` 全部改为 `U&'\uE001'`
+- [ ] `dotnet build` 无错误
+- [ ] 集成测试 `PgHighlight_UnicodeEscape_SingleBackslash` 通过
+
+#### Task V8-3.2: Product 软删除字段统一
+- [ ] grep `deleted_at IS NULL` 在 Product 查询中改为 `is_discontinued = false`
+- [ ] XrefOemBrand 查询保持 `deleted_at IS NULL`
+- [ ] `dotnet build` 无错误
+- [ ] 单元测试 `ProductQuery_FiltersByIsDiscontinued` 通过
+
+#### Task V8-3.3: IndexReplayWorker 死信判定 + 字段补充
+- [ ] SearchIndexPending 实体字段核实
+- [ ] 若无 retry_count/is_dead/last_error,新增迁移
+- [ ] IndexReplayWorker 失败时 UPDATE retry_count = retry_count + 1
+- [ ] retry_count >= 5 时标记 is_dead = true
+- [ ] 单元测试 `IndexReplayWorker_RetryCountIncrement` 通过
+- [ ] 单元测试 `IndexReplayWorker_MarkDeadAfter5Retries` 通过
+- [ ] 集成测试 `SearchIndexPending_RetryCountFieldExists` 通过
+
+#### Task V8-3.4: Meilisearch filter 转义修正
+- [ ] 移除对 `'`/`[`/`]` 的转义
+- [ ] 统一使用 Pre-Task-V8-8 的 EscapeMeiliFilterValue
+- [ ] 单元测试 `MeiliFilter_NoSingleQuoteEscape` 通过
+- [ ] 单元测试 `MeiliFilter_NoBracketEscape` 通过
+
+#### Task V8-3.5: stopWords 配置修正
+- [ ] 移除 stopWords 配置(或仅配置 "the"/"a"/"an")
+- [ ] 添加 synonyms 配置(品牌名缩写映射)
+- [ ] 单元测试 `Search_BrandWithSpace_Matched` 通过
+- [ ] 单元测试 `Search_NoStopWordFiltering` 通过
+
+#### Task V8-3.6: JavaScriptEncoder 全局配置
+- [ ] Program.cs 注册全局 JsonSerializerOptions
+- [ ] 使用 UnsafeRelaxedJsonEscaping
+- [ ] PropertyNamingPolicy = CamelCase
+- [ ] 移除 AllowPuaJavaScriptEncoder 引用(若存在)
+- [ ] 集成测试 `ApiResponse_PuaCharsNotEscaped` 通过
+- [ ] 集成测试 `ApiResponse_CamelCaseNaming` 通过
+
+### Phase 4: 前后端联动修复任务验证(6 个)
+
+#### Task V8-4.1: LoginView 开放重定向防护
+- [ ] 引入 isSafeRedirect
+- [ ] L46-47 改用 safeRedirect
+- [ ] 单元测试 `LoginView_RejectsExternalRedirect` 通过
+- [ ] 单元测试 `LoginView_AcceptsInternalRedirect` 通过
+
+#### Task V8-4.2: http.ts isRedirecting 防并发
+- [ ] 顶部新增 `let isRedirecting = false`
+- [ ] redirectToLogin 加入并发锁
+- [ ] 释放改为 router.isReady().finally
+- [ ] 单元测试 `Http_NoConcurrentRedirect` 通过
+- [ ] 单元测试 `Http_isRedirectingReleasesAfterRouteChange` 通过
+
+#### Task V8-4.3: ErrorBoundary 集成 errorMonitor
+- [ ] 移除 localStorage.setItem('sakura_error_log', ...) 代码
+- [ ] 引入 captureException
+- [ ] onErrorCaptured 内调用 captureException
+- [ ] 单元测试 `ErrorBoundary_WritesToErrorMonitor` 通过
+- [ ] 单元测试 `ErrorBoundary_NoLocalStorageDirectWrite` 通过
+
+#### Task V8-4.4: errorMonitor AbortError 过滤 + window 事件绑定
+- [ ] initMonitor 内绑定 window.onerror
+- [ ] initMonitor 内绑定 unhandledrejection,过滤 AbortError
+- [ ] initMonitor 内不调用 setTimeout
+- [ ] shutdownMonitor 解绑 window 事件监听
+- [ ] 单元测试 `ErrorMonitor_FiltersAbortError` 通过
+- [ ] 单元测试 `ErrorMonitor_CapturesWindowError` 通过
+- [ ] 单元测试 `ErrorMonitor_CapturesUnhandledRejection` 通过
+- [ ] 单元测试 `ErrorMonitor_NoSetTimeoutInInit` 通过
+
+#### Task V8-4.5: CursorHmac V2 Ticks 格式 + V1 兼容
+- [ ] 新增 Sign(long ticks, long id) 方法
+- [ ] VerifyAndExtract 支持 V2 优先 + V1 兼容
+- [ ] 所有调用方改为传 ticks
+- [ ] 旧 V1 cursor 仍可验证
+- [ ] 单元测试 `CursorHmac_V2SignAndVerify` 通过
+- [ ] 单元测试 `CursorHmac_V1BackwardCompat` 通过
+- [ ] 单元测试 `CursorHmac_TicksFormat` 通过
+- [ ] 单元测试 `CursorHmac_RejectsTamperedTicks` 通过
+
+#### Task V8-4.6: BroadcastChannelCompat 多标签页同步
+- [ ] BroadcastChannelCompat 类实现
+- [ ] 降级到 localStorage storage 事件
+- [ ] 应用到 auth-logout 频道
+- [ ] 应用到 form-draft 频道(可选)
+- [ ] 单元测试 `BroadcastChannelCompat_PostMessageWithChannel` 通过
+- [ ] 单元测试 `BroadcastChannelCompat_FallbackToStorage` 通过
+- [ ] 单元测试 `BroadcastChannelCompat_MultiTabLogoutSync` 通过
+
+## 五、第八轮深度审查验证点
+
+> 第八轮审查将验证 v8 修复方案是否引入新的衍生问题。审查维度:
+> 1. 代码现状对齐审计 30 项基线是否准确
+> 2. v7 24 项高危误判纠正是否引入新问题
+> 3. 第七轮 64 项衍生漏洞修复方案是否完整
+> 4. 8 项前置任务依赖链是否合理
+> 5. 27 项 v8 任务是否覆盖所有漏洞
+> 6. v8 修复方案是否再次"凭空假设"代码状态
+> 7. v8 是否引入新的字段/方法/类型引用错误
+> 8. v8 是否引入新的 SQL 语法错误
+> 9. v8 是否引入新的 API 契约破坏
+> 10. v8 是否引入新的硬约束违反
+
+### 数据关联维度(D8)验证点(10 个)
+- [ ] D8-1: v8 代码现状对齐审计 C1-C30 是否准确反映真实代码
+- [ ] D8-2: E4 HasOne<Product>() 无参重载是否与 InitialCreate 产生模型 diff
+- [ ] D8-3: E5 TRUNCATE 动态白名单是否漏列真实存在的表
+- [ ] D8-4: E6 IObjectStorage 扩展方法在 MinIO/Aliyun OSS 实现是否正确
+- [ ] D8-5: E8 Brand 排序 JOIN xref_oem_brand 是否引入 N+1 查询
+- [ ] D8-6: E9 BuildProductIndexDocAsync 是否正确查询 XrefOemBrands
+- [ ] D8-7: E11 cleanup_failures 状态机转换是否完整(pending→in_progress→success/failed)
+- [ ] D8-8: D7-9 LoadExistingOem2MapAsync static 调用方式是否正确
+- [ ] D8-9: D7-11 IAsyncEnumerable 在 0.15.4 SDK 兼容性
+- [ ] D8-10: D7-17 EtlImportService Singleton 调用 Scoped 服务是否正确释放
+
+### 检索逻辑维度(S8)验证点(10 个)
+- [ ] S8-1: E12 PG SQL `U&'\uE000'` 语法在 PostgreSQL 16 是否正确
+- [ ] S8-2: E13 Product is_discontinued 与 XrefOemBrand deleted_at 区分是否准确
+- [ ] S8-3: S7-1 PUA 过滤时机(写入索引 vs 搜索)是否正确
+- [ ] S8-4: S7-6 Meilisearch filter 转义规则是否与官方文档一致
+- [ ] S8-5: S7-7 SearchIndexPending 实体真实字段名是否核实
+- [ ] S8-6: S7-15 keyset 索引字段(is_discontinued, updated_at, id)是否真实存在
+- [ ] S8-7: S7-16 数组字段索引在 Meilisearch 0.15.4 是否支持
+- [ ] S8-8: E22 UnsafeRelaxedJsonEscaping 是否真的允许 PUA 字符
+- [ ] S8-9: Task V8-3.3 retry_count 字段迁移是否与现有 schema 冲突
+- [ ] S8-10: Task V8-3.5 synonyms 配置是否影响现有搜索行为
+
+### 前后端联动维度(F7)验证点(10 个)
+- [ ] F7-1: E14 保持单段路由是否影响 SEO 方案
+- [ ] F7-2: E16 isSafeRedirect 正则 `^\/[^/].*` 是否正确
+- [ ] F7-3: E17 isRedirecting router.isReady().finally 是否在所有浏览器支持
+- [ ] F7-4: E18 ErrorBoundary 集成 errorMonitor 是否丢失原 sakura_error_log 数据
+- [ ] F7-5: E19 url.ts isSafeRedirect 是否覆盖所有开放重定向场景
+- [ ] F7-6: E20 CursorHmac V2 Ticks 与 V1 ISO8601 兼容期是否引入安全风险
+- [ ] F7-7: E23 Mr1Validator CHK 算法(加权求和取模 36)是否符合业务规则
+- [ ] F7-8: E24 EtlAlertService `&& l.Status != "cancelled"` 是否冗余(隐式已排除)
+- [ ] F7-9: F6-8 BroadcastChannelCompat 在 IE/旧 Edge 降级是否正确
+- [ ] F7-10: F6-10 AbortError 过滤是否漏过滤其他非错误 rejection
+
+## 六、循环终止条件
+
+- [ ] 第八轮审查无任何新漏洞检出 → 完成
+- [ ] 第八轮审查发现新漏洞 → 进入 v9 修订,继续迭代
+
