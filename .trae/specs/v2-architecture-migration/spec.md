@@ -14017,3 +14017,80 @@ dotnet test backend/SakuraFilter.sln
 - CursorHmacTests: 构造函数校验(短 key/空 key/同 key)/签名生成(截断 16 字符/空 mr1/null mr1)/验签(篡改 mr1/篡改 updatedAt/无签名/垃圾输入/空 cursor/空 mr1)/双 key 轮转(过渡期接受/过渡期后拒绝)/向后兼容(id 字符串载荷)
 - V2BuildKeyPathTraversalTests: 路径穿越防御(../..\/空格/特殊字符)/imageRole-slot 一致性/namingField 配置切换(oem_no_3↔mr_1)/空命名值/扩展名/完整 key 格式
 
+### V24-F6: CS1570 XML 注释 warning 批量修复 [代码质量]
+
+**问题**: 9 个文件的 XML 注释中包含未转义的 `<` `>` `&` 字符,产生 66 个 CS1570 warning。
+
+**修复方案**: XML 注释中的特殊字符统一转义为 `&lt;` `&gt;` `&amp;`
+- `AuthController.cs` L55-56: `<your_username>/<your_password>` → `&lt;...&gt;`
+- `PublicSearchController.cs` L166: `&oemNo2` → `&amp;oemNo2`(URL 参数 & 符号)
+- `PublicFeaturedController.cs` L15: `< 20ms` → `&lt; 20ms`
+- `BaseDictService.cs` L12: `< 50 行` → `&lt; 50 行`
+- `IndexReplayWorker.cs` L16: `< 5` → `&lt; 5`
+- `PublicTypeaheadService.cs` L16: `< 2` → `&lt; 2`
+- `ResponseTimeMiddleware.cs` L15: `< 3%` → `&lt; 3%`
+- `DevTokenAuthMiddleware.cs` L12: `<token>` → `&lt;token&gt;`
+- `DeadLetterRecoveryService.cs` L26: `< max` → `&lt; max`
+
+**验证**: dotnet build backend/SakuraFilter.sln CS1570 warning 从 66 降至 0。
+
+### V24-F7: 可空性 warning 修复 [代码质量]
+
+**问题**: 11 个 CS8620/8601/8602/8604 可空性 warning 散落在多个文件。
+
+**修复方案**:
+- `EtlImportService.cs` L99-104: Stage getter 改用 `Volatile.Read(ref _stage)` 替代 `Interlocked.CompareExchange(ref _stage, null, null)`,避免 CS8601(`_stage` 是 `string` 非 null,null 参数不合法)
+- `Core/Extensions/LikeEscapeExtensions.cs`: 签名 `string` → `string?`(`EscapeLikePattern(this string? input)`)
+- `Search/MeiliSearchProvider.cs` L510-521: 添加 `.Select(b => b!)` 抑制 `List<string?>` vs `List<string>` 差异
+- `Api/Services/OemBrandDictService.cs` L54-60: 添加 `x.OemBrand != null` 过滤 + `bc.Brand!` 抑制
+- `Api/Services/PerfAlertService.cs` L174: `Dictionary<string, string>` → `Dictionary<string, string?>`
+- `Api.Tests/XssSanitizerTests.cs` L86: `result.ToLowerInvariant()` → `result!.ToLowerInvariant()`
+- `Etl.Tests/CoreLikeEscapeExtensionsTests.cs` L136: `result.Length` → `result!.Length`
+
+**验证**: dotnet build backend/SakuraFilter.sln 可空性 warning 从 11 降至 0;212/212 测试通过。
+
+### V24-F8: AdminEtlView 全量重建危险操作流程 Vitest 测试 [前端测试补充]
+
+**问题**: V17-3.1 全量重建(`doReindexAll`)是危险操作,后端有 ReindexAllAsync 资源泄漏修复(V24-F1)和 409 互斥逻辑,但前端二次确认/错误码映射/loading 状态等分支无单测覆盖。
+
+**修复方案**: 新建 `frontend/tests/unit/AdminEtlViewReindex.test.ts`,8 个测试用例覆盖完整决策矩阵:
+
+1. 点击按钮触发二次确认对话框(检查 ElMessageBox.confirm 调用 + 文案含"全量重建"/"危险操作")
+2. 用户取消确认 → `etlApi.reindexAll` 不被调用,ElMessage 不被调用
+3. API 成功(无 error) → `ElMessage.success` 调用,lastReindex descriptions 显示
+4. API 返回 `error='CANCELLED'` → `ElMessage.warning('已被取消')` 调用
+5. API 返回 error 非 null → `ElMessage.error` 调用,含错误信息
+6. API 抛 409 → `ElMessage.warning('已有 ETL 任务在运行')` 调用(业务语义,非失败)
+7. API 抛 500 → lastReindex 设置错误兜底,el-alert type=error 显示
+8. reindexing 状态在请求期间为 true,完成后为 false
+
+**关键修复**:
+- `el-button` stub 声明 `emits: ['click']` 防止 Vue 3 attrs 透传导致 click 双触发(Vue 3 默认把父组件 `@click` 透传到子组件根元素作为原生监听器,若 stub 内部也 `@click="$emit('click')"`,会触发 2 次)
+- 500 兜底 alert 用 `findAll('.el-alert')` + `attributes('data-title')` 定位 type=error alert(模板顶部常驻 warning el-alert 会干扰 `find('.el-alert')`)
+- mock `@/composables/useEtlProgress` 和 `useGlobalDragDrop` 避免副作用(SSE 连接/DOM 监听)
+- mock `vue-i18n`(注意模块名无 @ 前缀)防止 i18n 初始化失败
+- 完整 stub 所有 Element Plus 子组件 + EtlPipeline/EtlKpiCards/EtlAlertStatus/EtlReasonCodePie
+
+**验证**: `npx vitest run tests/unit/` 9 个测试文件全部通过,137/137 测试通过。
+
+## 25.8 v24 最终提交记录(追加 F4-F8)
+
+| Commit | 类型 | 说明 |
+|--------|------|------|
+| 952b006 | feat | v24 D7/D8 螺纹规格 filter 修复 + V17-3.5 ETL 测试项目 |
+| df9b884 | refactor | v24 架构清理 LikeEscape 抽到 Core,Api 改为 shim |
+| 9ac0fe8 | test | v24 补充 Core LikeEscapeExtensions 15 个单元测试 |
+| a18a2d5 | fix(etl) | 修复 ReindexAllAsync 资源泄漏(V24-F1) |
+| c47413b | refactor | V24-F4 完全移除 Api 层 LikeEscapeExtensions shim |
+| 9e5f133 | fix(api) | V24-F5 修复 CursorHmac XML 注释 CS1570 warning |
+| d3236b0 | fix(api) | V24-F6 批量修复 CS1570 XML 注释 warning(66→0) |
+| 717b42a | fix(nullable) | V24-F7 修复 11 个可空性 warning(CS8601/8602/8604/8620) |
+| 8ac2cd4 | test(etl) | V24-F8 补充 AdminEtlView 全量重建危险操作流程 Vitest 测试(8 用例) |
+
+## 25.9 v24 最终验证结果
+
+- **后端**: dotnet test backend/SakuraFilter.sln 212/212 通过(Etl.Tests 21 + Api.Tests 191)
+- **后端 warning**: dotnet build 全部 0 warning(CS1570 / CS8620 / CS8601 / CS8602 / CS8604 全部修复)
+- **前端**: npx vitest run tests/unit/ 137/137 通过(9 个测试文件)
+- **前端 contract**: 12 个失败均为 ECONNREFUSED(后端未启动,与代码无关)
+
