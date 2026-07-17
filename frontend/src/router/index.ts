@@ -38,6 +38,15 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/public/AggregateSearchView.vue'),
     meta: { title: '聚合搜索' }
   },
+  // ===== V2 Task 2.2.5: OEM 3 排序管理页 (后台, 需登录) =====
+  //   URL: /admin/xrefs/reorder
+  //   左侧 Brand 列表 + 右侧 vuedraggable 拖拽 OEM 3 排序
+  {
+    path: '/admin/xrefs/reorder',
+    name: 'AdminXrefReorder',
+    component: () => import('@/views/admin/AdminXrefReorderView.vue'),
+    meta: { title: 'OEM 排序管理', requireAuth: true }
+  },
   {
     path: '/product/:oem',
     name: 'ProductDetail',

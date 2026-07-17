@@ -220,6 +220,12 @@ export const productApi = {
   getByOem(slug: string): Promise<ProductDetail> {
     // 注意: 走 http 拦截器, 即使已登录后台 (有 token) 也可访问公开端点 (后端 [AllowAnonymous])
     return http.get(`/public/product/${encodeURIComponent(slug)}`).then((r) => r.data)
+  },
+  // V2 Task 2.3.5: 同 MR.1 其他 OEM 3 列表 (详情页推荐区块, 后端已排序)
+  //   GET /api/public/products/{mr1}/sibling-oem3
+  //   返回排序后列表 (brand_sort_order → sort_order), 前端不再二次排序
+  siblingOem3(mr1: string): Promise<{ total: number; items: import('./types').SiblingOem3Item[] }> {
+    return http.get(`/public/products/${encodeURIComponent(mr1)}/sibling-oem3`).then((r) => r.data)
   }
 }
 
@@ -327,6 +333,22 @@ export const adminProductApi = {
   },
   compare(ids: number[]): Promise<{ count: number; items: ProductDetail[] }> {
     return http.post('/admin/products/compare', { ids }).then((r) => r.data)
+  }
+}
+
+// ===== V2 Task 2.2.7: OEM 3 排序管理 API =====
+export const adminXrefApi = {
+  // GET /api/admin/xrefs/reorder/brands — 品牌 + sortOrder + oem3Count
+  listBrands(): Promise<{ total: number; items: import('./types').XrefBrandItem[] }> {
+    return http.get('/admin/xrefs/reorder/brands').then((r) => r.data)
+  },
+  // GET /api/admin/xrefs/reorder?oemBrand=BOSCH — 某 Brand 下 OEM 3 列表 (含 rowVersion)
+  listByBrand(oemBrand: string): Promise<{ total: number; items: import('./types').XrefOem3Item[] }> {
+    return http.get('/admin/xrefs/reorder', { params: { oemBrand } }).then((r) => r.data)
+  },
+  // POST /api/admin/xrefs/reorder — 批量更新 sort_order (含 xmin 乐观锁, 冲突返 409)
+  reorder(req: import('./types').XrefReorderRequest): Promise<{ updated: number }> {
+    return http.post('/admin/xrefs/reorder', req).then((r) => r.data)
   }
 }
 

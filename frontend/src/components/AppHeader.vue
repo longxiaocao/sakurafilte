@@ -57,6 +57,8 @@ const allNavItems = computed(() => {
       { key: 'products', label: '产品管理', path: '/admin/products', icon: 'Goods', priority: 4 },
       { key: 'adv-search', label: '高级搜索', path: '/public/search', icon: 'Filter', priority: 5 },
       { key: 'dict', label: '字典管理', dropdown: 'dict', icon: 'Collection', priority: 6 },
+      // V2 Task 2.2.6: OEM 排序管理入口 (priority 6.5, 在字典和 ETL 之间)
+      { key: 'xref-reorder', label: 'OEM 排序', path: '/admin/xrefs/reorder', icon: 'Sort', priority: 6.5 },
       { key: 'etl', label: 'ETL 触发', path: '/admin/etl', icon: 'Loading', priority: 7 }
     )
     if (isAdmin()) {

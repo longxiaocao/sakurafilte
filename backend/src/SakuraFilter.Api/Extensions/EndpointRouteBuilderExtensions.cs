@@ -15,6 +15,7 @@ public static class EndpointRouteBuilderExtensions
         app.MapAdminProductEndpoints();
         app.MapAdminEtlEndpoints();
         app.MapAdminAlertEndpoints();  // P2-1
+        app.MapAdminXrefReorderEndpoints();  // V2 Task 2.1: OEM 3 排序管理
         app.MapDeadLetterEndpoints();
         app.MapDictionaryEndpoints();
         app.MapPublicTypeaheadEndpoints();

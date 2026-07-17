@@ -149,6 +149,55 @@ public class PublicProductController : ControllerBase
             groups.Count, groups.Sum(g => g.ProductCount));
         return Ok(new ByTypeResponse(groups.Count, groups));
     }
+
+    /// <summary>
+    /// V2 Task 2.3.4: 同 MR.1 其他 OEM 3 列表 (前台详情页"同 MR.1 推荐其他 OEM 3"区块)
+    /// URL: GET /api/public/products/{mr1}/sibling-oem3
+    /// 排序: brand_sort_order → sort_order (与 Meilisearch oem_list 数组排序一致, Task 2.3.1)
+    /// 过滤: is_published=true AND is_discontinued=false (前台不展示下架/未发布)
+    /// 返回: oemBrand / oemNo3 / oem2 / sortOrder / machineType / brandSortOrder
+    /// </summary>
+    [HttpGet("products/{mr1}/sibling-oem3")]
+    public async Task<IActionResult> GetSiblingOem3(string mr1, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(mr1))
+            return BadRequest(new { error = "mr1 不能为空" });
+        if (mr1.Length > 10)
+            return BadRequest(new { error = "mr1 长度不能超过 10" });
+
+        // 查询同 MR.1 下所有上架 OEM 3 (含 brand_sort_order LEFT JOIN)
+        //   WHY LEFT JOIN: brand 软删除时 brand_sort_order 为 null, 排序时按 int.MaxValue 兜底
+        var items = await (
+            from x in _db.CrossReferences.AsNoTracking()
+            join p in _db.Products.AsNoTracking() on x.ProductId equals p.Id
+            where p.Mr1 == mr1
+                  && !p.IsDiscontinued
+                  && p.IsPublished
+                  && !x.IsDiscontinued
+                  && x.IsPublished
+            // V2 Task 2.3.1: 排序 brand_sort_order → sort_order → oem_no_3 (与 BuildMr1DocumentAsync 一致)
+            orderby (_db.XrefOemBrands
+                        .Where(b => b.Brand == x.OemBrand && b.DeletedAt == null)
+                        .Select(b => (int?)b.SortOrder)
+                        .FirstOrDefault() ?? int.MaxValue),
+                    x.SortOrder,
+                    x.OemNo3
+            select new
+            {
+                oemBrand = x.OemBrand,
+                oemNo3 = x.OemNo3,
+                oem2 = x.Oem2,
+                sortOrder = x.SortOrder,
+                machineType = x.MachineType,
+                // brand_sort_order 用于前端展示优先级标识 (null 表示品牌已软删除, 排末尾)
+                brandSortOrder = _db.XrefOemBrands
+                    .Where(b => b.Brand == x.OemBrand && b.DeletedAt == null)
+                    .Select(b => (int?)b.SortOrder)
+                    .FirstOrDefault()
+            }).ToListAsync(ct);
+
+        return Ok(new { total = items.Count, items });
+    }
 }
 
 /// <summary>P2.3: 单个 type 分组</summary>

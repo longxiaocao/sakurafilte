@@ -656,6 +656,42 @@ export interface AggregateSearchResponse {
   hits: AggregateSearchHit[]
 }
 
+// ===== V2 Task 2.2: OEM 3 排序管理 (POST /api/admin/xrefs/reorder) =====
+export interface XrefBrandItem {
+  brand: string
+  sortOrder: number
+  oem3Count: number
+}
+
+export interface XrefOem3Item {
+  oemNo3: string
+  sortOrder: number
+  mr1: string | null
+  isPublished: boolean
+  rowVersion: number  // xmin 乐观锁令牌 (uint, JSON 序列化为 number)
+}
+
+export interface XrefReorderItem {
+  oemNo3: string
+  sortOrder: number
+  rowVersion: number
+}
+
+export interface XrefReorderRequest {
+  oemBrand: string
+  items: XrefReorderItem[]
+}
+
+// ===== V2 Task 2.3.5: 同 MR.1 其他 OEM 3 列表 (前台详情页推荐区块) =====
+export interface SiblingOem3Item {
+  oemBrand: string | null
+  oemNo3: string | null
+  oem2: string | null
+  sortOrder: number
+  machineType: string | null
+  brandSortOrder: number | null  // null 表示品牌已软删除, 排末尾
+}
+
 // ===== Day 11 改进 1: 自动生成的 Request DTO (re-export) =====
 // WHY: 手工 types.ts 历史遗漏 38 个 Request/Reorder/Input DTO,
 //   导致前端调用 dictApi.machines.create() 等接口时参数无类型保护 (BUG B 根因).

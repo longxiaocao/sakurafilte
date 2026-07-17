@@ -491,10 +491,21 @@ public class AdminProductService
             .FirstOrDefaultAsync(x => x.Id == id, ct)
             ?? throw new KeyNotFoundException($"产品 id={id} 不存在");
 
-        var xrefs = await _db.CrossReferences.AsNoTracking()
-            .Where(x => x.ProductId == id)
-            .Select(x => new XrefInfo(x.Id, x.ProductName1, x.OemBrand, x.OemNo3, x.Oem2, x.SortOrder, x.MachineType, x.IsPublished, x.RowVersion))
-            .ToListAsync(ct);
+        // V2 Task 2.3.5: xrefs 按 brand_sort_order → sort_order → oem_no_3 排序
+        //   WHY: 详情页 crossReferences 表格直接展示, 前端不再二次排序
+        //   与 MeiliSearchProvider.BuildMr1DocumentAsync / PublicProductController.GetSiblingOem3 排序口径一致
+        var xrefs = await (
+            from x in _db.CrossReferences.AsNoTracking()
+            where x.ProductId == id
+            // V2: brand_sort_order LEFT JOIN (brand 软删除时按 int.MaxValue 兜底排末尾)
+            orderby (_db.XrefOemBrands
+                        .Where(b => b.Brand == x.OemBrand && b.DeletedAt == null)
+                        .Select(b => (int?)b.SortOrder)
+                        .FirstOrDefault() ?? int.MaxValue),
+                    x.SortOrder,
+                    x.OemNo3
+            select new XrefInfo(x.Id, x.ProductName1, x.OemBrand, x.OemNo3, x.Oem2, x.SortOrder, x.MachineType, x.IsPublished, x.RowVersion)
+        ).ToListAsync(ct);
 
         var apps = await _db.MachineApplications.AsNoTracking()
             .Where(m => m.ProductId == id)
@@ -978,10 +989,18 @@ public class AdminProductService
 
         // 单次查 xref + apps
         var idList = ordered.Select(p => p.Id).ToList();
-        var xrefs = await _db.CrossReferences.AsNoTracking()
-            .Where(x => idList.Contains(x.ProductId))
-            .Select(x => new { x.ProductId, x.Id, x.ProductName1, x.OemBrand, x.OemNo3, x.Oem2, x.SortOrder, x.MachineType, x.IsPublished, x.RowVersion })
-            .ToListAsync(ct);
+        // V2 Task 2.3.5: xrefs 按 brand_sort_order → sort_order → oem_no_3 排序 (列表页批量)
+        var xrefs = await (
+            from x in _db.CrossReferences.AsNoTracking()
+            where idList.Contains(x.ProductId)
+            orderby (_db.XrefOemBrands
+                        .Where(b => b.Brand == x.OemBrand && b.DeletedAt == null)
+                        .Select(b => (int?)b.SortOrder)
+                        .FirstOrDefault() ?? int.MaxValue),
+                    x.SortOrder,
+                    x.OemNo3
+            select new { x.ProductId, x.Id, x.ProductName1, x.OemBrand, x.OemNo3, x.Oem2, x.SortOrder, x.MachineType, x.IsPublished, x.RowVersion }
+        ).ToListAsync(ct);
         var apps = await _db.MachineApplications.AsNoTracking()
             .Where(m => idList.Contains(m.ProductId))
             .ToListAsync(ct);
