@@ -7360,3 +7360,164 @@ curl http://localhost:7700/indexes/products/documents/999999
 **新增 migration**: 0 个
 **已知问题**: D7/D8 filter 遗漏(现有 bug,列 v20+ 处理)
 
+---
+
+# v20 任务清单(对应 spec.md 第二十一章)
+
+> **核实机制**: 第十一重核实机制(跨伪代码片段字段名一致性 + 导航属性/字段存在性双重验证)
+> **修订范围**: spec.md 第二十一章 21.1~21.8 + tasks.md v20 任务清单 + checklist.md v20 验证清单
+> **衍生漏洞来源**: 第十九轮三维度并行深度审查发现 v19 衍生漏洞 6 项(D19:3 / S19:1 / N19:2,含 4 项严重)
+
+## v20 前置任务(Pre-Task)
+
+### Task V20-0.1 [必做] Pre-Task-V20-0 Product.CrossReferences 导航属性存在性验证
+
+**对应 spec**: spec.md 21.4 Pre-Task-V20-0
+**目标**: 确认 Product.CrossReferences 导航属性存在(v19 V19-F4 错误判断不存在)
+**步骤**:
+1. Grep `CrossReferences` 在 Product.cs: 应匹配 L92
+2. Read Product.cs L92: `public ICollection<CrossReference> CrossReferences { get; set; } = new List<CrossReference>();`
+3. 确认 Product **有** CrossReferences 导航属性
+**通过条件**: Product.CrossReferences 存在
+**失败处理**: 若不存在,V20-F1 修正方案需调整
+**验证命令**: 无(纯 Grep/Read 验证)
+
+### Task V20-0.2 [必做] Pre-Task-V20-1 XrefOemBrand 类字段完整性验证
+
+**对应 spec**: spec.md 21.4 Pre-Task-V20-1
+**目标**: 确认 XrefOemBrand 类无 OemBrand 和 OemNo3 字段
+**步骤**:
+1. Read Product.cs L208-L216(XrefOemBrand 类定义)
+2. 列出字段: Id / Brand / SortOrder / CreatedAt / UpdatedAt / DeletedAt
+3. Grep `OemBrand` 在 XrefOemBrand 类块: 应零匹配
+4. Grep `OemNo3` 在 XrefOemBrand 类块: 应零匹配
+**通过条件**: XrefOemBrand 类无 OemBrand 和 OemNo3 字段
+**失败处理**: 若存在,V20-F2 补充说明需调整
+**验证命令**: 无(纯 Read/Grep 验证)
+
+### Task V20-0.3 [必做] Pre-Task-V20-2 V19-F3 与 V19-F6 跨伪代码片段字段名一致性验证
+
+**对应 spec**: spec.md 21.4 Pre-Task-V20-2
+**目标**: 确认 V19-F3 引用的字段名与 V19-F6 匿名类型字段名一致
+**步骤**:
+1. Read spec.md V19-F3 伪代码(L12445-L12463): 列出所有 `p.X` 字段引用
+2. Read spec.md V19-F6 伪代码(L12514-L12528): 列出匿名类型所有字段名
+3. 逐行比对: V19-F3 的 `p.X` 必须在 V19-F6 匿名类型中存在字段 `X`
+4. 确认 V19-F3 L12461 `p.OemBrand` 与 V19-F6 `Brand` 不一致(D19-3 衍生漏洞)
+**通过条件**: V20-F3 修正后(p.OemBrand → p.Brand),所有字段名一致
+**失败处理**: 若仍不一致,需 v21 修订
+**验证命令**: 无(纯 Read 验证)
+
+### Task V20-0.4 [必做] Pre-Task-V20-3 Meilisearch 服务端字段命名方向验证(复用 Pre-Task-V18-0-Verify)
+
+**对应 spec**: spec.md 21.4 Pre-Task-V20-3
+**目标**: 确认 Meilisearch 服务端实际字段命名方向(PascalCase / snake_case / camelCase)
+**步骤**:
+1. 查询 Meilisearch index 配置(如 `GET /indexes/products/settings`)
+2. 确认 FilterableAttributes 字段命名方向
+3. 若 snake_case → v16 V16-F2 假设不适用,现有代码正确
+4. 若 PascalCase → v16 V16-F2 假设可能正确,现有代码需修订
+**通过条件**: 确认 Meilisearch 服务端字段命名方向
+**失败处理**: 若无法验证,V20-F4 措辞软化仍合理(不直接判定"错误")
+**验证命令**: 无(需运行时查询 Meilisearch 服务)
+
+## v20 数据关联维度修复任务(对应 V20-F1~F3)
+
+### Task V20-1.1 [严重] V20-F1 修正 V19-F4 第 2 点 — Product.CrossReferences 存在
+
+**对应 spec**: spec.md 21.3 V20-F1
+**对应漏洞**: D19-1
+**目标**: V19-F4 覆盖说明第 2 点修正为"Product 有 CrossReferences 导航属性"
+**步骤**:
+1. 定位 spec.md 第二十章 V19-F4 覆盖说明第 2 点
+2. 修正为"v16 V16-F1 用 p.CrossReferences 导航属性(正确: Product 有 CrossReferences 导航属性 L92)"
+3. 确认 v16 V16-F1 的真正错误是 x.IsPrimary(非 p.CrossReferences)
+**通过条件**: V19-F4 第 2 点修正为 Product.CrossReferences 存在
+**失败处理**: 无
+**验证命令**: 无(纯 spec 修订)
+
+### Task V20-1.2 [中] V20-F2 补充 V19-F4 第 4 点 — b.OemNo3 也错误
+
+**对应 spec**: spec.md 21.3 V20-F2
+**对应漏洞**: D19-2
+**目标**: V19-F4 覆盖说明第 4 点补充 b.OemNo3 也错误
+**步骤**:
+1. 定位 spec.md 第二十章 V19-F4 覆盖说明第 4 点
+2. 补充 v16 V16-F1 L10410-L10411 `b => new { b.OemBrand, b.OemNo3 }` 中 b.OemNo3 也错误
+3. 确认 XrefOemBrand 类无 OemNo3 字段
+**通过条件**: V19-F4 第 4 点补充 b.OemNo3 错误
+**失败处理**: 无
+**验证命令**: 无(纯 spec 修订)
+
+### Task V20-1.3 [严重] V20-F3 修正 V19-F3 — p.OemBrand 改为 p.Brand
+
+**对应 spec**: spec.md 21.3 V20-F3
+**对应漏洞**: D19-3(严重)
+**目标**: V19-F3 L12461 `p.OemBrand` 改为 `p.Brand`(与 V19-F6 匿名类型字段名一致)
+**步骤**:
+1. 定位 spec.md 第二十章 V19-F3 L12461
+2. `p.OemBrand` 改为 `p.Brand`
+3. 追加跨伪代码片段字段名一致性验证表(17 行)
+4. 确认所有字段名与 V19-F6 匿名类型一致
+**通过条件**: V19-F3 所有字段名与 V19-F6 匿名类型一致
+**失败处理**: 若仍不一致,需 v21 修订
+**验证命令**: 无(纯 spec 修订)
+
+## v20 检索逻辑维度修复任务(对应 V20-F4)
+
+### Task V20-2.1 [中] V20-F4 软化 V19-F7 措辞 — 不再直接判定"错误"
+
+**对应 spec**: spec.md 21.3 V20-F4
+**对应漏洞**: S19-1
+**目标**: V19-F7 第 5 点措辞软化为"以 Pre-Task-V18-0-Verify 验证为准"
+**步骤**:
+1. 定位 spec.md 第二十章 V19-F7 覆盖说明第 5 点
+2. "v16 V16-F2 的 PascalCase 假设错误"改为"v16 V16-F2 的 PascalCase 假设与现有代码 snake_case 不一致,以 Pre-Task-V18-0-Verify 验证为准"
+3. 追加 Pre-Task-V18-0-Verify 验证结果的两种处理分支
+**通过条件**: V19-F7 第 5 点措辞软化
+**失败处理**: 无
+**验证命令**: 无(纯 spec 修订)
+
+## v20 核实机制强化任务(对应 V20-F5~F6)
+
+### Task V20-3.1 [严重] V20-F5 强化第十一重核实机制 — 导航属性/字段存在性双重验证
+
+**对应 spec**: spec.md 21.3 V20-F5
+**对应漏洞**: N19-1
+**目标**: 第十一重核实机制追加"导航属性/字段存在性双重验证"定义
+**步骤**:
+1. 在 spec.md 第二十一章 21.2 第十一重核实机制定义中追加"导航属性/字段存在性双重验证"
+2. 明确双向验证规则: 声称"不存在" → Grep 零匹配; 声称"存在" → Grep 匹配
+3. 引用 D19-1 作为盲区案例
+**通过条件**: 第十一重核实机制定义含导航属性/字段存在性双重验证
+**失败处理**: 无
+**验证命令**: 无(纯 spec 修订)
+
+### Task V20-3.2 [严重] V20-F6 强化第十一重核实机制 — 跨伪代码片段字段名一致性验证
+
+**对应 spec**: spec.md 21.3 V20-F6
+**对应漏洞**: N19-2
+**目标**: 第十一重核实机制追加"跨伪代码片段字段名一致性验证"定义
+**步骤**:
+1. 在 spec.md 第二十一章 21.2 第十一重核实机制定义中追加"跨伪代码片段字段名一致性验证"
+2. 明确验证方法: 列出所有片段的字段引用表,逐行比对
+3. 引用 D19-3 作为盲区案例
+**通过条件**: 第十一重核实机制定义含跨伪代码片段字段名一致性验证
+**失败处理**: 无
+**验证命令**: 无(纯 spec 修订)
+
+## v20 任务总结
+
+- **前置任务**: 4 个(Pre-Task-V20-0 / V20-1 / V20-2 / V20-3)
+- **数据关联维度**: 3 个任务(V20-1.1 ~ V20-1.3,对应 V20-F1~F3)
+- **检索逻辑维度**: 1 个任务(V20-2.1,对应 V20-F4)
+- **核实机制强化**: 2 个任务(V20-3.1 ~ V20-3.2,对应 V20-F5~F6)
+- **总任务数**: 10 个(4 前置 + 6 实施)
+
+**实际新增代码**: 0 个(v20 仅修订 spec/tasks/checklist)
+**实际修改后端文件**: 0 个(代码修改由 v17 任务清单执行)
+**实际修改前端文件**: 0 个
+**纯文档修正**: 3 个文件(spec.md / tasks.md / checklist.md)
+**新增 migration**: 0 个
+**已知问题**: D7/D8 filter 遗漏(现有 bug,列 v21+ 处理)
+

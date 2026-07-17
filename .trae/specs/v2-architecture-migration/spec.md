@@ -12721,3 +12721,355 @@ V19-F9 ReindexResult 说明:
 - [ ] v19 新增 migration: 0 个
 - [ ] v19 已知问题: D7/D8 filter 遗漏(现有 bug,列 v20+ 处理)
 
+---
+
+# 第二十一章 v20 修订 — 第十一重核实机制(跨伪代码片段字段名一致性 + 导航属性/字段存在性双重验证)
+
+> 基于第十九轮三维度并行深度审查(D19:3 / S19:1 / N19:2,共 6 项衍生漏洞,含 4 项严重),v20 引入第十一重核实机制(跨伪代码片段字段名一致性验证 + 导航属性/字段存在性双重验证),解决 v19 V19-F4 错误判断 Product.CrossReferences 不存在、V19-F3 与 V19-F6 跨伪代码片段字段名不一致(OemBrand vs Brand)、V19-F7 措辞过于绝对等问题。
+
+## 21.1 第十九轮审查结果摘要(6 项衍生漏洞,含 4 项严重)
+
+### D19 数据关联维度(3 项)
+
+| 编号 | 问题 | 危险等级 | v19 伪代码 | 实际代码事实(经 Grep/Read 核实) |
+|------|------|---------|-----------|--------------------------------|
+| D19-1 | V19-F4 覆盖说明第 2 点错误判断 Product.CrossReferences 不存在 | **严重** | spec.md L12471: "v16 V16-F1 用 `p.CrossReferences` 导航属性(错误: Product 无 CrossReferences 导航属性)" | [Product.cs#L92](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Core/Entities/Product.cs#L92): `public ICollection<CrossReference> CrossReferences { get; set; } = new List<CrossReference>();` — Product **有** CrossReferences 导航属性 |
+| D19-2 | V19-F4 覆盖说明第 4 点遗漏 b.OemNo3 | 中 | spec.md L12473: 仅说明 `b.OemBrand`(错误: XrefOemBrand 无 OemBrand),未提及 `b.OemNo3` | v16 V16-F1 L10410-L10411: `b => new { b.OemBrand, b.OemNo3 }` — XrefOemBrand 类(Product.cs L208-L216)既无 OemBrand 也无 OemNo3 字段(只有 Brand/SortOrder/CreatedAt/UpdatedAt/DeletedAt) |
+| D19-3 | V19-F3 `p.OemBrand` 与 V19-F6 匿名类型字段名 `Brand` 不一致 | **严重** | V19-F3 L12461: `p.OemBrand,  // 16. OemBrand` <br> V19-F6 L12522: `Brand = p.OemBrand,  // 字段名是 Brand 非 OemBrand` | V19-F6 查询的匿名类型字段名是 `Brand`,V19-F3 引用 `p.OemBrand` 会编译错误(匿名类型无 OemBrand 字段)。V19-F3 的 p 是 V19-F6 查询结果元素(因 `p.BrandSortOrder` 引用匿名类型字段,Product 无此字段) |
+
+### S19 检索逻辑维度(1 项)
+
+| 编号 | 问题 | 危险等级 | v19 伪代码 | 实际代码事实 |
+|------|------|---------|-----------|------------|
+| S19-1 | V19-F7 措辞"v16 V16-F2 的 PascalCase 假设错误"过于绝对 | 中 | spec.md L12547: "v16 V16-F2 的 PascalCase 假设错误(与现有代码不一致)" | 现有代码 MeiliSearchProvider.cs L75/L80/L85/L90/L94 用 snake_case(type/d1_mm/d2_mm/h1_mm/is_discontinued),但 v16 V16-F2 的 PascalCase 假设基于 System.Text.Json 默认序列化策略,需 Pre-Task-V18-0-Verify 验证 Meilisearch 服务端实际字段命名方向后才能定论。v19 V19-F7 不应直接判定"错误",应软化为"与现有代码不一致,以 Pre-Task-V18-0-Verify 验证为准" |
+
+### N19 第十重核实机制应用维度(2 项)
+
+| 编号 | 问题 | 危险等级 | 根因 |
+|------|------|---------|------|
+| N19-1 | V19-F4 第十重核实机制失效 — 未验证 Product.CrossReferences 存在 | **严重** | v19 第十重核实机制(版本间一致性 + 字段顺序对齐)未覆盖"导航属性/字段存在性双重验证"。V19-F4 声称 Product 无 CrossReferences 导航属性,但实际存在(Product.cs L92)。第七重"方法/字段名 Grep 零匹配验证"只验证字段不存在(如 IsPrimary),未验证字段存在(如 CrossReferences) |
+| N19-2 | V19-F3 第十重核实机制失效 — 未验证跨伪代码片段字段名一致性 | **严重** | v19 第十重核实机制未覆盖"跨伪代码片段字段名一致性验证"。V19-F3(ProductIndexDoc 构造)引用 `p.OemBrand`,V19-F6(LEFT JOIN 查询)匿名类型字段名是 `Brand`,两者配合使用时编译错误。第十重只验证单片段内字段顺序,未验证跨片段字段名引用一致性 |
+
+## 21.2 v20 核心创新 — 第十一重核实机制(跨伪代码片段字段名一致性 + 导航属性/字段存在性双重验证)
+
+### 第十一重核实机制定义
+
+v19 第十重核实机制(版本间一致性 + 字段顺序对齐)存在两个盲区:
+1. **跨伪代码片段字段名一致性**: v19 V19-F3(ProductIndexDoc 构造)与 V19-F6(LEFT JOIN 查询)是配合使用的两个伪代码片段,但 V19-F3 引用 `p.OemBrand`,V19-F6 匿名类型字段名是 `Brand`,跨片段字段名不一致导致编译错误(D19-3)。
+2. **导航属性/字段存在性双重验证**: v19 V19-F4 声称 Product 无 CrossReferences 导航属性,但实际存在。第十重只验证"字段不存在"(如 IsPrimary),未验证"字段/导航属性存在"(如 CrossReferences),导致 D19-1 错误判断。
+
+v20 引入第十一重核实机制,在第十重基础上追加:
+
+1. **跨伪代码片段字段名一致性验证**: 当伪代码跨多个片段(如 F3 构造 + F6 查询)配合使用时,Grep/Read 所有相关片段,验证字段名引用一致(如 F3 引用的 `p.X` 必须在 F6 匿名类型中存在字段 `X`)。
+2. **导航属性/字段存在性双重验证**: 验证字段/导航属性时,不只验证"不存在"(Grep 零匹配),也要验证"存在"(Grep 匹配)。若 spec 声称"字段不存在",必须 Grep 验证零匹配;若 spec 声称"字段存在",必须 Grep 验证匹配。
+
+### 十一重核实机制完整定义(v20)
+
+| 重数 | 名称 | 验证内容 | 工具 |
+|------|------|---------|------|
+| 第一重 | 代码存在性 | 类/方法是否存在 | Grep |
+| 第二重 | 字段名 | 字段名是否存在 | Grep |
+| 第三重 | API 签名 | 方法签名与代码一致 | Read |
+| 第四重 | 伪代码自洽性 | 伪代码逻辑无矛盾 | 人工审查 |
+| 第五重 | 运行时上下文自洽性 | 锁/事务/取消三层互斥自洽 | 人工审查 |
+| 第六重 | API 完整签名比对 | 参数类型/返回值/泛型一致 | Read |
+| 第七重 | 方法/字段名 Grep 零匹配 | 引用的方法/字段名实际存在 | Grep 零匹配验证 |
+| 第八重 | 类归属 + 代码语义对齐 | 字段所属类正确 + 方法不存在时语义已实现 | Grep + Read 类块范围 |
+| 第九重 | record 完整字段 + 现有实现语义 | record 构造提供所有字段 + 保留现有实现关键逻辑 | Read record 定义 + Read 现有实现 |
+| 第十重 | 版本间一致性 + 字段顺序对齐 | 伪代码与前序版本无冲突 + record 构造字段顺序与扩展定义一致 | Grep 前序版本 + Read record 扩展定义 |
+| **第十一重** | **跨伪代码片段字段名一致性 + 导航属性/字段存在性双重验证** | **跨片段字段名引用一致 + 字段存在性双向验证(存在/不存在)** | **Grep 跨片段字段名 + Grep 双向验证** |
+
+### v20 第十一重核实机制验证结果(针对 v19 衍生漏洞)
+
+| v19 衍生漏洞 | 第十重结果 | 第十一重验证 | v20 修复方案 |
+|------------|-----------|------------|------------|
+| D19-1 V19-F4 错误判断 Product.CrossReferences 不存在 | 未覆盖存在性验证 | **导航属性存在性验证**: Grep Product.cs 确认 CrossReferences 存在(L92) | V20-F1: 修正 V19-F4 第 2 点,Product.CrossReferences 存在 |
+| D19-2 V19-F4 遗漏 b.OemNo3 | 未覆盖完整性验证 | **字段不存在性验证**: Grep XrefOemBrand 类确认无 OemNo3 字段 | V20-F2: 补充 V19-F4 第 4 点,b.OemNo3 也错误 |
+| D19-3 V19-F3 p.OemBrand 与 V19-F6 Brand 不一致 | 未覆盖跨片段验证 | **跨伪代码片段字段名一致性**: V19-F3 引用 p.OemBrand,V19-F6 匿名类型字段名 Brand,不一致 | V20-F3: V19-F3 p.OemBrand 改为 p.Brand |
+| S19-1 V19-F7 措辞过于绝对 | 未覆盖措辞严谨性 | **措辞严谨性**: V19-F7 不应直接判定"错误",应软化 | V20-F4: 软化 V19-F7 措辞 |
+| N19-1 第十重未覆盖存在性验证 | 第十重盲区 | **第十一重追加导航属性/字段存在性双重验证** | V20-F5: 强化第十一重核实机制定义 |
+| N19-2 第十重未覆盖跨片段验证 | 第十重盲区 | **第十一重追加跨伪代码片段字段名一致性验证** | V20-F6: 强化第十一重核实机制定义 |
+
+## 21.3 V20-F1~F6 修复方案(含完整伪代码)
+
+> **第十一重核实机制应用**: 每个 V20-Fx 修复方案均经过跨伪代码片段字段名一致性验证 + 导航属性/字段存在性双重验证,确保与 v19 伪代码片段字段名引用一致 + 字段存在性判断正确。
+
+### V20-F1 [严重] D19-1 修正 V19-F4 第 2 点 — Product.CrossReferences 导航属性存在
+
+**v19 伪代码位置**: spec.md 第二十章 V19-F4 覆盖说明第 2 点(L12471)
+**v19 错误**: V19-F4 第 2 点说"v16 V16-F1 用 `p.CrossReferences` 导航属性(错误: Product 无 CrossReferences 导航属性)"
+**真实代码事实**(经 Grep + Read 核实):
+- [Product.cs#L92](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Core/Entities/Product.cs#L92): `public ICollection<CrossReference> CrossReferences { get; set; } = new List<CrossReference>();`
+- Grep `CrossReferences` 在 Product.cs: 1 匹配(L92)
+- **Product 有 CrossReferences 导航属性**(v19 V19-F4 第 2 点判断错误)
+**v20 修正方案**: V19-F4 覆盖说明第 2 点修正:
+```
+V20-F1 修正 V19-F4 第 2 点:
+1. v19 V19-F4 第 2 点原: "v16 V16-F1 用 p.CrossReferences 导航属性(错误: Product 无 CrossReferences 导航属性)"
+2. v20 修正: "v16 V16-F1 用 p.CrossReferences 导航属性(正确: Product 有 CrossReferences 导航属性 L92)"
+3. 但 v16 V16-F1 用 x.IsPrimary(CrossReference 类无 IsPrimary 字段,错误),v18/v19 覆盖仍合理
+4. v16 V16-F1 的真正错误是 x.IsPrimary(非 p.CrossReferences),v18/v19 改用 Product.OemBrand + XrefOemBrand.Brand 匹配(正确)
+```
+
+### V20-F2 [中] D19-2 补充 V19-F4 第 4 点 — b.OemNo3 也错误
+
+**v19 伪代码位置**: spec.md 第二十章 V19-F4 覆盖说明第 4 点(L12473)
+**v19 遗漏**: V19-F4 第 4 点只说 `b.OemBrand` 错误,未提及 `b.OemNo3` 也错误
+**真实代码事实**(经 Read 核实):
+- v16 V16-F1 L10410-L10411: `b => new { b.OemBrand, b.OemNo3 }`
+- [Product.cs#L208-L216](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Core/Entities/Product.cs#L208-L216): XrefOemBrand 类字段为 Id / Brand / SortOrder / CreatedAt / UpdatedAt / DeletedAt
+- XrefOemBrand 类**既无 OemBrand 也无 OemNo3** 字段
+- CrossReference 类(Product.cs L122-L131)有 OemBrand(L127)和 OemNo3(L128),但 XrefOemBrand 类没有
+**v20 修正方案**: V19-F4 覆盖说明第 4 点补充:
+```
+V20-F2 补充 V19-F4 第 4 点:
+1. v19 V19-F4 第 4 点原: 仅说明 b.OemBrand 错误
+2. v20 补充: v16 V16-F1 L10410-L10411 `b => new { b.OemBrand, b.OemNo3 }` 中:
+   - b.OemBrand 错误(XrefOemBrand 类无 OemBrand 字段,只有 Brand)
+   - b.OemNo3 错误(XrefOemBrand 类无 OemNo3 字段)
+3. XrefOemBrand 类(Product.cs L208-L216)字段: Id / Brand / SortOrder / CreatedAt / UpdatedAt / DeletedAt
+4. v16 V16-F1 的 JOIN 条件 `b => new { b.OemBrand, b.OemNo3 }` 完全错误(两个字段都不存在)
+```
+
+### V20-F3 [严重] D19-3 修正 V19-F3 — p.OemBrand 改为 p.Brand(跨伪代码片段字段名一致性)
+
+**v19 伪代码位置**: spec.md 第二十章 V19-F3(L12461)+ V19-F6(L12522)
+**v19 错误**: V19-F3 引用 `p.OemBrand`,但 V19-F6 匿名类型字段名是 `Brand`,跨伪代码片段字段名不一致
+**真实代码事实**(经跨片段验证核实):
+- V19-F6 伪代码(L12514-L12528)查询匿名类型:
+  ```csharp
+  Brand = p.OemBrand,  // 字段名是 Brand(非 OemBrand)
+  BrandSortOrder = (from x in _db.XrefOemBrands ...).FirstOrDefault()
+  ```
+- V19-F3 伪代码(L12445-L12463)构造 ProductIndexDoc:
+  ```csharp
+  p.OemBrand,              // 16. OemBrand — 引用 p.OemBrand(错误)
+  p.BrandSortOrder         // 17. BrandSortOrder — 引用 p.BrandSortOrder(正确)
+  ```
+- V19-F3 的 p 是 V19-F6 查询结果元素(因 `p.BrandSortOrder` 引用匿名类型字段,Product 类无 BrandSortOrder 字段)
+- V19-F6 匿名类型字段名是 `Brand`,V19-F3 引用 `p.OemBrand` 会编译错误(匿名类型无 OemBrand 字段)
+**v20 修正方案**: V19-F3 L12461 `p.OemBrand` 改为 `p.Brand`(与 V19-F6 匿名类型字段名一致):
+```csharp
+// V20-F3: V19-F3 L12461 p.OemBrand 改为 p.Brand(跨伪代码片段字段名一致性)
+// V19-F6 匿名类型字段名是 Brand(非 OemBrand),V19-F3 必须引用 p.Brand
+var docs = batch.Select(p => new ProductIndexDoc(
+    p.Id,                    // 1. Id
+    p.OemNoNormalized,       // 2. OemNoNormalized
+    p.OemNoDisplay ?? "",    // 3. OemNoDisplay
+    p.Remark,                // 4. Remark
+    p.Type ?? "UNKNOWN",     // 5. Type
+    p.D1Mm,                  // 6. D1Mm
+    p.D2Mm,                  // 7. D2Mm
+    p.D3Mm,                  // 8. D3Mm (V19-F3: 第 8 位置)
+    p.H1Mm,                  // 9. H1Mm
+    p.H2Mm,                  // 10. H2Mm (V19-F3: 第 10 位置)
+    p.H3Mm,                  // 11. H3Mm (V19-F3: 第 11 位置)
+    p.Media,                 // 12. Media (V19-F3: 第 12 位置)
+    p.IsDiscontinued,        // 13. IsDiscontinued
+    new DateTimeOffset(DateTime.SpecifyKind(p.UpdatedAt, DateTimeKind.Utc), TimeSpan.Zero).ToUnixTimeSeconds(),  // 14. UpdatedAtUnix (V18-F3 SpecifyKind)
+    p.Mr1,                   // 15. Mr1
+    p.Brand,                 // 16. OemBrand (V20-F3 修正: p.Brand,与 V19-F6 匿名类型字段名一致)
+    p.BrandSortOrder         // 17. BrandSortOrder
+)).ToList();
+```
+
+**跨伪代码片段字段名一致性验证表**(V20-F3):
+
+| 伪代码片段 | 字段引用 | V19-F6 匿名类型字段名 | 一致性 |
+|-----------|---------|---------------------|--------|
+| V19-F3 L12446 | p.Id | Id | ✓ |
+| V19-F3 L12447 | p.OemNoNormalized | OemNoNormalized | ✓ |
+| V19-F3 L12448 | p.OemNoDisplay | OemNoDisplay | ✓ |
+| V19-F3 L12449 | p.Remark | Remark | ✓ |
+| V19-F3 L12450 | p.Type | Type | ✓ |
+| V19-F3 L12451 | p.D1Mm | D1Mm | ✓ |
+| V19-F3 L12452 | p.D2Mm | D2Mm | ✓ |
+| V19-F3 L12453 | p.D3Mm | D3Mm | ✓ |
+| V19-F3 L12454 | p.H1Mm | H1Mm | ✓ |
+| V19-F3 L12455 | p.H2Mm | H2Mm | ✓ |
+| V19-F3 L12456 | p.H3Mm | H3Mm | ✓ |
+| V19-F3 L12457 | p.Media | Media | ✓ |
+| V19-F3 L12458 | p.IsDiscontinued | IsDiscontinued | ✓ |
+| V19-F3 L12459 | p.UpdatedAt | UpdatedAt | ✓ |
+| V19-F3 L12460 | p.Mr1 | Mr1 | ✓ |
+| V19-F3 L12461 | ~~p.OemBrand~~ → **p.Brand** | Brand | ✓(V20-F3 修正) |
+| V19-F3 L12462 | p.BrandSortOrder | BrandSortOrder | ✓ |
+
+### V20-F4 [中] S19-1 软化 V19-F7 措辞 — 不再直接判定"错误"
+
+**v19 伪代码位置**: spec.md 第二十章 V19-F7 覆盖说明第 5 点(L12547)
+**v19 错误**: V19-F7 第 5 点说"v16 V16-F2 的 PascalCase 假设错误(与现有代码不一致)",措辞过于绝对
+**真实代码事实**(经 Grep 核实):
+- 现有代码 MeiliSearchProvider.cs L75/L80/L85/L90/L94 用 snake_case
+- 但 v16 V16-F2 的 PascalCase 假设基于 System.Text.Json 默认序列化策略(PropertyNamingPolicy=null 保留原样)
+- Meilisearch 服务端实际字段命名方向需 Pre-Task-V18-0-Verify 验证(查询 Meilisearch index 配置)
+- 若 Pre-Task-V18-0-Verify 验证为 PascalCase → v16 V16-F2 正确,现有代码 snake_case 错误,需 v21+ 修订
+- 若 Pre-Task-V18-0-Verify 验证为 snake_case → v16 V16-F2 错误,现有代码正确
+**v20 修正方案**: V19-F7 第 5 点措辞软化:
+```
+V20-F4 软化 V19-F7 第 5 点:
+1. v19 V19-F7 第 5 点原: "v16 V16-F2 的 PascalCase 假设错误(与现有代码不一致)"
+2. v20 修正: "v16 V16-F2 的 PascalCase 假设与现有代码 snake_case 不一致,以 Pre-Task-V18-0-Verify 验证为准"
+3. 若 Pre-Task-V18-0-Verify 验证为 snake_case → v16 V16-F2 假设不适用,现有代码正确
+4. 若 Pre-Task-V18-0-Verify 验证为 PascalCase → v16 V16-F2 假设可能正确,现有代码需修订(列 v21+ 处理)
+5. v20 不直接判定 v16 V16-F2 "错误",留给 Pre-Task-V18-0-Verify 验证定论
+```
+
+### V20-F5 [严重] N19-1 强化第十一重核实机制 — 导航属性/字段存在性双重验证
+
+**v19 盲区**: v19 第十重核实机制未覆盖"导航属性/字段存在性双重验证"
+**v20 修正方案**: 第十一重核实机制追加"导航属性/字段存在性双重验证"定义:
+```
+V20-F5 强化第十一重核实机制定义:
+1. 第十一重核实机制追加"导航属性/字段存在性双重验证":
+   - 若 spec 声称"字段/导航属性不存在" → 必须 Grep 验证零匹配(如 CrossReference.IsPrimary 零匹配)
+   - 若 spec 声称"字段/导航属性存在" → 必须 Grep 验证匹配(如 Product.CrossReferences 匹配 L92)
+2. v19 V19-F4 声称"Product 无 CrossReferences 导航属性",但未 Grep 验证 → D19-1 错误
+3. v20 要求: 所有"字段存在/不存在"判断必须 Grep 双向验证
+4. 应用范围: 导航属性 / 字段 / 方法 / 类
+```
+
+### V20-F6 [严重] N19-2 强化第十一重核实机制 — 跨伪代码片段字段名一致性验证
+
+**v19 盲区**: v19 第十重核实机制未覆盖"跨伪代码片段字段名一致性验证"
+**v20 修正方案**: 第十一重核实机制追加"跨伪代码片段字段名一致性验证"定义:
+```
+V20-F6 强化第十一重核实机制定义:
+1. 第十一重核实机制追加"跨伪代码片段字段名一致性验证":
+   - 当伪代码跨多个片段(如 F3 构造 + F6 查询)配合使用时,必须验证字段名引用一致
+   - 验证方法: 列出所有片段的字段引用表(如 V20-F3 一致性验证表),逐行比对
+2. v19 V19-F3 引用 p.OemBrand,V19-F6 匿名类型字段名 Brand,不一致 → D19-3 编译错误
+3. v20 要求: 所有跨片段字段引用必须列一致性验证表,逐行比对
+4. 应用范围: ProductIndexDoc 构造 / 匿名类型查询 / record 扩展定义 / 任何跨片段伪代码
+```
+
+## 21.4 v20 前置任务(Pre-Task)
+
+> **目的**: 在实施 V20-F1~F6 修复方案前,通过跨伪代码片段字段名一致性验证 + 导航属性/字段存在性双重验证,确认伪代码与 v19 无冲突。
+
+### Pre-Task-V20-0 [必做] Product.CrossReferences 导航属性存在性验证
+
+**验证目标**: 确认 Product.CrossReferences 导航属性存在(v19 V19-F4 错误判断不存在)
+**验证步骤**:
+1. Grep `CrossReferences` 在 Product.cs: 应匹配 L92
+2. Read Product.cs L92: `public ICollection<CrossReference> CrossReferences { get; set; } = new List<CrossReference>();`
+3. 确认 Product **有** CrossReferences 导航属性
+**通过条件**: Product.CrossReferences 存在
+**失败处理**: 若不存在,V20-F1 修正方案需调整
+
+### Pre-Task-V20-1 [必做] XrefOemBrand 类字段完整性验证
+
+**验证目标**: 确认 XrefOemBrand 类无 OemBrand 和 OemNo3 字段
+**验证步骤**:
+1. Read Product.cs L208-L216(XrefOemBrand 类定义)
+2. 列出字段: Id / Brand / SortOrder / CreatedAt / UpdatedAt / DeletedAt
+3. Grep `OemBrand` 在 XrefOemBrand 类块: 应零匹配
+4. Grep `OemNo3` 在 XrefOemBrand 类块: 应零匹配
+**通过条件**: XrefOemBrand 类无 OemBrand 和 OemNo3 字段
+**失败处理**: 若存在,V20-F2 补充说明需调整
+
+### Pre-Task-V20-2 [必做] V19-F3 与 V19-F6 跨伪代码片段字段名一致性验证
+
+**验证目标**: 确认 V19-F3 引用的字段名与 V19-F6 匿名类型字段名一致
+**验证步骤**:
+1. Read spec.md V19-F3 伪代码(L12445-L12463): 列出所有 `p.X` 字段引用
+2. Read spec.md V19-F6 伪代码(L12514-L12528): 列出匿名类型所有字段名
+3. 逐行比对: V19-F3 的 `p.X` 必须在 V19-F6 匿名类型中存在字段 `X`
+4. 确认 V19-F3 L12461 `p.OemBrand` 与 V19-F6 `Brand` 不一致(D19-3 衍生漏洞)
+**通过条件**: V20-F3 修正后(p.OemBrand → p.Brand),所有字段名一致
+**失败处理**: 若仍不一致,需 v21 修订
+
+### Pre-Task-V20-3 [必做] Meilisearch 服务端字段命名方向验证(Pre-Task-V18-0-Verify 复用)
+
+**验证目标**: 确认 Meilisearch 服务端实际字段命名方向(PascalCase / snake_case / camelCase)
+**验证步骤**:
+1. 查询 Meilisearch index 配置(如 `GET /indexes/products/settings`)
+2. 确认 FilterableAttributes 字段命名方向
+3. 若 snake_case → v16 V16-F2 假设不适用,现有代码正确
+4. 若 PascalCase → v16 V16-F2 假设可能正确,现有代码需修订
+**通过条件**: 确认 Meilisearch 服务端字段命名方向
+**失败处理**: 若无法验证,V20-F4 措辞软化仍合理(不直接判定"错误")
+
+## 21.5 v20 vs v19 对比表
+
+| 维度 | v19(第十重核实机制) | v20(第十一重核实机制) |
+|------|--------------------|--------------------|
+| 核实机制 | 10 重(版本间一致性 + 字段顺序对齐) | **11 重**(v19 10 重 + 跨伪代码片段字段名一致性 + 导航属性/字段存在性双重验证) |
+| 核实机制盲区 | 跨伪代码片段字段名一致性 + 字段存在性双向验证 | 无(v20 已补全) |
+| 衍生漏洞数 | 第十九轮审查发现 6 项(D19:3 / S19:1 / N19:2,含 4 项严重) | 待第二十轮审查验证 |
+| V19-F4 Product.CrossReferences 判断 | 错误判断"不存在"(D19-1) | 修正为"存在"(V20-F1) |
+| V19-F4 b.OemNo3 遗漏 | 仅说 b.OemBrand 错误(D19-2) | 补充 b.OemNo3 也错误(V20-F2) |
+| V19-F3 p.OemBrand vs V19-F6 Brand | 跨片段字段名不一致(D19-3) | p.OemBrand 改为 p.Brand(V20-F3) |
+| V19-F7 措辞 | "PascalCase 假设错误"(过于绝对,S19-1) | 软化为"以 Pre-Task-V18-0-Verify 验证为准"(V20-F4) |
+| 第十重核实机制盲区 | 未覆盖跨片段 + 存在性双向(N19-1/N19-2) | 第十一重补全(V20-F5/V20-F6) |
+| 新增 Pre-Task | 4 个 | 4 个(Pre-Task-V20-0 / V20-1 / V20-2 / V20-3) |
+| 修复方案数 | V19-F1~F9(9 项) | V20-F1~F6(6 项,针对 v19 衍生漏洞) |
+
+## 21.6 v20 文件清单
+
+### v20 实际新增代码文件(0 个)
+- v20 是 spec 修订版,不新增代码文件
+
+### v20 实际修改后端文件(0 个)
+- v20 仅修订 spec/tasks/checklist,不修改代码文件
+
+### v20 实际修改前端文件(0 个)
+- v20 不涉及前端文件修改
+
+### v20 纯文档修正(3 个文件)
+1. spec.md — 追加第二十一章(21.1~21.8)
+2. tasks.md — 追加 v20 任务清单(4 个 Pre-Task + 6 个修复任务)
+3. checklist.md — 追加 v20 验证清单
+
+### v20 新增 migration(0 个)
+- v20 不涉及 DB schema 变更
+
+## 21.7 v20 第二十轮审查重点
+
+> **审查目标**: 验证 v20 修订是否真正消除 v19 衍生漏洞,且不引入新衍生漏洞。
+
+### D20 数据关联维度审查重点
+
+- [ ] D20-1: V20-F1 是否修正 V19-F4 第 2 点(Product.CrossReferences 存在,非不存在)
+- [ ] D20-2: V20-F2 是否补充 V19-F4 第 4 点(b.OemNo3 也错误)
+- [ ] D20-3: V20-F3 是否将 V19-F3 p.OemBrand 改为 p.Brand(跨片段字段名一致)
+- [ ] D20-4: V20-F3 跨伪代码片段字段名一致性验证表是否完整(17 行)
+- [ ] D20-5: V20 伪代码是否引入新衍生漏洞(如 p.Brand 引用是否与 V19-F6 匿名类型一致)
+
+### S20 检索逻辑维度审查重点
+
+- [ ] S20-1: V20-F4 是否软化 V19-F7 措辞(不再直接判定"错误")
+- [ ] S20-2: V20-F4 是否说明以 Pre-Task-V18-0-Verify 验证为准
+- [ ] S20-3: V20 是否引入新检索逻辑漏洞
+
+### F19 前后端联动维度审查重点
+
+- [ ] F19-1: V20 是否引入新前后端联动漏洞(v20 不涉及前后端联动修复,应无)
+
+### 第十一重核实机制应用审查
+
+- [ ] N20-1: V20-F1~F6 每个修复方案是否基于跨伪代码片段字段名一致性验证
+- [ ] N20-2: V20-F1~F6 每个修复方案是否基于导航属性/字段存在性双重验证
+- [ ] N20-3: V20 伪代码是否引入新跨片段字段名不一致
+- [ ] N20-4: V20 伪代码是否引入新字段存在性判断错误
+- [ ] N20-5: V20 是否真正实现"0 项跨片段字段名不一致"+"0 项字段存在性判断错误"
+
+## 21.8 第二十轮循环终止条件
+
+- [ ] 第二十轮审查无任何新漏洞检出 → 完成 v20 修订,进入 v21 修订(如有新漏洞)或定稿
+- [ ] 第二十轮审查发现新漏洞 → 进入 v21 修订,继续迭代
+- [ ] 第二十轮审查发现 v20 仍有凭空假设 → 进入 v21 修订,加强核实机制(十二重核实?)
+- [ ] 第二十轮审查重点: 第十一重核实机制(跨伪代码片段字段名一致性 + 导航属性/字段存在性双重验证)
+- [ ] 第二十轮审查重点: v19 衍生漏洞是否真正消除(Grep 验证 Product.CrossReferences 存在/b.OemNo3 不存在/p.Brand 字段名一致/V19-F7 措辞软化)
+- [ ] 第二十轮审查重点: V20-F3 跨伪代码片段字段名一致性验证表是否完整(17 行)
+- [ ] 第二十轮审查重点: V20-F5/V20-F6 第十一重核实机制定义是否完整
+- [ ] 持续迭代直到连续一轮审查无任何新漏洞检出
+- [ ] v20 引入"第十一重核实机制"(跨伪代码片段字段名一致性 + 导航属性/字段存在性双重验证)
+- [ ] v20 目标: 真正实现"0 项跨片段字段名不一致"+"0 项字段存在性判断错误"+"0 项 v19 衍生漏洞"
+- [ ] v20 实际新增代码: 0 个(v20 仅修订 spec/tasks/checklist)
+- [ ] v20 实际修改后端文件: 0 个(代码修改由 v17 任务清单执行)
+- [ ] v20 实际修改前端文件: 0 个
+- [ ] v20 纯文档修正: 3 个文件(spec.md / tasks.md / checklist.md)
+- [ ] v20 新增 migration: 0 个
+- [ ] v20 已知问题: D7/D8 filter 遗漏(现有 bug,列 v21+ 处理)
+

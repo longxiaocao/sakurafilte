@@ -6297,3 +6297,154 @@ _待启动第七轮深度审查后追加_
 - **第十九轮循环终止条件验证**: 17 项(V19-CHK-83 ~ V19-CHK-99)
 - **总验证点数**: 99 项
 
+---
+
+# v20 验证清单(对应 spec.md 第二十一章 + tasks.md v20 任务清单)
+
+> **核实机制**: 第十一重核实机制(跨伪代码片段字段名一致性 + 导航属性/字段存在性双重验证)
+> **目标**: 真正实现"0 项跨片段字段名不一致"+"0 项字段存在性判断错误"+"0 项 v19 衍生漏洞"
+> **修订范围**: spec.md 第二十一章 21.1~21.8 + tasks.md v20 任务清单(4 前置 + 6 实施) + checklist.md v20 验证清单
+> **衍生漏洞来源**: 第十九轮三维度并行深度审查发现 v19 衍生漏洞 6 项(D19:3 / S19:1 / N19:2,含 4 项严重)
+
+## v20 Pre-Task 验证(4 项,对应 Task V20-0.1 ~ V20-0.4)
+
+### Pre-Task-V20-0 Product.CrossReferences 导航属性存在性验证
+
+- [ ] V20-CHK-1: Grep `CrossReferences` 在 Product.cs,应匹配 L92
+- [ ] V20-CHK-2: Read Product.cs L92,确认 `public ICollection<CrossReference> CrossReferences { get; set; } = new List<CrossReference>();`
+- [ ] V20-CHK-3: 确认 Product **有** CrossReferences 导航属性(v19 V19-F4 错误判断不存在)
+
+### Pre-Task-V20-1 XrefOemBrand 类字段完整性验证
+
+- [ ] V20-CHK-4: Read Product.cs L208-L216(XrefOemBrand 类定义),列出字段: Id / Brand / SortOrder / CreatedAt / UpdatedAt / DeletedAt
+- [ ] V20-CHK-5: Grep `OemBrand` 在 XrefOemBrand 类块,应零匹配
+- [ ] V20-CHK-6: Grep `OemNo3` 在 XrefOemBrand 类块,应零匹配
+- [ ] V20-CHK-7: 确认 XrefOemBrand 类**既无 OemBrand 也无 OemNo3** 字段
+
+### Pre-Task-V20-2 V19-F3 与 V19-F6 跨伪代码片段字段名一致性验证
+
+- [ ] V20-CHK-8: Read spec.md V19-F3 伪代码(L12445-L12463),列出所有 `p.X` 字段引用(17 个)
+- [ ] V20-CHK-9: Read spec.md V19-F6 伪代码(L12514-L12528),列出匿名类型所有字段名(17 个)
+- [ ] V20-CHK-10: 逐行比对 V19-F3 的 `p.X` 与 V19-F6 匿名类型字段名,确认 V19-F3 L12461 `p.OemBrand` 与 V19-F6 `Brand` 不一致(D19-3 衍生漏洞)
+- [ ] V20-CHK-11: 确认 V20-F3 修正后(p.OemBrand → p.Brand),所有字段名一致
+
+### Pre-Task-V20-3 Meilisearch 服务端字段命名方向验证
+
+- [ ] V20-CHK-12: 查询 Meilisearch index 配置(GET /indexes/products/settings),确认 FilterableAttributes 字段命名方向
+- [ ] V20-CHK-13: 确认 Meilisearch 服务端字段命名方向(snake_case / PascalCase / camelCase)
+
+## v20 数据关联维度修复验证(对应 V20-F1~F3,共 17 项)
+
+### V20-F1 [严重] D19-1 修正 V19-F4 第 2 点 — Product.CrossReferences 存在(对应 Task V20-1.1)
+
+- [ ] V20-CHK-14: spec.md 第二十一章 V20-F1 是否修正 V19-F4 第 2 点
+- [ ] V20-CHK-15: V20-F1 是否引用 Product.cs#L92 作为 Product.CrossReferences 存在的证据
+- [ ] V20-CHK-16: V20-F1 是否说明 v16 V16-F1 的真正错误是 x.IsPrimary(非 p.CrossReferences)
+- [ ] V20-CHK-17: V20-F1 是否说明 v18/v19 改用 Product.OemBrand + XrefOemBrand.Brand 匹配(正确)
+- [ ] V20-CHK-18: V20-F1 修正后,V19-F4 第 2 点是否为"Product 有 CrossReferences 导航属性 L92"
+
+### V20-F2 [中] D19-2 补充 V19-F4 第 4 点 — b.OemNo3 也错误(对应 Task V20-1.2)
+
+- [ ] V20-CHK-19: spec.md 第二十一章 V20-F2 是否补充 V19-F4 第 4 点
+- [ ] V20-CHK-20: V20-F2 是否引用 v16 V16-F1 L10410-L10411 `b => new { b.OemBrand, b.OemNo3 }`
+- [ ] V20-CHK-21: V20-F2 是否说明 b.OemBrand 错误(XrefOemBrand 无 OemBrand,只有 Brand)
+- [ ] V20-CHK-22: V20-F2 是否说明 b.OemNo3 错误(XrefOemBrand 无 OemNo3)
+- [ ] V20-CHK-23: V20-F2 是否引用 Product.cs#L208-L216(XrefOemBrand 类字段: Id / Brand / SortOrder / CreatedAt / UpdatedAt / DeletedAt)
+
+### V20-F3 [严重] D19-3 修正 V19-F3 — p.OemBrand 改为 p.Brand(对应 Task V20-1.3)
+
+- [ ] V20-CHK-24: spec.md 第二十一章 V20-F3 是否将 V19-F3 L12461 `p.OemBrand` 改为 `p.Brand`
+- [ ] V20-CHK-25: V20-F3 修正伪代码是否保留 17 字段顺序(与 v16 V16-F1 record 扩展定义一致)
+- [ ] V20-CHK-26: V20-F3 修正伪代码第 16 位置是否为 `p.Brand`(注释 `// 16. OemBrand (V20-F3 修正: p.Brand)`)
+- [ ] V20-CHK-27: V20-F3 是否给出跨伪代码片段字段名一致性验证表(17 行)
+- [ ] V20-CHK-28: V20-F3 验证表是否逐行比对 V19-F3 字段引用与 V19-F6 匿名类型字段名
+- [ ] V20-CHK-29: V20-F3 验证表 L12461 行是否标注"~~p.OemBrand~~ → **p.Brand**"(V20-F3 修正)
+- [ ] V20-CHK-30: V20-F3 修正后所有 17 字段名是否与 V19-F6 匿名类型字段名一致
+
+## v20 检索逻辑维度修复验证(对应 V20-F4,共 5 项)
+
+### V20-F4 [中] S19-1 软化 V19-F7 措辞 — 不再直接判定"错误"(对应 Task V20-2.1)
+
+- [ ] V20-CHK-31: spec.md 第二十一章 V20-F4 是否软化 V19-F7 第 5 点措辞
+- [ ] V20-CHK-32: V20-F4 是否将"PascalCase 假设错误"改为"与现有代码 snake_case 不一致,以 Pre-Task-V18-0-Verify 验证为准"
+- [ ] V20-CHK-33: V20-F4 是否给出 Pre-Task-V18-0-Verify 验证为 snake_case 的处理分支(v16 V16-F2 假设不适用)
+- [ ] V20-CHK-34: V20-F4 是否给出 Pre-Task-V18-0-Verify 验证为 PascalCase 的处理分支(v16 V16-F2 假设可能正确,列 v21+ 处理)
+- [ ] V20-CHK-35: V20-F4 是否说明 v20 不直接判定 v16 V16-F2 "错误",留给 Pre-Task-V18-0-Verify 验证定论
+
+## v20 核实机制强化验证(对应 V20-F5~F6,共 10 项)
+
+### V20-F5 [严重] N19-1 强化第十一重核实机制 — 导航属性/字段存在性双重验证(对应 Task V20-3.1)
+
+- [ ] V20-CHK-36: spec.md 第二十一章 V20-F5 是否追加"导航属性/字段存在性双重验证"定义
+- [ ] V20-CHK-37: V20-F5 是否明确双向验证规则(声称"不存在" → Grep 零匹配; 声称"存在" → Grep 匹配)
+- [ ] V20-CHK-38: V20-F5 是否引用 D19-1 作为盲区案例(Product.CrossReferences 存在但 v19 说不存在)
+- [ ] V20-CHK-39: V20-F5 是否说明应用范围(导航属性 / 字段 / 方法 / 类)
+- [ ] V20-CHK-40: V20-F5 是否在十一重核实机制完整定义表中标注第十一重
+
+### V20-F6 [严重] N19-2 强化第十一重核实机制 — 跨伪代码片段字段名一致性验证(对应 Task V20-3.2)
+
+- [ ] V20-CHK-41: spec.md 第二十一章 V20-F6 是否追加"跨伪代码片段字段名一致性验证"定义
+- [ ] V20-CHK-42: V20-F6 是否明确验证方法(列出所有片段的字段引用表,逐行比对)
+- [ ] V20-CHK-43: V20-F6 是否引用 D19-3 作为盲区案例(V19-F3 p.OemBrand vs V19-F6 Brand)
+- [ ] V20-CHK-44: V20-F6 是否说明应用范围(ProductIndexDoc 构造 / 匿名类型查询 / record 扩展定义 / 任何跨片段伪代码)
+- [ ] V20-CHK-45: V20-F6 是否在十一重核实机制完整定义表中标注第十一重
+
+## v20 第十一重核实机制应用验证(11 项)
+
+- [ ] V20-CHK-46: v20 是否引入第十一重核实机制(跨伪代码片段字段名一致性 + 导航属性/字段存在性双重验证)
+- [ ] V20-CHK-47: 第十一重核实机制是否在第十重基础上追加(非替换)
+- [ ] V20-CHK-48: 十一重核实机制完整定义表是否给出(11 行,第十一重高亮)
+- [ ] V20-CHK-49: v20 第十一重核实机制验证结果表是否针对 v19 衍生漏洞给出(6 项)
+- [ ] V20-CHK-50: V20-F1~F6 每个修复方案是否基于跨伪代码片段字段名一致性验证
+- [ ] V20-CHK-51: V20-F1~F6 每个修复方案是否基于导航属性/字段存在性双重验证
+- [ ] V20-CHK-52: V20-F3 跨伪代码片段字段名一致性验证表是否完整(17 行)
+- [ ] V20-CHK-53: V20-F1 是否 Grep 验证 Product.CrossReferences 存在(存在性验证)
+- [ ] V20-CHK-54: V20-F2 是否 Grep 验证 XrefOemBrand 无 OemNo3(不存在性验证)
+- [ ] V20-CHK-55: V20 伪代码是否引入新跨片段字段名不一致(应为否)
+- [ ] V20-CHK-56: V20 伪代码是否引入新字段存在性判断错误(应为否)
+
+## v20 文件清单验证(5 项)
+
+- [ ] V20-CHK-57: v20 实际新增代码文件数是否为 0 个(v20 是 spec 修订版)
+- [ ] V20-CHK-58: v20 实际修改后端文件数是否为 0 个(代码修改由 v17 任务清单执行)
+- [ ] V20-CHK-59: v20 实际修改前端文件数是否为 0 个
+- [ ] V20-CHK-60: v20 纯文档修正是否为 3 个文件(spec.md / tasks.md / checklist.md)
+- [ ] V20-CHK-61: v20 新增 migration 数是否为 0 个(不涉及 DB schema 变更)
+
+## v20 已知问题验证(2 项)
+
+- [ ] V20-CHK-62: v20 是否在已知问题中列出 D7/D8 filter 遗漏(现有 bug,列 v21+ 处理)
+- [ ] V20-CHK-63: v20 是否未尝试修复 D7/D8 filter 遗漏(应列入 v21+ 处理)
+
+## v20 第二十轮循环终止条件验证(17 项)
+
+- [ ] V20-CHK-64: 第二十轮审查无任何新漏洞检出 → 完成 v20 修订,进入 v21 修订(如有新漏洞)或定稿
+- [ ] V20-CHK-65: 第二十轮审查发现新漏洞 → 进入 v21 修订,继续迭代
+- [ ] V20-CHK-66: 第二十轮审查发现 v20 仍有凭空假设 → 进入 v21 修订,加强核实机制(十二重核实?)
+- [ ] V20-CHK-67: 第二十轮审查重点: 第十一重核实机制(跨伪代码片段字段名一致性 + 导航属性/字段存在性双重验证)
+- [ ] V20-CHK-68: 第二十轮审查重点: v19 衍生漏洞是否真正消除(Grep 验证 Product.CrossReferences 存在/b.OemNo3 不存在/p.Brand 字段名一致/V19-F7 措辞软化)
+- [ ] V20-CHK-69: 第二十轮审查重点: V20-F3 跨伪代码片段字段名一致性验证表是否完整(17 行)
+- [ ] V20-CHK-70: 第二十轮审查重点: V20-F5/V20-F6 第十一重核实机制定义是否完整
+- [ ] V20-CHK-71: 持续迭代直到连续一轮审查无任何新漏洞检出
+- [ ] V20-CHK-72: v20 引入"第十一重核实机制"(跨伪代码片段字段名一致性 + 导航属性/字段存在性双重验证)
+- [ ] V20-CHK-73: v20 目标: 真正实现"0 项跨片段字段名不一致"+"0 项字段存在性判断错误"+"0 项 v19 衍生漏洞"
+- [ ] V20-CHK-74: v20 实际新增代码: 0 个(v20 仅修订 spec/tasks/checklist)
+- [ ] V20-CHK-75: v20 实际修改后端文件: 0 个(代码修改由 v17 任务清单执行)
+- [ ] V20-CHK-76: v20 实际修改前端文件: 0 个
+- [ ] V20-CHK-77: v20 纯文档修正: 3 个文件(spec.md / tasks.md / checklist.md)
+- [ ] V20-CHK-78: v20 新增 migration: 0 个
+- [ ] V20-CHK-79: v20 已知问题: D7/D8 filter 遗漏(现有 bug,列 v21+ 处理)
+- [ ] V20-CHK-80: v20 修复方案数: V20-F1~F6(6 项,针对 v19 衍生漏洞)
+
+## v20 验证清单总结
+
+- **Pre-Task 验证**: 13 项(V20-CHK-1 ~ V20-CHK-13,对应 Pre-Task-V20-0 ~ V20-3)
+- **数据关联维度修复验证**: 17 项(V20-CHK-14 ~ V20-CHK-30,对应 V20-F1~F3)
+- **检索逻辑维度修复验证**: 5 项(V20-CHK-31 ~ V20-CHK-35,对应 V20-F4)
+- **核实机制强化验证**: 10 项(V20-CHK-36 ~ V20-CHK-45,对应 V20-F5~F6)
+- **第十一重核实机制应用验证**: 11 项(V20-CHK-46 ~ V20-CHK-56)
+- **文件清单验证**: 5 项(V20-CHK-57 ~ V20-CHK-61)
+- **已知问题验证**: 2 项(V20-CHK-62 ~ V20-CHK-63)
+- **第二十轮循环终止条件验证**: 17 项(V20-CHK-64 ~ V20-CHK-80)
+- **总验证点数**: 80 项
+
