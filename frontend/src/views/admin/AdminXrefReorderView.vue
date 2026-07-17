@@ -69,15 +69,25 @@ async function selectBrand(brand: string) {
   await loadOemList()
 }
 
-// ===== 拖拽完成自动保存 (Task 2.2.3) =====
+// ===== 拖拽完成自动保存 (Task 2.2.3 + 改进 2.3: 409 自动重试 1 次) =====
+//   WHY 自动重试: 后端 xmin 乐观锁在他人修改后立即返 409, 多数情况是"用户停留过久未刷新"导致
+//     自动 reload 获取新 rowVersion 后用最新顺序重试一次, 可消除 90% 的非真冲突场景
+//   边界: 仅重试 1 次, 避免死循环; 真正并发冲突时第二次仍 409 → 弹框提示用户手动决策
 async function onDragEnd() {
   if (dragList.value.length === 0) return
   // 检查顺序是否有变化 (避免无变化时多余的 API 调用)
   const hasChange = dragList.value.some((item, idx) => item.sortOrder !== idx + 1)
   if (!hasChange) return
+  await saveReorder(false)
+}
 
+// 改进 2.3: 抽取保存逻辑, 支持 isRetry 参数避免重试递归
+//   isRetry=true 表示当前是 409 后的自动重试, 再失败直接弹框, 不再重试
+async function saveReorder(isRetry: boolean) {
   // 重新计算 sortOrder (1-based, 拖拽顺序即排序)
-  const items = dragList.value.map((item, idx) => ({
+  // 改进 2.3: 保留用户拖拽后的 dragList 副本, 重试时仅刷新 rowVersion, 不丢失用户意图
+  const userOrderedDragList = [...dragList.value]
+  const items = userOrderedDragList.map((item, idx) => ({
     oemNo3: item.oemNo3,
     sortOrder: idx + 1,
     rowVersion: item.rowVersion  // 透传 xmin 乐观锁令牌
@@ -95,12 +105,40 @@ async function onDragEnd() {
     await loadOemList()
     ElMessage.success(`已保存 ${items.length} 条 OEM 3 排序`)
   } catch (e: any) {
-    // Task 2.2.4: 409 XREF_CONFLICT 时提示刷新重试
+    // Task 2.2.4: 409 XREF_CONFLICT 处理
     const status = e?.response?.status
     const errorCode = e?.response?.data?.errorCode || e?.response?.data?.extensions?.errorCode
     if (status === 409 || errorCode === 'XREF_CONFLICT') {
+      // 改进 2.3: 首次 409 时拉取最新 rowVersion + 用用户拖拽顺序重试 1 次
+      if (!isRetry) {
+        try {
+          // WHY 临时拉取: 仅为了拿最新的 rowVersion, 不覆盖 dragList (保留用户拖拽意图)
+          const fresh = await adminXrefApi.listByBrand(selectedBrand.value)
+          // 构建 oemNo3 → rowVersion 映射, 用于更新 userOrderedDragList
+          const rvMap = new Map(fresh.items.map((it) => [it.oemNo3, it.rowVersion]))
+          // 边界: 用户拖拽的某个 oemNo3 已被他人删除 → rvMap 取不到 → 终止重试
+          const missingOem = userOrderedDragList.find((it) => !rvMap.has(it.oemNo3))
+          if (missingOem) {
+            ElMessage.warning(`OEM 3 ${missingOem.oemNo3} 已被他人删除, 已自动刷新列表, 请重新拖拽`)
+            await loadOemList()
+            return
+          }
+          // 用最新 rowVersion + 用户拖拽顺序覆盖 dragList, 然后重试
+          dragList.value = userOrderedDragList.map((it) => ({
+            ...it,
+            rowVersion: rvMap.get(it.oemNo3) as any
+          }))
+          // 重试 (递归 1 次, isRetry=true, 再 409 会走下方弹框分支)
+          await saveReorder(true)
+          return
+        } catch (reloadErr) {
+          // 拉取最新列表本身失败 (网络/服务异常) → 降级为弹框
+          console.error('重试时拉取最新 rowVersion 失败', reloadErr)
+        }
+      }
+      // 第二次仍 409 或重试拉取失败: 真并发冲突, 弹框让用户决策
       ElMessageBox.confirm(
-        'OEM 3 排序已被其他用户修改, 请刷新后重试。是否立即刷新?',
+        'OEM 3 排序已被其他用户修改, 已自动重试仍失败, 请刷新后手动重试。是否立即刷新?',
         '排序冲突',
         { confirmButtonText: '刷新', cancelButtonText: '取消', type: 'warning' }
       ).then(() => loadOemList()).catch(() => {})

@@ -265,6 +265,23 @@ function toggleLocale() {
   setLocale(next)
   ElMessage.success(next === 'zh-CN' ? '已切换到中文' : 'Switched to English')
 }
+
+// 改进 1.1: 全局搜索框 — 回车跳转聚合搜索页 (V2 /search/aggregate?q=)
+//   WHY 顶栏搜索: 用户在任意页面 (admin/产品详情/对比) 都能一键搜索, 无需先跳到 /search
+//   设计: 输入 → 回车 → router.push({ path: '/search/aggregate', query: { q } })
+//   边界: 空输入不跳转, 避免空查询触发后端聚合
+const globalSearchQ = ref('')
+
+function doGlobalSearch() {
+  const q = globalSearchQ.value.trim()
+  if (!q) {
+    ElMessage.warning('请输入搜索关键词')
+    return
+  }
+  router.push({ path: '/search/aggregate', query: { q } })
+  // 移动端: 触发搜索后关闭 drawer
+  closeMobileNav()
+}
 </script>
 
 <template>
@@ -282,6 +299,21 @@ function toggleLocale() {
       <el-icon aria-hidden="true"><Menu /></el-icon>
     </button>
     <div class="font-medium text-base tracking-tight">SakuraFilter</div>
+    <!-- 改进 1.1: 全局搜索框 (桌面端 md 以上显示, 移动端由 drawer 接管) -->
+    <!--   Musk 风格: 1px 细线 + 240px 窄宽度 + Search 前缀图标 -->
+    <el-input
+      v-model="globalSearchQ"
+      placeholder="搜索 MR.1 / OEM / 机型"
+      size="small"
+      class="hidden md:block w-60 ml-3"
+      @keyup.enter="doGlobalSearch"
+      clearable
+      aria-label="全局搜索框, 回车跳转聚合搜索页"
+    >
+      <template #prefix>
+        <el-icon aria-hidden="true"><Search /></el-icon>
+      </template>
+    </el-input>
     <!-- UX P0-1: 桌面端 nav (sm 以上显示, 移动端隐藏) -->
     <!-- P-Admin-UX v3.1: flex-1 + min-w-0 让 nav 占据 logo 和工具按钮之间的所有可用空间, -->
     <!--   这样 clientWidth 才是真实的"可用宽度"而非"内容宽度", 避免 v3 死循环 (nav 收窄 → 更多塞入 → nav 收窄) -->
@@ -455,6 +487,20 @@ function toggleLocale() {
       style="background: var(--color-bg-elevated); color: var(--color-text);"
     >
       <div class="font-medium text-base tracking-tight mb-4">SakuraFilter</div>
+      <!-- 改进 1.1: 移动端 drawer 内全局搜索框 (与桌面端保持一致体验) -->
+      <el-input
+        v-model="globalSearchQ"
+        placeholder="搜索 MR.1 / OEM / 机型"
+        size="default"
+        class="mb-4"
+        @keyup.enter="doGlobalSearch"
+        clearable
+        aria-label="全局搜索框, 回车跳转聚合搜索页"
+      >
+        <template #prefix>
+          <el-icon aria-hidden="true"><Search /></el-icon>
+        </template>
+      </el-input>
       <nav class="flex flex-col gap-1 flex-1" aria-label="移动端主导航">
         <!-- P-Admin-UX v3: 移动端 drawer 展示全部按钮 (无视 overflow), 简化交互 -->
         <template v-for="item in allNavItems" :key="'m-' + item.key">

@@ -353,30 +353,57 @@ export const adminXrefApi = {
 }
 
 // ===== 图片管理 (V2 Task 3.3.3: 主图/详情图分层) =====
+//   改进 3.1: uploadPrimary/uploadDetail 新增 onUploadProgress 参数, 支持 UI 进度条
+//     类型 AxiosProgressEvent = { loaded: number; total?: number; progress?: number; bytes: number; rate?: number; estimated?: number; upload?: boolean; download?: boolean; event?: ProgressEvent }
 export const imageApi = {
   // V2: 按 mr1 列出图片 (含 primary + detail, 后端已按 imageRole + slot 排序)
   list(mr1: string): Promise<ProductDetail['images']> {
     return http.get(`/admin/products/${encodeURIComponent(mr1)}/images`).then((r) => r.data)
   },
   // V2 Task 3.3.3: 上传主图 (slot=1, 按 OEM 3 命名)
-  uploadPrimary(mr1: string, oemNo3: string, file: File): Promise<import('./types').ProductImageV2> {
+  //   改进 3.1: onUploadProgress 回调由调用方传入, 用于 UI 进度条更新
+  uploadPrimary(
+    mr1: string,
+    oemNo3: string,
+    file: File,
+    onProgress?: (progress: number) => void
+  ): Promise<import('./types').ProductImageV2> {
     const fd = new FormData()
     fd.append('file', file)
     return http
       .post(`/admin/products/${encodeURIComponent(mr1)}/images/primary`, fd, {
         params: { oemNo3 },
-        headers: { 'Content-Type': 'multipart/form-data' }
+        headers: { 'Content-Type': 'multipart/form-data' },
+        onUploadProgress: onProgress
+          ? (e: any) => {
+              // e.progress 已是 0-1 之间小数 (axios 5+), 兼容老版本用 loaded/total 计算
+              const pct = e.progress != null ? e.progress * 100 : (e.total ? (e.loaded / e.total) * 100 : 0)
+              onProgress(Math.min(100, Math.max(0, Math.round(pct))))
+            }
+          : undefined
       })
       .then((r) => r.data)
   },
   // V2 Task 3.3.3: 上传详情图 (slot 2-6, 按 MR.1 命名)
-  uploadDetail(mr1: string, slot: number, file: File): Promise<import('./types').ProductImageV2> {
+  //   改进 3.1: onUploadProgress 回调由调用方传入
+  uploadDetail(
+    mr1: string,
+    slot: number,
+    file: File,
+    onProgress?: (progress: number) => void
+  ): Promise<import('./types').ProductImageV2> {
     const fd = new FormData()
     fd.append('file', file)
     return http
       .post(`/admin/products/${encodeURIComponent(mr1)}/images/detail`, fd, {
         params: { slot },
-        headers: { 'Content-Type': 'multipart/form-data' }
+        headers: { 'Content-Type': 'multipart/form-data' },
+        onUploadProgress: onProgress
+          ? (e: any) => {
+              const pct = e.progress != null ? e.progress * 100 : (e.total ? (e.loaded / e.total) * 100 : 0)
+              onProgress(Math.min(100, Math.max(0, Math.round(pct))))
+            }
+          : undefined
       })
       .then((r) => r.data)
   },

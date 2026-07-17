@@ -6,10 +6,10 @@
 // Day 10+ P2.2: 7 分区全部接入 typeahead (productName1/2/type/oemNo3/media/machine/engine)
 // Day 10+ P5.1: 包装尺寸 L/W/H → Volume 自动计算 (m³), 母箱同理
 // Day 10+ P5.2: 尺寸/性能字段后挂 ? 图标, 鼠标悬停显示字段说明 (FieldHelpPopover)
-import { ref, reactive, onMounted, computed, watch, onBeforeUnmount } from 'vue'
+import { ref, reactive, onMounted, computed, watch, onBeforeUnmount, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { adminProductApi, imageApi, dictApi } from '@/api'
 import type { ProductDetail } from '@/api/types'
 import FieldHelpPopover from '@/components/FieldHelpPopover.vue'  // P5.2
@@ -93,6 +93,13 @@ const saving = ref(false)
 const uploading = ref(false)
 const removing = ref(false)
 
+// 改进 3.1: 图片上传进度条 state
+//   uploadingSlot 标识当前上传位置 ('primary' | `detail-${slot}`), 用于 UI 定位进度条
+//   uploadProgress 0-100 整数, 上传开始前置 0, 完成/失败后由 finally 重置
+//   WHY 单一槽位: uploading.value 互斥锁保证同时仅一个上传, 无需多 slot 并发进度
+const uploadingSlot = ref<string>('')
+const uploadProgress = ref<number>(0)
+
 // V2 Task 3.3.1: 图片分层 (主图按 OEM 3 + 详情图按 MR.1 共享)
 //   images[0] 为主图 (slot=1, imageRole=primary)
 //   images[1..5] 为详情图 (slot=2-6, imageRole=detail)
@@ -100,6 +107,47 @@ const removing = ref(false)
 const images = ref<Record<number, { slot: number; imageKey: string; imageUrl: string; oemNo3?: string | null; imageRole?: string }>>({})
 // V2: 主图上传时选择的 OEM 3 (从 form.crossReferences 已保存的 oemList 中选)
 const selectedOemNo3ForPrimary = ref<string>('')
+
+// 改进 3.2: 主图 OEM 3 切换拦截标志, 避免 watch 在回退赋值时递归触发
+//   WHY: 用户取消切换时需回退 selectedOemNo3ForPrimary.value = oldVal, 该赋值会再次触发 watch
+//   通过该 flag 跳过回退赋值的二次拦截, 防止"回退→触发 watch→再次判断→回退"死循环
+let primaryOemNo3Changing = false
+
+// 改进 3.2: 主图 OEM 3 切换提示 (已有主图且新 OEM 3 ≠ 当前主图 OEM 3 时弹 confirm)
+//   场景: 用户已为主图 slot=1 上传了关联 OEM 3="A" 的主图, 此时切到 "B" 会导致:
+//     - 旧主图仍以 "A" 命名存储在 MinIO, 不会自动删除
+//     - 重新上传会以 "B" 命名写入新主图, 与旧主图并存造成存储冗余
+//   解决: 切换前 confirm 让用户知晓影响, 取消则回退, 确认则提示后续需重新上传
+watch(selectedOemNo3ForPrimary, async (newVal, oldVal) => {
+  // 改进 3.2: 回退赋值时跳过, 避免递归
+  if (primaryOemNo3Changing) return
+  // 跳过初次赋值 (load 时从空 → 默认值) 或值未变化
+  if (newVal === oldVal) return
+  // 跳过从空到非空的首次设置 (load 场景)
+  if (!oldVal) return
+  const existingPrimary = images.value[1]
+  // 已有主图且切换后的 OEM 3 与现有主图 OEM 3 不同 → 提示
+  if (existingPrimary && existingPrimary.oemNo3 && existingPrimary.oemNo3 !== newVal) {
+    try {
+      await ElMessageBox.confirm(
+        `切换 OEM 3 将导致现有主图 (关联 OEM 3: ${existingPrimary.oemNo3}) 不再匹配。\n` +
+        `旧主图不会自动删除, 重新上传会以新 OEM 3 命名写入新文件。\n` +
+        `是否继续切换?`,
+        '切换主图 OEM 3',
+        { confirmButtonText: '继续切换', cancelButtonText: '取消', type: 'warning' }
+      )
+      // 用户确认: 保留新选择, 提示需重新上传
+      ElMessage.info('已切换 OEM 3, 请重新上传主图以匹配新关联')
+    } catch {
+      // 用户取消: 回退到旧值 (用 flag 跳过递归 watch)
+      primaryOemNo3Changing = true
+      selectedOemNo3ForPrimary.value = oldVal
+      // nextTick 后解除 flag, 确保 watch 已完成触发周期
+      await nextTick()
+      primaryOemNo3Changing = false
+    }
+  }
+})
 
 // ===== P5.1: 包装/母箱体积自动计算 =====
 //   L * W * H / 1e9 m³ (mm → m → m³)
@@ -335,14 +383,21 @@ async function uploadPrimaryImage(e: Event) {
   }
   if (uploading.value) return
   uploading.value = true
+  // 改进 3.1: 进度条 state 初始化
+  uploadingSlot.value = 'primary'
+  uploadProgress.value = 0
   try {
-    const r = await imageApi.uploadPrimary(form.mr1, selectedOemNo3ForPrimary.value, file)
+    const r = await imageApi.uploadPrimary(form.mr1, selectedOemNo3ForPrimary.value, file, (p) => {
+      uploadProgress.value = p
+    })
     ElMessage.success('主图上传成功')
     images.value[1] = { slot: 1, imageKey: r.imageKey, imageUrl: r.imageUrl, oemNo3: r.oemNo3, imageRole: 'primary' }
   } catch {
     // 已被拦截器
   } finally {
     uploading.value = false
+    uploadingSlot.value = ''
+    uploadProgress.value = 0
   }
   input.value = ''
 }
@@ -367,14 +422,21 @@ async function uploadDetailImage(slot: number, e: Event) {
   }
   if (uploading.value) return
   uploading.value = true
+  // 改进 3.1: 进度条 state 初始化
+  uploadingSlot.value = `detail-${slot}`
+  uploadProgress.value = 0
   try {
-    const r = await imageApi.uploadDetail(form.mr1, slot, file)
+    const r = await imageApi.uploadDetail(form.mr1, slot, file, (p) => {
+      uploadProgress.value = p
+    })
     ElMessage.success(`详情图 slot ${slot} 上传成功`)
     images.value[slot] = { slot, imageKey: r.imageKey, imageUrl: r.imageUrl, oemNo3: null, imageRole: 'detail' }
   } catch {
     // 已被拦截器
   } finally {
     uploading.value = false
+    uploadingSlot.value = ''
+    uploadProgress.value = 0
   }
   input.value = ''
 }
@@ -667,6 +729,14 @@ onBeforeUnmount(() => {
             </div>
             <div v-else>
               <input type="file" accept="image/*" @change="uploadPrimaryImage" class="text-xs" />
+              <!-- 改进 3.1: 主图上传进度条 -->
+              <el-progress
+                v-if="uploadingSlot === 'primary'"
+                :percentage="uploadProgress"
+                :stroke-width="6"
+                :status="uploadProgress >= 100 ? 'success' : ''"
+                class="mt-2"
+              />
             </div>
           </div>
 
@@ -682,6 +752,14 @@ onBeforeUnmount(() => {
                 </div>
                 <div v-else>
                   <input type="file" accept="image/*" @change="uploadDetailImage(slot, $event)" class="text-xs" />
+                  <!-- 改进 3.1: 详情图上传进度条 -->
+                  <el-progress
+                    v-if="uploadingSlot === `detail-${slot}`"
+                    :percentage="uploadProgress"
+                    :stroke-width="6"
+                    :status="uploadProgress >= 100 ? 'success' : ''"
+                    class="mt-1"
+                  />
                 </div>
               </div>
             </div>
