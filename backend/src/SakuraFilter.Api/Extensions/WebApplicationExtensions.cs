@@ -100,6 +100,29 @@ public static class StartupExtensions
         {
             var meiliOk = await rsp.IsPrimaryHealthyAsync();
             rsp.Initialize(meiliOk);
+
+            // V2 Task V17-2.3: Meili 可用时,后台异步执行 InitializeAsync 配置 schema
+            //   WHY 后台执行: schema 配置含 3 次 WaitForTaskAsync (每次最多 30s),同步执行会阻塞启动
+            //   独立 scope: 后台任务不持有 initScope (已 Dispose),需自建 scope 取 MeiliSearchProvider
+            //   CancellationToken.None: 后台任务不随启动取消 (启动完成后仍可继续配置)
+            //   try-catch: 失败时 LogWarning,不抛异常 (Meili schema 未配置仅影响 filter,搜索仍可工作)
+            if (meiliOk)
+            {
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        using var bgScope = app.Services.CreateScope();
+                        var meili = bgScope.ServiceProvider.GetRequiredService<MeiliSearchProvider>();
+                        await meili.InitializeAsync(CancellationToken.None);
+                    }
+                    catch (Exception ex)
+                    {
+                        var bgLogger = app.Services.GetService<ILogger<StartupMarker>>();
+                        bgLogger?.LogWarning(ex, "Meili InitializeAsync 后台执行失败 (搜索 filter 可能降级)");
+                    }
+                });
+            }
         }
     }
 

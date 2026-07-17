@@ -11,11 +11,16 @@ import { User, Lock } from '@element-plus/icons-vue'
 import { useAdminAuthStore } from '@/composables/useAdminAuth'
 import { authApi } from '@/api'
 import { useI18n } from 'vue-i18n'
+import { isSafeRedirect, parseRedirectHosts } from '@/utils/security'
 
 const router = useRouter()
 const route = useRoute()
 const auth = useAdminAuthStore()
 const { t } = useI18n()
+
+// V2 Task V17-3.3: 开放重定向防护 - 启动时解析一次白名单主机
+//   WHY 模块级常量: 环境变量编译期注入,运行时不变,无需每次登录重复解析
+const SAFE_REDIRECT_HOSTS = parseRedirectHosts(import.meta.env.VITE_SAFE_REDIRECT_HOSTS)
 
 const form = reactive({
   username: '',
@@ -43,8 +48,11 @@ async function handleLogin() {
     const payload = await authApi.login(form.username, form.password)
     auth.setAuth(payload)
     ElMessage.success(t('auth.loginSuccess'))
-    const redirect = (route.query.redirect as string) || '/admin/products'
-    router.push(redirect)
+    // V2 Task V17-3.3: 开放重定向防护 - 仅允许同源相对路径或白名单主机
+    //   WHY 修复: 之前 `route.query.redirect as string` 强转可被构造 javascript:evil() 或钓鱼站点
+    const redirectRaw = route.query.redirect as string | undefined
+    const safeRedirect = isSafeRedirect(redirectRaw, SAFE_REDIRECT_HOSTS)
+    router.push(safeRedirect ? redirectRaw! : '/admin/products')
   } catch (e: any) {
     // 后端 ProblemDetails.errorCode 优先, 走 i18n 映射; title 兜底
     const errorCode = e?.response?.data?.errorCode

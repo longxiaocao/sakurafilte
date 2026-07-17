@@ -178,6 +178,30 @@ public static class AdminEtlEndpoints
         })
         .WithName("AdminEtlProgress");
 
+        // V2 Task V17-3.2: 全量重建 Meilisearch 索引
+        //   WHY 必要: 索引损坏/字段变更/schema 升级后需清空重建
+        //   限流: 复用 "etl" 策略 (30/min),避免高频调用
+        //   鉴权: group 已通过 RequireAuthorization (X-Admin-Token/JWT)
+        //   互斥: ReindexAllAsync 内部 AcquireActiveCts 防止与 ImportXxxAsync 并发
+        group.MapPost("/reindex-all", async (
+            EtlImportService etl,
+            ILogger<Program> logger,
+            CancellationToken ct) =>
+        {
+            logger.LogInformation("手动触发 Meilisearch 全量重建");
+            try
+            {
+                var result = await etl.ReindexAllAsync(ct);
+                return Results.Ok(result);
+            }
+            catch (InvalidOperationException ex)
+            {
+                // 已有 ETL 任务在运行 (AcquireActiveCts 抛 InvalidOperationException)
+                return Results.Conflict(new { error = ex.Message });
+            }
+        })
+        .WithName("AdminReindexAll");
+
         // 进度 SSE 流
         app.MapGet("/api/admin/etl/progress/stream", async (HttpContext ctx, EtlImportService etl, IEtlProgressBroadcaster broadcaster) =>
         {

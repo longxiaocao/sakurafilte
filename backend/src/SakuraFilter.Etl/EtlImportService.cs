@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Npgsql;
 using NpgsqlTypes;
+using SakuraFilter.Core.DTOs;
 using SakuraFilter.Core.Entities;
 using SakuraFilter.Infrastructure.Data;
 using SakuraFilter.Search;
@@ -1279,6 +1280,162 @@ public class EtlImportService
             db.SearchIndexPending.AddRange(chunk);
             await db.SaveChangesAsync(ct);
         }
+    }
+
+    // ===== V2 Task V17-1.2 + V17-2.4: 全量重建链路 =====
+
+    /// <summary>
+    /// V2 Task V17-1.2: 全量重建 Meilisearch 索引
+    ///   WHY 必要: 索引损坏/字段变更/schema 升级后需清空重建,避免增量同步残留脏数据
+    ///   流程:
+    ///     1. AcquireActiveCts 防止与 ImportXxxAsync 并发 (同 _ctsLock 互斥)
+    ///     2. advisory lock 防止多实例并发重建 (lockKey 固定)
+    ///     3. DeleteAllDocumentsAsync 清空 Meili (保留 schema)
+    ///     4. TruncateSearchIndexPendingAsync 清空补偿队列 (避免旧 payload 干扰)
+    ///     5. SyncAllSearchIndexAsync 全量分批重建 (不按 UpdatedAt 筛选)
+    ///     6. finally 释放 advisory lock + ReleaseActiveCts + StopSnapshotTimer
+    /// </summary>
+    /// <param name="ct">取消令牌</param>
+    /// <returns>重建结果统计</returns>
+    public async Task<ReindexResult> ReindexAllAsync(CancellationToken ct = default)
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var cts = AcquireActiveCts("reindex-all", ct);
+        var broadcastCtx = StartSnapshotTimerIfNeeded();
+        // advisory lock key: 与 ImportProductsAsync 不同,避免与 ETL 互斥 (但 reindex 本身仍互斥)
+        const long reindexLockKey = 8812345678901234L;
+
+        using var scope = _sp.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ProductDbContext>();
+        var meili = scope.ServiceProvider.GetRequiredService<MeiliSearchProvider>();
+
+        await using var conn = new Npgsql.NpgsqlConnection(_pgConn);
+        await conn.OpenAsync(ct);
+
+        bool lockAcquired = false;
+        try
+        {
+            // 1. advisory lock (事务级,commit/rollback 自动释放)
+            lockAcquired = await TryAcquireAdvisoryLockAsync(conn, reindexLockKey, ct);
+            if (!lockAcquired)
+            {
+                return new ReindexResult("已有全量重建任务在运行", 0, 0, sw.ElapsedMilliseconds, null);
+            }
+
+            // 2. 显式事务包裹 (advisory lock 事务级,需在事务内持有)
+            await using var tx = await conn.BeginTransactionAsync(ct);
+
+            // 3. 清空 Meili 文档 (保留 schema)
+            await meili.DeleteAllDocumentsAsync(ct);
+
+            // 4. 清空 search_index_pending (旧 payload 可能与新 schema 不兼容)
+            await TruncateSearchIndexPendingAsync(db, ct);
+
+            // 5. 全量重建 (不按 UpdatedAt 筛选)
+            var (direct, queued) = await SyncAllSearchIndexAsync(meili, db, ct);
+
+            await tx.CommitAsync(ct);
+
+            sw.Stop();
+            var msg = $"全量重建完成: 直接={direct}, 入队={queued}";
+            _logger.LogInformation("ReindexAllAsync: {Message}, elapsed={ElapsedMs}ms", msg, sw.ElapsedMilliseconds);
+            return new ReindexResult(msg, direct, queued, sw.ElapsedMilliseconds, null);
+        }
+        catch (OperationCanceledException)
+        {
+            sw.Stop();
+            _logger.LogWarning("ReindexAllAsync 被取消, elapsed={ElapsedMs}ms", sw.ElapsedMilliseconds);
+            return new ReindexResult("全量重建被取消", 0, 0, sw.ElapsedMilliseconds, "CANCELLED");
+        }
+        catch (Exception ex)
+        {
+            sw.Stop();
+            _logger.LogError(ex, "ReindexAllAsync 异常, elapsed={ElapsedMs}ms", sw.ElapsedMilliseconds);
+            return new ReindexResult("全量重建失败", 0, 0, sw.ElapsedMilliseconds, ex.Message);
+        }
+        finally
+        {
+            // advisory lock 事务级,连接关闭自动释放 (tx.RollbackAsync 在异常路径已执行)
+            if (conn.State != System.Data.ConnectionState.Closed)
+                await conn.CloseAsync();
+            StopSnapshotTimer(broadcastCtx);
+            ReleaseActiveCts(cts);
+        }
+    }
+
+    /// <summary>
+    /// V2 Task V17-2.4: 全量同步搜索索引 (不按 UpdatedAt 筛选)
+    ///   与 SyncSearchIndexAsync 区别: 查询所有产品 (含 UpdatedAt=null),用于全量重建场景
+    ///   分批 1000, keyset 分页 (按 Id 升序),避免一次性加载百万级数据
+    /// </summary>
+    private async Task<(long direct, long queued)> SyncAllSearchIndexAsync(
+        MeiliSearchProvider meili, ProductDbContext db, CancellationToken ct)
+    {
+        const int batchSize = 1000;
+        long direct = 0, queued = 0;
+        long? lastId = null;
+
+        while (true)
+        {
+            ct.ThrowIfCancellationRequested();
+            var query = db.Products.AsNoTracking();
+            if (lastId.HasValue) query = query.Where(p => p.Id > lastId.Value);
+            var batch = await query.OrderBy(p => p.Id).Take(batchSize).ToListAsync(ct);
+            if (batch.Count == 0) break;
+            lastId = batch[^1].Id;
+
+            var docs = new List<Mr1IndexDoc>(batch.Count);
+            foreach (var p in batch)
+            {
+                try
+                {
+                    docs.Add(await meili.BuildMr1DocumentAsync(p, ct));
+                }
+                catch (Exception docEx)
+                {
+                    _logger.LogWarning(docEx, "BuildMr1DocumentAsync 失败 mr1={Mr1},跳过", p.Mr1);
+                }
+            }
+
+            try
+            {
+                await meili.IndexAsync(docs, ct);
+                direct += docs.Count;
+            }
+            catch (Exception batchEx)
+            {
+                _logger.LogWarning(batchEx, "Meili 批次 (lastId={LastId}) 失败,入队", lastId);
+                await EnqueuePendingBatchAsync(db, docs, ct);
+                queued += docs.Count;
+            }
+        }
+        _logger.LogInformation("SyncAllSearchIndexAsync 完成: 直接={Direct}, 入队={Queued}", direct, queued);
+        return (direct, queued);
+    }
+
+    /// <summary>
+    /// V2 Task V17-1.2: 清空 search_index_pending 表 (全量重建前调用)
+    ///   WHY 必要: 旧 payload 可能与新 schema 不兼容 (字段变更),避免 IndexReplayWorker 重放旧 payload 失败
+    ///   用 EF Core RemoveRange + SaveChanges (数据量小,无需 TRUNCATE)
+    /// </summary>
+    private async Task TruncateSearchIndexPendingAsync(ProductDbContext db, CancellationToken ct)
+    {
+        var count = await db.SearchIndexPending.CountAsync(ct);
+        if (count == 0) return;
+
+        // 分批删除 (每批 5000,避免单次事务过大)
+        const int deleteBatchSize = 5000;
+        int deletedTotal = 0;
+        while (true)
+        {
+            ct.ThrowIfCancellationRequested();
+            var batch = await db.SearchIndexPending.Take(deleteBatchSize).ToListAsync(ct);
+            if (batch.Count == 0) break;
+            db.SearchIndexPending.RemoveRange(batch);
+            await db.SaveChangesAsync(ct);
+            deletedTotal += batch.Count;
+        }
+        _logger.LogInformation("TruncateSearchIndexPendingAsync: 已清空 {Count} 条待补偿记录", deletedTotal);
     }
 
     private static async Task<Dictionary<string, long>> LoadExistingOemMapAsync(NpgsqlConnection conn, CancellationToken ct)

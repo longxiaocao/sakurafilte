@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using SakuraFilter.Core.DTOs;
 using SakuraFilter.Core.Entities;
 using SakuraFilter.Core.Interfaces;
+using SakuraFilter.Core.Validation;
 using SakuraFilter.Infrastructure.Data;
 using System.Text.Json;
 
@@ -1067,12 +1068,13 @@ public class AdminProductService
     // ========== 辅助 ==========
     private static void ValidateForm(ProductFormDto form)
     {
-        // V2: MR.1 必填校验(内部主键,数据强制)
-        if (string.IsNullOrWhiteSpace(form.Mr1))
-            throw new ArgumentException("MR1_REQUIRED: MR.1 必填");
-        // V2: MR.1 格式校验(1-10 位字母数字)
-        if (!System.Text.RegularExpressions.Regex.IsMatch(form.Mr1.Trim(), @"^[A-Za-z0-9]{1,10}$"))
-            throw new ArgumentException("MR1_FORMAT_INVALID: MR.1 必须为 1-10 位字母数字");
+        // V2 Task V17-1.3: MR.1 校验抽取到 Mr1Validator (复用 ETL/Admin 双路径)
+        //   WHY 抽取: 之前内联 regex 在 AdminProductService 和 ETL 重复,规则变更易漏改
+        //   Mr1Validator.Normalize 内部完成: 必填校验 + 格式校验 + Trim
+        //   校验失败抛 ArgumentException (与原语义一致,Endpoint 转 400)
+        //   注意: ProductFormDto.Mr1 是 init-only,无法重新赋值 Trim 后的值;
+        //         调用方 (CreateAsync/UpdateAsync) 取 form.Mr1?.Trim() 时已做 Trim,这里仅校验
+        Mr1Validator.Normalize(form.Mr1);
 
         if (string.IsNullOrWhiteSpace(form.Oem2))
             throw new ArgumentException("Oem2 (主号) 必填");

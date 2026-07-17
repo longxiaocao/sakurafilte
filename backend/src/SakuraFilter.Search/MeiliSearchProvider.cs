@@ -644,4 +644,99 @@ public class MeiliSearchProvider : ISearchProvider
             // 多值 OR (任一包含)
             return $"oem_list_published_brands IN [{string.Join(", ", safeBrands)}]";
     }
+
+    // ===== V2 Task V17-2.2: Meilisearch schema 初始化 + 全量清空 =====
+
+    /// <summary>
+    /// V2 Task V17-2.2: 配置 Meilisearch 索引 schema (FilterableAttributes / SortableAttributes / SearchableAttributes)
+    ///   WHY 必要: Meilisearch 启动时需显式配置 filterable/sortable 字段,否则 SearchAsync 的 Filter 参数会被忽略
+    ///   字段命名: snake_case (与 Mr1IndexDoc 的 JSON 序列化默认一致, Meilisearch SDK 0.15.4 不做 PascalCase 转换)
+    ///   幂等: 可重复执行,Meilisearch 内部覆盖旧配置
+    ///   注意: 主键 mr_1 在首次 IndexAsync 时自动设置 (SDK 0.15.4 无独立 UpdatePrimaryKeyAsync 方法)
+    /// </summary>
+    /// <param name="ct">取消令牌</param>
+    public async Task InitializeAsync(CancellationToken ct = default)
+    {
+        // V2 (S4-9): 遍历所有 WriteTargets 配置 schema (灰度期间两个索引都需配置)
+        foreach (var target in _writeTargets)
+        {
+            try
+            {
+                // FilterableAttributes: 支持范围/等值过滤的字段 (与 SearchAsync.BuildFilter 一致)
+                var filterable = new[]
+                {
+                    "mr_1", "type", "is_published", "is_discontinued",
+                    "d1_mm", "d2_mm", "d3_mm", "d4_mm",
+                    "h1_mm", "h2_mm", "h3_mm", "h4_mm",
+                    // 嵌套数组字段 (V2 新增)
+                    "oem_list.oem_brand", "oem_list.oem_no_3", "oem_list.is_published", "oem_list.machine_type",
+                    "machine_list.machine_brand", "machine_list.machine_model", "machine_list.machine_category",
+                    // 扁平化冗余字段 (S3-7/S3-8)
+                    "oem_list_published_brands", "oem_list_published_no3s",
+                    "brand_sort_order_min", "oem_list_sort_order_min"
+                };
+                // SDK 0.15.4: WaitForTaskAsync(int taskUid, double timeoutMs, int intervalMs = 500)
+                var filterTask = await target.UpdateFilterableAttributesAsync(filterable, ct);
+                await target.WaitForTaskAsync(filterTask.TaskUid, 30000);
+
+                // SortableAttributes: 支持排序的字段 (Brand 优先级 + 更新时间)
+                var sortable = new[]
+                {
+                    "brand_sort_order_min",       // S3-8: Brand 优先级排序
+                    "oem_list_sort_order_min",    // S4-16: OEM 3 排序
+                    "updated_at_unix",            // 按更新时间排序
+                    "d1_mm", "d2_mm", "d3_mm", "h1_mm", "h2_mm", "h3_mm"  // 尺寸排序
+                };
+                var sortTask = await target.UpdateSortableAttributesAsync(sortable, ct);
+                await target.WaitForTaskAsync(sortTask.TaskUid, 30000);
+
+                // SearchableAttributes: 全文检索字段 (顺序=相关性权重)
+                //   WHY 显式配置: 默认所有字符串字段都参与搜索,但嵌套数组字段会干扰相关性
+                var searchable = new[]
+                {
+                    "mr_1",                       // MR.1 主键搜索
+                    "product_name_1", "product_name_2", "oem_2", "type", "remark", "media",
+                    // 扁平化冗余字段 (S4-13: 空格分隔,可被分词器切分)
+                    "oem_brands_str", "oem_no3s_str",
+                    // 嵌套数组字段 (支持 OEM 3 / 机型搜索)
+                    "oem_list.oem_brand", "oem_list.oem_no_3",
+                    "machine_list.machine_brand", "machine_list.machine_model"
+                };
+                var searchTask = await target.UpdateSearchableAttributesAsync(searchable, ct);
+                await target.WaitForTaskAsync(searchTask.TaskUid, 30000);
+
+                _logger.LogInformation("Meili schema 已配置: target={Target}, filterable={FilterCount}, sortable={SortCount}, searchable={SearchCount}",
+                    target.Uid, filterable.Length, sortable.Length, searchable.Length);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Meili schema 配置失败 target={Target} (搜索功能可能降级)", target.Uid);
+                // 不抛出: 单个 target 失败不影响其他 target,启动不应阻塞
+            }
+        }
+    }
+
+    /// <summary>
+    /// V2 Task V17-2.2: 清空所有文档 (全量重建前调用)
+    ///   WHY 必要: 全量重建需先清空旧文档,避免脏数据残留
+    ///   注意: 仅删除文档,保留 schema 配置 (FilterableAttributes 等不变)
+    /// </summary>
+    /// <param name="ct">取消令牌</param>
+    public async Task DeleteAllDocumentsAsync(CancellationToken ct = default)
+    {
+        foreach (var target in _writeTargets)
+        {
+            try
+            {
+                var task = await target.DeleteAllDocumentsAsync(ct);
+                await target.WaitForTaskAsync(task.TaskUid, 60000);
+                _logger.LogInformation("Meili 文档已全量清空: target={Target}, taskUid={TaskUid}", target.Uid, task.TaskUid);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Meili 全量清空失败 target={Target} (继续后续重建,可能残留脏数据)", target.Uid);
+                // 不抛出: 单个 target 失败不影响其他 target
+            }
+        }
+    }
 }
