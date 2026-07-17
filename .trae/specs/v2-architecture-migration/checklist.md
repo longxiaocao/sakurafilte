@@ -5962,3 +5962,159 @@ _待启动第七轮深度审查后追加_
 - [ ] 111. v17 纯文档修正: 3 个文件(spec.md / tasks.md / checklist.md)
 - [ ] 112. v17 新增 migration: 0 个(v17 不涉及 DB schema 变更,CrossReference 不新增 IsPrimary 字段,改用 OrderBy(Id) 业务约定)
 
+---
+
+# v18 验证清单 — 第九重核实机制(record 完整字段验证 + 现有实现语义对齐)
+
+> **背景**: 基于第十七轮三维度并行深度审查发现 11 项 v17 衍生漏洞(D17:8 / S17:2 / F16:1),v18 引入第九重核实机制,追加 v18 验证清单。
+>
+> **核心原则**: v18 验证清单覆盖 Pre-Task 验证 + V18-F1~F8 修复方案验证 + 第九重核实机制应用验证 + 第十八轮循环终止条件验证。
+
+## v18 Pre-Task 验证(5 项)
+
+- [ ] V18-CHK-1: Pre-Task-V18-0 ProductIndexDoc record 完整字段验证(Read ISearchProvider.cs L32-L45,确认 12 字段)
+- [ ] V18-CHK-2: Pre-Task-V18-0-Verify Meilisearch 字段命名方向验证(写入 1 条 ProductIndexDoc + GET 验证字段名 snake_case/PascalCase)
+- [ ] V18-CHK-3: Pre-Task-V18-1 EtlImportService.SyncSearchIndexAsync 现有实现验证(Read L1140-L1166,确认 keyset 分页 + SpecifyKind(Utc))
+- [ ] V18-CHK-4: Pre-Task-V18-2 AdminEtlEndpoints 现有端点鉴权验证(Read L21-L147 + Grep [Authorize] 零匹配)
+- [ ] V18-CHK-5: Pre-Task-V18-3 SearchRequest D7/D8 字段验证(Read SearchRequest.cs L6-L21,确认 D7/D8 decimal? + BuildFilter 遗漏)
+
+## v18 数据关联维度修复验证(对应 V18-F1~F5)
+
+### V18-F1 ReleaseActiveCts 传参修正(D17-1)
+
+- [ ] V18-CHK-6: spec.md 第十八章 V17-F10 ReindexAllAsync 伪代码的 ReleaseActiveCts 调用是否含 cts 参数
+- [ ] V18-CHK-7: ReleaseActiveCts(cts) 是否与现有 L590 签名 `private void ReleaseActiveCts(CancellationTokenSource cts)` 一致
+- [ ] V18-CHK-8: cts 变量是否来自 AcquireActiveCts 返回值(现有 L577 签名)
+- [ ] V18-CHK-9: ReleaseActiveCts 调用是否在 finally 块内(确保异常时释放)
+
+### V18-F2 ProductIndexDoc 补充 OemNoNormalized + Media 字段(D17-2/D17-3)
+
+- [ ] V18-CHK-10: spec.md 第十八章 V17-F1 SyncSearchIndexAsync 伪代码的 ProductIndexDoc 构造是否提供完整 17 字段
+- [ ] V18-CHK-11: ProductIndexDoc 构造字段顺序是否与 ISearchProvider.cs L32-L45 record 定义一致
+- [ ] V18-CHK-12: OemNoNormalized(第 2 字段)是否提供(非空字符串)
+- [ ] V18-CHK-13: Media(第 10 字段)是否提供(可为 null)
+- [ ] V18-CHK-14: 新增 5 字段(D3Mm/H2Mm/Mr1/OemBrand/BrandSortOrder)是否在 record 扩展后追加
+- [ ] V18-CHK-15: ProductIndexDoc record 定义是否从 12 字段扩展到 17 字段(前置依赖)
+
+### V18-F3 DateTimeOffset SpecifyKind(Utc) 处理(D17-4)
+
+- [ ] V18-CHK-16: spec.md 第十八章 V17-F1 SyncSearchIndexAsync 伪代码的 UpdatedAtUnix 计算是否用 SpecifyKind(Utc)
+- [ ] V18-CHK-17: SpecifyKind(Utc) 是否与现有 L1165 实现一致
+- [ ] V18-CHK-18: DateTimeOffset 构造是否传 TimeSpan.Zero(确保 UTC)
+- [ ] V18-CHK-19: 是否说明 WHY(Npgsql EnableLegacyTimestampBehavior 返回 Kind=Local)
+
+### V18-F4 spec 字段数修正(D17-5/D17-6)
+
+- [ ] V18-CHK-20: spec.md 第十八章 18.4 V17-F1 修复方案的"现有字段(8)"是否改为"现有字段(12)"
+- [ ] V18-CHK-21: spec.md 第十八章 18.4 V17-F1 修复方案的"v17 新增(10)"是否改为"v17 新增(5)"
+- [ ] V18-CHK-22: V18-F4 字段清单表是否包含 17 行(12 现有 + 5 新增)
+- [ ] V18-CHK-23: 字段清单表是否标注每个字段的来源(Product.Id / XrefOemBrand.Brand 等)
+- [ ] V18-CHK-24: 字段清单表是否标注每个字段的状态(现有 / v17 新增)
+
+### V18-F5 保留 keyset 分页(非 AsAsyncEnumerable)(D17-7/D17-8)
+
+- [ ] V18-CHK-25: spec.md 第十八章 V17-F1 SyncSearchIndexAsync 伪代码是否用 keyset 分页(while + lastId + OrderBy(Id).Take(batchSize))
+- [ ] V18-CHK-26: 是否删除 query.AsAsyncEnumerable() 一次性枚举
+- [ ] V18-CHK-27: keyset 分页结构是否与现有 L1140-L1149 一致
+- [ ] V18-CHK-28: LEFT JOIN xref_oem_brands 是否在分页 Select 内(非外层 AsAsyncEnumerable)
+- [ ] V18-CHK-29: LEFT JOIN 是否用 Product.OemBrand 匹配 XrefOemBrand.Brand(现有字段名)
+- [ ] V18-CHK-30: BrandSortOrder 是否从 XrefOemBrand.SortOrder 获取(非独立字段)
+- [ ] V18-CHK-31: batchSize 常量是否定义(1000)
+- [ ] V18-CHK-32: lastId 更新是否正确(batch[^1].Id)
+- [ ] V18-CHK-33: 是否说明 WHY(1M 产品 AsAsyncEnumerable 内存溢出 ~2GB)
+
+## v18 检索逻辑维度修复验证(对应 V18-F6~F7)
+
+### V18-F6 BuildFilter 字段命名标注条件(S17-1)
+
+- [ ] V18-CHK-34: spec.md 第十八章 V17-F8 BuildFilter 伪代码字段命名是否标注条件(以 Pre-Task-V18-0-Verify 验证为准)
+- [ ] V18-CHK-35: 字段命名是否默认用 snake_case(与现有 L75/L80/L85/L90/L94 一致)
+- [ ] V18-CHK-36: type filter 是否用 `type = "{...}"`(snake_case)
+- [ ] V18-CHK-37: D1 filter 是否用 `d1_mm >= {lo} AND d1_mm <= {hi}`(snake_case)
+- [ ] V18-CHK-38: D2 filter 是否用 `d2_mm >= {lo} AND d2_mm <= {hi}`(snake_case)
+- [ ] V18-CHK-39: D3 filter(新增)是否用 `d3_mm >= {lo} AND d3_mm <= {hi}`(snake_case)
+- [ ] V18-CHK-40: H1 filter 是否用 `h1_mm >= {lo} AND h1_mm <= {hi}`(snake_case)
+- [ ] V18-CHK-41: H2 filter(新增)是否用 `h2_mm >= {lo} AND h2_mm <= {hi}`(snake_case)
+- [ ] V18-CHK-42: H3 filter(新增)是否用 `h3_mm >= {lo} AND h3_mm <= {hi}`(snake_case)
+- [ ] V18-CHK-43: is_discontinued filter 是否用 `is_discontinued = false`(snake_case)
+- [ ] V18-CHK-44: 是否追加 Pre-Task-V18-0-Verify 强化说明(启动 Meilisearch + 写入 + GET 验证)
+
+### V18-F7 D7/D8 说明(S17-2)
+
+- [ ] V18-CHK-45: spec.md 第十八章 18.4 末尾是否追加 V18-F7 说明(4 点)
+- [ ] V18-CHK-46: 说明 1: D7/D8 在 SearchRequest 是 decimal?,但在 Product 实体是 string(D7Thread/D8Thread)
+- [ ] V18-CHK-47: 说明 2: 现有 BuildFilter 遗漏 D7/D8 filter(既有 bug,非 v17 引入)
+- [ ] V18-CHK-48: 说明 3: v18 不修复 D7/D8 遗漏(类型不匹配 + 功能增强 + 非衍生漏洞)
+- [ ] V18-CHK-49: 说明 4: D7/D8 遗漏列为已知问题,在 v19+ 修订时处理
+- [ ] V18-CHK-50: 已知问题记录是否追加到 spec.md 第十八章 18.4 末尾
+
+## v18 前后端联动维度修复验证(对应 V18-F8)
+
+### V18-F8 reindex-all 端点无需 [Authorize](F16-1)
+
+- [ ] V18-CHK-51: spec.md 第十八章 V17-F17 reindex-all 端点伪代码是否无 [Authorize] 特性
+- [ ] V18-CHK-52: 是否删除 `.RequireAuthorization("Admin")` 链式调用
+- [ ] V18-CHK-53: 是否保留 `.RequireRateLimiting("etl")` 限流
+- [ ] V18-CHK-54: 是否追加注释说明(鉴权由 DevTokenAuthMiddleware 中间件统一处理)
+- [ ] V18-CHK-55: 伪代码风格是否与现有端点一致(MapPost + lambda + Results.Ok/BadRequest/Problem)
+- [ ] V18-CHK-56: 是否说明 WHY([Authorize] + 中间件双重鉴权冲突)
+
+## v18 第九重核实机制应用验证
+
+- [ ] V18-CHK-57: V18-F1 ReleaseActiveCts 修复是否基于 Read L590 签名验证(非凭空假设)
+- [ ] V18-CHK-58: V18-F2 ProductIndexDoc 修复是否基于 Read L32-L45 record 完整字段验证(非凭空假设)
+- [ ] V18-CHK-59: V18-F3 DateTimeOffset 修复是否基于 Read L1165 现有实现语义对齐(非凭空假设)
+- [ ] V18-CHK-60: V18-F4 spec 字段数修正是否基于 Read L32-L45 record 定义(非凭空假设)
+- [ ] V18-CHK-61: V18-F5 keyset 分页修复是否基于 Read L1140-L1149 现有实现语义对齐(非凭空假设)
+- [ ] V18-CHK-62: V18-F6 字段命名修复是否基于 Read L75/L80/L85/L90/L94 现有实现(非凭空假设)
+- [ ] V18-CHK-63: V18-F7 D7/D8 说明是否基于 Read SearchRequest.cs L6-L21 完整字段验证(非凭空假设)
+- [ ] V18-CHK-64: V18-F8 端点鉴权修复是否基于 Read AdminEtlEndpoints.cs L21-L147 现有实现(非凭空假设)
+- [ ] V18-CHK-65: v18 伪代码是否引入新 record 字段遗漏(应为 0)
+- [ ] V18-CHK-66: v18 伪代码是否引入新现有实现语义偏离(应为 0)
+- [ ] V18-CHK-67: v18 是否真正实现"0 项 record 字段遗漏"+"0 项现有实现语义偏离"
+
+## v18 文件清单验证
+
+- [ ] V18-CHK-68: v18 实际新增代码: 0 个(v18 仅修订 spec/tasks/checklist)
+- [ ] V18-CHK-69: v18 实际修改后端文件: 0 个(代码修改由 v17 任务清单执行)
+- [ ] V18-CHK-70: v18 实际修改前端文件: 0 个
+- [ ] V18-CHK-71: v18 纯文档修正: 3 个文件(spec.md / tasks.md / checklist.md)
+- [ ] V18-CHK-72: v18 新增 migration: 0 个
+
+## v18 已知问题验证
+
+- [ ] V18-CHK-73: D7/D8 filter 遗漏(现有 bug,v18 不修复,列 v19+ 处理)是否记录
+- [ ] V18-CHK-74: D7/D8 类型不匹配(decimal? vs string D7Thread/D8Thread)是否说明
+
+## v18 第十八轮循环终止条件验证
+
+- [ ] V18-CHK-75: 第十八轮审查无任何新漏洞检出 → 完成 v18 修订,进入 v19 修订(如有新漏洞)或定稿
+- [ ] V18-CHK-76: 第十八轮审查发现新漏洞 → 进入 v19 修订,继续迭代
+- [ ] V18-CHK-77: 第十八轮审查发现 v18 仍有凭空假设 → 进入 v19 修订,加强核实机制(十重核实?)
+- [ ] V18-CHK-78: 第十八轮审查重点: 第九重核实机制(record 完整字段验证 + 现有实现语义对齐验证)
+- [ ] V18-CHK-79: 第十八轮审查重点: v17 衍生漏洞是否真正消除(Grep 验证 ReleaseActiveCts 签名/ProductIndexDoc 12 字段/SpecifyKind Utc/keyset 分页/snake_case 字段命名/无 [Authorize])
+- [ ] V18-CHK-80: 第十八轮审查重点: V18-F2 ProductIndexDoc 17 字段构造顺序是否与扩展后 record 定义一致
+- [ ] V18-CHK-81: 第十八轮审查重点: V18-F5 LEFT JOIN xref_oem_brands 是否产生 N+1 问题(EF Core 子查询展开)
+- [ ] V18-CHK-82: 第十八轮审查重点: V18-F8 reindex-all 端点无 [Authorize] 是否正确(鉴权由中间件处理)
+- [ ] V18-CHK-83: 持续迭代直到连续一轮审查无任何新漏洞检出
+- [ ] V18-CHK-84: v18 引入"第九重核实机制"(record 完整字段验证 + 现有实现语义对齐验证)
+- [ ] V18-CHK-85: v18 目标: 真正实现"0 项 record 字段遗漏"+"0 项现有实现语义偏离"+"0 项 v17 衍生漏洞"
+- [ ] V18-CHK-86: v18 实际新增代码: 0 个(v18 仅修订 spec/tasks/checklist)
+- [ ] V18-CHK-87: v18 实际修改后端文件: 0 个(代码修改由 v17 任务清单执行)
+- [ ] V18-CHK-88: v18 实际修改前端文件: 0 个
+- [ ] V18-CHK-89: v18 纯文档修正: 3 个文件(spec.md / tasks.md / checklist.md)
+- [ ] V18-CHK-90: v18 新增 migration: 0 个
+- [ ] V18-CHK-91: v18 已知问题: D7/D8 filter 遗漏(现有 bug,列 v19+ 处理)
+
+## v18 验证清单总结
+
+- **Pre-Task 验证**: 5 项(V18-CHK-1 ~ V18-CHK-5)
+- **数据关联维度修复验证**: 28 项(V18-CHK-6 ~ V18-CHK-33,对应 V18-F1~F5)
+- **检索逻辑维度修复验证**: 17 项(V18-CHK-34 ~ V18-CHK-50,对应 V18-F6~F7)
+- **前后端联动维度修复验证**: 6 项(V18-CHK-51 ~ V18-CHK-56,对应 V18-F8)
+- **第九重核实机制应用验证**: 11 项(V18-CHK-57 ~ V18-CHK-67)
+- **文件清单验证**: 5 项(V18-CHK-68 ~ V18-CHK-72)
+- **已知问题验证**: 2 项(V18-CHK-73 ~ V18-CHK-74)
+- **第十八轮循环终止条件验证**: 17 项(V18-CHK-75 ~ V18-CHK-91)
+- **总验证点数**: 91 项
+

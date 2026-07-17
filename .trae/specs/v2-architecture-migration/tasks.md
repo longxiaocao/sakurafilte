@@ -6950,3 +6950,212 @@ Task V15-3.5 (损坏 payload hash 日志) ─→ 独立
 **纯文档修正**: 3 个文件(spec.md / tasks.md / checklist.md)
 **新增 migration**: 0 个(v17 不涉及 DB schema 变更,CrossReference 不新增 IsPrimary 字段)
 
+---
+
+# v18 任务清单 — 第九重核实机制(record 完整字段验证 + 现有实现语义对齐)
+
+> **背景**: 基于第十七轮三维度并行深度审查发现 11 项 v17 衍生漏洞(D17:8 / S17:2 / F16:1),v18 引入第九重核实机制,追加 4 个 Pre-Task + 8 个修复任务。
+>
+> **核心原则**: v18 仅修订 spec/tasks/checklist 伪代码,不直接修改代码文件。代码修改由 v17 任务清单执行,v18 仅修正 v17 伪代码错误。
+
+## v18 前置任务(Pre-Task)
+
+### Task V18-0.1 [必做] Pre-Task-V18-0 ProductIndexDoc record 完整字段验证
+
+**对应 spec**: spec.md 19.4 Pre-Task-V18-0
+**目标**: 确认 ProductIndexDoc record 当前 12 字段定义
+**步骤**:
+1. Read `backend/src/SakuraFilter.Search/ISearchProvider.cs` L32-L45
+2. 列出 record 所有字段(顺序): Id / OemNoNormalized / OemNoDisplay / Remark / Type / D1Mm / D2Mm / H3Mm / H1Mm / Media / IsDiscontinued / UpdatedAtUnix
+3. 确认字段数 = 12(非 v17 假设的 8)
+**通过条件**: 字段数 = 12,顺序与 spec.md 19.3 V18-F4 字段清单一致
+**失败处理**: 若字段数 ≠ 12,停止 V18-F2 实施,先核对 record 定义
+**验证命令**: 无(纯 Read 验证)
+
+### Task V18-0.2 [必做] Pre-Task-V18-0-Verify Meilisearch 字段命名方向验证
+
+**对应 spec**: spec.md 19.4 Pre-Task-V18-0-Verify
+**目标**: 确认 Meilisearch 服务端字段命名方向(snake_case vs PascalCase)
+**步骤**:
+1. 启动 Meilisearch + API 服务
+2. 写入 1 条 ProductIndexDoc(含 D1Mm/H1Mm/IsDiscontinued 字段)
+3. GET /indexes/products/documents/{id}
+4. 检查返回 JSON 字段名:
+   - 若为 `d1_mm/h1_mm/is_discontinued` → snake_case
+   - 若为 `D1Mm/H1Mm/IsDiscontinued` → PascalCase
+5. 记录验证结果到 spec.md 第十八章 18.4 Pre-Task-V17-0-Verify 末尾
+**通过条件**: 字段命名方向确定,V17-F8 BuildFilter 伪代码用对应方向
+**失败处理**: 若 Meilisearch 不可用,默认用 snake_case(与现有代码 L75/L80/L85/L90/L94 一致)
+**验证命令**:
+```bash
+curl -X POST http://localhost:7700/indexes/products/documents -H "Content-Type: application/json" -d '[{"id":999999,"oemNoNormalized":"TEST","oemNoDisplay":"TEST","remark":null,"type":"TEST","d1Mm":100,"d2Mm":null,"h3Mm":null,"h1Mm":50,"media":null,"isDiscontinued":false,"updatedAtUnix":1700000000}]'
+curl http://localhost:7700/indexes/products/documents/999999
+```
+
+### Task V18-0.3 [必做] Pre-Task-V18-1 EtlImportService.SyncSearchIndexAsync 现有实现验证
+
+**对应 spec**: spec.md 19.4 Pre-Task-V18-1
+**目标**: 确认现有 SyncSearchIndexAsync 用 keyset 分页 + SpecifyKind(Utc)
+**步骤**:
+1. Read `backend/src/SakuraFilter.Etl/EtlImportService.cs` L1140-L1166
+2. 确认 keyset 分页结构: `while (true) { ... OrderBy(p => p.Id).Take(batchSize) ... lastId = batch[^1].Id ... }`
+3. 确认 DateTimeOffset 用 SpecifyKind(Utc): `new DateTimeOffset(DateTime.SpecifyKind(p.UpdatedAt, DateTimeKind.Utc), TimeSpan.Zero)`
+**通过条件**: keyset 分页 + SpecifyKind(Utc) 均存在
+**失败处理**: 若任一缺失,V18-F3/V18-F5 伪代码需调整
+**验证命令**: 无(纯 Read 验证)
+
+### Task V18-0.4 [必做] Pre-Task-V18-2 AdminEtlEndpoints 现有端点鉴权验证
+
+**对应 spec**: spec.md 19.4 Pre-Task-V18-2
+**目标**: 确认现有 AdminEtlEndpoints 所有端点无 [Authorize] 特性
+**步骤**:
+1. Read `backend/src/SakuraFilter.Api/Endpoints/AdminEtlEndpoints.cs` L21-L147
+2. Grep `[Authorize]` 在 AdminEtlEndpoints.cs: 应零匹配
+3. 确认鉴权由 DevTokenAuthMiddleware 中间件处理(_adminPrefixes 含 "/api/admin")
+**通过条件**: AdminEtlEndpoints.cs 无 [Authorize] 特性
+**失败处理**: 若有 [Authorize],V18-F8 伪代码需保留 [Authorize]
+**验证命令**: 无(纯 Read/Grep 验证)
+
+### Task V18-0.5 [必做] Pre-Task-V18-3 SearchRequest D7/D8 字段验证
+
+**对应 spec**: spec.md 19.4 Pre-Task-V18-3
+**目标**: 确认 SearchRequest 含 D7/D8 字段(decimal? 类型)
+**步骤**:
+1. Read `backend/src/SakuraFilter.Core/DTOs/SearchRequest.cs` L6-L21
+2. 确认 D7/D8 字段存在且类型为 decimal?
+3. 确认现有 BuildFilter 未处理 D7/D8(Read MeiliSearchProvider.cs L72-L95)
+**通过条件**: D7/D8 字段存在 + 现有 BuildFilter 遗漏
+**失败处理**: 若 D7/D8 不存在,V18-F7 说明需调整
+**验证命令**: 无(纯 Read 验证)
+
+## v18 数据关联维度修复任务(对应 V18-F1~F5)
+
+### Task V18-1.1 [高] V18-F1 ReleaseActiveCts 传参修正
+
+**对应 spec**: spec.md 19.3 V18-F1
+**对应漏洞**: D17-1
+**目标**: 修正 V17-F10 ReindexAllAsync 伪代码的 ReleaseActiveCts() 无参数调用错误
+**步骤**:
+1. 定位 spec.md 第十八章 V17-F10 ReindexAllAsync 伪代码
+2. 将 `ReleaseActiveCts()` 改为 `ReleaseActiveCts(cts)`
+3. 确认与现有 L590 签名 `private void ReleaseActiveCts(CancellationTokenSource cts)` 一致
+**通过条件**: 伪代码 ReleaseActiveCts 调用含 cts 参数
+**失败处理**: 若 cts 变量名不一致(如 _cts),需调整
+**验证命令**: 无(纯 spec 修订)
+
+### Task V18-1.2 [高] V18-F2 ProductIndexDoc 补充 OemNoNormalized + Media 字段
+
+**对应 spec**: spec.md 19.3 V18-F2
+**对应漏洞**: D17-2 / D17-3
+**目标**: 修正 V17-F1 SyncSearchIndexAsync 伪代码的 ProductIndexDoc 构造,补充 OemNoNormalized + Media 字段
+**步骤**:
+1. 定位 spec.md 第十八章 V17-F1 SyncSearchIndexAsync 伪代码
+2. ProductIndexDoc 构造按完整 17 字段顺序提供(12 现有 + 5 新增)
+3. 确认字段顺序与 ISearchProvider.cs L32-L45 record 定义一致
+4. 确认新增 5 字段(D3Mm/H2Mm/Mr1/OemBrand/BrandSortOrder)在 record 扩展后追加
+**通过条件**: ProductIndexDoc 构造提供完整 17 字段
+**失败处理**: 若 ProductIndexDoc record 未扩展到 17 字段,V17-F1 需先扩展 record 定义
+**验证命令**: 无(纯 spec 修订)
+
+### Task V18-1.3 [高] V18-F3 DateTimeOffset SpecifyKind(Utc) 处理
+
+**对应 spec**: spec.md 19.3 V18-F3
+**对应漏洞**: D17-4
+**目标**: 修正 V17-F1 SyncSearchIndexAsync 伪代码的 UpdatedAtUnix 计算,用 SpecifyKind(Utc)
+**步骤**:
+1. 定位 spec.md 第十八章 V17-F1 SyncSearchIndexAsync 伪代码
+2. 将 `new DateTimeOffset(p.UpdatedAt).ToUnixTimeSeconds()` 改为 `new DateTimeOffset(DateTime.SpecifyKind(p.UpdatedAt, DateTimeKind.Utc), TimeSpan.Zero).ToUnixTimeSeconds()`
+3. 确认与现有 L1165 实现一致
+**通过条件**: UpdatedAtUnix 计算用 SpecifyKind(Utc)
+**失败处理**: 无
+**验证命令**: 无(纯 spec 修订)
+
+### Task V18-1.4 [中] V18-F4 spec 字段数修正
+
+**对应 spec**: spec.md 19.3 V18-F4
+**对应漏洞**: D17-5 / D17-6
+**目标**: 修正 spec.md 第十八章 18.4 V17-F1 修复方案的"现有字段(8)" + "v17 新增(10)"错误
+**步骤**:
+1. 定位 spec.md 第十八章 18.4 V17-F1 修复方案
+2. "现有字段(8)" 改为 "现有字段(12)"
+3. "v17 新增(10)" 改为 "v17 新增(5)"
+4. 追加 V18-F4 字段清单表(17 字段)
+**通过条件**: spec 字段数与 ISearchProvider.cs record 定义一致
+**失败处理**: 无
+**验证命令**: 无(纯 spec 修订)
+
+### Task V18-1.5 [高] V18-F5 保留 keyset 分页(非 AsAsyncEnumerable)
+
+**对应 spec**: spec.md 19.3 V18-F5
+**对应漏洞**: D17-7 / D17-8
+**目标**: 修正 V17-F1 SyncSearchIndexAsync 伪代码,保留现有 keyset 分页结构
+**步骤**:
+1. 定位 spec.md 第十八章 V17-F1 SyncSearchIndexAsync 伪代码
+2. 删除 `query.AsAsyncEnumerable()` 一次性枚举
+3. 改用 keyset 分页(while + lastId + OrderBy(Id).Take(batchSize))
+4. 确认 LEFT JOIN xref_oem_brands 在分页 Select 内(非外层)
+**通过条件**: SyncSearchIndexAsync 用 keyset 分页
+**失败处理**: 若 LEFT JOIN 产生 N+1,需用 Include 或子查询
+**验证命令**: 无(纯 spec 修订)
+
+## v18 检索逻辑维度修复任务(对应 V18-F6~F7)
+
+### Task V18-2.1 [高] V18-F6 BuildFilter 字段命名标注条件
+
+**对应 spec**: spec.md 19.3 V18-F6
+**对应漏洞**: S17-1
+**目标**: 修正 V17-F8 BuildFilter 伪代码的字段命名,标注条件(以 Pre-Task-V18-0-Verify 验证为准)
+**步骤**:
+1. 定位 spec.md 第十八章 V17-F8 BuildFilter 伪代码
+2. 所有字段名改用 snake_case(type/d1_mm/d2_mm/d3_mm/h1_mm/h2_mm/h3_mm/is_discontinued)
+3. 追加注释说明: 字段命名以 Pre-Task-V18-0-Verify 验证为准
+4. 确认与现有 L75/L80/L85/L90/L94 一致
+**通过条件**: BuildFilter 字段命名用 snake_case(默认)
+**失败处理**: 若 Pre-Task-V18-0-Verify 验证为 PascalCase,需调整
+**验证命令**: 无(纯 spec 修订)
+
+### Task V18-2.2 [中] V18-F7 D7/D8 说明(现有也遗漏,v18 不新增)
+
+**对应 spec**: spec.md 19.3 V18-F7
+**对应漏洞**: S17-2
+**目标**: 在 spec.md 第十八章 18.4 末尾追加 D7/D8 遗漏说明
+**步骤**:
+1. 定位 spec.md 第十八章 18.4 V17-F8 修复方案末尾
+2. 追加 V18-F7 说明(4 点)
+3. 追加已知问题记录(D7/D8 filter 遗漏,现有 bug,v18 不修复,列 v19+ 处理)
+**通过条件**: spec 明确说明 D7/D8 遗漏
+**失败处理**: 无
+**验证命令**: 无(纯 spec 修订)
+
+## v18 前后端联动维度修复任务(对应 V18-F8)
+
+### Task V18-3.1 [中] V18-F8 reindex-all 端点无需 [Authorize]
+
+**对应 spec**: spec.md 19.3 V18-F8
+**对应漏洞**: F16-1
+**目标**: 修正 V17-F17 reindex-all 端点伪代码,删除 [Authorize] 特性
+**步骤**:
+1. 定位 spec.md 第十八章 V17-F17 reindex-all 端点伪代码
+2. 删除 `[Authorize]` 特性
+3. 删除 `.RequireAuthorization("Admin")` 链式调用
+4. 保留 `.RequireRateLimiting("etl")` 限流
+5. 追加注释说明: 鉴权由 DevTokenAuthMiddleware 中间件统一处理
+**通过条件**: reindex-all 端点伪代码无 [Authorize]
+**失败处理**: 若现有端点有 [Authorize](Pre-Task-V18-2 验证),需保留
+**验证命令**: 无(纯 spec 修订)
+
+## v18 任务总结
+
+- **前置任务**: 5 个(Pre-Task-V18-0 / V18-0-Verify / V18-1 / V18-2 / V18-3)
+- **数据关联维度**: 5 个任务(V18-1.1 ~ V18-1.5,对应 V18-F1~F5)
+- **检索逻辑维度**: 2 个任务(V18-2.1 ~ V18-2.2,对应 V18-F6~F7)
+- **前后端联动维度**: 1 个任务(V18-3.1,对应 V18-F8)
+- **总任务数**: 13 个(5 前置 + 8 实施)
+
+**实际新增代码**: 0 个(v18 仅修订 spec/tasks/checklist)
+**实际修改后端文件**: 0 个(代码修改由 v17 任务清单执行)
+**实际修改前端文件**: 0 个
+**纯文档修正**: 3 个文件(spec.md / tasks.md / checklist.md)
+**新增 migration**: 0 个
+**已知问题**: D7/D8 filter 遗漏(现有 bug,列 v19+ 处理)
+

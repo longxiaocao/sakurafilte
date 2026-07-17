@@ -11791,3 +11791,513 @@ v18 引入第九重核实机制,在第八重基础上追加:
 | S17-2 D7/D8 遗漏 | - | **SearchRequest 未完整读取**: Read L6-L21 确认含 D7/D8 | V18-F7: 说明现有也遗漏,v18 不新增 |
 | F16-1 [Authorize] 假设 | - | **现有端点未读取**: Read L24/L112 确认无 [Authorize] | V18-F8: 端点无需 [Authorize],鉴权由中间件处理 |
 
+## 19.3 V18-F1~F8 修复方案(含完整伪代码)
+
+> **第九重核实机制应用**: 每个 V18-Fx 修复方案的伪代码均经过 record 完整字段验证 + 现有实现语义对齐验证,确保不引入新衍生漏洞。
+
+### V18-F1 [高] D17-1 ReleaseActiveCts 传参修正
+
+**v17 伪代码位置**: spec.md 第十八章 V17-F10(ReindexAllAsync)
+**v17 错误**: 伪代码 `ReleaseActiveCts()` 无参数调用
+**真实代码事实**(经 Read 核实):
+- [EtlImportService.cs#L590](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Etl/EtlImportService.cs#L590): `private void ReleaseActiveCts(CancellationTokenSource cts)`
+- 现有调用点: L1114/L1367/L1817 均用 `ReleaseActiveCts(cts)`
+- v17 V17-F10 伪代码无参数调用会 CS7036(无重载接受 0 参数)
+**v18 修正方案**: V17-F10 ReindexAllAsync 伪代码的 `ReleaseActiveCts()` 改为 `ReleaseActiveCts(cts)`:
+```csharp
+// V17-F10 ReindexAllAsync finally 块(V18-F1 修正)
+public async Task<ReindexResult> ReindexAllAsync(CancellationToken externalCt = default)
+{
+    var cts = AcquireActiveCts("product-reindex", externalCt);  // 现有 L577 签名
+    var broadcastCtx = StartSnapshotTimerIfNeeded();  // V17-F10: 进度广播
+    try
+    {
+        // ... reindex 逻辑 ...
+        return ReindexResult.Ok(processed, indexed);
+    }
+    catch (OperationCanceledException ex)
+    {
+        _logger.LogWarning(ex, "ReindexAll 被取消");
+        return ReindexResult.Cancelled();
+    }
+    catch (Exception ex)
+    {
+        _logger.LogError(ex, "ReindexAll 失败");
+        return ReindexResult.Fail(ex.Message);
+    }
+    finally
+    {
+        StopSnapshotTimer(broadcastCtx);              // V17-F10: 停止进度广播
+        ReleaseActiveCts(cts);                         // V18-F1 修正: 传 cts 参数(非无参数)
+    }
+}
+```
+
+### V18-F2 [高] D17-2/D17-3 ProductIndexDoc 补充 OemNoNormalized + Media 字段
+
+**v17 伪代码位置**: spec.md 第十八章 V17-F1(SyncSearchIndexAsync)
+**v17 错误**: ProductIndexDoc 构造缺失 OemNoNormalized(第 2 参数) 和 Media(第 10 参数)
+**真实代码事实**(经 Read 核实):
+- [ISearchProvider.cs#L32-L45](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Search/ISearchProvider.cs#L32-L45): ProductIndexDoc 是 12 字段 record
+  ```
+  Id / OemNoNormalized / OemNoDisplay / Remark / Type
+  D1Mm / D2Mm / H3Mm / H1Mm / Media
+  IsDiscontinued / UpdatedAtUnix
+  ```
+- 现有 [EtlImportService.cs#L1148-L1166](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Etl/EtlImportService.cs#L1148-L1166) 构造时提供所有 12 字段
+- v17 V17-F1 伪代码新增 D3Mm/H2Mm/Mr1/OemBrand/BrandSortOrder 时,若不基于完整 record 定义,可能遗漏 OemNoNormalized/Media
+**v18 修正方案**: V17-F1 SyncSearchIndexAsync 伪代码的 ProductIndexDoc 构造必须基于完整 record 定义(12 现有 + 5 新增 = 17 字段):
+```csharp
+// V17-F1 SyncSearchIndexAsync keyset 分页内(V18-F2 修正)
+// V18-F2: ProductIndexDoc 完整字段(12 现有 + 5 新增),必须按 record 顺序提供
+var docs = batch.Select(p => new ProductIndexDoc(
+    p.Id,                    // 1. Id (现有)
+    p.OemNoNormalized,       // 2. OemNoNormalized (V18-F2 修正: v17 遗漏)
+    p.OemNoDisplay ?? "",    // 3. OemNoDisplay (现有)
+    p.Remark,                // 4. Remark (现有)
+    p.Type ?? "UNKNOWN",     // 5. Type (现有)
+    p.D1Mm,                  // 6. D1Mm (现有)
+    p.D2Mm,                  // 7. D2Mm (现有)
+    p.H3Mm,                  // 8. H3Mm (现有)
+    p.H1Mm,                  // 9. H1Mm (现有)
+    p.Media,                 // 10. Media (V18-F2 修正: v17 遗漏)
+    p.IsDiscontinued,        // 11. IsDiscontinued (现有)
+    new DateTimeOffset(DateTime.SpecifyKind(p.UpdatedAt, DateTimeKind.Utc), TimeSpan.Zero).ToUnixTimeSeconds(),  // 12. UpdatedAtUnix (V18-F3 修正: SpecifyKind)
+    // v17 新增 5 字段(需先扩展 ProductIndexDoc record 定义):
+    p.D3Mm,                  // 13. D3Mm (v17 新增)
+    p.H2Mm,                  // 14. H2Mm (v17 新增)
+    p.Mr1,                   // 15. Mr1 (v17 新增)
+    p.OemBrand,              // 16. OemBrand (v17 新增)
+    p.BrandSortOrder         // 17. BrandSortOrder (v17 新增)
+)).ToList();
+```
+**前置依赖**: V17-F1 必须先扩展 ProductIndexDoc record 定义(从 12 字段扩展到 17 字段),否则 CS1729(无重载接受 17 参数)。
+
+### V18-F3 [高] D17-4 DateTimeOffset SpecifyKind(Utc) 处理
+
+**v17 伪代码位置**: spec.md 第十八章 V17-F1(SyncSearchIndexAsync)
+**v17 错误**: 伪代码 `new DateTimeOffset(p.UpdatedAt).ToUnixTimeSeconds()` 未处理 Kind
+**真实代码事实**(经 Read 核实):
+- [EtlImportService.cs#L1165](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Etl/EtlImportService.cs#L1165): `new DateTimeOffset(DateTime.SpecifyKind(p.UpdatedAt, DateTimeKind.Utc), TimeSpan.Zero).ToUnixTimeSeconds()`
+- [EtlImportService.cs#L1161-L1164](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Etl/EtlImportService.cs#L1161-L1164) 注释: "Npgsql EnableLegacyTimestampBehavior 返回 Kind=Local,必须 SpecifyKind(Utc)"
+- v17 V17-F1 伪代码直接 `new DateTimeOffset(p.UpdatedAt)` 会因 Kind=Local 产生时区偏移(UTC+8),UpdatedAtUnix 偏大 8 小时
+**v18 修正方案**: V17-F1 SyncSearchIndexAsync 伪代码的 UpdatedAtUnix 计算必须用 SpecifyKind(Utc):
+```csharp
+// V17-F1 SyncSearchIndexAsync(V18-F3 修正)
+// V18-F3: 必须 SpecifyKind(Utc),因 Npgsql EnableLegacyTimestampBehavior 返回 Kind=Local
+// WHY 不直接 new DateTimeOffset(p.UpdatedAt): Kind=Local 时 Offset 会用本地时区(+08:00),
+//   ToUnixTimeSeconds() 会偏移 8 小时(UTC+8 比 UTC 早 8 小时,Unix 时间戳偏大)
+var updatedAtUnix = new DateTimeOffset(
+    DateTime.SpecifyKind(p.UpdatedAt, DateTimeKind.Utc),
+    TimeSpan.Zero
+).ToUnixTimeSeconds();
+```
+**注**: V18-F2 伪代码已含此修正(第 12 字段)。
+
+### V18-F4 [中] D17-5/D17-6 spec 字段数修正
+
+**v17 spec 位置**: spec.md 第十八章 18.4 V17-F1 修复方案"现有字段(8)" + "v17 新增(10)"
+**v17 错误**: 假设 ProductIndexDoc 现有 8 字段 + v17 新增 10 字段
+**真实代码事实**(经 Read 核实):
+- [ISearchProvider.cs#L32-L45](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Search/ISearchProvider.cs#L32-L45): 现有 12 字段(非 8)
+  - 现有: Id/OemNoNormalized/OemNoDisplay/Remark/Type/D1Mm/D2Mm/H3Mm/H1Mm/Media/IsDiscontinued/UpdatedAtUnix
+- v17 实际新增 5 字段(非 10): D3Mm/H2Mm/Mr1/OemBrand/BrandSortOrder
+  - UpdatedAtUnix 已存在(非新增)
+  - H3Mm 已存在(非新增)
+  - BrandSortOrder 来自 XrefOemBrand.SortOrder JOIN(非独立字段)
+**v18 修正方案**: spec.md 第十八章 18.4 V17-F1 修复方案的"现有字段(8)"改为"现有字段(12)","v17 新增(10)"改为"v17 新增(5)":
+```
+修正前(v17): ProductIndexDoc 现有字段(8) + v17 新增(10) = 18 字段
+修正后(v18): ProductIndexDoc 现有字段(12) + v17 新增(5) = 17 字段
+```
+**字段清单修正**(v18 权威):
+| # | 字段 | 来源 | 状态 |
+|---|------|------|------|
+| 1 | Id | Product.Id | 现有 |
+| 2 | OemNoNormalized | Product.OemNoNormalized | 现有 |
+| 3 | OemNoDisplay | Product.OemNoDisplay | 现有 |
+| 4 | Remark | Product.Remark | 现有 |
+| 5 | Type | Product.Type | 现有 |
+| 6 | D1Mm | Product.D1Mm | 现有 |
+| 7 | D2Mm | Product.D2Mm | 现有 |
+| 8 | H3Mm | Product.H3Mm | 现有 |
+| 9 | H1Mm | Product.H1Mm | 现有 |
+| 10 | Media | Product.Media | 现有 |
+| 11 | IsDiscontinued | Product.IsDiscontinued | 现有 |
+| 12 | UpdatedAtUnix | Product.UpdatedAt(SpecifyKind Utc) | 现有 |
+| 13 | D3Mm | Product.D3Mm | v17 新增 |
+| 14 | H2Mm | Product.H2Mm | v17 新增 |
+| 15 | Mr1 | Product.Mr1 | v17 新增 |
+| 16 | OemBrand | XrefOemBrand.Brand(LEFT JOIN) | v17 新增 |
+| 17 | BrandSortOrder | XrefOemBrand.SortOrder(LEFT JOIN) | v17 新增 |
+
+
+### V18-F5 [高] D17-7/D17-8 保留 keyset 分页(非 AsAsyncEnumerable)
+
+**v17 伪代码位置**: spec.md 第十八章 V17-F1(SyncSearchIndexAsync)
+**v17 错误**: 伪代码用 `query.AsAsyncEnumerable()` 一次性加载 1M 产品
+**真实代码事实**(经 Read 核实):
+- [EtlImportService.cs#L1140-L1149](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Etl/EtlImportService.cs#L1140-L1149): 现有 SyncSearchIndexAsync 用 keyset 分页
+  ```csharp
+  while (true)
+  {
+      ct.ThrowIfCancellationRequested();
+      var query = db.Products.AsNoTracking()
+          .Where(p => p.UpdatedAt >= importStartedAt);
+      if (lastId.HasValue) query = query.Where(p => p.Id > lastId.Value);
+      var batch = await query.OrderBy(p => p.Id).Take(batchSize).ToListAsync(ct);
+      if (batch.Count == 0) break;
+      lastId = batch[^1].Id;
+      // ... 构造 ProductIndexDoc + IndexAsync ...
+  }
+  ```
+- 1M 产品一次性加载内存溢出(EF Core 跟踪 + DTO 投影估算 ~2GB)
+- keyset 分页(每批 1000)内存稳定 ~50MB
+- v17 V17-F1 伪代码 AsAsyncEnumerable 仍会一次性枚举所有记录,虽有 await foreach 但底层 SQL 是单条 SELECT,无 LIMIT
+**v18 修正方案**: V17-F1 SyncSearchIndexAsync 伪代码必须保留现有 keyset 分页结构:
+```csharp
+// V17-F1 SyncSearchIndexAsync(V18-F5 修正: 保留 keyset 分页)
+// V18-F5: 必须 keyset 分页,非 AsAsyncEnumerable(1M 产品内存溢出)
+public async Task SyncSearchIndexAsync(DateTime importStartedAt, CancellationToken ct = default)
+{
+    const int batchSize = 1000;
+    long? lastId = null;
+    while (true)
+    {
+        ct.ThrowIfCancellationRequested();
+        var query = _db.Products.AsNoTracking()
+            .Where(p => p.UpdatedAt >= importStartedAt);
+        if (lastId.HasValue) query = query.Where(p => p.Id > lastId.Value);
+        
+        // V17-F1: LEFT JOIN xref_oem_brands 获取 OemBrand + BrandSortOrder
+        // V18-F5: keyset 分页(OrderBy Id + Take batchSize),非 AsAsyncEnumerable
+        var batch = await query
+            .OrderBy(p => p.Id)
+            .Take(batchSize)
+            .Select(p => new
+            {
+                p.Id, p.OemNoNormalized, p.OemNoDisplay, p.Remark, p.Type,
+                p.D1Mm, p.D2Mm, p.D3Mm, p.H1Mm, p.H2Mm, p.H3Mm, p.Media,
+                p.IsDiscontinued, p.UpdatedAt, p.Mr1,
+                Brand = (from x in _db.XrefOemBrands
+                         where x.Brand == p.OemBrand  // 现有 Product.OemBrand 字段
+                         select x.Brand).FirstOrDefault(),
+                BrandSortOrder = (from x in _db.XrefOemBrands
+                                  where x.Brand == p.OemBrand
+                                  select x.SortOrder).FirstOrDefault()
+            })
+            .ToListAsync(ct);
+        if (batch.Count == 0) break;
+        lastId = batch[^1].Id;
+        
+        // V18-F2: ProductIndexDoc 完整 17 字段构造(含 V18-F3 SpecifyKind)
+        var docs = batch.Select(p => new ProductIndexDoc(
+            p.Id, p.OemNoNormalized, p.OemNoDisplay ?? "", p.Remark, p.Type ?? "UNKNOWN",
+            p.D1Mm, p.D2Mm, p.H3Mm, p.H1Mm, p.Media, p.IsDiscontinued,
+            new DateTimeOffset(DateTime.SpecifyKind(p.UpdatedAt, DateTimeKind.Utc), TimeSpan.Zero).ToUnixTimeSeconds(),
+            p.D3Mm, p.H2Mm, p.Mr1, p.Brand, p.BrandSortOrder
+        )).ToList();
+        await _search.IndexAsync(docs, ct);
+    }
+}
+```
+**注**: V17-F1 必须先扩展 ProductIndexDoc record 定义到 17 字段(见 V18-F2)。
+
+### V18-F6 [高] S17-1 字段命名标注条件(以 Pre-Task 验证为准)
+
+**v17 伪代码位置**: spec.md 第十八章 V17-F8(BuildFilter)
+**v17 错误**: 伪代码假设字段命名用 PascalCase(Type/D1Mm/D2Mm/D3Mm/H1Mm/H2Mm/H3Mm/IsDiscontinued)
+**真实代码事实**(经 Read 核实):
+- [MeiliSearchProvider.cs#L75-L94](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Search/MeiliSearchProvider.cs#L75-L94): 现有 BuildFilter 用 snake_case
+  - L75: `type = "{...}"`
+  - L80: `d1_mm >= {lo} AND d1_mm <= {hi}`
+  - L85: `d2_mm >= {lo} AND d2_mm <= {hi}`
+  - L90: `h1_mm >= {lo} AND h1_mm <= {hi}`
+  - L94: `is_discontinued = false`
+- Meilisearch SDK 默认用 PascalCase(C# 属性名),但 Meilisearch 服务端 filter 表达式用字段名
+- 现有代码字段名是 snake_case,说明 IndexAsync 写入时 Meilisearch 自动转换(或 ProductIndexDoc 属性名被序列化为 snake_case)
+- v17 V17-F8 假设 PascalCase 会与现有 filter 不一致,导致新字段(D3Mm/H2Mm/H3Mm)filter 失效
+**v18 修正方案**: V17-F8 BuildFilter 伪代码字段命名标注条件,以 Pre-Task-V17-0-Verify 验证为准:
+```csharp
+// V17-F8 BuildFilter(V18-F6 修正: 字段命名条件化)
+// V18-F6: 字段命名以 Pre-Task-V17-0-Verify 验证为准
+//   - 若验证为 snake_case(现有代码一致): 用 type/d1_mm/d2_mm/d3_mm/h1_mm/h2_mm/h3_mm/is_discontinued
+//   - 若验证为 PascalCase(Meilisearch SDK 默认): 用 Type/D1Mm/D2Mm/D3Mm/H1Mm/H2Mm/H3Mm/IsDiscontinued
+// 现有 MeiliSearchProvider.cs L75/L80/L85/L90/L94 用 snake_case,v18 默认推荐 snake_case
+var filters = new List<string>();
+if (!string.IsNullOrWhiteSpace(req.Type))
+    filters.Add($"type = \"{EscapeFilter(req.Type)}\"");  // V18-F6: snake_case(与现有 L75 一致)
+if (req.D1.HasValue)
+{
+    var (lo, hi) = (req.D1.Value - req.Tolerance, req.D1.Value + req.Tolerance);
+    filters.Add($"d1_mm >= {lo} AND d1_mm <= {hi}");  // V18-F6: snake_case(与现有 L80 一致)
+}
+if (req.D2.HasValue)
+{
+    var (lo, hi) = (req.D2.Value - req.Tolerance, req.D2.Value + req.Tolerance);
+    filters.Add($"d2_mm >= {lo} AND d2_mm <= {hi}");  // V18-F6: snake_case(与现有 L85 一致)
+}
+// V17-F8 新增: D3 范围 filter
+if (req.D3.HasValue)
+{
+    var (lo, hi) = (req.D3.Value - req.Tolerance, req.D3.Value + req.Tolerance);
+    filters.Add($"d3_mm >= {lo} AND d3_mm <= {hi}");  // V18-F6: snake_case(与新字段一致)
+}
+if (req.H1.HasValue)
+{
+    var (lo, hi) = (req.H1.Value - req.Tolerance, req.H1.Value + req.Tolerance);
+    filters.Add($"h1_mm >= {lo} AND h1_mm <= {hi}");  // V18-F6: snake_case(与现有 L90 一致)
+}
+// V17-F8 新增: H2 范围 filter
+if (req.H2.HasValue)
+{
+    var (lo, hi) = (req.H2.Value - req.Tolerance, req.H2.Value + req.Tolerance);
+    filters.Add($"h2_mm >= {lo} AND h2_mm <= {hi}");  // V18-F6: snake_case
+}
+// V17-F8 新增: H3 范围 filter(现有 ProductIndexDoc 已含 H3Mm,但现有 BuildFilter 遗漏)
+if (req.H3.HasValue)
+{
+    var (lo, hi) = (req.H3.Value - req.Tolerance, req.H3.Value + req.Tolerance);
+    filters.Add($"h3_mm >= {lo} AND h3_mm <= {hi}");  // V18-F6: snake_case
+}
+if (!req.IncludeDiscontinued)
+    filters.Add("is_discontinued = false");  // V18-F6: snake_case(与现有 L94 一致)
+```
+**Pre-Task-V17-0-Verify 强化**(V18-F6 追加):
+- 验证步骤: 启动 Meilisearch + 写入 1 条 ProductIndexDoc + GET /indexes/products/documents/{id}
+- 验证字段名: 若返回 JSON 字段名为 snake_case → V17-F8 用 snake_case; 若为 PascalCase → V17-F8 用 PascalCase
+- 验证记录: 在 spec.md 第十八章 18.4 Pre-Task-V17-0-Verify 末尾追加字段命名方向验证结果
+
+### V18-F7 [中] S17-2 D7/D8 说明(现有也遗漏,v18 不新增)
+
+**v17 伪代码位置**: spec.md 第十八章 V17-F8(BuildFilter)
+**v17 错误**: V17-F8 只补充 D3/H2/H3,未处理 D7/D8
+**真实代码事实**(经 Read 核实):
+- [SearchRequest.cs#L6-L21](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Core/DTOs/SearchRequest.cs#L6-L21): SearchRequest 含 D7(螺纹)/D8 字段
+  ```csharp
+  public record SearchRequest(
+      string? Q, string? Type,
+      decimal? D1, decimal? D2, decimal? D3,
+      decimal? H1, decimal? H2, decimal? H3,
+      decimal? D7,                // 螺纹
+      decimal? D8,
+      decimal Tolerance = 5,
+      ...
+  );
+  ```
+- [MeiliSearchProvider.cs#L72-L95](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Search/MeiliSearchProvider.cs#L72-L95): 现有 BuildFilter 仅处理 Type/D1/D2/H1/IsDiscontinued,未处理 D7/D8
+- ProductIndexDoc 现有 12 字段不含 D7/D8(因 D7/D8 在 Product 实体是 string 类型 D7Thread/D8Thread,非 decimal)
+**v18 修正方案**: V17-F8 BuildFilter 不新增 D7/D8 filter,但 spec 必须明确说明:
+```
+V18-F7 说明:
+1. D7/D8 在 SearchRequest 是 decimal?,但在 Product 实体是 string(D7Thread/D8Thread)
+2. 现有 BuildFilter 遗漏 D7/D8 filter(既有 bug,非 v17 引入)
+3. v18 不修复 D7/D8 遗漏,因:
+   a. D7/D8 类型不匹配(decimal? vs string),需先统一类型
+   b. 修复需扩展 ProductIndexDoc 追加 D7Thread/D8Thread 字段
+   c. 属于功能增强,非衍生漏洞修复
+4. D7/D8 遗漏列为已知问题,在 v19+ 修订时处理
+```
+**已知问题记录**(v18 追加到 spec.md 第十八章 18.4 末尾):
+- D7/D8 filter 遗漏(现有 bug,v18 不修复,列 v19+ 处理)
+
+### V18-F8 [中] F16-1 端点无需 [Authorize] 特性
+
+**v17 伪代码位置**: spec.md 第十八章 V17-F17(reindex-all 端点)
+**v17 错误**: 伪代码假设端点用 `[Authorize]` + X-Admin-Token 校验
+**真实代码事实**(经 Read 核实):
+- [AdminEtlEndpoints.cs#L21-L147](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Endpoints/AdminEtlEndpoints.cs#L21-L147): 现有端点无 [Authorize] 特性
+  ```csharp
+  var group = app.MapGroup("/api/admin/etl").WithTags("AdminEtl").RequireRateLimiting("etl");
+  group.MapPost("/trigger", ...);
+  group.MapDelete("/task", ...);
+  group.MapPost("/pause", ...);
+  group.MapPost("/resume", ...);
+  ```
+- [DevTokenAuthMiddleware.cs#L75-L76](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Services/DevTokenAuthMiddleware.cs#L75-L76): 鉴权由中间件统一处理
+  ```csharp
+  _adminPrefixes = config.GetSection("Auth:AdminPaths").Get<string[]>()
+      ?? new[] { "/api/admin", "/api/etl" };
+  ```
+- v17 V17-F17 伪代码假设 [Authorize] + X-Admin-Token 会与现有中间件鉴权冲突(双重鉴权)
+**v18 修正方案**: V17-F17 reindex-all 端点伪代码无需 [Authorize] 特性,鉴权由 DevTokenAuthMiddleware 中间件统一处理:
+```csharp
+// V17-F17 reindex-all 端点(V18-F8 修正: 无需 [Authorize])
+// V18-F8: 鉴权由 DevTokenAuthMiddleware 中间件统一处理(/api/admin/* 前缀)
+//   - 现有 AdminEtlEndpoints.cs L21-L147 所有端点均无 [Authorize] 特性
+//   - 现有端点依赖 _adminPrefixes("/api/admin") 中间件拦截 X-Admin-Token
+//   - 若追加 [Authorize] 会与中间件双重鉴权,JWT 请求被中间件放行后又被 [Authorize] 拦截
+group.MapPost("/reindex-all", async (EtlImportService etl, CancellationToken ct) =>
+{
+    try
+    {
+        var result = await etl.ReindexAllAsync(ct);
+        return result.Success ? Results.Ok(result) : Results.BadRequest(result);
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem(detail: ex.Message, statusCode: 500);
+    }
+})
+.RequireRateLimiting("etl");  // V18-F8: 仅限流,无 [Authorize](鉴权由中间件处理)
+```
+**注**: V17-F17 伪代码若用 `.RequireAuthorization("Admin")` 也需删除,因会与中间件冲突。
+
+
+## 19.4 v18 前置任务(Pre-Task)
+
+> **目的**: 在实施 V18-F1~F8 修复方案前,通过代码现状验证确认伪代码与实际代码对齐,避免引入新衍生漏洞。
+
+### Pre-Task-V18-0 [必做] ProductIndexDoc record 完整字段验证
+
+**验证目标**: 确认 ProductIndexDoc record 当前 12 字段定义
+**验证步骤**:
+1. Read [ISearchProvider.cs#L32-L45](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Search/ISearchProvider.cs#L32-L45)
+2. 列出 record 所有字段(顺序): Id / OemNoNormalized / OemNoDisplay / Remark / Type / D1Mm / D2Mm / H3Mm / H1Mm / Media / IsDiscontinued / UpdatedAtUnix
+3. 确认字段数 = 12(非 v17 假设的 8)
+**通过条件**: 字段数 = 12,顺序与 V18-F4 字段清单一致
+**失败处理**: 若字段数 ≠ 12,停止 V18-F2 实施,先核对 record 定义
+
+### Pre-Task-V18-0-Verify [必做] Meilisearch 字段命名方向验证
+
+**验证目标**: 确认 Meilisearch 服务端字段命名方向(snake_case vs PascalCase)
+**验证步骤**:
+1. 启动 Meilisearch + API 服务
+2. 写入 1 条 ProductIndexDoc(含 D1Mm/H1Mm/IsDiscontinued 字段)
+3. GET /indexes/products/documents/{id}
+4. 检查返回 JSON 字段名:
+   - 若为 `d1_mm/h1_mm/is_discontinued` → snake_case
+   - 若为 `D1Mm/H1Mm/IsDiscontinued` → PascalCase
+5. 记录验证结果到 spec.md 第十八章 18.4 Pre-Task-V17-0-Verify 末尾
+**通过条件**: 字段命名方向确定,V17-F8 BuildFilter 伪代码用对应方向
+**失败处理**: 若 Meilisearch 不可用,默认用 snake_case(与现有代码 L75/L80/L85/L90/L94 一致)
+
+### Pre-Task-V18-1 [必做] EtlImportService.SyncSearchIndexAsync 现有实现验证
+
+**验证目标**: 确认现有 SyncSearchIndexAsync 用 keyset 分页 + SpecifyKind(Utc)
+**验证步骤**:
+1. Read [EtlImportService.cs#L1140-L1166](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Etl/EtlImportService.cs#L1140-L1166)
+2. 确认 keyset 分页结构: `while (true) { ... OrderBy(p => p.Id).Take(batchSize) ... lastId = batch[^1].Id ... }`
+3. 确认 DateTimeOffset 用 SpecifyKind(Utc): `new DateTimeOffset(DateTime.SpecifyKind(p.UpdatedAt, DateTimeKind.Utc), TimeSpan.Zero)`
+**通过条件**: keyset 分页 + SpecifyKind(Utc) 均存在
+**失败处理**: 若任一缺失,V18-F3/V18-F5 伪代码需调整
+
+### Pre-Task-V18-2 [必做] AdminEtlEndpoints 现有端点鉴权验证
+
+**验证目标**: 确认现有 AdminEtlEndpoints 所有端点无 [Authorize] 特性
+**验证步骤**:
+1. Read [AdminEtlEndpoints.cs#L21-L147](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Endpoints/AdminEtlEndpoints.cs#L21-L147)
+2. Grep `[Authorize]` 在 AdminEtlEndpoints.cs: 应零匹配
+3. 确认鉴权由 DevTokenAuthMiddleware 中间件处理(_adminPrefixes 含 "/api/admin")
+**通过条件**: AdminEtlEndpoints.cs 无 [Authorize] 特性
+**失败处理**: 若有 [Authorize],V18-F8 伪代码需保留 [Authorize]
+
+### Pre-Task-V18-3 [必做] SearchRequest D7/D8 字段验证
+
+**验证目标**: 确认 SearchRequest 含 D7/D8 字段(decimal? 类型)
+**验证步骤**:
+1. Read [SearchRequest.cs#L6-L21](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Core/DTOs/SearchRequest.cs#L6-L21)
+2. 确认 D7/D8 字段存在且类型为 decimal?
+3. 确认现有 BuildFilter 未处理 D7/D8(Read MeiliSearchProvider.cs L72-L95)
+**通过条件**: D7/D8 字段存在 + 现有 BuildFilter 遗漏
+**失败处理**: 若 D7/D8 不存在,V18-F7 说明需调整
+
+## 19.5 v18 vs v17 对比表
+
+| 维度 | v17(第八重核实机制) | v18(第九重核实机制) |
+|------|--------------------|--------------------|
+| 核实机制 | 8 重(代码存在性→字段名→API 签名→伪代码自洽性→运行时上下文→API 完整签名→方法/字段名零匹配→类归属+代码语义对齐) | **9 重**(v17 8 重 + record 完整字段验证 + 现有实现语义对齐) |
+| 核实机制盲区 | record 构造完整性 + 现有实现语义保留 | 无(v18 已补全) |
+| 衍生漏洞数 | 第十七轮审查发现 11 项(D17:8 / S17:2 / F16:1) | 待第十八轮审查验证 |
+| ProductIndexDoc 字段数假设 | 8 现有 + 10 新增 = 18(错误) | 12 现有 + 5 新增 = 17(正确,Read 验证) |
+| ReleaseActiveCts 签名 | 无参数调用(错误) | 传 cts 参数(正确,Read L590 验证) |
+| DateTimeOffset Kind | 未处理(错误,UTC+8 偏移) | SpecifyKind(Utc)(正确,Read L1165 验证) |
+| SyncSearchIndexAsync 分页 | AsAsyncEnumerable(错误,1M 内存溢出) | keyset 分页(正确,Read L1140-L1149 验证) |
+| BuildFilter 字段命名 | PascalCase 假设(错误风险) | snake_case(与现有代码一致,以 Pre-Task 验证为准) |
+| D7/D8 filter | 遗漏(未说明) | 明确说明现有也遗漏,v18 不新增(列 v19+ 处理) |
+| reindex-all 端点鉴权 | [Authorize] + X-Admin-Token(错误,双重鉴权) | 无 [Authorize](鉴权由中间件统一处理) |
+| 新增 Pre-Task | 0 个 | 4 个(Pre-Task-V18-0 / V18-0-Verify / V18-1 / V18-2 / V18-3) |
+| 修复方案数 | V17-F1~F18(18 项) | V18-F1~F8(8 项,针对 v17 衍生漏洞) |
+
+## 19.6 v18 文件清单
+
+### v18 实际新增代码文件(0 个)
+- v18 是 spec 修订版,不新增代码文件
+
+### v18 实际修改后端文件(0 个)
+- v18 仅修订 spec/tasks/checklist,不修改代码文件
+- 代码修改由 v17 任务清单(tasks.md v17)执行,v18 仅修正 v17 伪代码错误
+
+### v18 实际修改前端文件(0 个)
+- v18 不涉及前端文件修改
+
+### v18 纯文档修正(3 个文件)
+1. spec.md — 追加第十九章(19.1~19.8)
+2. tasks.md — 追加 v18 任务清单(4 个 Pre-Task + 8 个修复任务)
+3. checklist.md — 追加 v18 验证清单
+
+### v18 新增 migration(0 个)
+- v18 不涉及 DB schema 变更
+
+## 19.7 v18 第十八轮审查重点
+
+> **审查目标**: 验证 v18 修订是否真正消除 v17 衍生漏洞,且不引入新衍生漏洞。
+
+### D18 数据关联维度审查重点
+
+- [ ] D18-1: V18-F1 ReleaseActiveCts(cts) 传参是否正确(Read L590 签名 + L1114/L1367/L1817 调用点)
+- [ ] D18-2: V18-F2 ProductIndexDoc 构造是否提供完整 17 字段(12 现有 + 5 新增)
+- [ ] D18-3: V18-F2 ProductIndexDoc 字段顺序是否与 record 定义一致(Read L32-L45)
+- [ ] D18-4: V18-F3 DateTimeOffset 是否用 SpecifyKind(Utc)(Read L1165 现有实现)
+- [ ] D18-5: V18-F4 spec 字段数是否修正为 12 现有 + 5 新增(非 8 + 10)
+- [ ] D18-6: V18-F5 SyncSearchIndexAsync 是否保留 keyset 分页(非 AsAsyncEnumerable)
+- [ ] D18-7: V18-F5 keyset 分页是否正确(lastId + OrderBy(Id).Take(batchSize))
+- [ ] D18-8: V18-F5 LEFT JOIN xref_oem_brands 是否正确(用 Product.OemBrand 匹配 XrefOemBrand.Brand)
+- [ ] D18-9: V18-F5 BrandSortOrder 是否从 XrefOemBrand.SortOrder 获取(非独立字段)
+- [ ] D18-10: V18 伪代码是否引入新衍生漏洞(如 Product.OemBrand 字段是否存在)
+
+### S18 检索逻辑维度审查重点
+
+- [ ] S18-1: V18-F6 BuildFilter 字段命名是否标注条件(以 Pre-Task-V18-0-Verify 为准)
+- [ ] S18-2: V18-F6 snake_case 字段名是否与现有 L75/L80/L85/L90/L94 一致
+- [ ] S18-3: V18-F6 新增 D3/H2/H3 filter 是否正确(d3_mm/h2_mm/h3_mm)
+- [ ] S18-4: V18-F7 D7/D8 说明是否明确(现有遗漏,v18 不新增)
+- [ ] S18-5: V18-F7 D7/D8 类型不匹配说明是否准确(decimal? vs string D7Thread/D8Thread)
+- [ ] S18-6: V18 是否引入新检索逻辑漏洞(如 filter 优先级错误)
+
+### F17 前后端联动维度审查重点
+
+- [ ] F17-1: V18-F8 reindex-all 端点是否无 [Authorize] 特性
+- [ ] F17-2: V18-F8 鉴权是否由 DevTokenAuthMiddleware 中间件统一处理
+- [ ] F17-3: V18-F8 RequireRateLimiting("etl") 限流是否配置
+- [ ] F17-4: V18-F8 伪代码是否与现有端点风格一致(MapPost + lambda + Results.Ok/BadRequest/Problem)
+- [ ] F17-5: V18 是否引入新前后端联动漏洞(如错误响应格式不一致)
+
+### 第九重核实机制应用审查
+
+- [ ] N18-1: V18-F1~F8 每个修复方案是否基于 record 完整字段验证
+- [ ] N18-2: V18-F1~F8 每个修复方案是否基于现有实现语义对齐
+- [ ] N18-3: V18 伪代码是否引入新 record 字段遗漏
+- [ ] N18-4: V18 伪代码是否引入新现有实现语义偏离
+- [ ] N18-5: V18 是否真正实现"0 项 record 字段遗漏"+"0 项现有实现语义偏离"
+
+## 19.8 第十八轮循环终止条件
+
+- [ ] 第十八轮审查无任何新漏洞检出 → 完成 v18 修订,进入 v19 修订(如有新漏洞)或定稿
+- [ ] 第十八轮审查发现新漏洞 → 进入 v19 修订,继续迭代
+- [ ] 第十八轮审查发现 v18 仍有凭空假设 → 进入 v19 修订,加强核实机制(十重核实?)
+- [ ] 第十八轮审查重点: 第九重核实机制(record 完整字段验证 + 现有实现语义对齐验证)
+- [ ] 第十八轮审查重点: v17 衍生漏洞是否真正消除(Grep 验证 ReleaseActiveCts 签名/ProductIndexDoc 12 字段/SpecifyKind Utc/keyset 分页/snake_case 字段命名/无 [Authorize])
+- [ ] 第十八轮审查重点: V18-F2 ProductIndexDoc 17 字段构造顺序是否与扩展后 record 定义一致
+- [ ] 第十八轮审查重点: V18-F5 LEFT JOIN xref_oem_brands 是否产生 N+1 问题(EF Core 子查询展开)
+- [ ] 第十八轮审查重点: V18-F8 reindex-all 端点无 [Authorize] 是否正确(鉴权由中间件处理)
+- [ ] 持续迭代直到连续一轮审查无任何新漏洞检出
+- [ ] v18 引入"第九重核实机制"(record 完整字段验证 + 现有实现语义对齐验证)
+- [ ] v18 目标: 真正实现"0 项 record 字段遗漏"+"0 项现有实现语义偏离"+"0 项 v17 衍生漏洞"
+- [ ] v18 实际新增代码: 0 个(v18 仅修订 spec/tasks/checklist)
+- [ ] v18 实际修改后端文件: 0 个(代码修改由 v17 任务清单执行)
+- [ ] v18 实际修改前端文件: 0 个
+- [ ] v18 纯文档修正: 3 个文件(spec.md / tasks.md / checklist.md)
+- [ ] v18 新增 migration: 0 个
+- [ ] v18 已知问题: D7/D8 filter 遗漏(现有 bug,列 v19+ 处理)
+
