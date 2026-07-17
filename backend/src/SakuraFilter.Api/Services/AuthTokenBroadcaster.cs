@@ -20,6 +20,8 @@ public class AuthTokenBroadcaster : IHostedService, IAsyncDisposable
     private NpgsqlConnection? _listenConn;
     private CancellationTokenSource? _cts;
     private Task? _listenTask;
+    // 连续失败计数, 驱动指数退避重连 (5s -> 10s -> 20s -> 40s -> 60s 封顶)
+    private int _consecutiveFailures;
     public bool IsListening { get; private set; }
 
     public AuthTokenBroadcaster(IServiceProvider services, ILogger<AuthTokenBroadcaster> logger, IConfiguration config, IHostedServiceStatus hostedStatus)
@@ -75,6 +77,7 @@ public class AuthTokenBroadcaster : IHostedService, IAsyncDisposable
                     await cmd.ExecuteNonQueryAsync(ct);
                 }
                 IsListening = true;
+                _consecutiveFailures = 0;  // 重连成功重置计数, 让退避从 5s 重新开始
                 _logger.LogInformation("[AuthTokenBroadcaster] LISTEN auth_token_rotated 已启动");
 
                 _listenConn.Notification += async (sender, e) =>
@@ -133,11 +136,15 @@ public class AuthTokenBroadcaster : IHostedService, IAsyncDisposable
             catch (Exception ex)
             {
                 IsListening = false;
-                _logger.LogWarning(ex, "[AuthTokenBroadcaster] 连接失败, 5s 后重试");
+                // 指数退避: 5s -> 10s -> 20s -> 40s -> 60s 封顶
+                //   WHY: PG 长时间不可用时固定 5s 重连会产生大量失败日志, 退避减少无效重试
+                var delaySec = Math.Min(60, 5 * (int)Math.Pow(2, _consecutiveFailures));
+                _consecutiveFailures++;
+                _logger.LogWarning(ex, "[AuthTokenBroadcaster] 连接失败, {Delay}s 后重试 (第 {N} 次)", delaySec, _consecutiveFailures);
                 try { _listenConn?.Dispose(); } catch { }
                 // P2-5 修复: Dispose 后置 null, 防止外部访问已 Dispose 对象 (ObjectDisposedException)
                 _listenConn = null;
-                try { await Task.Delay(TimeSpan.FromSeconds(5), ct); } catch { return; }
+                try { await Task.Delay(TimeSpan.FromSeconds(delaySec), ct); } catch { return; }
             }
         }
         IsListening = false;
