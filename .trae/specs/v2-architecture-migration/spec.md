@@ -14089,6 +14089,7 @@ dotnet test backend/SakuraFilter.sln
 | bbe90f3 | fix(quality) | V24-F9 修复剩余 CS0414/CS1573/CS1587/CS0618 warning(8 个) |
 | fbe2ffe | fix(deps) | V24-F10 NuGet 版本对齐消除全部 warning(21→0) |
 | 879c8c5 | feat(auth) | V24-F11 AuthTokenBroadcaster 实现指数退避重连(5s→10s→20s→40s→60s 封顶) |
+| c3ee1c9 | feat(etl) | V24-F12 EtlProgressBroadcaster 实现指数退避重连(3s→6s→12s→24s→60s 封顶, 与 F11 对称) |
 
 ### V24-F9: 剩余 CS0414/CS1573/CS1587/CS0618 warning 修复 [代码质量]
 
@@ -14138,6 +14139,28 @@ dotnet test backend/SakuraFilter.sln
   - 第 4 次失败: 40s
   - 第 5+ 次失败: 60s(封顶)
 - 日志增加 `delaySec` 和失败次数,便于排查
+
+**验证**: dotnet build 0 warning;dotnet test 212/212 通过。
+
+### V24-F12: EtlProgressBroadcaster 指数退避重连 [可用性改进,与 F11 对称]
+
+**问题**: V24-F11 改进了 AuthTokenBroadcaster 的重连策略,但 EtlProgressBroadcaster 仍是固定 3s 重连(L93)。两个 PG LISTEN 广播器应保持一致的退避策略。
+
+**修复方案**: 应用与 F11 相同的指数退避模式,但 baseline 保持 3s(原值):
+- `delaySec` 提到 try 块外声明,默认 3(正常断开用短延迟快速恢复)
+- catch (Exception) 块内重新赋值 `delaySec = Math.Min(60, 3 * 2^failures)`
+- 重连成功时 `_consecutiveFailures = 0`
+- Delay 秒数:
+  - 第 1 次失败: 3s
+  - 第 2 次失败: 6s
+  - 第 3 次失败: 12s
+  - 第 4 次失败: 24s
+  - 第 5+ 次失败: 60s(封顶)
+- 日志增加 `delaySec` 和失败次数
+
+**与 F11 的差异**:
+- F11 (AuthToken): baseline 5s,无论正常/异常都走指数退避
+- F12 (EtlProgress): baseline 3s,正常断开保持 3s(快速恢复),异常时才指数退避
 
 **验证**: dotnet build 0 warning;dotnet test 212/212 通过。
 
