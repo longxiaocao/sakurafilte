@@ -11716,3 +11716,78 @@ public record ReindexResult
 - [ ] v17 纯文档修正: 3 个文件(spec.md / tasks.md / checklist.md)
 - [ ] v17 新增 migration: 0 个(v17 不涉及 DB schema 变更,CrossReference 不新增 IsPrimary 字段,改用 OrderBy(Id) 业务约定)
 
+---
+
+# 第十九章 v18 修订 — 第九重核实机制(record 完整字段验证 + 现有实现语义对齐)
+
+> 基于第十七轮三维度并行深度审查(D17:8 / S17:2 / F16:1,共 11 项衍生漏洞),v18 引入第九重核实机制(record 完整字段验证 + 现有实现语义对齐),解决 v17 伪代码在 ProductIndexDoc record 构造、DateTimeOffset Kind 处理、ReleaseActiveCts 签名、字段命名方向等细节上的凭空假设。
+
+## 19.1 第十七轮审查结果摘要(11 项衍生漏洞)
+
+### D17 数据关联维度(8 项)
+
+| 编号 | 问题 | 危险等级 | v17 伪代码 | 实际代码 |
+|------|------|---------|-----------|---------|
+| D17-1 | V17-F10 ReleaseActiveCts() 无参数调用错误 | 高 | `ReleaseActiveCts()` | EtlImportService.cs L590 签名 `private void ReleaseActiveCts(CancellationTokenSource cts)`,需传 cts 参数。现有 L1114/L1367/L1817 都用 `ReleaseActiveCts(cts)` |
+| D17-2 | V17-F1 ProductIndexDoc 构造缺失 OemNoNormalized | 高 | 未引用 OemNoNormalized | ISearchProvider.cs L34 `string OemNoNormalized` 是 record 第 2 参数,构造必须提供 |
+| D17-3 | V17-F1 ProductIndexDoc 构造缺失 Media | 高 | 未引用 Media | ISearchProvider.cs L42 `string? Media` 是 record 第 10 参数,构造必须提供 |
+| D17-4 | V17-F3 DateTimeOffset 未处理 Kind | 高 | `new DateTimeOffset(p.UpdatedAt).ToUnixTimeSeconds()` | 现有 EtlImportService.cs L1165 用 `new DateTimeOffset(DateTime.SpecifyKind(p.UpdatedAt, DateTimeKind.Utc), TimeSpan.Zero)`,因 Npgsql EnableLegacyTimestampBehavior 返回 Kind=Local,L1161-L1164 注释明确说明 |
+| D17-5 | V17 spec 18.4 "现有字段(8)" 错误 | 中 | 假设 8 字段 | 实际 12 字段: Id/OemNoNormalized/OemNoDisplay/Remark/Type/D1Mm/D2Mm/H3Mm/H1Mm/Media/IsDiscontinued/UpdatedAtUnix |
+| D17-6 | V17 spec 18.4 "v17 新增(10)" 错误 | 中 | 假设新增 10 字段 | 实际新增 5 个: D3Mm/H2Mm/Mr1/OemBrand/BrandSortOrder(UpdatedAtUnix/H3Mm 已存在) |
+| D17-7 | V17-F1 AsAsyncEnumerable 与 keyset 分页不一致 | 中 | `query.AsAsyncEnumerable()` | 现有 L1140-L1149 用 keyset 分页(lastId + OrderBy(p.Id).Take(batchSize)),AsAsyncEnumerable 一次性加载 1M 产品内存溢出 |
+| D17-8 | V17-F1 Join 子查询未保留 keyset 分页 | 高 | `from p in _db.Products.AsNoTracking() where p.UpdatedAt >= importStartedAt` | 现有 L1146-L1149 `db.Products.AsNoTracking().Where(p => p.UpdatedAt >= importStartedAt)` + `OrderBy(p => p.Id).Take(batchSize)` 分批 |
+
+### S17 检索逻辑维度(2 项)
+
+| 编号 | 问题 | 危险等级 | 根因 |
+|------|------|---------|------|
+| S17-1 | V17-F8 字段命名假设 PascalCase | 高 | 现有 MeiliSearchProvider.cs L75/L80/L85/L90/L94 用 snake_case(type/d1_mm/d2_mm/h1_mm/is_discontinued),V17-F8 假设 PascalCase(Type/D1Mm/D2Mm/D3Mm/H1Mm/H2Mm/H3Mm/IsDiscontinued)。若 Pre-Task-V17-0-Verify 验证为 snake_case 则 V17-F8 全部错误 |
+| S17-2 | V17-F8 遗漏 D7/D8 范围 filter | 中 | SearchRequest.cs L15-L16 含 D7(螺纹)/D8 字段,V17-F8 只补充 D3/H2/H3,未处理 D7/D8(现有代码也遗漏) |
+
+### F16 前后端联动维度(1 项)
+
+| 编号 | 问题 | 危险等级 | 根因 |
+|------|------|---------|------|
+| F16-1 | AdminEtlEndpoints 现有端点无 [Authorize] 特性 | 中 | AdminEtlEndpoints.cs L24/L112/L131/L147 现有端点无 [Authorize],鉴权由 DevTokenAuthMiddleware 中间件统一处理。V17-F17 伪代码假设 [Authorize] + X-Admin-Token,但实际端点无需 [Authorize] |
+
+## 19.2 v18 核心创新 — 第九重核实机制(record 完整字段验证 + 现有实现语义对齐)
+
+### 第九重核实机制定义
+
+v17 第八重核实机制(类归属验证 + 代码语义对齐)存在盲区:
+1. **record 构造完整性**: 伪代码构造 record 时未读取 record 定义确认完整字段列表,导致缺失字段(如 ProductIndexDoc 缺失 OemNoNormalized/Media)。
+2. **现有实现语义保留**: 伪代码改写现有方法时,未保留现有实现的关键逻辑(如 DateTimeOffset Kind 处理、keyset 分页)。
+
+v18 引入第九重核实机制,在第八重基础上追加:
+
+1. **record 完整字段验证**: 构造 record 前,Read record 定义,列出所有字段(含顺序),伪代码必须提供所有参数。
+2. **现有实现语义对齐**: 改写现有方法前,Read 现有实现,识别关键逻辑(Kind 处理/分页/锁/事务),伪代码必须保留这些逻辑。
+
+### 九重核实机制完整定义(v18)
+
+| 重数 | 名称 | 验证内容 | 工具 |
+|------|------|---------|------|
+| 第一重 | 代码存在性 | 类/方法是否存在 | Grep |
+| 第二重 | 字段名 | 字段名是否存在 | Grep |
+| 第三重 | API 签名 | 方法签名与代码一致 | Read |
+| 第四重 | 伪代码自洽性 | 伪代码逻辑无矛盾 | 人工审查 |
+| 第五重 | 运行时上下文自洽性 | 锁/事务/取消三层互斥自洽 | 人工审查 |
+| 第六重 | API 完整签名比对 | 参数类型/返回值/泛型一致 | Read |
+| 第七重 | 方法/字段名 Grep 零匹配 | 引用的方法/字段名实际存在 | Grep 零匹配验证 |
+| 第八重 | 类归属 + 代码语义对齐 | 字段所属类正确 + 方法不存在时语义已实现 | Grep + Read 类块范围 |
+| **第九重** | **record 完整字段 + 现有实现语义** | **record 构造提供所有字段 + 保留现有实现关键逻辑** | **Read record 定义 + Read 现有实现** |
+
+### v18 第九重核实机制验证结果(针对 v17 衍生漏洞)
+
+| v17 衍生漏洞 | 第八重结果 | 第九重验证 | v18 修复方案 |
+|------------|-----------|-----------|------------|
+| D17-1 ReleaseActiveCts() 无参数 | Grep 有匹配(L590) | **签名错误**: Read L590 确认需 `CancellationTokenSource cts` 参数 | V18-F1: 改为 ReleaseActiveCts(cts) |
+| D17-2 ProductIndexDoc 缺 OemNoNormalized | Grep 有匹配(L34) | **record 字段缺失**: Read L32-L45 确认 12 字段,伪代码缺失 OemNoNormalized | V18-F2: 补充 OemNoNormalized 字段 |
+| D17-3 ProductIndexDoc 缺 Media | Grep 有匹配(L42) | **record 字段缺失**: Read L32-L45 确认缺失 Media | V18-F2: 补充 Media 字段 |
+| D17-4 DateTimeOffset Kind | Grep 有匹配 | **现有实现语义未保留**: Read L1165 确认用 SpecifyKind(Utc) | V18-F3: 用 SpecifyKind(Utc) |
+| D17-5/D17-6 spec 字段数错误 | - | **record 定义未读取**: Read L32-L45 确认实际 12 字段 | V18-F4: 修正 spec 字段数 |
+| D17-7/D17-8 AsAsyncEnumerable vs keyset | - | **现有实现语义未保留**: Read L1140-L1149 确认 keyset 分页 | V18-F5: 保留 keyset 分页 |
+| S17-1 字段命名 PascalCase 假设 | - | **现有实现未读取**: Read L75/L80 确认 snake_case | V18-F6: 伪代码标注条件,以 Pre-Task 验证为准 |
+| S17-2 D7/D8 遗漏 | - | **SearchRequest 未完整读取**: Read L6-L21 确认含 D7/D8 | V18-F7: 说明现有也遗漏,v18 不新增 |
+| F16-1 [Authorize] 假设 | - | **现有端点未读取**: Read L24/L112 确认无 [Authorize] | V18-F8: 端点无需 [Authorize],鉴权由中间件处理 |
+
