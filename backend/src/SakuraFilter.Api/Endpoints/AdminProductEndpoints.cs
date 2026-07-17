@@ -113,7 +113,8 @@ public static class AdminProductEndpoints
             try
             {
                 var p = await svc.GetByIdAsync(id, ct);
-                var imgs = await imgSvc.ListAsync(id, ct);
+                // V2: imgSvc.ListAsync 改为按 mr1 查询 (Task 3.2.1 签名变更)
+                var imgs = string.IsNullOrEmpty(p.Mr1) ? new List<ProductImageInfo>() : await imgSvc.ListAsync(p.Mr1, ct);
                 return Results.Ok(p with { Images = imgs });
             }
             catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
@@ -182,11 +183,19 @@ public static class AdminProductEndpoints
         })
         .WithSummary("后台恢复已下架产品 (is_discontinued=false)").WithName("AdminRestoreProduct");
 
-        // 上传产品图
-        group.MapPost("/{id:long}/images/{slot:int}", async (
-            long id, int slot, HttpRequest req, AdminProductImageService svc, HttpContext ctx, CancellationToken ct) =>
+        // V2 Task 3.2.5/3.2.8: 旧端点 POST /{id}/images/{slot} 拆为两个分层端点
+        //   - POST /{mr1}/images/primary?oemNo3=...  (主图, slot=1)
+        //   - POST /{mr1}/images/detail?slot=2       (详情图, slot 2-6)
+        //   WHY 拆分: 主图按 OEM 3 命名 + 唯一约束 (OEM 3 维度), 详情图按 MR.1 共享 + 唯一约束 (MR.1 + slot 维度)
+        //             两者校验逻辑差异大, 拆分后签名清晰, 前端 UI 也分层
+
+        // V2 主图上传
+        group.MapPost("/{mr1}/images/primary", async (
+            string mr1, [FromQuery(Name = "oemNo3")] string oemNo3,
+            HttpRequest req, AdminProductImageService svc, HttpContext ctx, CancellationToken ct) =>
         {
-            if (slot < 1 || slot > 6) return Results.BadRequest(new { error = "slot 必须在 1-6 之间" });
+            if (string.IsNullOrWhiteSpace(oemNo3))
+                return Results.BadRequest(new { error = "oemNo3 参数必填 (主图关联的 OEM 3)" });
             if (!req.HasFormContentType) return Results.BadRequest(new { error = "需 multipart/form-data" });
             var form = await req.ReadFormAsync(ct);
             var file = form.Files.GetFile("file");
@@ -195,11 +204,11 @@ public static class AdminProductEndpoints
             try
             {
                 using var stream = file.OpenReadStream();
-                var img = await svc.UploadAsync(id, (short)slot, stream, file.ContentType ?? "image/jpeg", user, ct);
+                // V2: slot=1 固定 (主图), imageRole="primary"
+                var img = await svc.UploadAsync(mr1, "primary", oemNo3, 1, stream, file.ContentType ?? "image/jpeg", user, ct);
                 return Results.Ok(img);
             }
             catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
-            catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (InvalidOperationException ex) when (ex.Message.Contains("图片超过最大尺寸") || ex.Message.Contains("超过最大"))
             {
                 return Results.Problem(
@@ -209,26 +218,64 @@ public static class AdminProductEndpoints
             }
             catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
         })
-        .WithName("AdminUploadProductImage")
+        .WithSummary("V2 上传主图 (slot=1, 按 OEM 3 命名, 唯一约束 uq_product_images_primary)")
+        .WithName("AdminUploadPrimaryImage")
         .DisableAntiforgery();
 
-        // 删除产品图
-        group.MapDelete("/{id:long}/images/{slot:int}", async (long id, int slot, AdminProductImageService svc, HttpContext ctx, CancellationToken ct) =>
+        // V2 详情图上传
+        group.MapPost("/{mr1}/images/detail", async (
+            string mr1, [FromQuery(Name = "slot")] int slot,
+            HttpRequest req, AdminProductImageService svc, HttpContext ctx, CancellationToken ct) =>
         {
-            if (slot < 1 || slot > 6) return Results.BadRequest(new { error = "slot 必须在 1-6 之间" });
+            if (slot < 2 || slot > 6) return Results.BadRequest(new { error = "详情图 slot 必须在 2-6 之间" });
+            if (!req.HasFormContentType) return Results.BadRequest(new { error = "需 multipart/form-data" });
+            var form = await req.ReadFormAsync(ct);
+            var file = form.Files.GetFile("file");
+            if (file == null) return Results.BadRequest(new { error = "缺 file 字段" });
+            var user = ResolveUser(req, ctx);
             try
             {
-                await svc.DeleteAsync(id, (short)slot, ct);
-                return Results.Ok(new { productId = id, slot, deleted = true });
+                using var stream = file.OpenReadStream();
+                // V2: imageRole="detail", slot 2-6
+                var img = await svc.UploadAsync(mr1, "detail", null, (short)slot, stream, file.ContentType ?? "image/jpeg", user, ct);
+                return Results.Ok(img);
             }
             catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
-            catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+            catch (InvalidOperationException ex) when (ex.Message.Contains("图片超过最大尺寸") || ex.Message.Contains("超过最大"))
+            {
+                return Results.Problem(
+                    detail: ex.Message,
+                    statusCode: StatusCodes.Status413RequestEntityTooLarge,
+                    title: "Payload Too Large");
+            }
+            catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+        })
+        .WithSummary("V2 上传详情图 (slot 2-6, 按 MR.1 命名, 唯一约束 uq_product_images_detail_slot)")
+        .WithName("AdminUploadDetailImage")
+        .DisableAntiforgery();
+
+        // V2 删除产品图 (按 mr1 + imageRole + slot)
+        group.MapDelete("/{mr1}/images/{imageRole}/{slot:int}", async (
+            string mr1, string imageRole, int slot,
+            AdminProductImageService svc, HttpContext ctx, CancellationToken ct) =>
+        {
+            if (imageRole != "primary" && imageRole != "detail")
+                return Results.BadRequest(new { error = "imageRole 必须为 primary 或 detail" });
+            if (imageRole == "primary" && slot != 1) return Results.BadRequest(new { error = "主图 slot 必须为 1" });
+            if (imageRole == "detail" && (slot < 2 || slot > 6)) return Results.BadRequest(new { error = "详情图 slot 必须在 2-6 之间" });
+            try
+            {
+                await svc.DeleteAsync(mr1, imageRole, (short)slot, ct);
+                return Results.Ok(new { mr1, imageRole, slot, deleted = true });
+            }
+            catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+            catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
         })
         .WithName("AdminDeleteProductImage");
 
-        // 列出产品图
-        group.MapGet("/{id:long}/images", async (long id, AdminProductImageService svc, CancellationToken ct) =>
-            Results.Ok(await svc.ListAsync(id, ct)))
+        // V2 列出产品图 (按 mr1)
+        group.MapGet("/{mr1}/images", async (string mr1, AdminProductImageService svc, CancellationToken ct) =>
+            Results.Ok(await svc.ListAsync(mr1, ct)))
         .WithName("AdminListProductImages");
 
         // 变更历史

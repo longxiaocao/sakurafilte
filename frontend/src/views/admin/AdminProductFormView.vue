@@ -93,7 +93,13 @@ const saving = ref(false)
 const uploading = ref(false)
 const removing = ref(false)
 
-const images = ref<{ slot: number; imageKey: string; imageUrl: string }[]>([])
+// V2 Task 3.3.1: 图片分层 (主图按 OEM 3 + 详情图按 MR.1 共享)
+//   images[0] 为主图 (slot=1, imageRole=primary)
+//   images[1..5] 为详情图 (slot=2-6, imageRole=detail)
+//   WHY 复用数组: 旧 UI 6 slot 网格布局保留, 仅语义分层
+const images = ref<Record<number, { slot: number; imageKey: string; imageUrl: string; oemNo3?: string | null; imageRole?: string }>>({})
+// V2: 主图上传时选择的 OEM 3 (从 form.crossReferences 已保存的 oemList 中选)
+const selectedOemNo3ForPrimary = ref<string>('')
 
 // ===== P5.1: 包装/母箱体积自动计算 =====
 //   L * W * H / 1e9 m³ (mm → m → m³)
@@ -146,7 +152,23 @@ async function load() {
     })
     form.crossReferences = p.crossReferences.map((x) => ({ ...x }))
     form.machineApplications = p.machineApplications.map((m) => ({ ...m }))
-    images.value = p.images || []
+    // V2 Task 3.3.1: images 改为 Record<slot, img> 结构 (主图 slot=1, 详情图 slot=2-6)
+    images.value = {}
+    if (Array.isArray(p.images)) {
+      for (const img of p.images) {
+        if (img && img.slot) {
+          images.value[img.slot] = {
+            slot: img.slot,
+            imageKey: img.imageKey,
+            imageUrl: img.imageUrl,
+            oemNo3: (img as any).oemNo3 ?? null,
+            imageRole: (img as any).imageRole ?? (img.slot === 1 ? 'primary' : 'detail')
+          }
+        }
+      }
+    }
+    // V2: 默认选中第一个上架 OEM 3 作为主图关联
+    selectedOemNo3ForPrimary.value = form.crossReferences.find((x: any) => x.oemNo3)?.oemNo3 || ''
     // E2E BD.3 修复 v2: 保存 GET 时的 RowVersion (xmin), PUT 时带回实现乐观锁
     rowVersion.value = p.rowVersion ?? 0
   } catch (e: any) {} finally {
@@ -294,25 +316,29 @@ async function queryEngineType(q: string, cb: (items: { value: string; engineTyp
   } catch { cb([]) }
 }
 
-async function uploadImage(slot: number, e: Event) {
-  // Day 9.3: 前端 slot 范围校验, 与后端 AdminProductImageService.UploadAsync 一致
-  if (slot < 1 || slot > 6 || !Number.isInteger(slot)) {
-    ElMessage.error(t('common.field.invalid_slot') + slot + t('common.field.slot_must_be_1_to_6'))
-    return
-  }
+// V2 Task 3.3.2: 上传主图 (slot=1, 需选 OEM 3)
+async function uploadPrimaryImage(e: Event) {
   const input = e.target as HTMLInputElement
   const file = input.files?.[0]
   if (!file) return
   if (!isEdit.value) {
-    ElMessage.warning(t('admin.productformview.warning.please_first_save_product_then'))
+    ElMessage.warning('请先保存产品后再上传图片')
+    return
+  }
+  if (!form.mr1) {
+    ElMessage.error('MR.1 缺失, 无法上传图片')
+    return
+  }
+  if (!selectedOemNo3ForPrimary.value) {
+    ElMessage.error('请先选择主图关联的 OEM 3')
     return
   }
   if (uploading.value) return
   uploading.value = true
   try {
-    const r = await imageApi.upload(productId.value, slot, file)
-    ElMessage.success(t('admin.productformview.string.slot_slot_uploaded', { slot }))
-    images.value[slot - 1] = r
+    const r = await imageApi.uploadPrimary(form.mr1, selectedOemNo3ForPrimary.value, file)
+    ElMessage.success('主图上传成功')
+    images.value[1] = { slot: 1, imageKey: r.imageKey, imageUrl: r.imageUrl, oemNo3: r.oemNo3, imageRole: 'primary' }
   } catch {
     // 已被拦截器
   } finally {
@@ -321,18 +347,64 @@ async function uploadImage(slot: number, e: Event) {
   input.value = ''
 }
 
-async function removeImage(slot: number) {
-  // Day 9.3: 前端 slot 范围校验
-  if (slot < 1 || slot > 6 || !Number.isInteger(slot)) {
-    ElMessage.error(t('common.field.invalid_slot') + slot + t('common.field.slot_must_be_1_to_6'))
+// V2 Task 3.3.2: 上传详情图 (slot 2-6, 按 MR.1 命名)
+async function uploadDetailImage(slot: number, e: Event) {
+  // V2 Task 3.3.2: 前端校验 slot 必须 2-6
+  if (slot < 2 || slot > 6 || !Number.isInteger(slot)) {
+    ElMessage.error(`详情图 slot 必须在 2-6 之间 (当前 ${slot})`)
     return
   }
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  if (!isEdit.value) {
+    ElMessage.warning('请先保存产品后再上传图片')
+    return
+  }
+  if (!form.mr1) {
+    ElMessage.error('MR.1 缺失, 无法上传图片')
+    return
+  }
+  if (uploading.value) return
+  uploading.value = true
+  try {
+    const r = await imageApi.uploadDetail(form.mr1, slot, file)
+    ElMessage.success(`详情图 slot ${slot} 上传成功`)
+    images.value[slot] = { slot, imageKey: r.imageKey, imageUrl: r.imageUrl, oemNo3: null, imageRole: 'detail' }
+  } catch {
+    // 已被拦截器
+  } finally {
+    uploading.value = false
+  }
+  input.value = ''
+}
+
+// V2: 删除主图
+async function removePrimaryImage() {
   if (removing.value) return
+  if (!form.mr1) return
   removing.value = true
   try {
-    await imageApi.remove(productId.value, slot)
-    images.value[slot - 1] = undefined as any
-    ElMessage.success(t('admin.productformview.string.slot_slot_deleted', { slot }))
+    await imageApi.remove(form.mr1, 'primary', 1)
+    delete images.value[1]
+    ElMessage.success('主图已删除')
+  } catch {
+    // 已被拦截器
+  } finally {
+    removing.value = false
+  }
+}
+
+// V2: 删除详情图
+async function removeDetailImage(slot: number) {
+  if (slot < 2 || slot > 6) return
+  if (removing.value) return
+  if (!form.mr1) return
+  removing.value = true
+  try {
+    await imageApi.remove(form.mr1, 'detail', slot)
+    delete images.value[slot]
+    ElMessage.success(`详情图 slot ${slot} 已删除`)
   } catch {
     // 已被拦截器
   } finally {
@@ -566,17 +638,51 @@ onBeforeUnmount(() => {
           <el-button @click="addApp" size="small">+ 添加车型</el-button>
         </el-collapse-item>
 
-        <!-- 分区 8: 图片 (仅编辑) -->
+        <!-- V2 Task 3.3.1: 分区 8 图片 (主图区 + 详情图区分层, 仅编辑) -->
         <el-collapse-item v-if="isEdit" :title="t('admin.productformview.title.image')" name="8">
-          <div class="grid grid-cols-3 gap-3">
-            <div v-for="slot in 6" :key="slot" class="hairline p-2">
-              <div class="text-xs text-muted mb-1">Slot {{ slot }}</div>
-              <div v-if="images[slot - 1]" class="mb-2">
-                <img :src="images[slot - 1].imageUrl" class="w-full h-32 object-contain bg-[var(--color-bg-hover)]" />
-                <el-button text type="danger" size="small" @click="removeImage(slot)" class="mt-1 w-full">删除</el-button>
-              </div>
-              <div v-else>
-                <input type="file" accept="image/*" @change="uploadImage(slot, $event)" class="text-xs" />
+          <!-- 主图区: 按 OEM 3 命名, slot=1, 同 OEM 3 仅 1 张 -->
+          <div class="mb-4 hairline p-3">
+            <div class="text-sm font-medium mb-2">主图 (按 OEM 3 命名, slot=1)</div>
+            <div class="flex items-center gap-2 mb-2">
+              <span class="text-xs text-muted">关联 OEM 3:</span>
+              <el-select
+                v-model="selectedOemNo3ForPrimary"
+                placeholder="选择 OEM 3"
+                size="small"
+                style="width: 240px"
+                filterable
+              >
+                <el-option
+                  v-for="x in form.crossReferences.filter((x: any) => x.oemNo3)"
+                  :key="x.oemNo3"
+                  :label="`${x.oemBrand || ''} - ${x.oemNo3}`"
+                  :value="x.oemNo3"
+                />
+              </el-select>
+            </div>
+            <div v-if="images[1]" class="mb-2">
+              <img :src="images[1].imageUrl" class="w-full h-32 object-contain bg-[var(--color-bg-hover)]" />
+              <div class="text-xs text-muted mt-1">OEM 3: {{ images[1].oemNo3 || '-' }}</div>
+              <el-button text type="danger" size="small" @click="removePrimaryImage" class="mt-1 w-full">删除主图</el-button>
+            </div>
+            <div v-else>
+              <input type="file" accept="image/*" @change="uploadPrimaryImage" class="text-xs" />
+            </div>
+          </div>
+
+          <!-- 详情图区: 按 MR.1 共享, slot 2-6 -->
+          <div class="hairline p-3">
+            <div class="text-sm font-medium mb-2">详情图 (按 MR.1 共享, slot 2-6)</div>
+            <div class="grid grid-cols-3 gap-3">
+              <div v-for="slot in [2, 3, 4, 5, 6]" :key="slot" class="hairline p-2">
+                <div class="text-xs text-muted mb-1">Slot {{ slot }}</div>
+                <div v-if="images[slot]" class="mb-2">
+                  <img :src="images[slot].imageUrl" class="w-full h-24 object-contain bg-[var(--color-bg-hover)]" />
+                  <el-button text type="danger" size="small" @click="removeDetailImage(slot)" class="mt-1 w-full">删除</el-button>
+                </div>
+                <div v-else>
+                  <input type="file" accept="image/*" @change="uploadDetailImage(slot, $event)" class="text-xs" />
+                </div>
               </div>
             </div>
           </div>

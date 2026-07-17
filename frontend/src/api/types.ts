@@ -692,6 +692,24 @@ export interface SiblingOem3Item {
   brandSortOrder: number | null  // null 表示品牌已软删除, 排末尾
 }
 
+// ===== V2 Task 3.3.4: 产品图片 (含 oemNo3 / imageRole 分层字段) =====
+export interface ProductImageV2 {
+  id: number
+  productId: number
+  slot: number  // primary=1, detail=2-6
+  imageKey: string
+  imageUrl: string
+  sizeBytes: number | null
+  contentType: string | null
+  width: number | null
+  height: number | null
+  isPrimary: boolean
+  uploadedAt: string
+  uploadedBy: string | null
+  oemNo3: string | null  // V2: 主图关联的 OEM 3 (detail 为 null)
+  imageRole: string  // V2: "primary" / "detail"
+}
+
 // ===== Day 11 改进 1: 自动生成的 Request DTO (re-export) =====
 // WHY: 手工 types.ts 历史遗漏 38 个 Request/Reorder/Input DTO,
 //   导致前端调用 dictApi.machines.create() 等接口时参数无类型保护 (BUG B 根因).

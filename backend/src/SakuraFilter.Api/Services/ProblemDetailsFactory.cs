@@ -45,6 +45,13 @@ public static class ProblemDetailsFactory
     private const string V2SearchPageTooDeep = "SEARCH_PAGE_TOO_DEEP";
     private const string V2CursorInvalid = "CURSOR_INVALID";
     private const string V2CursorExpired = "CURSOR_EXPIRED";
+    // V2 Task 3.2: 图片分层上传错误码
+    private const string V2ImageRoleSlotMismatch = "IMAGE_ROLE_SLOT_MISMATCH";
+    private const string V2ImageDetailSlotInvalid = "IMAGE_DETAIL_SLOT_INVALID";
+    private const string V2ImagePrimaryDuplicate = "IMAGE_PRIMARY_DUPLICATE";
+    private const string V2ImageDetailSlotDuplicate = "IMAGE_DETAIL_SLOT_DUPLICATE";
+    private const string V2Mr1NotFound = "MR1_NOT_FOUND";
+    private const string V2Oem3NotFound = "OEM3_NOT_FOUND";
 
     /// <summary>
     /// 把异常类型映射为 HTTP 状态码 (Day 8.4 MVP 范围)
@@ -199,6 +206,13 @@ public static class ProblemDetailsFactory
         if (message.Contains("SEARCH_PAGE_TOO_DEEP")) return V2SearchPageTooDeep;
         if (message.Contains("CURSOR_INVALID")) return V2CursorInvalid;
         if (message.Contains("CURSOR_EXPIRED")) return V2CursorExpired;
+        // V2 Task 3.2: 图片分层上传错误码
+        if (message.Contains("IMAGE_ROLE_SLOT_MISMATCH")) return V2ImageRoleSlotMismatch;
+        if (message.Contains("IMAGE_DETAIL_SLOT_INVALID")) return V2ImageDetailSlotInvalid;
+        if (message.Contains("IMAGE_PRIMARY_DUPLICATE")) return V2ImagePrimaryDuplicate;
+        if (message.Contains("IMAGE_DETAIL_SLOT_DUPLICATE")) return V2ImageDetailSlotDuplicate;
+        if (message.Contains("MR1_NOT_FOUND")) return V2Mr1NotFound;
+        if (message.Contains("OEM3_NOT_FOUND")) return V2Oem3NotFound;
         // 向后兼容: 未匹配 V2 错误码时,根据 HTTP 语义返回旧错误码
         return ErrValidationFailed;
     }

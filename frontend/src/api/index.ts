@@ -352,22 +352,39 @@ export const adminXrefApi = {
   }
 }
 
-// ===== 图片管理 =====
+// ===== 图片管理 (V2 Task 3.3.3: 主图/详情图分层) =====
 export const imageApi = {
-  list(productId: number): Promise<ProductDetail['images']> {
-    return http.get(`/admin/products/${productId}/images`).then((r) => r.data)
+  // V2: 按 mr1 列出图片 (含 primary + detail, 后端已按 imageRole + slot 排序)
+  list(mr1: string): Promise<ProductDetail['images']> {
+    return http.get(`/admin/products/${encodeURIComponent(mr1)}/images`).then((r) => r.data)
   },
-  upload(productId: number, slot: number, file: File): Promise<{ slot: number; imageKey: string; imageUrl: string }> {
+  // V2 Task 3.3.3: 上传主图 (slot=1, 按 OEM 3 命名)
+  uploadPrimary(mr1: string, oemNo3: string, file: File): Promise<import('./types').ProductImageV2> {
     const fd = new FormData()
     fd.append('file', file)
     return http
-      .post(`/admin/products/${productId}/images/${slot}`, fd, {
+      .post(`/admin/products/${encodeURIComponent(mr1)}/images/primary`, fd, {
+        params: { oemNo3 },
         headers: { 'Content-Type': 'multipart/form-data' }
       })
       .then((r) => r.data)
   },
-  remove(productId: number, slot: number): Promise<void> {
-    return http.delete(`/admin/products/${productId}/images/${slot}`).then((r) => r.data)
+  // V2 Task 3.3.3: 上传详情图 (slot 2-6, 按 MR.1 命名)
+  uploadDetail(mr1: string, slot: number, file: File): Promise<import('./types').ProductImageV2> {
+    const fd = new FormData()
+    fd.append('file', file)
+    return http
+      .post(`/admin/products/${encodeURIComponent(mr1)}/images/detail`, fd, {
+        params: { slot },
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
+      .then((r) => r.data)
+  },
+  // V2: 删除图片 (按 mr1 + imageRole + slot)
+  remove(mr1: string, imageRole: 'primary' | 'detail', slot: number): Promise<void> {
+    return http
+      .delete(`/admin/products/${encodeURIComponent(mr1)}/images/${imageRole}/${slot}`)
+      .then((r) => r.data)
   }
 }
 
