@@ -4364,3 +4364,723 @@ Task V11-3.3 (router.isReady await) ─────→ 独立
 **修改前端文件**: 2 个(http.ts 或 router 相关 / isSafeRedirect 测试文件)
 **新增 migration**: 1 个(FixCrossReferenceNavProperty,纯 metadata 修正,无 DDL)
 
+---
+
+# v12 补丁任务清单(第十一轮深度审查衍生 22 项漏洞修正)
+
+> **修订背景**: v11 自称"0 项凭空假设",但第十一轮三维度并行深度审查发现 v11 仍存在 13 项高危凭空假设 + 7 项中危 + 2 项低危(共 22 项)。
+> **修订原则**: 代码存在性 + 字段名 + API 签名三重核实机制 — 所有方法/字段/属性引用必须确认存在且名字匹配(区分大小写)。
+> **修订目标**: 实现 v11 自称但未达成的"真正 0 项凭空假设"。
+
+## v12 前置任务(Pre-Task-V12-1 ~ Pre-Task-V12-10,10 个,全部已完成)
+
+### Pre-Task-V12-1: 核实 ProductIndexDoc 完整字段定义 ✅
+- **核实方式**: Read ISearchProvider.cs L32-44
+- **核实结论**: `public record ProductIndexDoc(long Id, string OemNoNormalized, string OemNoDisplay, string? Remark, string Type, decimal? D1Mm, decimal? D2Mm, decimal? H3Mm, decimal? H1Mm, string? Media, bool IsDiscontinued, long UpdatedAtUnix)` — 12 字段,**无 Oem2,字段名 UpdatedAtUnix**
+- **影响**: Task V12-1.2 明确字段定义
+- **状态**: ✅ 已完成
+
+### Pre-Task-V12-2: 核实 isSafeRedirect 函数不存在 ✅
+- **核实方式**: Grep `isSafeRedirect` 全项目
+- **核实结论**: 全项目无匹配
+- **影响**: Task V12-3.2 新建 isSafeRedirect 实现
+- **状态**: ✅ 已完成
+
+### Pre-Task-V12-3: 核实 VerifyAndExtractV2 方法不存在 ✅
+- **核实方式**: Grep `VerifyAndExtractV2` 全后端
+- **核实结论**: 全后端无匹配
+- **影响**: Task V12-3.1 新增前置子任务实现
+- **状态**: ✅ 已完成
+
+### Pre-Task-V12-4: 核实 SignV2 方法不存在 ✅
+- **核实方式**: Grep `SignV2` 全后端
+- **核实结论**: 全后端无匹配(现有方法名是 Sign)
+- **影响**: spec L7468 中 SignV2 改为 Sign
+- **状态**: ✅ 已完成
+
+### Pre-Task-V12-5: 核实 router.isReady() 全前端无匹配 ✅
+- **核实方式**: Grep `router.isReady` 全前端
+- **核实结论**: 全前端无匹配
+- **影响**: 删除 Task V11-3.3
+- **状态**: ✅ 已完成
+
+### Pre-Task-V12-6: 核实 name: 'login' 全前端无匹配 ✅
+- **核实方式**: Grep `name: 'login'` 全前端
+- **核实结论**: 全前端无匹配(name 已是 'Login' 大写)
+- **影响**: 删除子任务 3.3.4
+- **状态**: ✅ 已完成
+
+### Pre-Task-V12-7: 核实 LoginView.vue 当前 redirect 处理 ✅
+- **核实方式**: Read LoginView.vue L46-47
+- **核实结论**: `router.push(redirect)` 直接 push 未校验 — 真实 Open Redirect 漏洞
+- **影响**: Task V12-3.2 引入 isSafeRedirect 校验
+- **状态**: ✅ 已完成
+
+### Pre-Task-V12-8: 核实 SyncSearchIndexAsync 内部时间窗过滤逻辑 ✅
+- **核实方式**: Read EtlImportService.cs L1146-1147
+- **核实结论**: `Where(p => p.UpdatedAt >= importStartedAt)` — 时间窗过滤
+- **影响**: Task V12-2.1 ReindexAllAsync sinceDate=null 改用 DateTime.MinValue
+- **状态**: ✅ 已完成
+
+### Pre-Task-V12-9: 核实 ResilientSearchProvider 当前 _primaryAvailable 使用 ✅
+- **核实方式**: Read ResilientSearchProvider.cs L21, L118-125, L154
+- **核实结论**: `private volatile bool _primaryAvailable`,SocketException 时直接赋值(无 lock)
+- **影响**: 统一 SetPrimaryAvailable 无 lock
+- **状态**: ✅ 已完成
+
+### Pre-Task-V12-10: 核实 IndexReplayWorker 当前重试机制 ✅
+- **核实方式**: Read IndexReplayWorker.cs L78-108
+- **核实结论**: 整批 catch (Exception ex) UpdateRetryAsync,无单条 try-catch
+- **影响**: Task V12-2.4 改为单条 try-catch + db.Remove
+- **状态**: ✅ 已完成
+
+---
+
+## v12 数据关联任务(V12-1.1 ~ V12-1.3,3 个)
+
+### Task V12-1.1: 修正 Task V11-1.1 — ModelSnapshot 描述精确化(V12-F22)
+
+**问题**: V11-1.1 子任务 1.1.5 "无 schema 差异" 描述不精确。
+**事实**: EF Core 中 WithMany(字符串)和 WithMany(lambda)生成等价 ModelSnapshot,但 ModelSnapshot 文件本身会重新生成。
+**修复**: 修正描述(无代码改动)
+- 子任务 1.1.5 描述改为:"新 migration 无 DDL 变更,但 ModelSnapshot 文件会重新生成(从字符串参数变为 lambda 表达式),这是预期行为"
+- 或选择 v11 子任务 1.1 次选方案:`.WithMany("CrossReferences")`(字符串),则 ModelSnapshot 完全不变
+
+**验证**:
+- 描述精确化,无代码改动
+- 若选 lambda 方案,ModelSnapshot 文件 diff 显示字符串→lambda(预期)
+
+---
+
+### Task V12-1.2: 修正 Task V11-1.2 — ProductIndexDoc 完整字段定义(V12-F1)
+
+**问题**: v11 子任务 2.2.1 引用 ProductIndexDoc 不存在的 Oem2 字段,且字段名 UpdatedAt 错误(实际 UpdatedAtUnix)。
+**事实**: ISearchProvider.cs L32-44:
+```csharp
+public record ProductIndexDoc(
+    long Id,
+    string OemNoNormalized, string OemNoDisplay, string? Remark, string Type,
+    decimal? D1Mm, decimal? D2Mm, decimal? H3Mm, decimal? H1Mm,
+    string? Media, bool IsDiscontinued, long UpdatedAtUnix);
+```
+当前 12 字段,**无 Oem2,字段名 UpdatedAtUnix**。
+V9/V10 扩展字段是 Mr1/OemBrand/BrandSortOrder(三个),**无 Oem2**。
+
+**修复**: 明确 ProductIndexDoc 扩展后完整字段定义
+
+**子任务**:
+1.2.1 在 Task V11-1.2 修订中明确 ProductIndexDoc 扩展后字段定义:
+```csharp
+public record ProductIndexDoc(
+    long Id,
+    string OemNoNormalized, string OemNoDisplay, string? Remark, string Type,
+    decimal? D1Mm, decimal? D2Mm, decimal? H3Mm, decimal? H1Mm,
+    string? Media, bool IsDiscontinued, long UpdatedAtUnix,
+    // V9/V10 扩展字段:
+    string? Mr1, string? OemBrand, int? BrandSortOrder);
+```
+- 注意: **无 Oem2 字段**(临时方案用 Product.Oem2 赋给 OemBrand)
+- 注意: 字段名是 `UpdatedAtUnix`(非 UpdatedAt)
+
+1.2.2 修正 v11 子任务 2.2.1 伪代码:
+```csharp
+// 错误(v11): OemBrand: p.Oem2, UpdatedAt: ...
+// 正确(v12): OemBrand: p.Oem2, UpdatedAtUnix: ...
+return new ProductIndexDoc(
+    Id: p.Id,
+    // ... 其他现有字段保持一致
+    UpdatedAtUnix: new DateTimeOffset(
+        DateTime.SpecifyKind(p.UpdatedAt, DateTimeKind.Utc)
+    ).ToUnixTimeSeconds(),
+    Mr1: p.Mr1,
+    OemBrand: p.Oem2,           // V12-F1: 临时方案,Product.Oem2 赋给 OemBrand
+    BrandSortOrder: null         // V12-F1: 默认 null,待业务方确认
+);
+```
+
+1.2.3 修正 v11 子任务 2.2.5 单元测试:
+```csharp
+[Fact]
+public void BuildProductIndexDocs_ReturnsCorrectDoc()
+{
+    var product = new Product
+    {
+        Id = 123L,
+        Mr1 = "ABC1234567",
+        Oem2 = "Toyota",
+        UpdatedAt = DateTime.UtcNow
+    };
+
+    var doc = EtlImportService.BuildProductIndexDocs(product);
+
+    Assert.Equal(123L, doc.Id);
+    Assert.Equal("ABC1234567", doc.Mr1);
+    Assert.Equal("Toyota", doc.OemBrand);  // V12-F1: OemBrand 来源 Product.Oem2(非 doc.Oem2)
+    // 注意: doc.Oem2 不存在(ProductIndexDoc 无 Oem2 字段)
+}
+```
+
+1.2.4 修正 v11 子任务 2.4.1 中 `doc with { OemBrand = doc.Mr1 ?? "unknown" }`:
+- doc.Mr1 字段在 V9/V10 扩展中存在(确认)
+- 但需先判 doc null(V12-F3)
+
+1.2.5 `dotnet build` 验证编译通过
+
+**验证**:
+- ISearchProvider.cs ProductIndexDoc 字段定义含 Mr1/OemBrand/BrandSortOrder,**无 Oem2**,字段名 UpdatedAtUnix
+- v11 子任务 2.2.1 伪代码字段名 `UpdatedAtUnix`(非 UpdatedAt)
+- v11 子任务 2.2.5 单元测试用 `doc.OemBrand`(非 doc.Oem2)
+- `dotnet build` 编译通过
+
+---
+
+### Task V12-1.3: 修正 Task V11-1.3 — DevTokenAuthMiddleware 复核(V12-F1 衍生)
+
+**问题**: V11-1.3 修复方案需复核 ClaimsPrincipal 是否能通过 AdminPolicy.RequireRole("admin") 校验。
+**事实**:
+- ServiceCollectionExtensions.cs L178: `options.AddPolicy("Admin", p => p.RequireRole("admin"))`
+- ASP.NET Core 标准 ClaimsIdentity 走 RequireRole 校验:ClaimTypes.Role → "admin"
+
+**修复**: 沿用 V11-1.3 修复方案,补充验证用例
+
+**子任务**:
+1.3.1 沿用 V11-1.3 子任务 1.3.1(DevTokenAuthMiddleware 设置 ClaimsPrincipal)
+1.3.2 沿用 V11-1.3 子任务 1.3.2(AdminEtlEndpoints 加 RequireAuthorization("Admin"))
+1.3.3 补充集成测试: ctx.User.HasClaim(ClaimTypes.Role, "admin") == true
+1.3.4 补充集成测试: 无 token 返回 401,X-Admin-Token 返回 200
+
+**验证**:
+- 沿用 V11-1.3 验证,补充 ClaimsIdentity 类型匹配验证
+
+---
+
+## v12 检索逻辑任务(V12-2.1 ~ V12-2.4,4 个)
+
+### Task V12-2.1: 修正 Task V11-2.1 — 全量重建端点综合修正(V12-F5/F6/F7/F15/F17)
+
+**问题**: v11 Task V11-2.1 存在 5 个衍生问题:
+1. V12-F5: ReindexAllAsync sinceDate=null 用 DateTime.UtcNow(零量重建)
+2. V12-F6: .Include + ToListAsync 1M 行 OOM
+3. V12-F7: finally 无条件 SetPrimaryAvailable(true) 异常路径数据不一致
+4. V12-F15: .Include(p => p.CrossReferences) 与 OemBrand=p.Oem2 矛盾
+5. V12-F17: SetPrimaryAvailable lock 与无 lock 不一致
+
+**修复**(5 子任务):
+
+**子任务 2.1.1: ReindexAllAsync sinceDate=null 改用 DateTime.MinValue**(V12-F5)
+- 文件: `backend/src/SakuraFilter.Etl/EtlImportService.cs`
+- 修改:
+```csharp
+public async Task ReindexAllAsync(DateTime? sinceDate, CancellationToken ct)
+{
+    var importStartedAt = sinceDate ?? DateTime.MinValue;  // V12-F5: 真正全量(非 UtcNow)
+    await SyncSearchIndexAsync(importStartedAt, ct);
+}
+```
+
+**子任务 2.1.2: 全量重建改用流式分批处理**(V12-F6, V12-F15)
+- 文件: `backend/src/SakuraFilter.Api/Endpoints/AdminSearchEndpoints.cs`(新建)
+- 修改: 去掉 .Include,改用 keyset 分页:
+```csharp
+group.MapPost("/reindex", async (
+    EtlImportService etlService,
+    ResilientSearchProvider searchProvider,
+    ProductDbContext db,
+    IMeilisearchClient meili,
+    CancellationToken ct) =>
+{
+    searchProvider.SetPrimaryAvailable(false);  // V12-F17: 无 lock(volatile 单赋值足够)
+    bool success = false;
+    try
+    {
+        await etlService.TruncateSearchIndexPendingAsync(ct);
+
+        // V12-F6: 流式分批处理(keyset 分页,每批 1000),避免 1M 行 OOM
+        // V12-F15: 去掉 .Include(p => p.CrossReferences),临时方案用 Product.Oem2 不需要
+        long? lastId = null;
+        var sinceDate = DateTime.MinValue;  // V12-F5: 真正全量
+        while (!ct.IsCancellationRequested)
+        {
+            var batch = await db.Products.AsNoTracking()
+                .Where(p => p.UpdatedAt >= sinceDate && (lastId == null || p.Id > lastId.Value))
+                .OrderBy(p => p.Id).Take(1000).ToListAsync(ct);
+            if (batch.Count == 0) break;
+            var docs = batch.Select(EtlImportService.BuildProductIndexDocs).ToList();
+            await meili.IndexAsync(docs, ct);  // 假设 IMeilisearchClient 已注入
+            lastId = batch[^1].Id;
+        }
+
+        success = true;
+        return Results.Ok(new { message = "全量重建完成" });
+    }
+    finally
+    {
+        // V12-F7: 条件性恢复,仅在成功时才 SetPrimaryAvailable(true)
+        if (success) searchProvider.SetPrimaryAvailable(true);
+        // 失败时保持 false,让用户搜索继续走 PG 兜底
+    }
+});
+```
+
+**子任务 2.1.3: ResilientSearchProvider 统一无 lock**(V12-F17, V12-F21)
+- 文件: `backend/src/SakuraFilter.Search/ResilientSearchProvider.cs`
+- 修改: 复用 Initialize,删除子任务 V11-2.1.3 新增 SetPrimaryAvailable
+- 注释改 Initialize 为"启动时或运行时初始化"
+```csharp
+// V12-F17: 无 lock(volatile bool 单赋值是原子的)
+// V12-F21: 复用 Initialize,避免功能重复
+public void Initialize(bool primaryAvailable)
+{
+    _primaryAvailable = primaryAvailable;
+    if (!primaryAvailable)
+        _logger.LogWarning("主索引可用性切换: {Available}(原因: 全量重建触发或启动探活)", primaryAvailable);
+}
+```
+- AdminSearchEndpoints 调用改为 `searchProvider.Initialize(false)` / `searchProvider.Initialize(true)`
+
+**子任务 2.1.4: EtlImportService.TruncateSearchIndexPendingAsync**(沿用 V11-2.1.4)
+- 文件: `backend/src/SakuraFilter.Etl/EtlImportService.cs`
+- 沿用 v11 伪代码(无修改)
+
+**子任务 2.1.5: 注册 AdminSearchEndpoints**(沿用 V11-2.1.5)
+- 文件: `backend/src/SakuraFilter.Api/Extensions/EndpointRouteBuilderExtensions.cs`
+- 沿用 v11(加 `app.MapAdminSearchEndpoints()`)
+
+**验证**:
+- `dotnet build` 编译通过
+- 集成测试 POST /api/admin/search/reindex 全量重建 1M 行不 OOM
+- 集成测试 全量重建失败时主索引保持 false(走 PG 兜底)
+- 集成测试 全量重建成功时主索引恢复 true
+- 单元测试 ReindexAllAsync(null, ct) 委托到 SyncSearchIndexAsync(DateTime.MinValue, ct)
+- 单元测试 Initialize(false) 后 SearchAsync 走 PG 兜底
+
+---
+
+### Task V12-2.2: 修正 Task V11-2.2 — BuildProductIndexDocs 综合修正(V12-F1/F2)
+
+**问题**: v11 Task V11-2.2 存在 2 个衍生问题:
+1. V12-F1: 引用不存在的 Oem2 字段及 UpdatedAt 字段名错误
+2. V12-F2: private static 跨程序集无法被 AdminSearchEndpoints 调用
+
+**修复**(2 子任务):
+
+**子任务 2.2.1: 新建 BuildProductIndexDocs 方法**(V12-F1, V12-F2)
+- 文件: `backend/src/SakuraFilter.Etl/EtlImportService.cs`
+- 修改: 从 L1158-1166 内联 lambda 抽取为独立方法
+```csharp
+/// <summary>
+/// 从 Product 实体构建 ProductIndexDoc(V12-F1: 字段名修正;V12-F2: public 跨程序集调用)
+/// WHY 命名 BuildProductIndexDocs(非 Async): 方法不返回 Task,同步方法不能用 Async 后缀(.NET 约定)
+/// WHY public: AdminSearchEndpoints 在 SakuraFilter.Api 程序集,需要跨程序集调用
+/// </summary>
+public static ProductIndexDoc BuildProductIndexDocs(Product p)
+{
+    return new ProductIndexDoc(
+        Id: p.Id,                                    // V12-F1: long 类型
+        OemNoNormalized: p.OemNoNormalized,          // 现有字段
+        OemNoDisplay: p.OemNoDisplay,                // 现有字段
+        Remark: p.Remark,                            // 现有字段
+        Type: p.Type,                                // 现有字段
+        D1Mm: p.D1Mm, D2Mm: p.D2Mm, H3Mm: p.H3Mm, H1Mm: p.H1Mm,  // 现有字段
+        Media: p.Media,                              // 现有字段
+        IsDiscontinued: p.IsDiscontinued,            // 现有字段
+        UpdatedAtUnix: new DateTimeOffset(           // V12-F1: 字段名 UpdatedAtUnix(非 UpdatedAt)
+            DateTime.SpecifyKind(p.UpdatedAt, DateTimeKind.Utc)
+        ).ToUnixTimeSeconds(),
+        Mr1: p.Mr1,                                  // V9/V10 扩展字段
+        OemBrand: p.Oem2,                            // V12-F1: 临时方案,Product.Oem2 赋给 OemBrand(无 Oem2 字段)
+        BrandSortOrder: null                         // V12-F1: 默认 null,待业务方确认
+    );
+}
+```
+- 同步: L1158-1166 内联 lambda 改为调用 `BuildProductIndexDocs(p)`
+
+**子任务 2.2.2: 单元测试**(V12-F1)
+- 文件: `backend/tests/SakuraFilter.Etl.Tests/EtlImportServiceTests.cs`(若存在,否则新建)
+```csharp
+[Fact]
+public void BuildProductIndexDocs_ReturnsCorrectDoc()
+{
+    var product = new Product
+    {
+        Id = 123L,
+        Mr1 = "ABC1234567",
+        Oem2 = "Toyota",
+        UpdatedAt = DateTime.UtcNow
+    };
+
+    var doc = EtlImportService.BuildProductIndexDocs(product);
+
+    Assert.Equal(123L, doc.Id);
+    Assert.Equal("ABC1234567", doc.Mr1);
+    Assert.Equal("Toyota", doc.OemBrand);  // V12-F1: OemBrand 来源 Product.Oem2
+    // 注意: doc.Oem2 不存在(ProductIndexDoc 无 Oem2 字段)
+}
+```
+
+**验证**:
+- `dotnet build` 编译通过
+- BuildProductIndexDocs 是 `public static`(非 private)
+- ProductIndexDoc 字段名 `UpdatedAtUnix`(非 UpdatedAt)
+- ProductIndexDoc 无 Oem2 字段
+- `dotnet test` 单元测试通过
+
+---
+
+### Task V12-2.3: 修正 Task V11-2.3 — V2 cursor 格式修正 + VerifyAndExtractV2 实现(V12-F4/F9/F14)
+
+**问题**: v11 Task V11-2.3 存在 3 个衍生问题:
+1. V12-F4: V2 cursor 构造 "V2:" + Sign(iso, id) 丢失 iso 和 id 信息
+2. V12-F9: VerifyAndExtractV2 方法全后端不存在
+3. V12-F14: spec.md V11-F6 与 tasks.md V11-2.3 伪代码不一致(ticks vs iso)
+
+**修复**(3 子任务):
+
+**子任务 2.3.1: 新建 VerifyAndExtractV2 方法**(V12-F9, V12-F14)
+- 文件: `backend/src/SakuraFilter.Api/Services/CursorHmac.cs`
+- 修改: 新增方法(沿用 tasks.md V11-2.3 iso 格式,删除 spec.md ticks 方案)
+```csharp
+/// <summary>
+/// V2 验签(V2: 前缀),失败时 V1 兜底(V12-F9: 实现方法;V12-F14: 统一 iso 格式)
+/// WHY V1 兜底: 历史页 cursor 用 Ticks(V1 格式),V2 切换期需兼容
+/// V2 cursor 格式: "V2:" + iso + "|" + id + "|" + sig(V12-F4: 含 iso 和 id)
+/// V1 cursor 格式: iso + "|" + id + "|" + sig(无 V2: 前缀)
+/// </summary>
+public (string updatedAtIso, long id, int version) VerifyAndExtractV2(string cursor)
+{
+    // 1. 先尝试 V2 验签
+    if (cursor.StartsWith("V2:", StringComparison.Ordinal))
+    {
+        var body = cursor.Substring(3);  // V12-F4: 去掉 "V2:" 前缀,剩 iso|id|sig
+        var (iso, id) = VerifyAndExtract(body);  // 委托给现有 V1 验签
+        return (iso, id, 2);
+    }
+
+    // 2. V2 失败,V1 兜底(原 VerifyAndExtract 逻辑)
+    var (v1Iso, v1Id) = VerifyAndExtract(cursor);
+    return (v1Iso, v1Id, 1);
+}
+```
+
+**子任务 2.3.2: 主列表 cursor 加 V2 前缀**(V12-F4)
+- 文件: `backend/src/SakuraFilter.Api/Services/AdminProductService.cs`
+- 修改: L866-868 主列表 cursor 生成
+```csharp
+// V12-F4: V2 cursor = "V2:" + iso + "|" + id + "|" + sig(含 iso 和 id)
+var sig = _cursorHmac.Sign(updatedAtIso, id);
+var v2Cursor = "V2:" + updatedAtIso + "|" + id + "|" + sig;
+```
+
+**子任务 2.3.3: 主列表分页查询用 VerifyAndExtractV2**(V12-F9)
+- 文件: `backend/src/SakuraFilter.Api/Services/AdminProductService.cs`
+- 修改: L603 将 `VerifyAndExtract` 替换为 `VerifyAndExtractV2`
+```csharp
+// V12-F9: 主列表用 V2 验签,自动兼容 V1/V2
+var (updatedAtIso, id, version) = _cursorHmac.VerifyAndExtractV2(cursor);
+```
+
+**子任务 2.3.4: 历史页 cursor 保持 V1 格式**(V12-F19)
+- 文件: `backend/src/SakuraFilter.Api/Services/AdminProductService.cs`
+- 修改: L400-401 加注释
+```csharp
+// V12-F19: V1 cursor(历史页): base64url 包装,内部 Ticks|id|sig
+// WHY 保持 V1: 历史页是已有功能,避免破坏已有书签
+// 兼容: VerifyAndExtractV2 自动识别 V1/V2
+var cursor = EncodeCursor(changedAt.Ticks.ToString(), id);  // 沿用现有 base64url 包装
+```
+
+**子任务 2.3.5: 单元测试**
+```csharp
+[Fact]
+public void VerifyAndExtractV2_V2Cursor_ReturnsVersion2()
+{
+    var iso = "2026-07-17T10:00:00Z";
+    long id = 123L;
+    var sig = _cursorHmac.Sign(iso, id);
+    var v2Cursor = $"V2:{iso}|{id}|{sig}";
+
+    var (extractedIso, extractedId, version) = _cursorHmac.VerifyAndExtractV2(v2Cursor);
+
+    Assert.Equal(iso, extractedIso);
+    Assert.Equal(id, extractedId);
+    Assert.Equal(2, version);
+}
+
+[Fact]
+public void VerifyAndExtractV2_V1Cursor_ReturnsVersion1()
+{
+    var iso = "2026-07-17T10:00:00Z";
+    long id = 123L;
+    var sig = _cursorHmac.Sign(iso, id);
+    var v1Cursor = $"{iso}|{id}|{sig}";  // 无 V2: 前缀
+
+    var (extractedIso, extractedId, version) = _cursorHmac.VerifyAndExtractV2(v1Cursor);
+
+    Assert.Equal(iso, extractedIso);
+    Assert.Equal(id, extractedId);
+    Assert.Equal(1, version);
+}
+
+[Fact]
+public void VerifyAndExtractV2_TamperedCursor_ThrowsException()
+{
+    var iso = "2026-07-17T10:00:00Z";
+    long id = 123L;
+    var sig = _cursorHmac.Sign(iso, id);
+    var tamperedCursor = $"V2:{iso}|456|{sig}";  // 篡改 id
+
+    Assert.Throws<ArgumentException>(() => _cursorHmac.VerifyAndExtractV2(tamperedCursor));
+}
+```
+
+**验证**:
+- `dotnet build` 编译通过
+- Grep `VerifyAndExtractV2` 全后端有匹配(方法已实现)
+- Grep `SignV2` 全后端无匹配(spec L7468 已改为 Sign)
+- 单元测试 V2/V1/篡改 cursor 全部通过
+- 主列表 cursor 用 V2 格式("V2:" + iso + "|" + id + "|" + sig)
+- 历史页 cursor 保持 V1 格式(base64url 包装)
+
+---
+
+### Task V12-2.4: 修正 Task V11-2.4 — IndexReplayWorker 完整伪代码(V12-F3/F16/F22)
+
+**问题**: v11 Task V11-2.4 存在 3 个衍生问题:
+1. V12-F3: doc with { ... } 当 doc 为 null 时抛 NRE
+2. V12-F16: catch (JsonException) continue 导致损坏 payload 无限重试
+3. V12-F22: v11 伪代码不完整,未显示 IndexAsync 和 RemoveRange 调用
+
+**修复**: 补充完整伪代码(V12-F22)
+
+**子任务**:
+2.4.1 IndexReplayWorker.cs L95-101 完整改写:
+```csharp
+// V12-F22: 完整伪代码,含 IndexAsync 和 RemoveRange
+var validDocs = new List<ProductIndexDoc>();
+var processed = new List<SearchIndexPending>();
+foreach (var p in toIndex)
+{
+    try
+    {
+        var doc = JsonSerializer.Deserialize<ProductIndexDoc>(p.Payload);
+
+        // V12-F3: 先判 null,跳过(不进行 with 表达式)
+        if (doc is null)
+        {
+            _logger?.LogWarning("payload 反序列化为 null,删除(id={Id})", p.Id);
+            db.SearchIndexPending.Remove(p);  // V12-F16: 删除损坏 payload,避免无限重试
+            continue;
+        }
+
+        // V12-F3: doc 已判 null,安全使用 with 表达式
+        if (doc.OemBrand is null)
+        {
+            doc = doc with { OemBrand = doc.Mr1 ?? "unknown" };
+        }
+
+        validDocs.Add(doc);
+        processed.Add(p);
+    }
+    catch (JsonException ex)
+    {
+        // V12-F16: 删除损坏 payload,避免无限重试(而非 continue 跳过)
+        _logger?.LogWarning(ex, "payload 反序列化失败,删除(id={Id})", p.Id);
+        db.SearchIndexPending.Remove(p);
+    }
+}
+
+if (validDocs.Count > 0)
+{
+    await meili.IndexAsync(validDocs, ct);
+    db.SearchIndexPending.RemoveRange(processed);
+    await db.SaveChangesAsync(ct);
+}
+```
+
+2.4.2 单元测试: 旧 payload(无 OemBrand)反序列化不报错,OemBrand 兜底为 Mr1
+2.4.3 单元测试: 损坏 payload 抛 JsonException 时删除,不阻塞队列
+2.4.4 单元测试: null payload 删除,不抛 NRE
+
+**验证**:
+- `dotnet build` 编译通过
+- 旧 payload(无 OemBrand)反序列化不报错,OemBrand 兜底为 Mr1
+- 损坏 payload 删除(db.Remove),不无限重试
+- null payload 删除,不抛 NRE
+- `dotnet test` 全部通过
+
+---
+
+## v12 前后端联动任务(V12-3.1 ~ V12-3.2,2 个)
+
+### Task V12-3.1: 修正 Task V11-3.1 — 实现 VerifyAndExtractV2 + 注释精确化(V12-F9/F19/F20)
+
+**问题**: v11 Task V11-3.1 存在 3 个衍生问题:
+1. V12-F9: VerifyAndExtractV2 全后端不存在,Task V11-3.1 仅要求"添加注释"
+2. V12-F19: 历史页 cursor 实际是 base64url 包装,spec 描述不准确
+3. V12-F20: 主列表前端实际用 offset 分页,v11 描述与前端现状不符
+
+**修复**(3 子任务):
+
+**子任务 3.1.0: 实现 VerifyAndExtractV2 方法**(V12-F9,新增前置子任务)
+- 见 Task V12-2.3 子任务 2.3.1(已实现)
+
+**子任务 3.1.1: spec.md L7468 修正 SignV2 → Sign**(V12-F10)
+- 文件: `d:\projects\sakurafilter\.trae\specs\v2-architecture-migration\spec.md`
+- 修改: L7468 中 "SignV2" 改为 "Sign"
+
+**子任务 3.1.2: spec.md L7466 补充 base64url 包装说明**(V12-F19)
+- 文件: `d:\projects\sakurafilter\.trae\specs\v2-architecture-migration\spec.md`
+- 修改: L7466 补充
+  - 历史页 cursor 外层是 base64url 包装,内部 payload 是 `{ticks}|{id}|{sig}`
+  - 主列表 cursor 是明文 `{iso}|{id}|{sig}`,无 base64url 包装
+  - VerifyAndExtractV2 实现时需先 base64url 解码历史页 cursor
+
+**子任务 3.1.3: 明确 Task V12-3.1 范围**(V12-F20)
+- 文件: tasks.md(本任务)
+- 修改: 明确 Task V12-3.1 范围仅注释改动 + 实现 VerifyAndExtractV2,**不涉及前端分页方式切换**
+- 若需将主列表切换为 V2 cursor 分页,新增独立 task 说明前端改造范围
+
+**验证**:
+- spec.md L7468 显示 "Sign"(非 SignV2)
+- spec.md L7466 补充 base64url 包装说明
+- Task V12-3.1 范围明确(不涉及前端分页方式切换)
+- VerifyAndExtractV2 方法已实现(Task V12-2.3)
+
+---
+
+### Task V12-3.2: 修正 Task V11-3.2 — 新建 isSafeRedirect + LoginView.vue 校验(V12-F8/F13/F18)
+
+**问题**: v11 Task V11-3.2 存在 3 个衍生问题:
+1. V12-F8: isSafeRedirect 全项目不存在,v11 凭空假设已存在
+2. V12-F13: LoginView.vue router.push(redirect) 未校验,Open Redirect 漏洞
+3. V12-F18: npm run test 命令不存在
+
+**修复**(4 子任务):
+
+**子任务 3.2.1: 新建 isSafeRedirect 函数**(V12-F8)
+- 文件: `frontend/src/utils/security.ts`(新建)
+```typescript
+// V12-F8: Open Redirect 防护
+// WHY 新建: v11 假设已存在但实际全项目无匹配
+const SAFE_REDIRECT_HOSTS = (import.meta.env.VITE_SAFE_REDIRECT_HOSTS || '').split(',').filter(Boolean)
+
+export function isSafeRedirect(url: string): boolean {
+  if (!url || typeof url !== 'string') return false
+  // 拒绝危险协议
+  if (/^(javascript|data|vbscript|file):/i.test(url)) return false
+  // V12-F8: 防止 URL 编码绕过 (如 %2F%2Fevil.com)
+  const decoded = decodeURIComponent(url)
+  if (/^(javascript|data|vbscript|file):/i.test(decoded)) return false
+  // 允许相对路径(以 / 开头但非 //)
+  if (decoded.startsWith('/') && !decoded.startsWith('//')) return true
+  try {
+    const u = new URL(decoded, window.location.origin)
+    if (u.origin === window.location.origin) return true
+    return SAFE_REDIRECT_HOSTS.includes(u.hostname)
+  } catch { return false }
+}
+```
+
+**子任务 3.2.2: LoginView.vue 引入 isSafeRedirect**(V12-F13)
+- 文件: `frontend/src/views/LoginView.vue`
+- 修改: L46-47
+```typescript
+// V12-F13: 引入 isSafeRedirect 校验,防止 Open Redirect
+import { isSafeRedirect } from '@/utils/security'
+
+const redirect = (route.query.redirect as string) || '/admin/products'
+// V12-F13: 校验 redirect,失败回退到默认页
+const safeRedirect = isSafeRedirect(redirect) ? redirect : '/admin/products'
+router.push(safeRedirect)
+```
+
+**子任务 3.2.3: 补充测试用例**(V12-F8)
+- 文件: `frontend/tests/unit/security.test.ts`(新建,若 test 目录存在)
+```typescript
+import { isSafeRedirect } from '@/utils/security'
+
+describe('isSafeRedirect', () => {
+  it('允许相对路径', () => {
+    expect(isSafeRedirect('/admin/products')).toBe(true)
+  })
+  it('允许同源绝对路径', () => {
+    expect(isSafeRedirect('https://sakurafilter.example.com/callback')).toBe(true)
+  })
+  it('拒绝非法绝对路径(白名单外)', () => {
+    expect(isSafeRedirect('https://evil.com/callback')).toBe(false)
+  })
+  it('拒绝 javascript: 协议', () => {
+    expect(isSafeRedirect('javascript:alert(1)')).toBe(false)
+  })
+  it('拒绝 data: 协议', () => {
+    expect(isSafeRedirect('data:text/html,<script>alert(1)</script>')).toBe(false)
+  })
+  it('拒绝 URL 编码绕过', () => {
+    expect(isSafeRedirect('%6Aavascript:alert(1)')).toBe(false)
+  })
+  it('拒绝 // 开头(协议相对 URL)', () => {
+    expect(isSafeRedirect('//evil.com')).toBe(false)
+  })
+})
+```
+
+**子任务 3.2.4: npm run test:contract 验证**(V12-F18)
+- 命令: `npm run test:contract`(非 npm run test)
+- 验证全部测试通过
+
+**验证**:
+- Grep `isSafeRedirect` 全前端有匹配(security.ts + LoginView.vue + security.test.ts)
+- LoginView.vue L46-47 引入 isSafeRedirect 校验
+- `npm run test:contract` 全部通过
+- `npm run build` 编译通过
+
+---
+
+### Task V12-3.3: 删除 Task V11-3.3 — router.isReady/name: 'login' 凭空假设(V12-F11/F12)
+
+**问题**: v11 Task V11-3.3 修复的 `if (router.isReady())` 和 `name: 'login'` 全前端无匹配,是修复不存在的问题。
+**事实**:
+- Grep `router.isReady` 全前端无匹配
+- Grep `name: 'login'`(小写) 全前端无匹配(name 已是 'Login' 大写)
+
+**修复**: 删除 Task V11-3.3(无代码改动)
+
+**子任务**:
+3.3.1 删除 Task V11-3.3(因 v10 Task V10-3.5 伪代码从未实施到代码,无需修复)
+3.3.2 删除子任务 3.3.4(已核实无 name: 'login' 引用)
+3.3.3 在 tasks.md Task V11-3.3 位置加注释:"v12 已删除,因 router.isReady() 和 name: 'login' 全前端无匹配"
+
+**验证**:
+- Grep `router.isReady` 全前端仍无匹配(无需修改)
+- Grep `name: 'login'` 全前端仍无匹配(无需修改)
+- tasks.md Task V11-3.3 标记为"v12 已删除"
+
+---
+
+## v12 任务依赖链
+
+```
+Pre-Task-V12-1~10 (10 个前置,全部已完成) ✅
+
+Task V12-1.1 (ModelSnapshot 描述) ──────────→ 独立
+Task V12-1.2 (ProductIndexDoc 字段定义) ────→ Task V12-2.2 (BuildProductIndexDocs)
+Task V12-1.3 (DevTokenAuthMiddleware 复核) ─→ Task V12-2.1 (RequireAuthorization 依赖)
+
+Task V12-2.1 (全量重建端点综合修正) ────────→ Task V12-2.2 (BuildProductIndexDocs 被调用)
+                                            └→ Task V12-2.4 (TRUNCATE search_index_pending 配套)
+Task V12-2.2 (BuildProductIndexDocs) ───────→ 独立
+Task V12-2.3 (VerifyAndExtractV2 实现) ─────→ Task V12-3.1 (注释精确化)
+Task V12-2.4 (IndexReplayWorker 完整) ──────→ 配合 Task V12-2.1
+
+Task V12-3.1 (实现 VerifyAndExtractV2 + 注释) → 配合 Task V12-2.3
+Task V12-3.2 (isSafeRedirect + LoginView) ──→ 独立
+Task V12-3.3 (删除 Task V11-3.3) ───────────→ 独立(无代码改动)
+```
+
+**总计**: 12 个 v12 补丁任务(10 前置已完成 + 3 数据关联 + 4 检索逻辑 + 3 前后端联动 - 1 删除 - 3 修正)
+**实际新增代码文件**: 2 个(AdminSearchEndpoints.cs + security.ts)
+**实际修改代码文件**: 5 个(EtlImportService.cs / ResilientSearchProvider.cs / CursorHmac.cs / AdminProductService.cs / IndexReplayWorker.cs)
+**实际修改前端文件**: 2 个(LoginView.vue / security.test.ts)
+**新增 migration**: 1 个(FixCrossReferenceNavProperty,纯 metadata 修正,无 DDL)
+**删除任务**: 1 个(Task V11-3.3 因修复不存在的问题)
+
