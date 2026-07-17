@@ -23,9 +23,9 @@ public static class LikeEscapeExtensions
     /// 转义 LIKE/ILIKE 用户输入的 % _ \ 三个特殊字符
     /// 转义后必须配合 EF.Functions.ILike 三参重载 + ESCAPE '\\' 使用
     /// </summary>
-    /// <param name="input">用户原始输入 (已 Trim 过的查询关键字)</param>
-    /// <returns>转义后的 pattern, 可直接拼到 LIKE 模式两侧 (例: $"%{escaped}%")</returns>
-    public static string EscapeLikePattern(this string input)
+    /// <param name="input">用户原始输入 (已 Trim 过的查询关键字)。null/空串原样返回,不抛异常</param>
+    /// <returns>转义后的 pattern, 可直接拼到 LIKE 模式两侧 (例: $"%{escaped}%")。null 输入返回 null</returns>
+    public static string? EscapeLikePattern(this string? input)
     {
         if (string.IsNullOrEmpty(input)) return input;
         return input.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");

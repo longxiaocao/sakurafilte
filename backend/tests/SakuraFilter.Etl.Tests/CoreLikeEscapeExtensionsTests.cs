@@ -133,7 +133,7 @@ public class CoreLikeEscapeExtensionsTests
         var input = new string('a', 1000) + "%" + new string('b', 1000);
         var result = input.EscapeLikePattern();
         result.Should().Contain("\\%");
-        result.Length.Should().Be(input.Length + 1, "仅 % 增加一个 \\ 转义符");
+        result!.Length.Should().Be(input.Length + 1, "仅 % 增加一个 \\ 转义符");  // CS8602: input 非 null, result 非 null, ! 抑制
     }
 
     [Fact]

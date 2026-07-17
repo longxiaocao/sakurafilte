@@ -511,11 +511,13 @@ public class MeiliSearchProvider : ISearchProvider
             .Select(x => x.OemBrand)
             .Where(b => !string.IsNullOrEmpty(b))
             .Distinct()
+            .Select(b => b!)  // CS8620: Where 已过滤 null/空, ! 抑制可空性差异
             .ToList();
         var publishedNo3s = publishedOemList
             .Select(x => x.OemNo3)
             .Where(n => !string.IsNullOrEmpty(n))
             .Distinct()
+            .Select(n => n!)  // CS8620: 同上
             .ToList();
 
         // S4-13: 分隔符改空格 (对齐 separatorTokens 配置)

@@ -52,12 +52,12 @@ public class OemBrandDictService : BaseDictService<XrefOemBrand>
         if (brands.Count > 0)
         {
             var brandCounts = await _db.CrossReferences.AsNoTracking()
-                .Where(x => brands.Contains(x.OemBrand))
+                .Where(x => x.OemBrand != null && brands.Contains(x.OemBrand))
                 .GroupBy(x => x.OemBrand)
                 .Select(g => new { Brand = g.Key, Cnt = g.LongCount() })
                 .ToListAsync(ct);
             foreach (var bc in brandCounts)
-                counts[bc.Brand] = bc.Cnt;
+                counts[bc.Brand!] = bc.Cnt;  // CS8604: bc.Brand 来自 GroupBy Key 可能 null, ! 抑制 (Where 已过滤 null)
         }
         return rows.Select(b => new OemBrandItem(
             b.Id, b.Brand, b.SortOrder, b.CreatedAt, b.UpdatedAt, b.DeletedAt,

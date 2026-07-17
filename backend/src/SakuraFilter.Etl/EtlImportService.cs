@@ -98,8 +98,10 @@ public class EtlProgress
     public long RowsTotal => Interlocked.Read(ref _rowsTotal);
     // Day 9.2: Stage 字段公开 - 用于前端精细化显示当前 ETL 阶段
     //   值: idle / reading / staging / inserting / committing / meili-sync
-    //   WHY Interlocked.Exchange: 后台 Meili 同步在另一线程跑,需要线程安全
-    public string Stage => Interlocked.CompareExchange(ref _stage, null, null) ?? "idle";
+    //   WHY Volatile.Read: 后台 Meili 同步在另一线程跑,需要线程安全读取引用类型
+    //   v24 修复: 替代 Interlocked.CompareExchange(ref _stage, null, null), 避免 CS8601
+    //     (T 推断为 string 非 null, null 参数不合法)
+    public string Stage => Volatile.Read(ref _stage);
     public string Status => _status;
     public DateTime? StartedAt => _startedAt;
     public DateTime? FinishedAt => _finishedAt;

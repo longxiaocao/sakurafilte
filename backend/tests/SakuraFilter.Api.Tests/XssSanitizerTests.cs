@@ -83,7 +83,7 @@ public class XssSanitizerTests
         // WHY: 大小写绕过是常见尝试
         var result = _sut.Sanitize("<ScRiPt>alert(1)</ScRiPt>");
         result.Should().NotContain("alert");
-        result.ToLowerInvariant().Should().NotContain("script");
+        result!.ToLowerInvariant().Should().NotContain("script");  // CS8602: result 来自 Sanitize 输入非 null, ! 抑制
     }
 
     [Fact]

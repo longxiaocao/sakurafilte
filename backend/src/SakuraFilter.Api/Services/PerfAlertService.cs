@@ -171,7 +171,7 @@ public class PerfAlertService : BackgroundService
         return pollSec;
     }
 
-    private static double ParseDouble(Dictionary<string, string> settings, string key, double defaultValue)
+    private static double ParseDouble(Dictionary<string, string?> settings, string key, double defaultValue)
     {
         return settings.TryGetValue(key, out var s) && double.TryParse(s, out var v) ? v : defaultValue;
     }
