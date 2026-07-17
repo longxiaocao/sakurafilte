@@ -9,7 +9,7 @@ namespace SakuraFilter.Api.Services;
 /// <summary>
 /// 字典管理抽象基类 (Day 10+ P2.1)
 /// 用途: 统一实现所有字典的软删/排序/UNIQUE 验证/批量重排序 7 个核心方法,
-///       子类只需 override xrefCount 业务逻辑 (Day 10: OemBrandDictService < 50 行)
+///       子类只需 override xrefCount 业务逻辑 (Day 10: OemBrandDictService &lt; 50 行)
 ///
 /// 设计:
 ///   - TItem 必须是 EF Core 实体 (有 Id / Value / SortOrder / DeletedAt 字段)

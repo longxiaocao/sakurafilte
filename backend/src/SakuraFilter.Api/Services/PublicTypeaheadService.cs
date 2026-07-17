@@ -13,7 +13,7 @@ namespace SakuraFilter.Api.Services;
 ///   - 字段映射到 3 张表 (products/cross_references/machine_applications)
 ///   - 走 EscapeLikePattern + EF.Functions.ILike 三参重载 (与 PublicSearchController 一致)
 ///   - AsNoTracking + Take(20) 性能优先
-///   - q 长度 < 2 返回空, 避免短前缀命中过多
+///   - q 长度 &lt; 2 返回空, 避免短前缀命中过多
 ///   - 每字段独立 Where 表达式 (避免 selector.Compile() 在表达式树中无法翻译)
 ///   - IMemoryCache 5 分钟 TTL: 同 (field, q_lower, limit) 命中缓存直接返回, 不查 PG
 /// </summary>

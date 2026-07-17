@@ -13,7 +13,7 @@ namespace SakuraFilter.Api.Services;
 /// Meili 索引写入补偿 Worker (Day 5)
 /// - 每 N s 扫描 search_index_pending (Day 7: 10s;Day 7.9: 改用配置)
 /// - 每批 M 条 (Day 7: 500;Day 7.9: 改用配置)
-/// - 对 retry_count < 5 的条目重试 (指数退避 60s/120s/300s/600s/1800s)
+/// - 对 retry_count &lt; 5 的条目重试 (指数退避 60s/120s/300s/600s/1800s)
 /// - 成功后删除条目,失败更新 next_retry_at
 /// - 重试 5 次后转入 search_index_dead_letter (Day 7) 等待人工排查
 /// </summary>

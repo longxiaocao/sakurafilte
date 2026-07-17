@@ -12,7 +12,7 @@ namespace SakuraFilter.Api.Services;
 ///   - 暴露 GetSnapshot() 给 /api/perf 端点
 ///   - 不写入 X-Response-Time header (避免日志被观测污染)
 /// WHY 独立 Singleton:
-///   - 1000 条样本足够计算 P95 (统计学上 n=1000 误差 < 3%)
+///   - 1000 条样本足够计算 P95 (统计学上 n=1000 误差 &lt; 3%)
 ///   - 用 ConcurrentQueue + 自旋保持容量,避免 List 加锁开销
 ///   - 简单可靠,不需要 Prometheus/InfluxDB 等额外基础设施
 ///   - Middleware 通过构造注入本服务, 端点也注入本服务 (DI 友好)

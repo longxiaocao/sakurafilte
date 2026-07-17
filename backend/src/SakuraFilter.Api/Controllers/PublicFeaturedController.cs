@@ -12,7 +12,7 @@ namespace SakuraFilter.Api.Controllers;
 /// 设计: 不带任何过滤条件, 只排除 is_discontinued=true
 ///   - 排序: OrderByDescending(Id) -> 最新上架优先
 ///   - limit: 1-50, 默认 20
-///   - 性能: 主键降序扫描 + Take(20), 1M 数据下 < 20ms
+///   - 性能: 主键降序扫描 + Take(20), 1M 数据下 &lt; 20ms
 /// </summary>
 [ApiController]
 [AllowAnonymous]

@@ -163,7 +163,7 @@ public class PublicSearchController : ControllerBase
 
     /// <summary>
     /// P3.4 (Task 11.5): 公开搜索页 8 字段多框模糊搜索
-    /// URL: GET /api/public/search?oemBrand=...&oemNo2=...&oemNo3=...&machineBrand=...&machineModel=...&modelName=...&engineBrand=...&engineType=...
+    /// URL: GET /api/public/search?oemBrand=...&amp;oemNo2=...&amp;oemNo3=...&amp;machineBrand=...&amp;machineModel=...&amp;modelName=...&amp;engineBrand=...&amp;engineType=...
     /// 规格 (新思路.xlsx R2/R8): 8 字段同时支持模糊搜索,任一字段命中即返回
     ///  - 8 字段全部 optional, 全部空 → 400
     ///  - 多字段 = AND 关系 (收窄范围)

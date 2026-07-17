@@ -9,7 +9,7 @@ namespace SakuraFilter.Api.Services;
 /// Day 8.4: 简易鉴权中间件
 /// 用途: 保护 /api/admin/* 和 /api/etl/* 端点, 防止未授权访问
 /// 设计:
-///   - dev 环境: 静态 token 验证 (Header X-Admin-Token: <token>)
+///   - dev 环境: 静态 token 验证 (Header X-Admin-Token: &lt;token&gt;)
 ///   - 白名单路径 (/api/search, /scalar 等) 直接放行
 ///   - 错误统一返回 RFC 7807 ProblemDetails
 ///   - 401 含 WWW-Authenticate 头, 符合 HTTP 规范

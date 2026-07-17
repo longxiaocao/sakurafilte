@@ -23,7 +23,7 @@ namespace SakuraFilter.Api.Services;
 ///      避免并发条件竞争 (后台 worker 选中的行正好被 admin batch 改 status)
 ///
 /// 行为 (不变):
-///   - 扫描 dead_letter WHERE status='active' AND recovery_count < max AND 冷却已到
+///   - 扫描 dead_letter WHERE status='active' AND recovery_count &lt; max AND 冷却已到
 ///     AND last_error 含"瞬时错误"关键词
 ///   - 移回 search_index_pending (retry=0, next_retry_at=now) 让 IndexReplayWorker 接手
 ///   - 同步: status='recovered' + recovery_count+=1 + recovered_at=now + recovered_to_pending_id
