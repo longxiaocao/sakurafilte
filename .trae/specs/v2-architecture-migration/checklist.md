@@ -289,3 +289,346 @@
 - [ ] Machine Type 双轨全程落地,无私自修改
 - [ ] 图片方案 A 全程落地,无私自修改
 - [ ] 分区 6 预留空表仅后端占位,不参与查询/不展示前端
+
+---
+
+## 47 项漏洞修复验证清单(v2 修订)
+
+> 对照 spec.md 末尾"漏洞修复清单(47 项 → 修复方案映射)",逐项验证修复落地。
+> 每个漏洞含: 漏洞描述、修复方案、验证手段、验证状态。
+
+### 一、数据结构与表设计漏洞(20 项)
+
+#### 漏洞 1: product_images (product_id, slot) UNIQUE 约束冲突 [高]
+- [ ] 旧约束 `ix_product_images_product_id_slot_unique` 已 DROP
+- [ ] 新增 `uq_product_images_primary` 部分唯一索引 `ON product_images (oem_no_3) WHERE image_role = 'primary' AND oem_no_3 IS NOT NULL`
+- [ ] 新增 `uq_product_images_detail_slot` 部分唯一索引 `ON product_images (product_id, slot) WHERE image_role = 'detail'`
+- [ ] 验证手段: `psql \d product_images` 显示索引列表,旧约束消失,两个新索引存在
+- [ ] 单元测试 `Image_Upload_Primary_Duplicate` 通过(同 OEM 3 第二张主图抛 `IMAGE_PRIMARY_DUPLICATE`)
+- [ ] 单元测试 `Image_Upload_Detail_Slot_Duplicate` 通过(同 MR.1 slot 重复抛 `IMAGE_DETAIL_SLOT_DUPLICATE`)
+
+#### 漏洞 2: oem_no_normalized UNIQUE 语义矛盾 [高]
+- [ ] `products.oem_no_normalized` 旧 UNIQUE 约束 `ix_products_oem_no_normalized_unique` 已 DROP
+- [ ] 改为普通索引 `idx_products_oem_no_normalized` (WHERE NOT NULL)
+- [ ] `ALTER COLUMN oem_no_normalized DROP NOT NULL` 执行成功(允许 NULL)
+- [ ] 验证手段: `psql \d products` 显示 oem_no_nullable + 普通索引
+- [ ] 单元测试 `Product_Create_NullOemNoNormalized` 通过(NULL 不抛错)
+
+#### 漏洞 3: cross_references 缺 oem_2 字段 [高]
+- [ ] `cross_references` 表新增 `oem_2 varchar(100)` 列
+- [ ] ETL `ImportXrefsAsync` 解析 `oem_2` 字段
+- [ ] `CrossReference` 实体类加 `Oem2` 属性
+- [ ] 验证手段: `psql \d cross_references` 显示 oem_2 列
+- [ ] 单元测试 `Xref_Import_Oem2` 通过(oem_2 字段正确入库)
+
+#### 漏洞 4: system_settings INSERT 缺 updated_at [高]
+- [ ] 10 项新配置的 INSERT 语句显式带 `updated_at = now()`
+- [ ] 验证手段: `SELECT key, updated_at FROM system_settings WHERE key LIKE 'image.%' OR key LIKE 'search.%' OR key LIKE 'seo.%'` 全部 updated_at 非空
+
+#### 漏洞 5: 所有 INSERT 缺 ON CONFLICT [高]
+- [ ] system_settings INSERT 末尾加 `ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, description = EXCLUDED.description, updated_at = now()`
+- [ ] 脚本可重跑不报错(幂等)
+- [ ] 验证手段: 连续执行 2 次 INSERT 脚本,无错误,数据一致
+
+#### 漏洞 6: oem_no_3 nullable 绕过 UNIQUE [高]
+- [ ] `ALTER TABLE cross_references ALTER COLUMN oem_no_3 SET NOT NULL` 执行成功
+- [ ] `ALTER TABLE cross_references ALTER COLUMN oem_brand SET NOT NULL` 执行成功
+- [ ] 验证手段: `psql \d cross_references` 显示两列 not_null=true
+- [ ] 单元测试 `Xref_Create_NullOemNo3` 通过(抛 `OEM3_REQUIRED`)
+- [ ] 单元测试 `Xref_Create_NullOemBrand` 通过(抛 `OEM_BRAND_REQUIRED`)
+
+#### 漏洞 7: mr_1=NULL 与 oem_no_normalized NOT NULL 冲突 [高]
+- [ ] `oem_no_normalized DROP NOT NULL` 与 `mr_1` 部分唯一索引共存(WHERE mr_1 IS NOT NULL)
+- [ ] mr_1 为 NULL 时不进唯一索引,允许多行 NULL
+- [ ] V2 新数据业务层强制 mr_1 必填(`MR1_REQUIRED` 错误码)
+- [ ] 验证手段: 单元测试 `Product_Create_Mr1Required` 通过(V2 数据不填 mr_1 抛错)
+
+#### 漏洞 8: partition6_placeholder 未在 EF Core 注册 [中]
+- [ ] 新增 `SakuraFilter.Core/Entities/Partition6Placeholder.cs` 实体类(仅 Id + CreatedAt)
+- [ ] `ProductDbContext.OnModelCreating` 显式 `modelBuilder.Entity<Partition6Placeholder>().ToTable("partition6_placeholder").HasKey(e => e.Id)`
+- [ ] 不暴露 DbSet(防止业务查询误用)
+- [ ] 验证手段: `dotnet build` 通过,ModelSnapshot 含 partition6_placeholder 表
+
+#### 漏洞 9: 字段长度未明确 [中]
+- [ ] `mr_1` varchar(10) (CHECK 约束 `^[A-Za-z0-9]{1,10}$`)
+- [ ] `oem_no_3` varchar(200)
+- [ ] `oem_brand` varchar(100)
+- [ ] `oem_2` varchar(100)
+- [ ] `machine_type` varchar(50)
+- [ ] `machine_category` varchar(50)
+- [ ] `image_role` varchar(20)
+- [ ] EF Core 配置类 `HasMaxLength()` 全部对齐
+- [ ] 验证手段: `psql \d+ cross_references` + `\d+ products` + `\d+ product_images` 字段长度一致
+
+#### 漏洞 10: machine_type 枚举未加 CHECK [中]
+- [ ] `cross_references` 加 `chk_xref_machine_type` CHECK 约束(枚举: agriculture/commercial/construction/industrial/others)
+- [ ] `machine_applications` 加 `chk_machine_apps_category` CHECK 约束(同枚举)
+- [ ] 验证手段: `psql \d+ cross_references` + `\d+ machine_applications` 显示 CHECK 约束
+- [ ] 单元测试 `Xref_Create_InvalidMachineType` 通过(非法枚举值抛 `MACHINE_TYPE_INVALID`)
+
+#### 漏洞 11: image_role 未加 CHECK [中]
+- [ ] `product_images` 加 `chk_image_role` CHECK 约束(image_role IN ('primary', 'detail'))
+- [ ] `product_images` 加 `chk_image_role_slot` CHECK 约束((primary AND slot=1) OR (detail AND slot BETWEEN 2 AND 6))
+- [ ] 验证手段: `psql \d+ product_images` 显示两个 CHECK 约束
+- [ ] 单元测试 `Image_Upload_InvalidRole` 通过(非法 role 抛错)
+- [ ] 单元测试 `Image_Upload_PrimarySlotNot1` 通过(primary + slot=2 抛 `IMAGE_ROLE_SLOT_MISMATCH`)
+- [ ] 单元测试 `Image_Upload_DetailSlotInvalid` 通过(detail + slot=7 抛 `IMAGE_DETAIL_SLOT_INVALID`)
+
+#### 漏洞 12: 外键级联策略未明确 [中]
+- [ ] `product_images.product_id` 外键声明 `ON DELETE CASCADE`
+- [ ] EF Core 配置 `.OnDelete(DeleteBehavior.Cascade)`
+- [ ] 验证手段: `psql \d+ product_images` 外键显示 ON DELETE CASCADE
+- [ ] 单元测试 `Product_Delete_CascadeImages` 通过(删 MR.1 自动删关联图片行)
+
+#### 漏洞 13: cross_references 无 xmin 并发丢更新 [中]
+- [ ] `CrossReference` 实体加 `RowVersion` 属性(byte[])
+- [ ] EF Core 配置 `e.Property(x => x.RowVersion).IsRowVersion().IsConcurrencyToken()`(映射到 xmin)
+- [ ] OEM 排序管理端点 POST body 含 `rowVersion` 字段
+- [ ] 冲突返回 409 `XREF_CONFLICT`
+- [ ] 验证手段: 单元测试 `Oem3_Reorder_ConcurrencyConflict` 通过(并发更新抛 DbUpdateConcurrencyException)
+
+#### 漏洞 14: mr_1 与 oem_no_normalized 派生关系未明 [中]
+- [ ] ETL `ImportProductsAsync` 中 `oem_no_normalized = mr_1`(临时派生,过渡兼容)
+- [ ] 注释明确"V2 过渡期,oem_no_normalized 仅为兼容旧查询,新代码不应使用"
+- [ ] 验证手段: ETL 导入后 `SELECT mr_1, oem_no_normalized FROM products WHERE mr_1 IS NOT NULL` 两列值一致
+
+#### 漏洞 15: 索引选择性分析缺失 [中]
+- [ ] spec.md "索引设计汇总"表补全每条索引的选择性备注(高/中/低)
+- [ ] 高选择性索引(cardinality 接近行数)优先保留
+- [ ] 低选择性索引(如 is_published 布尔)改为部分索引(WHERE 条件)
+- [ ] 验证手段: spec.md 索引汇总表完整
+
+#### 漏洞 16: cross_references.product_id NOT NULL 未明 [中]
+- [ ] `ALTER TABLE cross_references ALTER COLUMN product_id SET NOT NULL` 执行成功
+- [ ] 验证手段: `psql \d cross_references` 显示 product_id not_null=true
+- [ ] 单元测试 `Xref_Create_NullProduct` 通过(无关联产品抛错)
+
+#### 漏洞 17: products.is_published 与 xref.is_published 区分 [中]
+- [ ] spec.md 检索逻辑章节明确: `products.is_published` 为文档级(整 MR.1 下架),`cross_references.is_published` 为 OEM 3 级(单个 OEM 3 下架)
+- [ ] Meilisearch 过滤语义: `oem_list.is_published = true AND is_published = true`(双重过滤)
+- [ ] 验证手段: spec.md 文档说明清晰
+- [ ] 单元测试 `Search_Filter_ProductLevelUnpublished` 通过(MR.1 下架不出现在结果)
+- [ ] 单元测试 `Search_Filter_Oem3LevelUnpublished` 通过(单个 OEM 3 下架,该 OEM 3 不出现但同 MR.1 其他 OEM 3 出现)
+
+#### 漏洞 18: product_images.slot 值范围未加 CHECK [中]
+- [ ] `chk_image_role_slot` CHECK 约束明确 slot=1(primary)/slot BETWEEN 2 AND 6(detail)
+- [ ] 验证手段: 见漏洞 11 验证项
+
+#### 漏洞 19: numeric 字段精度未明 [中]
+- [ ] products 表 8 个尺寸字段 `d1_mm/d2_mm/h1_mm/d3_mm/d4_mm/h2_mm/h3_mm/h4_mm` 全部 `numeric(10,2)`
+- [ ] `ALTER COLUMN d1_mm TYPE numeric(10,2)` 等 8 个 ALTER 执行成功
+- [ ] 验证手段: `psql \d products` 显示 8 个字段类型 numeric(10,2)
+
+#### 漏洞 20: brand_sort_order 查询路径未走单一索引 [中]
+- [ ] Meilisearch 文档结构含 `brand_sort_order_min` 字段(预计算,文档级)
+- [ ] `BuildMr1DocumentAsync` 中 `brand_sort_order_min = oem_list.Min(o => o.brand_sort_order)`
+- [ ] `sortableAttributes` 含 `brand_sort_order_min`
+- [ ] 验证手段: Meilisearch `/indexes/products/settings/sortable-attributes` 含 brand_sort_order_min
+- [ ] 单元测试 `Search_Sort_ByBrandSortOrderMin` 通过(按 brand_sort_order_min 排序正确)
+
+### 二、检索逻辑与索引漏洞(12 项)
+
+#### 漏洞 1: 聚合搜索响应结构与 MR.1 文档主键矛盾 [高]
+- [ ] `AggregateSearchResponse.hits[]` 每项为 1 个 MR.1 文档
+- [ ] 每个 hit 含 `oemList` 数组(已按 Brand sort_order → OEM 3 sort_order 排序)
+- [ ] 前端展开显示同 MR.1 下所有 OEM 3
+- [ ] 验证手段: 单元测试 `Search_Aggregate_DocumentLevel` 通过(同 MR.1 多 OEM 3 只返回 1 个 hit)
+
+#### 漏洞 2: PG 兜底 JOIN 膨胀 [高]
+- [ ] `PostgresSearchProvider` 改用 LATERAL JOIN + JSON 聚合
+- [ ] SQL 模板: `SELECT p.*, lat_oem.oem_list, lat_machine.machine_list FROM products p LEFT JOIN LATERAL (...) lat_oem ON true LEFT JOIN LATERAL (...) lat_machine ON true WHERE ...`
+- [ ] 加 DISTINCT 防重复
+- [ ] 验证手段: 单元测试 `Search_Fallback_Pg_NoCartesian` 通过(同 MR.1 3 OEM 3 + 5 机型不膨胀)
+
+#### 漏洞 3: filterableAttributes 严重漏配 [高]
+- [ ] Meilisearch `filterableAttributes` 含: type / is_discontinued / is_published / oem_list.is_published / oem_list.oem_brand / oem_list.oem_no_3 / oem_list.oem_2 / oem_list.machine_type / machine_list.machine_brand / machine_list.machine_category / d1_mm / d2_mm / h1_mm
+- [ ] 验证手段: `GET /indexes/products/settings/filterable-attributes` 返回列表完整
+
+#### 漏洞 4: _formatted 高亮 XSS [高]
+- [ ] 后端 `MeiliSearchProvider.SearchAsync` 返回前对 `_formatted` 做 HTML escape(转义 `<>&"'`)
+- [ ] 转义后还原 `<mark>` + `</mark>` 标签
+- [ ] 前端 `html-sanitizer.ts` 封装 DOMPurify,白名单只允许 `<mark>`
+- [ ] 前端 `v-html` 渲染前必须经过 sanitizer
+- [ ] 验证手段: 单元测试 `Search_Aggregate_XssDefense` 通过(注入 `<script>` 被 escape)
+- [ ] 前端单元测试 `Search_Aggregate_XssDefense` 通过(DOMPurify 过滤)
+
+#### 漏洞 5: 嵌套数组 filter 语义不明 [高]
+- [ ] spec.md 明确"嵌套数组 filter 为 OR 语义(至少一个元素满足)"
+- [ ] 文档级冗余字段 `brand_sort_order_min` 支持文档级过滤
+- [ ] `oem_list.is_published = true` 表示"至少一个 OEM 3 上架"
+- [ ] 验证手段: spec.md 文档说明清晰
+- [ ] 单元测试 `Search_Filter_NestedOrSemantics` 通过(任一 OEM 3 满足条件即返回)
+
+#### 漏洞 6: 排序规则缺索引支撑 [中]
+- [ ] `brand_sort_order_min` 冗余字段 + `sortableAttributes` 配置
+- [ ] `oem_list.sort_order` MIN 语义明确(取最小值作为文档级排序键)
+- [ ] 验证手段: 见漏洞 20
+
+#### 漏洞 7: cursor 分页偏移 [中]
+- [ ] `CursorHmac.Sign` 改签名为 `Sign(string updatedAtIso, string mr1)`(支持 string MR.1)
+- [ ] cursor payload 改为 `{updatedAt, mr1}` JSON
+- [ ] 验证手段: 单元测试 `Cursor_NextPage_ByMr1` 通过(按 MR.1 cursor 翻页)
+
+#### 漏洞 8: 停止词配置缺失 [中]
+- [ ] Meilisearch `stopWords` 配置: ["the", "a", "an", "of", "for", "and", "or", "to", "in", "on"]
+- [ ] 验证手段: `GET /indexes/products/settings/stop-words` 返回列表
+
+#### 漏洞 9: typo 容错 minWordSizeForTypos 未配 [中]
+- [ ] `typoTolerance.minWordSizeForTypos.oneTypo = 4` / `twoTypos = 8`
+- [ ] system_settings 配置项 `search.aggregate_min_word_size_for_typos=4`
+- [ ] 验证手段: `GET /indexes/products/settings/typo-tolerance` 返回配置
+- [ ] 单元测试 `Search_Aggregate_TypoTolerance` 通过("BOSHC" 命中 "BOSCH")
+
+#### 漏洞 10: 嵌套字段排序语义未明 [中]
+- [ ] spec.md 明确: 嵌套字段排序取 MIN 语义
+- [ ] `brand_sort_order_min` 为文档级,直接 sort
+- [ ] `oem_list.sort_order` 取 MIN 作为文档级排序键
+- [ ] 验证手段: spec.md 文档说明清晰
+
+#### 漏洞 11: PG ILIKE 转义未说 [中]
+- [ ] `PostgresSearchProvider` 复用 `LikeEscapeExtensions.EscapeLikePattern`
+- [ ] 使用 3 参 ILike (`EF.Functions.ILike(pattern, query, escapeChar)`)
+- [ ] 验证手段: 单元测试 `Search_Fallback_Pg_LikeEscape` 通过(含 `%` `_` 的搜索词不触发全表扫描)
+
+#### 漏洞 12: 分页深度限制缺失 [中]
+- [ ] `AggregateSearchRequest.page` 加校验 `page > 100` 抛 `SEARCH_PAGE_TOO_DEEP`
+- [ ] max_page_depth=100 配置在 system_settings
+- [ ] 验证手段: 单元测试 `Search_Aggregate_PageTooDeep` 通过(page=101 抛错)
+
+### 三、前后端联动链路漏洞(15 项)
+
+#### 漏洞 1: nginx.conf 路由未配置 [高]
+- [ ] `docker/nginx.conf` 新增 location:
+  - `location ~ ^/products/` → proxy_pass http://backend:8080
+  - `location ~ ^/product/` → proxy_pass http://backend:8080 (旧 URL 301)
+  - `location ~ ^/(sitemap\.xml|sitemaps/)` → proxy_pass http://backend:8080
+  - `location = /robots.txt` → proxy_pass http://backend:8080
+- [ ] 验证手段: `curl -I http://localhost/products/oil-filter/spin-on/bosch/F000000001` 返回 200 + Content-Type: text/html(非 SPA index.html)
+- [ ] 验证手段: `curl -I http://localhost/sitemap.xml` 返回 200 + Content-Type: application/xml
+
+#### 漏洞 2: router 移除路由与 SPA 跳转冲突 [高]
+- [ ] spec.md "SEO 与部署方案/SPA 跳转改造"列全项目清单: `router.push('/product/...')` → `window.location.href = '/products/...'`
+- [ ] 涉及文件: PublicSearchView.vue / PublicCompareView.vue / PublicProductView.vue / AppHeader.vue 搜索跳转
+- [ ] 验证手段: 全项目 grep `router.push.*product/` 无遗留(仅保留 SPA 内部跳转)
+
+#### 漏洞 3: Vue 3 无原生局部 hydration [高]
+- [ ] spec.md 明确: 不用 hydration,改用 client mount 模式
+- [ ] `product-detail-client.js` 使用 `createApp(GalleryApp).mount('#vue-gallery')`
+- [ ] SSR 阶段 div 内可留空(SEO 内容在外层 HTML)
+- [ ] 验证手段: 浏览器禁用 JS,详情页 SEO 内容(h1/表格/列表)仍可见
+- [ ] 验证手段: 单元测试 `Razor_DetailPage_NoVueDependency` 通过
+
+#### 漏洞 4: ProblemDetailsFactory 错误码命名不一致 [高]
+- [ ] 新增 V2 错误码全部大写下划线格式(无 ERR_ 前缀)
+- [ ] V2 错误码清单: MR1_ALREADY_EXISTS / MR1_FORMAT_INVALID / MR1_REQUIRED / OEM3_ALREADY_EXISTS / OEM3_REQUIRED / OEM_BRAND_REQUIRED / MACHINE_TYPE_INVALID / XREF_CONFLICT / IMAGE_PRIMARY_DUPLICATE / IMAGE_DETAIL_SLOT_DUPLICATE / IMAGE_ROLE_SLOT_MISMATCH / IMAGE_DETAIL_SLOT_INVALID / SEARCH_PAGE_TOO_DEEP
+- [ ] 旧 `ERR_*` 错误码保留映射(向后兼容)
+- [ ] `appsettings.json` 加 `ErrorCodes:LegacyPrefix: "ERR_"` 配置
+- [ ] 验证手段: 单元测试 `ProblemDetails_ErrorCode_LegacyCompat` 通过(旧 ERR_CONFLICT 仍识别为新 XREF_CONFLICT)
+
+#### 漏洞 5: AdminProductImageService 签名不兼容 [高]
+- [ ] `UploadAsync` 新签名: `(string mr1, string imageRole, string? oemNo3, short slot, Stream stream, string contentType, CancellationToken ct)`
+- [ ] 旧签名 `(long productId, short slot, ...)` 删除
+- [ ] 调用方 `AdminProductEndpoints.cs` 适配
+- [ ] 验证手段: `dotnet build` 通过,无旧签名调用残留
+
+#### 漏洞 6: CursorHmac 签名改造 [中]
+- [ ] `CursorHmac.Sign` 改为 `Sign(string updatedAtIso, string mr1)`(string 类型 MR.1)
+- [ ] `CursorHmac.Verify` 对应改造
+- [ ] 调用方 `PublicSearchController` 适配
+- [ ] 验证手段: 单元测试 `CursorHmac_SignVerify_Mr1String` 通过
+
+#### 漏洞 7: RateLimit "public" 策略缺失 [中]
+- [ ] `Program.cs` `AddRateLimiter` 加 "public" 策略(120/min,基于 RemoteIpAddress)
+- [ ] 公开搜索端点用 `[EnableRateLimiting("public")]` 标注
+- [ ] 验证手段: 压测 121 次请求,第 121 次返回 429
+
+#### 漏洞 8: ExemptPaths 死配置 /api/products [中]
+- [ ] `appsettings.json` `ExemptPaths` 数组移除 `/api/products`(死配置)
+- [ ] 验证手段: appsettings.json 文件检查,无 `/api/products` 条目
+
+#### 漏洞 9: IndexReplayWorker 批次大小/并发未明 [中]
+- [ ] spec.md 明确: 复用现有 BatchSize=500
+- [ ] 加 `SemaphoreSlim(1)` 并发限制(单实例同时只跑 1 个批次)
+- [ ] 验证手段: spec.md 文档说明清晰
+- [ ] 单元测试 `IndexReplay_BatchSize500_Concurrency1` 通过
+
+#### 漏洞 10: sitemap 内存缓存键未明 [中]
+- [ ] sitemap 索引缓存键: `sitemap:index`
+- [ ] sitemap 分片缓存键: `sitemap:shard:{shard}`
+- [ ] 缓存 TTL 1 小时
+- [ ] 验证手段: 单元测试 `Sitemap_CacheKey` 通过
+
+#### 漏洞 11: Vue 局部 hydration 时序问题 [中]
+- [ ] `product-detail-client.js` defer 加载
+- [ ] 脚本位置在 `</body>` 前
+- [ ] 挂载失败不影响 SEO 内容(渐进增强)
+- [ ] 验证手段: 模拟 JS 加载失败,SEO 内容仍可见
+- [ ] 验证手段: 单元测试 `VueMount_DeferLoad` 通过
+
+#### 漏洞 12: 前端图片懒加载 [低]
+- [ ] `<img>` 标签加 `loading="lazy"` 属性
+- [ ] 关键主图(首屏)不加 lazy
+- [ ] 验证手段: 前端代码检查
+
+#### 漏洞 13: 路由懒加载 [低]
+- [ ] router 动态 import() 懒加载所有路由
+- [ ] 验证手段: `npm run build` 后 chunk 分割正常
+
+#### 漏洞 14: SEO meta tags 服务端注入 [中]
+- [ ] `Detail.cshtml` 用 `@model` 渲染 `og:title` / `og:description` / `canonical` / `og:image`
+- [ ] 验证手段: `curl http://localhost/products/...` HTML 含 og:title 等标签
+- [ ] E2E `Public_ProductDetail_SeoMeta` 通过
+
+#### 漏洞 15: 404 页面 SEO URL 不存在时 [中]
+- [ ] Razor 404 页含站内搜索入口
+- [ ] 404 页 HTTP 状态码正确返回 404(不是 200)
+- [ ] 验证手段: `curl -I http://localhost/products/oil-filter/spin-on/bosch/NOT_EXIST` 返回 404
+- [ ] E2E `Public_ProductDetail_404` 通过
+
+---
+
+## 第二轮深度审查验证点(待启动)
+
+> 启动 3 个并行子代理(数据/检索/联动)对 v2 修复后再次深度审查
+> 验证目标: 修复后是否产生衍生问题、是否有遗漏场景
+
+### 数据关联维度第二轮审查
+- [ ] product_images 旧约束 DROP 后,历史数据是否有依赖该约束的业务代码(残留 SELECT)
+- [ ] oem_no_normalized DROP NOT NULL 后,是否有 NOT NULL 校验残留代码
+- [ ] cross_references 加 oem_2 后,是否有 OEM 2 在 products 表的残留读写
+- [ ] system_settings ON CONFLICT 改造后,旧 INSERT 单条逻辑是否兼容
+- [ ] partition6_placeholder 注册后,是否误进入 Meilisearch 索引构建逻辑
+- [ ] mr_1 部分唯一索引(WHERE mr_1 IS NOT NULL)与 NULL 多行共存的边界
+- [ ] cross_references.xmin 乐观锁在 ETL 全量导入场景下的行为(大批量更新冲突)
+
+### 检索逻辑维度第二轮审查
+- [ ] Meilisearch 嵌套文档 oem_list 排序后,搜索结果展示顺序是否一致
+- [ ] LATERAL JOIN 兜底在 1M 数据量下的查询计划(EXPLAIN ANALYZE)
+- [ ] filterableAttributes 补全后,Meilisearch 索引大小是否膨胀超阈值
+- [ ] _formatted HTML escape 后,中文高亮是否仍正常(mark 标签位置正确)
+- [ ] brand_sort_order_min 冗余字段在 OEM 3 上下架切换时是否及时更新
+- [ ] cursor 分页 page > 100 抛错后,前端是否有友好提示
+- [ ] typoTolerance minWordSizeForTypos=4 配置后,3 字短词(如"BMW")搜索是否失效
+
+### 前后端联动维度第二轮审查
+- [ ] nginx 路由 /products/ 与 SPA /products/:pn1/:pn2/:brand/:oem3 路由是否冲突
+- [ ] Vue client mount 在 SSR HTML 含 `<mark>` 高亮场景下的渲染(画廊组件是否冲突)
+- [ ] ProblemDetailsFactory 旧 ERR_* 映射的覆盖范围(是否有遗漏错误码)
+- [ ] AdminProductImageService 签名改造后,旧单测是否全部更新
+- [ ] CursorHmac string MR.1 改造后,旧 cursor 客户端兼容性
+- [ ] RateLimit "public" 策略对 SEO 爬虫(Googlebot)是否误伤
+- [ ] sitemap 缓存失效后,首次请求的响应时间(缓存击穿防护)
+- [ ] product-detail-client.js defer 加载顺序(依赖 Vue 全局变量时)
+
+---
+
+## 持续迭代验证点(每轮审查后追加)
+
+> 每完成一轮审查 + 修复后,在此追加下一轮验证点
+> 循环终止条件: 连续一轮审查无任何新漏洞检出
+
+### 第 N-1 轮(暂无,待审查后追加)
+_待启动第二轮深度审查后追加_
+
+### 第 N 轮(暂无,待审查后追加)
+_待启动第二轮深度审查后追加_
