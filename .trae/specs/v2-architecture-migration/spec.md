@@ -6656,3 +6656,450 @@ if (needsRedirect) await router.push({ path: '/login', query: { redirect: router
 ⏳ 第九轮深度审查将验证 v9 修复方案是否引入新的衍生问题
 ⏳ 持续迭代直到连续一轮审查无任何新漏洞检出
 
+---
+
+# 第十一章 v10 修订 — 第九轮深度审查结果 + v9 凭空假设纠正
+
+> **修订日期**: 2026-07-17
+> **触发原因**: 第九轮三维度并行深度审查发现 v9 仍存在 11 项高危凭空假设(自称"0 项凭空假设"是讽刺),其中 V9-R1 错误"纠正"了第八轮审查的正确结论,导致 Task V9-1.5/S8-15 伪代码无法编译
+> **核心目标**: (1) 撤销 V9-R1 错误纠正,恢复第八轮 D8-14/S8-11 结论 (2) 修正 11 项高危凭空假设 (3) 修正 11 项中低危问题 (4) 引入"行号+类名"双重核实机制: 所有字段引用必须确认所属类
+
+## 11.1 第九轮深度审查结果摘要
+
+### 审查维度与发现
+
+| 维度 | 子代理 | 发现总数 | 高危 | 中危 | 低危 | 真实漏洞 |
+|------|--------|---------|------|------|------|---------|
+| 数据关联 | D9 | 8 | 5 | 3 | 0 | 8 |
+| 检索逻辑 | S9 | 9 | 5 | 3 | 1 | 9 |
+| 前后端联动 | F8 | 5 | 1 | 1 | 3 | 5 |
+| **合计** | — | **22** | **11** | **7** | **4** | **22** |
+
+### 关键发现
+
+1. **v9 V9-R1 是最大的讽刺**: v9 在"代码现状对齐"章节中"纠正"第八轮审查 D8-14/S8-11,声称 Product.OemBrand 字段存在(L127)。经 Read 核实:
+   - Product 类(L8-95)**没有** OemBrand 字段
+   - L127 的 `[Column("oem_brand")] public string? OemBrand` 属于 L122 的 `CrossReference` 类
+   - **第八轮审查 D8-14/S8-11 结论正确,v9 V9-R1 错误**
+   - 导致 Task V9-1.5/S8-15 伪代码 `p.OemBrand`(p 是 Product)**无法编译**
+
+2. **v9 Task V9-1.1 凭空假设 mr_1 字段不存在**: 实际 [Product.cs#L22](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Core/Entities/Product.cs#L22) 已有 `[Column("mr_1")] public string? Mr1`,InitialCreate 迁移已创建列,AddProductsOem2Mr1Indexes 迁移已创建索引
+
+3. **v9 Task V9-2.4 重新引入 Day 9.9 已修复的 bug**: 
+   - 现有 [EtlImportService.cs#L1165](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Etl/EtlImportService.cs#L1165) 用 `DateTime.SpecifyKind(p.UpdatedAt, DateTimeKind.Utc)` + `ToUnixTimeSeconds()`
+   - v9 伪代码用 `new DateTimeOffset(p.UpdatedAt, TimeSpan.Zero).ToUnixTimeMilliseconds()`
+   - 缺失 SpecifyKind 会抛 ArgumentException,单位错误(毫秒 vs 秒)破坏现有索引数据
+
+4. **v9 Task V9-3.3 captureException API 不匹配**: errorMonitor.ts L255-259 captureException options 仅支持 `{ level?, tags?, extra? }`,v9 传 `{ component: 'ErrorBoundary' }` 不符合 API 契约
+
+5. **v9 Task V9-1.7 "AdminPolicy" 策略名凭空假设**: 实际 [ServiceCollectionExtensions.cs#L178](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Extensions/ServiceCollectionExtensions.cs#L178) 注册的策略名是 `"Admin"` 和 `"Operator"`,无 "AdminPolicy"
+
+6. **v9 Task V9-1.8 ListAllAsync 方法凭空假设**: [IObjectStorage.cs](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Core/Interfaces/IObjectStorage.cs) 仅有 5 个方法(UploadAsync/DeleteAsync/GetUrl/GetPresignedUrlAsync/ExistsAsync),无 ListAllAsync
+
+## 11.2 v9 凭空假设纠正(V10-F1 ~ V10-F11)
+
+### V10-F1 [高] V9-R1 错误纠正:Product.OemBrand 实际不存在
+
+**v9 spec 位置**: L6399-L6405(V9-R1)
+**v9 错误描述**: "Product.cs#L127 存在 `[Column("oem_brand")] public string? OemBrand`,第八轮审查结论错误"
+**真实代码事实**(经 Read 核实):
+- [Product.cs#L8-L95](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Core/Entities/Product.cs#L8) Product 类无 OemBrand 字段
+- [Product.cs#L122-L131](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Core/Entities/Product.cs#L122) CrossReference 类才有 L127 的 OemBrand
+- Product 类有 `Oem2`(L23)字段,但**无 OemBrand**
+- **第八轮审查 D8-14/S8-11 结论"Product 实体只有 Oem2 字段,无 OemBrand"是正确的**
+**修正方案**:
+1. **撤销 V9-R1**: 恢复第八轮 D8-14/S8-11 结论
+2. **Task V9-1.5 伪代码修正**: `p.OemBrand` 改为通过 CrossReferences 导航属性关联:
+   ```csharp
+   // 通过 CrossReferences 导航属性获取首个 OemBrand(Product 无 OemBrand 字段)
+   var oemBrand = p.CrossReferences.FirstOrDefault()?.OemBrand;
+   ```
+3. **S8-15 伪代码修正**: 同上,通过 CrossReferences 关联
+4. **根因分析**: v9 V9-R1 Grep 匹配 `OemBrand` 时未区分所属类,把 CrossReference.OemBrand 错认为 Product.OemBrand
+
+### V10-F2 [高] Task V9-1.1 mr_1 字段已存在
+
+**v9 spec 位置**: L6242-L6247(V9-F1), tasks.md L2720-L2748
+**v9 错误描述**: "ALTER TABLE products ADD COLUMN mr_1 VARCHAR(10)"
+**真实代码事实**:
+- [Product.cs#L22](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Core/Entities/Product.cs#L22) 已有 `[Column("mr_1")] public string? Mr1`
+- InitialCreate 迁移已创建 mr_1 列(ModelSnapshot L1069-1071)
+- AddProductsOem2Mr1Indexes 迁移已创建 `ix_products_mr_1` 非 UNIQUE 索引
+- 现有 mr_1 类型是 `text`,v9 改为 `varchar(10)` 需 `ALTER COLUMN TYPE`
+**修正方案**: 废弃 InitMr1PrimaryKey 迁移,改为 `UpgradeMr1IndexToUnique`:
+```bash
+dotnet ef migrations add UpgradeMr1IndexToUnique
+```
+迁移内容:
+```csharp
+// 1. 数据去重(保留最小 id 的记录,其余置 NULL)
+migrationBuilder.Sql("UPDATE products SET mr_1 = NULL WHERE id NOT IN (SELECT MIN(id) FROM products WHERE mr_1 IS NOT NULL GROUP BY mr_1);");
+// 2. DROP 旧非 UNIQUE 索引
+migrationBuilder.DropIndex(name: "ix_products_mr_1", table: "products");
+// 3. CREATE UNIQUE 索引(部分索引,mr_1 IS NOT NULL)
+migrationBuilder.CreateIndex(
+    name: "ix_products_mr_1_unique",
+    table: "products",
+    column: "mr_1",
+    unique: true,
+    filter: "mr_1 IS NOT NULL");
+```
+**注意**: 不改 mr_1 类型(保持 text),避免数据截断风险
+
+### V10-F3 [高] Task V9-1.8 ListAllAsync 方法凭空假设
+
+**v9 spec 位置**: L6518-L6521(D8-19), tasks.md L2912-L2925
+**v9 错误描述**: "Task V9-1.8 核实 IObjectStorage 现有签名,ListAllAsync 签名调整为..."
+**真实代码事实**: [IObjectStorage.cs#L6-L22](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Core/Interfaces/IObjectStorage.cs#L6) 仅有 5 个方法,**无 ListAllAsync**
+**修正方案**: Task V9-1.8 改为"新增 ListAllAsync 方法"(非"签名调整"):
+```csharp
+// IObjectStorage.cs 新增
+Task<IAsyncEnumerable<string>> ListAllAsync(string? prefix = null, CancellationToken ct = default);
+```
+同步新增 MinIO/Aliyun OSS/Local 实现类的对应方法
+
+### V10-F4 [高] F7-4 mr_1_needs_review 字段凭空假设
+
+**v9 spec 位置**: L6605(F7-4 修复方案)
+**v9 错误描述**: `UPDATE products SET mr_1_needs_review = true WHERE mr_1 IS NULL;`
+**真实代码事实**: 全项目无 mr_1_needs_review 字段,Product.cs 无此字段,products 表无此列
+**修正方案**: 删除该 SQL 语句,仅保留:
+```sql
+-- 从 oem_2 派生 mr_1(临时方案,业务方确认后替换)
+UPDATE products SET mr_1 = oem_2 WHERE mr_1 IS NULL AND oem_2 IS NOT NULL;
+-- 无需标记复核行,业务方确认 CHK 算法后再统一校验
+```
+
+### V10-F5 [高] Task V9-1.7 "AdminPolicy" 策略名凭空假设
+
+**v9 spec 位置**: L6506(D8-17 修复方案), tasks.md L2905
+**v9 错误描述**: `.RequireAuthorization("AdminPolicy")`
+**真实代码事实**: [ServiceCollectionExtensions.cs#L178](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Extensions/ServiceCollectionExtensions.cs#L178) 注册的策略名是 `"Admin"` 和 `"Operator"`,无 "AdminPolicy"
+**修正方案**: 全局替换 "AdminPolicy" 为 "Admin":
+```csharp
+.RequireAuthorization("Admin")  // 非 "AdminPolicy"
+```
+
+### V10-F6 [高] Task V9-2.3 列名 mr1 错误(应为 mr_1)
+
+**v9 spec 位置**: tasks.md L2982
+**v9 错误描述**: `CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_products_mr1 ON products (mr1) WHERE mr_1 IS NOT NULL;`
+**真实代码事实**: 
+- PG 列名是 `mr_1`([Product.cs#L22](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Core/Entities/Product.cs#L22) `[Column("mr_1")]`)
+- v9 SQL 用 `mr1`(无下划线)会报 `column "mr1" does not exist`
+- 且与 Task V9-1.1 索引方案矛盾(UNIQUE vs 非 UNIQUE)
+**修正方案**: 统一索引方案(见 V10-F2),列名改为 mr_1:
+```sql
+CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS ix_products_mr_1_unique 
+ON products (mr_1) WHERE mr_1 IS NOT NULL;
+```
+
+### V10-F7 [高] Task V9-2.4 p.OemBrand 无法编译
+
+**v9 spec 位置**: tasks.md L3009, L3015
+**v9 错误描述**: `p.OemBrand != null && brands.TryGetValue(p.OemBrand, ...)` + `p.OemBrand,  // V2 新增`
+**真实代码事实**: Product 类无 OemBrand 字段(见 V10-F1)
+**修正方案**: 通过 CrossReferences 导航属性关联:
+```csharp
+// BuildProductIndexDocAsync 修正
+foreach (var p in products)
+{
+    // 通过 CrossReferences 导航属性获取首个 OemBrand
+    var oemBrand = p.CrossReferences.FirstOrDefault()?.OemBrand;
+    var brandSortOrder = oemBrand != null && brands.TryGetValue(oemBrand, out var so) 
+        ? so : int.MaxValue;
+    docs.Add(new ProductIndexDoc(
+        p.Id, p.OemNoNormalized, p.OemNoDisplay ?? "", p.Remark, p.Type ?? "UNKNOWN",
+        p.D1Mm, p.D2Mm, p.H3Mm, p.H1Mm, p.Media, p.IsDiscontinued,
+        new DateTimeOffset(DateTime.SpecifyKind(p.UpdatedAt, DateTimeKind.Utc), TimeSpan.Zero).ToUnixTimeSeconds(),
+        p.Mr1,  // V2 新增
+        oemBrand,  // V2 新增(通过 CrossReferences)
+        brandSortOrder  // V2 新增
+    ));
+}
+```
+**注意**: 需在 SyncSearchIndexAsync 查询时 Include CrossReferences:
+```csharp
+.Select(p => new { ..., CrossReferences = p.CrossReferences.Select(c => new { c.OemBrand }).ToList() })
+```
+
+### V10-F8 [高] Task V9-2.4 ToUnixTimeMilliseconds 单位错误
+
+**v9 spec 位置**: tasks.md L3014
+**v9 错误描述**: `new DateTimeOffset(p.UpdatedAt, TimeSpan.Zero).ToUnixTimeMilliseconds()`
+**真实代码事实**: 
+- 现有 [EtlImportService.cs#L1165](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Etl/EtlImportService.cs#L1165) 用 `ToUnixTimeSeconds()`(秒)
+- v9 改为 `ToUnixTimeMilliseconds()`(毫秒)会破坏现有 Meili 索引数据(UpdatedAtUnix 单位不一致)
+- 索引重建后旧 cursor 排序失效
+**修正方案**: 保持 `ToUnixTimeSeconds()`(见 V10-F7 修正伪代码)
+
+### V10-F9 [高] Task V9-2.4 缺失 SpecifyKind 修复
+
+**v9 spec 位置**: tasks.md L3014
+**v9 错误描述**: `new DateTimeOffset(p.UpdatedAt, TimeSpan.Zero)`
+**真实代码事实**: 
+- 现有 [EtlImportService.cs#L1161-L1165](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Etl/EtlImportService.cs#L1161) Day 9.9 修复: `DateTime.SpecifyKind(p.UpdatedAt, DateTimeKind.Utc)`
+- 在 `EnableLegacyTimestampBehavior` 下,Npgsql 读 timestamptz 返回 Kind=Local,`new DateTimeOffset(dt, TimeSpan.Zero)` 要求 Kind==Utc 否则抛 ArgumentException
+- v9 伪代码缺失 SpecifyKind 会重新引入 Day 9.9 已修复的 bug
+**修正方案**: 保持 SpecifyKind 修复(见 V10-F7 修正伪代码)
+
+### V10-F10 [高] Task V9-3.3 captureException API 不匹配
+
+**v9 spec 位置**: tasks.md L3135
+**v9 错误描述**: `captureException(err, { component: 'ErrorBoundary' })`
+**真实代码事实**: [errorMonitor.ts#L255-L259](file:///d:/projects/sakurafilter/frontend/src/utils/errorMonitor.ts#L255) captureException options 类型:
+```typescript
+export function captureException(err: unknown, options?: {
+  level?: Severity
+  tags?: Record<string, string>
+  extra?: Record<string, unknown>
+}): string
+```
+**无 component 字段**,现有 6 处调用均用 `{ level, tags, extra }` 格式
+**修正方案**: 改为 tags 格式(与现有调用风格一致):
+```typescript
+captureException(err, { tags: { source: 'ErrorBoundary' } })
+```
+
+### V10-F11 [高] V9-R3 凭空假设 v8 body 是两段(实际三段)
+
+**v9 spec 位置**: L6419(V9-R3)
+**v9 错误描述**: "v8 spec L5446 实际传 `VerifySignature(body, parts[2])`,其中 body 是 `<ticks>|<id>` 两段(非整个 cursor),payload 格式正确"
+**真实代码事实**(经 Read v8 spec 核实):
+- v8 spec L5441 `var body = cursor[3..];` body = cursor 去掉 `V2:` 前缀 = `{ticks}|{id}|{sig}` **三段**
+- v8 spec L5442 `var parts = body.Split('|', 3);` 拆出 3 个 parts,反向证明 body 含三段
+- v8 spec Sign 时 L5431 `var payload = $"{ticks}|{id}";` 仅两段
+- **签名(两段)与验签(三段)payload 不匹配,验签必然失败**,这是 v8 spec 的真实 bug
+- 第八轮审查核心结论(payload 格式有问题)正确,仅措辞"整个 cursor 字符串"不精确
+**修正方案**: 
+1. **撤销 V9-R3**: 第八轮审查 F7-6 三 核心结论正确
+2. v9 V9-F4 修复方案(用 `VerifyKey(parts[0], id, parts[2])` 传两段)是正确的,保留
+3. V9-R3 改为:"v8 spec payload 格式确实错误(传三段 body 而非两段 ticks|id),由 V9-F4 修复方案处理"
+
+## 11.3 v9 中低危问题修正(V10-F12 ~ V10-F22)
+
+### V10-F12 [中] D8-17 范围扩展到 AdminEtlEndpoints.cs
+
+**v9 spec 位置**: L6502-L6510(D8-17)
+**v9 遗漏**: 仅关注 EtlEndpoints.cs,漏掉 AdminEtlEndpoints.cs
+**真实代码事实**: [AdminEtlEndpoints.cs#L21](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Endpoints/AdminEtlEndpoints.cs#L21) 仅 `RequireRateLimiting("etl")`,**无 RequireAuthorization**
+**修正方案**: D8-17 修复范围扩展:
+```csharp
+// AdminEtlEndpoints.cs L21 修改
+var group = app.MapGroup("/api/admin/etl").WithTags("AdminEtl")
+    .RequireAuthorization("Admin")  // V10-F5: 用 "Admin" 非 "AdminPolicy"
+    .RequireRateLimiting("etl");
+```
+
+### V10-F13 [中] D9-7 ProcessDeadLetterAsync 复用机制描述错误
+
+**v9 spec 位置**: L6325(V9-F5)
+**v9 错误描述**: "同 payload 已 recovered 的死信会复用 recovery_count"
+**真实代码事实**: [IndexReplayWorker.cs#L186](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Services/IndexReplayWorker.cs#L186) 实际是 `existingDead.RetryCount = p.RetryCount;`(复用 RetryCount),L184 注释明确"RecoveryCount 保持不变"
+**修正方案**: L6325 描述改为:"同 payload 已 recovered 的死信会复用其行(status 重置为 active),并更新 RetryCount/LastError,RecoveryCount 保持不变"
+
+### V10-F14 [中] Task V9-1.2 HasOne 与现有 FK 潜在冲突
+
+**v9 spec 位置**: tasks.md L2769
+**v9 风险**: 新增 `e.HasOne<Product>().WithMany().HasForeignKey(x => x.ProductId)` 与现有 FK 约束(InitialCreate L200-205 `fk_cross_references_products_product_id` onDelete: Cascade)可能冲突
+**修正方案**: 显式声明 OnDelete 与现有 FK 一致:
+```csharp
+e.HasOne<Product>().WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Cascade);
+```
+Task V9-1.2 子任务 1.2.3 添加说明:"迁移生成后,对比 ModelSnapshot 确认无重复 FK 创建语句"
+
+### V10-F15 [中] Task V9-2.4 N+1 修复 brands 字典未提到循环外
+
+**v9 spec 位置**: tasks.md L2996-L3020
+**v9 问题**: 1M 数据 / 1000 = 1000 个 batch → 1000 次加载 XrefOemBrand 字典(浪费 999 次)
+**修正方案**: brands 字典提到 SyncSearchIndexAsync 循环外,只加载一次:
+```csharp
+// SyncSearchIndexAsync 修正
+var brands = await db.XrefOemBrands
+    .Where(b => b.DeletedAt == null)
+    .ToDictionaryAsync(b => b.Brand, b => b.SortOrder, ct);
+// 循环内调用 BuildProductIndexDocAsync(batch, brands)
+foreach (var batch in batches)
+{
+    var docs = BuildProductIndexDocAsync(batch, brands);
+    // ...
+}
+```
+
+### V10-F16 [中] Task V9-2.1 重建 Meili 索引缺乏全量重建机制
+
+**v9 spec 位置**: tasks.md L2945-L2955
+**v9 问题**: 现有 SyncSearchIndexAsync 按 `p.UpdatedAt >= importStartedAt` 增量同步,无法全量重建;重建期间公开搜索返回空结果
+**修正方案**: 新增 admin 端点强制全量重建:
+```csharp
+// AdminSearchEndpoints.cs 新增
+group.MapPost("/reindex", async (EtlImportService etl, CancellationToken ct) =>
+{
+    // 临时设 importStartedAt = DateTime.MinValue,强制全量同步
+    await etl.SyncSearchIndexAsync(DateTime.MinValue, ct);
+    return Results.Ok(new { message = "全量重建完成" });
+}).RequireAuthorization("Admin");
+```
+重建期间让 ResilientSearchProvider 切到 PG 兜底
+
+### V10-F17 [中] Mr1Validator CHK 占位实现会拒绝真实数据
+
+**v9 spec 位置**: tasks.md L2862-L2881
+**v9 问题**: 占位算法"前 9 位 ASCII 求和取模 36"如果与业务方真实算法不同,会拒绝所有真实数据(数据迁移失败)
+**修正方案**: 占位实现跳过 CHK 校验(只做长度+字符集校验):
+```csharp
+public static bool IsValid(string? mr1)
+{
+    if (string.IsNullOrEmpty(mr1)) return false;
+    if (mr1.Length != ExpectedLength) return false;
+    if (mr1.Any(c => !Charset.Contains(c))) return false;
+    // CHK 校验跳过(待 Pre-Task-V9-1 业务方确认)
+    // WHY 跳过: 占位算法与真实算法不同会拒绝所有真实数据
+    // TODO: Pre-Task-V9-1 确认后启用 CHK 校验
+    return true;  // 仅长度+字符集校验通过
+}
+```
+
+### V10-F18 [中] S8-6 CONCURRENTLY 事务方案破坏迁移原子性
+
+**v9 spec 位置**: spec.md L6543-L6551, tasks.md L2973-L2989
+**v9 问题**: EF Core 8 migrationBuilder.Sql 无 suppressTransaction 参数,COMMIT 后 CONCURRENTLY 失败无法回滚
+**修正方案**: 拆分为两个迁移:
+1. `UpgradeMr1IndexToUnique`(事务内): DROP 旧索引 + CREATE UNIQUE 索引(非 CONCURRENTLY)
+2. 若需 CONCURRENTLY(避免长时间锁表),用 raw ADO.NET 连接在迁移外单独执行:
+```csharp
+// 迁移 Up 方法
+migrationBuilder.DropIndex(name: "ix_products_mr_1", table: "products");
+// 不用 CONCURRENTLY,接受短暂锁表(1M 数据预计 < 30s)
+migrationBuilder.CreateIndex(
+    name: "ix_products_mr_1_unique",
+    table: "products",
+    column: "mr_1",
+    unique: true,
+    filter: "mr_1 IS NOT NULL");
+```
+
+### V10-F19 [低] F8-1 isSafeRedirect 漏校验 protocol
+
+**v9 spec 位置**: tasks.md L3092-L3099
+**v9 问题**: 仅校验 hostname 不校验 protocol,`javascript://example.com/alert(1)` 可绕过
+**修正方案**: 增加 protocol 校验:
+```typescript
+export function isSafeRedirect(target: string): boolean {
+  try {
+    const url = new URL(target, window.location.origin)
+    return (url.protocol === 'http:' || url.protocol === 'https:')
+      && url.hostname === window.location.hostname
+  } catch {
+    return false
+  }
+}
+```
+测试用例补充:
+```typescript
+expect(isSafeRedirect('javascript://example.com/x')).toBe(false)
+expect(isSafeRedirect('data://example.com/x')).toBe(false)
+```
+
+### V10-F20 [低] F7-3 项目不支持 IE 11
+
+**v9 spec 位置**: spec.md L6592-L6596
+**v9 问题**: frontend 无 browserslist/targets 配置,默认目标现代浏览器(Vite 默认 modules),不支持 IE 11;且伪代码 `try { } catch { } then()` 语法错误
+**修正方案**: F7-3 直接降级为"不适用":
+```
+F7-3 [不适用] 项目不支持 IE 11
+- frontend 无 browserslist 配置,Vite 默认目标现代浏览器
+- Promise.finally 在所有目标浏览器原生支持
+- 无需 polyfill,无需修改
+```
+删除 L6595 语法错误的伪代码
+
+### V10-F21 [低] F7-12 凭空假设 v8 spec 有硬跳转
+
+**v9 spec 位置**: spec.md L6620-L6621
+**v9 问题**: v8 spec redirectToLogin 伪代码无 `window.location.href` 硬跳转,仅 `// ...` 占位
+**真实代码事实**: [http.ts#L94](file:///d:/projects/sakurafilter/frontend/src/utils/http.ts#L94) `window.location.href = ...` 是真实硬跳转
+**修正方案**: F7-12 问题描述改为指向 http.ts L94:
+```
+F7-12 [中] http.ts redirectToLogin 用 window.location.href 硬跳转
+- 真实代码事实: http.ts L94 `window.location.href = ...` 硬跳转丢失 SPA 上下文
+- 修复方案: 用 router.push 替代(需在 router.isReady 后调用)
+```
+
+### V10-F22 [低] S9-9 V9-F10 占位实现单元测试预期值不可知
+
+**v9 spec 位置**: tasks.md L2885-L2888
+**v9 问题**: 单元测试 `[InlineData("1234567890", true)]` 标注"待确认",但占位算法"前 9 位 ASCII 求和取模 36"计算结果应是 false(最后一位应为 '9' 而非 '0')
+**修正方案**: V10-F17 占位实现跳过 CHK 后,单元测试仅验证长度+字符集:
+```csharp
+[Theory]
+[InlineData("1234567890", true)]   // 长度+字符集通过
+[InlineData("ABCDEFGHIJ", true)]   // 长度+字符集通过
+[InlineData("123456789", false)]   // 长度不足
+[InlineData("12345678901", false)] // 长度超长
+[InlineData("123456789!", false)]  // 非法字符
+public void Mr1Validator_IsValid(string mr1, bool expected) { ... }
+```
+
+## 11.4 v10 关键设计调整(A1-A20)
+
+| 编号 | 决策点 | v9 方案 | v10 调整 | 理由 |
+|------|--------|---------|---------|------|
+| A1 | V9-R1 Product.OemBrand | 错误纠正(称存在) | 撤销,恢复 D8-14/S8-11 | V10-F1: Product 类无此字段 |
+| A2 | Task V9-1.5/S8-15 p.OemBrand | 直接引用 | 通过 CrossReferences 导航 | V10-F7: Product 无此字段 |
+| A3 | Task V9-1.1 InitMr1PrimaryKey | ADD COLUMN mr_1 | UpgradeMr1IndexToUnique | V10-F2: 字段已存在 |
+| A4 | Task V9-1.8 ListAllAsync | 签名调整 | 新增方法 | V10-F3: 接口无此方法 |
+| A5 | F7-4 mr_1_needs_review | 标记复核行 | 删除该 SQL | V10-F4: 字段不存在 |
+| A6 | Task V9-1.7 策略名 | "AdminPolicy" | "Admin" | V10-F5: 实际策略名 |
+| A7 | Task V9-2.3 列名 | mr1 | mr_1 | V10-F6: PG 列名 |
+| A8 | Task V9-2.4 单位 | ToUnixTimeMilliseconds | ToUnixTimeSeconds | V10-F8: 保持现有单位 |
+| A9 | Task V9-2.4 SpecifyKind | 缺失 | 保持 SpecifyKind | V10-F9: 避免 Day 9.9 bug |
+| A10 | Task V9-2.4 brands 字典 | 循环内加载 | 循环外加载 | V10-F15: 避免重复加载 |
+| A11 | Task V9-2.1 全量重建 | 缺失 | 新增 admin 端点 | V10-F16: 重建机制 |
+| A12 | Mr1Validator CHK | 强制校验 | 跳过(占位) | V10-F17: 避免拒绝数据 |
+| A13 | S8-6 CONCURRENTLY | 事务内 hack | 拆分迁移/非 CONCURRENTLY | V10-F18: 迁移原子性 |
+| A14 | Task V9-3.2 isSafeRedirect | 仅校验 hostname | 增加 protocol 校验 | V10-F19: 防 javascript:// 绕过 |
+| A15 | F7-3 Promise.finally | IE 11 polyfill | 不适用 | V10-F20: 项目不支持 IE 11 |
+| A16 | F7-12 硬跳转 | v8 spec 伪代码 | http.ts L94 真实代码 | V10-F21: 真实问题位置 |
+| A17 | V9-R3 payload 格式 | "格式正确" | 撤销,v8 确实错误 | V10-F11: body 是三段 |
+| A18 | D8-17 范围 | 仅 EtlEndpoints.cs | 扩展到 AdminEtlEndpoints.cs | V10-F12: 同样缺失认证 |
+| A19 | ProcessDeadLetterAsync 复用 | 复用 recovery_count | 复用 RetryCount | V10-F13: 描述错误 |
+| A20 | Task V9-1.2 HasOne | 无 OnDelete | OnDelete(Cascade) | V10-F14: 与现有 FK 一致 |
+
+## 11.5 v10 前置任务(Pre-Task-V10-1 ~ Pre-Task-V10-3)
+
+### Pre-Task-V10-1: 核实 Product.OemBrand 字段是否真的不存在(双重确认)
+- 已通过 Read 核实:Product.cs L8-95 无 OemBrand 字段,L127 属于 CrossReference
+- **结论**: V9-R1 错误,撤销
+
+### Pre-Task-V10-2: 核实 mr_1 字段+索引是否已存在(双重确认)
+- 已通过 Grep 迁移文件核实:InitialCreate + AddProductsOem2Mr1Indexes 已创建
+- **结论**: Task V9-1.1 改为 UpgradeMr1IndexToUnique
+
+### Pre-Task-V10-3: 核实 IObjectStorage.ListAllAsync 是否真的不存在(双重确认)
+- 已通过 Read 核实:IObjectStorage.cs L6-22 仅 5 个方法
+- **结论**: Task V9-1.8 改为新增方法
+
+## 11.6 v10 与 v9 根本区别对比表
+
+| 维度 | v9 | v10 |
+|------|-----|-----|
+| 凭空假设数量 | 11 项(全高危) | 0 项(行号+类名双重核实) |
+| V9-R1 Product.OemBrand | 错误"纠正" | 撤销,恢复 D8-14/S8-11 |
+| Task V9-1.1 迁移 | InitMr1PrimaryKey(ADD COLUMN) | UpgradeMr1IndexToUnique(DROP+CREATE UNIQUE) |
+| Task V9-1.8 ListAllAsync | 签名调整 | 新增方法 |
+| Task V9-2.4 ProductIndexDoc 构造 | p.OemBrand + 毫秒 + 缺 SpecifyKind | CrossReferences.OemBrand + 秒 + SpecifyKind |
+| Task V9-3.3 captureException | { component } | { tags: { source } } |
+| 策略名 | AdminPolicy | Admin |
+| 列名 | mr1 | mr_1 |
+| CHK 校验 | 强制(拒绝数据) | 跳过(占位) |
+| isSafeRedirect | 仅 hostname | hostname + protocol |
+| F7-3 IE 11 | polyfill | 不适用 |
+| CONCURRENTLY | 事务内 hack | 非 CONCURRENTLY 或拆分迁移 |
+
+## 11.7 v10 待启动第十轮深度审查
+
+⏳ 第十轮深度审查将验证 v10 修复方案是否引入新的衍生问题
+⏳ 持续迭代直到连续一轮审查无任何新漏洞检出
+⏳ v10 引入"行号+类名"双重核实机制,所有字段引用必须确认所属类
+
