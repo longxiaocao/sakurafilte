@@ -3164,3 +3164,587 @@ Task V9-2.2 (EscapeFilter) ──────────→ 独立
 ```
 
 **总计**: 20 个 v9 补丁任务(5 前置 + 8 数据关联 + 4 检索逻辑 + 3 前后端联动)
+
+---
+
+# v10 补丁任务清单(基于 spec.md 第十一章)
+
+> **修订日期**: 2026-07-17
+> **触发原因**: 第九轮深度审查发现 v9 仍有 11 项高危凭空假设(自称"0 项凭空假设"是讽刺),其中 V9-R1 错误"纠正"了第八轮审查的正确结论,导致 Task V9-1.5/S8-15 伪代码无法编译
+> **核心机制**: 引入"行号+类名"双重核实 — 所有字段引用必须确认所属类;所有 API 调用必须核对签名
+> **任务总数**: 23 个(3 前置 + 8 数据关联 + 5 检索逻辑 + 5 前后端联动 + 2 其他修正)
+
+## v10 前置任务(Pre-Task-V10-1 ~ Pre-Task-V10-3)
+
+### Pre-Task-V10-1: 核实 Product.OemBrand 字段是否真的不存在(双重确认)
+- **核实方式**: Read [Product.cs#L8-L131](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Core/Entities/Product.cs#L8)
+- **核实结论**: 
+  - Product 类(L8-95)**没有** OemBrand 字段
+  - L127 的 `[Column("oem_brand")] public string? OemBrand` 属于 L122 的 `CrossReference` 类
+  - Product 类有 `Oem2`(L23)字段,但**无 OemBrand**
+- **影响**: 撤销 V9-R1,恢复第八轮 D8-14/S8-11 结论
+- **状态**: ✅ 已完成(本轮 Read 核实)
+
+### Pre-Task-V10-2: 核实 mr_1 字段+索引是否已存在(双重确认)
+- **核实方式**: Grep `mr_1` across migrations + Read ModelSnapshot
+- **核实结论**:
+  - [Product.cs#L22](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Core/Entities/Product.cs#L22) 已有 `[Column("mr_1")] public string? Mr1`
+  - InitialCreate 迁移已创建 mr_1 列
+  - AddProductsOem2Mr1Indexes 迁移已创建 `ix_products_mr_1` 非 UNIQUE 索引
+- **影响**: 废弃 Task V9-1.1 InitMr1PrimaryKey,改为 UpgradeMr1IndexToUnique
+- **状态**: ✅ 已完成(本轮 Grep+Read 核实)
+
+### Pre-Task-V10-3: 核实 IObjectStorage.ListAllAsync 是否真的不存在(双重确认)
+- **核实方式**: Read [IObjectStorage.cs#L6-L22](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Core/Interfaces/IObjectStorage.cs#L6)
+- **核实结论**: 仅 5 个方法(UploadAsync/DeleteAsync/GetUrl/GetPresignedUrlAsync/ExistsAsync),**无 ListAllAsync**
+- **影响**: Task V9-1.8 改为"新增方法"(非"签名调整")
+- **状态**: ✅ 已完成(本轮 Read 核实)
+
+---
+
+## v10 数据关联模块任务(Task V10-1.1 ~ Task V10-1.8)
+
+### Task V10-1.1: UpgradeMr1IndexToUnique 迁移(替代 Task V9-1.1)
+**修复**: V10-F2(mr_1 字段已存在)、V10-F6(列名 mr1 错误)、V10-F18(CONCURRENTLY 破坏原子性)
+**调整**: A3(UpgradeMr1IndexToUnique)、A7(mr_1 列名)、A13(非 CONCURRENTLY)
+**依赖**: Pre-Task-V10-2
+**文件**: 新建 `backend/src/SakuraFilter.Infrastructure/Data/Migrations/<timestamp>_UpgradeMr1IndexToUnique.cs`
+**子任务**:
+- [ ] 1.1.1: 废弃 Task V9-1.1 的 InitMr1PrimaryKey 迁移(mr_1 字段已存在)
+- [ ] 1.1.2: 生成迁移:
+  ```bash
+  dotnet ef migrations add UpgradeMr1IndexToUnique
+  ```
+- [ ] 1.1.3: 迁移 Up 方法内容(非 CONCURRENTLY,避免破坏事务原子性 — V10-F18):
+  ```csharp
+  // 1. 数据去重: 保留最小 id 的记录,其余置 NULL(V10-F2: 字段已存在无需 ADD COLUMN)
+  migrationBuilder.Sql(@"
+      UPDATE products SET mr_1 = NULL 
+      WHERE id NOT IN (
+          SELECT MIN(id) FROM products 
+          WHERE mr_1 IS NOT NULL 
+          GROUP BY mr_1
+      );");
+  // 2. DROP 旧非 UNIQUE 索引
+  migrationBuilder.DropIndex(name: "ix_products_mr_1", table: "products");
+  // 3. CREATE UNIQUE 部分索引(V10-F6: 列名用 mr_1 非 mr1)
+  migrationBuilder.CreateIndex(
+      name: "ix_products_mr_1_unique",
+      table: "products",
+      column: "mr_1",
+      unique: true,
+      filter: "mr_1 IS NOT NULL");
+  ```
+- [ ] 1.1.4: Down 方法回滚(DROP UNIQUE + CREATE 非 UNIQUE)
+- [ ] 1.1.5: 不改 mr_1 类型(保持 text,避免数据截断风险)
+**验证**:
+- `dotnet ef database update` 成功
+- `SELECT indexname, indexdef FROM pg_indexes WHERE tablename='products';` 显示 ix_products_mr_1_unique
+- 重复 mr_1 值插入被拒绝(测试: `INSERT INTO products(mr_1) VALUES('DUP')` 两次,第二次失败)
+- NULL mr_1 不受唯一约束(测试: 多行 mr_1=NULL 插入成功)
+
+### Task V10-1.2: CrossReferenceConfig OnDelete(Cascade)(替代 Task V9-1.2)
+**修复**: V10-F14(HasOne 与现有 FK 冲突)
+**调整**: A20(OnDelete Cascade)
+**依赖**: 无
+**文件**: `backend/src/SakuraFilter.Infrastructure/Data/ProductDbContext.cs` L108-117
+**子任务**:
+- [ ] 1.2.1: 新增 CrossReferenceConfiguration 内联配置:
+  ```csharp
+  // V10-F14: 显式声明 OnDelete 与现有 FK 一致(InitialCreate L200-205 Cascade)
+  e.HasOne<Product>()
+   .WithMany()
+   .HasForeignKey(x => x.ProductId)
+   .OnDelete(DeleteBehavior.Cascade);
+  ```
+- [ ] 1.2.2: 迁移生成后,对比 ModelSnapshot 确认无重复 FK 创建语句
+- [ ] 1.2.3: 验证现有 FK `fk_cross_references_products_product_id` 未被替换
+**验证**:
+- `dotnet ef migrations add CrossReferenceConfig` 生成的迁移 Up 方法无重复 CREATE CONSTRAINT
+- ModelSnapshot 中只有一个 `fk_cross_references_products_product_id` FK
+
+### Task V10-1.3: TRUNCATE 修改(继承 Task V9-1.3,无变化)
+**修复**: D8-18(cleanup_failures 表不存在)
+**依赖**: 无
+**文件**: `backend/src/SakuraFilter.Etl/EtlImportService.cs` L935-937
+**子任务**:
+- [ ] 1.3.1: TRUNCATE 列表仅保留实际存在的 8 张表(删除不存在的 cleanup_failures)
+**验证**:
+- ETL 全量重建模式 cascade=true 触发 TRUNCATE 不报"relation does not exist"
+
+### Task V10-1.4: 死信表复用描述修正(替代 Task V9-1.4)
+**修复**: V10-F13(ProcessDeadLetterAsync 复用 RetryCount 非 RecoveryCount)
+**调整**: A19(描述修正)
+**依赖**: 无
+**文件**: `backend/src/SakuraFilter.Api/Services/IndexReplayWorker.cs` L138-218
+**子任务**:
+- [ ] 1.4.1: 核实 [IndexReplayWorker.cs#L186](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Services/IndexReplayWorker.cs#L186) 实际是 `existingDead.RetryCount = p.RetryCount`
+- [ ] 1.4.2: 注释/spec 描述修正: "同 payload 已 recovered 的死信会复用其行(status 重置为 active),并更新 RetryCount/LastError,RecoveryCount 保持不变"
+**验证**:
+- 代码现状与描述一致(无需修改代码,仅修正 spec)
+
+### Task V10-1.5: ProductIndexDoc 扩展通过 CrossReferences 导航(替代 Task V9-1.5)
+**修复**: V10-F1(Product.OemBrand 不存在)、V10-F7(p.OemBrand 无法编译)
+**调整**: A1(撤销 V9-R1)、A2(通过 CrossReferences 导航)
+**依赖**: Pre-Task-V10-1
+**文件**: `backend/src/SakuraFilter.Search/ISearchProvider.cs` L32-45
+**子任务**:
+- [ ] 1.5.1: ProductIndexDoc record 扩展为 14 个字段(新增 mr1/oemBrand/brandSortOrder):
+  ```csharp
+  public record ProductIndexDoc(
+      int Id, string OemNoNormalized, string OemNoDisplay, string? Remark,
+      string Type, decimal? D1Mm, decimal? D2Mm, decimal? H3Mm, decimal? H1Mm,
+      string? Media, bool IsDiscontinued, long UpdatedAtUnix,
+      // V2 新增
+      string? Mr1,
+      string? OemBrand,           // 通过 CrossReferences 导航获取(V10-F7)
+      int BrandSortOrder          // 通过 XrefOemBrands 关联(V10-F15)
+  );
+  ```
+- [ ] 1.5.2: 撤销 V9-R1 错误"纠正"(spec.md L6399-L6405)
+- [ ] 1.5.3: 恢复第八轮 D8-14/S8-11 结论(Product 实体只有 Oem2 字段,无 OemBrand)
+**验证**:
+- `dotnet build` 通过(ProductIndexDoc 类型定义正确)
+- 编译时无 `p.OemBrand` 引用错误
+
+### Task V10-1.6: Mr1Validator CHK 跳过占位(替代 Task V9-1.6)
+**修复**: V10-F17(CHK 占位实现会拒绝真实数据)
+**调整**: A12(跳过 CHK 校验)
+**依赖**: Pre-Task-V9-1(CHK 算法确认,业务方未确认前跳过)
+**文件**: 新建 `backend/src/SakuraFilter.Core/Validation/Mr1Validator.cs`
+**子任务**:
+- [ ] 1.6.1: Mr1Validator 占位实现(仅长度+字符集校验,跳过 CHK):
+  ```csharp
+  public static class Mr1Validator
+  {
+      public const int ExpectedLength = 10;
+      public const string Charset = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+      
+      public static bool IsValid(string? mr1)
+      {
+          if (string.IsNullOrEmpty(mr1)) return false;
+          if (mr1.Length != ExpectedLength) return false;
+          if (mr1.Any(c => !Charset.Contains(c))) return false;
+          // CHK 校验跳过(待 Pre-Task-V9-1 业务方确认)
+          // WHY 跳过: 占位算法与真实算法不同会拒绝所有真实数据(V10-F17)
+          // TODO: Pre-Task-V9-1 确认后启用 CHK 校验
+          return true;  // 仅长度+字符集校验通过
+      }
+  }
+  ```
+- [ ] 1.6.2: 单元测试仅验证长度+字符集(见 Task V10-4.2)
+**验证**:
+- 单元测试 5 个用例全部通过(见 Task V10-4.2)
+- 真实数据导入时 Mr1Validator 不拒绝合法记录
+
+### Task V10-1.7: EtlEndpoints + AdminEtlEndpoints 补充 RequireAuthorization("Admin")(替代 Task V9-1.7)
+**修复**: V10-F5(AdminPolicy 凭空假设)、V10-F12(AdminEtlEndpoints 漏认证)
+**调整**: A6(策略名 Admin)、A18(范围扩展到 AdminEtlEndpoints)
+**依赖**: Pre-Task-V10-1
+**文件**: 
+- `backend/src/SakuraFilter.Api/Endpoints/EtlEndpoints.cs`
+- `backend/src/SakuraFilter.Api/Endpoints/AdminEtlEndpoints.cs` L21
+**子任务**:
+- [ ] 1.7.1: EtlEndpoints.cs 所有写操作端点补充 RequireAuthorization:
+  ```csharp
+  // V10-F5: 策略名 "Admin" 非 "AdminPolicy"
+  group.MapPost("/trigger", ...).RequireAuthorization("Admin");
+  group.MapDelete("/task", ...).RequireAuthorization("Admin");
+  ```
+- [ ] 1.7.2: AdminEtlEndpoints.cs L21 补充 RequireAuthorization(V10-F12 扩展):
+  ```csharp
+  var group = app.MapGroup("/api/admin/etl").WithTags("AdminEtl")
+      .RequireAuthorization("Admin")              // V10-F5: "Admin" 非 "AdminPolicy"
+      .RequireRateLimiting("etl");                 // 原有
+  ```
+- [ ] 1.7.3: 验证策略名 "Admin" 在 [ServiceCollectionExtensions.cs#L178](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Extensions/ServiceCollectionExtensions.cs#L178) 已注册
+**验证**:
+- 未携带 admin token 访问 /api/admin/etl/trigger 返回 401/403
+- 未携带 admin token 访问 /api/etl/trigger 返回 401/403
+- 携带 admin token 访问正常
+
+### Task V10-1.8: 新增 IObjectStorage.ListAllAsync 方法(替代 Task V9-1.8)
+**修复**: V10-F3(ListAllAsync 方法凭空假设)
+**调整**: A4(新增方法)
+**依赖**: Pre-Task-V10-3
+**文件**: 
+- `backend/src/SakuraFilter.Core/Interfaces/IObjectStorage.cs`
+- `backend/src/SakuraFilter.Infrastructure/Storage/MinioStorage.cs`
+- `backend/src/SakuraFilter.Infrastructure/Storage/AliyunOssStorage.cs`
+- `backend/src/SakuraFilter.Infrastructure/Storage/LocalStorage.cs`
+**子任务**:
+- [ ] 1.8.1: IObjectStorage.cs 新增 ListAllAsync 方法(V10-F3: 新增非签名调整):
+  ```csharp
+  /// <summary>列举对象 key(分页 token 由实现自管理)</summary>
+  Task<IAsyncEnumerable<string>> ListAllAsync(string? prefix = null, CancellationToken ct = default);
+  ```
+- [ ] 1.8.2: MinioStorage 实现 ListAllAsync(用 minio.ListObjectsAsync)
+- [ ] 1.8.3: AliyunOssStorage 实现 ListAllAsync(用 OssClient.ListObjects)
+- [ ] 1.8.4: LocalStorage 实现 ListAllAsync(用 Directory.EnumerateFiles)
+- [ ] 1.8.5: 单元测试 mock IObjectStorage 验证调用
+**验证**:
+- `dotnet build` 通过(所有实现类都新增了方法)
+- 单元测试验证 MinIO/Aliyun/Local 三种实现返回的 key 列表正确
+
+---
+
+## v10 检索逻辑模块任务(Task V10-2.1 ~ Task V10-2.5)
+
+### Task V10-2.1: SyncSearchIndexAsync 全量重建端点(扩展 Task V9-2.1)
+**修复**: V10-F16(全量重建机制缺失)
+**调整**: A11(新增 admin 端点)
+**依赖**: Task V10-1.5
+**文件**: 
+- `backend/src/SakuraFilter.Api/Endpoints/AdminSearchEndpoints.cs`(新增端点)
+- `backend/src/SakuraFilter.Etl/EtlImportService.cs` SyncSearchIndexAsync
+**子任务**:
+- [ ] 2.1.1: 新增 admin 端点强制全量重建(V10-F16):
+  ```csharp
+  group.MapPost("/reindex", async (EtlImportService etl, CancellationToken ct) =>
+  {
+      // 临时设 importStartedAt = DateTime.MinValue,强制全量同步
+      await etl.SyncSearchIndexAsync(DateTime.MinValue, ct);
+      return Results.Ok(new { message = "全量重建完成" });
+  }).RequireAuthorization("Admin");
+  ```
+- [ ] 2.1.2: 重建期间让 ResilientSearchProvider 切到 PG 兜底
+- [ ] 2.1.3: 增加锁机制防止并发重建
+**验证**:
+- POST /api/admin/search/reindex 触发全量重建
+- 重建期间公开搜索切到 PG 兜底,不返回空结果
+- 并发重建第二次请求返回 409 Conflict
+
+### Task V10-2.2: EscapeFilter 增强(继承 Task V9-2.2,无变化)
+**修复**: S8-14(Meili filter 转义不足)
+**依赖**: 无
+**文件**: `backend/src/SakuraFilter.Search/MeiliSearchProvider.cs` L141
+**子任务**:
+- [ ] 2.2.1: EscapeFilter 增加转义字符(`\` `(` `)` `~` 等)
+- [ ] 2.2.2: 单元测试验证恶意 filter 字符串被正确转义
+**验证**:
+- 单元测试通过(包含 `"` `\` `(` `)` `~` 的 filter 不破坏 Meili 查询)
+
+### Task V10-2.3: mr_1 列名修正 + UNIQUE 索引统一(并入 Task V10-1.1)
+**修复**: V10-F6(列名 mr1 错误)
+**调整**: A7(mr_1 列名)
+**依赖**: Task V10-1.1
+**说明**: 此任务已并入 Task V10-1.1 的 1.1.3 子任务(列名用 mr_1 非 mr1,UNIQUE 索引名 ix_products_mr_1_unique)
+**验证**: 同 Task V10-1.1
+
+### Task V10-2.4: BuildProductIndexDocAsync 修正(替代 Task V9-2.4)
+**修复**: V10-F7(p.OemBrand 无法编译)、V10-F8(单位错误)、V10-F9(缺失 SpecifyKind)、V10-F15(N+1 修复 brands 字典循环外加载)
+**调整**: A8(秒)、A9(SpecifyKind)、A10(brands 循环外)
+**依赖**: Task V10-1.5
+**文件**: `backend/src/SakuraFilter.Etl/EtlImportService.cs` L1158-1211
+**子任务**:
+- [ ] 2.4.1: BuildProductIndexDocAsync 方法签名增加 brands 参数(V10-F15):
+  ```csharp
+  private List<ProductIndexDoc> BuildProductIndexDocAsync(
+      IEnumerable<Product> products, 
+      Dictionary<string, int> brands)  // V10-F15: 循环外加载
+  ```
+- [ ] 2.4.2: SyncSearchIndexAsync 循环外加载 brands 字典一次:
+  ```csharp
+  var brands = await db.XrefOemBrands
+      .Where(b => b.DeletedAt == null)
+      .ToDictionaryAsync(b => b.Brand, b => b.SortOrder, ct);
+  foreach (var batch in batches)
+  {
+      var docs = BuildProductIndexDocAsync(batch, brands);  // 传入 brands
+      // ...
+  }
+  ```
+- [ ] 2.4.3: BuildProductIndexDocAsync 内通过 CrossReferences 导航获取 OemBrand(V10-F7):
+  ```csharp
+  foreach (var p in products)
+  {
+      // V10-F7: 通过 CrossReferences 导航属性获取首个 OemBrand
+      // WHY: Product 类无 OemBrand 字段(V10-F1),OemBrand 属于 CrossReference 类
+      var oemBrand = p.CrossReferences.FirstOrDefault()?.OemBrand;
+      var brandSortOrder = oemBrand != null && brands.TryGetValue(oemBrand, out var so) 
+          ? so : int.MaxValue;
+      docs.Add(new ProductIndexDoc(
+          p.Id, p.OemNoNormalized, p.OemNoDisplay ?? "", p.Remark, p.Type ?? "UNKNOWN",
+          p.D1Mm, p.D2Mm, p.H3Mm, p.H1Mm, p.Media, p.IsDiscontinued,
+          // V10-F8: 保持 ToUnixTimeSeconds()(非毫秒)
+          // V10-F9: 保持 SpecifyKind(避免 Day 9.9 已修复的 bug)
+          new DateTimeOffset(DateTime.SpecifyKind(p.UpdatedAt, DateTimeKind.Utc), TimeSpan.Zero)
+              .ToUnixTimeSeconds(),
+          p.Mr1,           // V2 新增
+          oemBrand,        // V2 新增(通过 CrossReferences)
+          brandSortOrder   // V2 新增
+      ));
+  }
+  ```
+- [ ] 2.4.4: SyncSearchIndexAsync 查询时 Include CrossReferences:
+  ```csharp
+  .Select(p => new { 
+      Product = p, 
+      CrossReferences = p.CrossReferences.Select(c => new { c.OemBrand }).ToList() 
+  })
+  ```
+**验证**:
+- `dotnet build` 通过(无 p.OemBrand 编译错误)
+- 现有 UpdatedAtUnix 单位保持秒(非毫秒),旧 cursor 排序正常
+- 1M 数据全量重建时 brands 字典仅加载 1 次(非 1000 次)
+- Meili 索引数据验证 oemBrand/brandSortOrder 字段非空
+
+### Task V10-2.5: V9-R3 撤销(替代 v9 伪修复)
+**修复**: V10-F11(V9-R3 凭空假设 v8 body 是两段)
+**调整**: A17(撤销 V9-R3)
+**依赖**: 无
+**文件**: spec.md L6419(V9-R3 章节)
+**子任务**:
+- [ ] 2.5.1: 撤销 V9-R3(第八轮审查 F7-6 三 核心结论正确)
+- [ ] 2.5.2: 保留 V9-F4 修复方案(用 `VerifyKey(parts[0], id, parts[2])` 传两段)
+- [ ] 2.5.3: spec 描述修正: "v8 spec payload 格式确实错误(传三段 body 而非两段 ticks|id),由 V9-F4 修复方案处理"
+**验证**:
+- spec.md L6419 章节标注"已撤销,见 V10-F11"
+- CursorHmac.VerifyAndExtractV2 实现使用两段 payload(非三段)
+
+---
+
+## v10 前后端联动模块任务(Task V10-3.1 ~ Task V10-3.5)
+
+### Task V10-3.1: CursorHmac V2 兼容(继承 Task V9-3.1,撤销 V9-R3 部分)
+**修复**: F7-6 三(cursor payload 格式错误)、V10-F11(V9-R3 凭空假设)
+**调整**: A17(V9-R3 撤销)
+**依赖**: Pre-Task-V9-5(V2 兼容期)
+**文件**: `backend/src/SakuraFilter.Api/Services/CursorHmac.cs`
+**子任务**:
+- [ ] 3.1.1: 新增 SignV2(long ticks, long id) 方法(两段 payload):
+  ```csharp
+  public string SignV2(long ticks, long id)
+  {
+      var payload = $"{ticks}|{id}";  // 两段(V10-F11: 签名 payload 仅两段)
+      // ... HMAC 签名
+  }
+  ```
+- [ ] 3.1.2: 新增 VerifyAndExtractV2 方法(三段 body 拆出两段 payload 验签):
+  ```csharp
+  public (long ticks, long id) VerifyAndExtractV2(string cursor)
+  {
+      // cursor = V2:{ticks}|{id}|{sig} 三段(V10-F11: v8 body 确实三段)
+      var body = cursor[3..];
+      var parts = body.Split('|', 3);
+      if (parts.Length != 3) throw new ArgumentException("V2 cursor 格式错误");
+      if (!long.TryParse(parts[0], out var ticks)) throw new ArgumentException();
+      if (!long.TryParse(parts[1], out var id)) throw new ArgumentException();
+      // 验签时传两段(parts[0]=ticks, id, parts[2]=sig) — V9-F4 修复方案
+      if (!VerifyKey(_currentKey, parts[0], id, parts[2])
+          && (_previousKey == null || !VerifyKey(_previousKey, parts[0], id, parts[2])))
+          throw new ArgumentException("V2 cursor 签名验证失败");
+      return (ticks, id);
+  }
+  ```
+- [ ] 3.1.3: AdminProductService 主列表 L866-868 改为调用 SignV2
+- [ ] 3.1.4: AdminProductService 主列表 cursor 解析改为 VerifyAndExtractV2
+- [ ] 3.1.5: 历史页 L400-401 保持不变(已用 Ticks,与 V2 天然兼容)
+**验证**:
+- V2 cursor 签名/验签通过(两段 payload,三段 body)
+- V1 cursor 在兼容期内验签通过
+- 历史页 cursor 不受影响
+
+### Task V10-3.2: isSafeRedirect 增加 protocol 校验(替代 Task V9-3.2)
+**修复**: V10-F19(漏校验 protocol)
+**调整**: A14(hostname + protocol)
+**依赖**: Pre-Task-V9-3
+**文件**: 新建 `frontend/src/utils/url.ts`
+**子任务**:
+- [ ] 3.2.1: 创建 url.ts(V10-F19 增加 protocol 校验):
+  ```typescript
+  /**
+   * 安全重定向校验
+   * WHY: 防止开放重定向漏洞(如 javascript://example.com/alert(1))
+   * HOW: 先用 new URL 规范化,再校验 protocol + hostname
+   */
+  export function isSafeRedirect(target: string): boolean {
+    try {
+      const url = new URL(target, window.location.origin)
+      // V10-F19: 增加 protocol 校验,防 javascript:// 绕过
+      return (url.protocol === 'http:' || url.protocol === 'https:')
+        && url.hostname === window.location.hostname
+    } catch {
+      return false
+    }
+  }
+  
+  export function safeRedirect(target: string): string | null {
+    return isSafeRedirect(target) ? target : null
+  }
+  ```
+- [ ] 3.2.2: http.ts redirectToLogin 调用 isSafeRedirect
+- [ ] 3.2.3: 单元测试(V10-F19 补充 protocol 用例):
+  ```typescript
+  expect(isSafeRedirect('/login')).toBe(true)
+  expect(isSafeRedirect('/\\evil.com')).toBe(false)
+  expect(isSafeRedirect('//evil.com')).toBe(false)
+  expect(isSafeRedirect('https://evil.com')).toBe(false)
+  expect(isSafeRedirect('javascript:alert(1)')).toBe(false)
+  // V10-F19 新增
+  expect(isSafeRedirect('javascript://example.com/x')).toBe(false)
+  expect(isSafeRedirect('data://example.com/x')).toBe(false)
+  ```
+**验证**:
+- vitest 通过所有测试用例(含 protocol 校验)
+
+### Task V10-3.3: ErrorBoundary 统一到 errorMonitor tags.source(替代 Task V9-3.3)
+**修复**: V10-F10(captureException API 不匹配)
+**调整**: 无(component 改为 tags.source)
+**依赖**: Pre-Task-V9-4
+**文件**: `frontend/src/components/ErrorBoundary.vue` L21-38
+**子任务**:
+- [ ] 3.3.1: ErrorBoundary onErrorCaptured 改为调用 errorMonitor.captureException(V10-F10 API 修正):
+  ```typescript
+  import { captureException } from '@/utils/errorMonitor'
+  
+  onErrorCaptured((err: any) => {
+    const info = {
+      message: err?.message || String(err),
+      stack: err?.stack || '',
+      timestamp: new Date().toISOString(),
+      url: window.location.href
+    }
+    error.value = info
+    // V10-F10: captureException options 无 component 字段
+    // 现有 API: { level?, tags?, extra? }
+    captureException(err, { tags: { source: 'ErrorBoundary' } })
+    return false
+  })
+  ```
+- [ ] 3.3.2: 删除原 localStorage `sakura_error_log` 写入逻辑(L31-38)
+- [ ] 3.3.3: 验证 AdminErrorView 能读取到 ErrorBoundary 捕获的错误
+**验证**:
+- ErrorBoundary 触发后,errorMonitor.getEvents() 返回包含该错误,tags.source='ErrorBoundary'
+- AdminErrorView 显示 ErrorBoundary 捕获的错误
+- localStorage `sakura_error_log` 不再写入
+
+### Task V10-3.4: F7-3 不适用(替代 Task V9-3.4)
+**修复**: V10-F20(项目不支持 IE 11)
+**调整**: A15(不适用)
+**依赖**: 无
+**文件**: 无(仅 spec 修正)
+**子任务**:
+- [ ] 3.4.1: spec.md F7-3 直接降级为"不适用":
+  ```
+  F7-3 [不适用] 项目不支持 IE 11
+  - frontend 无 browserslist 配置,Vite 默认目标现代浏览器
+  - Promise.finally 在所有目标浏览器原生支持
+  - 无需 polyfill,无需修改
+  ```
+- [ ] 3.4.2: 删除 v9 spec L6595 语法错误的伪代码(`try { } catch { } then()`)
+**验证**:
+- spec.md F7-3 章节标注"不适用"
+- 无代码修改
+
+### Task V10-3.5: F7-12 http.ts 硬跳转修复(新增)
+**修复**: V10-F21(F7-12 凭空假设 v8 spec 有硬跳转)
+**调整**: A16(指向 http.ts L94 真实代码)
+**依赖**: 无
+**文件**: `frontend/src/utils/http.ts` L88-96
+**子任务**:
+- [ ] 3.5.1: 核实 [http.ts#L94](file:///d:/projects/sakurafilter/frontend/src/utils/http.ts#L94) `window.location.href = ...` 是真实硬跳转
+- [ ] 3.5.2: spec F7-12 问题描述改为指向 http.ts L94:
+  ```
+  F7-12 [中] http.ts redirectToLogin 用 window.location.href 硬跳转
+  - 真实代码事实: http.ts L94 `window.location.href = ...` 硬跳转丢失 SPA 上下文
+  - 修复方案: 用 router.push 替代(需在 router.isReady 后调用)
+  ```
+- [ ] 3.5.3: http.ts redirectToLogin 改为 router.push:
+  ```typescript
+  import router from '@/router'
+  
+  function redirectToLogin() {
+    if (router.isReady()) {
+      router.push({ name: 'login', query: { redirect: window.location.pathname } })
+    } else {
+      // 兜底: router 未就绪时仍用硬跳转(避免无限循环)
+      window.location.href = `/login?redirect=${encodeURIComponent(window.location.pathname)}`
+    }
+  }
+  ```
+**验证**:
+- 401 响应触发 redirectToLogin 后,SPA 上下文保留(Vue 状态不丢失)
+- router 未就绪场景兜底硬跳转正常
+
+---
+
+## v10 其他低危修正任务(Task V10-4.1 ~ Task V10-4.2)
+
+### Task V10-4.1: F7-4 删除 mr_1_needs_review SQL(修正 V9 spec)
+**修复**: V10-F4(mr_1_needs_review 字段凭空假设)
+**调整**: A5(删除该 SQL)
+**依赖**: 无
+**文件**: spec.md L6605(F7-4 修复方案)
+**子任务**:
+- [ ] 4.1.1: 删除 spec 中 `UPDATE products SET mr_1_needs_review = true WHERE mr_1 IS NULL;` SQL
+- [ ] 4.1.2: 仅保留从 oem_2 派生 mr_1 的 SQL:
+  ```sql
+  -- 从 oem_2 派生 mr_1(临时方案,业务方确认后替换)
+  UPDATE products SET mr_1 = oem_2 WHERE mr_1 IS NULL AND oem_2 IS NOT NULL;
+  -- 无需标记复核行,业务方确认 CHK 算法后再统一校验
+  ```
+**验证**:
+- spec.md L6605 无 mr_1_needs_review 引用
+
+### Task V10-4.2: Mr1Validator 单元测试预期值修正
+**修复**: V10-F22(V9-F10 占位实现单元测试预期值不可知)
+**调整**: 无(配合 V10-F17 CHK 跳过)
+**依赖**: Task V10-1.6
+**文件**: 新建 `backend/tests/SakuraFilter.Core.Tests/Validation/Mr1ValidatorTests.cs`
+**子任务**:
+- [ ] 4.2.1: 单元测试仅验证长度+字符集(V10-F22 配合 V10-F17 CHK 跳过):
+  ```csharp
+  [Theory]
+  [InlineData("1234567890", true)]   // 长度+字符集通过
+  [InlineData("ABCDEFGHIJ", true)]   // 长度+字符集通过
+  [InlineData("123456789", false)]   // 长度不足
+  [InlineData("12345678901", false)] // 长度超长
+  [InlineData("123456789!", false)]  // 非法字符
+  public void Mr1Validator_IsValid(string mr1, bool expected)
+  {
+      Assert.Equal(expected, Mr1Validator.IsValid(mr1));
+  }
+  ```
+**验证**:
+- `dotnet test` 5 个用例全部通过
+- 真实数据导入时 Mr1Validator 不拒绝合法记录(CHK 跳过)
+
+---
+
+## v10 任务依赖链
+
+```
+Pre-Task-V10-1 (核实 Product.OemBrand) ──→ Task V10-1.5 (ProductIndexDoc 扩展)
+                                         └→ Task V10-1.7 (EtlEndpoints 认证)
+Pre-Task-V10-2 (核实 mr_1 字段) ────────→ Task V10-1.1 (UpgradeMr1IndexToUnique)
+                                         └→ Task V10-2.3 (并入 V10-1.1)
+Pre-Task-V10-3 (核实 ListAllAsync) ─────→ Task V10-1.8 (新增方法)
+
+Task V10-1.1 (UpgradeMr1IndexToUnique) ──→ 独立
+Task V10-1.2 (CrossReferenceConfig) ─────→ 独立
+Task V10-1.3 (TRUNCATE 修改) ───────────→ 独立
+Task V10-1.4 (死信表描述修正) ──────────→ 独立
+Task V10-1.5 (ProductIndexDoc 扩展) ────→ Task V10-2.1 (全量重建端点)
+                                        └→ Task V10-2.4 (BuildProductIndexDocAsync)
+Task V10-1.6 (Mr1Validator CHK 跳过) ───→ Task V10-4.2 (单元测试)
+Task V10-1.7 (EtlEndpoints 认证) ───────→ 独立
+Task V10-1.8 (ListAllAsync 新增) ────────→ 独立
+
+Task V10-2.1 (全量重建端点) ─────────────→ 独立
+Task V10-2.2 (EscapeFilter) ─────────────→ 独立
+Task V10-2.3 (mr_1 列名) ────────────────→ 并入 Task V10-1.1
+Task V10-2.4 (BuildProductIndexDocAsync) → 独立
+Task V10-2.5 (V9-R3 撤销) ──────────────→ 独立
+
+Task V10-3.1 (CursorHmac V2) ────────────→ 独立
+Task V10-3.2 (isSafeRedirect protocol) ──→ 独立
+Task V10-3.3 (ErrorBoundary tags.source) → 独立
+Task V10-3.4 (F7-3 不适用) ─────────────→ 独立
+Task V10-3.5 (F7-12 http.ts 硬跳转) ─────→ 独立
+
+Task V10-4.1 (F7-4 删除 SQL) ────────────→ 独立
+Task V10-4.2 (Mr1Validator 单元测试) ───→ 依赖 Task V10-1.6
+```
+
+**总计**: 23 个 v10 补丁任务(3 前置 + 8 数据关联 + 5 检索逻辑 + 5 前后端联动 + 2 其他修正)

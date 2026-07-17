@@ -3836,3 +3836,264 @@ _待启动第七轮深度审查后追加_
 - [ ] 第九轮审查发现新漏洞 → 进入 v10 修订,继续迭代
 - [ ] 持续迭代直到连续一轮审查无任何新漏洞检出
 
+---
+
+# v10 验证清单(基于 spec.md 第十一章 + tasks.md v10 任务清单)
+
+> **修订日期**: 2026-07-17
+> **验证机制**: 行号+类名双重核实 — 所有字段引用必须确认所属类;所有 API 调用必须核对签名
+> **验证范围**: 11 项 V10-F 高危凭空假设纠正 + 11 项 V10-F 中低危修正 + 20 项 A 设计调整 + 3 前置 + 23 任务 + 第十轮审查点
+
+## 九、v10 凭空假设纠正验证(V10-F1 ~ V10-F11,11 项高危)
+
+### V10-F1: 撤销 V9-R1,Product.OemBrand 实际不存在
+- [ ] V10-CHK-1: spec.md L6399-L6405(V9-R1 章节)标注"已撤销,见 V10-F1"
+- [ ] V10-CHK-2: 恢复第八轮 D8-14/S8-11 结论(Product 实体只有 Oem2 字段,无 OemBrand)
+- [ ] V10-CHK-3: Product.cs L8-95 经 Read 核实无 OemBrand 字段
+- [ ] V10-CHK-4: L127 的 OemBrand 确认属于 L122 CrossReference 类(非 Product 类)
+
+### V10-F2: Task V9-1.1 mr_1 字段已存在,改为 UpgradeMr1IndexToUnique
+- [ ] V10-CHK-5: tasks.md Task V9-1.1 InitMr1PrimaryKey 标注"废弃,见 Task V10-1.1"
+- [ ] V10-CHK-6: Task V10-1.1 迁移名是 UpgradeMr1IndexToUnique(非 InitMr1PrimaryKey)
+- [ ] V10-CHK-7: Task V10-1.1 迁移内容是 DROP+CREATE UNIQUE(非 ADD COLUMN)
+- [ ] V10-CHK-8: Task V10-1.1 保留 mr_1 类型为 text(不改为 varchar(10))
+
+### V10-F3: Task V9-1.8 ListAllAsync 方法凭空假设,改为新增方法
+- [ ] V10-CHK-9: tasks.md Task V9-1.8 标注"凭空假设,见 Task V10-1.8"
+- [ ] V10-CHK-10: Task V10-1.8 标题是"新增 IObjectStorage.ListAllAsync 方法"(非"签名调整")
+- [ ] V10-CHK-11: Task V10-1.8 同步新增 MinIO/Aliyun/Local 三个实现类
+
+### V10-F4: F7-4 mr_1_needs_review 字段凭空假设
+- [ ] V10-CHK-12: spec.md L6605 无 mr_1_needs_review 引用
+- [ ] V10-CHK-13: Task V10-4.1 仅保留从 oem_2 派生 mr_1 的 SQL
+
+### V10-F5: Task V9-1.7 "AdminPolicy" 策略名凭空假设,改为 "Admin"
+- [ ] V10-CHK-14: tasks.md 所有 RequireAuthorization 调用使用 "Admin"(非 "AdminPolicy")
+- [ ] V10-CHK-15: Task V10-1.7 EtlEndpoints + AdminEtlEndpoints 均使用 "Admin"
+- [ ] V10-CHK-16: ServiceCollectionExtensions.cs L178 注册策略名 "Admin" 确认
+
+### V10-F6: Task V9-2.3 列名 mr1 错误,应为 mr_1
+- [ ] V10-CHK-17: tasks.md Task V9-2.3 SQL 列名是 mr_1(非 mr1)
+- [ ] V10-CHK-18: Task V10-1.1 迁移列名是 mr_1(非 mr1)
+
+### V10-F7: Task V9-2.4 p.OemBrand 无法编译,改为 CrossReferences 导航
+- [ ] V10-CHK-19: tasks.md Task V10-2.4 伪代码无 `p.OemBrand` 引用
+- [ ] V10-CHK-20: Task V10-2.4 改为 `p.CrossReferences.FirstOrDefault()?.OemBrand`
+- [ ] V10-CHK-21: Task V10-2.4 SyncSearchIndexAsync 查询时 Include CrossReferences
+
+### V10-F8: Task V9-2.4 ToUnixTimeMilliseconds 单位错误,改为 ToUnixTimeSeconds
+- [ ] V10-CHK-22: tasks.md Task V10-2.4 伪代码使用 ToUnixTimeSeconds()(非毫秒)
+- [ ] V10-CHK-23: 现有 EtlImportService.cs L1165 单位保持秒
+
+### V10-F9: Task V9-2.4 缺失 SpecifyKind 修复,保持 SpecifyKind
+- [ ] V10-CHK-24: tasks.md Task V10-2.4 伪代码包含 DateTime.SpecifyKind(p.UpdatedAt, DateTimeKind.Utc)
+- [ ] V10-CHK-25: 现有 EtlImportService.cs L1161-1165 SpecifyKind 修复保持
+
+### V10-F10: Task V9-3.3 captureException API 不匹配,改为 tags.source
+- [ ] V10-CHK-26: tasks.md Task V10-3.3 伪代码使用 { tags: { source: 'ErrorBoundary' } }
+- [ ] V10-CHK-27: tasks.md Task V10-3.3 无 { component: 'ErrorBoundary' } 引用
+- [ ] V10-CHK-28: errorMonitor.ts L255-259 captureException API 签名确认(无 component 字段)
+
+### V10-F11: V9-R3 凭空假设 v8 body 是两段(实际三段)
+- [ ] V10-CHK-29: spec.md V9-R3 章节标注"已撤销,见 V10-F11"
+- [ ] V10-CHK-30: 第八轮审查 F7-6 三 核心结论恢复正确(payload 格式错误)
+- [ ] V10-CHK-31: Task V10-2.5 V9-F4 修复方案保留(VerifyKey 传两段)
+
+## 十、v10 中低危问题修正验证(V10-F12 ~ V10-F22,11 项)
+
+### V10-F12: D8-17 范围扩展到 AdminEtlEndpoints.cs
+- [ ] V10-CHK-32: Task V10-1.7 同时修改 EtlEndpoints.cs + AdminEtlEndpoints.cs
+- [ ] V10-CHK-33: AdminEtlEndpoints.cs L21 补充 RequireAuthorization("Admin")
+
+### V10-F13: ProcessDeadLetterAsync 复用机制描述错误
+- [ ] V10-CHK-34: Task V10-1.4 描述改为"复用 RetryCount"(非 RecoveryCount)
+- [ ] V10-CHK-35: IndexReplayWorker.cs L186 实际代码确认是 RetryCount
+
+### V10-F14: Task V9-1.2 HasOne 与现有 FK 潜在冲突
+- [ ] V10-CHK-36: Task V10-1.2 显式声明 OnDelete(DeleteBehavior.Cascade)
+- [ ] V10-CHK-37: 迁移生成后对比 ModelSnapshot 无重复 FK 创建语句
+
+### V10-F15: Task V9-2.4 N+1 修复 brands 字典未提到循环外
+- [ ] V10-CHK-38: Task V10-2.4 brands 字典在 SyncSearchIndexAsync 循环外加载
+- [ ] V10-CHK-39: Task V10-2.4 BuildProductIndexDocAsync 签名增加 brands 参数
+
+### V10-F16: Task V9-2.1 重建 Meili 索引缺乏全量重建机制
+- [ ] V10-CHK-40: Task V10-2.1 新增 admin 端点 /api/admin/search/reindex
+- [ ] V10-CHK-41: Task V10-2.1 重建期间 ResilientSearchProvider 切到 PG 兜底
+- [ ] V10-CHK-42: Task V10-2.1 增加锁机制防止并发重建
+
+### V10-F17: Mr1Validator CHK 占位实现会拒绝真实数据
+- [ ] V10-CHK-43: Task V10-1.6 Mr1Validator 占位实现跳过 CHK 校验
+- [ ] V10-CHK-44: Task V10-1.6 仅校验长度+字符集
+
+### V10-F18: S8-6 CONCURRENTLY 事务方案破坏迁移原子性
+- [ ] V10-CHK-45: Task V10-1.1 迁移不用 CONCURRENTLY
+- [ ] V10-CHK-46: Task V10-1.1 接受短暂锁表(1M 数据 < 30s)
+
+### V10-F19: F8-1 isSafeRedirect 漏校验 protocol
+- [ ] V10-CHK-47: Task V10-3.2 isSafeRedirect 增加 protocol 校验
+- [ ] V10-CHK-48: Task V10-3.2 单元测试补充 javascript:// 用例
+
+### V10-F20: F7-3 项目不支持 IE 11
+- [ ] V10-CHK-49: Task V10-3.4 spec F7-3 标注"不适用"
+- [ ] V10-CHK-50: Task V10-3.4 删除 v9 spec 语法错误伪代码
+
+### V10-F21: F7-12 凭空假设 v8 spec 有硬跳转
+- [ ] V10-CHK-51: Task V10-3.5 spec F7-12 问题描述指向 http.ts L94
+- [ ] V10-CHK-52: Task V10-3.5 http.ts redirectToLogin 改为 router.push
+
+### V10-F22: S9-9 V9-F10 占位实现单元测试预期值不可知
+- [ ] V10-CHK-53: Task V10-4.2 单元测试仅验证长度+字符集
+- [ ] V10-CHK-54: Task V10-4.2 5 个用例全部通过
+
+## 十一、v10 设计调整验证(A1 ~ A20,20 项)
+
+- [ ] V10-CHK-55: A1 V9-R1 撤销,恢复 D8-14/S8-11
+- [ ] V10-CHK-56: A2 Task V9-1.5/S8-15 p.OemBrand 改为 CrossReferences 导航
+- [ ] V10-CHK-57: A3 Task V9-1.1 InitMr1PrimaryKey 改为 UpgradeMr1IndexToUnique
+- [ ] V10-CHK-58: A4 Task V9-1.8 ListAllAsync 签名调整改为新增方法
+- [ ] V10-CHK-59: A5 F7-4 mr_1_needs_review 标记复核行改为删除该 SQL
+- [ ] V10-CHK-60: A6 Task V9-1.7 策略名 AdminPolicy 改为 Admin
+- [ ] V10-CHK-61: A7 Task V9-2.3 列名 mr1 改为 mr_1
+- [ ] V10-CHK-62: A8 Task V9-2.4 单位 ToUnixTimeMilliseconds 改为 ToUnixTimeSeconds
+- [ ] V10-CHK-63: A9 Task V9-2.4 SpecifyKind 缺失改为保持 SpecifyKind
+- [ ] V10-CHK-64: A10 Task V9-2.4 brands 字典循环内改为循环外加载
+- [ ] V10-CHK-65: A11 Task V9-2.1 全量重建缺失改为新增 admin 端点
+- [ ] V10-CHK-66: A12 Mr1Validator CHK 强制校验改为跳过(占位)
+- [ ] V10-CHK-67: A13 S8-6 CONCURRENTLY 事务内 hack 改为非 CONCURRENTLY 或拆分迁移
+- [ ] V10-CHK-68: A14 Task V9-3.2 isSafeRedirect 仅 hostname 改为 hostname + protocol
+- [ ] V10-CHK-69: A15 F7-3 Promise.finally IE 11 polyfill 改为不适用
+- [ ] V10-CHK-70: A16 F7-12 硬跳转 v8 spec 伪代码改为 http.ts L94 真实代码
+- [ ] V10-CHK-71: A17 V9-R3 payload 格式"正确"改为撤销,v8 确实错误
+- [ ] V10-CHK-72: A18 D8-17 范围仅 EtlEndpoints.cs 扩展到 AdminEtlEndpoints.cs
+- [ ] V10-CHK-73: A19 ProcessDeadLetterAsync 复用 recovery_count 改为复用 RetryCount
+- [ ] V10-CHK-74: A20 Task V9-1.2 HasOne 无 OnDelete 改为 OnDelete(Cascade)
+
+## 十二、v10 前置任务验证(3 项)
+
+- [ ] V10-CHK-75: Pre-Task-V10-1 核实 Product.OemBrand 字段不存在(Read 核实)
+- [ ] V10-CHK-76: Pre-Task-V10-2 核实 mr_1 字段+索引已存在(Grep+Read 核实)
+- [ ] V10-CHK-77: Pre-Task-V10-3 核实 IObjectStorage.ListAllAsync 不存在(Read 核实)
+
+## 十三、v10 任务执行验证(23 项任务)
+
+### 数据关联模块(8 项)
+- [ ] V10-CHK-78: Task V10-1.1 UpgradeMr1IndexToUnique 迁移完成
+- [ ] V10-CHK-79: Task V10-1.2 CrossReferenceConfig OnDelete(Cascade) 完成
+- [ ] V10-CHK-80: Task V10-1.3 TRUNCATE 修改完成(删除 cleanup_failures)
+- [ ] V10-CHK-81: Task V10-1.4 死信表复用描述修正完成
+- [ ] V10-CHK-82: Task V10-1.5 ProductIndexDoc 扩展通过 CrossReferences 导航完成
+- [ ] V10-CHK-83: Task V10-1.6 Mr1Validator CHK 跳过占位完成
+- [ ] V10-CHK-84: Task V10-1.7 EtlEndpoints + AdminEtlEndpoints 补充 RequireAuthorization("Admin") 完成
+- [ ] V10-CHK-85: Task V10-1.8 新增 IObjectStorage.ListAllAsync 方法完成
+
+### 检索逻辑模块(5 项)
+- [ ] V10-CHK-86: Task V10-2.1 SyncSearchIndexAsync 全量重建端点完成
+- [ ] V10-CHK-87: Task V10-2.2 EscapeFilter 增强完成
+- [ ] V10-CHK-88: Task V10-2.3 mr_1 列名修正并入 Task V10-1.1 完成
+- [ ] V10-CHK-89: Task V10-2.4 BuildProductIndexDocAsync 修正完成
+- [ ] V10-CHK-90: Task V10-2.5 V9-R3 撤销完成
+
+### 前后端联动模块(5 项)
+- [ ] V10-CHK-91: Task V10-3.1 CursorHmac V2 兼容完成
+- [ ] V10-CHK-92: Task V10-3.2 isSafeRedirect 增加 protocol 校验完成
+- [ ] V10-CHK-93: Task V10-3.3 ErrorBoundary 统一到 errorMonitor tags.source 完成
+- [ ] V10-CHK-94: Task V10-3.4 F7-3 不适用标记完成
+- [ ] V10-CHK-95: Task V10-3.5 F7-12 http.ts 硬跳转修复完成
+
+### 其他低危修正(2 项)
+- [ ] V10-CHK-96: Task V10-4.1 F7-4 删除 mr_1_needs_review SQL 完成
+- [ ] V10-CHK-97: Task V10-4.2 Mr1Validator 单元测试预期值修正完成
+
+## 十四、v10 spec 自身凭空假设检查(10 项,重点:行号+类名双重核实)
+
+- [ ] V10-CHK-98: v10 spec 中所有 Product 字段引用确认所属类(Product 还是 CrossReference)
+- [ ] V10-CHK-99: v10 spec 中所有 CrossReference 字段引用确认所属类
+- [ ] V10-CHK-100: v10 spec 中所有 IObjectStorage 方法调用核对签名(5 个现有方法 + 1 个新增)
+- [ ] V10-CHK-101: v10 spec 中所有 captureException 调用核对签名({ level?, tags?, extra? })
+- [ ] V10-CHK-102: v10 spec 中所有 CursorHmac 方法调用核对签名(Sign/VerifyAndExtract/VerifyKey)
+- [ ] V10-CHK-103: v10 spec 中所有策略名核对 ServiceCollectionExtensions.cs L178-179("Admin"/"Operator")
+- [ ] V10-CHK-104: v10 spec 中所有 PG 列名核对 Product.cs [Column] 特性(mr_1 非 mr1)
+- [ ] V10-CHK-105: v10 spec 中所有迁移文件名核对现有迁移目录(避免重复)
+- [ ] V10-CHK-106: v10 spec 中所有 EtlImportService 行号核对当前代码(L935-937/L1158-1211)
+- [ ] V10-CHK-107: v10 spec V10-F1~F22 描述的代码事实均有 Read/Grep 核实证据
+
+## 十五、v10 tasks.md 任务可执行性检查(10 项)
+
+- [ ] V10-CHK-108: Task V10-1.1 `dotnet ef migrations add UpgradeMr1IndexToUnique` 命令可在项目根目录执行
+- [ ] V10-CHK-109: Task V10-1.2 修改 ProductDbContext.cs L108-117 行号正确
+- [ ] V10-CHK-110: Task V10-1.5 ProductIndexDoc 扩展字段在 ISearchProvider.cs L32-45
+- [ ] V10-CHK-111: Task V10-1.6 Mr1Validator.cs 新建路径正确(backend/src/SakuraFilter.Core/Validation/)
+- [ ] V10-CHK-112: Task V10-1.7 EtlEndpoints.cs + AdminEtlEndpoints.cs L21 行号正确
+- [ ] V10-CHK-113: Task V10-1.8 IObjectStorage.cs + 三个实现类路径正确
+- [ ] V10-CHK-114: Task V10-2.4 EtlImportService.cs L1158-1211 行号正确
+- [ ] V10-CHK-115: Task V10-3.1 CursorHmac.cs VerifyKey 私有方法位置正确
+- [ ] V10-CHK-116: Task V10-3.3 ErrorBoundary.vue L21-38 行号正确
+- [ ] V10-CHK-117: Task V10-3.5 http.ts L88-96 行号正确
+
+## 十六、v10 修复方案一致性检查(10 项)
+
+- [ ] V10-CHK-118: v10 spec 与 tasks.md 任务编号一致(V10-F1 → Task V10-1.5)
+- [ ] V10-CHK-119: v10 spec 与 checklist.md 验证项一致
+- [ ] V10-CHK-120: v10 任务依赖链无循环依赖
+- [ ] V10-CHK-121: v10 前置任务均阻塞对应实现任务
+- [ ] V10-CHK-122: v10 修复方案不引入新的破坏性变更
+- [ ] V10-CHK-123: v10 修复方案不引入新的凭空假设(行号+类名双重核实)
+- [ ] V10-CHK-124: v10 修复方案不与现有代码机制冲突(如死信表复用 RetryCount)
+- [ ] V10-CHK-125: v10 修复方案保持向后兼容(V2 cursor 兼容期、ProductIndexDoc 可选参数)
+- [ ] V10-CHK-126: v10 修复方案提供单元测试用例(Mr1Validator/isSafeRedirect)
+- [ ] V10-CHK-127: v10 修复方案提供验证命令(`dotnet build`/`dotnet test`/`vitest`)
+
+## 十七、第十轮审查验证点(35 项)
+
+### 17.1 v10 spec 自身凭空假设检查(12 项,重点验证)
+
+- [ ] V10-AUDIT-1: v10 spec 中是否还有任何 Product.OemBrand 引用(应全部改为 CrossReferences 导航)
+- [ ] V10-AUDIT-2: v10 spec 中是否还有任何 "AdminPolicy" 引用(应全部改为 "Admin")
+- [ ] V10-AUDIT-3: v10 spec 中是否还有任何 ToUnixTimeMilliseconds 引用(应全部改为 ToUnixTimeSeconds)
+- [ ] V10-AUDIT-4: v10 spec 中是否还有任何缺失 SpecifyKind 的 DateTimeOffset 构造
+- [ ] V10-AUDIT-5: v10 spec 中是否还有任何 captureException { component } 引用(应改为 tags.source)
+- [ ] V10-AUDIT-6: v10 spec 中是否还有任何列名 mr1 引用(应改为 mr_1)
+- [ ] V10-AUDIT-7: v10 spec 中是否还有任何 InitMr1PrimaryKey 引用(应改为 UpgradeMr1IndexToUnique)
+- [ ] V10-AUDIT-8: v10 spec 中是否还有任何 ListAllAsync "签名调整"描述(应改为"新增方法")
+- [ ] V10-AUDIT-9: v10 spec 中是否还有任何 CONCURRENTLY + 事务内 hack 描述
+- [ ] V10-AUDIT-10: v10 spec 中是否还有任何 mr_1_needs_review 引用
+- [ ] V10-AUDIT-11: v10 spec 中是否还有任何 V9-R3 "格式正确"描述(应撤销)
+- [ ] V10-AUDIT-12: v10 spec 中是否还有任何 IE 11 polyfill 描述(应标注不适用)
+
+### 17.2 v10 tasks.md 任务可执行性深度检查(12 项)
+
+- [ ] V10-AUDIT-13: Task V10-1.1 迁移 SQL `UPDATE products SET mr_1 = NULL WHERE id NOT IN (...)` 语法正确
+- [ ] V10-AUDIT-14: Task V10-1.2 OnDelete(DeleteBehavior.Cascade) 与 InitialCreate L200-205 一致
+- [ ] V10-AUDIT-15: Task V10-1.5 ProductIndexDoc 14 字段位置参数顺序正确
+- [ ] V10-AUDIT-16: Task V10-1.6 Mr1Validator Charset 包含 0-9A-Z(36 字符)
+- [ ] V10-AUDIT-17: Task V10-1.7 RequireAuthorization("Admin") 在 ServiceCollectionExtensions.cs L178 已注册
+- [ ] V10-AUDIT-18: Task V10-1.8 IAsyncEnumerable<string> 返回类型可被 await foreach 消费
+- [ ] V10-AUDIT-19: Task V10-2.1 SyncSearchIndexAsync(DateTime.MinValue, ct) 方法签名存在
+- [ ] V10-AUDIT-20: Task V10-2.4 BuildProductIndexDocAsync 签名增加 brands 参数后调用方同步更新
+- [ ] V10-AUDIT-21: Task V10-3.1 SignV2/VerifyAndExtractV2 方法签名不与现有 Sign/VerifyAndExtract 冲突
+- [ ] V10-AUDIT-22: Task V10-3.2 isSafeRedirect 单元测试 7 个用例覆盖所有边界
+- [ ] V10-AUDIT-23: Task V10-3.3 ErrorBoundary.vue onErrorCaptured 返回 false 阻止冒泡
+- [ ] V10-AUDIT-24: Task V10-3.5 http.ts router.isReady() 是同步方法还是 Promise(需核实)
+
+### 17.3 v10 修复方案衍生风险检查(11 项)
+
+- [ ] V10-AUDIT-25: Task V10-1.1 数据去重 SQL(保留最小 id)是否会导致业务数据丢失
+- [ ] V10-AUDIT-26: Task V10-1.2 OnDelete(Cascade) 是否会触发现有数据级联删除
+- [ ] V10-AUDIT-27: Task V10-1.5 通过 CrossReferences.FirstOrDefault 获取 OemBrand 是否会引入 N+1
+- [ ] V10-AUDIT-28: Task V10-1.6 Mr1Validator 跳过 CHK 是否会接受非法数据
+- [ ] V10-AUDIT-29: Task V10-1.7 RequireAuthorization("Admin") 是否会破坏现有 admin 访问
+- [ ] V10-AUDIT-30: Task V10-1.8 新增 ListAllAsync 是否需要在 IObjectStorageExtensions 扩展方法
+- [ ] V10-AUDIT-31: Task V10-2.1 全量重建期间公开搜索切到 PG 兜底是否会显著降低性能
+- [ ] V10-AUDIT-32: Task V10-2.4 brands 字典循环外加载是否会增加首次同步延迟
+- [ ] V10-AUDIT-33: Task V10-3.1 SignV2/VerifyAndExtractV2 是否与现有 V1 兼容期冲突
+- [ ] V10-AUDIT-34: Task V10-3.2 isSafeRedirect protocol 校验是否会拒绝合法的 http://localhost
+- [ ] V10-AUDIT-35: Task V10-3.5 router.push 是否会在 router 未就绪时丢失(需兜底)
+
+## 十八、循环终止条件(更新)
+
+- [ ] 第十轮审查无任何新漏洞检出 → 完成
+- [ ] 第十轮审查发现新漏洞 → 进入 v11 修订,继续迭代
+- [ ] 持续迭代直到连续一轮审查无任何新漏洞检出
+- [ ] v10 引入"行号+类名"双重核实机制,目标是 v11 实现真正的"0 项凭空假设"
+
