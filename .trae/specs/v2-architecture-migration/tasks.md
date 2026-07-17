@@ -7521,3 +7521,139 @@ curl http://localhost:7700/indexes/products/documents/999999
 **新增 migration**: 0 个
 **已知问题**: D7/D8 filter 遗漏(现有 bug,列 v21+ 处理)
 
+---
+
+# v21 任务清单(对应 spec.md 第二十二章)
+
+> **修订范围**: spec.md 第二十二章 22.1~22.8 + tasks.md v21 任务清单 + checklist.md v21 验证清单
+> **核心目标**: 修正 v20 衍生漏洞(D20:6,全部严重),引入第十二重核实机制(伪代码内部字段引用存在性验证 + 跨版本回归验证)
+> **触发原因**: 第二十轮三维度并行深度审查发现 v20 仍有 6 项严重衍生漏洞,其中 D20-1/D20-2/D20-5 是 v17/v18/v19 回归 v10 V10-F7 已修正错误(Product.OemBrand 不存在但伪代码引用 p.OemBrand),D20-3/D20-4 是 v20 V20-F3 修正方向错误,D20-6 是第十一重核实机制仍有盲区
+
+## v21 前置任务(Pre-Task)
+
+### Task V21-0.1 [必做] Pre-Task-V21-0 Product 类 OemBrand 字段不存在性验证
+
+**对应 spec**: spec.md 22.4 Pre-Task-V21-0
+**目标**: Grep 确认 Product 类无 OemBrand 字段(v17/v18/v19/v20 伪代码引用 p.OemBrand 是编译错误)
+**步骤**:
+1. Grep `public.*OemBrand` 在 Product.cs
+2. 确认只在 CrossReference 类 L127 / XrefOemBrand 类 L211(Brand)匹配,Product 类块(L8-L95)零匹配
+3. Read Product.cs L8-L95 确认 Product 类字段清单
+**通过条件**: Product 类无 OemBrand 字段
+**失败处理**: 若 Product 类有 OemBrand 字段,V21-F1 修正方案需调整
+**验证命令**: Grep `public.*OemBrand` 在 Product.cs
+
+### Task V21-0.2 [必做] Pre-Task-V21-1 v10 V10-F7 修正方案存在性验证
+
+**对应 spec**: spec.md 22.4 Pre-Task-V21-1
+**目标**: Grep 确认 v10 V10-F7 已明确修正"Product.OemBrand 不存在"
+**步骤**:
+1. Grep `V10-F7` 在 spec.md: 应匹配 L6797-L6824
+2. Read spec.md L6797-L6824 确认修正方案: `var oemBrand = p.CrossReferences.FirstOrDefault()?.OemBrand;`
+3. Grep `p.CrossReferences.FirstOrDefault` 在 spec.md: 应匹配 L6808
+**通过条件**: v10 V10-F7 修正方案存在且明确
+**失败处理**: 若 v10 V10-F7 不存在,V21-F3 回归验证清单需调整
+**验证命令**: Grep `V10-F7` 在 spec.md
+
+### Task V21-0.3 [必做] Pre-Task-V21-2 v17/v18/v19 回归位置完整性验证
+
+**对应 spec**: spec.md 22.4 Pre-Task-V21-2
+**目标**: Grep 确认 v17/v18/v19 所有 `p.OemBrand` 引用位置已列入 V21-F3 修正清单
+**步骤**:
+1. Grep `p.OemBrand` 在 spec.md: 列出所有匹配行号
+2. 比对 V21-F3 修正清单(10 项),确认无遗漏
+3. 若发现遗漏,追加到 V21-F3 修正清单
+**通过条件**: 所有 `p.OemBrand` 引用位置已列入 V21-F3 修正清单
+**失败处理**: 若有遗漏,V21-F3 修正清单需补充
+**验证命令**: Grep `p.OemBrand` 在 spec.md
+
+### Task V21-0.4 [必做] Pre-Task-V21-3 V21-F1 修正后伪代码内部字段引用存在性验证
+
+**对应 spec**: spec.md 22.4 Pre-Task-V21-3
+**目标**: 确认 V21-F1 修正后 V19-F6 伪代码所有 `p.X` 引用 Product.X 存在
+**步骤**:
+1. Read V21-F1 修正后 V19-F6 伪代码(spec.md 22.3 V21-F1)
+2. 列出所有 `p.X` 引用(Id/OemNoNormalized/OemNoDisplay/Remark/Type/D1Mm/D2Mm/D3Mm/H1Mm/H2Mm/H3Mm/Media/IsDiscontinued/UpdatedAt/Mr1/CrossReferences)
+3. Grep 每个 `X` 在 Product.cs: 应匹配
+4. 验证 `p.CrossReferences.FirstOrDefault().OemBrand`: CrossReferences 存在(L92),OemBrand 存在于 CrossReference 类(L127)
+**通过条件**: V21-F1 修正后所有 `p.X` 引用 Product.X 存在
+**失败处理**: 若有不一致,V21-F1 修正方案需调整
+**验证命令**: Grep 字段名在 Product.cs
+
+## v21 数据关联维度任务(对应 V21-F1~F3)
+
+### Task V21-1.1 [严重] V21-F1 修正 V19-F6 — p.OemBrand 改为通过 CrossReferences 导航属性
+
+**对应 spec**: spec.md 22.3 V21-F1
+**对应漏洞**: D20-1, D20-2
+**目标**: V19-F6 `Brand = p.OemBrand` 和 `where x.Brand == p.OemBrand` 改为 `p.CrossReferences.FirstOrDefault().OemBrand`(v10 V10-F7 方案)
+**步骤**:
+1. 定位 spec.md 第二十章 V19-F6(L12514-L12528)
+2. `Brand = p.OemBrand` 改为 `Brand = p.CrossReferences.FirstOrDefault().OemBrand`
+3. `where x.Brand == p.OemBrand` 改为 `where x.Brand == p.CrossReferences.FirstOrDefault().OemBrand`
+4. 追加伪代码内部字段引用存在性验证表(20 行)
+5. 注意: EF Core 投影中 CrossReferences.FirstOrDefault() 需 Include 导航属性(在 v17 任务清单执行时处理)
+**通过条件**: V19-F6 不再引用 p.OemBrand,改为 CrossReferences 导航属性
+**失败处理**: 若 EF Core 投影不支持 CrossReferences.FirstOrDefault(),需改为先查 Product 再查 CrossReferences
+**验证命令**: Grep `p.OemBrand` 在 V19-F6 伪代码: 应零匹配
+
+### Task V21-1.2 [严重] V21-F2 修正 V20-F3 修正方向错误 — 重新设计 V19-F3 字段引用
+
+**对应 spec**: spec.md 22.3 V21-F2
+**对应漏洞**: D20-3, D20-4
+**目标**: V21-F1 修正 V19-F6 后,V19-F3 字段引用同步修正,基于 V21-F1 修正后的匿名类型字段
+**步骤**:
+1. 定位 spec.md 第二十一章 V20-F3(L12834-L12896)
+2. V19-F3 `p.Brand` 保留(与 V21-F1 修正后 V19-F6 匿名类型字段名 Brand 一致)
+3. 追加跨伪代码片段字段名一致性 + 字段值来源合法性验证表(17 行)
+4. 确认 V19-F3 `p.Brand` 引用 V19-F6 匿名类型字段 Brand,值来自 CrossReferences.OemBrand(V21-F1 修正后合法)
+**通过条件**: V19-F3 与 V19-F6 跨片段字段名一致 + 字段值来源合法
+**失败处理**: 若字段值来源不合法,需 V21-F1 重新修正
+**验证命令**: Read V21-F2 验证表
+
+### Task V21-1.3 [严重] V21-F3 修正 v17/v18/v19 回归 v10 V10-F7 已修正的错误
+
+**对应 spec**: spec.md 22.3 V21-F3
+**对应漏洞**: D20-5
+**目标**: 所有 v17/v18/v19 中 `p.OemBrand` 引用统一修正为 `p.CrossReferences.FirstOrDefault().OemBrand`
+**步骤**:
+1. 定位 v17 spec.md L11870/L11983/L11986
+2. 定位 v18 spec.md L12316/L12317
+3. 定位 v19 spec.md L12369/L12396/L12513/L12522/L12525
+4. 所有 `p.OemBrand` 引用统一修正为 `p.CrossReferences.FirstOrDefault().OemBrand`
+5. 注释中"Product.OemBrand 字段"修正为"CrossReferences.OemBrand 字段"
+**通过条件**: v17/v18/v19 不再引用 p.OemBrand,统一改为 CrossReferences 导航属性
+**失败处理**: 若发现遗漏,追加到 V21-F3 修正清单
+**验证命令**: Grep `p.OemBrand` 在 spec.md: 应零匹配(或仅在 v10 V10-F7 修正方案描述中作为"错误案例"出现)
+
+## v21 核实机制强化任务(对应 V21-F4)
+
+### Task V21-2.1 [严重] V21-F4 强化第十二重核实机制 — 伪代码内部字段引用存在性验证 + 跨版本回归验证
+
+**对应 spec**: spec.md 22.3 V21-F4
+**对应漏洞**: D20-6
+**目标**: 第十二重核实机制追加"伪代码内部字段引用存在性验证"和"跨版本回归验证"定义
+**步骤**:
+1. 在 spec.md 第二十二章 22.2 第十二重核实机制定义中追加"伪代码内部字段引用存在性验证"
+2. 在 spec.md 第二十二章 22.2 第十二重核实机制定义中追加"跨版本回归验证"
+3. 明确伪代码内部字段引用存在性验证规则: 对所有 `p.X` / `b.Y` 引用,必须 Grep 验证 `X` 在 `p` 的类型中存在
+4. 明确跨版本回归验证规则: 对 vN 伪代码,必须 Grep v(N-K) 已修正错误清单,验证不回归
+5. 引用 D20-1/D20-5/D20-6 作为盲区案例
+**通过条件**: 第十二重核实机制定义含伪代码内部字段引用存在性验证 + 跨版本回归验证
+**失败处理**: 无
+**验证命令**: 无(纯 spec 修订)
+
+## v21 任务总结
+
+- **前置任务**: 4 个(Pre-Task-V21-0 / V21-1 / V21-2 / V21-3)
+- **数据关联维度**: 3 个任务(V21-1.1 ~ V21-1.3,对应 V21-F1~F3)
+- **核实机制强化**: 1 个任务(V21-2.1,对应 V21-F4)
+- **总任务数**: 8 个(4 前置 + 4 实施)
+
+**实际新增代码**: 0 个(v21 仅修订 spec/tasks/checklist)
+**实际修改后端文件**: 0 个(代码修改由 v17 任务清单执行)
+**实际修改前端文件**: 0 个
+**纯文档修正**: 3 个文件(spec.md / tasks.md / checklist.md)
+**新增 migration**: 0 个
+**已知问题**: D7/D8 filter 遗漏(现有 bug,列 v22+ 处理)
+

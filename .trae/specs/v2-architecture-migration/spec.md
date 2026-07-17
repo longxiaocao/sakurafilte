@@ -13073,3 +13073,374 @@ V20-F6 强化第十一重核实机制定义:
 - [ ] v20 新增 migration: 0 个
 - [ ] v20 已知问题: D7/D8 filter 遗漏(现有 bug,列 v21+ 处理)
 
+---
+
+# 第二十二章 v21 修订 — 第十二重核实机制(伪代码内部字段引用存在性验证 + 跨版本回归验证)
+
+> 基于第二十轮三维度并行深度审查(D20:6 / S20:0 / N20:0,共 6 项衍生漏洞,全部严重),v21 引入第十二重核实机制(伪代码内部字段引用存在性验证 + 跨版本回归验证),解决 v17/v18/v19 回归 v10 V10-F7 已修正的错误(Product.OemBrand 不存在但伪代码引用 p.OemBrand)、v20 V20-F3 修正方向错误(假设 V19-F6 `Brand = p.OemBrand` 合法,实际 Product 无此字段)、第十一重核实机制仍有盲区(未验证伪代码内部 `p.X` 引用 Product.X 是否存在)等问题。
+
+## 22.1 第二十轮审查结果摘要(6 项衍生漏洞,全部严重)
+
+### D20 数据关联维度(6 项,全部严重)
+
+| 编号 | 问题 | 危险等级 | v19/v20 伪代码 | 实际代码事实(经 Grep/Read 核实) |
+|------|------|---------|----------------|--------------------------------|
+| D20-1 | V19-F6 L12522 `Brand = p.OemBrand` 引用 Product.OemBrand 不存在 | **严重** | spec.md L12522: `Brand = p.OemBrand,  // V19-F2: 直接用 Product.OemBrand` | [Product.cs#L8-L95](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Core/Entities/Product.cs#L8-L95): Product 类字段无 OemBrand(Grep `public.*OemBrand` 在 Product 类块零匹配)。OemBrand 字段只在 CrossReference 类 L127 / XrefOemBrand 类 L211(Brand)出现 |
+| D20-2 | V19-F6 L12525 `where x.Brand == p.OemBrand` 引用 Product.OemBrand 不存在 | **严重** | spec.md L12525: `where x.Brand == p.OemBrand && x.DeletedAt == null` | 同 D20-1,Product 类无 OemBrand 字段,该 LEFT JOIN 条件编译错误 |
+| D20-3 | V20-F3 跨伪代码片段字段名一致性验证表不完整 | **严重** | spec.md L12876-L12896: V20-F3 验证表只验证 V19-F3 → V19-F6 匿名类型字段名一致性 | V20-F3 验证表未验证 V19-F6 内部 `Brand = p.OemBrand` 中 p(Product)是否有 OemBrand 字段。第十一重核实机制仍需强化 |
+| D20-4 | V20-F3 修正方向错误 | **严重** | spec.md L12834-L12873: V20-F3 假设 V19-F6 `Brand = p.OemBrand` 合法,将 V19-F3 `p.OemBrand` 改为 `p.Brand` | V19-F6 内部 `Brand = p.OemBrand` 本身编译错误(Product 无 OemBrand),V20-F3 在错误前提下做"跨片段字段名一致性修正"是错上加错 |
+| D20-5 | v17/v18/v19 回归 v10 V10-F7 已修正的错误 | **严重** | spec.md L11870(v17): `p.OemBrand,  // 16. OemBrand (v17 新增)` <br> L12317(v18 D18-2): "Brand 直接用 p.OemBrand,删除子查询" <br> L12513(v19 V19-F2): "Brand 直接用 p.OemBrand(无需 JOIN 获取 Brand)" | [spec.md#L6797-L6824](file:///d:/projects/sakurafilter/.trae/specs/v2-architecture-migration/spec.md#L6797-L6824): v10 V10-F7 明确修正方案 — 通过 `p.CrossReferences.FirstOrDefault()?.OemBrand` 获取 OemBrand(因 Product 无此字段)。v17/v18/v19 重新引入 `p.OemBrand` 直接引用是回归错误 |
+| D20-6 | 第十一重核实机制仍有盲区 — 未覆盖伪代码内部字段引用存在性验证 | **严重** | spec.md L12918-L12930 V20-F5: 第十一重追加"导航属性/字段存在性双重验证" | V20-F5 只验证 spec 显式声称"字段存在/不存在"的双向验证,未验证伪代码内部 `p.X` 引用 Product.X 是否存在(隐式字段引用)。V19-F6 `Brand = p.OemBrand` 是隐式引用 Product.OemBrand,V20-F5 未覆盖 |
+
+### S20 检索逻辑维度(0 项)
+
+无新漏洞检出。V20-F4 软化 V19-F7 措辞方案合理(不直接判定"错误",留给 Pre-Task-V18-0-Verify 验证定论)。
+
+### F19 前后端联动维度(0 项)
+
+无新漏洞检出。v20 不涉及前后端联动修复。
+
+### N20 第十一重核实机制应用维度(0 项,但 D20-6 揭示盲区)
+
+第十一重核实机制应用本身无错误,但 D20-6 揭示其定义仍有盲区 — 未覆盖"伪代码内部字段引用存在性验证"。
+
+## 22.2 v21 核心创新 — 第十二重核实机制(伪代码内部字段引用存在性验证 + 跨版本回归验证)
+
+### 第十二重核实机制定义
+
+v20 第十一重核实机制(跨伪代码片段字段名一致性 + 导航属性/字段存在性双重验证)存在两个盲区:
+1. **伪代码内部字段引用存在性验证**: v20 V20-F5 第十一重只验证 spec 显式声称"字段存在/不存在"的双向验证,未验证伪代码内部 `p.X` 引用 Product.X 是否存在(隐式字段引用)。V19-F6 `Brand = p.OemBrand` 是隐式引用 Product.OemBrand,V20-F5 未覆盖 → D20-1/D20-6 错误。
+2. **跨版本回归验证**: v20 V20-F5 未验证 vN 伪代码是否回归 v(N-K) 已修正的错误。v10 V10-F7 已明确修正 Product.OemBrand 不存在(通过 CrossReferences 导航属性),但 v17/v18/v19 重新引入 `p.OemBrand` 直接引用,V20-F5 未覆盖 → D20-5 回归错误。
+
+v21 引入第十二重核实机制,在第十一重基础上追加:
+
+1. **伪代码内部字段引用存在性验证**: 对所有伪代码 `p.X` / `b.Y` 等字段引用,必须 Grep 验证 `X` 在 `p` 的类型(如 Product)中存在,`Y` 在 `b` 的类型(如 XrefOemBrand)中存在。不仅验证 spec 显式声称,也要验证伪代码内部隐式引用。
+2. **跨版本回归验证**: 对 vN 伪代码的所有字段引用,必须 Grep v(N-K) 已修正的错误清单,验证 vN 是否回归已修正错误。若 v10 V10-F7 已修正"Product.OemBrand 不存在",v17+ 伪代码不得重新引入 `p.OemBrand` 直接引用。
+
+### 十二重核实机制完整定义(v21)
+
+| 重数 | 名称 | 验证内容 | 工具 |
+|------|------|---------|------|
+| 第一重 | 代码存在性 | 类/方法是否存在 | Grep |
+| 第二重 | 字段名 | 字段名是否存在 | Grep |
+| 第三重 | API 签名 | 方法签名与代码一致 | Read |
+| 第四重 | 伪代码自洽性 | 伪代码逻辑无矛盾 | 人工审查 |
+| 第五重 | 运行时上下文自洽性 | 锁/事务/取消三层互斥自洽 | 人工审查 |
+| 第六重 | API 完整签名比对 | 参数类型/返回值/泛型一致 | Read |
+| 第七重 | 方法/字段名 Grep 零匹配 | 引用的方法/字段名实际存在 | Grep 零匹配验证 |
+| 第八重 | 类归属 + 代码语义对齐 | 字段所属类正确 + 方法不存在时语义已实现 | Grep + Read 类块范围 |
+| 第九重 | record 完整字段 + 现有实现语义 | record 构造提供所有字段 + 保留现有实现关键逻辑 | Read record 定义 + Read 现有实现 |
+| 第十重 | 版本间一致性 + 字段顺序对齐 | 伪代码与前序版本无冲突 + record 构造字段顺序与扩展定义一致 | Grep 前序版本 + Read record 扩展定义 |
+| 第十一重 | 跨伪代码片段字段名一致性 + 导航属性/字段存在性双重验证 | 跨片段字段名引用一致 + 字段存在性双向验证(存在/不存在) | Grep 跨片段字段名 + Grep 双向验证 |
+| **第十二重** | **伪代码内部字段引用存在性验证 + 跨版本回归验证** | **伪代码内部 `p.X` 引用类型 X 字段存在 + vN 不回归 v(N-K) 已修正错误** | **Grep 伪代码内部字段引用 + Grep 前序版本已修正错误清单** |
+
+### v21 第十二重核实机制验证结果(针对 v20 衍生漏洞)
+
+| v20 衍生漏洞 | 第十一重结果 | 第十二重验证 | v21 修复方案 |
+|------------|------------|------------|------------|
+| D20-1 V19-F6 `Brand = p.OemBrand` 引用 Product.OemBrand 不存在 | 未覆盖伪代码内部字段引用 | **伪代码内部字段引用存在性验证**: Grep Product.cs 确认无 OemBrand 字段 | V21-F1: 修正 V19-F6,通过 CrossReferences 导航属性获取 OemBrand(v10 V10-F7 方案) |
+| D20-2 V19-F6 `where x.Brand == p.OemBrand` 引用 Product.OemBrand 不存在 | 未覆盖伪代码内部字段引用 | **伪代码内部字段引用存在性验证**: 同 D20-1 | V21-F1: 同上 |
+| D20-3 V20-F3 跨伪代码片段字段名一致性验证表不完整 | 验证表只验证跨片段字段名 | **伪代码内部字段引用存在性验证**: V20-F3 验证表应追加 V19-F6 内部 `p.OemBrand` 引用 Product.OemBrand 验证 | V21-F2: 重新设计 V19-F3 与 V19-F6 字段引用,基于 V21-F1 修正 |
+| D20-4 V20-F3 修正方向错误 | 假设 V19-F6 `Brand = p.OemBrand` 合法 | **伪代码内部字段引用存在性验证**: V19-F6 `Brand = p.OemBrand` 编译错误,V20-F3 修正方向错误 | V21-F2: 同上 |
+| D20-5 v17/v18/v19 回归 v10 V10-F7 已修正的错误 | 未覆盖跨版本回归 | **跨版本回归验证**: Grep v10 V10-F7 已修正"Product.OemBrand 不存在",v17/v18/v19 重新引入 `p.OemBrand` 是回归错误 | V21-F3: 列出所有回归位置,统一修正为 CrossReferences 导航属性 |
+| D20-6 第十一重核实机制仍有盲区 | 未覆盖伪代码内部字段引用 | **第十二重追加伪代码内部字段引用存在性验证 + 跨版本回归验证** | V21-F4: 强化第十二重核实机制定义 |
+
+## 22.3 V21-F1~F4 修复方案(含完整伪代码)
+
+> **第十二重核实机制应用**: 每个 V21-Fx 修复方案均经过伪代码内部字段引用存在性验证 + 跨版本回归验证,确保伪代码内部 `p.X` 引用 Product.X 存在 + 不回归 v10 V10-F7 已修正错误。
+
+### V21-F1 [严重] D20-1/D20-2 修正 V19-F6 — p.OemBrand 改为通过 CrossReferences 导航属性
+
+**v19/v20 错误位置**: spec.md 第二十章 V19-F6(L12514-L12528)
+**v19/v20 错误**: V19-F6 `Brand = p.OemBrand` 和 `where x.Brand == p.OemBrand` 引用 Product.OemBrand,但 Product 类无此字段
+**真实代码事实**(经 Grep + Read 核实):
+- [Product.cs#L8-L95](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Core/Entities/Product.cs#L8-L95): Product 类无 OemBrand 字段
+- Grep `public.*OemBrand` 在 Product.cs: 0 匹配(Product 类块内)
+- [Product.cs#L92](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Core/Entities/Product.cs#L92): `public ICollection<CrossReference> CrossReferences` — Product 有 CrossReferences 导航属性
+- [Product.cs#L127](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Core/Entities/Product.cs#L127): `[Column("oem_brand")] public string? OemBrand` — CrossReference 类有 OemBrand 字段
+- [spec.md#L6797-L6824](file:///d:/projects/sakurafilter/.trae/specs/v2-architecture-migration/spec.md#L6797-L6824): v10 V10-F7 明确修正方案 — 通过 `p.CrossReferences.FirstOrDefault()?.OemBrand` 获取 OemBrand
+**v21 修正方案**: V19-F6 改用 CrossReferences 导航属性获取 OemBrand(v10 V10-F7 修正方案):
+```csharp
+// V21-F1: V19-F6 p.OemBrand 改为通过 CrossReferences 导航属性(v10 V10-F7 修正方案)
+// V19-F6: LEFT JOIN 合并为 1 次 JOIN(非 2 个子查询)
+// V19-F1: 追加 DeletedAt 过滤
+// V21-F1: Brand 通过 CrossReferences.FirstOrDefault().OemBrand 获取(Product 无 OemBrand 字段)
+//         但 EF Core 投影中子查询需用 Include 或单独查询,此处改为先查 Product 再查 CrossReferences
+var batch = await query
+    .OrderBy(p => p.Id)
+    .Take(batchSize)
+    .Select(p => new
+    {
+        p.Id, p.OemNoNormalized, p.OemNoDisplay, p.Remark, p.Type,
+        p.D1Mm, p.D2Mm, p.D3Mm, p.H1Mm, p.H2Mm, p.H3Mm, p.Media,
+        p.IsDiscontinued, p.UpdatedAt, p.Mr1,
+        // V21-F1 修正: Brand 通过 CrossReferences 导航属性获取(v10 V10-F7 方案)
+        // WHY: Product 类无 OemBrand 字段,V19-F2/V19-F6 直接用 p.OemBrand 编译错误
+        Brand = p.CrossReferences.FirstOrDefault().OemBrand,  // V21-F1: 通过 CrossReferences 导航
+        // V19-F6: 仅 BrandSortOrder 用 LEFT JOIN(1 次 JOIN,非 2 次)
+        // V21-F1: BrandSortOrder 的 JOIN 条件也改为通过 CrossReferences.OemBrand
+        BrandSortOrder = (from x in _db.XrefOemBrands
+                          where x.Brand == p.CrossReferences.FirstOrDefault().OemBrand  // V21-F1 修正
+                                && x.DeletedAt == null  // V19-F1
+                          select (int?)x.SortOrder).FirstOrDefault()
+    })
+    .ToListAsync(ct);
+```
+
+**伪代码内部字段引用存在性验证表**(V21-F1):
+
+| 伪代码片段 | 字段引用 | 引用类型 | 字段存在性 | 验证工具 |
+|-----------|---------|---------|----------|---------|
+| V21-F1 L12522 | p.Id | Product | ✓(L10) | Grep Product.cs |
+| V21-F1 L12522 | p.OemNoNormalized | Product | ✓(L11) | Grep Product.cs |
+| V21-F1 L12522 | p.OemNoDisplay | Product | ✓(L12) | Grep Product.cs |
+| V21-F1 L12522 | p.Remark | Product | ✓(L13) | Grep Product.cs |
+| V21-F1 L12522 | p.Type | Product | ✓(L16) | Grep Product.cs |
+| V21-F1 L12522 | p.D1Mm | Product | ✓(L27) | Grep Product.cs |
+| V21-F1 L12522 | p.D2Mm | Product | ✓(L28) | Grep Product.cs |
+| V21-F1 L12522 | p.D3Mm | Product | ✓(L29) | Grep Product.cs |
+| V21-F1 L12522 | p.H1Mm | Product | ✓(L31) | Grep Product.cs |
+| V21-F1 L12522 | p.H2Mm | Product | ✓(L32) | Grep Product.cs |
+| V21-F1 L12522 | p.H3Mm | Product | ✓(L33) | Grep Product.cs |
+| V21-F1 L12522 | p.Media | Product | ✓(L37) | Grep Product.cs |
+| V21-F1 L12522 | p.IsDiscontinued | Product | ✓(L74) | Grep Product.cs |
+| V21-F1 L12522 | p.UpdatedAt | Product | ✓(L77) | Grep Product.cs |
+| V21-F1 L12522 | p.Mr1 | Product | ✓(L22) | Grep Product.cs |
+| V21-F1 L12522 | p.CrossReferences | Product | ✓(L92) | Grep Product.cs |
+| V21-F1 L12522 | p.CrossReferences.FirstOrDefault().OemBrand | CrossReference | ✓(L127) | Grep Product.cs |
+| V21-F1 L12525 | x.Brand | XrefOemBrand | ✓(L211) | Grep Product.cs |
+| V21-F1 L12525 | x.DeletedAt | XrefOemBrand | ✓(L215) | Grep Product.cs |
+| V21-F1 L12525 | x.SortOrder | XrefOemBrand | ✓(L212) | Grep Product.cs |
+
+### V21-F2 [严重] D20-3/D20-4 修正 V20-F3 修正方向错误 — 重新设计 V19-F3 字段引用
+
+**v20 错误位置**: spec.md 第二十一章 V20-F3(L12834-L12896)
+**v20 错误**: V20-F3 假设 V19-F6 `Brand = p.OemBrand` 合法,将 V19-F3 `p.OemBrand` 改为 `p.Brand`(跨片段字段名一致)。但 V19-F6 `Brand = p.OemBrand` 本身编译错误(Product 无 OemBrand),V20-F3 在错误前提下做修正
+**真实代码事实**(经跨片段验证核实):
+- V19-F6 内部 `Brand = p.OemBrand` 编译错误(D20-1)
+- V20-F3 修正后 V19-F3 `p.Brand` 引用 V19-F6 匿名类型字段 Brand,但 Brand 字段值来自不存在的 p.OemBrand
+- V20-F3 跨伪代码片段字段名一致性验证表只验证字段名一致,未验证字段值来源合法
+**v21 修正方案**: V21-F1 修正 V19-F6 后,V19-F3 字段引用同步修正:
+```csharp
+// V21-F2: V19-F3 修正,与 V21-F1 修正后的 V19-F6 匿名类型字段名一致
+// V21-F1 修正后 V19-F6 匿名类型 Brand = p.CrossReferences.FirstOrDefault().OemBrand
+// V19-F3 引用 p.Brand(匿名类型字段名 Brand,值来自 CrossReferences.OemBrand)
+var docs = batch.Select(p => new ProductIndexDoc(
+    p.Id,                    // 1. Id
+    p.OemNoNormalized,       // 2. OemNoNormalized
+    p.OemNoDisplay ?? "",    // 3. OemNoDisplay
+    p.Remark,                // 4. Remark
+    p.Type ?? "UNKNOWN",     // 5. Type
+    p.D1Mm,                  // 6. D1Mm
+    p.D2Mm,                  // 7. D2Mm
+    p.D3Mm,                  // 8. D3Mm (V19-F3: 第 8 位置)
+    p.H1Mm,                  // 9. H1Mm
+    p.H2Mm,                  // 10. H2Mm (V19-F3: 第 10 位置)
+    p.H3Mm,                  // 11. H3Mm (V19-F3: 第 11 位置)
+    p.Media,                 // 12. Media (V19-F3: 第 12 位置)
+    p.IsDiscontinued,        // 13. IsDiscontinued
+    new DateTimeOffset(DateTime.SpecifyKind(p.UpdatedAt, DateTimeKind.Utc), TimeSpan.Zero).ToUnixTimeSeconds(),  // 14. UpdatedAtUnix (V18-F3 SpecifyKind)
+    p.Mr1,                   // 15. Mr1
+    p.Brand,                 // 16. OemBrand (V20-F3 修正保留: p.Brand,与 V21-F1 修正后 V19-F6 匿名类型字段名一致)
+    p.BrandSortOrder         // 17. BrandSortOrder
+)).ToList();
+```
+
+**跨伪代码片段字段名一致性 + 字段值来源合法性验证表**(V21-F2):
+
+| 伪代码片段 | 字段引用 | V19-F6 匿名类型字段名 | 字段名一致 | 字段值来源合法 | 一致性 |
+|-----------|---------|---------------------|----------|-------------|--------|
+| V21-F2 | p.Id | Id | ✓ | ✓(p.Id from Product.L10) | ✓ |
+| V21-F2 | p.OemNoNormalized | OemNoNormalized | ✓ | ✓(p.OemNoNormalized from Product.L11) | ✓ |
+| V21-F2 | p.OemNoDisplay | OemNoDisplay | ✓ | ✓(p.OemNoDisplay from Product.L12) | ✓ |
+| V21-F2 | p.Remark | Remark | ✓ | ✓(p.Remark from Product.L13) | ✓ |
+| V21-F2 | p.Type | Type | ✓ | ✓(p.Type from Product.L16) | ✓ |
+| V21-F2 | p.D1Mm | D1Mm | ✓ | ✓(p.D1Mm from Product.L27) | ✓ |
+| V21-F2 | p.D2Mm | D2Mm | ✓ | ✓(p.D2Mm from Product.L28) | ✓ |
+| V21-F2 | p.D3Mm | D3Mm | ✓ | ✓(p.D3Mm from Product.L29) | ✓ |
+| V21-F2 | p.H1Mm | H1Mm | ✓ | ✓(p.H1Mm from Product.L31) | ✓ |
+| V21-F2 | p.H2Mm | H2Mm | ✓ | ✓(p.H2Mm from Product.L32) | ✓ |
+| V21-F2 | p.H3Mm | H3Mm | ✓ | ✓(p.H3Mm from Product.L33) | ✓ |
+| V21-F2 | p.Media | Media | ✓ | ✓(p.Media from Product.L37) | ✓ |
+| V21-F2 | p.IsDiscontinued | IsDiscontinued | ✓ | ✓(p.IsDiscontinued from Product.L74) | ✓ |
+| V21-F2 | p.UpdatedAt | UpdatedAt | ✓ | ✓(p.UpdatedAt from Product.L77) | ✓ |
+| V21-F2 | p.Mr1 | Mr1 | ✓ | ✓(p.Mr1 from Product.L22) | ✓ |
+| V21-F2 | p.Brand | Brand | ✓ | ✓(Brand = p.CrossReferences.FirstOrDefault().OemBrand,V21-F1 修正后合法) | ✓(V21-F2 修正) |
+| V21-F2 | p.BrandSortOrder | BrandSortOrder | ✓ | ✓(BrandSortOrder from LEFT JOIN) | ✓ |
+
+### V21-F3 [严重] D20-5 修正 v17/v18/v19 回归 v10 V10-F7 已修正的错误
+
+**回归错误位置清单**(经 Grep v10 V10-F7 已修正错误核实):
+- [spec.md#L11870](file:///d:/projects/sakurafilter/.trae/specs/v2-architecture-migration/spec.md#L11870) v17: `p.OemBrand,  // 16. OemBrand (v17 新增)` — 回归 v10 V10-F7
+- [spec.md#L11983](file:///d:/projects/sakurafilter/.trae/specs/v2-architecture-migration/spec.md#L11983) v17: `where x.Brand == p.OemBrand  // 现有 Product.OemBrand 字段` — 回归 v10 V10-F7,注释错误
+- [spec.md#L11986](file:///d:/projects/sakurafilter/.trae/specs/v2-architecture-migration/spec.md#L11986) v17: `where x.Brand == p.OemBrand` — 回归 v10 V10-F7
+- [spec.md#L12316](file:///d:/projects/sakurafilter/.trae/specs/v2-architecture-migration/spec.md#L12316) v18 D18-1: `from x in _db.XrefOemBrands where x.Brand == p.OemBrand` — 回归 v10 V10-F7
+- [spec.md#L12317](file:///d:/projects/sakurafilter/.trae/specs/v2-architecture-migration/spec.md#L12317) v18 D18-2: "Brand 直接用 p.OemBrand,删除子查询" — 回归 v10 V10-F7
+- [spec.md#L12369](file:///d:/projects/sakurafilter/.trae/specs/v2-architecture-migration/spec.md#L12369) v19 V19-F2: "Brand 直接用 p.OemBrand,删除子查询" — 回归 v10 V10-F7
+- [spec.md#L12396](file:///d:/projects/sakurafilter/.trae/specs/v2-architecture-migration/spec.md#L12396) v19: `where x.Brand == p.OemBrand && x.DeletedAt == null` — 回归 v10 V10-F7
+- [spec.md#L12513](file:///d:/projects/sakurafilter/.trae/specs/v2-architecture-migration/spec.md#L12513) v19 V19-F2: "Brand 直接用 p.OemBrand(无需 JOIN 获取 Brand)" — 回归 v10 V10-F7
+- [spec.md#L12522](file:///d:/projects/sakurafilter/.trae/specs/v2-architecture-migration/spec.md#L12522) v19 V19-F6: `Brand = p.OemBrand` — 回归 v10 V10-F7
+- [spec.md#L12525](file:///d:/projects/sakurafilter/.trae/specs/v2-architecture-migration/spec.md#L12525) v19 V19-F6: `where x.Brand == p.OemBrand` — 回归 v10 V10-F7
+
+**v21 修正方案**: 所有 v17/v18/v19 中 `p.OemBrand` 引用统一修正为 `p.CrossReferences.FirstOrDefault().OemBrand`(v10 V10-F7 修正方案):
+```
+V21-F3 修正清单:
+1. v17 spec.md L11870: `p.OemBrand,` → `p.CrossReferences.FirstOrDefault()?.OemBrand,`(需先 Include CrossReferences)
+2. v17 spec.md L11983: `where x.Brand == p.OemBrand` → `where x.Brand == p.CrossReferences.FirstOrDefault().OemBrand`
+3. v17 spec.md L11986: 同上
+4. v18 spec.md L12316: `where x.Brand == p.OemBrand` → `where x.Brand == p.CrossReferences.FirstOrDefault().OemBrand`
+5. v18 spec.md L12317: "Brand 直接用 p.OemBrand" → "Brand 通过 CrossReferences.FirstOrDefault().OemBrand"
+6. v19 spec.md L12369: 同 5
+7. v19 spec.md L12396: 同 4
+8. v19 spec.md L12513: 同 5
+9. v19 spec.md L12522: `Brand = p.OemBrand` → `Brand = p.CrossReferences.FirstOrDefault().OemBrand`(V21-F1)
+10. v19 spec.md L12525: `where x.Brand == p.OemBrand` → `where x.Brand == p.CrossReferences.FirstOrDefault().OemBrand`(V21-F1)
+```
+
+### V21-F4 [严重] D20-6 强化第十二重核实机制 — 伪代码内部字段引用存在性验证 + 跨版本回归验证
+
+**v20 盲区**: v20 V20-F5 第十一重核实机制未覆盖"伪代码内部字段引用存在性验证"和"跨版本回归验证"
+**v21 修正方案**: 第十二重核实机制追加定义:
+```
+V21-F4 强化第十二重核实机制定义:
+1. 第十二重核实机制追加"伪代码内部字段引用存在性验证":
+   - 对所有伪代码 `p.X` / `b.Y` 等字段引用,必须 Grep 验证 `X` 在 `p` 的类型中存在
+   - 不仅验证 spec 显式声称"字段存在/不存在",也要验证伪代码内部隐式引用
+   - 验证范围: 所有伪代码片段(包括 record 构造 / 查询投影 / LEFT JOIN 条件 / where 过滤)
+2. 第十二重核实机制追加"跨版本回归验证":
+   - 对 vN 伪代码的所有字段引用,必须 Grep v(N-K) 已修正的错误清单
+   - 若 v10 V10-F7 已修正"Product.OemBrand 不存在",v17+ 伪代码不得重新引入 `p.OemBrand` 直接引用
+   - 验证范围: 所有 vN 伪代码(包括 v17/v18/v19/v20)
+3. v20 V20-F5 第十一重只验证 spec 显式声称,未覆盖伪代码内部隐式引用 → D20-1/D20-6 错误
+4. v20 V20-F5 第十一重未覆盖跨版本回归 → D20-5 回归错误
+5. v21 要求: 所有伪代码字段引用必须 Grep 双向验证(存在/不存在) + Grep 前序版本已修正错误清单
+```
+
+## 22.4 v21 前置任务(Pre-Task)
+
+> **目的**: 在实施 V21-F1~F4 修复方案前,通过伪代码内部字段引用存在性验证 + 跨版本回归验证,确认伪代码与 Product 类实际字段一致 + 不回归 v10 V10-F7。
+
+### Pre-Task-V21-0 [必做] Product 类 OemBrand 字段不存在性验证
+
+**验证目标**: 确认 Product 类无 OemBrand 字段(v17/v18/v19/v20 伪代码引用 p.OemBrand 是编译错误)
+**验证步骤**:
+1. Grep `public.*OemBrand` 在 Product.cs: 应只在 CrossReference 类 L127 / XrefOemBrand 类 L211(Brand)匹配,Product 类块(L8-L95)零匹配
+2. Read Product.cs L8-L95 确认 Product 类字段清单(无 OemBrand)
+**通过条件**: Product 类无 OemBrand 字段
+**失败处理**: 若 Product 类有 OemBrand 字段,V21-F1 修正方案需调整
+
+### Pre-Task-V21-1 [必做] v10 V10-F7 修正方案存在性验证
+
+**验证目标**: 确认 v10 V10-F7 已明确修正"Product.OemBrand 不存在"(通过 CrossReferences 导航属性)
+**验证步骤**:
+1. Grep `V10-F7` 在 spec.md: 应匹配 L6797-L6824
+2. Read spec.md L6797-L6824 确认修正方案: `var oemBrand = p.CrossReferences.FirstOrDefault()?.OemBrand;`
+3. Grep `p.CrossReferences.FirstOrDefault` 在 spec.md: 应匹配 L6808(v10 V10-F7 修正方案)
+**通过条件**: v10 V10-F7 修正方案存在且明确
+**失败处理**: 若 v10 V10-F7 不存在,V21-F3 回归验证清单需调整
+
+### Pre-Task-V21-2 [必做] v17/v18/v19 回归位置完整性验证
+
+**验证目标**: 确认 v17/v18/v19 所有 `p.OemBrand` 引用位置已列入 V21-F3 修正清单
+**验证步骤**:
+1. Grep `p.OemBrand` 在 spec.md: 列出所有匹配行号
+2. 比对 V21-F3 修正清单(10 项),确认无遗漏
+3. 若发现遗漏,追加到 V21-F3 修正清单
+**通过条件**: 所有 `p.OemBrand` 引用位置已列入 V21-F3 修正清单
+**失败处理**: 若有遗漏,V21-F3 修正清单需补充
+
+### Pre-Task-V21-3 [必做] V21-F1 修正后伪代码内部字段引用存在性验证
+
+**验证目标**: 确认 V21-F1 修正后 V19-F6 伪代码所有 `p.X` 引用 Product.X 存在
+**验证步骤**:
+1. Read V21-F1 修正后 V19-F6 伪代码
+2. 列出所有 `p.X` 引用(Id/OemNoNormalized/OemNoDisplay/Remark/Type/D1Mm/D2Mm/D3Mm/H1Mm/H2Mm/H3Mm/Media/IsDiscontinued/UpdatedAt/Mr1/CrossReferences)
+3. Grep 每个 `X` 在 Product.cs: 应匹配
+4. 验证 `p.CrossReferences.FirstOrDefault().OemBrand`: CrossReferences 存在(L92),OemBrand 存在于 CrossReference 类(L127)
+**通过条件**: V21-F1 修正后所有 `p.X` 引用 Product.X 存在
+**失败处理**: 若有不一致,V21-F1 修正方案需调整
+
+## 22.5 v21 vs v20 对比表
+
+| 维度 | v20(第十一重核实机制) | v21(第十二重核实机制) |
+|------|--------------------|--------------------|
+| 核实机制 | 11 重(跨伪代码片段字段名一致性 + 导航属性/字段存在性双重验证) | **12 重**(v20 11 重 + 伪代码内部字段引用存在性验证 + 跨版本回归验证) |
+| 核实机制盲区 | 伪代码内部字段引用存在性 + 跨版本回归 | 无(v21 已补全) |
+| 衍生漏洞数 | 第二十轮审查发现 6 项(D20:6,全部严重) | 待第二十一轮审查验证 |
+| V19-F6 `Brand = p.OemBrand` | 未发现编译错误(D20-1) | 修正为 `Brand = p.CrossReferences.FirstOrDefault().OemBrand`(V21-F1) |
+| V19-F6 `where x.Brand == p.OemBrand` | 未发现编译错误(D20-2) | 修正为 `where x.Brand == p.CrossReferences.FirstOrDefault().OemBrand`(V21-F1) |
+| V20-F3 修正方向 | 错上加错(假设 V19-F6 `Brand = p.OemBrand` 合法) | 重新设计,基于 V21-F1 修正(V21-F2) |
+| v17/v18/v19 回归 v10 V10-F7 | 未发现回归(D20-5) | 列出 10 项回归位置,统一修正(V21-F3) |
+| 第十一重核实机制盲区 | 未覆盖伪代码内部字段引用 + 跨版本回归(D20-6) | 第十二重补全(V21-F4) |
+| 新增 Pre-Task | 4 个 | 4 个(Pre-Task-V21-0 / V21-1 / V21-2 / V21-3) |
+| 修复方案数 | V20-F1~F6(6 项,针对 v19 衍生漏洞) | V21-F1~F4(4 项,针对 v20 衍生漏洞) |
+
+## 22.6 v21 文件清单
+
+### v21 实际新增代码文件(0 个)
+- v21 是 spec 修订版,不新增代码文件
+
+### v21 实际修改后端文件(0 个)
+- v21 仅修订 spec/tasks/checklist,不修改代码文件
+
+### v21 实际修改前端文件(0 个)
+- v21 不涉及前端文件修改
+
+### v21 纯文档修正(3 个文件)
+1. spec.md — 追加第二十二章(22.1~22.8)
+2. tasks.md — 追加 v21 任务清单(4 个 Pre-Task + 4 个修复任务)
+3. checklist.md — 追加 v21 验证清单
+
+### v21 新增 migration(0 个)
+- v21 不涉及 DB schema 变更
+
+## 22.7 v21 第二十一轮审查重点
+
+> **审查目标**: 验证 v21 修订是否真正消除 v20 衍生漏洞,且不引入新衍生漏洞。
+
+### D21 数据关联维度审查重点
+
+- [ ] D21-1: V21-F1 是否修正 V19-F6 `Brand = p.OemBrand`(改为 CrossReferences.FirstOrDefault().OemBrand)
+- [ ] D21-2: V21-F1 是否修正 V19-F6 `where x.Brand == p.OemBrand`
+- [ ] D21-3: V21-F1 伪代码内部字段引用存在性验证表是否完整(20 行)
+- [ ] D21-4: V21-F2 跨伪代码片段字段名一致性 + 字段值来源合法性验证表是否完整(17 行)
+- [ ] D21-5: V21-F3 回归位置清单是否完整(10 项)
+- [ ] D21-6: V21 伪代码是否引入新衍生漏洞(如 EF Core 投影中 CrossReferences.FirstOrDefault() 是否合法)
+
+### S21 检索逻辑维度审查重点
+
+- [ ] S21-1: V21 是否引入新检索逻辑漏洞
+
+### F20 前后端联动维度审查重点
+
+- [ ] F20-1: V21 是否引入新前后端联动漏洞(v21 不涉及前后端联动修复,应无)
+
+### 第十二重核实机制应用审查
+
+- [ ] N21-1: V21-F1~F4 每个修复方案是否基于伪代码内部字段引用存在性验证
+- [ ] N21-2: V21-F1~F4 每个修复方案是否基于跨版本回归验证
+- [ ] N21-3: V21 伪代码是否引入新伪代码内部字段引用错误
+- [ ] N21-4: V21 伪代码是否引入新跨版本回归
+- [ ] N21-5: V21 是否真正实现"0 项伪代码内部字段引用错误"+"0 项跨版本回归"+"0 项 v20 衍生漏洞"
+
+## 22.8 第二十一轮循环终止条件
+
+- [ ] 第二十一轮审查无任何新漏洞检出 → 完成 v21 修订,进入 v22 修订(如有新漏洞)或定稿
+- [ ] 第二十一轮审查发现新漏洞 → 进入 v22 修订,继续迭代
+- [ ] 第二十一轮审查发现 v21 仍有凭空假设 → 进入 v22 修订,加强核实机制(十三重核实?)
+- [ ] 第二十一轮审查重点: 第十二重核实机制(伪代码内部字段引用存在性验证 + 跨版本回归验证)
+- [ ] 第二十一轮审查重点: v20 衍生漏洞是否真正消除(Grep 验证 Product.OemBrand 不存在/V19-F6 修正为 CrossReferences 导航属性/v17-v19 回归位置全部修正)
+- [ ] 第二十一轮审查重点: V21-F1 伪代码内部字段引用存在性验证表是否完整(20 行)
+- [ ] 第二十一轮审查重点: V21-F2 跨伪代码片段字段名一致性 + 字段值来源合法性验证表是否完整(17 行)
+- [ ] 第二十一轮审查重点: V21-F3 回归位置清单是否完整(10 项)
+- [ ] 第二十一轮审查重点: V21-F4 第十二重核实机制定义是否完整
+- [ ] 持续迭代直到连续一轮审查无任何新漏洞检出
+- [ ] v21 引入"第十二重核实机制"(伪代码内部字段引用存在性验证 + 跨版本回归验证)
+- [ ] v21 目标: 真正实现"0 项伪代码内部字段引用错误"+"0 项跨版本回归"+"0 项 v20 衍生漏洞"
+- [ ] v21 实际新增代码: 0 个(v21 仅修订 spec/tasks/checklist)
+- [ ] v21 实际修改后端文件: 0 个(代码修改由 v17 任务清单执行)
+- [ ] v21 实际修改前端文件: 0 个
+- [ ] v21 纯文档修正: 3 个文件(spec.md / tasks.md / checklist.md)
+- [ ] v21 新增 migration: 0 个
+- [ ] v21 已知问题: D7/D8 filter 遗漏(现有 bug,列 v22+ 处理)
+
