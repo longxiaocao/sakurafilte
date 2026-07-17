@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using SakuraFilter.Core.DTOs;
 using SakuraFilter.Core.Entities;
+using SakuraFilter.Core.Extensions;
 using SakuraFilter.Core.Interfaces;
 using SakuraFilter.Core.Validation;
 using SakuraFilter.Infrastructure.Data;

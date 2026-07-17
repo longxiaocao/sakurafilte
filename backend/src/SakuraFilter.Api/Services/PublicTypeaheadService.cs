@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using SakuraFilter.Core.Extensions;
 using SakuraFilter.Infrastructure.Data;
 
 namespace SakuraFilter.Api.Services;

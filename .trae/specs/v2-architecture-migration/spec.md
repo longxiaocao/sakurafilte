@@ -13856,3 +13856,152 @@ V23-F2 强化第十四重核实机制定义:
 - [ ] v23 新增 migration: 0 个
 - [ ] v23 已知问题: D7/D8 filter 遗漏(现有 bug,列 v24+ 处理)
 
+# 第二十五章 v24 修订 — D7/D8 螺纹规格修复 + 架构清理 + ReindexAllAsync 资源泄漏修复
+
+> v23 已知问题 "D7/D8 filter 遗漏(现有 bug,列 v24+ 处理)" 在 v24 正式修复。v24 同时处理两项架构改进建议:(1) 抽取 LikeEscape 公共类消除 Search/Api 层重复实现;(2) 修复 ReindexAllAsync 资源泄漏(AcquireActiveCts 之后的代码移入 try 块)。三项改动均经全量后端测试验证(212/212 通过)。
+
+## 25.1 v24 修订背景
+
+v23 第二十三轮审查在 spec.md 末尾标注 "D7/D8 filter 遗漏(现有 bug,列 v24+ 处理)" 作为已知问题。v18 起实现 SearchRequest/AggregateSearchRequest 的 D7/D8 字段为 `decimal?`,而 Product 实体中 D7Thread/D8Thread 是 `string?`(螺纹规格如 "M14×1.5" 无法用数值范围表达),导致 Meili 索引阶段将 string 强制转换为 decimal 失败,filter 查询阶段无法精确匹配螺纹规格。
+
+v24 修复此 bug,并顺势处理 v17-3.5 ETL 测试项目中已识别但未立即修复的 ReindexAllAsync 资源泄漏风险(原测试注释明确标注 "V17-3.5 改进建议: 把 AcquireActiveCts 之后的代码移入 try 块")。
+
+## 25.2 v24 核心修复项
+
+### V24-F1: D7/D8 螺纹规格 filter 修复(decimal? → string?) [高危修复]
+
+**问题**: SearchRequest.D7/D8 类型与 Product.D7Thread/D8Thread 类型不一致(decimal? vs string?),Meili 索引阶段转换失败,filter 查询阶段无法精确匹配 "M14×1.5" 等螺纹规格。
+
+**修复方案**: 文本精确匹配(用户选择)
+- SearchRequest: `decimal? D7, decimal? D8` → `string? D7Thread, string? D8Thread`
+- AggregateSearchRequest: 同步添加 `string? D7Thread = null, string? D8Thread = null`
+- Mr1IndexDoc record: 新增 `string? D7Thread, string? D8Thread` 字段
+- MeiliSearchProvider.SearchAsync/AggregateSearchAsync: 精确匹配 `d7_thread = "M14×1.5"`
+- MeiliSearchProvider.BuildMr1DocumentAsync: 填充 `D7Thread: p.D7Thread, D8Thread: p.D8Thread`
+- MeiliSearchProvider.InitializeAsync: FilterableAttributes 添加 `"d7_thread", "d8_thread"`
+- PostgresSearchProvider: PG 兜底用 ILIKE 模糊匹配(螺纹规格可能存在细微差异)
+- 前端 types.ts/generated-types.ts: `d7?: number → d7Thread?: string`
+
+**契约一致性**: SearchRequest 与 AggregateSearchRequest 必须同步修改,否则 PostgresSearchProvider.AggregateSearchAsync 编译失败(CS1061)。
+
+### V24-F2: LikeEscape 架构清理(抽取 Core 公共类) [架构改进]
+
+**问题**: PostgresSearchProvider(SakuraFilter.Search)与 LikeEscapeExtensions(SakuraFilter.Api.Services)各有一份相同的 LIKE 转义实现。Search 项目不引用 Api(架构层次倒置),原方案在 Search 层重新实现导致重复代码。
+
+**修复方案**: 抽取到 SakuraFilter.Core.Extensions.LikeEscapeExtensions
+- 新增 `backend/src/SakuraFilter.Core/Extensions/LikeEscapeExtensions.cs`(唯一实现源)
+- Api/Services/LikeEscapeExtensions.cs 改为转发 shim,使用 `global::SakuraFilter.Core.Extensions.LikeEscapeExtensions` 前缀避免同名歧义
+- PostgresSearchProvider 改用 `SakuraFilter.Core.Extensions.EscapeLikePattern()`,删除本地 `EscapeLike` 私有方法
+- 9 个 Api 调用方无需改 using(保持向后兼容)
+
+**架构层次**:
+```
+Core (LikeEscapeExtensions 唯一实现)
+  ↑            ↑
+Search        Api (shim 转发)
+```
+
+### V24-F3: ReindexAllAsync 资源泄漏修复 [中危修复]
+
+**问题**: EtlImportService.ReindexAllAsync 的 AcquireActiveCts 之后的代码(StartSnapshotTimerIfNeeded / _sp.CreateScope / GetRequiredService / conn.OpenAsync)位于 try 块之前,若其中任一抛异常,finally 块不执行,_activeCts 不释放(资源泄漏)。
+
+ReindexAllMutexTests.ReindexAll_WithCancelledToken_DoesNotOccupyActiveCtsAfterCall 测试注释已明确预测此问题:"V17-3.5 改进建议: 把 AcquireActiveCts 之后的代码移入 try 块"。
+
+**修复方案**: 将 AcquireActiveCts 之后的所有代码移入 try 块
+- `BroadcastCtx? broadcastCtx = null` 在 try 外声明(可空),try 内赋值
+- `StartSnapshotTimerIfNeeded` / `CreateScope` / `GetRequiredService` / `conn.OpenAsync` 全部移入 try 块
+- `conn` 改为 try 块内 `await using var` 自动 Dispose,移除 finally 手动 CloseAsync
+- finally 块始终执行 `StopSnapshotTimer(broadcastCtx)` + `ReleaseActiveCts(cts)`
+
+**测试更新**: 2 个用例断言反转(原测试注释已预测此修复方向)
+- `ReindexAll_WhenActiveCtsCancelled_DoesNotThrowMutexException`: 原 `ThrowAsync<Exception>` → 现返回 `ReindexResult` (Error 含异常信息)
+- `ReindexAll_WithCancelledToken_DoesNotOccupyActiveCtsAfterCall`: 原 `_activeCts.NotBeNull`(泄漏存在) → 现 `BeNull`(已释放)
+
+## 25.3 v24 测试覆盖
+
+### V24-T1: Core LikeEscapeExtensions 单元测试(15 用例)
+
+新增 `backend/tests/SakuraFilter.Etl.Tests/CoreLikeEscapeExtensionsTests.cs`,覆盖:
+- NULL/空串处理(2 用例): 不抛异常,与原 string.Replace 行为一致
+- 单字符转义(3 用例): `%` → `\%`、`_` → `\_`、`\` → `\\`
+- 组合场景(2 用例): `10%_test\` → `10\%\_test\\`,顺序正确性(\\ → % → _)
+- 纯文本(1 用例): 不修改
+- Unicode/Emoji(2 用例): 中文/Emoji 不应被转义,只处理 SQL 通配符
+- D7/D8 螺纹规格实际用例(2 用例): `M14×1.5` / `M20×2.5` 原样返回
+- 边界场景(3 用例): 超长输入(2000 字符) + 仅通配符 + 纯空格
+
+### V24-T2: ReindexAllMutexTests 测试更新(2 用例断言反转)
+
+详见 V24-F3 修复方案。
+
+### V24-T3: 全量后端测试验证
+
+```
+dotnet test backend/SakuraFilter.sln
+- SakuraFilter.Etl.Tests: 21/21 通过
+- SakuraFilter.Api.Tests: 191/191 通过
+总计 212/212 通过
+```
+
+## 25.4 v24 文件改动清单
+
+| 类型 | 路径 | 修改摘要 |
+|------|------|----------|
+| 修改 | backend/src/SakuraFilter.Core/DTOs/SearchRequest.cs | D7/D8 → D7Thread/D8Thread (string?) |
+| 修改 | backend/src/SakuraFilter.Core/DTOs/AggregateSearchDto.cs | AggregateSearchRequest 新增 D7Thread/D8Thread |
+| 修改 | backend/src/SakuraFilter.Search/ISearchProvider.cs | Mr1IndexDoc 新增 D7Thread/D8Thread |
+| 修改 | backend/src/SakuraFilter.Search/MeiliSearchProvider.cs | 4 处: SearchAsync filter / AggregateSearchAsync filter / BuildMr1DocumentAsync / InitializeAsync FilterableAttributes |
+| 修改 | backend/src/SakuraFilter.Search/PostgresSearchProvider.cs | D7/D8 ILIKE 模糊匹配 + 删除本地 EscapeLike 改用 Core |
+| 修改 | backend/src/SakuraFilter.Api/Services/LikeEscapeExtensions.cs | 改为转发 shim (global:: 前缀) |
+| 修改 | backend/src/SakuraFilter.Etl/EtlImportService.cs | ReindexAllAsync AcquireActiveCts 之后代码移入 try 块 |
+| 创建 | backend/src/SakuraFilter.Core/Extensions/LikeEscapeExtensions.cs | Core 层唯一实现源 |
+| 创建 | backend/tests/SakuraFilter.Etl.Tests/CoreLikeEscapeExtensionsTests.cs | 15 用例 |
+| 修改 | backend/tests/SakuraFilter.Etl.Tests/ReindexAllMutexTests.cs | 2 用例断言反转匹配新行为 |
+| 修改 | frontend/src/api/types.ts | d7?: number → d7Thread?: string |
+| 修改 | frontend/src/api/generated-types.ts | d7?: number\|null → d7Thread?: string\|null |
+
+## 25.5 v24 Git 提交记录
+
+| Commit | 描述 |
+|--------|------|
+| 952b006 | feat(search): v24 D7/D8 螺纹规格 filter 修复 + V17-3.5 ETL 测试项目 |
+| df9b884 | refactor(search): v24 架构清理 LikeEscape 抽到 Core,Api 改为 shim |
+| 9ac0fe8 | test(core): v24 补充 Core LikeEscapeExtensions 15 个单元测试 |
+| a18a2d5 | fix(etl): 修复 ReindexAllAsync 资源泄漏,AcquireActiveCts 之后的代码移入 try 块 |
+
+## 25.6 v24 审查记录
+
+- [x] 第二十四轮审查发现 v23 已知问题 D7/D8 filter 遗漏 → v24 修复
+- [x] 第二十四轮审查重点: D7/D8 修复是否与 Product 实体类型对齐(string? vs decimal?)
+- [x] 第二十四轮审查重点: SearchRequest 与 AggregateSearchRequest 契约一致性
+- [x] 第二十四轮审查重点: LikeEscape 抽到 Core 后 Api 层 shim 是否保持向后兼容
+- [x] 第二十四轮审查重点: ReindexAllAsync 资源泄漏修复是否破坏现有 6 个互斥性测试
+- [x] 第二十四轮审查重点: 全量后端测试是否 212/212 通过
+- [x] v24 目标: 修复 D7/D8 filter + 架构清理 + 资源泄漏修复,均经测试验证
+- [x] v24 实际新增代码: 2 个文件(Core/LikeEscapeExtensions + Etl.Tests/CoreLikeEscapeExtensionsTests)
+- [x] v24 实际修改后端文件: 7 个
+- [x] v24 实际修改前端文件: 2 个
+- [x] v24 实际修改测试文件: 1 个(ReindexAllMutexTests)
+- [x] v24 新增 migration: 0 个
+- [x] v24 已知问题: Api 层 shim 已移除(5 个调用方 + 1 个测试文件改 using Core.Extensions,见 V24-F4)
+- [x] v24 已知问题: AdminProductImageService.BuildKeyAsync 和 CursorHmac 单元测试待补充(留 v25+ 处理)
+
+## 25.7 v24 后续追加修复(V24-F4)
+
+### V24-F4: 完全移除 Api 层 LikeEscapeExtensions shim [架构改进]
+
+**问题**: V24-F2 中 Api 层 shim 保留以保持向后兼容,但 5 个调用方文件实际可以改为直接 using Core.Extensions,消除多余的转发层。
+
+**修复方案**: 删除 `backend/src/SakuraFilter.Api/Services/LikeEscapeExtensions.cs`,5 个调用方 + 1 个测试文件改 using Core.Extensions
+- AdminProductService.cs: 添加 `using SakuraFilter.Core.Extensions;`
+- BaseDictService.cs: 同上
+- PublicTypeaheadService.cs: 同上
+- PublicSearchController.cs: 添加 `using SakuraFilter.Core.Extensions;`(保留 `using SakuraFilter.Api.Services;` 用于其他类型)
+- PublicTypeaheadEndpoints.cs: 同上
+- tests/SakuraFilter.Api.Tests/LikeEscapeExtensionsTests.cs: using 从 `SakuraFilter.Api.Services` 改为 `SakuraFilter.Core.Extensions`
+
+**验证**: dotnet test backend/SakuraFilter.sln
+- SakuraFilter.Etl.Tests: 21/21 通过
+- SakuraFilter.Api.Tests: 191/191 通过
+- 总计 212/212 通过
+

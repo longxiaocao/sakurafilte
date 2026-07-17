@@ -1,5 +1,5 @@
 using FluentAssertions;
-using SakuraFilter.Api.Services;
+using SakuraFilter.Core.Extensions;
 using Xunit;
 
 namespace SakuraFilter.Api.Tests;

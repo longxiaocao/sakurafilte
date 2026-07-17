@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using SakuraFilter.Api.Services;
+using SakuraFilter.Core.Extensions;
 
 namespace SakuraFilter.Api.Endpoints;
 

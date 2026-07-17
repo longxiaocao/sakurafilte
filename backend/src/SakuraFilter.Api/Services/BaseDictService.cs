@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
+using SakuraFilter.Core.Extensions;
 using SakuraFilter.Core.Interfaces;
 using SakuraFilter.Infrastructure.Data;
 

@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using SakuraFilter.Api.Services;
 using SakuraFilter.Core.DTOs;
+using SakuraFilter.Core.Extensions;
 using SakuraFilter.Infrastructure.Data;
 using SakuraFilter.Search;
 
