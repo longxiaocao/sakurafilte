@@ -10296,3 +10296,674 @@ v15 前置任务必须实施(非纯核实):
 - [ ] v15 实际修改前端文件: 4 个(LoginView.vue / api/index.ts / AdminEtlView.vue / .env.development)
 - [ ] v15 纯文档修正: 3 个文件(spec.md / tasks.md / checklist.md)
 - [ ] v15 新增 migration: 0 个(v15 不涉及 DB schema 变更)
+
+
+---
+
+# 第十七章 v16 修订 — 七重核实机制与 ProductIndexDoc 显式扩展
+
+## 17.1 第十五轮审查结果摘要
+
+第十五轮三维度并行审查(D15/S15/F14)发现 **44 项衍生漏洞**（去重后约 25 项独立问题）:
+
+### D15 数据关联维度(9 项)
+- 高危 3: D15-1(ReindexAllAsync 凭空假设 + ProcessPendingAsync private)、D15-6(FilterableAttributes 凭空假设 + camelCase 与 snake_case 冲突 + ProductIndexDoc 缺 D3Mm/H2Mm)、D15-7(camelCase 与 PascalCase record + snake_case filter 三方冲突)
+- 中危 4: D15-2(Validation 目录不存在)、D15-4(InitializeAsync 命名冲突)、D15-9(ReindexResult 凭空假设 + AcquireActiveCts private)
+- 低危 1: D15-8(etlApi.reindexAll 凭空假设)
+- 已核实通过 1: D15-3(WithRateLimiter → RequireRateLimiting)、D15-5(Bearer 检测保留)
+
+### S15 检索逻辑维度(15 项)
+- 高危 5: S15-1(字段命名方向错误 - System.Text.Json 默认 PascalCase 非 camelCase)、S15-2(引用 ProductIndexDoc 不存在字段)、S15-3(V15-F16 AsSplitQuery 凭空假设现有用 Include)、S15-4(V15-F17 阶段1/阶段2 凭空假设)、S15-5(三处 FilterableAttributes 描述矛盾)
+- 中危 7: S15-6(硬编码 "products")、S15-7(InitializeAsync 阻塞启动)、S15-8(变量命名误导)、S15-9(Mr1Length=10 与 Product.Mr1 无约束不一致)、S15-10(隐含扩展 ProductIndexDoc 未明确)、S15-11(FilterableAttributes 含 mr1 但 SearchRequest 无 mr1)、S15-12(启动顺序与降级原则冲突)
+- 低危 3: S15-13(Validation 目录不存在)、S15-14(ReindexAllAsync/TruncateSearchIndexPendingAsync 不存在)、S15-15(Mr1 校验未覆盖 AdminProductService)
+
+### F14 前后端联动维度(20 项)
+- 高危 8: F14-1(ReleaseAdvisoryLockAsync 不存在)、F14-2(事务级锁无显式事务)、F14-3(TruncateSearchIndexPendingAsync 不存在)、F14-5(SyncSearchIndexAsync private)、F14-7(token 无效仍调用 next 安全漏洞)、F14-8(ProductIndexDoc 不存在字段)、F14-9(isSafeRedirect 不存在)、F14-20(六重核实机制盲区)
+- 中危 9: F14-4(_connectionString 字段名错误)、F14-6(InvokeAsync 签名错误)、F14-10(env.d.ts 未声明)、F14-11(reindexAll 返回类型不一致)、F14-12(GetDbConnection 未打开)、F14-13(进度未推送)、F14-14(V15-F1 与 V15-F9 伪代码不一致)、F14-15(未提供运行时验证步骤)、F14-19(sinceDate 语义不一致)
+- 低危 3: F14-16(硬编码 "products")、F14-17(SakuraFilter.Etl.Tests 路径合理)、F14-18(.env 未提供完整模板)
+
+### 核心结论
+v15 标榜"六重核实机制实现 0 项凭空假设",但第十五轮审查发现至少 **7 项新的凭空假设**:
+1. ReleaseAdvisoryLockAsync(F14-1)
+2. TruncateSearchIndexPendingAsync(F14-3)
+3. isSafeRedirect / @/utils/security(F14-9)
+4. ProductIndexDoc.mr1/oemBrand/brandSortOrder/d3Mm/h2Mm(F14-8/S15-2)
+5. ReindexAllAsync(D15-1,虽 v15 给出伪代码但引用不存在的辅助方法)
+6. ReindexResult(D15-9)
+7. Mr1Validator 路径下 Validation 目录(S15-13)
+
+此外,v15 引入 **1 项关键技术错误**(S15-1): 假设 Meilisearch SDK 0.15.4 默认 camelCase 序列化,但 System.Text.Json 默认 PropertyNamingPolicy=null(保留原样=PascalCase),v15 改为 camelCase 后 filter 永远不匹配,搜索全面失效。
+
+v15 的六重核实机制存在盲区: 未对伪代码引用的**方法名/字段名**执行 Grep 零匹配验证。
+
+## 17.2 v16 核心创新 — 第七重核实机制
+
+v16 在六重核实机制基础上,新增**第七重核实 — 方法/字段名 Grep 零匹配验证**:
+
+| 核实层级 | 核实内容 | 核实工具 | v15 是否覆盖 |
+|---------|---------|---------|-------------|
+| 第一重 | 代码存在性(类/方法是否存在) | Grep | ✅ |
+| 第二重 | 字段名(字段是否真实存在) | Grep | ✅ |
+| 第三重 | API 签名(参数/返回值) | Read | ✅ |
+| 第四重 | 伪代码自洽性(逻辑是否自洽) | 人工 | ✅ |
+| 第五重 | 运行时上下文自洽性(并发/事务/锁) | 人工 | ✅ |
+| 第六重 | API 完整签名比对(引用方法签名匹配) | Read | ✅ v15 新增 |
+| **第七重** | **方法/字段名 Grep 零匹配验证**(伪代码引用的所有方法名/字段名必须 Grep 验证存在) | **Grep** | **❌ v16 新增** |
+
+### 第七重核实执行规则
+1. 对伪代码中**所有**引用的方法名/字段名/类名,逐一执行 Grep 全后端/全前端搜索
+2. 零匹配项必须标记为"凭空假设",给出新建伪代码或改用现有方法的方案
+3. 部分匹配项(方法名存在但签名不符)必须给出实际签名
+4. 第七重核实必须在 spec 修订时同步完成,不允许 deferred 到实施阶段
+
+## 17.3 v16 修复方案(25 项)
+
+### V16-F1: ProductIndexDoc 显式扩展 [高危纠正]
+
+**问题**: v15 多处(S15-2/S15-10/F14-8)引用 ProductIndexDoc.mr1/oemBrand/brandSortOrder/d3Mm/h2Mm 字段,但 record 仅 12 字段。spec.md L8232 自承认"从未实施"。
+
+**修复**: 显式扩展 ProductIndexDoc record,作为 v16 的**前置任务**(Pre-Task-V16-0):
+
+```csharp
+// d:\projects\sakurafilter\backend\src\SakuraFilter.Search\ISearchProvider.cs
+// WHY v16: v15 多处引用未存在字段,必须显式扩展
+public record ProductIndexDoc(
+    long Id,
+    string OemNoNormalized,
+    string OemNoDisplay,
+    string? Remark,
+    string Type,
+    decimal? D1Mm,
+    decimal? D2Mm,
+    decimal? D3Mm,        // v16 新增
+    decimal? H1Mm,
+    decimal? H2Mm,        // v16 新增
+    decimal? H3Mm,
+    string? Media,
+    bool IsDiscontinued,
+    long UpdatedAtUnix,
+    string? Mr1,           // v16 新增
+    string? OemBrand,      // v16 新增
+    int? BrandSortOrder    // v16 新增
+);
+```
+
+**SyncSearchIndexAsync 改造伪代码**(需先 Grep 验证 Product.CrossReferences 导航属性,见 Pre-Task-V16-3):
+```csharp
+// d:\projects\sakurafilter\backend\src\SakuraFilter.Etl\EtlImportService.cs L1146-L1166
+// WHY v16: 现有查询用 Select 投影到匿名类型(无 Include),v16 改用 Join 取 OemBrand/SortOrder
+// 注意: 若 Product.CrossReferences 导航属性不存在,改用 V16-F21 显式 Join
+var batch = await query.OrderBy(p => p.Id).Take(batchSize)
+    .Select(p => new {
+        p.Id, p.OemNoNormalized, p.OemNoDisplay, p.Remark, p.Type,
+        p.D1Mm, p.D2Mm, p.D3Mm, p.H1Mm, p.H2Mm, p.H3Mm,
+        p.Media, p.IsDiscontinued, p.UpdatedAtUnix,
+        p.Mr1,
+        // v16: 从 CrossReference 取 OemBrand(primary 优先),从 XrefOemBrand 取 SortOrder
+        PrimaryXrefOemBrand = p.CrossReferences
+            .Where(x => x.IsPrimary)
+            .Select(x => x.OemBrand)
+            .FirstOrDefault(),
+        BrandSortOrder = p.CrossReferences
+            .Where(x => x.IsPrimary)
+            .Join(_db.XrefOemBrands,
+                  x => new { x.OemBrand, x.OemNo3 },
+                  b => new { b.OemBrand, b.OemNo3 })
+            .Select(b => (int?)b.SortOrder)
+            .FirstOrDefault()
+    })
+    .ToListAsync(ct);
+```
+
+### V16-F2: 字段命名方向纠正 — 统一 PascalCase [高危纠正]
+
+**问题**: v15 假设 Meilisearch SDK 0.15.4 默认 camelCase 序列化,但 System.Text.Json 默认 PropertyNamingPolicy=null(保留原样=PascalCase)。v15 改为 camelCase 后 filter `d1Mm >= 100` 实际查询字段是 `D1Mm`,Meilisearch 报"attribute d1Mm is not filterable",搜索全面失效。
+
+**修复**: 统一为 **PascalCase**(与 ProductIndexDoc record 一致):
+
+```csharp
+// d:\projects\sakurafilter\backend\src\SakuraFilter.Search\MeiliSearchProvider.cs L75-L94
+// WHY v16: System.Text.Json 默认 PascalCase 序列化,filter 必须用 PascalCase
+filters.Add($"Type = \"{EscapeFilter(req.Type)}\"");
+filters.Add($"D1Mm >= {lo} AND D1Mm <= {hi}");
+filters.Add($"D2Mm >= {lo} AND D2Mm <= {hi}");
+filters.Add($"H1Mm >= {lo} AND H1Mm <= {hi}");
+filters.Add("IsDiscontinued = false");
+```
+
+**FilterableAttributes 同步**(PascalCase):
+```csharp
+// WHY v16: 与 ProductIndexDoc record 字段名一致(PascalCase)
+FilterableAttributes = new[] {
+    "Type", "IsDiscontinued",
+    "D1Mm", "D2Mm", "D3Mm", "H1Mm", "H2Mm", "H3Mm",
+    "Mr1", "OemBrand"  // v16 新增(需 Pre-Task-V16-0 扩展 record)
+}
+SortableAttributes = new[] { "BrandSortOrder", "UpdatedAtUnix" }
+SearchableAttributes = new[] { "OemNoNormalized", "OemNoDisplay", "Remark", "Type", "Mr1", "OemBrand" }
+```
+
+**Pre-Task-V16-0-Verify**: 实施前必须运行时验证 SDK 实际序列化字段名(写最小化测试 dump 一条 ProductIndexDoc 到 Meilisearch,GET `/indexes/products/documents` 查看实际字段名)。
+
+### V16-F3: TruncateSearchIndexPendingAsync 改用 EF Core RemoveRange [高危纠正]
+
+**问题**: v15 引用 `TruncateSearchIndexPendingAsync(ct)` 方法,但全后端 Grep 零匹配(F14-3)。
+
+**修复**: 不新增方法,直接在 ReindexAllAsync 内用 EF Core:
+
+```csharp
+// 不再调用 TruncateSearchIndexPendingAsync(v15 凭空假设)
+// v16 改用:
+using var scope = _sp.CreateScope();
+var db = scope.ServiceProvider.GetRequiredService<ProductDbContext>();
+db.SearchIndexPending.RemoveRange(db.SearchIndexPending);
+await db.SaveChangesAsync(ct);
+```
+
+### V16-F4: 字段名 _pgConn 纠正 [中危纠正]
+
+**问题**: v15 伪代码用 `_connectionString`,实际字段是 `_pgConn`(EtlImportService.cs L346)。
+
+**修复**:
+```csharp
+// v15 错误: new NpgsqlConnection(_connectionString)
+// v16 纠正:
+await using var conn = new NpgsqlConnection(_pgConn);
+await conn.OpenAsync(ct);
+```
+
+### V16-F5: InvokeAsync 签名纠正 [中危纠正]
+
+**问题**: v15 用 `InvokeAsync(HttpContext ctx, RequestDelegate next)` + `await next(ctx)`,实际是单参数 `InvokeAsync(HttpContext ctx)` + `await _next(ctx)`(DevTokenAuthMiddleware.cs L81)。
+
+**修复**:
+```csharp
+// v15 错误: public async Task InvokeAsync(HttpContext ctx, RequestDelegate next) { ... await next(ctx); }
+// v16 纠正:
+public async Task InvokeAsync(HttpContext ctx)
+{
+    // 现有 Bearer 检测逻辑(保留,L117-L126)
+    var authHeader = ctx.Request.Headers.Authorization.ToString();
+    if (authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+    {
+        await _next(ctx);
+        return;
+    }
+    // ... X-Admin-Token 校验逻辑 ...
+    await _next(ctx);  // 使用 _next 字段
+}
+```
+
+### V16-F6: DevTokenAuthMiddleware 保留 401 返回逻辑 [高危纠正]
+
+**问题**: v15 伪代码 token 无效时仍 `await next(ctx)`,丢失现有 L154-L168 的 401 返回逻辑(F14-7 安全漏洞)。
+
+**修复**: 必须保留现有 401 返回逻辑:
+```csharp
+// v15 错误: token 无效也 await next(ctx)
+// v16 纠正:
+var token = ctx.Request.Headers["X-Admin-Token"].FirstOrDefault();
+if (string.IsNullOrEmpty(token))
+{
+    // 无 token 且非 Bearer,返回 401
+    ctx.Response.StatusCode = 401;
+    ctx.Response.ContentType = "application/problem+json";
+    await ctx.Response.WriteAsync("{\"title\":\"Missing X-Admin-Token\",\"status\":401}");
+    return;  // 不调用 next
+}
+if (!ValidToken(token))
+{
+    // token 无效,返回 401
+    ctx.Response.StatusCode = 401;
+    ctx.Response.ContentType = "application/problem+json";
+    await ctx.Response.WriteAsync("{\"title\":\"Invalid X-Admin-Token\",\"status\":401}");
+    return;  // 不调用 next
+}
+// token 有效,设置 ClaimsPrincipal
+var claims = new[] { new Claim(ClaimTypes.Name, "dev-admin"), new Claim(ClaimTypes.Role, "Admin") };
+ctx.User = new ClaimsPrincipal(new ClaimsIdentity(claims, "DevToken"));
+await _next(ctx);
+```
+
+### V16-F7: advisory lock 显式事务包裹 [高危纠正]
+
+**问题**: v15 用 `pg_try_advisory_xact_lock` 但无显式事务,锁在每条 SQL 语句自动 commit 时立即释放(F14-2)。
+
+**修复**: 显式事务包裹整个 ReindexAllAsync 流程:
+```csharp
+await using var conn = new NpgsqlConnection(_pgConn);
+await conn.OpenAsync(ct);
+await using var tx = await conn.BeginTransactionAsync(ct);
+try
+{
+    if (!await TryAcquireAdvisoryLockAsync(conn, 7740005L, ct))
+    {
+        return new ReindexResult(0, 0, TimeSpan.Zero, "已有 ReindexAll 或 IndexReplay 任务在运行");
+    }
+    // ... 全量重建逻辑 ...
+    await tx.CommitAsync(ct);
+}
+catch
+{
+    await tx.RollbackAsync(ct);
+    throw;
+}
+// 注: pg_try_advisory_xact_lock 在 commit/rollback 时自动释放,无需手动 unlock
+```
+
+**注意**: 删除 v15 引用的 `ReleaseAdvisoryLockAsync(conn, 7740005L, ct)` 调用(F14-1 凭空假设方法)。
+
+### V16-F8: V15-F16 删除(现有代码无 Include) [高危纠正]
+
+**问题**: v15 V15-F16 修复"Include CrossReferences 笛卡尔积",但现有 SyncSearchIndexAsync(EtlImportService.cs L1146-L1155)用 Select 投影到匿名类型,**无 Include**(S15-3)。
+
+**修复**: 删除 V15-F16 修复方案。V16-F1 的 SyncSearchIndexAsync 改造已用 Join 子查询,不需要 Include + AsSplitQuery。
+
+### V16-F9: V15-F17 删除(现有 IndexReplayWorker 无阶段1/阶段2) [高危纠正]
+
+**问题**: v15 V15-F17 修复"阶段1 失败阻塞阶段2",但现有 IndexReplayWorker.ProcessPendingAsync(IndexReplayWorker.cs L70-L128)无"阶段1/阶段2"概念,仅 toIndex/toDelete 分组独立 try-catch(S15-4)。
+
+**修复**: 删除 V15-F17 修复方案。IndexReplayWorker 现有设计已用独立 try-catch 隔离失败,无需"阶段1/阶段2"改造。
+
+### V16-F10: InitializeAsync 改为 HostedService 异步执行 [中危纠正]
+
+**问题**: v15 要求启动时 `await meili.InitializeAsync(ct)`,但与现有"Meili 不可用降级 PG 兜底"原则冲突(S15-7/S15-12)。Meili 启动晚于 Api 时,Api 无法启动。
+
+**修复**: 改为后台 HostedService 异步执行:
+```csharp
+// d:\projects\sakurafilter\backend\src\SakuraFilter.Api\Extensions\WebApplicationExtensions.cs
+// WHY v16: v15 阻塞启动与降级原则冲突,改为后台 HostedService
+public static async Task InitializeSearchAsync(this WebApplication app)
+{
+    using var initScope = app.Services.CreateScope();
+    var search = initScope.ServiceProvider.GetRequiredService<ISearchProvider>();
+    if (search is ResilientSearchProvider rsp)
+    {
+        var meiliOk = await rsp.IsPrimaryHealthyAsync();
+        rsp.Initialize(meiliOk);
+        // v16: Meili 可用时,后台异步执行 InitializeAsync(不阻塞启动)
+        if (meiliOk)
+        {
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    var meili = initScope.ServiceProvider.GetRequiredService<MeiliSearchProvider>();
+                    await meili.InitializeAsync();
+                }
+                catch (Exception ex) { app.Logger.LogWarning(ex, "Meili InitializeAsync 后台执行失败"); }
+            });
+        }
+    }
+}
+```
+
+### V16-F11: ReindexAllAsync 进度推送 [中危纠正]
+
+**问题**: v15 ReindexAllAsync 伪代码未调用 StartSnapshotTimerIfNeeded,前端无法感知进度(F14-13)。
+
+**修复**: ReindexAllAsync 内部调用 StartSnapshotTimerIfNeeded:
+```csharp
+public async Task<ReindexResult> ReindexAllAsync(CancellationToken ct)
+{
+    StartSnapshotTimerIfNeeded();  // v16: 启动进度广播
+    try
+    {
+        // ... 全量重建逻辑 ...
+        Progress.SetStage("reindex-all");
+        Progress.SetRowsTotal(totalCount);
+        // ... 处理逻辑 ...
+        return new ReindexResult(directOk, queuedFail, elapsed, null);
+    }
+    finally
+    {
+        StopSnapshotTimer();  // v16: 停止进度广播
+    }
+}
+```
+
+### V16-F12: isSafeRedirect 模块新增(Pre-Task-V16-1) [高危纠正]
+
+**问题**: v15 引用 `isSafeRedirect` 和 `@/utils/security` 模块,全前端 Grep 零匹配(F14-9)。
+
+**修复**: 新增 Pre-Task-V16-1 创建 `frontend/src/utils/security.ts`:
+```typescript
+// d:\projects\sakurafilter\frontend\src\utils\security.ts
+// WHY v16: v15 引用未存在模块,必须显式新增
+const DEFAULT_ALLOWED_HOSTS = ['localhost', '127.0.0.1'];
+
+export function isSafeRedirect(redirect: string, allowedHosts: string[] = DEFAULT_ALLOWED_HOSTS): boolean {
+    if (!redirect || typeof redirect !== 'string') return false;
+    // 禁止 javascript: / data: / file: 协议
+    if (/^(javascript|data|file|vbscript):/i.test(redirect)) return false;
+    // 相对路径允许
+    if (redirect.startsWith('/') && !redirect.startsWith('//')) return true;
+    try {
+        const url = new URL(redirect, window.location.origin);
+        if (url.origin === window.location.origin) return true;
+        return allowedHosts.includes(url.hostname);
+    } catch {
+        return false;
+    }
+}
+
+export function parseRedirectHosts(env?: string): string[] {
+    if (!env) return DEFAULT_ALLOWED_HOSTS;
+    return env.split(',').map(h => h.trim()).filter(Boolean);
+}
+```
+
+### V16-F13: env.d.ts 声明 VITE_SAFE_REDIRECT_HOSTS [中危纠正]
+
+**问题**: v15 引用 `import.meta.env.VITE_SAFE_REDIRECT_HOSTS`,但 env.d.ts L3-6 仅声明 VITE_ERROR_REPORT_URL 和 VITE_HOOK_CONSOLE_ERROR(F14-10)。
+
+**修复**: 在 env.d.ts 追加声明:
+```typescript
+// d:\projects\sakurafilter\frontend\src\env.d.ts
+interface ImportMetaEnv {
+  readonly VITE_ERROR_REPORT_URL?: string
+  readonly VITE_HOOK_CONSOLE_ERROR?: string
+  readonly VITE_SAFE_REDIRECT_HOSTS?: string  // v16 新增
+}
+```
+
+### V16-F14: Mr1Validator 校验覆盖 AdminProductService [低危纠正]
+
+**问题**: v15 仅在 ImportProductsAsync 追加 Mr1Validator 校验,未覆盖 AdminProductService.CreateAsync/UpdateAsync(S15-15)。
+
+**修复**: 在 AdminProductService.CreateAsync(L69)和 UpdateAsync(L185)的 Mr1 赋值前追加校验:
+```csharp
+// d:\projects\sakurafilter\backend\src\SakuraFilter.Api\Services\AdminProductService.cs L69
+// WHY v16: v15 仅覆盖 ETL,v16 扩展到后台手动新增/编辑
+var normalizedMr1 = Mr1Validator.Normalize(form.Mr1);
+if (form.Mr1 != null && normalizedMr1 == null)
+{
+    return Result.Fail("MR.1 格式无效(需 10 位字母数字)");
+}
+product.Mr1 = normalizedMr1;
+```
+
+### V16-F15: reindexAll 返回类型对齐 ReindexResult [中危纠正]
+
+**问题**: v15 前端 reindexAll 返回 `Promise<{ message: string; startedAt: string }>`,但后端 ReindexResult 是 `{ DirectOk, QueuedFail, Elapsed, Error }`(F14-11)。
+
+**修复**: 前端类型对齐后端:
+```typescript
+// d:\projects\sakurafilter\frontend\src\api\index.ts
+// v15 错误: reindexAll(): Promise<{ message: string; startedAt: string }>
+// v16 纠正:
+reindexAll: (): Promise<{ message: string; direct: number; queued?: number; elapsed: number; error?: string }> =>
+    request('/api/admin/etl/reindex-all', { method: 'POST' }),
+```
+
+### V16-F16: .env.development / .env.production 完整模板 [低危纠正]
+
+**问题**: v15 仅给出单行配置,未提供完整模板(F14-18)。
+
+**修复**: 新建 `frontend/.env.development` 和 `frontend/.env.production`:
+```bash
+# frontend/.env.development
+VITE_SAFE_REDIRECT_HOSTS=localhost,127.0.0.1
+
+# frontend/.env.production
+VITE_SAFE_REDIRECT_HOSTS=your-domain.com
+```
+
+### V16-F17: FilterableAttributes 三处描述统一 [高危纠正]
+
+**问题**: spec.md L5881(S7)、L9016(V14-F12)、L9724/L9805(V15-F4/F6)三处 FilterableAttributes 描述矛盾(S15-5)。
+
+**修复**: v16 以 V16-F2 的 PascalCase 版本为准,旧描述加注"已被 V16-F2 取代":
+- L5881 加注: `[已被 V16-F2 取代,统一为 PascalCase]`
+- L9016 加注: `[已被 V16-F2 取代,删除 mr1/oemBrand 因 ProductIndexDoc 待扩展]`
+- L9724/L9805 加注: `[已被 V16-F2 取代,字段名改为 PascalCase]`
+
+### V16-F18: Mr1Validator Mr1Length 与 Product.Mr1 一致性 [中危纠正]
+
+**问题**: v15 Mr1Validator 强制 Mr1Length=10,但 Product.Mr1 字段无长度约束(S15-9)。现有数据可能存在长度 ≠ 10 的 Mr1。
+
+**修复**: 实施前必须 SELECT 统计现有 products.mr_1 字段长度分布:
+```sql
+SELECT LENGTH(mr_1) AS len, COUNT(*) AS cnt
+FROM products
+WHERE mr_1 IS NOT NULL
+GROUP BY LENGTH(mr_1)
+ORDER BY cnt DESC;
+```
+
+根据统计结果决定:
+- 若 95%+ 数据长度=10,Mr1Validator 保持 Mr1Length=10,其他长度数据 IncrSkippedNullField
+- 若数据长度分散,Mr1Validator 改为 `Mr1Length <= 10` 或仅校验字母数字
+- 同步在 Product.Mr1 添加 `[StringLength(10)]` 特性
+
+### V16-F19: V15-F1 与 V15-F9 伪代码合并 [中危纠正]
+
+**问题**: v15 spec 给出两个版本的 ReindexAllAsync 伪代码(V15-F1 仅 advisory lock,V15-F9 用 AcquireActiveCts + advisory lock),版本不一致(F14-14)。
+
+**修复**: v16 只保留 V15-F9 完整版(含 AcquireActiveCts + advisory lock 7740005 + 显式事务),删除 V15-F1 单独的伪代码版本。
+
+### V16-F20: InitializeAsync 复用 _index 字段 [低危纠正]
+
+**问题**: v15 用 `var index = _client.Index("products");` 硬编码索引名,绕过构造函数已初始化的 `_index` 字段(S15-6/F14-16)。
+
+**修复**:
+```csharp
+// v15 错误: var index = _client.Index("products");
+// v16 纠正:
+// 直接使用构造函数已初始化的 _index 字段(MeiliSearchProvider.cs L31/L40)
+await _index.UpdateFilterableAttributesAsync(...);
+```
+
+### V16-F21: SyncSearchIndexAsync 改用 Join(不依赖 Include) [中危纠正]
+
+**问题**: V16-F1 的 SyncSearchIndexAsync 改造伪代码引用 `p.CrossReferences` 导航属性,但需验证该属性是否存在。
+
+**修复**: 先 Grep 验证 Product.CrossReferences 导航属性(Pre-Task-V16-3):
+- 若存在,使用 V16-F1 伪代码
+- 若不存在,改用显式 Join:
+```csharp
+// v16: 显式 Join,不依赖导航属性
+var batch = await (from p in query.OrderBy(p => p.Id).Take(batchSize)
+                   join x in _db.CrossReferences on p.Id equals x.ProductId into xrefs
+                   from x in xrefs.Where(x => x.IsPrimary).DefaultIfEmpty()
+                   join b in _db.XrefOemBrands on new { x.OemBrand, x.OemNo3 } equals new { b.OemBrand, b.OemNo3 } into brands
+                   from b in brands.DefaultIfEmpty()
+                   select new {
+                       p.Id, p.OemNoNormalized, p.OemNoDisplay, p.Remark, p.Type,
+                       p.D1Mm, p.D2Mm, p.D3Mm, p.H1Mm, p.H2Mm, p.H3Mm,
+                       p.Media, p.IsDiscontinued, p.UpdatedAtUnix,
+                       p.Mr1,
+                       OemBrand = x != null ? x.OemBrand : null,
+                       BrandSortOrder = b != null ? (int?)b.SortOrder : null
+                   }).ToListAsync(ct);
+```
+
+### V16-F22: V15-F4 WaitForTaskAsync 超时配置 [中危纠正]
+
+**问题**: v15 WaitForTaskAsync 默认超时数十秒,Meili 响应慢时阻塞启动(S15-7)。
+
+**修复**: V16-F10 改为后台执行后,WaitForTaskAsync 配置 30s 超时:
+```csharp
+// v16: 配置 30s 超时,超时后 LogWarning 不阻塞
+await _index.WaitForTaskAsync(filterTaskInfo.TaskUid, TimeSpan.FromSeconds(30), ct);
+```
+
+### V16-F23: V15-F4 变量命名纠正 [低危纠正]
+
+**问题**: v15 变量命名 `filterTask`/`sortTask`/`searchTask` 误导(实为 TaskInfo)(S15-8)。
+
+**修复**:
+```csharp
+var filterTaskInfo = await _index.UpdateFilterableAttributesAsync(...);
+var sortTaskInfo = await _index.UpdateSortableAttributesAsync(...);
+var searchTaskInfo = await _index.UpdateSearchableAttributesAsync(...);
+await _index.WaitForTaskAsync(filterTaskInfo.TaskUid, TimeSpan.FromSeconds(30), ct);
+await _index.WaitForTaskAsync(sortTaskInfo.TaskUid, TimeSpan.FromSeconds(30), ct);
+await _index.WaitForTaskAsync(searchTaskInfo.TaskUid, TimeSpan.FromSeconds(30), ct);
+```
+
+### V16-F24: V15-F14 DeleteAllDocumentsAsync 保留 primary key [中危纠正]
+
+**问题**: v15 未说明 DeleteAllDocumentsAsync 后 Meilisearch primary key 是否保留(S15-3 审查点)。
+
+**修复**: 明确说明 DeleteAllDocumentsAsync 只删除文档,**保留** index schema(primary key / filterable / sortable / searchable 配置)。无需重新设置 primary key。
+
+### V16-F25: ReindexAllAsync 使用 DateTime.MinValue(全量重建) [中危纠正]
+
+**问题**: v15 ReindexAllAsync 的 sinceDate 参数与 SyncSearchIndexAsync 的 importStartedAt 语义不一致(F14-19)。SyncSearchIndexAsync 内部 `Where(p => p.UpdatedAt >= importStartedAt)`,若 sinceDate 是历史时间可能漏掉从未更新的老产品。
+
+**修复**: ReindexAllAsync 不使用 SyncSearchIndexAsync,改用新增的 SyncAllSearchIndexAsync(不按时间筛选):
+```csharp
+// v16: 新增 SyncAllSearchIndexAsync,全量查询所有产品(不按 UpdatedAt 筛选)
+private async Task SyncAllSearchIndexAsync(CancellationToken ct)
+{
+    var query = _db.Products.AsNoTracking();
+    // ... 批量处理所有产品(不按 UpdatedAt 筛选) ...
+}
+```
+
+## 17.4 v16 前置任务
+
+### Pre-Task-V16-0: ProductIndexDoc 显式扩展(必须先于其他 v16 任务)
+1. 修改 `backend/src/SakuraFilter.Search/ISearchProvider.cs` L32-L45,扩展 ProductIndexDoc record 为 17 字段(新增 D3Mm/H2Mm/Mr1/OemBrand/BrandSortOrder)
+2. 修改 `backend/src/SakuraFilter.Etl/EtlImportService.cs` L1146-L1166 SyncSearchIndexAsync,改造查询为 Join 子查询(见 V16-F1/V16-F21)
+3. 编译验证: `dotnet build backend/src/SakuraFilter.Search/SakuraFilter.Search.csproj`
+
+### Pre-Task-V16-0-Verify: 运行时验证 Meilisearch SDK 序列化字段名
+1. 写最小化测试: 构造一条 ProductIndexDoc,通过 MeiliSearchProvider.IndexAsync 写入 Meilisearch
+2. `curl http://localhost:7700/indexes/products/documents` 查看实际字段名
+3. 确认是 PascalCase(D1Mm) 还是 camelCase(d1Mm)
+4. 根据结果决定 V16-F2 的字段命名方向
+
+### Pre-Task-V16-1: 新增 isSafeRedirect 模块
+1. 新建 `frontend/src/utils/security.ts`
+2. 实现 `isSafeRedirect(redirect: string, allowedHosts: string[]): boolean` 函数(见 V16-F12)
+3. 新建 `frontend/src/utils/__tests__/security.test.ts`,覆盖 12 个测试用例(javascript: / data: / 相对路径 / 同源 / 允许主机 / 非允许主机 / 空值 / 非字符串 / 协议相对 // / 端口 / 子域名 / IP)
+
+### Pre-Task-V16-2: SELECT 统计 Mr1 长度分布
+1. 执行 SQL: `SELECT LENGTH(mr_1), COUNT(*) FROM products WHERE mr_1 IS NOT NULL GROUP BY LENGTH(mr_1) ORDER BY COUNT(*) DESC`
+2. 根据结果决定 V16-F18 的 Mr1Validator 长度规则
+3. 若 95%+ 长度=10,保持 Mr1Length=10;否则改为 Mr1Length <= 10
+
+### Pre-Task-V16-3: Grep 验证 Product.CrossReferences 导航属性
+1. `Grep "CrossReferences" backend/src/SakuraFilter.Core/Entities/Product.cs`
+2. 若存在,使用 V16-F1 伪代码
+3. 若不存在,使用 V16-F21 显式 Join 伪代码
+
+## 17.5 v16 vs v15 对比表(25 项)
+
+| 编号 | 问题简述 | v15 状态 | v16 修复 |
+|------|---------|---------|---------|
+| V16-F1 | ProductIndexDoc 显式扩展 | 凭空假设 | Pre-Task-V16-0 显式扩展 record |
+| V16-F2 | 字段命名方向错误(PascalCase) | camelCase 错误 | 统一 PascalCase + 运行时验证 |
+| V16-F3 | TruncateSearchIndexPendingAsync 不存在 | 凭空假设 | 改用 EF Core RemoveRange |
+| V16-F4 | _connectionString 字段名错误 | 错误 | 纠正为 _pgConn |
+| V16-F5 | InvokeAsync 签名错误 | 双参数错误 | 单参数 + _next 字段 |
+| V16-F6 | token 无效仍调用 next | 安全漏洞 | 保留 401 返回逻辑 |
+| V16-F7 | 事务级锁无显式事务 | 锁立即释放 | BeginTransactionAsync 包裹 |
+| V16-F8 | V15-F16 Include 凭空假设 | 修复不存在问题 | 删除 V15-F16 |
+| V16-F9 | V15-F17 阶段1/阶段2 凭空假设 | 修复不存在问题 | 删除 V15-F17 |
+| V16-F10 | InitializeAsync 阻塞启动 | 与降级原则冲突 | 改为 HostedService 异步 |
+| V16-F11 | 进度未推送 | 前端无法感知 | StartSnapshotTimerIfNeeded |
+| V16-F12 | isSafeRedirect 不存在 | 凭空假设 | Pre-Task-V16-1 新增模块 |
+| V16-F13 | env.d.ts 未声明 | TS 编译失败 | 追加 VITE_SAFE_REDIRECT_HOSTS |
+| V16-F14 | Mr1Validator 未覆盖 AdminProductService | 校验不全 | 扩展到 CreateAsync/UpdateAsync |
+| V16-F15 | reindexAll 返回类型不一致 | 类型不匹配 | 对齐 ReindexResult |
+| V16-F16 | .env 未提供完整模板 | 描述错误 | 新建 .env.development/.env.production |
+| V16-F17 | FilterableAttributes 三处矛盾 | 描述不一致 | 统一为 V16-F2 PascalCase 版本 |
+| V16-F18 | Mr1Length=10 与 Product.Mr1 不一致 | 数据可能被拒 | SELECT 统计后决定 |
+| V16-F19 | V15-F1 与 V15-F9 伪代码不一致 | 版本混乱 | 只保留 V15-F9 完整版 |
+| V16-F20 | InitializeAsync 硬编码 "products" | 绕过 _index | 复用 _index 字段 |
+| V16-F21 | SyncSearchIndexAsync 改用 Join | 导航属性未验证 | Grep 验证后决定 |
+| V16-F22 | WaitForTaskAsync 无超时 | 阻塞启动 | 配置 30s 超时 |
+| V16-F23 | 变量命名 filterTask 误导 | 可读性差 | 改为 filterTaskInfo |
+| V16-F24 | DeleteAllDocumentsAsync 保留 primary key | 未说明 | 明确保留 schema |
+| V16-F25 | ReindexAllAsync sinceDate 语义错误 | 漏掉老产品 | 新增 SyncAllSearchIndexAsync |
+
+## 17.6 v16 实际修改文件清单
+
+### 后端修改(8 个文件)
+1. `backend/src/SakuraFilter.Search/ISearchProvider.cs` - ProductIndexDoc 扩展为 17 字段(Pre-Task-V16-0)
+2. `backend/src/SakuraFilter.Search/MeiliSearchProvider.cs` - 字段命名 PascalCase + InitializeAsync + DeleteAllDocumentsAsync
+3. `backend/src/SakuraFilter.Etl/EtlImportService.cs` - SyncSearchIndexAsync 改造 + ReindexAllAsync 新增 + SyncAllSearchIndexAsync 新增
+4. `backend/src/SakuraFilter.Api/Services/DevTokenAuthMiddleware.cs` - InvokeAsync 签名纠正 + 401 返回逻辑保留
+5. `backend/src/SakuraFilter.Api/Services/AdminProductService.cs` - Mr1Validator 校验扩展
+6. `backend/src/SakuraFilter.Api/Extensions/WebApplicationExtensions.cs` - InitializeAsync 改为后台执行
+7. `backend/src/SakuraFilter.Api/Endpoints/AdminEtlEndpoints.cs` - reindex-all 端点新增
+8. `backend/src/SakuraFilter.Core/Validation/Mr1Validator.cs` - 新建(v15 Pre-Task-V15-1 + v16 校验扩展)
+
+### 前端修改(5 个文件)
+1. `frontend/src/utils/security.ts` - 新建(Pre-Task-V16-1)
+2. `frontend/src/utils/__tests__/security.test.ts` - 新建
+3. `frontend/src/env.d.ts` - 追加 VITE_SAFE_REDIRECT_HOSTS 声明
+4. `frontend/src/api/index.ts` - reindexAll 返回类型对齐
+5. `frontend/.env.development` / `frontend/.env.production` - 新建
+
+### 测试修改(1 个文件)
+1. `backend/tests/SakuraFilter.Etl.Tests/EtlImportServiceTests.cs` - 新建(v15 Pre-Task-V15-2 + v16 扩展)
+
+### 纯文档修正(3 个文件)
+1. `.trae/specs/v2-architecture-migration/spec.md` - 第十七章 v16
+2. `.trae/specs/v2-architecture-migration/tasks.md` - v16 任务清单
+3. `.trae/specs/v2-architecture-migration/checklist.md` - v16 验证清单
+
+## 17.7 v16 第十六轮审查重点(35 个审查点)
+
+### 数据关联维度(D16)审查点(12 个)
+- [ ] D16-1: ProductIndexDoc 扩展后,所有构造调用点是否同步更新(EtlImportService/AdminProductService)
+- [ ] D16-2: SyncSearchIndexAsync Join 子查询是否产生笛卡尔积(一个 Product 多个 CrossReference)
+- [ ] D16-3: advisory lock 7740005 在显式事务内,commit/rollback 时是否正确释放
+- [ ] D16-4: AcquireActiveCts("reindex-all", ct) 与 ImportProductsAsync 的 _ctsLock 是否正确互斥
+- [ ] D16-5: DevTokenAuthMiddleware 401 返回逻辑保留后,JWT 认证流程是否仍正确
+- [ ] D16-6: BrandSortOrder 从 XrefOemBrand.SortOrder 取,XrefOemBrand 表是否有 SortOrder 字段(int? 类型)
+- [ ] D16-7: ReindexResult 返回值,前端 etlApi.reindexAll 是否正确消费
+- [ ] D16-8: DeleteAllDocumentsAsync 后,Meilisearch primary key 是否保留(保留)
+- [ ] D16-9: EF Core RemoveRange 是否在 advisory lock 内执行(lock 内 TRUNCATE 语义)
+- [ ] D16-10: XrefOemBrand.SortOrder 字段类型(int? vs int),null 时 BrandSortOrder 默认值
+- [ ] D16-11: OemBrand "UNKNOWN" 占位值是否影响前端品牌筛选器
+- [ ] D16-12: SakuraFilter.Etl.Tests 项目引用 SakuraFilter.Etl.csproj 后,内部类是否可测
+
+### 检索逻辑维度(S16)审查点(12 个)
+- [ ] S16-1: Meilisearch 字段命名统一 PascalCase 后,现有 filter 是否全部修正(无遗漏 snake_case)
+- [ ] S16-2: FilterableAttributes 含 D1Mm/D2Mm/D3Mm/H1Mm/H2Mm/H3Mm,是否覆盖所有 SearchRequest 范围字段
+- [ ] S16-3: DeleteAllDocumentsAsync 后,索引 schema 是否保留(保留)
+- [ ] S16-4: SyncAllSearchIndexAsync 不按 UpdatedAt 筛选,是否覆盖所有产品(含历史)
+- [ ] S16-5: IndexReplayWorker 现有独立 try-catch 设计,是否无需"阶段1/阶段2"改造
+- [ ] S16-6: Meilisearch schema WaitForTaskAsync 30s 超时,是否足够
+- [ ] S16-7: ReindexAllAsync DeleteAllDocumentsAsync 失败时,是否仍执行 SyncAllSearchIndexAsync(应中止)
+- [ ] S16-8: BrandSortOrder 从 XrefOemBrand.SortOrder 取,DB 查询是否在 batch 内(N+1 问题)
+- [ ] S16-9: Mr1Validator 校验失败时,是否记录日志(便于排查)
+- [ ] S16-10: 全量重建期间 IndexReplayWorker 跳过处理,是否有日志(便于运维监控)
+- [ ] S16-11: ProductIndexDoc 扩展后,Meilisearch 索引是否需要全量重建(旧文档无新字段)
+- [ ] S16-12: Pre-Task-V16-0-Verify 运行时验证字段名,是否与 V16-F2 假设一致(PascalCase)
+
+### 前后端联动维度(F15)审查点(11 个)
+- [ ] F15-1: etlApi.reindexAll 返回 ReindexResult,前端 TypeScript 类型是否同步
+- [ ] F15-2: 全量重建按钮 loading 状态,是否防止重复点击
+- [ ] F15-3: query.redirect string[] 处理,Vue Router 类型定义是否对齐
+- [ ] F15-4: VITE_SAFE_REDIRECT_HOSTS dev/prod 区分,env.d.ts 类型声明是否调整
+- [ ] F15-5: security.test.ts 12 个测试用例,是否覆盖所有 isSafeRedirect 内部分支
+- [ ] F15-6: Meilisearch 字段命名 PascalCase,前端 filter 参数是否同步
+- [ ] F15-7: OemBrand "UNKNOWN" 占位值,前端品牌筛选器是否过滤
+- [ ] F15-8: BrandSortOrder 从 XrefOemBrand.SortOrder 取,前端排序方向(asc/desc)是否明确
+- [ ] F15-9: 全量重建进度展示,前端是否轮询 etlApi.progress() 显示
+- [ ] F15-10: v15 25 项衍生漏洞是否全部在 v16 修复方案中覆盖(无遗漏)
+- [ ] F15-11: v16 引入的第七重核实机制(Grep 零匹配验证)是否在 spec 修订时同步完成
+
+## 17.8 第十六轮循环终止条件
+
+- [ ] 第十六轮审查无任何新漏洞检出 → 完成 v16 修订,进入 v17 修订(如有新漏洞)或定稿
+- [ ] 第十六轮审查发现新漏洞 → 进入 v17 修订,继续迭代
+- [ ] 第十六轮审查发现 v16 仍有凭空假设 → 进入 v17 修订,加强核实机制(八重核实?)
+- [ ] 第十六轮审查重点: 第七重核实机制(方法/字段名 Grep 零匹配验证)
+- [ ] 第十六轮审查重点: v15 凭空假设是否真正消除(Grep 验证 ReleaseAdvisoryLockAsync/TruncateSearchIndexPendingAsync/isSafeRedirect/ProductIndexDoc.mr1)
+- [ ] 第十六轮审查重点: V16-F2 字段命名方向(PascalCase)是否与运行时验证一致
+- [ ] 持续迭代直到连续一轮审查无任何新漏洞检出
+- [ ] v16 引入"七重核实机制"(代码存在性+字段名+API 签名+伪代码自洽性+运行时上下文自洽性+API 完整签名比对+方法/字段名 Grep 零匹配验证)
+- [ ] v16 目标: 真正实现"0 项凭空假设"+"0 项伪代码自洽性漏洞"+"0 项运行时上下文漏洞"+"0 项 API 签名漏洞"+"0 项方法/字段名零匹配漏洞"
+- [ ] v16 实际新增代码: 5 个新文件(Mr1Validator.cs + security.ts + security.test.ts + EtlImportServiceTests.cs + .env.development/.env.production)
+- [ ] v16 实际修改后端文件: 7 个(ISearchProvider.cs / MeiliSearchProvider.cs / EtlImportService.cs / DevTokenAuthMiddleware.cs / AdminProductService.cs / WebApplicationExtensions.cs / AdminEtlEndpoints.cs)
+- [ ] v16 实际修改前端文件: 4 个(env.d.ts / api/index.ts / LoginView.vue / AdminEtlView.vue)
+- [ ] v16 纯文档修正: 3 个文件(spec.md / tasks.md / checklist.md)
+- [ ] v16 新增 migration: 0 个(v16 不涉及 DB schema 变更,仅 ProductIndexDoc record 扩展)
+

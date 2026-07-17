@@ -5644,3 +5644,174 @@ _待启动第七轮深度审查后追加_
 - [ ] v15 实际修改前端文件: 4 个
 - [ ] v15 纯文档修正: 3 个文件
 - [ ] v15 新增 migration: 0 个(v15 不涉及 DB schema 变更)
+
+
+---
+
+# v16 验证清单 — 七重核实机制与 ProductIndexDoc 显式扩展
+
+> 基于 v15 第十五轮审查发现的 44 项衍生漏洞,v16 引入第七重核实机制(方法/字段名 Grep 零匹配验证),并显式扩展 ProductIndexDoc record。本清单用于验证 v16 修订是否真正实现"0 项凭空假设"。
+
+## 第一部分: 七重核实机制验证(40 项)
+
+### 第七重核实: 方法/字段名 Grep 零匹配验证(v16 新增,20 项)
+
+- [ ] 1. Grep 验证 `ReleaseAdvisoryLockAsync` 全后端零匹配(v15 凭空假设,v16 已删除调用)
+- [ ] 2. Grep 验证 `TruncateSearchIndexPendingAsync` 全后端零匹配(v15 凭空假设,v16 改用 EF Core RemoveRange)
+- [ ] 3. Grep 验证 `isSafeRedirect` 全前端零匹配(v15 凭空假设,v16 Pre-Task-V16-1 新增)
+- [ ] 4. Grep 验证 `@/utils/security` 全前端零匹配(v15 凭空假设,v16 新建 security.ts)
+- [ ] 5. Grep 验证 `Mr1` 字段在 ProductIndexDoc 中存在(v16 Pre-Task-V16-0 扩展后)
+- [ ] 6. Grep 验证 `OemBrand` 字段在 ProductIndexDoc 中存在(v16 Pre-Task-V16-0 扩展后)
+- [ ] 7. Grep 验证 `BrandSortOrder` 字段在 ProductIndexDoc 中存在(v16 Pre-Task-V16-0 扩展后)
+- [ ] 8. Grep 验证 `D3Mm` 字段在 ProductIndexDoc 中存在(v16 Pre-Task-V16-0 扩展后)
+- [ ] 9. Grep 验证 `H2Mm` 字段在 ProductIndexDoc 中存在(v16 Pre-Task-V16-0 扩展后)
+- [ ] 10. Grep 验证 `ReindexResult` 类型存在(v16 Task V16-1.2 新建)
+- [ ] 11. Grep 验证 `SyncAllSearchIndexAsync` 方法存在(v16 Task V16-2.4 新建)
+- [ ] 12. Grep 验证 `InitializeAsync` 方法在 MeiliSearchProvider 中存在(v16 Task V16-2.2 新建)
+- [ ] 13. Grep 验证 `DeleteAllDocumentsAsync` 方法在 MeiliSearchProvider 中存在(v16 Task V16-2.2 新建)
+- [ ] 14. Grep 验证 `_pgConn` 字段名(v15 错写 _connectionString,v16 纠正)
+- [ ] 15. Grep 验证 `InvokeAsync(HttpContext ctx)` 单参数签名(v15 错写双参数,v16 纠正)
+- [ ] 16. Grep 验证 `_next` 字段(v15 错写 next 参数,v16 纠正)
+- [ ] 17. Grep 验证 `VITE_SAFE_REDIRECT_HOSTS` 在 env.d.ts 中声明(v16 Task V16-3.4 新增)
+- [ ] 18. Grep 验证 `reindexAll` 方法在 etlApi 中存在(v16 Task V16-3.1 新增)
+- [ ] 19. Grep 验证 `/api/admin/etl/reindex-all` 端点存在(v16 Task V16-3.2 新增)
+- [ ] 20. Grep 验证 `Mr1Validator` 类存在(v15 Pre-Task-V15-1 + v16 Task V16-1.4 扩展)
+
+### 前六重核实机制复核(20 项)
+
+- [ ] 21. 第一重(代码存在性): 所有 v16 引用的类/方法 Grep 验证存在
+- [ ] 22. 第二重(字段名): 所有 v16 引用的字段名 Grep 验证存在
+- [ ] 23. 第三重(API 签名): 所有 v16 引用的 API 签名 Read 验证一致
+- [ ] 24. 第四重(伪代码自洽性): v16 伪代码逻辑自洽(无矛盾)
+- [ ] 25. 第五重(运行时上下文自洽性): v16 advisory lock + 显式事务 + AcquireActiveCts 三层互斥自洽
+- [ ] 26. 第六重(API 完整签名比对): v16 引用的方法签名与代码一致
+- [ ] 27. 复核: ReindexAllAsync 签名 `Task<ReindexResult> ReindexAllAsync(CancellationToken ct)`
+- [ ] 28. 复核: AcquireActiveCts 签名 `private CancellationTokenSource AcquireActiveCts(string entityType, CancellationToken externalCt)`
+- [ ] 29. 复核: TryAcquireAdvisoryLockAsync 签名(在显式事务内调用)
+- [ ] 30. 复核: SyncSearchIndexAsync 签名 `private async Task SyncSearchIndexAsync(DateTime importStartedAt, CancellationToken ct)`
+- [ ] 31. 复核: SyncAllSearchIndexAsync 签名(v16 新增,不按时间筛选)
+- [ ] 32. 复核: MeiliSearchProvider._index 字段(构造函数 L40 初始化)
+- [ ] 33. 复核: DevTokenAuthMiddleware._next 字段(构造函数注入)
+- [ ] 34. 复核: EtlImportService._pgConn 字段(L346)
+- [ ] 35. 复核: EtlImportService._sp 字段(IServiceProvider)
+- [ ] 36. 复核: ProductIndexDoc record 17 字段(v16 Pre-Task-V16-0 扩展后)
+- [ ] 37. 复核: XrefOemBrand.SortOrder 字段(int 类型, spec.md L10255 已确认)
+- [ ] 38. 复核: CrossReference.OemBrand 字段
+- [ ] 39. 复核: CrossReference.IsPrimary 字段
+- [ ] 40. 复核: SearchIndexPending DbSet 存在(v16 改用 RemoveRange)
+
+## 第二部分: v16 修复方案验证(25 项)
+
+### V16-F1 ~ V16-F5 验证(5 项)
+
+- [ ] 41. V16-F1: ProductIndexDoc record 扩展为 17 字段(Pre-Task-V16-0)
+- [ ] 42. V16-F2: Meilisearch 字段命名统一 PascalCase(Pre-Task-V16-0-Verify 运行时验证)
+- [ ] 43. V16-F3: 使用 EF Core RemoveRange 替代 TruncateSearchIndexPendingAsync
+- [ ] 44. V16-F4: 使用 _pgConn 字段名(非 _connectionString)
+- [ ] 45. V16-F5: InvokeAsync 单参数签名 + _next 字段
+
+### V16-F6 ~ V16-F10 验证(5 项)
+
+- [ ] 46. V16-F6: DevTokenAuthMiddleware 保留 401 返回逻辑(token 无效时 return)
+- [ ] 47. V16-F7: advisory lock 7740005 + 显式事务包裹(BeginTransactionAsync)
+- [ ] 48. V16-F8: V15-F16 删除(现有代码无 Include)
+- [ ] 49. V16-F9: V15-F17 删除(现有 IndexReplayWorker 无阶段1/阶段2)
+- [ ] 50. V16-F10: InitializeAsync 改为后台 HostedService 异步执行
+
+### V16-F11 ~ V16-F15 验证(5 项)
+
+- [ ] 51. V16-F11: ReindexAllAsync 调用 StartSnapshotTimerIfNeeded 推送进度
+- [ ] 52. V16-F12: isSafeRedirect 模块新增(Pre-Task-V16-1)
+- [ ] 53. V16-F13: env.d.ts 声明 VITE_SAFE_REDIRECT_HOSTS
+- [ ] 54. V16-F14: Mr1Validator 校验覆盖 AdminProductService.CreateAsync/UpdateAsync
+- [ ] 55. V16-F15: etlApi.reindexAll 返回类型对齐 ReindexResult
+
+### V16-F16 ~ V16-F20 验证(5 项)
+
+- [ ] 56. V16-F16: 新建 .env.development / .env.production 完整模板
+- [ ] 57. V16-F17: FilterableAttributes 三处描述统一(加注"已被 V16-F2 取代")
+- [ ] 58. V16-F18: Mr1Validator Mr1Length 与 Product.Mr1 一致性(Pre-Task-V16-2 SELECT 统计)
+- [ ] 59. V16-F19: V15-F1 与 V15-F9 伪代码合并(只保留 V15-F9 完整版)
+- [ ] 60. V16-F20: InitializeAsync 复用 _index 字段(不硬编码 "products")
+
+### V16-F21 ~ V16-F25 验证(5 项)
+
+- [ ] 61. V16-F21: SyncSearchIndexAsync 改用 Join(Pre-Task-V16-3 Grep 验证导航属性)
+- [ ] 62. V16-F22: WaitForTaskAsync 配置 30s 超时
+- [ ] 63. V16-F23: 变量命名纠正(filterTaskInfo / sortTaskInfo / searchTaskInfo)
+- [ ] 64. V16-F24: DeleteAllDocumentsAsync 保留 primary key(明确说明)
+- [ ] 65. V16-F25: ReindexAllAsync 使用 SyncAllSearchIndexAsync(不按 UpdatedAt 筛选)
+
+## 第三部分: 第十六轮审查点(35 项)
+
+### 数据关联维度(D16)审查点(12 个)
+
+- [ ] 66. D16-1: ProductIndexDoc 扩展后,所有构造调用点是否同步更新(EtlImportService/AdminProductService)
+- [ ] 67. D16-2: SyncSearchIndexAsync Join 子查询是否产生笛卡尔积(一个 Product 多个 CrossReference)
+- [ ] 68. D16-3: advisory lock 7740005 在显式事务内,commit/rollback 时是否正确释放
+- [ ] 69. D16-4: AcquireActiveCts("reindex-all", ct) 与 ImportProductsAsync 的 _ctsLock 是否正确互斥
+- [ ] 70. D16-5: DevTokenAuthMiddleware 401 返回逻辑保留后,JWT 认证流程是否仍正确
+- [ ] 71. D16-6: BrandSortOrder 从 XrefOemBrand.SortOrder 取,XrefOemBrand 表是否有 SortOrder 字段(int? 类型)
+- [ ] 72. D16-7: ReindexResult 返回值,前端 etlApi.reindexAll 是否正确消费
+- [ ] 73. D16-8: DeleteAllDocumentsAsync 后,Meilisearch primary key 是否保留(保留)
+- [ ] 74. D16-9: EF Core RemoveRange 是否在 advisory lock 内执行(lock 内 TRUNCATE 语义)
+- [ ] 75. D16-10: XrefOemBrand.SortOrder 字段类型(int? vs int),null 时 BrandSortOrder 默认值
+- [ ] 76. D16-11: OemBrand "UNKNOWN" 占位值是否影响前端品牌筛选器
+- [ ] 77. D16-12: SakuraFilter.Etl.Tests 项目引用 SakuraFilter.Etl.csproj 后,内部类是否可测
+
+### 检索逻辑维度(S16)审查点(12 个)
+
+- [ ] 78. S16-1: Meilisearch 字段命名统一 PascalCase 后,现有 filter 是否全部修正(无遗漏 snake_case)
+- [ ] 79. S16-2: FilterableAttributes 含 D1Mm/D2Mm/D3Mm/H1Mm/H2Mm/H3Mm,是否覆盖所有 SearchRequest 范围字段
+- [ ] 80. S16-3: DeleteAllDocumentsAsync 后,索引 schema 是否保留(保留)
+- [ ] 81. S16-4: SyncAllSearchIndexAsync 不按 UpdatedAt 筛选,是否覆盖所有产品(含历史)
+- [ ] 82. S16-5: IndexReplayWorker 现有独立 try-catch 设计,是否无需"阶段1/阶段2"改造
+- [ ] 83. S16-6: Meilisearch schema WaitForTaskAsync 30s 超时,是否足够
+- [ ] 84. S16-7: ReindexAllAsync DeleteAllDocumentsAsync 失败时,是否仍执行 SyncAllSearchIndexAsync(应中止)
+- [ ] 85. S16-8: BrandSortOrder 从 XrefOemBrand.SortOrder 取,DB 查询是否在 batch 内(N+1 问题)
+- [ ] 86. S16-9: Mr1Validator 校验失败时,是否记录日志(便于排查)
+- [ ] 87. S16-10: 全量重建期间 IndexReplayWorker 跳过处理,是否有日志(便于运维监控)
+- [ ] 88. S16-11: ProductIndexDoc 扩展后,Meilisearch 索引是否需要全量重建(旧文档无新字段)
+- [ ] 89. S16-12: Pre-Task-V16-0-Verify 运行时验证字段名,是否与 V16-F2 假设一致(PascalCase)
+
+### 前后端联动维度(F15)审查点(11 个)
+
+- [ ] 90. F15-1: etlApi.reindexAll 返回 ReindexResult,前端 TypeScript 类型是否同步
+- [ ] 91. F15-2: 全量重建按钮 loading 状态,是否防止重复点击
+- [ ] 92. F15-3: query.redirect string[] 处理,Vue Router 类型定义是否对齐
+- [ ] 93. F15-4: VITE_SAFE_REDIRECT_HOSTS dev/prod 区分,env.d.ts 类型声明是否调整
+- [ ] 94. F15-5: security.test.ts 12 个测试用例,是否覆盖所有 isSafeRedirect 内部分支
+- [ ] 95. F15-6: Meilisearch 字段命名 PascalCase,前端 filter 参数是否同步
+- [ ] 96. F15-7: OemBrand "UNKNOWN" 占位值,前端品牌筛选器是否过滤
+- [ ] 97. F15-8: BrandSortOrder 从 XrefOemBrand.SortOrder 取,前端排序方向(asc/desc)是否明确
+- [ ] 98. F15-9: 全量重建进度展示,前端是否轮询 etlApi.progress() 显示
+- [ ] 99. F15-10: v15 25 项衍生漏洞是否全部在 v16 修复方案中覆盖(无遗漏)
+- [ ] 100. F15-11: v16 引入的第七重核实机制(Grep 零匹配验证)是否在 spec 修订时同步完成
+
+## 第四部分: v16 vs v15 凭空假设消除验证(7 项)
+
+- [ ] 101. v15 凭空假设 1(ReleaseAdvisoryLockAsync): v16 已删除调用,改用 pg_try_advisory_xact_lock 事务自动释放
+- [ ] 102. v15 凭空假设 2(TruncateSearchIndexPendingAsync): v16 改用 EF Core RemoveRange
+- [ ] 103. v15 凭空假设 3(isSafeRedirect): v16 Pre-Task-V16-1 新建 security.ts
+- [ ] 104. v15 凭空假设 4(ProductIndexDoc.mr1/oemBrand/brandSortOrder): v16 Pre-Task-V16-0 显式扩展 record
+- [ ] 105. v15 凭空假设 5(ReindexAllAsync 引用辅助方法): v16 Task V16-1.2 完整定义
+- [ ] 106. v15 凭空假设 6(ReindexResult): v16 Task V16-1.2 新建 ReindexResult.cs
+- [ ] 107. v15 凭空假设 7(Mr1Validator Validation 目录): v16 Pre-Task-V16-0 明确新建目录
+
+## 第五部分: v16 第十六轮循环终止条件
+
+- [ ] 108. 第十六轮审查无任何新漏洞检出 → 完成 v16 修订,进入 v17 修订(如有新漏洞)或定稿
+- [ ] 109. 第十六轮审查发现新漏洞 → 进入 v17 修订,继续迭代
+- [ ] 110. 第十六轮审查发现 v16 仍有凭空假设 → 进入 v17 修订,加强核实机制(八重核实?)
+- [ ] 111. 第十六轮审查重点: 第七重核实机制(方法/字段名 Grep 零匹配验证)
+- [ ] 112. 第十六轮审查重点: v15 凭空假设是否真正消除(Grep 验证 ReleaseAdvisoryLockAsync/TruncateSearchIndexPendingAsync/isSafeRedirect/ProductIndexDoc.mr1)
+- [ ] 113. 第十六轮审查重点: V16-F2 字段命名方向(PascalCase)是否与运行时验证一致
+- [ ] 114. 持续迭代直到连续一轮审查无任何新漏洞检出
+- [ ] 115. v16 引入"七重核实机制"(代码存在性+字段名+API 签名+伪代码自洽性+运行时上下文自洽性+API 完整签名比对+方法/字段名 Grep 零匹配验证)
+- [ ] 116. v16 目标: 真正实现"0 项凭空假设"+"0 项伪代码自洽性漏洞"+"0 项运行时上下文漏洞"+"0 项 API 签名漏洞"+"0 项方法/字段名零匹配漏洞"
+- [ ] 117. v16 实际新增代码: 5 个新文件(Mr1Validator.cs + security.ts + security.test.ts + EtlImportServiceTests.cs + .env.development/.env.production)
+- [ ] 118. v16 实际修改后端文件: 7 个(ISearchProvider.cs / MeiliSearchProvider.cs / EtlImportService.cs / DevTokenAuthMiddleware.cs / AdminProductService.cs / WebApplicationExtensions.cs / AdminEtlEndpoints.cs)
+- [ ] 119. v16 实际修改前端文件: 4 个(env.d.ts / api/index.ts / LoginView.vue / AdminEtlView.vue)
+- [ ] 120. v16 纯文档修正: 3 个文件(spec.md / tasks.md / checklist.md)
+- [ ] 121. v16 新增 migration: 0 个(v16 不涉及 DB schema 变更,仅 ProductIndexDoc record 扩展)
+
