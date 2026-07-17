@@ -5023,3 +5023,312 @@ _待启动第七轮深度审查后追加_
 - [ ] 持续迭代直到连续一轮审查无任何新漏洞检出
 - [ ] v13 引入"四重核实机制"(代码存在性+字段名+API 签名+伪代码自洽性),目标: 真正实现"0 项凭空假设"+"0 项伪代码自洽性漏洞"
 
+
+---
+
+# v14 验证清单 — 第十三轮审查衍生漏洞修复验证
+
+## 三十八、Pre-Task-V14-1~3 验证(15 项)
+
+### Pre-Task-V14-1 (ReindexAllAsync 实施)
+- [ ] V14-CHK-1: EtlImportService.cs 含 `public async Task ReindexAllAsync` 方法
+- [ ] V14-CHK-2: SyncSearchIndexAsync 访问修饰符改为 `protected virtual`
+- [ ] V14-CHK-3: AdminEtlEndpoints.cs 含 `/api/admin/etl/reindex-all` 端点
+- [ ] V14-CHK-4: 端点含 `.RequireAuthorization("Admin")` 鉴权
+- [ ] V14-CHK-5: 端点含 `.WithRateLimiter("etl")` 限流
+- [ ] V14-CHK-6: Grep `ReindexAllAsync` 全后端返回非零匹配
+
+### Pre-Task-V14-2 (security.ts 新建)
+- [ ] V14-CHK-7: Glob `**/security.ts` 返回 `frontend/src/utils/security.ts`
+- [ ] V14-CHK-8: Glob `**/security.test.ts` 返回 `frontend/tests/unit/security.test.ts`
+- [ ] V14-CHK-9: security.ts 含 isSafeRedirect + safeDecode 两个 export 函数
+- [ ] V14-CHK-10: security.test.ts 含 7 个测试用例
+- [ ] V14-CHK-11: env.d.ts 含 VITE_SAFE_REDIRECT_HOSTS 声明
+- [ ] V14-CHK-12: `cd frontend && npx vitest run tests/unit/security.test.ts` 全部通过
+
+### Pre-Task-V14-3 (路径修正)
+- [ ] V14-CHK-13: Grep `Middleware/DevTokenAuthMiddleware` 全 spec: 零匹配
+- [ ] V14-CHK-14: Grep `Middleware/CursorHmac` 全 spec: 零匹配
+- [ ] V14-CHK-15: Grep `views/auth/LoginView` 全 spec: 零匹配
+
+## 三十九、V14-F1~F11 高危验证(22 子项)
+
+### V14-F1 (DevTokenAuthMiddleware 中间件顺序)
+- [ ] V14-CHK-16: MiddlewarePipelineExtensions.cs 中 UseMiddleware<DevTokenAuthMiddleware>() 在 UseAuthorization() 之前
+- [ ] V14-CHK-17: DevTokenAuthMiddleware.InvokeAsync 含 ClaimsPrincipal 设置代码
+
+### V14-F2 (ReindexAllAsync 实施)
+- [ ] V14-CHK-18: ReindexAllAsync 方法签名 `(DateTime sinceDate, CancellationToken ct)`
+- [ ] V14-CHK-19: 默认 sinceDate = `new DateTime(1970, 1, 1, DateTimeKind.Utc)`
+
+### V14-F3 (DevTokenAuthMiddleware 路径)
+- [ ] V14-CHK-20: spec/tasks/checklist 路径引用为 `backend/src/SakuraFilter.Api/Services/DevTokenAuthMiddleware.cs`
+
+### V14-F4 (ResilientSearchProvider DI)
+- [ ] V14-CHK-21: 伪代码使用 `GetRequiredService<ISearchProvider>()` + 类型转换
+- [ ] V14-CHK-22: 不存在 `GetRequiredService<ResilientSearchProvider>()` 引用
+
+### V14-F5 (OemBrand 语义)
+- [ ] V14-CHK-23: BuildProductIndexDocs 中 OemBrand 取自 `primaryXref?.OemBrand`
+- [ ] V14-CHK-24: 不存在 `OemBrand: p.Oem2` 引用
+
+### V14-F6 (匿名类型编译错误)
+- [ ] V14-CHK-25: SyncSearchIndexAsync 使用 `query.Include(p => p.CrossReferences).ToListAsync(ct)`
+- [ ] V14-CHK-26: 不存在匿名类型 Select 投影(无 Mr1/Oem2)
+
+### V14-F7 (security.ts 不存在)
+- [ ] V14-CHK-27: security.ts 文件存在
+- [ ] V14-CHK-28: security.test.ts 文件存在
+
+### V14-F8 (LoginView.vue 路径)
+- [ ] V14-CHK-29: spec/tasks/checklist 路径引用为 `frontend/src/views/LoginView.vue`
+
+### V14-F9 (CursorHmac.cs 路径)
+- [ ] V14-CHK-30: spec/tasks/checklist 路径引用为 `backend/src/SakuraFilter.Api/Services/CursorHmac.cs`
+
+### V14-F10 (开放重定向)
+- [ ] V14-CHK-31: LoginView.vue 含 `import { isSafeRedirect } from '@/utils/security'`
+- [ ] V14-CHK-32: LoginView.vue 调用 `isSafeRedirect(rawRedirect, allowedHosts)`
+
+### V14-F11 (vitest 配置)
+- [ ] V14-CHK-33: security.test.ts 位于 `frontend/tests/unit/`
+- [ ] V14-CHK-34: vitest.config.ts include 含 `tests/unit/**/*.test.ts`
+
+## 四十、V14-F12~F22 中低危验证(20 子项)
+
+### V14-F12 (Meilisearch schema)
+- [ ] V14-CHK-35: MeiliSearchProvider.cs 含 `UpdateFilterableAttributesAsync`
+- [ ] V14-CHK-36: MeiliSearchProvider.cs 含 `UpdateSortableAttributesAsync`
+- [ ] V14-CHK-37: MeiliSearchProvider.cs 含 `UpdateSearchableAttributesAsync`
+
+### V14-F13 (Product.Mr1 已存在)
+- [ ] V14-CHK-38: Product.cs 含 `[Column("mr_1")] public string? Mr1`
+
+### V14-F14 (BrandSortOrder null 排序)
+- [ ] V14-CHK-39: BuildProductIndexDocs 中 BrandSortOrder 默认 999(非 null)
+
+### V14-F15 (Mr1 类型 text)
+- [ ] V14-CHK-40: Product.cs Mr1 类型为 `string?`(text,非 varchar(10))
+
+### V14-F16 (阶段1 失败流转 dead_letter)
+- [ ] V14-CHK-41: IndexReplayWorker.cs 含两阶段处理(隔离 + 处理)
+- [ ] V14-CHK-42: 阶段1 失败条目流转至 SearchIndexDeadLetters
+
+### V14-F17 (Polly 与 Initialize 冲突)
+- [ ] V14-CHK-43: WebApplicationExtensions.cs 无 finally 块 Initialize 调用
+- [ ] V14-CHK-44: 仅启动时 Initialize 一次
+
+### V14-F18 (TRUNCATE 并发竞态)
+- [ ] V14-CHK-45: ReindexAllAsync 含 StopAsync("IndexReplayWorker") 调用
+- [ ] V14-CHK-46: finally 块含 StartAsync("IndexReplayWorker") 调用
+
+### V14-F19 (验证点逻辑悖论)
+- [ ] V14-CHK-47: checklist 验证点改为"新建 7 个测试用例是否全部通过"(非"原有 7 个")
+
+### V14-F20 (v12 错误路径)
+- [ ] V14-CHK-48: spec/tasks/checklist 无 `views/auth/LoginView` 引用
+
+### V14-F21 (协议白名单)
+- [ ] V14-CHK-49: security.ts DANGEROUS_PROTOCOLS 含 `file|about|blob|filesystem`
+
+### V14-F22 (safeDecode null byte)
+- [ ] V14-CHK-50: security.ts safeDecode 含 `%00`/`\0` 检测
+
+## 四十一、V14-F23~F27 低危验证(8 子项)
+
+### V14-F23 (SearchIndexPendingRepository 凭空引用)
+- [ ] V14-CHK-51: spec/tasks 无 SearchIndexPendingRepository 引用
+- [ ] V14-CHK-52: 直接使用 ProductDbContext.SearchIndexPending DbSet
+
+### V14-F24 (nullable 字段行为)
+- [ ] V14-CHK-53: nullable 字段(OemBrand/BrandSortOrder)在 Meilisearch 中作为缺失字段处理
+
+### V14-F25 (损坏 payload 审计)
+- [ ] V14-CHK-54: IndexReplayWorker 阶段1 失败时记录 ILogger.LogWarning
+- [ ] V14-CHK-55: 日志含 Payload 内容(截断 200 字符)
+
+### V14-F26 ("应已"推测性语言)
+- [ ] V14-CHK-56: Grep `应已` 全 spec: 零匹配(或仅在历史描述上下文)
+
+### V14-F27 (spec L7468 SignV2)
+- [ ] V14-CHK-57: spec.md L7468 含 `Sign`(非 `SignV2`)
+- [ ] V14-CHK-58: Grep `SignV2` 全 spec: 零匹配
+
+## 四十二、16 任务执行验证(48 子项)
+
+### 数据关联模块(3 项)
+- [ ] V14-CHK-59: Task V14-1.1 ProductIndexDoc 扩展为 15 字段完成
+- [ ] V14-CHK-60: Task V14-1.2 BuildProductIndexDocs 改用 Product 实体完成
+- [ ] V14-CHK-61: Task V14-1.3 DevTokenAuthMiddleware 顺序+ClaimsPrincipal 完成
+
+### 检索逻辑模块(5 项)
+- [ ] V14-CHK-62: Task V14-2.1 ReindexAllAsync 综合修正完成
+- [ ] V14-CHK-63: Task V14-2.2 Meilisearch schema 配置完成
+- [ ] V14-CHK-64: Task V14-2.3 TruncateSearchIndexPendingAsync 实施完成
+- [ ] V14-CHK-65: Task V14-2.4 IndexReplayWorker 两阶段处理+审计完成
+- [ ] V14-CHK-66: Task V14-2.5 已合并到 V14-2.2(无独立执行)
+
+### 前后端联动模块(5 项)
+- [ ] V14-CHK-67: Task V14-3.1 spec L7468 SignV2 修正完成
+- [ ] V14-CHK-68: Task V14-3.2 LoginView.vue isSafeRedirect 集成完成
+- [ ] V14-CHK-69: Task V14-3.3 前端类型同步更新完成
+- [ ] V14-CHK-70: Task V14-3.4 DevTokenAuthMiddleware 前端无变化(确认)
+- [ ] V14-CHK-71: Task V14-3.5 v14 文档同步修正完成
+
+### 单元测试验证
+- [ ] V14-CHK-72: BuildProductIndexDocs_ReturnsCorrectDoc 单元测试通过
+- [ ] V14-CHK-73: security.test.ts 7 个测试用例全部通过
+- [ ] V14-CHK-74: `dotnet build` 无编译错误
+- [ ] V14-CHK-75: `cd frontend && npx tsc --noEmit` 无 TypeScript 错误
+
+### 集成测试验证
+- [ ] V14-CHK-76: HTTP POST `/api/admin/etl/reindex-all` (无 token) 返回 401
+- [ ] V14-CHK-77: HTTP POST `/api/admin/etl/reindex-all` (有 X-Admin-Token) 返回 200
+- [ ] V14-CHK-78: 浏览器 `/login?redirect=https://evil.com` 重定向到 `/admin/products`
+- [ ] V14-CHK-79: HTTP GET `/api/admin/alerts` (有 X-Admin-Token) 返回 200
+- [ ] V14-CHK-80: HTTP GET `/api/admin/alerts` (无 token) 返回 401
+
+## 四十三、五重核实机制 CHK-V14-1~30(30 项)
+
+### 代码存在性核实(8 项)
+- [ ] V14-CHK-81: ReindexAllAsync 全后端 Grep 返回非零匹配
+- [ ] V14-CHK-82: TruncateSearchIndexPendingAsync 全后端 Grep 返回非零匹配
+- [ ] V14-CHK-83: security.ts 文件 Glob 返回非零匹配
+- [ ] V14-CHK-84: security.test.ts 文件 Glob 返回非零匹配
+- [ ] V14-CHK-85: DevTokenAuthMiddleware.cs 路径为 `backend/src/SakuraFilter.Api/Services/`
+- [ ] V14-CHK-86: CursorHmac.cs 路径为 `backend/src/SakuraFilter.Api/Services/`
+- [ ] V14-CHK-87: LoginView.vue 路径为 `frontend/src/views/`
+- [ ] V14-CHK-88: IndexReplayWorker.cs 路径为 `backend/src/SakuraFilter.Api/Services/`
+
+### 字段名核实(6 项)
+- [ ] V14-CHK-89: ProductIndexDoc.OemBrand 字段名(非 OemBrandName)
+- [ ] V14-CHK-90: ProductIndexDoc.BrandSortOrder 字段名(非 BrandSort)
+- [ ] V14-CHK-91: ProductIndexDoc.Mr1 字段名(非 MR1)
+- [ ] V14-CHK-92: Product.Mr1 字段名(对应 [Column("mr_1")])
+- [ ] V14-CHK-93: CrossReference.OemBrand 字段名(对应 [Column("oem_brand")])
+- [ ] V14-CHK-94: Product.Oem2 字段名(对应 [Column("oem_2")])
+
+### API 签名核实(6 项)
+- [ ] V14-CHK-95: ReindexAllAsync 签名 `public async Task ReindexAllAsync(DateTime sinceDate, CancellationToken ct = default)`
+- [ ] V14-CHK-96: TruncateSearchIndexPendingAsync 签名 `public async Task TruncateSearchIndexPendingAsync(CancellationToken ct = default)`
+- [ ] V14-CHK-97: SyncSearchIndexAsync 访问修饰符为 `protected virtual`
+- [ ] V14-CHK-98: BuildProductIndexDocs 签名 `public static ProductIndexDoc BuildProductIndexDocs(Product product)`
+- [ ] V14-CHK-99: ResilientSearchProvider.Initialize 签名 `public void Initialize(bool primaryAvailable)`
+- [ ] V14-CHK-100: isSafeRedirect 签名 `function isSafeRedirect(rawUrl: string, allowedHosts: string[]): boolean`
+
+### 伪代码自洽性核实(5 项)
+- [ ] V14-CHK-101: BuildProductIndexDocs 伪代码引用 product.CrossReferences(在 Product 实体导航属性中存在)
+- [ ] V14-CHK-102: IndexReplayWorker 阶段1 伪代码引用 p.Payload(SearchIndexPending.Payload 字段存在)
+- [ ] V14-CHK-103: IndexReplayWorker 阶段1 伪代码引用 SearchIndexDeadLetter(类存在)
+- [ ] V14-CHK-104: DevTokenAuthMiddleware 伪代码引用 ClaimTypes.Name/Role(System.Security.Claims 命名空间)
+- [ ] V14-CHK-105: LoginView.vue 伪代码引用 route.query.redirect(Vue Router 标准 API)
+
+### 运行时上下文自洽性核实(5 项, v14 新增)
+- [ ] V14-CHK-106: DevTokenAuthMiddleware 在 UseAuthorization 之前执行(中间件 pipeline 顺序)
+- [ ] V14-CHK-107: ResilientSearchProvider 通过 ISearchProvider 接口解析(DI 注册)
+- [ ] V14-CHK-108: Polly 熔断器 OnOpened/OnClosed 自动管理 _primaryAvailable(无 Initialize 干预)
+- [ ] V14-CHK-109: IndexReplayWorker 在全量重建期间被停止(IHostedServiceStatus 协调)
+- [ ] V14-CHK-110: DbContext 在 using 块内使用(无跨 scope 共享)
+
+## 四十四、EXEC-V14-1~16 任务可执行性(16 项)
+
+- [ ] EXEC-V14-1: Pre-Task-V14-1 ReindexAllAsync 实施可执行(EtlImportService.cs 修改)
+- [ ] EXEC-V14-2: Pre-Task-V14-2 security.ts/security.test.ts 新建可执行(无依赖)
+- [ ] EXEC-V14-3: Pre-Task-V14-3 路径修正可执行(纯文档修改)
+- [ ] EXEC-V14-4: Task V14-1.1 ProductIndexDoc 扩展可执行(ISearchProvider.cs 修改)
+- [ ] EXEC-V14-5: Task V14-1.2 BuildProductIndexDocs 可执行(EtlImportService.cs 修改)
+- [ ] EXEC-V14-6: Task V14-1.3 DevTokenAuthMiddleware 可执行(MiddlewarePipelineExtensions.cs + DevTokenAuthMiddleware.cs 修改)
+- [ ] EXEC-V14-7: Task V14-2.1 ReindexAllAsync 综合修正可执行(依赖 Pre-Task-V14-1)
+- [ ] EXEC-V14-8: Task V14-2.2 Meilisearch schema 可执行(MeiliSearchProvider.cs 修改)
+- [ ] EXEC-V14-9: Task V14-2.3 TruncateSearchIndexPendingAsync 可执行(EtlImportService.cs 修改)
+- [ ] EXEC-V14-10: Task V14-2.4 IndexReplayWorker 两阶段可执行(IndexReplayWorker.cs 修改)
+- [ ] EXEC-V14-11: Task V14-3.1 spec L7468 SignV2 修正可执行(纯文档)
+- [ ] EXEC-V14-12: Task V14-3.2 LoginView.vue isSafeRedirect 可执行(依赖 Pre-Task-V14-2)
+- [ ] EXEC-V14-13: Task V14-3.3 前端类型同步可执行(types.ts 修改,依赖 Task V14-1.1)
+- [ ] EXEC-V14-14: Task V14-3.4 DevTokenAuthMiddleware 前端无变化(确认即可)
+- [ ] EXEC-V14-15: Task V14-3.5 文档同步可执行(纯文档)
+- [ ] EXEC-V14-16: 所有 16 任务依赖图无循环依赖
+
+## 四十五、CONS-V14-1~15 一致性(15 项)
+
+- [ ] CONS-V14-1: spec.md 第十五章 V14-F1~F27 与 tasks.md 16 任务一一对应
+- [ ] CONS-V14-2: tasks.md 16 任务与 checklist.md V14-CHK-59~71 执行验证对应
+- [ ] CONS-V14-3: spec.md 15.5 Pre-Task-V14-1~3 与 tasks.md Pre-Task-V14-1~3 一致
+- [ ] CONS-V14-4: spec.md 15.4 五重核实机制与 checklist.md V14-CHK-81~110 对应
+- [ ] CONS-V14-5: DevTokenAuthMiddleware 路径在 spec/tasks/checklist 一致(Services/)
+- [ ] CONS-V14-6: CursorHmac.cs 路径在 spec/tasks/checklist 一致(Services/)
+- [ ] CONS-V14-7: LoginView.vue 路径在 spec/tasks/checklist 一致(views/)
+- [ ] CONS-V14-8: IndexReplayWorker.cs 路径在 spec/tasks/checklist 一致(Services/)
+- [ ] CONS-V14-9: OemBrand 数据来源在 spec/tasks/伪代码一致(CrossReference.OemBrand)
+- [ ] CONS-V14-10: BrandSortOrder 默认值在 spec/tasks/伪代码一致(999)
+- [ ] CONS-V14-11: ReindexAllAsync 默认 sinceDate 在 spec/tasks 一致(1970-01-01 UTC)
+- [ ] CONS-V14-12: security.test.ts 路径在 spec/tasks/checklist 一致(tests/unit/)
+- [ ] CONS-V14-13: VITE_SAFE_REDIRECT_HOSTS 在 spec/tasks/checklist 一致
+- [ ] CONS-V14-14: DANGEROUS_PROTOCOLS 白名单在 spec/tasks 一致(含 file|about|blob|filesystem)
+- [ ] CONS-V14-15: v13 27 项衍生漏洞全部在 v14 修复方案中覆盖(无遗漏)
+
+## 四十六、D14+S14+F13 第十四轮审查点(39 项)
+
+### 数据关联维度(D14)审查点(15 个)
+
+- [ ] D14-1: ReindexAllAsync 实施后,EtlImportService.cs 是否引入线程安全问题(多端点并发触发)
+- [ ] D14-2: TruncateSearchIndexPendingAsync 与 IndexReplayWorker 停止/重启的原子性(若 IndexReplayWorker 停止失败,TRUNCATE 是否仍执行)
+- [ ] D14-3: DevTokenAuthMiddleware 顺序调整后,是否有其他中间件依赖原顺序(如 UseCors / UseRouting)
+- [ ] D14-4: DevTokenAuthMiddleware ClaimsPrincipal 设置后,是否与 Cookie/JWT 认证冲突(双身份)
+- [ ] D14-5: ProductIndexDoc.OemBrand 从 CrossReference.OemBrand 取,若 Product 无 CrossReference 是否 null 安全
+- [ ] D14-6: BuildProductIndexDocs 改用 Product 实体+Include(CrossReferences)后,内存占用是否超限(1M 行数据)
+- [ ] D14-7: Meilisearch schema 配置(FilterableAttributes 含 mr1/oemBrand)后,已有索引是否需要重建
+- [ ] D14-8: BrandSortOrder 默认 999 后,排序结果是否与业务期望一致(品牌优先级 1-100 vs 999 末尾)
+- [ ] D14-9: IndexReplayWorker 阶段1 失败流转 dead_letter,是否与 ProcessDeadLetterAsync 重复(双重流转)
+- [ ] D14-10: Product.Mr1 字段类型保持 text,业务层 Mr1Validator 校验是否覆盖所有写入路径
+- [ ] D14-11: 全量重建端点 `/api/admin/etl/reindex-all` 是否需要 RateLimit 限制(防止滥用)
+- [ ] D14-12: ReindexAllAsync 调用 SyncSearchIndexAsync,若 SyncSearchIndexAsync 内部异常是否向上传播
+- [ ] D14-13: DevTokenAuthMiddleware 调整顺序后,X-Admin-Token 失败时是否仍能匿名访问公开端点
+- [ ] D14-14: CrossReference.OemBrand nullable 字段在 ProductIndexDoc 中是否影响 Meilisearch 搜索(空值匹配)
+- [ ] D14-15: Pre-Task-V14-3 路径修正后,是否有遗漏的路径引用(spec/tasks/checklist 中)
+
+### 检索逻辑维度(S14)审查点(12 个)
+
+- [ ] S14-1: ReindexAllAsync 全量重建时,Meilisearch 索引是否需要先删除再重建(避免脏数据)
+- [ ] S14-2: SyncSearchIndexAsync 改为 protected 后,是否有其他类反射调用(破坏封装)
+- [ ] S14-3: BuildProductIndexDocs 改用 Product 实体后,keyset 分页(p.Id > lastId)是否仍正常
+- [ ] S14-4: ProductIndexDoc 扩展为 15 字段后,Meilisearch 索引大小是否超限(单文档 < 100KB)
+- [ ] S14-5: Meilisearch schema 配置后,FilterableAttributes 是否覆盖所有搜索过滤场景(按 type/mr1/oemBrand)
+- [ ] S14-6: BrandSortOrder 默认 999,排序时是否需要排除(asc 排序 999 会排在最后,desc 排序 999 会排在最前)
+- [ ] S14-7: IndexReplayWorker 两阶段处理,阶段1 失败后阶段2 是否仍执行(独立 vs 串行)
+- [ ] S14-8: 损坏 payload 审计日志(截断 200 字符)是否泄露敏感信息(payload 可能含业务数据)
+- [ ] S14-9: Polly 熔断器 OnOpened/OnClosed 与 _primaryAvailable 是否仍同步(无 Initialize 干预)
+- [ ] S14-10: TRUNCATE products RESTART IDENTITY CASCADE 是否影响外键引用(CrossReferences)
+- [ ] S14-11: 全量重建前停止 IndexReplayWorker,停止超时(默认 30s)是否足够
+- [ ] S14-12: Meilisearch schema 更新是异步操作,是否需要 await 等待生效
+
+### 前后端联动维度(F13)审查点(12 个)
+
+- [ ] F13-1: security.ts isSafeRedirect 实现后,是否与后端 RedirectValidator 逻辑一致(双重校验)
+- [ ] F13-2: LoginView.vue isSafeRedirect 集成后,redirect query 参数为对象数组时是否安全(query.redirect 可能是 string[])
+- [ ] F13-3: VITE_SAFE_REDIRECT_HOSTS 环境变量未配置时,默认值 'localhost,127.0.0.1' 是否覆盖生产域名
+- [ ] F13-4: security.test.ts 7 个测试用例是否覆盖所有边界(空字符串 / null / undefined / 数字 / 对象)
+- [ ] F13-5: vitest.config.ts include 已含 tests/unit/,security.test.ts 放此处是否被其他测试套件污染(全局 mock)
+- [ ] F13-6: DevTokenAuthMiddleware ClaimsPrincipal 设置后,前端 axios 拦截器是否需要调整(X-Admin-Token 请求头)
+- [ ] F13-7: ProductIndexDoc 扩展字段(mr1/oemBrand/brandSortOrder)是否需要前端类型同步更新(types.ts)
+- [ ] F13-8: 全量重建端点 `/api/admin/etl/reindex-all` 前端是否需要新增按钮 + loading 状态
+- [ ] F13-9: env.d.ts 是否需要追加 VITE_SAFE_REDIRECT_HOSTS 声明(TypeScript 严格模式)
+- [ ] F13-10: spec L7468 SignV2 → Sign 修正后,前端是否有引用 SignV2(全局搜索)
+- [ ] F13-11: Meilisearch schema 配置后,前端搜索请求 filter 参数是否需要调整(按 mr1 过滤)
+- [ ] F13-12: 第十三轮审查发现的 27 项漏洞是否全部在 v14 修复方案中覆盖(无遗漏)
+
+## 四十七、第十四轮循环终止条件
+
+- [ ] 第十四轮审查无任何新漏洞检出 → 完成 v14 修订,进入 v15 修订(如有新漏洞)或定稿
+- [ ] 第十四轮审查发现新漏洞 → 进入 v15 修订,继续迭代
+- [ ] 第十四轮审查发现 v14 仍有凭空假设 → 进入 v15 修订,加强核实机制(六重核实?)
+- [ ] 第十四轮审查重点: 运行时上下文自洽性(DI 注册 / 中间件顺序 / Polly 状态 / DbContext scope / 并发竞态)
+- [ ] 第十四轮审查重点: v13 凭空假设是否真正消除(Grep 验证 ReindexAllAsync/security.ts/DevTokenAuthMiddleware 路径)
+- [ ] 持续迭代直到连续一轮审查无任何新漏洞检出
+- [ ] v14 引入"五重核实机制"(代码存在性+字段名+API 签名+伪代码自洽性+运行时上下文自洽性)
+- [ ] v14 目标: 真正实现"0 项凭空假设"+"0 项伪代码自洽性漏洞"+"0 项运行时上下文漏洞"
+- [ ] v14 实际新增代码: 2 个新文件(security.ts + security.test.ts)
+- [ ] v14 实际修改后端文件: 6 个(EtlImportService.cs / AdminEtlEndpoints.cs / MiddlewarePipelineExtensions.cs / DevTokenAuthMiddleware.cs / IndexReplayWorker.cs / MeiliSearchProvider.cs)
+- [ ] v14 实际修改前端文件: 3 个(LoginView.vue / env.d.ts / .env.development)
+- [ ] v14 纯文档修正: 3 个文件(spec.md / tasks.md / checklist.md 的描述类问题)
+- [ ] v14 新增 migration: 0 个(v14 不涉及 DB schema 变更,Mr1 字段已存在)

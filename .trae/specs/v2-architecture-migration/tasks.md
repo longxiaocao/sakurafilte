@@ -5511,3 +5511,598 @@ Task V13-3.2 ──→ 独立 (前端 isSafeRedirect 增强)
 **纯文档修正**: 3 个文件(spec.md / tasks.md / checklist.md 的描述类问题)
 **新增 migration**: 0-1 个(取决于 Pre-Task-V13-3 核实结果,若 Product 无 Mr1 字段则需新增)
 
+
+---
+
+# v14 任务清单 — 第十三轮审查衍生漏洞修复
+
+**总计**: 16 个 v14 任务(3 前置 + 3 数据关联 + 5 检索逻辑 + 5 前后端联动)
+**实际新增代码文件**: 2 个(frontend/src/utils/security.ts + frontend/tests/unit/security.test.ts)
+**实际修改后端文件**: 5 个(EtlImportService.cs / AdminEtlEndpoints.cs / MiddlewarePipelineExtensions.cs / DevTokenAuthMiddleware.cs / IndexReplayWorker.cs / MeiliSearchProvider.cs)
+**实际修改前端文件**: 3 个(LoginView.vue / env.d.ts / .env.development)
+**纯文档修正**: 3 个文件(spec.md / tasks.md / checklist.md 的路径与描述类问题)
+
+## v14 前置任务(3 项)
+
+### Pre-Task-V14-1: 实施 ReindexAllAsync 公开方法 + 全量重建端点
+
+**目标**: 解决 D13-13(ReindexAllAsync 全后端零匹配)
+
+**子任务**:
+1. **Pre-Task-V14-1.1**: 在 [EtlImportService.cs](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Etl/EtlImportService.cs) 中新增公开方法:
+   ```csharp
+   /// <summary>
+   /// 全量重建搜索索引 (V14-F2 修复 D13-13)
+   /// 复用 private SyncSearchIndexAsync 内部逻辑
+   /// </summary>
+   public async Task ReindexAllAsync(DateTime sinceDate, CancellationToken ct = default)
+   {
+       var utcSince = DateTime.SpecifyKind(sinceDate, DateTimeKind.Utc);
+       await SyncSearchIndexAsync(utcSince, ct);
+   }
+   ```
+2. **Pre-Task-V14-1.2**: 将 SyncSearchIndexAsync 访问修饰符从 `private` 改为 `protected`(便于单元测试 mock):
+   ```csharp
+   protected virtual async Task SyncSearchIndexAsync(DateTime sinceDate, CancellationToken ct)
+   {
+       // 原有实现保持不变
+   }
+   ```
+3. **Pre-Task-V14-1.3**: 在 [AdminEtlEndpoints.cs](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Endpoints/AdminEtlEndpoints.cs) 新增端点:
+   ```csharp
+   app.MapPost("/api/admin/etl/reindex-all", async (
+       EtlImportService etl,
+       CancellationToken ct) =>
+   {
+       // 全量重建前清空 pending 队列 (V14-F2)
+       await etl.TruncateSearchIndexPendingAsync(ct);
+       // 默认从 1970-01-01 UTC 开始全量重建
+       await etl.ReindexAllAsync(new DateTime(1970, 1, 1, DateTimeKind.Utc), ct);
+       return Results.Ok(new { message = "全量重建已触发", startedAt = DateTime.UtcNow });
+   })
+   .RequireAuthorization("Admin")
+   .WithRateLimiter("etl");  // 复用 ETL RateLimit 30/min
+   ```
+
+**验证**:
+- [ ] Grep `public async Task ReindexAllAsync` EtlImportService.cs 返回非零匹配
+- [ ] Grep `ReindexAllAsync` AdminEtlEndpoints.cs 返回非零匹配
+- [ ] HTTP POST `/api/admin/etl/reindex-all` (无 X-Admin-Token) 返回 401
+- [ ] HTTP POST `/api/admin/etl/reindex-all` (有 X-Admin-Token) 返回 200
+- [ ] 全量重建完成后 search_index_pending 表为空
+
+### Pre-Task-V14-2: 从零新建 security.ts + security.test.ts
+
+**目标**: 解决 F12-A(security.ts/security.test.ts 完全不存在)
+
+**子任务**:
+1. **Pre-Task-V14-2.1**: 新建 `frontend/src/utils/security.ts`(完整实现见 spec.md 15.5 Pre-Task-V14-2)
+2. **Pre-Task-V14-2.2**: 新建 `frontend/tests/unit/security.test.ts`(7 个测试用例)
+3. **Pre-Task-V14-2.3**: 在 `frontend/src/env.d.ts` 追加环境变量声明:
+   ```typescript
+   interface ImportMetaEnv {
+     readonly VITE_SAFE_REDIRECT_HOSTS: string
+   }
+   interface ImportMeta {
+     readonly env: ImportMetaEnv
+   }
+   ```
+
+**验证**:
+- [ ] Glob `**/security.ts` 返回 `frontend/src/utils/security.ts`
+- [ ] Glob `**/security.test.ts` 返回 `frontend/tests/unit/security.test.ts`
+- [ ] `cd frontend && npx vitest run tests/unit/security.test.ts` 7 个测试全部通过
+- [ ] `cd frontend && npx tsc --noEmit` 无 TypeScript 错误
+
+### Pre-Task-V14-3: 核实并修正所有路径引用
+
+**目标**: 解决 D13-14 / F12-B / F12-C(路径错误)
+
+**子任务**:
+1. **Pre-Task-V14-3.1**: Grep 全 spec/tasks/checklist 修正以下路径:
+   - `Middleware/DevTokenAuthMiddleware` → `Services/DevTokenAuthMiddleware`
+   - `Middleware/CursorHmac` → `Services/CursorHmac`
+   - `views/auth/LoginView` → `views/LoginView`
+   - `Etl/IndexReplayWorker` → `Api/Services/IndexReplayWorker`(若 v13 仍有错误)
+2. **Pre-Task-V14-3.2**: 验证 glob 匹配实际文件存在:
+   ```powershell
+   Glob "**/DevTokenAuthMiddleware.cs" → backend/src/SakuraFilter.Api/Services/DevTokenAuthMiddleware.cs
+   Glob "**/CursorHmac.cs" → backend/src/SakuraFilter.Api/Services/CursorHmac.cs
+   Glob "**/LoginView.vue" → frontend/src/views/LoginView.vue
+   Glob "**/IndexReplayWorker.cs" → backend/src/SakuraFilter.Api/Services/IndexReplayWorker.cs
+   ```
+
+**验证**:
+- [ ] Grep `Middleware/DevTokenAuthMiddleware` 全 spec: 零匹配
+- [ ] Grep `Middleware/CursorHmac` 全 spec: 零匹配
+- [ ] Grep `views/auth/LoginView` 全 spec: 零匹配
+
+## v14 数据关联任务(3 项)
+
+### Task V14-1.1: ProductIndexDoc 扩展为 15 字段(record 定义)
+
+**目标**: V14-F4 落地 ProductIndexDoc 15 字段
+
+**子任务**:
+1. **Task V14-1.1.1**: 修改 [ISearchProvider.cs](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Search/ISearchProvider.cs) ProductIndexDoc record:
+   ```csharp
+   public record ProductIndexDoc(
+       long Id,
+       string? OemNoNormalized,
+       string? OemNoDisplay,
+       string? Remark,
+       string? Type,
+       decimal? D1Mm,
+       decimal? D2Mm,
+       decimal? H1Mm,
+       decimal? H3Mm,
+       string? Media,
+       bool IsDiscontinued,
+       long UpdatedAtUnix,
+       // V14 扩展字段 (V14-F4)
+       string? Mr1,              // MR.1 编码 (10 字符)
+       string? OemBrand,         // 从 CrossReference.OemBrand 取 (非 Product.Oem2)
+       int BrandSortOrder        // 默认 999 (V14-F14)
+   );
+   ```
+2. **Task V14-1.1.2**: 编译验证 `dotnet build backend/src/SakuraFilter.Search`
+
+**验证**:
+- [ ] ProductIndexDoc record 含 15 字段
+- [ ] BrandSortOrder 类型为 int(非 int?),默认值 999
+- [ ] `dotnet build` 无编译错误
+
+### Task V14-1.2: BuildProductIndexDocs 实施改用 Product 实体
+
+**目标**: V14-F6 修复匿名类型编译错误 + V14-F5 OemBrand 语义修正
+
+**子任务**:
+1. **Task V14-1.2.1**: 修改 [EtlImportService.cs](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Etl/EtlImportService.cs) SyncSearchIndexAsync 方法 L1146-1155:
+   ```csharp
+   // 修改前 (匿名类型,无 Mr1/Oem2/CrossReferences):
+   // var batch = await query.OrderBy(p => p.Id).Take(batchSize)
+   //     .Select(p => new { p.Id, p.OemNoNormalized, ... })
+   //     .ToListAsync(ct);
+   
+   // 修改后 (直接取 Product 实体 + Include CrossReferences):
+   var batch = await query
+       .Include(p => p.CrossReferences)
+       .OrderBy(p => p.Id)
+       .Take(batchSize)
+       .ToListAsync(ct);
+   ```
+2. **Task V14-1.2.2**: 抽取 BuildProductIndexDocs 静态方法:
+   ```csharp
+   public static ProductIndexDoc BuildProductIndexDocs(Product product)
+   {
+       var primaryXref = product.CrossReferences?.FirstOrDefault();
+       return new ProductIndexDoc(
+           Id: product.Id,
+           OemNoNormalized: product.OemNoNormalized,
+           OemNoDisplay: product.OemNoDisplay,
+           Remark: product.Remark,
+           Type: product.Type,
+           D1Mm: product.D1Mm,
+           D2Mm: product.D2Mm,
+           H1Mm: product.H1Mm,
+           H3Mm: product.H3Mm,
+           Media: product.Media,
+           IsDiscontinued: product.IsDiscontinued,
+           UpdatedAtUnix: new DateTimeOffset(
+               DateTime.SpecifyKind(product.UpdatedAt, DateTimeKind.Utc)
+           ).ToUnixTimeSeconds(),
+           Mr1: product.Mr1,
+           OemBrand: primaryXref?.OemBrand,  // V14-F5: 从 CrossReference.OemBrand 取
+           BrandSortOrder: 999               // V14-F14: 默认 999
+       );
+   }
+   ```
+3. **Task V14-1.2.3**: 修改 SyncSearchIndexAsync 内联 lambda 调用 BuildProductIndexDocs:
+   ```csharp
+   var docs = batch.Select(p => BuildProductIndexDocs(p)).ToList();
+   ```
+4. **Task V14-1.2.4**: 单元测试 `backend/tests/SakuraFilter.Etl.Tests/EtlImportServiceTests.cs`:
+   ```csharp
+   [Fact]
+   public void BuildProductIndexDocs_ReturnsCorrectDoc()
+   {
+       var product = new Product
+       {
+           Id = 123L,
+           Mr1 = "ABC1234567",
+           Oem2 = "TOYOTA001",  // OEM 编码 (非品牌名)
+           UpdatedAt = DateTime.UtcNow,
+           CrossReferences = new List<CrossReference>
+           {
+               new() { OemBrand = "Toyota" }
+           }
+       };
+       
+       var doc = EtlImportService.BuildProductIndexDocs(product);
+       
+       Assert.Equal(123L, doc.Id);
+       Assert.Equal("ABC1234567", doc.Mr1);
+       Assert.Equal("Toyota", doc.OemBrand);  // 从 CrossReference 取
+       Assert.Equal(999, doc.BrandSortOrder);
+   }
+   ```
+
+**验证**:
+- [ ] `dotnet build` 无 CS1061 编译错误
+- [ ] 单元测试 BuildProductIndexDocs_ReturnsCorrectDoc 通过
+- [ ] OemBrand 来自 CrossReference.OemBrand(非 Product.Oem2)
+
+### Task V14-1.3: DevTokenAuthMiddleware 顺序调整 + ClaimsPrincipal 设置
+
+**目标**: V14-F1 修复中间件顺序 + V14-F3 路径修正
+
+**子任务**:
+1. **Task V14-1.3.1**: 修改 [MiddlewarePipelineExtensions.cs](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Extensions/MiddlewarePipelineExtensions.cs) L84-92:
+   ```csharp
+   // 8) 认证
+   app.UseAuthentication();
+   // 9) DevToken (V14-F1: 必须在 UseAuthorization 之前)
+   app.UseMiddleware<DevTokenAuthMiddleware>();
+   // 10) 授权
+   app.UseAuthorization();
+   ```
+2. **Task V14-1.3.2**: 修改 [DevTokenAuthMiddleware.cs](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Services/DevTokenAuthMiddleware.cs) InvokeAsync 方法:
+   ```csharp
+   public async Task InvokeAsync(HttpContext ctx, RequestDelegate next)
+   {
+       var token = ctx.Request.Headers["X-Admin-Token"].FirstOrDefault();
+       if (!string.IsNullOrEmpty(token) && ValidToken(token))
+       {
+           // V14-F1: 设置 ClaimsPrincipal (在 UseAuthorization 之前执行)
+           var identity = new ClaimsIdentity(new[]
+           {
+               new Claim(ClaimTypes.Name, "admin"),
+               new Claim(ClaimTypes.Role, "admin")
+           }, "DevToken");
+           ctx.User = new ClaimsPrincipal(identity);
+       }
+       await next(ctx);
+   }
+   ```
+3. **Task V14-1.3.3**: 集成测试验证 X-Admin-Token 请求可访问 Admin 端点
+
+**验证**:
+- [ ] MiddlewarePipelineExtensions.cs 中 UseMiddleware<DevTokenAuthMiddleware>() 在 UseAuthorization() 之前
+- [ ] DevTokenAuthMiddleware.InvokeAsync 含 ClaimsPrincipal 设置代码
+- [ ] HTTP GET `/api/admin/alerts` (无 token) 返回 401
+- [ ] HTTP GET `/api/admin/alerts` (有 X-Admin-Token) 返回 200
+
+## v14 检索逻辑任务(5 项)
+
+### Task V14-2.1: ReindexAllAsync 综合修正
+
+**目标**: 整合 V14-F2(ReindexAllAsync 实施) + V14-F17(Polly 与 Initialize 冲突) + V14-F18(TRUNCATE 并发竞态)
+
+**子任务**:
+1. **Task V14-2.1.1**: ReindexAllAsync 实施已在 Pre-Task-V14-1 完成
+2. **Task V14-2.1.2**: 删除 WebApplicationExtensions.cs 中 finally 块的 `rsp.Initialize(success)` 调用(V14-F17):
+   ```csharp
+   // 修改前:
+   // try { ... } finally { if (search is ResilientSearchProvider rsp) rsp.Initialize(success); }
+   
+   // 修改后 (V14-F17: 仅启动时 Initialize,运行时由 Polly 管理):
+   try
+   {
+       var meiliOk = await MeiliHealthCheckAsync();
+       var search = scope.ServiceProvider.GetRequiredService<ISearchProvider>();
+       if (search is ResilientSearchProvider rsp)
+       {
+           rsp.Initialize(meiliOk);  // 启动时 Initialize 一次
+       }
+   }
+   catch (Exception ex)
+   {
+       logger.LogWarning(ex, "Meili 启动探活失败,由 Polly 熔断器自动管理降级");
+   }
+   ```
+3. **Task V14-2.1.3**: 全量重建前停止 IndexReplayWorker(V14-F18):
+   ```csharp
+   public async Task ReindexAllAsync(DateTime sinceDate, CancellationToken ct = default)
+   {
+       // V14-F18: 停止 IndexReplayWorker 防止 TRUNCATE 并发竞态
+       var hostedStatus = _sp.GetRequiredService<IHostedServiceStatus>();
+       await hostedStatus.StopAsync("IndexReplayWorker", ct);
+       
+       try
+       {
+           await TruncateSearchIndexPendingAsync(ct);
+           await SyncSearchIndexAsync(sinceDate, ct);
+       }
+       finally
+       {
+           await hostedStatus.StartAsync("IndexReplayWorker", ct);
+       }
+   }
+   ```
+
+**验证**:
+- [ ] WebApplicationExtensions.cs 无 finally 块 Initialize 调用
+- [ ] ReindexAllAsync 含 StopAsync("IndexReplayWorker") 调用
+- [ ] finally 块含 StartAsync("IndexReplayWorker") 调用
+
+### Task V14-2.2: Meilisearch 索引 schema 配置
+
+**目标**: V14-F12 解决 Meilisearch schema 遗漏
+
+**子任务**:
+1. **Task V14-2.2.1**: 修改 [MeiliSearchProvider.cs](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Search/MeiliSearchProvider.cs) InitializeAsync 方法:
+   ```csharp
+   public async Task InitializeAsync(CancellationToken ct = default)
+   {
+       var index = _client.Index("products");
+       
+       // V14-F12: 配置 FilterableAttributes
+       await index.UpdateFilterableAttributesAsync(
+           new[] { "type", "isDiscontinued", "mr1", "oemBrand" }, ct);
+       
+       // V14-F12: 配置 SortableAttributes
+       await index.UpdateSortableAttributesAsync(
+           new[] { "updatedAtUnix", "oemNoDisplay", "brandSortOrder" }, ct);
+       
+       // V14-F12: 配置 SearchableAttributes (搜索字段权重,越靠前权重越高)
+       await index.UpdateSearchableAttributesAsync(
+           new[] { "oemNoDisplay", "remark", "type", "mr1", "oemBrand" }, ct);
+   }
+   ```
+2. **Task V14-2.2.2**: 在 WebApplicationExtensions.cs 启动时调用 InitializeAsync:
+   ```csharp
+   var meili = scope.ServiceProvider.GetRequiredService<MeiliSearchProvider>();
+   await meili.InitializeAsync(ct);
+   ```
+
+**验证**:
+- [ ] Grep `UpdateFilterableAttributesAsync` MeiliSearchProvider.cs 返回非零匹配
+- [ ] Grep `UpdateSortableAttributesAsync` MeiliSearchProvider.cs 返回非零匹配
+- [ ] Grep `UpdateSearchableAttributesAsync` MeiliSearchProvider.cs 返回非零匹配
+- [ ] HTTP GET `/api/admin/search/health` 返回 schema 已配置
+
+### Task V14-2.3: TruncateSearchIndexPendingAsync 实施
+
+**目标**: V13-F6 凭空引用 → v14 实施
+
+**子任务**:
+1. **Task V14-2.3.1**: 在 EtlImportService.cs 新增方法:
+   ```csharp
+   /// <summary>
+   /// 清空 search_index_pending 队列 (V14: V13-F6 凭空引用落地)
+   /// 全量重建前调用,防止旧 pending 干扰
+   /// </summary>
+   public async Task TruncateSearchIndexPendingAsync(CancellationToken ct = default)
+   {
+       using var scope = _sp.CreateScope();
+       var db = scope.ServiceProvider.GetRequiredService<ProductDbContext>();
+       
+       // V14-F18: 使用 TRUNCATE TABLE RESTART IDENTITY CASCADE
+       // 对齐现有 TRUNCATE products 风格 (EtlImportService.cs L936-937)
+       await db.Database.ExecuteSqlRawAsync(
+           "TRUNCATE TABLE search_index_pending RESTART IDENTITY CASCADE", ct);
+       
+       _logger?.LogInformation("search_index_pending 队列已清空");
+   }
+   ```
+
+**验证**:
+- [ ] Grep `TruncateSearchIndexPendingAsync` EtlImportService.cs 返回非零匹配
+- [ ] 调用后 search_index_pending 表为空
+
+### Task V14-2.4: IndexReplayWorker 两阶段处理 + 审计
+
+**目标**: V14-F16 阶段1 失败流转 dead_letter + V14-F25 损坏 payload 审计
+
+**子任务**:
+1. **Task V14-2.4.1**: 修改 [IndexReplayWorker.cs](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Services/IndexReplayWorker.cs) ProcessPendingAsync 方法,拆分两阶段:
+   ```csharp
+   private async Task ProcessPendingAsync(CancellationToken ct)
+   {
+       using var scope = _sp.CreateScope();
+       var db = scope.ServiceProvider.GetRequiredService<ProductDbContext>();
+       var meili = scope.ServiceProvider.GetRequiredService<MeiliSearchProvider>();
+       
+       var now = DateTime.UtcNow;
+       var pending = await db.SearchIndexPending
+           .Where(p => p.NextRetryAt <= now && p.RetryCount < MaxRetryCount)
+           .OrderBy(p => p.NextRetryAt)
+           .Take(BatchSize)
+           .ToListAsync(ct);
+       
+       if (pending.Count == 0) return;
+       
+       // V14-F16: 阶段1 - 隔离损坏 payload
+       var validItems = new List<SearchIndexPending>();
+       var corruptedItems = new List<SearchIndexPending>();
+       
+       foreach (var p in pending)
+       {
+           try
+           {
+               if (p.Operation == "index")
+               {
+                   _ = JsonSerializer.Deserialize<ProductIndexDoc>(p.Payload);
+               }
+               else if (p.Operation == "delete")
+               {
+                   _ = JsonSerializer.Deserialize<List<long>>(p.Payload);
+               }
+               validItems.Add(p);
+           }
+           catch (Exception ex)
+           {
+               // V14-F25: 审计日志 (截断 200 字符)
+               _logger.LogWarning(ex, "损坏 payload 隔离: id={Id} op={Op} payload={Payload}",
+                   p.Id, p.Operation, p.Payload?.Substring(0, Math.Min(200, p.Payload?.Length ?? 0)));
+               corruptedItems.Add(p);
+           }
+       }
+       
+       // V14-F16: 阶段1 失败流转 dead_letter
+       if (corruptedItems.Count > 0)
+       {
+           var deadLetters = corruptedItems.Select(p => new SearchIndexDeadLetter
+           {
+               OriginalId = p.Id,
+               Operation = p.Operation,
+               Payload = p.Payload,
+               RetryCount = p.RetryCount,
+               LastError = "Payload 反序列化失败",
+               CreatedAt = p.CreatedAt,
+               MovedAt = now,
+               Status = "active"
+           }).ToList();
+           
+           await db.SearchIndexDeadLetters.AddRangeAsync(deadLetters, ct);
+           db.SearchIndexPending.RemoveRange(corruptedItems);
+           await db.SaveChangesAsync(ct);  // 阶段1 独立 SaveChanges
+       }
+       
+       // 阶段2 - 处理有效条目
+       await ProcessValidItemsAsync(db, meili, validItems, ct);
+   }
+   
+   private async Task ProcessValidItemsAsync(
+       ProductDbContext db, MeiliSearchProvider meili, 
+       List<SearchIndexPending> items, CancellationToken ct)
+   {
+       // 原有 toIndex/toDelete 处理逻辑
+       // ...
+   }
+   ```
+2. **Task V14-2.4.2**: 删除 IndexReplayWorker.cs L97 的 `!` null-forgiving 操作符(因阶段1已隔离损坏 payload):
+   ```csharp
+   // 修改前: var docs = toIndex.Select(p => JsonSerializer.Deserialize<ProductIndexDoc>(p.Payload)!).ToList();
+   // 修改后: var docs = toIndex.Select(p => JsonSerializer.Deserialize<ProductIndexDoc>(p.Payload)).ToList();
+   // 注意: p.Payload 可能 null,阶段1 已过滤损坏 payload 但 null 仍需处理
+   ```
+
+**验证**:
+- [ ] ProcessPendingAsync 含两阶段处理(隔离 + 处理)
+- [ ] 阶段1 失败条目流转至 SearchIndexDeadLetters
+- [ ] 阶段1 SaveChanges 独立于阶段2
+- [ ] 损坏 payload 日志含 Payload 内容(截断 200 字符)
+- [ ] L97 `!` 操作符已删除
+
+### Task V14-2.5: Meilisearch schema 配置(并入 Task V14-2.2)
+
+**说明**: 此任务已合并到 Task V14-2.2,无需独立执行
+
+## v14 前后端联动任务(5 项)
+
+### Task V14-3.1: spec L7468 SignV2 修正
+
+**目标**: V14-F27 修正 spec.md L7468 SignV2 → Sign
+
+**子任务**:
+1. **Task V14-3.1.1**: 在 spec.md L7468 搜索 `SignV2`,替换为 `Sign`
+2. **Task V14-3.1.2**: Grep 全 spec 确认无其他 `SignV2` 引用
+
+**验证**:
+- [ ] Grep `SignV2` 全 spec: 零匹配
+
+### Task V14-3.2: LoginView.vue isSafeRedirect 真实集成
+
+**目标**: V14-F10 修复开放重定向漏洞 + V14-F8 路径修正
+
+**子任务**:
+1. **Task V14-3.2.1**: 在 [LoginView.vue](file:///d:/projects/sakurafilter/frontend/src/views/LoginView.vue) L42-48 修改:
+   ```typescript
+   import { isSafeRedirect } from '@/utils/security'
+   
+   // V14-F10: 开放重定向漏洞修复
+   const rawRedirect = (route.query.redirect as string) || '/admin/products'
+   const allowedHosts = (import.meta.env.VITE_SAFE_REDIRECT_HOSTS || 'localhost,127.0.0.1').split(',')
+   const redirect = isSafeRedirect(rawRedirect, allowedHosts) ? rawRedirect : '/admin/products'
+   router.push(redirect)
+   ```
+2. **Task V14-3.2.2**: 在 `frontend/.env.development` 追加:
+   ```
+   VITE_SAFE_REDIRECT_HOSTS=localhost,127.0.0.1
+   ```
+3. **Task V14-3.2.3**: 在 `frontend/.env.production` 追加(需替换为生产域名):
+   ```
+   VITE_SAFE_REDIRECT_HOSTS=your-domain.com,www.your-domain.com
+   ```
+
+**验证**:
+- [ ] LoginView.vue 含 `import { isSafeRedirect } from '@/utils/security'`
+- [ ] LoginView.vue 调用 `isSafeRedirect(rawRedirect, allowedHosts)`
+- [ ] .env.development 含 VITE_SAFE_REDIRECT_HOSTS
+- [ ] 浏览器访问 `/login?redirect=https://evil.com` 重定向到 `/admin/products`(非 evil.com)
+
+### Task V14-3.3: 前端类型同步更新
+
+**目标**: V14-F7(ProductIndexDoc 扩展字段)前端类型同步
+
+**子任务**:
+1. **Task V14-3.3.1**: 在 `frontend/src/api/types.ts` 追加 ProductIndexDoc 类型:
+   ```typescript
+   export interface ProductIndexDoc {
+     id: number
+     oemNoNormalized: string | null
+     oemNoDisplay: string | null
+     remark: string | null
+     type: string | null
+     d1Mm: number | null
+     d2Mm: number | null
+     h1Mm: number | null
+     h3Mm: number | null
+     media: string | null
+     isDiscontinued: boolean
+     updatedAtUnix: number
+     mr1: string | null          // V14 新增
+     oemBrand: string | null     // V14 新增
+     brandSortOrder: number      // V14 新增,默认 999
+   }
+   ```
+
+**验证**:
+- [ ] types.ts 含 ProductIndexDoc 15 字段
+- [ ] `cd frontend && npx tsc --noEmit` 无错误
+
+### Task V14-3.4: DevTokenAuthMiddleware 前端集成(无变化)
+
+**说明**: V14-F1 修复后端中间件顺序,前端无变化(X-Admin-Token 请求头仍由 axios 拦截器添加)
+
+### Task V14-3.5: v14 文档同步修正
+
+**目标**: V14-F26 消除"应已"推测性语言 + V14-F20 修正 v12 错误路径引用
+
+**子任务**:
+1. **Task V14-3.5.1**: Grep 全 spec/tasks/checklist `应已`,改为明确事实陈述:
+   - "应已新建" → "已新建" 或 "未新建,v14 实施"
+   - "应已实施" → "已实施" 或 "未实施,v14 落地"
+2. **Task V14-3.5.2**: Grep 全 spec/tasks/checklist `views/auth/LoginView`,改为 `views/LoginView`
+
+**验证**:
+- [ ] Grep `应已` 全 spec: 零匹配(或仅在历史描述上下文)
+- [ ] Grep `views/auth/LoginView` 全 spec: 零匹配
+
+## v14 任务依赖图
+
+```
+Pre-Task-V14-3 (路径核实) ──┐
+                            ↓
+Pre-Task-V14-1 (ReindexAllAsync 实施) ─→ Task V14-2.1 (ReindexAllAsync 综合修正)
+                                          └→ Task V14-2.3 (TruncateSearchIndexPendingAsync 实施)
+
+Pre-Task-V14-2 (security.ts 新建) ─→ Task V14-3.2 (LoginView.vue isSafeRedirect 集成)
+
+Task V14-1.1 (ProductIndexDoc 15 字段) ─→ Task V14-1.2 (BuildProductIndexDocs 实施)
+                                          └→ Task V14-2.2 (Meilisearch schema 配置)
+
+Task V14-1.3 (DevTokenAuthMiddleware 顺序+ClaimsPrincipal) ─→ 独立
+Task V14-2.4 (IndexReplayWorker 两阶段 + 审计) ─→ 独立
+Task V14-3.1 (spec L7468 SignV2 修正) ─→ 独立
+Task V14-3.3 (前端类型同步) ─→ 依赖 Task V14-1.1
+Task V14-3.5 (文档同步) ─→ 独立
+```
+
+**总计**: 16 个 v14 任务(3 前置 + 3 数据关联 + 5 检索逻辑 + 5 前后端联动)
+**实际新增代码**: 2 个新文件(security.ts + security.test.ts)
+**实际修改后端文件**: 6 个(EtlImportService.cs / AdminEtlEndpoints.cs / MiddlewarePipelineExtensions.cs / DevTokenAuthMiddleware.cs / IndexReplayWorker.cs / MeiliSearchProvider.cs)
+**实际修改前端文件**: 3 个(LoginView.vue / env.d.ts / .env.development)
+**纯文档修正**: 3 个文件(spec.md / tasks.md / checklist.md 的描述类问题)
+**新增 migration**: 0 个(v14 不涉及 DB schema 变更,Mr1 字段已存在)
