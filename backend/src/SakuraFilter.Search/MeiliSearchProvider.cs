@@ -206,6 +206,168 @@ public class MeiliSearchProvider : ISearchProvider
     }
 
     /// <summary>
+    /// V2 Task 1.2: 聚合搜索 (文档级返回 + _formatted 高亮 + _rankingScore)
+    /// 与 SearchAsync 区别:
+    ///   - 返回完整 oem_list + machine_list 嵌套数组 (SearchAsync 仅返回摘要)
+    ///   - 透传 _formatted 字段 (XSS 防御后,前端 v-html 渲染高亮)
+    ///   - 透传 _rankingScore (相关性评分)
+    ///   - 响应含 Provider="meilisearch" 标识
+    /// </summary>
+    public async Task<AggregateSearchResponse> AggregateSearchAsync(AggregateSearchRequest req, CancellationToken ct = default)
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+
+        // V2: 默认 filter 排除下架 + 要求至少一个上架 OEM 3 (与 SearchAsync 一致)
+        var filters = new List<string>
+        {
+            "is_published = true",
+            "is_discontinued = false",
+            "oem_list.is_published = true"  // 文档级: 至少一个 OEM 3 上架
+        };
+
+        if (!string.IsNullOrWhiteSpace(req.Type))
+            filters.Add($"type = \"{EscapeFilter(req.Type)}\"");
+        if (!string.IsNullOrWhiteSpace(req.MachineCategory))
+            filters.Add($"machine_list.machine_category = \"{EscapeFilter(req.MachineCategory)}\"");
+
+        // 尺寸范围 filter
+        if (req.D1.HasValue) { var (lo, hi) = (req.D1.Value - req.Tolerance, req.D1.Value + req.Tolerance); filters.Add($"d1_mm >= {lo} AND d1_mm <= {hi}"); }
+        if (req.D2.HasValue) { var (lo, hi) = (req.D2.Value - req.Tolerance, req.D2.Value + req.Tolerance); filters.Add($"d2_mm >= {lo} AND d2_mm <= {hi}"); }
+        if (req.D3.HasValue) { var (lo, hi) = (req.D3.Value - req.Tolerance, req.D3.Value + req.Tolerance); filters.Add($"d3_mm >= {lo} AND d3_mm <= {hi}"); }
+        if (req.H1.HasValue) { var (lo, hi) = (req.H1.Value - req.Tolerance, req.H1.Value + req.Tolerance); filters.Add($"h1_mm >= {lo} AND h1_mm <= {hi}"); }
+        if (req.H2.HasValue) { var (lo, hi) = (req.H2.Value - req.Tolerance, req.H2.Value + req.Tolerance); filters.Add($"h2_mm >= {lo} AND h2_mm <= {hi}"); }
+        if (req.H3.HasValue) { var (lo, hi) = (req.H3.Value - req.Tolerance, req.H3.Value + req.Tolerance); filters.Add($"h3_mm >= {lo} AND h3_mm <= {hi}"); }
+
+        if (req.IncludeDiscontinued)
+            filters.RemoveAll(f => f.StartsWith("is_discontinued"));
+
+        var page = Math.Max(1, req.Page);
+        var pageSize = Math.Clamp(req.PageSize, 1, 100);
+
+        var searchQuery = new SearchQuery
+        {
+            Limit = pageSize,
+            Offset = (page - 1) * pageSize,
+            Filter = string.Join(" AND ", filters),
+            // V2 (S4-16): 高亮标签用 BMP 私用区占位符, SanitizeFormatted 还原
+            AttributesToHighlight = new[] { "*" },
+            HighlightPreTag = MarkOpen,
+            HighlightPostTag = MarkClose,
+            ShowRankingScore = true,
+        };
+
+        var query = req.Q?.Trim() ?? "";
+        var rawResult = await _index.SearchAsync<JsonObject>(query, searchQuery, ct);
+        var total = (rawResult as SearchResult<JsonObject>)?.EstimatedTotalHits ?? rawResult.Hits.Count;
+
+        // 映射 hits → AggregateSearchHit (含完整 oem_list + machine_list + _formatted + _rankingScore)
+        var hits = new List<AggregateSearchHit>(rawResult.Hits.Count);
+        foreach (var hit in rawResult.Hits)
+        {
+            // XSS 防御: 递归处理 _formatted
+            var formatted = hit.ContainsKey("_formatted") ? hit["_formatted"] : null;
+            if (formatted is JsonObject formattedObj)
+            {
+                SanitizeFormatted(formattedObj);
+            }
+
+            // 提取顶层字段 (优先 _formatted 高亮版本)
+            var mr1 = hit.TryGetPropertyValue("mr_1", out var mr1Node) ? mr1Node?.GetValue<string>() : null;
+            var productName1 = ExtractFieldValue(hit, formatted, "product_name_1");
+            var productName2 = ExtractFieldValue(hit, formatted, "product_name_2");
+            var oem2 = ExtractFieldValue(hit, formatted, "oem_2");
+            var type = ExtractFieldValue(hit, formatted, "type") ?? "UNKNOWN";
+            var remark = ExtractFieldValue(hit, formatted, "remark");
+            var media = ExtractFieldValue(hit, formatted, "media");
+            var isPublished = hit.TryGetPropertyValue("is_published", out var pubNode) && pubNode?.GetValue<bool>() == true;
+            var isDiscontinued = hit.TryGetPropertyValue("is_discontinued", out var discNode) && discNode?.GetValue<bool>() == true;
+
+            // 嵌套数组 oem_list
+            var oemList = new List<AggregateOemItem>();
+            if (hit.TryGetPropertyValue("oem_list", out var oemListNode) && oemListNode is JsonArray oemArr)
+            {
+                foreach (var item in oemArr)
+                {
+                    if (item is JsonObject oemObj)
+                    {
+                        oemList.Add(new AggregateOemItem(
+                            OemBrand: oemObj.TryGetPropertyValue("oem_brand", out var b) ? b?.GetValue<string>() : null,
+                            OemNo3: oemObj.TryGetPropertyValue("oem_no_3", out var n) ? n?.GetValue<string>() : null,
+                            Oem2: oemObj.TryGetPropertyValue("oem_2", out var o2) ? o2?.GetValue<string>() : null,
+                            SortOrder: oemObj.TryGetPropertyValue("sort_order", out var so) && so != null ? so.GetValue<int>() : 0,
+                            MachineType: oemObj.TryGetPropertyValue("machine_type", out var mt) ? mt?.GetValue<string>() : null,
+                            IsPublished: oemObj.TryGetPropertyValue("is_published", out var ip) && ip?.GetValue<bool>() == true,
+                            BrandSortOrder: oemObj.TryGetPropertyValue("brand_sort_order", out var bso) && bso != null ? bso.GetValue<int?>() : null
+                        ));
+                    }
+                }
+            }
+
+            // 嵌套数组 machine_list
+            var machineList = new List<AggregateMachineItem>();
+            if (hit.TryGetPropertyValue("machine_list", out var mlNode) && mlNode is JsonArray mlArr)
+            {
+                foreach (var item in mlArr)
+                {
+                    if (item is JsonObject mlObj)
+                    {
+                        machineList.Add(new AggregateMachineItem(
+                            MachineBrand: mlObj.TryGetPropertyValue("machine_brand", out var mb) ? mb?.GetValue<string>() : null,
+                            MachineModel: mlObj.TryGetPropertyValue("machine_model", out var mm) ? mm?.GetValue<string>() : null,
+                            MachineCategory: mlObj.TryGetPropertyValue("machine_category", out var mc) ? mc?.GetValue<string>() : null
+                        ));
+                    }
+                }
+            }
+
+            // _rankingScore (Meilisearch 0-1)
+            double? rankingScore = null;
+            if (hit.TryGetPropertyValue("_rankingScore", out var rsNode) && rsNode != null)
+            {
+                try { rankingScore = rsNode.GetValue<double>(); } catch { /* 兜底: null */ }
+            }
+
+            // _formatted 转 Dictionary (前端 v-html 渲染用)
+            Dictionary<string, object?>? formattedDict = null;
+            if (formatted is JsonObject fObj)
+            {
+                formattedDict = new Dictionary<string, object?>();
+                foreach (var prop in fObj)
+                {
+                    formattedDict[prop.Key] = prop.Value?.Deserialize<object>();
+                }
+            }
+
+            hits.Add(new AggregateSearchHit(
+                Mr1: mr1 ?? "",
+                ProductName1: productName1,
+                ProductName2: productName2,
+                Oem2: oem2,
+                Type: type,
+                Remark: remark,
+                Media: media,
+                IsPublished: isPublished,
+                IsDiscontinued: isDiscontinued,
+                OemList: oemList,
+                MachineList: machineList,
+                Formatted: formattedDict,
+                RankingScore: rankingScore
+            ));
+        }
+
+        sw.Stop();
+        return new AggregateSearchResponse(
+            Total: total,
+            Page: page,
+            PageSize: pageSize,
+            TotalPages: (int)Math.Ceiling(total / (double)pageSize),
+            ProcessingTimeMs: (int)sw.ElapsedMilliseconds,
+            Provider: "meilisearch",
+            Hits: hits
+        );
+    }
+
+    /// <summary>
     /// 从 hit 或 _formatted 中提取字段值 (优先 _formatted 高亮版本)
     /// </summary>
     private static string? ExtractFieldValue(JsonObject hit, JsonNode? formatted, string fieldName)

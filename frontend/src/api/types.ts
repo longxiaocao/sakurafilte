@@ -594,6 +594,68 @@ export interface PublicEightResponse {
   items: PublicSearchHit[]
 }
 
+// ===== V2 Task 1.3: 聚合搜索 (POST /api/public/search/aggregate) =====
+//   文档级返回: mr1 + oemList 嵌套数组 + _formatted 高亮 + _rankingScore
+//   与后端 AggregateSearchDto.cs 一一对应 (PascalCase 序列化)
+export interface AggregateSearchRequest {
+  q?: string
+  page?: number
+  pageSize?: number
+  tolerance?: number
+  includeDiscontinued?: boolean
+  machineCategory?: string  // agriculture/commercial/construction/industrial/others
+  type?: string  // oil/fuel/air/cabin/others
+  d1?: number
+  d2?: number
+  d3?: number
+  h1?: number
+  h2?: number
+  h3?: number
+}
+
+export interface AggregateOemItem {
+  oemBrand?: string | null
+  oemNo3?: string | null
+  oem2?: string | null
+  sortOrder: number
+  machineType?: string | null
+  isPublished: boolean
+  brandSortOrder?: number | null
+}
+
+export interface AggregateMachineItem {
+  machineBrand?: string | null
+  machineModel?: string | null
+  machineCategory?: string | null
+}
+
+export interface AggregateSearchHit {
+  mr1: string
+  productName1?: string | null
+  productName2?: string | null
+  oem2?: string | null
+  type: string
+  remark?: string | null
+  media?: string | null
+  isPublished: boolean
+  isDiscontinued: boolean
+  oemList: AggregateOemItem[]
+  machineList: AggregateMachineItem[]
+  // _formatted 高亮字段 (后端已做 XSS 防御, 前端 sanitizeFormatted 双保险)
+  formatted?: Record<string, unknown> | null
+  rankingScore?: number | null
+}
+
+export interface AggregateSearchResponse {
+  total: number
+  page: number
+  pageSize: number
+  totalPages: number
+  processingTimeMs: number
+  provider: string  // "meilisearch" | "postgres"
+  hits: AggregateSearchHit[]
+}
+
 // ===== Day 11 改进 1: 自动生成的 Request DTO (re-export) =====
 // WHY: 手工 types.ts 历史遗漏 38 个 Request/Reorder/Input DTO,
 //   导致前端调用 dictApi.machines.create() 等接口时参数无类型保护 (BUG B 根因).

@@ -2,7 +2,9 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SakuraFilter.Api.Services;
+using SakuraFilter.Core.DTOs;
 using SakuraFilter.Infrastructure.Data;
+using SakuraFilter.Search;
 
 namespace SakuraFilter.Api.Controllers;
 
@@ -10,6 +12,7 @@ namespace SakuraFilter.Api.Controllers;
 /// P3.2 (Task 10): 公开搜索端点 (无需 token, 走 "search" 限流分区)
 /// 用途: 前台搜索页面的批量粘贴查询
 /// 设计: 与 AdminProductService 共享 ProductDbContext, 走 AsNoTracking 性能最优
+/// V2 Task 1.2: 新增 POST /aggregate 聚合搜索端点 (Meili 主 + PG 兜底)
 /// </summary>
 [ApiController]
 [AllowAnonymous]
@@ -18,11 +21,20 @@ public class PublicSearchController : ControllerBase
 {
     private readonly ProductDbContext _db;
     private readonly ILogger<PublicSearchController> _logger;
+    // V2 Task 1.2: 聚合搜索直接注入两个 provider (不走 Resilient 包装,需区分 provider 标识)
+    private readonly MeiliSearchProvider _meili;
+    private readonly PostgresSearchProvider _pg;
 
-    public PublicSearchController(ProductDbContext db, ILogger<PublicSearchController> logger)
+    public PublicSearchController(
+        ProductDbContext db,
+        ILogger<PublicSearchController> logger,
+        MeiliSearchProvider meili,
+        PostgresSearchProvider pg)
     {
         _db = db;
         _logger = logger;
+        _meili = meili;
+        _pg = pg;
     }
 
     /// <summary>
@@ -304,6 +316,116 @@ public class PublicSearchController : ControllerBase
             CountMode: countModeUsed,
             Items: items
         ));
+    }
+
+    /// <summary>
+    /// V2 Task 1.2: 聚合搜索 (需求 5,修复漏洞 1/2/4/12)
+    /// POST /api/public/search/aggregate
+    /// - 文档级返回: mr1 + oemList 嵌套数组 (修复漏洞 1: 之前返回扁平 OEM 列表丢失 MR.1 关联)
+    /// - _formatted 高亮字段 + XSS 防御 (修复漏洞 4: MeiliSearchProvider.SanitizeFormatted 递归处理)
+    /// - 分页深度校验 (修复漏洞 12: page > max_page_depth 抛 SEARCH_PAGE_TOO_DEEP)
+    /// - PG 兜底 (修复漏洞 2: Meili 离线时降级,返回结构一致)
+    /// </summary>
+    /// <remarks>
+    /// 示例请求:
+    ///
+    ///     POST /api/public/search/aggregate
+    ///     {
+    ///       "q": "CAT 320D",
+    ///       "page": 1,
+    ///       "pageSize": 20,
+    ///       "tolerance": 5,
+    ///       "machineCategory": "construction"
+    ///     }
+    ///
+    /// 成功响应 (200):
+    ///
+    ///     {
+    ///       "total": 42,
+    ///       "page": 1,
+    ///       "pageSize": 20,
+    ///       "totalPages": 3,
+    ///       "processingTimeMs": 12,
+    ///       "provider": "meilisearch",
+    ///       "hits": [
+    ///         {
+    ///           "mr1": "ABC1234567",
+    ///           "productName1": "Oil Filter",
+    ///           "oemList": [{"oemBrand":"BOSCH","oemNo3":"F000000001","sortOrder":1}],
+    ///           "formatted": {"productName1":"Oil <mark>Filter</mark>"},
+    ///           "rankingScore": 0.95
+    ///         }
+    ///       ]
+    ///     }
+    ///
+    /// 400 (分页过深):
+    ///
+    ///     {
+    ///       "type": "https://sakurafilter.com/errors/search-page-too-deep",
+    ///       "title": "Search Page Too Deep",
+    ///       "status": 400,
+    ///       "errorCode": "SEARCH_PAGE_TOO_DEEP",
+    ///       "detail": "分页深度超过限制(最大 100 页)"
+    ///     }
+    /// </remarks>
+    [HttpPost("aggregate")]
+    [ProducesResponseType(typeof(AggregateSearchResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> Aggregate(
+        [FromBody] AggregateSearchRequest? req,
+        CancellationToken ct)
+    {
+        // 入参兜底
+        req ??= new AggregateSearchRequest(Q: null);
+        var page = Math.Max(1, req.Page);
+        var pageSize = Math.Clamp(req.PageSize, 1, 100);
+
+        // V2 Task 1.2.4: 分页深度校验 (修复漏洞 12)
+        //   WHY: 深度分页 (如 page=10000) 会让 Meili/PG OFFSET 跳过大量行,性能急剧下降
+        //   max_page_depth 从 system_settings 读取,默认 100 (可配)
+        var maxPageDepth = await GetMaxPageDepthAsync(ct);
+        if (page > maxPageDepth)
+        {
+            throw new ArgumentException(
+                $"SEARCH_PAGE_TOO_DEEP: 分页深度超过限制 (最大 {maxPageDepth} 页, 当前 page={page})");
+        }
+
+        // V2 Task 1.2.5/1.2.6: Meili 主搜索 (含高亮 + XSS 防御)
+        //   1s 超时: 与 ResilientSearchProvider 一致,避免公开搜索长耗时
+        //   失败降级 PG (修复漏洞 2)
+        AggregateSearchResponse response;
+        try
+        {
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(1000);
+            response = await _meili.AggregateSearchAsync(req with { Page = page, PageSize = pageSize }, cts.Token);
+        }
+        catch (Exception ex) when (ex is OperationCanceledException or TimeoutException or HttpRequestException)
+        {
+            _logger.LogWarning(ex, "聚合搜索 Meili 失败,降级 PG 兜底 (q={Q})", req.Q);
+            response = await _pg.AggregateSearchAsync(req with { Page = page, PageSize = pageSize }, ct);
+        }
+
+        _logger.LogInformation("aggregate search: q={Q} page={Page} pageSize={PageSize} → total={Total} provider={Provider} elapsed={Elapsed}ms",
+            req.Q, page, pageSize, response.Total, response.Provider, response.ProcessingTimeMs);
+
+        return Ok(response);
+    }
+
+    /// <summary>
+    /// 从 system_settings 读取 search.max_page_depth (默认 100)
+    /// WHY 单独方法: 便于未来加 IMemoryCache 缓存 (当前直接查 DB,5ms 可接受)
+    /// </summary>
+    private async Task<int> GetMaxPageDepthAsync(CancellationToken ct)
+    {
+        var value = await _db.SystemSettings
+            .AsNoTracking()
+            .Where(s => s.Key == "search.max_page_depth")
+            .Select(s => s.Value)
+            .FirstOrDefaultAsync(ct);
+        if (string.IsNullOrEmpty(value) || !int.TryParse(value, out var depth) || depth < 1)
+            return 100;  // 默认 100 页
+        return depth;
     }
 }
 

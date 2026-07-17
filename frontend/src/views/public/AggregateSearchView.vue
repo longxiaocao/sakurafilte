@@ -1,0 +1,359 @@
+<script setup lang="ts">
+// V2 Task 1.3.2: 聚合搜索页 (需求 5)
+//   URL: /search/aggregate?q=CAT 320D&page=1
+//   - 调 POST /api/public/search/aggregate (Meili 主 + PG 兜底)
+//   - 文档级展示: MR.1 卡片 + 可展开 oemList (每个 OEM 3 一行)
+//   - _formatted 高亮渲染 (sanitizeFormatted 双保险, 只允许 <mark> 标签)
+//   - 500ms 防抖 + AbortController 取消前序请求 (复用 PublicSearchView 模式)
+//   - Musk 风格极简: 纯黑白 + 1px 细线 + 8px 网格 + 无阴影
+import { ref, reactive, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import { publicSearchApi } from '@/api'
+import type { AggregateSearchHit, AggregateSearchResponse } from '@/api/types'
+import { sanitizeFormatted } from '@/utils/html-sanitizer'
+
+const route = useRoute()
+const router = useRouter()
+
+// ===== 搜索表单 =====
+const q = ref<string>((route.query.q as string) || '')
+const page = ref<number>(route.query.page ? Number(route.query.page) : 1)
+const pageSize = ref<number>(20)
+// 高级筛选 (折叠展开, 默认收起)
+const showAdvanced = ref(false)
+const advancedForm = reactive({
+  type: '',
+  machineCategory: '',
+  tolerance: 5,
+  includeDiscontinued: false
+})
+
+// ===== 搜索结果状态 =====
+const loading = ref(false)
+const results = ref<AggregateSearchHit[]>([])
+const total = ref(0)
+const totalPages = ref(0)
+const processingTimeMs = ref(0)
+const provider = ref<string>('')
+const lastError = ref('')
+// 展开的 MR.1 卡片 (展示完整 oemList)
+const expandedMr1 = ref<Set<string>>(new Set())
+
+// ===== 防抖 + AbortController (Task 1.3.5) =====
+let debounceTimer: number | null = null
+let abortCtrl: AbortController | null = null
+
+async function doSearch() {
+  // 取消前序请求 (快速连续搜索时只保留最后一次)
+  if (abortCtrl) abortCtrl.abort()
+  abortCtrl = new AbortController()
+
+  if (!q.value.trim() && !advancedForm.type && !advancedForm.machineCategory) {
+    results.value = []
+    total.value = 0
+    totalPages.value = 0
+    return
+  }
+
+  loading.value = true
+  lastError.value = ''
+  try {
+    const resp: AggregateSearchResponse = await publicSearchApi.aggregate(
+      {
+        q: q.value.trim() || undefined,
+        page: page.value,
+        pageSize: pageSize.value,
+        tolerance: advancedForm.tolerance,
+        includeDiscontinued: advancedForm.includeDiscontinued,
+        type: advancedForm.type || undefined,
+        machineCategory: advancedForm.machineCategory || undefined
+      },
+      { signal: abortCtrl.signal }
+    )
+    results.value = resp.hits || []
+    total.value = resp.total
+    totalPages.value = resp.totalPages
+    processingTimeMs.value = resp.processingTimeMs
+    provider.value = resp.provider
+  } catch (e: any) {
+    // AbortError 静默 (用户快速输入时正常取消)
+    if (e?.name === 'CanceledError' || e?.code === 'ERR_CANCELED') return
+    lastError.value = e?.problem?.detail || e?.response?.data?.detail || e?.message || '搜索失败'
+    results.value = []
+    total.value = 0
+    totalPages.value = 0
+  } finally {
+    loading.value = false
+  }
+}
+
+// q 输入 → 500ms 防抖搜索
+watch(q, () => {
+  if (debounceTimer) window.clearTimeout(debounceTimer)
+  debounceTimer = window.setTimeout(() => {
+    page.value = 1
+    syncUrl()
+    doSearch()
+  }, 500)
+})
+
+// 翻页
+watch(page, () => {
+  syncUrl()
+  doSearch()
+})
+
+// 高级筛选变化 → 立即搜索 (用户主动改条件, 无需防抖)
+watch(advancedForm, () => {
+  page.value = 1
+  doSearch()
+}, { deep: true })
+
+// URL 同步 (刷新页面可还原状态)
+function syncUrl() {
+  const query: Record<string, string> = {}
+  if (q.value.trim()) query.q = q.value.trim()
+  if (page.value > 1) query.page = String(page.value)
+  router.replace({ path: '/search/aggregate', query })
+}
+
+// 展开/收起 MR.1 卡片的 oemList
+function toggleExpand(mr1: string) {
+  const next = new Set(expandedMr1.value)
+  if (next.has(mr1)) next.delete(mr1)
+  else next.add(mr1)
+  expandedMr1.value = next
+}
+
+// 跳转产品详情 (V2 SEO URL 暂未实现, 用旧 /product/:oem 跳转)
+function viewDetail(hit: AggregateSearchHit) {
+  const oem = hit.oem2 || hit.mr1
+  if (oem) router.push(`/product/${encodeURIComponent(oem)}`)
+}
+
+// 清空搜索
+function clearSearch() {
+  q.value = ''
+  advancedForm.type = ''
+  advancedForm.machineCategory = ''
+  advancedForm.tolerance = 5
+  advancedForm.includeDiscontinued = false
+  page.value = 1
+  results.value = []
+  total.value = 0
+  syncUrl()
+}
+
+// 取 _formatted 字段值 (后端高亮版本, 前端 sanitizeFormatted 双保险)
+function getHighlighted(hit: AggregateSearchHit, field: string): string {
+  const formatted = hit.formatted as Record<string, unknown> | null
+  const raw = formatted?.[field]
+  if (typeof raw === 'string') return sanitizeFormatted(raw)
+  // 降级: 用原始字段 (无高亮)
+  const fallback = (hit as unknown as Record<string, unknown>)[field]
+  return typeof fallback === 'string' ? fallback : ''
+}
+
+onMounted(() => {
+  if (q.value.trim()) doSearch()
+})
+
+onBeforeUnmount(() => {
+  if (debounceTimer) window.clearTimeout(debounceTimer)
+  if (abortCtrl) abortCtrl.abort()
+})
+</script>
+
+<template>
+  <div class="p-4 max-w-7xl mx-auto">
+    <!-- 标题 + 搜索框 -->
+    <div class="border-b border-gray-200 pb-3 mb-4">
+      <h1 class="text-xl font-medium mb-3">聚合搜索</h1>
+      <div class="flex gap-2 items-center">
+        <el-input
+          v-model="q"
+          placeholder="输入关键词 (产品名 / OEM / 机型 / 品牌)"
+          clearable
+          size="large"
+          class="flex-1"
+          @keyup.enter="page = 1; syncUrl(); doSearch()"
+        />
+        <el-button type="primary" size="large" @click="page = 1; syncUrl(); doSearch()" :loading="loading">
+          搜索
+        </el-button>
+        <el-button size="large" @click="clearSearch">清空</el-button>
+      </div>
+      <!-- 高级筛选 (折叠展开) -->
+      <div class="mt-2">
+        <el-button text size="small" @click="showAdvanced = !showAdvanced">
+          {{ showAdvanced ? '收起高级筛选' : '展开高级筛选' }}
+        </el-button>
+        <div v-if="showAdvanced" class="flex flex-wrap gap-3 mt-2 p-3 border border-gray-200 rounded">
+          <el-form-item label="分类" class="!mb-0">
+            <el-select v-model="advancedForm.type" placeholder="全部" clearable size="small" style="width: 120px">
+              <el-option label="机油滤" value="oil" />
+              <el-option label="燃油滤" value="fuel" />
+              <el-option label="空气滤" value="air" />
+              <el-option label="空调滤" value="cabin" />
+              <el-option label="其他" value="others" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="机型分类" class="!mb-0">
+            <el-select v-model="advancedForm.machineCategory" placeholder="全部" clearable size="small" style="width: 140px">
+              <el-option label="农业" value="agriculture" />
+              <el-option label="商用" value="commercial" />
+              <el-option label="工程机械" value="construction" />
+              <el-option label="工业" value="industrial" />
+              <el-option label="其他" value="others" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="尺寸容差" class="!mb-0">
+            <el-select v-model="advancedForm.tolerance" size="small" style="width: 100px">
+              <el-option label="±1mm" :value="1" />
+              <el-option label="±5mm" :value="5" />
+              <el-option label="±10mm" :value="10" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="含下架" class="!mb-0">
+            <el-switch v-model="advancedForm.includeDiscontinued" />
+          </el-form-item>
+        </div>
+      </div>
+    </div>
+
+    <!-- 错误提示 -->
+    <div v-if="lastError" class="p-3 mb-3 border border-red-300 bg-red-50 text-red-700 text-sm">
+      {{ lastError }}
+    </div>
+
+    <!-- 元信息 (总数 / 耗时 / provider) -->
+    <div v-if="total > 0" class="text-sm text-gray-600 mb-3 flex gap-4">
+      <span>共 {{ total }} 条</span>
+      <span>耗时 {{ processingTimeMs }}ms</span>
+      <span>来源: {{ provider === 'meilisearch' ? 'Meilisearch' : 'PostgreSQL (兜底)' }}</span>
+    </div>
+
+    <!-- 加载中 -->
+    <div v-if="loading" class="py-12 text-center text-gray-500">
+      <el-icon class="is-loading text-2xl"><Loading /></el-icon>
+      <p class="mt-2">搜索中...</p>
+    </div>
+
+    <!-- 空结果 -->
+    <div v-else-if="!loading && results.length === 0 && q.trim()" class="py-12 text-center text-gray-500">
+      <p>未找到匹配结果</p>
+      <p class="text-xs mt-1">尝试更换关键词或调整筛选条件</p>
+    </div>
+
+    <!-- 搜索结果列表 (MR.1 文档级卡片) -->
+    <div v-else class="space-y-2">
+      <div
+        v-for="hit in results"
+        :key="hit.mr1"
+        class="border border-gray-200 rounded p-3 hover:border-gray-400 transition-colors cursor-pointer"
+        @click="viewDetail(hit)"
+      >
+        <!-- MR.1 主信息行 -->
+        <div class="flex items-start gap-3">
+          <div class="flex-1 min-w-0">
+            <div class="flex items-baseline gap-2 flex-wrap">
+              <span class="font-mono text-sm text-gray-900 font-medium">{{ hit.mr1 }}</span>
+              <!-- V2 Task 1.3.3: v-html 渲染 _formatted 高亮 (sanitizeFormatted 双保险) -->
+              <span
+                v-if="getHighlighted(hit, 'product_name_1')"
+                class="text-sm text-gray-700"
+                v-html="getHighlighted(hit, 'product_name_1')"
+              ></span>
+              <span v-if="hit.productName2" class="text-xs text-gray-500">{{ hit.productName2 }}</span>
+              <el-tag size="small" type="info">{{ hit.type }}</el-tag>
+              <el-tag v-if="!hit.isPublished" size="small" type="warning">未上架</el-tag>
+              <el-tag v-if="hit.isDiscontinued" size="small" type="danger">已下架</el-tag>
+            </div>
+            <div v-if="hit.oem2" class="text-xs text-gray-500 mt-1">OEM 2: {{ hit.oem2 }}</div>
+          </div>
+          <div class="flex items-center gap-2">
+            <span v-if="hit.rankingScore != null" class="text-xs text-gray-400">
+              相关度 {{ (hit.rankingScore * 100).toFixed(0) }}%
+            </span>
+            <el-button
+              text
+              size="small"
+              @click.stop="toggleExpand(hit.mr1)"
+            >
+              {{ expandedMr1.has(hit.mr1) ? '收起' : `展开 OEM (${hit.oemList.length})` }}
+            </el-button>
+          </div>
+        </div>
+
+        <!-- OEM 3 列表 (展开时显示) -->
+        <div v-if="expandedMr1.has(hit.mr1)" class="mt-3 pt-3 border-t border-gray-100">
+          <div class="text-xs text-gray-500 mb-2">交叉引用 (OEM 3 列表,按品牌优先级排序)</div>
+          <table class="w-full text-xs">
+            <thead class="text-gray-500 border-b border-gray-200">
+              <tr>
+                <th class="text-left py-1 px-2 font-normal">OEM Brand</th>
+                <th class="text-left py-1 px-2 font-normal">OEM 3</th>
+                <th class="text-left py-1 px-2 font-normal">OEM 2</th>
+                <th class="text-left py-1 px-2 font-normal">Sort</th>
+                <th class="text-left py-1 px-2 font-normal">机型类型</th>
+                <th class="text-left py-1 px-2 font-normal">上架</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="(oem, idx) in hit.oemList"
+                :key="idx"
+                class="border-b border-gray-100 hover:bg-gray-50"
+              >
+                <td class="py-1 px-2">{{ oem.oemBrand || '-' }}</td>
+                <td class="py-1 px-2 font-mono">{{ oem.oemNo3 || '-' }}</td>
+                <td class="py-1 px-2 font-mono">{{ oem.oem2 || '-' }}</td>
+                <td class="py-1 px-2">{{ oem.sortOrder }}</td>
+                <td class="py-1 px-2">{{ oem.machineType || '-' }}</td>
+                <td class="py-1 px-2">
+                  <el-tag v-if="oem.isPublished" size="small" type="success">上架</el-tag>
+                  <el-tag v-else size="small" type="info">下架</el-tag>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          <!-- 机型列表 (展开时显示) -->
+          <div v-if="hit.machineList.length > 0" class="mt-3">
+            <div class="text-xs text-gray-500 mb-2">适配机型 ({{ hit.machineList.length }})</div>
+            <div class="flex flex-wrap gap-1">
+              <el-tag
+                v-for="(m, idx) in hit.machineList.slice(0, 20)"
+                :key="idx"
+                size="small"
+                type="info"
+              >
+                {{ [m.machineBrand, m.machineModel].filter(Boolean).join(' ') }}
+              </el-tag>
+              <span v-if="hit.machineList.length > 20" class="text-xs text-gray-400 self-center">
+                + {{ hit.machineList.length - 20 }} 更多
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 分页 -->
+    <div v-if="totalPages > 1" class="mt-6 flex justify-center">
+      <el-pagination
+        v-model:current-page="page"
+        :page-size="pageSize"
+        :total="total"
+        layout="prev, pager, next, total"
+        background
+      />
+    </div>
+  </div>
+</template>
+
+<script lang="ts">
+import { Loading } from '@element-plus/icons-vue'
+export default { components: { Loading } }
+</script>

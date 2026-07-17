@@ -76,6 +76,18 @@ const form = reactive<any>({
 //   后端用此值覆盖实体加载时的 xmin, 检测"先读后写"并发丢失更新
 const rowVersion = ref<number>(0)
 
+// V2 Task 1.1: MR.1 前端校验规则 (与后端 AdminProductService.ValidateForm 对齐)
+//   - required: 后端 MR1_REQUIRED 抛 ArgumentException, 前端同步拦截避免 400 往返
+//   - pattern: 后端正则 ^[A-Za-z0-9]{1,10}$, 前端同口径
+//   - max 10: maxlength 属性已限制, rules 兜底防止粘贴超长
+const mr1Rules = [
+  { required: true, message: 'MR.1 必填', trigger: 'blur' },
+  { pattern: /^[A-Za-z0-9]{1,10}$/, message: 'MR.1 必须为 1-10 位字母+数字', trigger: 'blur' }
+]
+
+// V2 Task 1.1: el-form ref, save 前调 validate() 触发 rules 校验
+const formRef = ref()
+
 const loading = ref(false)
 const saving = ref(false)
 const uploading = ref(false)
@@ -143,6 +155,16 @@ async function load() {
 }
 
 async function save() {
+  // V2 Task 1.1: 提交前触发 el-form validate, 同步拦截 MR.1 必填/格式错误
+  //   WHY: rules trigger='blur' 在用户未离开输入框直接点保存时不触发, 需显式 validate
+  if (formRef.value) {
+    try {
+      await formRef.value.validate()
+    } catch {
+      ElMessage.error('表单校验未通过, 请检查 MR.1 等必填字段')
+      return
+    }
+  }
   saving.value = true
   try {
     if (isEdit.value) {
@@ -343,7 +365,7 @@ onBeforeUnmount(() => {
       <el-button type="primary" @click="save" :loading="saving">保存</el-button>
     </div>
 
-    <el-form :model="form" label-position="top" label-width="100px" size="small">
+    <el-form ref="formRef" :model="form" label-position="top" label-width="100px" size="small">
       <el-collapse v-model="activeNames">
         <!-- 分区 1: 基础信息 -->
         <el-collapse-item :title="t('admin.productformview.title.basic_info')" name="1">
@@ -361,7 +383,19 @@ onBeforeUnmount(() => {
               <el-autocomplete v-model="form.type" :fetch-suggestions="queryType"
                 placeholder="oil/fuel/air/cabin/others" clearable size="small" :trigger-on-focus="true" :debounce="200" />
             </el-form-item>
-            <el-form-item label="MR.1"><el-input v-model="form.mr1" /></el-form-item>
+            <!-- V2 Task 1.1: MR.1 输入校验 (与后端 AdminProductService.ValidateForm 对齐)
+                 - maxlength=10: 防止超长 (后端 PG 22001 + ArgumentException 双兜底)
+                 - pattern=[A-Za-z0-9]{1,10}: 前端拦截非法字符, 与后端正则 ^[A-Za-z0-9]{1,10}$ 一致
+                 - 必填: 后端 MR1_REQUIRED 校验, 前端 rules 同步拦截, 避免无谓 400 往返 -->
+            <el-form-item label="MR.1" prop="mr1" :rules="mr1Rules">
+              <el-input
+                v-model="form.mr1"
+                maxlength="10"
+                pattern="[A-Za-z0-9]{1,10}"
+                placeholder="1-10 位字母+数字 (必填)"
+                show-word-limit
+              />
+            </el-form-item>
             <el-form-item :label="t('admin.productformview.label.oem_required')"><el-input v-model="form.oem2" /></el-form-item>
             <el-form-item :label="t('common.field.publish')">
               <el-switch v-model="form.isPublished" />

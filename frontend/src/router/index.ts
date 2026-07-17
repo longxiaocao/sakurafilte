@@ -28,6 +28,16 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/public/PublicSearchView.vue'),
     meta: { title: '产品搜索 (8 字段)' }
   },
+  // ===== V2 Task 1.3.7: 聚合搜索页 (需求 5, 文档级返回 + 高亮) =====
+  //   URL: /search/aggregate?q=CAT 320D&page=1
+  //   公开路由 (无 requireAuth, 游客可访问)
+  //   与 /public/search 区别: 聚合搜索走 Meilisearch (typo 容错 + 高亮), 8 字段走 PG ILIKE
+  {
+    path: '/search/aggregate',
+    name: 'AggregateSearch',
+    component: () => import('@/views/public/AggregateSearchView.vue'),
+    meta: { title: '聚合搜索' }
+  },
   {
     path: '/product/:oem',
     name: 'ProductDetail',

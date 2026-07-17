@@ -276,6 +276,17 @@ export const publicSearchApi = {
   //   后端: OrderByDescending(Id) Take(limit), 仅排除 IsDiscontinued=true
   featured(limit = 20): Promise<{ total: number; items: import('./types').PublicSearchHit[] }> {
     return http.get('/public/featured', { params: { limit } }).then((r) => r.data)
+  },
+
+  // V2 Task 1.3.6: 聚合搜索 (POST /api/public/search/aggregate)
+  //   文档级返回: mr1 + oemList 嵌套数组 + _formatted 高亮 + _rankingScore
+  //   支持 AbortSignal: 500ms 防抖 + 取消前序请求
+  //   provider 字段: "meilisearch" / "postgres" (Meili 离线时降级)
+  aggregate(
+    req: import('./types').AggregateSearchRequest,
+    config?: { signal?: AbortSignal }
+  ): Promise<import('./types').AggregateSearchResponse> {
+    return http.post('/public/search/aggregate', req, { signal: config?.signal }).then((r) => r.data)
   }
 }
 
