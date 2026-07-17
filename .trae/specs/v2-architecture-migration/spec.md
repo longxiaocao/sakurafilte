@@ -12301,3 +12301,423 @@ group.MapPost("/reindex-all", async (EtlImportService etl, CancellationToken ct)
 - [ ] v18 新增 migration: 0 个
 - [ ] v18 已知问题: D7/D8 filter 遗漏(现有 bug,列 v19+ 处理)
 
+---
+
+# 第二十章 v19 修订 — 第十重核实机制(版本间一致性验证 + 字段顺序对齐)
+
+> 基于第十八轮三维度并行深度审查(D18:6 / S18:2 / F17:1,共 9 项衍生漏洞,含 1 项严重漏洞 D18-3 字段顺序冲突),v19 引入第十重核实机制(版本间一致性验证 + 字段顺序对齐),解决 v18 伪代码与 v16 V16-F1 record 扩展定义字段顺序不一致、v18 与 v16 V16-F2 字段命名方向冲突未说明、v18 V18-F5 LEFT JOIN 未过滤 DeletedAt 等问题。
+
+## 20.1 第十八轮审查结果摘要(9 项衍生漏洞)
+
+### D18 数据关联维度(6 项)
+
+| 编号 | 问题 | 危险等级 | v18 伪代码 | 实际代码/v16 定义 |
+|------|------|---------|-----------|------------------|
+| D18-1 | V18-F5 LEFT JOIN 未过滤 XrefOemBrand.DeletedAt | 高 | `from x in _db.XrefOemBrands where x.Brand == p.OemBrand` | 现有代码 L2041/L11118/L11495 都过滤 `b.DeletedAt == null`,v18 遗漏会导致已删除品牌字典记录的 SortOrder 被返回 |
+| D18-2 | V18-F5 Brand 子查询冗余 | 高 | `Brand = (from x in _db.XrefOemBrands where x.Brand == p.OemBrand select x.Brand).FirstOrDefault()` | XrefOemBrand.Brand 唯一索引(L202),子查询返回的就是 p.OemBrand 本身,应直接用 `Brand = p.OemBrand` |
+| D18-3 | V18-F2 字段顺序与 v16 V16-F1 record 扩展定义不一致 | **严重** | v18 V18-F2 伪代码: 前 12 字段按现有 record 顺序 + 末尾追加 5 字段(D3Mm/H2Mm/Mr1/OemBrand/BrandSortOrder) | v16 V16-F1 record 扩展定义(L10370-L10388): D3Mm 插入第 8 位置,H2Mm 插入第 10 位置。字段顺序冲突会导致 p.H3Mm 赋给 D3Mm 字段(语义错误) |
+| D18-4 | v18 与 v16 V16-F1 SyncSearchIndexAsync 实现冲突未说明 | 高 | v18 V18-F5: 用 `p.OemBrand` + `x.Brand` 子查询 | v16 V16-F1(L10396-L10415): 用 `p.CrossReferences` 导航属性 + `x.IsPrimary`(字段不存在)。v18 未说明 v16 V16-F1 已被覆盖 |
+| D18-5 | v18 V18-F2 record 扩展定义缺失 | 中 | v18 V18-F2 伪代码引用 17 字段 ProductIndexDoc 构造,但未明确给出 record 扩展定义 | v16 V16-F1(L10370-L10388)已给出 record 扩展定义,但 v18 未引用 |
+| D18-6 | v18 V18-F5 LEFT JOIN 可能产生 N+1 | 中 | v18 V18-F5 用两个子查询(Brand + BrandSortOrder) | EF Core 5.0+ 会展开为 LEFT JOIN,但两个子查询产生 2 次 JOIN(性能略差),应合并为 1 次 JOIN |
+
+### S18 检索逻辑维度(2 项)
+
+| 编号 | 问题 | 危险等级 | 根因 |
+|------|------|---------|------|
+| S18-1 | v18 V18-F6 与 v16 V16-F2 字段命名方向冲突未说明 | 高 | v16 V16-F2(L10418-L10432): PascalCase(Type/D1Mm/D2Mm/H1Mm/IsDiscontinued)。v18 V18-F6: snake_case。v18 与现有代码一致,但与 v16 冲突,未说明 v16 V16-F2 已被覆盖 |
+| S18-2 | v18 V18-F6 Pre-Task-V18-0-Verify 与 v16 V16-F2 冲突 | 中 | v16 V16-F2 明确说"统一 PascalCase"。v18 V18-F6 说"以 Pre-Task-V18-0-Verify 验证为准",默认 snake_case。若 Pre-Task 验证为 PascalCase,v18 与现有代码冲突 |
+
+### F17 前后端联动维度(1 项)
+
+| 编号 | 问题 | 危险等级 | 根因 |
+|------|------|---------|------|
+| F17-1 | v18 V18-F8 reindex-all 端点伪代码引用 ReindexResult,但 ReindexResult 类不存在 | 低 | v18 V18-F1 伪代码引用 `ReindexResult.Ok/Cancelled/Fail`。v17 spec 假设新建 ReindexResult.cs,但实际未创建(Grep 零匹配)。v18 应明确说明 ReindexResult 是 v17 新建类(尚未实施) |
+
+## 20.2 v19 核心创新 — 第十重核实机制(版本间一致性验证 + 字段顺序对齐)
+
+### 第十重核实机制定义
+
+v18 第九重核实机制(record 完整字段验证 + 现有实现语义对齐)存在盲区:
+1. **版本间一致性**: v18 修订 v17 伪代码时,未检查与前序版本(v16 V16-F1/V16-F2)的冲突,导致字段顺序不一致(D18-3)、字段命名方向冲突(S18-1)。
+2. **字段顺序对齐**: v18 V18-F2 伪代码构造 record 时,未与 v16 V16-F1 record 扩展定义(含字段顺序)对齐,导致字段错位(D18-3)。
+
+v19 引入第十重核实机制,在第九重基础上追加:
+
+1. **版本间一致性验证**: 伪代码修订时,Grep 前序版本(v16/v17)的相关修复方案,检查冲突,明确说明覆盖关系。
+2. **字段顺序对齐**: record 构造时,Read record 扩展定义(含字段顺序),伪代码字段顺序必须与 record 定义完全一致。
+
+### 十重核实机制完整定义(v19)
+
+| 重数 | 名称 | 验证内容 | 工具 |
+|------|------|---------|------|
+| 第一重 | 代码存在性 | 类/方法是否存在 | Grep |
+| 第二重 | 字段名 | 字段名是否存在 | Grep |
+| 第三重 | API 签名 | 方法签名与代码一致 | Read |
+| 第四重 | 伪代码自洽性 | 伪代码逻辑无矛盾 | 人工审查 |
+| 第五重 | 运行时上下文自洽性 | 锁/事务/取消三层互斥自洽 | 人工审查 |
+| 第六重 | API 完整签名比对 | 参数类型/返回值/泛型一致 | Read |
+| 第七重 | 方法/字段名 Grep 零匹配 | 引用的方法/字段名实际存在 | Grep 零匹配验证 |
+| 第八重 | 类归属 + 代码语义对齐 | 字段所属类正确 + 方法不存在时语义已实现 | Grep + Read 类块范围 |
+| 第九重 | record 完整字段 + 现有实现语义 | record 构造提供所有字段 + 保留现有实现关键逻辑 | Read record 定义 + Read 现有实现 |
+| **第十重** | **版本间一致性 + 字段顺序对齐** | **伪代码与前序版本无冲突 + record 构造字段顺序与扩展定义一致** | **Grep 前序版本 + Read record 扩展定义** |
+
+### v19 第十重核实机制验证结果(针对 v18 衍生漏洞)
+
+| v18 衍生漏洞 | 第九重结果 | 第十重验证 | v19 修复方案 |
+|------------|-----------|-----------|------------|
+| D18-1 LEFT JOIN 未过滤 DeletedAt | 现有实现语义未完全对齐 | **版本间一致性**: v16 V16-F1 也未过滤,但现有代码 L2041/L11118/L11495 都过滤 | V19-F1: LEFT JOIN 追加 `b.DeletedAt == null` 过滤 |
+| D18-2 Brand 子查询冗余 | 伪代码自洽,但语义冗余 | **版本间一致性**: v16 V16-F1 用 CrossReferences 导航属性(错误),v18 用子查询(冗余) | V19-F2: Brand 直接用 p.OemBrand,删除子查询 |
+| D18-3 字段顺序冲突 | record 字段完整,但顺序错位 | **字段顺序对齐**: v16 V16-F1 record 扩展定义 D3Mm 在第 8 位置,v18 V18-F2 伪代码 D3Mm 在第 13 位置 | V19-F3: V18-F2 字段顺序与 v16 V16-F1 record 扩展定义对齐 |
+| D18-4 v18 与 v16 V16-F1 冲突未说明 | - | **版本间一致性**: v16 V16-F1 用 CrossReferences.IsPrimary(字段不存在),v18 用 Product.OemBrand(正确) | V19-F4: 明确说明 v16 V16-F1 SyncSearchIndexAsync 伪代码已被 v18/v19 覆盖 |
+| D18-5 record 扩展定义缺失 | - | **版本间一致性**: v16 V16-F1 已给出 record 扩展定义,v18 未引用 | V19-F5: V18-F2 引用 v16 V16-F1 record 扩展定义(L10370-L10388) |
+| D18-6 LEFT JOIN N+1 风险 | - | **版本间一致性**: v18 用 2 个子查询,应合并为 1 次 JOIN | V19-F6: V18-F5 LEFT JOIN 合并为 1 次 JOIN |
+| S18-1 v18 与 v16 V16-F2 冲突未说明 | - | **版本间一致性**: v16 V16-F2 说 PascalCase,v18 说 snake_case(与现有代码一致) | V19-F7: 明确说明 v16 V16-F2 已被 v18/v19 覆盖(现有代码用 snake_case) |
+| S18-2 Pre-Task 与 v16 V16-F2 冲突 | - | **版本间一致性**: v16 V16-F2 明确 PascalCase,v18 Pre-Task 默认 snake_case | V19-F8: V18-F6 Pre-Task 说明 v16 V16-F2 已被覆盖,以现有代码 snake_case 为准 |
+| F17-1 ReindexResult 类不存在 | - | **版本间一致性**: v17 假设新建 ReindexResult.cs,v18 引用但未说明 | V19-F9: V18-F8 说明 ReindexResult 是 v17 新建类(尚未实施) |
+
+## 20.3 V19-F1~F9 修复方案(含完整伪代码)
+
+> **第十重核实机制应用**: 每个 V19-Fx 修复方案均经过版本间一致性验证 + 字段顺序对齐验证,确保与前序版本(v16/v17/v18)无冲突。
+
+### V19-F1 [高] D18-1 LEFT JOIN 追加 DeletedAt 过滤
+
+**v18 伪代码位置**: spec.md 第十九章 V18-F5(SyncSearchIndexAsync LEFT JOIN)
+**v18 错误**: LEFT JOIN 未过滤 `b.DeletedAt == null`
+**真实代码事实**(经 Grep 核实):
+- 现有代码 L2041: `&& _db.XrefOemBrands.Any(b => b.Brand == x.OemBrand && b.DeletedAt == null)`
+- 现有代码 L11118: `join b in _db.XrefOemBrands.Where(b => b.DeletedAt == null)`
+- 现有代码 L11495: `join b in _db.XrefOemBrands.Where(b => b.DeletedAt == null)`
+- [Product.cs#L215](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Core/Entities/Product.cs#L215): XrefOemBrand 有软删除字段 `DeletedAt`
+- v18 V18-F5 伪代码未过滤,会包含已删除品牌字典记录
+**v19 修正方案**: V18-F5 LEFT JOIN 追加 `b.DeletedAt == null` 过滤:
+```csharp
+// V19-F1: LEFT JOIN 追加 DeletedAt 过滤(与现有代码 L2041/L11118/L11495 一致)
+BrandSortOrder = (from x in _db.XrefOemBrands
+                  where x.Brand == p.OemBrand && x.DeletedAt == null  // V19-F1 修正
+                  select x.SortOrder).FirstOrDefault()
+```
+
+### V19-F2 [高] D18-2 Brand 直接用 p.OemBrand,删除冗余子查询
+
+**v18 伪代码位置**: spec.md 第十九章 V18-F5(SyncSearchIndexAsync Brand 子查询)
+**v18 错误**: Brand 子查询冗余
+**真实代码事实**(经 Read 核实):
+- [Product.cs#L127](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Core/Entities/Product.cs#L127): `public string? OemBrand`
+- [Product.cs#L202](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Core/Entities/Product.cs#L202): XrefOemBrand.Brand 唯一索引
+- v18 V18-F5 伪代码 `Brand = (from x in _db.XrefOemBrands where x.Brand == p.OemBrand select x.Brand).FirstOrDefault()` 返回的就是 p.OemBrand 本身
+**v19 修正方案**: V18-F5 Brand 直接用 p.OemBrand,删除子查询:
+```csharp
+// V19-F2: Brand 直接用 p.OemBrand,删除冗余子查询
+Brand = p.OemBrand,  // V19-F2 修正: 直接用 Product.OemBrand,无需子查询
+BrandSortOrder = (from x in _db.XrefOemBrands
+                  where x.Brand == p.OemBrand && x.DeletedAt == null  // V19-F1 + V19-F2
+                  select x.SortOrder).FirstOrDefault()
+```
+
+### V19-F3 [严重] D18-3 V18-F2 字段顺序与 v16 V16-F1 record 扩展定义对齐
+
+**v18 伪代码位置**: spec.md 第十九章 V18-F2(ProductIndexDoc 构造)
+**v18 错误**: V18-F2 伪代码字段顺序(末尾追加)与 v16 V16-F1 record 扩展定义(中间插入)不一致
+**真实代码事实**(经 Read 核实):
+- v16 V16-F1 record 扩展定义(spec.md L10370-L10388): 17 字段,D3Mm 在第 8 位置,H2Mm 在第 10 位置
+  ```
+  1.Id / 2.OemNoNormalized / 3.OemNoDisplay / 4.Remark / 5.Type
+  6.D1Mm / 7.D2Mm / 8.D3Mm / 9.H1Mm / 10.H2Mm / 11.H3Mm
+  12.Media / 13.IsDiscontinued / 14.UpdatedAtUnix
+  15.Mr1 / 16.OemBrand / 17.BrandSortOrder
+  ```
+- v18 V18-F2 伪代码字段顺序(末尾追加): 17 字段,但 D3Mm 在第 13 位置,H2Mm 在第 14 位置
+  ```
+  1.Id / 2.OemNoNormalized / 3.OemNoDisplay / 4.Remark / 5.Type
+  6.D1Mm / 7.D2Mm / 8.H3Mm / 9.H1Mm / 10.Media
+  11.IsDiscontinued / 12.UpdatedAtUnix
+  13.D3Mm / 14.H2Mm / 15.Mr1 / 16.OemBrand / 17.BrandSortOrder
+  ```
+- 字段顺序冲突会导致 p.H3Mm 赋给 D3Mm 字段(类型相同 decimal?,但语义错误)
+**v19 修正方案**: V18-F2 伪代码字段顺序与 v16 V16-F1 record 扩展定义对齐:
+```csharp
+// V19-F3: V18-F2 字段顺序与 v16 V16-F1 record 扩展定义(L10370-L10388)对齐
+// v16 V16-F1 record 扩展定义(17 字段,D3Mm 在第 8 位置,H2Mm 在第 10 位置):
+//   Id / OemNoNormalized / OemNoDisplay / Remark / Type
+//   D1Mm / D2Mm / D3Mm / H1Mm / H2Mm / H3Mm
+//   Media / IsDiscontinued / UpdatedAtUnix
+//   Mr1 / OemBrand / BrandSortOrder
+var docs = batch.Select(p => new ProductIndexDoc(
+    p.Id,                    // 1. Id
+    p.OemNoNormalized,       // 2. OemNoNormalized
+    p.OemNoDisplay ?? "",    // 3. OemNoDisplay
+    p.Remark,                // 4. Remark
+    p.Type ?? "UNKNOWN",     // 5. Type
+    p.D1Mm,                  // 6. D1Mm
+    p.D2Mm,                  // 7. D2Mm
+    p.D3Mm,                  // 8. D3Mm (V19-F3 修正: 第 8 位置,非末尾追加)
+    p.H1Mm,                  // 9. H1Mm
+    p.H2Mm,                  // 10. H2Mm (V19-F3 修正: 第 10 位置,非末尾追加)
+    p.H3Mm,                  // 11. H3Mm (V19-F3 修正: 第 11 位置,非第 8 位置)
+    p.Media,                 // 12. Media (V19-F3 修正: 第 12 位置,非第 10 位置)
+    p.IsDiscontinued,        // 13. IsDiscontinued
+    new DateTimeOffset(DateTime.SpecifyKind(p.UpdatedAt, DateTimeKind.Utc), TimeSpan.Zero).ToUnixTimeSeconds(),  // 14. UpdatedAtUnix (V18-F3 SpecifyKind)
+    p.Mr1,                   // 15. Mr1
+    p.OemBrand,              // 16. OemBrand (V19-F2: 直接用 p.OemBrand)
+    p.BrandSortOrder         // 17. BrandSortOrder
+)).ToList();
+```
+
+### V19-F4 [高] D18-4 说明 v16 V16-F1 SyncSearchIndexAsync 已被 v18/v19 覆盖
+
+**v18 伪代码位置**: spec.md 第十九章 V18-F5(SyncSearchIndexAsync)
+**v16 伪代码位置**: spec.md 第十六章 V16-F1(SyncSearchIndexAsync,L10396-L10415)
+**冲突说明**:
+- v16 V16-F1 用 `p.CrossReferences` 导航属性(但 Product 无 CrossReferences 导航属性)
+- v16 V16-F1 用 `x.IsPrimary`(但 CrossReference 类无 IsPrimary 字段)
+- v16 V16-F1 用 `b.OemBrand`(但 XrefOemBrand 类字段是 Brand,无 OemBrand)
+- v18 V18-F5 用 `p.OemBrand`(Product.OemBrand 存在)+ `x.Brand`(XrefOemBrand.Brand 存在)
+**v19 修正方案**: 在 v18 V18-F5 伪代码末尾追加覆盖说明:
+```
+V19-F4 覆盖说明:
+1. v16 V16-F1 SyncSearchIndexAsync 伪代码(L10396-L10415)已被 v18 V18-F5 + v19 V19-F1/V19-F2/V19-F6 覆盖
+2. v16 V16-F1 用 p.CrossReferences 导航属性(错误: Product 无 CrossReferences 导航属性)
+3. v16 V16-F1 用 x.IsPrimary(错误: CrossReference 类无 IsPrimary 字段)
+4. v16 V16-F1 用 b.OemBrand(错误: XrefOemBrand 类字段是 Brand,无 OemBrand)
+5. v18/v19 改用 p.OemBrand(Product.OemBrand 存在)+ XrefOemBrand.Brand 匹配(正确)
+```
+
+### V19-F5 [中] D18-5 V18-F2 引用 v16 V16-F1 record 扩展定义
+
+**v18 伪代码位置**: spec.md 第十九章 V18-F2(ProductIndexDoc 构造)
+**v18 错误**: V18-F2 伪代码引用 17 字段 ProductIndexDoc 构造,但未明确给出 record 扩展定义
+**真实代码事实**(经 Read 核实):
+- v16 V16-F1 record 扩展定义(spec.md L10370-L10388): 明确给出 17 字段 record 定义
+- v18 V18-F2 伪代码假设 record 已扩展,但未引用 v16 V16-F1
+**v19 修正方案**: V18-F2 伪代码前置依赖说明追加 v16 V16-F1 引用:
+```
+V19-F5 前置依赖说明:
+1. V18-F2 伪代码假设 ProductIndexDoc record 已从 12 字段扩展到 17 字段
+2. record 扩展定义见 v16 V16-F1(spec.md L10370-L10388)
+3. v16 V16-F1 record 扩展定义字段顺序:
+   Id / OemNoNormalized / OemNoDisplay / Remark / Type
+   D1Mm / D2Mm / D3Mm / H1Mm / H2Mm / H3Mm
+   Media / IsDiscontinued / UpdatedAtUnix
+   Mr1 / OemBrand / BrandSortOrder
+4. V19-F3 已将 V18-F2 伪代码字段顺序与 v16 V16-F1 record 扩展定义对齐
+```
+
+### V19-F6 [中] D18-6 V18-F5 LEFT JOIN 合并为 1 次 JOIN
+
+**v18 伪代码位置**: spec.md 第十九章 V18-F5(SyncSearchIndexAsync LEFT JOIN)
+**v18 错误**: V18-F5 用两个子查询(Brand + BrandSortOrder),产生 2 次 JOIN
+**v19 修正方案**: V18-F5 LEFT JOIN 合并为 1 次 JOIN:
+```csharp
+// V19-F6: LEFT JOIN 合并为 1 次 JOIN(非 2 个子查询)
+// V19-F1: 追加 DeletedAt 过滤
+// V19-F2: Brand 直接用 p.OemBrand(无需 JOIN 获取 Brand)
+var batch = await query
+    .OrderBy(p => p.Id)
+    .Take(batchSize)
+    .Select(p => new
+    {
+        p.Id, p.OemNoNormalized, p.OemNoDisplay, p.Remark, p.Type,
+        p.D1Mm, p.D2Mm, p.D3Mm, p.H1Mm, p.H2Mm, p.H3Mm, p.Media,
+        p.IsDiscontinued, p.UpdatedAt, p.Mr1,
+        Brand = p.OemBrand,  // V19-F2: 直接用 Product.OemBrand
+        // V19-F6: 仅 BrandSortOrder 用 LEFT JOIN(1 次 JOIN,非 2 次)
+        BrandSortOrder = (from x in _db.XrefOemBrands
+                          where x.Brand == p.OemBrand && x.DeletedAt == null  // V19-F1
+                          select (int?)x.SortOrder).FirstOrDefault()
+    })
+    .ToListAsync(ct);
+```
+
+### V19-F7 [高] S18-1 说明 v16 V16-F2 已被 v18/v19 覆盖
+
+**v18 伪代码位置**: spec.md 第十九章 V18-F6(BuildFilter 字段命名)
+**v16 伪代码位置**: spec.md 第十六章 V16-F2(BuildFilter 字段命名,L10418-L10432)
+**冲突说明**:
+- v16 V16-F2: PascalCase(Type/D1Mm/D2Mm/H1Mm/IsDiscontinued)
+- v18 V18-F6: snake_case(type/d1_mm/d2_mm/d3_mm/h1_mm/h2_mm/h3_mm/is_discontinued)
+- 现有代码 MeiliSearchProvider.cs L75/L80/L85/L90/L94: snake_case
+- v18 与现有代码一致,但与 v16 V16-F2 冲突
+**v19 修正方案**: 在 v18 V18-F6 伪代码末尾追加覆盖说明:
+```
+V19-F7 覆盖说明:
+1. v16 V16-F2 BuildFilter 字段命名伪代码(L10418-L10432)已被 v18 V18-F6 + v19 覆盖
+2. v16 V16-F2 假设 PascalCase(Type/D1Mm/D2Mm/H1Mm/IsDiscontinued)
+3. 现有代码 MeiliSearchProvider.cs L75/L80/L85/L90/L94 用 snake_case
+4. v18/v19 以现有代码为准,统一用 snake_case
+5. v16 V16-F2 的 PascalCase 假设错误(与现有代码不一致)
+```
+
+### V19-F8 [中] S18-2 V18-F6 Pre-Task 说明 v16 V16-F2 已被覆盖
+
+**v18 伪代码位置**: spec.md 第十九章 V18-F6(Pre-Task-V18-0-Verify)
+**v19 修正方案**: V18-F6 Pre-Task-V18-0-Verify 追加 v16 V16-F2 覆盖说明:
+```
+V19-F8 Pre-Task-V18-0-Verify 强化说明:
+1. v16 V16-F2 明确说"统一 PascalCase"(错误假设)
+2. v18 V18-F6 说"以 Pre-Task-V18-0-Verify 验证为准",默认 snake_case
+3. v19 明确: v16 V16-F2 已被覆盖,以现有代码 snake_case 为准
+4. Pre-Task-V18-0-Verify 仍需执行(验证 Meilisearch 服务端字段命名方向)
+5. 若 Pre-Task-V18-0-Verify 验证为 snake_case → V18-F6 伪代码正确
+6. 若 Pre-Task-V18-0-Verify 验证为 PascalCase → 需 v20 修订(但现有代码 snake_case 表明 Meilisearch 已配置 snake_case)
+```
+
+### V19-F9 [低] F17-1 V18-F8 说明 ReindexResult 是 v17 新建类
+
+**v18 伪代码位置**: spec.md 第十九章 V18-F8(reindex-all 端点)+ V18-F1(ReindexAllAsync)
+**v18 错误**: V18-F1 伪代码引用 `ReindexResult.Ok/Cancelled/Fail`,但未说明 ReindexResult 是 v17 新建类
+**真实代码事实**(经 Grep 核实):
+- Grep `ReindexResult` 全后端: No matches found
+- Glob `**/ReindexResult*.cs`: No file found
+- v17 spec 假设新建 ReindexResult.cs,但实际未创建
+**v19 修正方案**: V18-F1/V18-F8 伪代码追加 ReindexResult 说明:
+```
+V19-F9 ReindexResult 说明:
+1. V18-F1 伪代码引用 ReindexResult.Ok/Cancelled/Fail 静态工厂方法
+2. ReindexResult 是 v17 spec 假设新建的类(见 v17 V17-F10),但实际未创建
+3. 实施 V17-F10 时需先新建 ReindexResult.cs:
+   ```csharp
+   public record ReindexResult(bool Success, long Processed, long Indexed, string? Error)
+   {
+       public static ReindexResult Ok(long processed, long indexed) => new(true, processed, indexed, null);
+       public static ReindexResult Cancelled() => new(false, 0, 0, "Cancelled");
+       public static ReindexResult Fail(string error) => new(false, 0, 0, error);
+   }
+   ```
+4. V18-F8 reindex-all 端点伪代码引用 ReindexResult,实施时需先完成 V17-F10 ReindexResult 新建
+```
+
+## 20.4 v19 前置任务(Pre-Task)
+
+> **目的**: 在实施 V19-F1~F9 修复方案前,通过版本间一致性验证 + 字段顺序对齐验证,确认伪代码与 v16/v17/v18 无冲突。
+
+### Pre-Task-V19-0 [必做] v16 V16-F1 record 扩展定义验证
+
+**验证目标**: 确认 v16 V16-F1 ProductIndexDoc record 扩展定义字段顺序
+**验证步骤**:
+1. Read spec.md L10370-L10388(v16 V16-F1 record 扩展定义)
+2. 列出 17 字段顺序: Id / OemNoNormalized / OemNoDisplay / Remark / Type / D1Mm / D2Mm / **D3Mm / H1Mm / H2Mm / H3Mm** / Media / IsDiscontinued / UpdatedAtUnix / Mr1 / OemBrand / BrandSortOrder
+3. 确认 D3Mm 在第 8 位置,H2Mm 在第 10 位置(非末尾追加)
+**通过条件**: 字段顺序与 V19-F3 伪代码一致
+**失败处理**: 若 v16 V16-F1 record 扩展定义缺失,V19-F3 需先明确给出 record 扩展定义
+
+### Pre-Task-V19-1 [必做] v16 V16-F2 字段命名方向验证
+
+**验证目标**: 确认 v16 V16-F2 BuildFilter 字段命名方向(PascalCase)
+**验证步骤**:
+1. Read spec.md L10418-L10432(v16 V16-F2 字段命名)
+2. 确认 v16 V16-F2 用 PascalCase(Type/D1Mm/D2Mm/H1Mm/IsDiscontinued)
+3. Grep 现有代码 MeiliSearchProvider.cs L75/L80/L85/L90/L94: 应为 snake_case
+4. 确认 v16 V16-F2 与现有代码冲突(已覆盖)
+**通过条件**: v16 V16-F2 字段命名方向与现有代码冲突(已覆盖)
+**失败处理**: 若 v16 V16-F2 与现有代码一致,V19-F7 覆盖说明需调整
+
+### Pre-Task-V19-2 [必做] XrefOemBrand.DeletedAt 过滤验证
+
+**验证目标**: 确认现有代码 XrefOemBrands 查询都过滤 DeletedAt == null
+**验证步骤**:
+1. Grep `XrefOemBrands.*DeletedAt` 全后端
+2. 确认现有代码 L2041/L11118/L11495 都过滤 `b.DeletedAt == null`
+3. 确认 v18 V18-F5 伪代码未过滤(衍生漏洞 D18-1)
+**通过条件**: 现有代码都过滤 DeletedAt,v18 伪代码未过滤
+**失败处理**: 若现有代码未过滤,V19-F1 需调整
+
+### Pre-Task-V19-3 [必做] ReindexResult 类存在性验证
+
+**验证目标**: 确认 ReindexResult 类不存在(v17 假设新建)
+**验证步骤**:
+1. Grep `ReindexResult` 全后端: 应零匹配
+2. Glob `**/ReindexResult*.cs`: 应无文件
+3. 确认 v17 spec 假设新建 ReindexResult.cs,但实际未创建
+**通过条件**: ReindexResult 类不存在
+**失败处理**: 若 ReindexResult 类存在,V19-F9 说明需调整
+
+## 20.5 v19 vs v18 对比表
+
+| 维度 | v18(第九重核实机制) | v19(第十重核实机制) |
+|------|--------------------|--------------------|
+| 核实机制 | 9 重(record 完整字段 + 现有实现语义) | **10 重**(v18 9 重 + 版本间一致性 + 字段顺序对齐) |
+| 核实机制盲区 | 版本间一致性 + 字段顺序对齐 | 无(v19 已补全) |
+| 衍生漏洞数 | 第十八轮审查发现 9 项(D18:6 / S18:2 / F17:1,含 1 项严重) | 待第十九轮审查验证 |
+| ProductIndexDoc 字段顺序 | 末尾追加(D3Mm 在第 13 位置,错误) | 与 v16 V16-F1 对齐(D3Mm 在第 8 位置,正确) |
+| LEFT JOIN DeletedAt 过滤 | 未过滤(衍生漏洞 D18-1) | 追加 `b.DeletedAt == null` 过滤(V19-F1) |
+| Brand 子查询 | 冗余子查询(衍生漏洞 D18-2) | 直接用 p.OemBrand(V19-F2) |
+| LEFT JOIN 次数 | 2 次 JOIN(Brand + BrandSortOrder) | 1 次 JOIN(仅 BrandSortOrder,V19-F6) |
+| 字段命名方向冲突 | 未说明 v16 V16-F2 已覆盖 | 明确说明 v16 V16-F2 已被覆盖(V19-F7) |
+| record 扩展定义引用 | 未引用 v16 V16-F1 | 引用 v16 V16-F1 L10370-L10388(V19-F5) |
+| ReindexResult 说明 | 未说明是 v17 新建类 | 明确说明 ReindexResult 是 v17 新建类(V19-F9) |
+| 新增 Pre-Task | 5 个 | 4 个(Pre-Task-V19-0 / V19-1 / V19-2 / V19-3) |
+| 修复方案数 | V18-F1~F8(8 项) | V19-F1~F9(9 项,针对 v18 衍生漏洞) |
+
+## 20.6 v19 文件清单
+
+### v19 实际新增代码文件(0 个)
+- v19 是 spec 修订版,不新增代码文件
+
+### v19 实际修改后端文件(0 个)
+- v19 仅修订 spec/tasks/checklist,不修改代码文件
+
+### v19 实际修改前端文件(0 个)
+- v19 不涉及前端文件修改
+
+### v19 纯文档修正(3 个文件)
+1. spec.md — 追加第二十章(20.1~20.8)
+2. tasks.md — 追加 v19 任务清单(4 个 Pre-Task + 9 个修复任务)
+3. checklist.md — 追加 v19 验证清单
+
+### v19 新增 migration(0 个)
+- v19 不涉及 DB schema 变更
+
+## 20.7 v19 第十九轮审查重点
+
+> **审查目标**: 验证 v19 修订是否真正消除 v18 衍生漏洞,且不引入新衍生漏洞。
+
+### D19 数据关联维度审查重点
+
+- [ ] D19-1: V19-F1 LEFT JOIN 是否追加 `b.DeletedAt == null` 过滤(与现有代码 L2041/L11118/L11495 一致)
+- [ ] D19-2: V19-F2 Brand 是否直接用 p.OemBrand(删除冗余子查询)
+- [ ] D19-3: V19-F3 ProductIndexDoc 构造字段顺序是否与 v16 V16-F1 record 扩展定义一致(D3Mm 在第 8 位置)
+- [ ] D19-4: V19-F4 是否说明 v16 V16-F1 SyncSearchIndexAsync 已被覆盖
+- [ ] D19-5: V19-F5 是否引用 v16 V16-F1 record 扩展定义(L10370-L10388)
+- [ ] D19-6: V19-F6 LEFT JOIN 是否合并为 1 次 JOIN(仅 BrandSortOrder)
+- [ ] D19-7: V19 伪代码是否引入新衍生漏洞(如 BrandSortOrder 类型 int? 与 record 定义 int? 一致)
+
+### S19 检索逻辑维度审查重点
+
+- [ ] S19-1: V19-F7 是否说明 v16 V16-F2 已被覆盖(现有代码用 snake_case)
+- [ ] S19-2: V19-F8 Pre-Task-V18-0-Verify 是否说明 v16 V16-F2 已被覆盖
+- [ ] S19-3: V19 是否引入新检索逻辑漏洞(如 BuildFilter 字段命名方向错误)
+
+### F18 前后端联动维度审查重点
+
+- [ ] F18-1: V19-F9 是否说明 ReindexResult 是 v17 新建类
+- [ ] F18-2: V19-F9 是否给出 ReindexResult record 定义伪代码
+- [ ] F18-3: V19 是否引入新前后端联动漏洞
+
+### 第十重核实机制应用审查
+
+- [ ] N19-1: V19-F1~F9 每个修复方案是否基于版本间一致性验证
+- [ ] N19-2: V19-F1~F9 每个修复方案是否基于字段顺序对齐验证
+- [ ] N19-3: V19 伪代码是否引入新版本间冲突
+- [ ] N19-4: V19 伪代码是否引入新字段顺序错位
+- [ ] N19-5: V19 是否真正实现"0 项版本间冲突"+"0 项字段顺序错位"
+
+## 20.8 第十九轮循环终止条件
+
+- [ ] 第十九轮审查无任何新漏洞检出 → 完成 v19 修订,进入 v20 修订(如有新漏洞)或定稿
+- [ ] 第十九轮审查发现新漏洞 → 进入 v20 修订,继续迭代
+- [ ] 第十九轮审查发现 v19 仍有凭空假设 → 进入 v20 修订,加强核实机制(十一重核实?)
+- [ ] 第十九轮审查重点: 第十重核实机制(版本间一致性验证 + 字段顺序对齐验证)
+- [ ] 第十九轮审查重点: v18 衍生漏洞是否真正消除(Grep 验证 DeletedAt 过滤/Brand 直接用 p.OemBrand/字段顺序与 v16 V16-F1 一致/v16 V16-F2 已覆盖说明/ReindexResult 说明)
+- [ ] 第十九轮审查重点: V19-F3 ProductIndexDoc 17 字段构造顺序是否与 v16 V16-F1 record 扩展定义完全一致
+- [ ] 第十九轮审查重点: V19-F6 LEFT JOIN 是否真正合并为 1 次 JOIN(非 2 次子查询)
+- [ ] 第十九轮审查重点: V19-F9 ReindexResult record 定义伪代码是否正确
+- [ ] 持续迭代直到连续一轮审查无任何新漏洞检出
+- [ ] v19 引入"第十重核实机制"(版本间一致性验证 + 字段顺序对齐验证)
+- [ ] v19 目标: 真正实现"0 项版本间冲突"+"0 项字段顺序错位"+"0 项 v18 衍生漏洞"
+- [ ] v19 实际新增代码: 0 个(v19 仅修订 spec/tasks/checklist)
+- [ ] v19 实际修改后端文件: 0 个(代码修改由 v17 任务清单执行)
+- [ ] v19 实际修改前端文件: 0 个
+- [ ] v19 纯文档修正: 3 个文件(spec.md / tasks.md / checklist.md)
+- [ ] v19 新增 migration: 0 个
+- [ ] v19 已知问题: D7/D8 filter 遗漏(现有 bug,列 v20+ 处理)
+

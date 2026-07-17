@@ -7159,3 +7159,204 @@ curl http://localhost:7700/indexes/products/documents/999999
 **新增 migration**: 0 个
 **已知问题**: D7/D8 filter 遗漏(现有 bug,列 v19+ 处理)
 
+---
+
+# v19 任务清单 — 第十重核实机制(版本间一致性验证 + 字段顺序对齐)
+
+> **背景**: 基于第十八轮三维度并行深度审查发现 9 项 v18 衍生漏洞(D18:6 / S18:2 / F17:1,含 1 项严重漏洞 D18-3 字段顺序冲突),v19 引入第十重核实机制,追加 4 个 Pre-Task + 9 个修复任务。
+>
+> **核心原则**: v19 仅修订 spec/tasks/checklist 伪代码,不直接修改代码文件。代码修改由 v17 任务清单执行,v19 仅修正 v18 伪代码错误。
+
+## v19 前置任务(Pre-Task)
+
+### Task V19-0.1 [必做] Pre-Task-V19-0 v16 V16-F1 record 扩展定义验证
+
+**对应 spec**: spec.md 20.4 Pre-Task-V19-0
+**目标**: 确认 v16 V16-F1 ProductIndexDoc record 扩展定义字段顺序
+**步骤**:
+1. Read spec.md L10370-L10388(v16 V16-F1 record 扩展定义)
+2. 列出 17 字段顺序: Id / OemNoNormalized / OemNoDisplay / Remark / Type / D1Mm / D2Mm / D3Mm / H1Mm / H2Mm / H3Mm / Media / IsDiscontinued / UpdatedAtUnix / Mr1 / OemBrand / BrandSortOrder
+3. 确认 D3Mm 在第 8 位置,H2Mm 在第 10 位置(非末尾追加)
+**通过条件**: 字段顺序与 V19-F3 伪代码一致
+**失败处理**: 若 v16 V16-F1 record 扩展定义缺失,V19-F3 需先明确给出 record 扩展定义
+**验证命令**: 无(纯 Read 验证)
+
+### Task V19-0.2 [必做] Pre-Task-V19-1 v16 V16-F2 字段命名方向验证
+
+**对应 spec**: spec.md 20.4 Pre-Task-V19-1
+**目标**: 确认 v16 V16-F2 BuildFilter 字段命名方向(PascalCase)
+**步骤**:
+1. Read spec.md L10418-L10432(v16 V16-F2 字段命名)
+2. 确认 v16 V16-F2 用 PascalCase(Type/D1Mm/D2Mm/H1Mm/IsDiscontinued)
+3. Grep 现有代码 MeiliSearchProvider.cs L75/L80/L85/L90/L94: 应为 snake_case
+4. 确认 v16 V16-F2 与现有代码冲突(已覆盖)
+**通过条件**: v16 V16-F2 字段命名方向与现有代码冲突(已覆盖)
+**失败处理**: 若 v16 V16-F2 与现有代码一致,V19-F7 覆盖说明需调整
+**验证命令**: 无(纯 Read/Grep 验证)
+
+### Task V19-0.3 [必做] Pre-Task-V19-2 XrefOemBrand.DeletedAt 过滤验证
+
+**对应 spec**: spec.md 20.4 Pre-Task-V19-2
+**目标**: 确认现有代码 XrefOemBrands 查询都过滤 DeletedAt == null
+**步骤**:
+1. Grep `XrefOemBrands.*DeletedAt` 全后端
+2. 确认现有代码 L2041/L11118/L11495 都过滤 `b.DeletedAt == null`
+3. 确认 v18 V18-F5 伪代码未过滤(衍生漏洞 D18-1)
+**通过条件**: 现有代码都过滤 DeletedAt,v18 伪代码未过滤
+**失败处理**: 若现有代码未过滤,V19-F1 需调整
+**验证命令**: 无(纯 Grep 验证)
+
+### Task V19-0.4 [必做] Pre-Task-V19-3 ReindexResult 类存在性验证
+
+**对应 spec**: spec.md 20.4 Pre-Task-V19-3
+**目标**: 确认 ReindexResult 类不存在(v17 假设新建)
+**步骤**:
+1. Grep `ReindexResult` 全后端: 应零匹配
+2. Glob `**/ReindexResult*.cs`: 应无文件
+3. 确认 v17 spec 假设新建 ReindexResult.cs,但实际未创建
+**通过条件**: ReindexResult 类不存在
+**失败处理**: 若 ReindexResult 类存在,V19-F9 说明需调整
+**验证命令**: 无(纯 Grep/Glob 验证)
+
+## v19 数据关联维度修复任务(对应 V19-F1~F6)
+
+### Task V19-1.1 [高] V19-F1 LEFT JOIN 追加 DeletedAt 过滤
+
+**对应 spec**: spec.md 20.3 V19-F1
+**对应漏洞**: D18-1
+**目标**: V18-F5 LEFT JOIN 追加 `b.DeletedAt == null` 过滤
+**步骤**:
+1. 定位 spec.md 第十九章 V18-F5 LEFT JOIN 伪代码
+2. BrandSortOrder 子查询追加 `&& x.DeletedAt == null` 过滤
+3. 确认与现有代码 L2041/L11118/L11495 一致
+**通过条件**: LEFT JOIN 过滤 DeletedAt == null
+**失败处理**: 无
+**验证命令**: 无(纯 spec 修订)
+
+### Task V19-1.2 [高] V19-F2 Brand 直接用 p.OemBrand
+
+**对应 spec**: spec.md 20.3 V19-F2
+**对应漏洞**: D18-2
+**目标**: V18-F5 Brand 直接用 p.OemBrand,删除冗余子查询
+**步骤**:
+1. 定位 spec.md 第十九章 V18-F5 Brand 子查询伪代码
+2. 删除 Brand 子查询,改为 `Brand = p.OemBrand`
+3. 确认 Product.OemBrand 字段存在(Read Product.cs L127)
+**通过条件**: Brand 直接用 p.OemBrand
+**失败处理**: 无
+**验证命令**: 无(纯 spec 修订)
+
+### Task V19-1.3 [严重] V19-F3 字段顺序与 v16 V16-F1 record 扩展定义对齐
+
+**对应 spec**: spec.md 20.3 V19-F3
+**对应漏洞**: D18-3(严重)
+**目标**: V18-F2 ProductIndexDoc 构造字段顺序与 v16 V16-F1 record 扩展定义对齐
+**步骤**:
+1. Read spec.md L10370-L10388(v16 V16-F1 record 扩展定义)
+2. 定位 spec.md 第十九章 V18-F2 ProductIndexDoc 构造伪代码
+3. 字段顺序改为: Id / OemNoNormalized / OemNoDisplay / Remark / Type / D1Mm / D2Mm / D3Mm / H1Mm / H2Mm / H3Mm / Media / IsDiscontinued / UpdatedAtUnix / Mr1 / OemBrand / BrandSortOrder
+4. 确认 D3Mm 在第 8 位置(非第 13 位置)
+5. 确认 H2Mm 在第 10 位置(非第 14 位置)
+**通过条件**: 字段顺序与 v16 V16-F1 record 扩展定义完全一致
+**失败处理**: 若 v16 V16-F1 record 扩展定义缺失,需先明确给出
+**验证命令**: 无(纯 spec 修订)
+
+### Task V19-1.4 [高] V19-F4 说明 v16 V16-F1 SyncSearchIndexAsync 已被覆盖
+
+**对应 spec**: spec.md 20.3 V19-F4
+**对应漏洞**: D18-4
+**目标**: 在 v18 V18-F5 伪代码末尾追加 v16 V16-F1 覆盖说明
+**步骤**:
+1. 定位 spec.md 第十九章 V18-F5 伪代码末尾
+2. 追加 V19-F4 覆盖说明(5 点)
+3. 确认说明 v16 V16-F1 用 CrossReferences.IsPrimary(字段不存在)是错误的
+**通过条件**: v16 V16-F1 覆盖说明完整
+**失败处理**: 无
+**验证命令**: 无(纯 spec 修订)
+
+### Task V19-1.5 [中] V19-F5 V18-F2 引用 v16 V16-F1 record 扩展定义
+
+**对应 spec**: spec.md 20.3 V19-F5
+**对应漏洞**: D18-5
+**目标**: V18-F2 伪代码前置依赖说明追加 v16 V16-F1 引用
+**步骤**:
+1. 定位 spec.md 第十九章 V18-F2 伪代码前置依赖说明
+2. 追加 V19-F5 前置依赖说明(4 点)
+3. 确认引用 v16 V16-F1 record 扩展定义(L10370-L10388)
+**通过条件**: V18-F2 引用 v16 V16-F1 record 扩展定义
+**失败处理**: 无
+**验证命令**: 无(纯 spec 修订)
+
+### Task V19-1.6 [中] V19-F6 LEFT JOIN 合并为 1 次 JOIN
+
+**对应 spec**: spec.md 20.3 V19-F6
+**对应漏洞**: D18-6
+**目标**: V18-F5 LEFT JOIN 合并为 1 次 JOIN(仅 BrandSortOrder)
+**步骤**:
+1. 定位 spec.md 第十九章 V18-F5 LEFT JOIN 伪代码
+2. 删除 Brand 子查询(V19-F2 已处理)
+3. 仅保留 BrandSortOrder 子查询(1 次 JOIN)
+4. 追加 V19-F1 DeletedAt 过滤
+**通过条件**: LEFT JOIN 仅 1 次(BrandSortOrder)
+**失败处理**: 无
+**验证命令**: 无(纯 spec 修订)
+
+## v19 检索逻辑维度修复任务(对应 V19-F7~F8)
+
+### Task V19-2.1 [高] V19-F7 说明 v16 V16-F2 已被覆盖
+
+**对应 spec**: spec.md 20.3 V19-F7
+**对应漏洞**: S18-1
+**目标**: 在 v18 V18-F6 伪代码末尾追加 v16 V16-F2 覆盖说明
+**步骤**:
+1. 定位 spec.md 第十九章 V18-F6 伪代码末尾
+2. 追加 V19-F7 覆盖说明(5 点)
+3. 确认说明 v16 V16-F2 的 PascalCase 假设错误(与现有代码 snake_case 不一致)
+**通过条件**: v16 V16-F2 覆盖说明完整
+**失败处理**: 无
+**验证命令**: 无(纯 spec 修订)
+
+### Task V19-2.2 [中] V19-F8 Pre-Task 说明 v16 V16-F2 已被覆盖
+
+**对应 spec**: spec.md 20.3 V19-F8
+**对应漏洞**: S18-2
+**目标**: V18-F6 Pre-Task-V18-0-Verify 追加 v16 V16-F2 覆盖说明
+**步骤**:
+1. 定位 spec.md 第十九章 V18-F6 Pre-Task-V18-0-Verify 强化说明
+2. 追加 V19-F8 强化说明(6 点)
+3. 确认说明 v16 V16-F2 已被覆盖,以现有代码 snake_case 为准
+**通过条件**: Pre-Task-V18-0-Verify 含 v16 V16-F2 覆盖说明
+**失败处理**: 无
+**验证命令**: 无(纯 spec 修订)
+
+## v19 前后端联动维度修复任务(对应 V19-F9)
+
+### Task V19-3.1 [低] V19-F9 说明 ReindexResult 是 v17 新建类
+
+**对应 spec**: spec.md 20.3 V19-F9
+**对应漏洞**: F17-1
+**目标**: V18-F1/V18-F8 伪代码追加 ReindexResult 说明
+**步骤**:
+1. 定位 spec.md 第十九章 V18-F1 和 V18-F8 伪代码
+2. 追加 V19-F9 ReindexResult 说明(4 点)
+3. 给出 ReindexResult record 定义伪代码(含 Ok/Cancelled/Fail 静态工厂方法)
+4. 确认说明 ReindexResult 是 v17 新建类(尚未实施)
+**通过条件**: ReindexResult 说明完整,含 record 定义伪代码
+**失败处理**: 若 ReindexResult 类已存在(Pre-Task-V19-3 验证),需调整说明
+**验证命令**: 无(纯 spec 修订)
+
+## v19 任务总结
+
+- **前置任务**: 4 个(Pre-Task-V19-0 / V19-1 / V19-2 / V19-3)
+- **数据关联维度**: 6 个任务(V19-1.1 ~ V19-1.6,对应 V19-F1~F6)
+- **检索逻辑维度**: 2 个任务(V19-2.1 ~ V19-2.2,对应 V19-F7~F8)
+- **前后端联动维度**: 1 个任务(V19-3.1,对应 V19-F9)
+- **总任务数**: 13 个(4 前置 + 9 实施)
+
+**实际新增代码**: 0 个(v19 仅修订 spec/tasks/checklist)
+**实际修改后端文件**: 0 个(代码修改由 v17 任务清单执行)
+**实际修改前端文件**: 0 个
+**纯文档修正**: 3 个文件(spec.md / tasks.md / checklist.md)
+**新增 migration**: 0 个
+**已知问题**: D7/D8 filter 遗漏(现有 bug,列 v20+ 处理)
+

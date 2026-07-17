@@ -6118,3 +6118,182 @@ _待启动第七轮深度审查后追加_
 - **第十八轮循环终止条件验证**: 17 项(V18-CHK-75 ~ V18-CHK-91)
 - **总验证点数**: 91 项
 
+---
+
+# v19 验证清单(对应 spec.md 第二十章 + tasks.md v19 任务清单)
+
+> **核实机制**: 第十重核实机制(版本间一致性验证 + 字段顺序对齐验证)
+> **目标**: 真正实现"0 项版本间冲突"+"0 项字段顺序错位"+"0 项 v18 衍生漏洞"
+> **修订范围**: spec.md 第二十章 20.1~20.8 + tasks.md v19 任务清单(4 前置 + 9 实施) + checklist.md v19 验证清单
+> **衍生漏洞来源**: 第十八轮三维度并行深度审查发现 v18 衍生漏洞 9 项(D18:6 / S18:2 / F17:1,含 1 项严重 D18-3 字段顺序冲突)
+
+## v19 Pre-Task 验证(4 项,对应 Task V19-0.1 ~ V19-0.4)
+
+### Pre-Task-V19-0 v16 V16-F1 record 扩展定义验证
+
+- [ ] V19-CHK-1: Read spec.md L10370-L10388(v16 V16-F1 ProductIndexDoc record 扩展定义)
+- [ ] V19-CHK-2: 确认 v16 V16-F1 record 扩展定义字段顺序为 17 字段(Id / OemNoNormalized / OemNoDisplay / Remark / Type / D1Mm / D2Mm / D3Mm / H1Mm / H2Mm / H3Mm / Media / IsDiscontinued / UpdatedAtUnix / Mr1 / OemBrand / BrandSortOrder)
+- [ ] V19-CHK-3: 确认 D3Mm 在第 8 位置(非末尾追加),H2Mm 在第 10 位置(非末尾追加)
+- [ ] V19-CHK-4: 确认字段顺序与 V19-F3 伪代码字段顺序完全一致
+
+### Pre-Task-V19-1 v16 V16-F2 字段命名方向验证
+
+- [ ] V19-CHK-5: Read spec.md L10418-L10432(v16 V16-F2 BuildFilter 字段命名)
+- [ ] V19-CHK-6: 确认 v16 V16-F2 用 PascalCase(Type/D1Mm/D2Mm/H1Mm/IsDiscontinued)
+- [ ] V19-CHK-7: Grep 现有代码 MeiliSearchProvider.cs L75/L80/L85/L90/L94,应为 snake_case(type/d1_mm/d2_mm/d3_mm/h1_mm/h2_mm/h3_mm/is_discontinued)
+- [ ] V19-CHK-8: 确认 v16 V16-F2 与现有代码冲突(已覆盖),V19-F7 覆盖说明正确
+
+### Pre-Task-V19-2 XrefOemBrand.DeletedAt 过滤验证
+
+- [ ] V19-CHK-9: Grep `XrefOemBrands.*DeletedAt` 全后端,确认 L2041/L11118/L11495 都过滤 `b.DeletedAt == null`
+- [ ] V19-CHK-10: 确认 v18 V18-F5 伪代码未过滤 DeletedAt(衍生漏洞 D18-1)
+- [ ] V19-CHK-11: 确认 V19-F1 LEFT JOIN 追加 `x.DeletedAt == null` 过滤,与现有代码一致
+
+### Pre-Task-V19-3 ReindexResult 类存在性验证
+
+- [ ] V19-CHK-12: Grep `ReindexResult` 全后端,应零匹配
+- [ ] V19-CHK-13: Glob `**/ReindexResult*.cs`,应无文件
+- [ ] V19-CHK-14: 确认 v17 spec 假设新建 ReindexResult.cs,但实际未创建(F17-1 根因)
+- [ ] V19-CHK-15: 确认 V19-F9 明确说明 ReindexResult 是 v17 新建类(尚未实施)
+
+## v19 数据关联维度修复验证(对应 V19-F1~F6,共 33 项)
+
+### V19-F1 [高] D18-1 LEFT JOIN 追加 DeletedAt 过滤(对应 Task V19-1.1)
+
+- [ ] V19-CHK-16: spec.md 第二十章 V19-F1 是否给出 LEFT JOIN 追加 `b.DeletedAt == null` 过滤的伪代码
+- [ ] V19-CHK-17: V19-F1 伪代码 BrandSortOrder 子查询是否含 `&& x.DeletedAt == null` 过滤
+- [ ] V19-CHK-18: V19-F1 是否引用现有代码 L2041/L11118/L11495 作为对齐依据
+- [ ] V19-CHK-19: V19-F1 是否引用 Product.cs#L215(XrefOemBrand.DeletedAt 字段定义)作为依据
+- [ ] V19-CHK-20: V19-F1 修正方案是否与现有代码 L2041 `b.DeletedAt == null` 完全一致
+
+### V19-F2 [高] D18-2 Brand 直接用 p.OemBrand(对应 Task V19-1.2)
+
+- [ ] V19-CHK-21: spec.md 第二十章 V19-F2 是否给出 `Brand = p.OemBrand` 伪代码(删除冗余子查询)
+- [ ] V19-CHK-22: V19-F2 是否引用 Product.cs#L127(Product.OemBrand 字段定义)作为依据
+- [ ] V19-CHK-23: V19-F2 是否引用 Product.cs#L202(XrefOemBrand.Brand 唯一索引)作为子查询冗余的依据
+- [ ] V19-CHK-24: V19-F2 是否说明子查询返回的就是 p.OemBrand 本身(因 Brand 唯一索引)
+
+### V19-F3 [严重] D18-3 V18-F2 字段顺序与 v16 V16-F1 record 扩展定义对齐(对应 Task V19-1.3)
+
+- [ ] V19-CHK-25: spec.md 第二十章 V19-F3 是否明确列出 v16 V16-F1 record 扩展定义的 17 字段顺序
+- [ ] V19-CHK-26: V19-F3 是否明确列出 v18 V18-F2 错误字段顺序(D3Mm 在第 13 位置)
+- [ ] V19-CHK-27: V19-F3 修正伪代码 ProductIndexDoc 构造字段顺序是否为 17 字段
+- [ ] V19-CHK-28: V19-F3 修正伪代码 D3Mm 是否在第 8 位置(注释 `// 8. D3Mm`)
+- [ ] V19-CHK-29: V19-F3 修正伪代码 H2Mm 是否在第 10 位置(注释 `// 10. H2Mm`)
+- [ ] V19-CHK-30: V19-F3 修正伪代码 H3Mm 是否在第 11 位置(注释 `// 11. H3Mm`,非第 8 位置)
+- [ ] V19-CHK-31: V19-F3 修正伪代码 Media 是否在第 12 位置(注释 `// 12. Media`,非第 10 位置)
+- [ ] V19-CHK-32: V19-F3 修正伪代码是否保留 V18-F3 的 SpecifyKind(DateTime.SpecifyKind(p.UpdatedAt, DateTimeKind.Utc))
+- [ ] V19-CHK-33: V19-F3 修正伪代码 BrandSortOrder 是否引用 p.BrandSortOrder(字段顺序最后位置 17)
+- [ ] V19-CHK-34: V19-F3 修正伪代码字段顺序是否与 Pre-Task-V19-0 验证的 v16 V16-F1 record 扩展定义完全一致
+
+### V19-F4 [高] D18-4 说明 v16 V16-F1 SyncSearchIndexAsync 已被覆盖(对应 Task V19-1.4)
+
+- [ ] V19-CHK-35: spec.md 第二十章 V19-F4 是否给出 5 点覆盖说明
+- [ ] V19-CHK-36: V19-F4 是否说明 v16 V16-F1 SyncSearchIndexAsync 伪代码已被 v18 V18-F5 + v19 V19-F1/V19-F2/V19-F6 覆盖
+- [ ] V19-CHK-37: V19-F4 是否说明 v16 V16-F1 用 `p.CrossReferences` 导航属性(错误: Product 无 CrossReferences 导航属性)
+- [ ] V19-CHK-38: V19-F4 是否说明 v16 V16-F1 用 `x.IsPrimary`(错误: CrossReference 类无 IsPrimary 字段)
+- [ ] V19-CHK-39: V19-F4 是否说明 v16 V16-F1 用 `b.OemBrand`(错误: XrefOemBrand 类字段是 Brand,无 OemBrand)
+
+### V19-F5 [中] D18-5 V18-F2 引用 v16 V16-F1 record 扩展定义(对应 Task V19-1.5)
+
+- [ ] V19-CHK-40: spec.md 第二十章 V19-F5 是否给出 4 点前置依赖说明
+- [ ] V19-CHK-41: V19-F5 是否明确引用 v16 V16-F1 record 扩展定义(spec.md L10370-L10388)
+- [ ] V19-CHK-42: V19-F5 是否说明 V18-F2 假设 ProductIndexDoc record 已从 12 字段扩展到 17 字段
+- [ ] V19-CHK-43: V19-F5 是否说明 V19-F3 已将 V18-F2 伪代码字段顺序与 v16 V16-F1 record 扩展定义对齐
+
+### V19-F6 [中] D18-6 V18-F5 LEFT JOIN 合并为 1 次 JOIN(对应 Task V19-1.6)
+
+- [ ] V19-CHK-44: spec.md 第二十章 V19-F6 是否给出合并后 LEFT JOIN 伪代码
+- [ ] V19-CHK-45: V19-F6 伪代码是否仅保留 BrandSortOrder 子查询(1 次 JOIN,非 2 次)
+- [ ] V19-CHK-46: V19-F6 伪代码 Brand 是否直接用 `Brand = p.OemBrand`(V19-F2 已处理)
+- [ ] V19-CHK-47: V19-F6 伪代码 BrandSortOrder 子查询是否含 `&& x.DeletedAt == null`(V19-F1 已处理)
+- [ ] V19-CHK-48: V19-F6 伪代码 BrandSortOrder 类型是否为 `(int?)x.SortOrder`(与 record 定义 `int? BrandSortOrder` 一致)
+
+## v19 检索逻辑维度修复验证(对应 V19-F7~F8,共 10 项)
+
+### V19-F7 [高] S18-1 说明 v16 V16-F2 已被覆盖(对应 Task V19-2.1)
+
+- [ ] V19-CHK-49: spec.md 第二十章 V19-F7 是否给出 5 点覆盖说明
+- [ ] V19-CHK-50: V19-F7 是否说明 v16 V16-F2 BuildFilter 字段命名伪代码已被 v18 V18-F6 + v19 覆盖
+- [ ] V19-CHK-51: V19-F7 是否说明 v16 V16-F2 假设 PascalCase(Type/D1Mm/D2Mm/H1Mm/IsDiscontinued)
+- [ ] V19-CHK-52: V19-F7 是否引用现有代码 MeiliSearchProvider.cs L75/L80/L85/L90/L94 用 snake_case 作为依据
+- [ ] V19-CHK-53: V19-F7 是否说明 v16 V16-F2 的 PascalCase 假设错误(与现有代码不一致)
+
+### V19-F8 [中] S18-2 Pre-Task 说明 v16 V16-F2 已被覆盖(对应 Task V19-2.2)
+
+- [ ] V19-CHK-54: spec.md 第二十章 V19-F8 是否给出 6 点 Pre-Task-V18-0-Verify 强化说明
+- [ ] V19-CHK-55: V19-F8 是否说明 v16 V16-F2 明确说"统一 PascalCase"(错误假设)
+- [ ] V19-CHK-56: V19-F8 是否说明 v19 明确以现有代码 snake_case 为准(v16 V16-F2 已被覆盖)
+- [ ] V19-CHK-57: V19-F8 是否说明 Pre-Task-V18-0-Verify 仍需执行(验证 Meilisearch 服务端字段命名方向)
+- [ ] V19-CHK-58: V19-F8 是否给出若 Pre-Task-V18-0-Verify 验证为 PascalCase 的兜底处理(需 v20 修订)
+
+## v19 前后端联动维度修复验证(对应 V19-F9,共 6 项)
+
+### V19-F9 [低] F17-1 V18-F8 说明 ReindexResult 是 v17 新建类(对应 Task V19-3.1)
+
+- [ ] V19-CHK-59: spec.md 第二十章 V19-F9 是否给出 4 点 ReindexResult 说明
+- [ ] V19-CHK-60: V19-F9 是否说明 V18-F1 伪代码引用 ReindexResult.Ok/Cancelled/Fail 静态工厂方法
+- [ ] V19-CHK-61: V19-F9 是否说明 ReindexResult 是 v17 spec 假设新建的类(见 v17 V17-F10),但实际未创建
+- [ ] V19-CHK-62: V19-F9 是否给出 ReindexResult record 定义伪代码(含 Success/Processed/Indexed/Error 字段)
+- [ ] V19-CHK-63: V19-F9 伪代码 ReindexResult.Ok 静态工厂方法签名是否为 `Ok(long processed, long indexed) => new(true, processed, indexed, null)`
+- [ ] V19-CHK-64: V19-F9 是否说明实施 V17-F10 时需先新建 ReindexResult.cs
+
+## v19 第十重核实机制应用验证(11 项)
+
+- [ ] V19-CHK-65: v19 是否引入第十重核实机制(版本间一致性验证 + 字段顺序对齐验证)
+- [ ] V19-CHK-66: 第十重核实机制是否在第九重基础上追加(非替换)
+- [ ] V19-CHK-67: 十重核实机制完整定义表是否给出(10 行,第十重高亮)
+- [ ] V19-CHK-68: v19 第十重核实机制验证结果表是否针对 v18 衍生漏洞给出(9 项)
+- [ ] V19-CHK-69: V19-F1~F9 每个修复方案是否基于版本间一致性验证(检查与前序版本 v16/v17/v18 的冲突)
+- [ ] V19-CHK-70: V19-F1~F9 每个修复方案是否基于字段顺序对齐验证(Read record 扩展定义)
+- [ ] V19-CHK-71: V19-F3 字段顺序是否与 v16 V16-F1 record 扩展定义(L10370-L10388)完全一致
+- [ ] V19-CHK-72: V19-F1 LEFT JOIN 是否与现有代码 L2041/L11118/L11495 完全一致(版本间一致性)
+- [ ] V19-CHK-73: V19-F7 字段命名方向是否与现有代码 MeiliSearchProvider.cs snake_case 一致(版本间一致性)
+- [ ] V19-CHK-74: V19 伪代码是否引入新版本间冲突(应为否)
+- [ ] V19-CHK-75: V19 伪代码是否引入新字段顺序错位(应为否)
+
+## v19 文件清单验证(5 项)
+
+- [ ] V19-CHK-76: v19 实际新增代码文件数是否为 0 个(v19 是 spec 修订版)
+- [ ] V19-CHK-77: v19 实际修改后端文件数是否为 0 个(代码修改由 v17 任务清单执行)
+- [ ] V19-CHK-78: v19 实际修改前端文件数是否为 0 个
+- [ ] V19-CHK-79: v19 纯文档修正是否为 3 个文件(spec.md / tasks.md / checklist.md)
+- [ ] V19-CHK-80: v19 新增 migration 数是否为 0 个(不涉及 DB schema 变更)
+
+## v19 已知问题验证(2 项)
+
+- [ ] V19-CHK-81: v19 是否在已知问题中列出 D7/D8 filter 遗漏(现有 bug,列 v20+ 处理)
+- [ ] V19-CHK-82: v19 是否未尝试修复 D7/D8 filter 遗漏(应列入 v20+ 处理)
+
+## v19 第十九轮循环终止条件验证(17 项)
+
+- [ ] V19-CHK-83: 第十九轮审查无任何新漏洞检出 → 完成 v19 修订,进入 v20 修订(如有新漏洞)或定稿
+- [ ] V19-CHK-84: 第十九轮审查发现新漏洞 → 进入 v20 修订,继续迭代
+- [ ] V19-CHK-85: 第十九轮审查发现 v19 仍有凭空假设 → 进入 v20 修订,加强核实机制(十一重核实?)
+- [ ] V19-CHK-86: 第十九轮审查重点: 第十重核实机制(版本间一致性验证 + 字段顺序对齐验证)
+- [ ] V19-CHK-87: 第十九轮审查重点: v18 衍生漏洞是否真正消除(Grep 验证 DeletedAt 过滤/Brand 直接用 p.OemBrand/字段顺序与 v16 V16-F1 一致/v16 V16-F2 已覆盖说明/ReindexResult 说明)
+- [ ] V19-CHK-88: 第十九轮审查重点: V19-F3 ProductIndexDoc 17 字段构造顺序是否与 v16 V16-F1 record 扩展定义完全一致
+- [ ] V19-CHK-89: 第十九轮审查重点: V19-F6 LEFT JOIN 是否真正合并为 1 次 JOIN(非 2 次子查询)
+- [ ] V19-CHK-90: 第十九轮审查重点: V19-F9 ReindexResult record 定义伪代码是否正确
+- [ ] V19-CHK-91: 持续迭代直到连续一轮审查无任何新漏洞检出
+- [ ] V19-CHK-92: v19 引入"第十重核实机制"(版本间一致性验证 + 字段顺序对齐验证)
+- [ ] V19-CHK-93: v19 目标: 真正实现"0 项版本间冲突"+"0 项字段顺序错位"+"0 项 v18 衍生漏洞"
+- [ ] V19-CHK-94: v19 实际新增代码: 0 个(v19 仅修订 spec/tasks/checklist)
+- [ ] V19-CHK-95: v19 实际修改后端文件: 0 个(代码修改由 v17 任务清单执行)
+- [ ] V19-CHK-96: v19 实际修改前端文件: 0 个
+- [ ] V19-CHK-97: v19 纯文档修正: 3 个文件(spec.md / tasks.md / checklist.md)
+- [ ] V19-CHK-98: v19 新增 migration: 0 个
+- [ ] V19-CHK-99: v19 已知问题: D7/D8 filter 遗漏(现有 bug,列 v20+ 处理)
+
+## v19 验证清单总结
+
+- **Pre-Task 验证**: 15 项(V19-CHK-1 ~ V19-CHK-15,对应 Pre-Task-V19-0 ~ V19-3)
+- **数据关联维度修复验证**: 33 项(V19-CHK-16 ~ V19-CHK-48,对应 V19-F1~F6)
+- **检索逻辑维度修复验证**: 10 项(V19-CHK-49 ~ V19-CHK-58,对应 V19-F7~F8)
+- **前后端联动维度修复验证**: 6 项(V19-CHK-59 ~ V19-CHK-64,对应 V19-F9)
+- **第十重核实机制应用验证**: 11 项(V19-CHK-65 ~ V19-CHK-75)
+- **文件清单验证**: 5 项(V19-CHK-76 ~ V19-CHK-80)
+- **已知问题验证**: 2 项(V19-CHK-81 ~ V19-CHK-82)
+- **第十九轮循环终止条件验证**: 17 项(V19-CHK-83 ~ V19-CHK-99)
+- **总验证点数**: 99 项
+
