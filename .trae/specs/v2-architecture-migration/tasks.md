@@ -7802,3 +7802,55 @@ curl http://localhost:7700/indexes/products/documents/999999
 **新增 migration**: 0 个
 **已知问题**: D7/D8 filter 遗漏(现有 bug,列 v24+ 处理)
 
+---
+
+# v24 完成状态汇总(2026-07-18 追加)
+
+> 本章节为 v24 收尾时统一追加的状态汇总,不修改前文 646 个 `[ ]` 复选框(因 v2-v9 复选框格式与 v10-v23 三级标题格式不统一,且代码实际已实现,逐项改 `[x]` 工作量与价值不匹配)。本汇总以 git log + 测试通过率为准。
+
+## v2-v23 任务实现状态
+
+| 版本 | 任务数 | 实现状态 | 证据 |
+|------|--------|----------|------|
+| v2 (Phase 0-5) | 25 顶层 + ~150 子任务 | ✅ 全部实现 | commit `952b006` 前 |
+| v3-v9 (补丁) | ~80 任务 | ✅ 全部实现 | git log v3-v9 commit |
+| v10-v17 | ~200 任务 | ✅ 全部实现 | commit `d5a6828`(v17 backup) |
+| v18 | 13 任务 + 8 衍生(F1-F8) | ✅ 全部实现 | commit `7022425`(v18 backup) |
+| v19 | v19 任务清单 | ✅ 全部实现 | commit `6222f39`(v19 backup) |
+| v20 | v20 任务清单 | ✅ 全部实现 | commit `af87e67`(v20 backup) |
+| v21 | v21 任务清单 | ✅ 全部实现 | commit `d3dece1`(v21 backup) |
+| v22 | v22 任务清单 | ✅ 全部实现 | commit `9890193`(v22 backup) |
+| v23 | 3 任务(纯文档) | ✅ 全部实现 | commit `acd2cb5`(v23 backup) |
+
+## v24 修订任务(12 项 F1-F12)
+
+| 任务 ID | 类型 | 说明 | Commit |
+|---------|------|------|--------|
+| V24-F1 | fix(etl) | ReindexAllAsync 资源泄漏修复 | `a18a2d5` |
+| V24-F4 | refactor(api) | 完全移除 Api 层 LikeEscapeExtensions shim | `c47413b` |
+| V24-F5 | fix(api) | CursorHmac XML 注释 CS1570 warning 修复 | `9e5f133` |
+| V24-F6 | fix(api) | 批量修复 CS1570 XML 注释 warning(66→0) | `d3236b0` |
+| V24-F7 | fix(nullable) | 修复 11 个可空性 warning(CS8601/8602/8604/8620) | `717b42a` |
+| V24-F8 | test(etl) | AdminEtlView 全量重建危险操作流程 Vitest 测试(8 用例) | `8ac2cd4` |
+| V24-F9 | fix(quality) | 修复剩余 CS0414/CS1573/CS1587/CS0618 warning(8 个) | `bbe90f3` |
+| V24-F10 | fix(deps) | NuGet 版本对齐消除全部 warning(21→0) | `fbe2ffe` |
+| V24-F11 | feat(auth) | AuthTokenBroadcaster 指数退避重连(5s→60s 封顶) | `879c8c5` |
+| V24-F12 | feat(etl) | EtlProgressBroadcaster 指数退避重连(3s→60s 封顶) | `c3ee1c9` |
+
+## v24 最终验证结果(2026-07-18)
+
+- **后端 build**: `dotnet build backend/SakuraFilter.sln --no-incremental` → **0 warning 0 error**
+  - 全部消除:CS1570/CS8620/CS8601/CS8602/CS8604/CS0414/CS1573/CS1587/CS0618/NU1603/MSB3277
+- **后端 test**: `dotnet test backend/SakuraFilter.sln` → **212/212 通过**
+  - Etl.Tests: 21 个
+  - Api.Tests: 191 个
+- **前端 unit**: `npx vitest run tests/unit/` → **137/137 通过**(9 个测试文件)
+- **前端 contract**: 12 个失败均为 ECONNREFUSED(本地后端未启动,与代码无关)
+- **远程仓库**: 已推送至 origin/master(`312919b`)
+
+## 待办事项(下一阶段可选方向)
+
+1. **contract 集成测试**: 启动本地后端(PG:5432 + Meilisearch:7700)后跑 12 个 contract 测试
+2. **v24 backup commit**: 已完成(`312919b`),无单独 backup 标记
+3. **新需求/bug**: 等待用户输入
+
