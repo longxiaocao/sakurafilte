@@ -4643,3 +4643,383 @@ _待启动第七轮深度审查后追加_
 - [ ] 持续迭代直到连续一轮审查无任何新漏洞检出
 - [ ] v12 引入"代码存在性 + 字段名 + API 签名"三重核实机制,目标: 真正实现"0 项凭空假设"
 
+---
+
+# 第八部分 v13 验证清单 — 第十二轮审查 23 项衍生漏洞纠正验证
+
+## 二十八、v13 前置任务验证(Pre-Task-V13-1~5,5 项)
+
+- [ ] Pre-Task-V13-1: ProductIndexDoc record 已扩展为 15 字段(新增 Mr1/OemBrand/BrandSortOrder)
+- [ ] Pre-Task-V13-1: EtlImportService.cs L1158-1166 Select 投影包含 Mr1 / Oem2 字段
+- [ ] Pre-Task-V13-1: ProductIndexDoc 构造调用传入 15 参数
+- [ ] Pre-Task-V13-1: `dotnet build backend/src/SakuraFilter.Search/SakuraFilter.Search.csproj` 通过
+- [ ] Pre-Task-V13-1: `dotnet build backend/src/SakuraFilter.Etl/SakuraFilter.Etl.csproj` 通过
+- [ ] Pre-Task-V13-2: EtlImportService.cs 新增 public async Task TruncateSearchIndexPendingAsync(CancellationToken ct = default) 方法
+- [ ] Pre-Task-V13-2: 方法体使用 ExecuteSqlRawAsync("TRUNCATE TABLE search_index_pending RESTART IDENTITY")
+- [ ] Pre-Task-V13-2: `dotnet build` 通过
+- [ ] Pre-Task-V13-2: Grep `TruncateSearchIndexPendingAsync` 全后端有 1 处定义(EtlImportService.cs)
+- [ ] Pre-Task-V13-3: 已核实 Product.cs 实体是否含 Mr1 字段(记录结论: 有/无)
+- [ ] Pre-Task-V13-3: 若 Product 无 Mr1 字段,已新增 migration AddMr1ColumnToProduct(varchar(10) nullable)
+- [ ] Pre-Task-V13-4: 已核实 AdminProductService.cs L866-868 主列表 cursor 签名(明文 {iso}|{id}|{sig})
+- [ ] Pre-Task-V13-4: 已核实 AdminProductService.cs L395-404 历史页 cursor 签名(base64url 包装)
+- [ ] Pre-Task-V13-5: 已核实 ServiceCollectionExtensions.cs L178 `options.AddPolicy("Admin", p => p.RequireRole("admin"))` 配置存在
+
+## 二十九、v13 高危凭空假设纠正验证(V13-F1~F7,7 项,细分 28 子项)
+
+### V13-F1: S12-1 SaveChanges 位置错误纠正
+
+- [ ] V13-F1.1: IndexReplayWorker.cs ProcessPendingAsync 已拆分为两阶段处理
+- [ ] V13-F1.2: 阶段 1 (解析 + 隔离损坏 payload) 有独立 SaveChanges 在 `if (corrupted.Count > 0)` 块内
+- [ ] V13-F1.3: 阶段 2 (处理 validDocs) 保持原批量逻辑,SaveChanges 在 `if (validDocs.Count > 0)` 块内
+- [ ] V13-F1.4: 损坏 payload 持久化删除验证: 模拟全部 toIndex 是损坏 payload,下次轮询不再取到
+- [ ] V13-F1.5: V12-F22 原错误伪代码(SaveChanges 在 if 块内)已从 spec 删除或标注"v13 已修正"
+
+### V13-F2: S12-2 IMeilisearchClient 凭空假设纠正
+
+- [ ] V13-F2.1: spec.md 中所有 `IMeilisearchClient` 引用已改为 `MeiliSearchProvider`
+- [ ] V13-F2.2: tasks.md 中所有 `IMeilisearchClient` 引用已改为 `MeiliSearchProvider`
+- [ ] V13-F2.3: checklist.md 中所有 `IMeilisearchClient` 引用已改为 `MeiliSearchProvider`
+- [ ] V13-F2.4: Grep `IMeilisearchClient` 全 spec/tasks/checklist 零匹配
+- [ ] V13-F2.5: spec V12-F18 描述已改为"保持 MeiliSearchProvider 具体类注入不变"
+
+### V13-F3: S12-3 SetPrimaryAvailable vs Initialize 矛盾消除
+
+- [ ] V13-F3.1: spec.md 中所有 `SetPrimaryAvailable` 引用已改为 `Initialize`
+- [ ] V13-F3.2: tasks.md 中所有 `SetPrimaryAvailable` 引用已改为 `Initialize`
+- [ ] V13-F3.3: checklist.md 中所有 `SetPrimaryAvailable` 引用已改为 `Initialize`
+- [ ] V13-F3.4: Grep `SetPrimaryAvailable` 全 spec/tasks/checklist 零匹配
+- [ ] V13-F3.5: Grep `SetPrimaryAvailable` 全后端代码零匹配(原本就不存在)
+- [ ] V13-F3.6: Task V12-2.1.2 与 Task V12-2.1.3 已合并为单一任务(消除矛盾)
+- [ ] V13-F3.7: ReindexAllAsync finally 块调用 `resilient.Initialize(success)` 编译通过
+
+### V13-F4: D12-1 ProductIndexDoc 扩展字段实施
+
+- [ ] V13-F4.1: ISearchProvider.cs L32-44 ProductIndexDoc record 共 15 字段(新增 Mr1/OemBrand/BrandSortOrder)
+- [ ] V13-F4.2: EtlImportService.cs L1158-1166 构造逻辑传入 15 参数
+- [ ] V13-F4.3: v12 spec V12-F1~F4 / V12-F14~F15 伪代码引用 doc.Mr1/doc.OemBrand/doc.BrandSortOrder 可编译
+- [ ] V13-F4.4: OemBrand 临时方案取 Product.Oem2(与 v12 spec 一致)
+- [ ] V13-F4.5: BrandSortOrder 默认 null(Meilisearch 排序配置处理空值)
+
+### V13-F5: D12-2 DevTokenAuthMiddleware ClaimsPrincipal 设置
+
+- [ ] V13-F5.1: DevTokenAuthMiddleware.cs L172 附近有 ClaimsPrincipal 设置代码
+- [ ] V13-F5.2: Claims 包含 `ClaimTypes.Role = "admin"`(与 AdminPolicy.RequireRole("admin") 匹配)
+- [ ] V13-F5.3: `using System.Security.Claims;` 已引入
+- [ ] V13-F5.4: X-Admin-Token 调用 Admin 端点返回 200(非 403)
+- [ ] V13-F5.5: 无 X-Admin-Token 调用 Admin 端点返回 401
+
+### V13-F6: D12-3 TruncateSearchIndexPendingAsync 新增
+
+- [ ] V13-F6.1: EtlImportService.cs 新增 TruncateSearchIndexPendingAsync 方法
+- [ ] V13-F6.2: 方法体使用 ExecuteSqlRawAsync("TRUNCATE TABLE search_index_pending RESTART IDENTITY")
+- [ ] V13-F6.3: ReindexAllAsync 全量重建前调用 TruncateSearchIndexPendingAsync
+- [ ] V13-F6.4: Grep `TruncateSearchIndexPendingAsync` 全后端有 1 处定义 + 1 处调用
+
+### V13-F7: spec V12-F7 与 V12-F21 矛盾消除
+
+- [ ] V13-F7.1: spec V12-F7 中"删除 TruncateSearchIndexPendingAsync 调用"描述已删除
+- [ ] V13-F7.2: spec 统一为 V12-F21 方案(保留 TRUNCATE)
+- [ ] V13-F7.3: 全量重建前 search_index_pending 表被 TRUNCATE(避免旧 payload 重试)
+
+## 三十、v13 中低危问题修正验证(V13-F8~F16,9 项,细分 25 子项)
+
+### V13-F8: IndexReplayWorker 路径修正
+
+- [ ] V13-F8.1: spec.md 中所有 IndexReplayWorker.cs 路径引用为 `backend/src/SakuraFilter.Api/Services/IndexReplayWorker.cs`
+- [ ] V13-F8.2: tasks.md 中所有 IndexReplayWorker.cs 路径引用为 `backend/src/SakuraFilter.Api/Services/IndexReplayWorker.cs`
+- [ ] V13-F8.3: checklist.md 中所有 IndexReplayWorker.cs 路径引用为 `backend/src/SakuraFilter.Api/Services/IndexReplayWorker.cs`
+- [ ] V13-F8.4: Grep `SakuraFilter.Etl/IndexReplayWorker` 全 spec/tasks/checklist 零匹配
+
+### V13-F9: D12-8 验证点 TruncateAsync 凭空引用纠正
+
+- [ ] V13-F9.1: checklist D12-8 验证点描述已改为"TruncateSearchIndexPendingAsync(V13-F6 新增)是否与 ExecuteSqlRawAsync 风格一致"
+- [ ] V13-F9.2: Grep `TruncateAsync`(不含 TruncateSearchIndexPendingAsync)全 checklist 零匹配
+
+### V13-F10: IndexReplayWorker `!` 操作符删除
+
+- [ ] V13-F10.1: IndexReplayWorker.cs L97 附近无 `!` 操作符
+- [ ] V13-F10.2: 改为 `JsonSerializer.Deserialize<ProductIndexDoc>(p.Payload)` 返回 nullable
+- [ ] V13-F10.3: try-catch 内处理 null(`if (doc is null) { corrupted.Add(p); continue; }`)
+
+### V13-F11: Npgsql DateTime.MinValue 风险消除
+
+- [ ] V13-F11.1: ReindexAllAsync sinceDate=null 时使用 `new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc)`
+- [ ] V13-F11.2: 不再使用 `DateTime.MinValue`(避免 Kind=Unspecified 风险)
+- [ ] V13-F11.3: ReindexAllAsync sinceDate=null 触发全量重建(查询到所有 Product,非零量)
+- [ ] V13-F11.4: 与 EtlImportService.cs L1165 SpecifyKind(Utc) 风格一致
+
+### V13-F12: isSafeRedirect decodeURIComponent try-catch
+
+- [ ] V13-F12.1: security.ts 新增 safeDecode 函数(包 try-catch)
+- [ ] V13-F12.2: isSafeRedirect 内调用 safeDecode 替代 decodeURIComponent
+- [ ] V13-F12.3: 畸形 URL 编码(如 `%E0%A4%A` 截断)不抛 URIError
+
+### V13-F13: security.test.ts 测试环境变量注入
+
+- [ ] V13-F13.1: security.test.ts 顶部包含 `(import.meta as any).env.VITE_SAFE_REDIRECT_HOSTS = 'localhost,127.0.0.1,example.com';`
+- [ ] V13-F13.2: `npm run test:contract` 全部通过(原有 7 个 + 新增 3 个 = 10 个用例)
+- [ ] V13-F13.3: 测试不依赖 .env 文件加载
+
+### V13-F14: env.d.ts VITE_SAFE_REDIRECT_HOSTS 声明
+
+- [ ] V13-F14.1: env.d.ts L3-6 包含 `readonly VITE_SAFE_REDIRECT_HOSTS?: string;`
+- [ ] V13-F14.2: `npm run build` 编译通过(无 TypeScript 错误)
+
+### V13-F15: 变量名 iso/cid 对齐
+
+- [ ] V13-F15.1: spec.md 中所有 VerifyAndExtract 返回 `(string updatedAtIso, long id)` 改为 `(string iso, long cid)`
+- [ ] V13-F15.2: 与 AdminProductService.cs L603 `var (iso, cid) = _cursorHmac.VerifyAndExtract(req.Cursor);` 对齐
+- [ ] V13-F15.3: Grep `updatedAtIso` 全 spec/tasks/checklist 零匹配
+
+### V13-F16: 低危描述类问题合并修正
+
+- [ ] V13-F16.1: spec.md L7468 `SignV2` 已改为 `Sign`
+- [ ] V13-F16.2: Grep `SignV2` 全 spec/tasks/checklist 零匹配
+- [ ] V13-F16.3: spec.md 中"V9/V10 已实施 Mr1/OemBrand/BrandSortOrder"已改为"V13 落地"
+- [ ] V13-F16.4: Grep `V9/V10 已实施` 全 spec/tasks/checklist 零匹配
+- [ ] V13-F16.5: spec L7607 "V9/V10 扩展字段已实施"描述已修正
+
+## 三十一、v13 设计调整验证(A1~A18,18 项)
+
+- [ ] A1: 四重核实机制已落地(代码存在性 + 字段名 + API 签名 + 伪代码自洽性)
+- [ ] A2: IndexReplayWorker 拆分两阶段(损坏 payload 独立 SaveChanges)
+- [ ] A3: SetPrimaryAvailable 统一为 Initialize(无 lock,volatile 保证可见性)
+- [ ] A4: IMeilisearchClient 引用全部删除,保持 MeiliSearchProvider 具体类
+- [ ] A5: ProductIndexDoc 扩展为 15 字段(Mr1/OemBrand/BrandSortOrder)
+- [ ] A6: DevTokenAuthMiddleware 设置 ClaimsPrincipal(ClaimTypes.Role = "admin")
+- [ ] A7: TruncateSearchIndexPendingAsync 新增(ExecuteSqlRawAsync + RESTART IDENTITY)
+- [ ] A8: ReindexAllAsync 下界改用 DateTime(1970,1,1,Utc)
+- [ ] A9: IndexReplayWorker.cs 路径统一为 backend/src/SakuraFilter.Api/Services/
+- [ ] A10: isSafeRedirect 增强(safeDecode + 反斜杠/空白防护 + 协议白名单)
+- [ ] A11: env.d.ts 补充 VITE_SAFE_REDIRECT_HOSTS 声明
+- [ ] A12: security.test.ts 测试内注入环境变量(不依赖 .env)
+- [ ] A13: spec/tasks/checklist 变量名对齐代码(iso/cid)
+- [ ] A14: spec L7468 SignV2 → Sign 修正
+- [ ] A15: V9/V10 扩展状态描述修正("V13 落地")
+- [ ] A16: V12-F7 与 V12-F21 矛盾消除(统一为保留 TRUNCATE)
+- [ ] A17: D12-8 验证点 TruncateAsync → ExecuteSqlRawAsync 修正
+- [ ] A18: EncodeCursor 签名一致性核实(主列表明文 + 历史页 base64url)
+
+## 三十二、v13 任务执行验证(14 个任务,细分 56 子项)
+
+### Pre-Task-V13-1 (实施 ProductIndexDoc 扩展)
+
+- [ ] Pre-Task-V13-1.1: ISearchProvider.cs ProductIndexDoc record 追加 3 字段
+- [ ] Pre-Task-V13-1.2: EtlImportService.cs Select 投影追加 Mr1/Oem2
+- [ ] Pre-Task-V13-1.3: `dotnet build SakuraFilter.Search.csproj` 通过
+- [ ] Pre-Task-V13-1.4: `dotnet build SakuraFilter.Etl.csproj` 通过
+
+### Pre-Task-V13-2 (新增 TruncateSearchIndexPendingAsync)
+
+- [ ] Pre-Task-V13-2.1: EtlImportService.cs 新增 TruncateSearchIndexPendingAsync 方法
+- [ ] Pre-Task-V13-2.2: 方法体使用 ExecuteSqlRawAsync TRUNCATE
+- [ ] Pre-Task-V13-2.3: `dotnet build` 通过
+
+### Pre-Task-V13-3 (核实 Product.Mr1 字段)
+
+- [ ] Pre-Task-V13-3.1: Read Product.cs 确认 Mr1 字段是否存在
+- [ ] Pre-Task-V13-3.2: 若无,新增 migration AddMr1ColumnToProduct
+- [ ] Pre-Task-V13-3.3: 若无,更新 Product.cs 实体添加 Mr1 属性
+
+### Pre-Task-V13-4 (核实 EncodeCursor 签名)
+
+- [ ] Pre-Task-V13-4.1: Read AdminProductService.cs L860-870 确认主列表 cursor 签名
+- [ ] Pre-Task-V13-4.2: Read AdminProductService.cs L390-410 确认历史页 cursor 签名
+- [ ] Pre-Task-V13-4.3: spec 描述与代码一致(无需修改代码)
+
+### Pre-Task-V13-5 (核实 AdminPolicy 配置)
+
+- [ ] Pre-Task-V13-5.1: Read ServiceCollectionExtensions.cs L170-185 确认 AdminPolicy 配置
+- [ ] Pre-Task-V13-5.2: 确认 `RequireRole("admin")` 与 DevTokenAuthMiddleware ClaimsPrincipal 设置匹配
+
+### Task V13-1.1 (ProductIndexDoc record 15 字段)
+
+- [ ] Task V13-1.1.1: ProductIndexDoc record 末尾追加 3 字段
+- [ ] Task V13-1.1.2: XML 注释说明字段含义和"V13 新增"
+- [ ] Task V13-1.1.3: `dotnet build` 通过
+
+### Task V13-1.2 (EtlImportService 构造逻辑追加 3 字段)
+
+- [ ] Task V13-1.2.1: Select 投影追加 p.Mr1, p.Oem2
+- [ ] Task V13-1.2.2: ProductIndexDoc 构造调用追加 3 参数
+- [ ] Task V13-1.2.3: `dotnet build` 通过
+
+### Task V13-1.3 (DevTokenAuthMiddleware ClaimsPrincipal)
+
+- [ ] Task V13-1.3.1: L172 附近新增 ClaimsPrincipal 设置代码
+- [ ] Task V13-1.3.2: 引入 `using System.Security.Claims;`
+- [ ] Task V13-1.3.3: `dotnet build` 通过
+- [ ] Task V13-1.3.4: X-Admin-Token 调用 Admin 端点返回 200
+
+### Task V13-2.1 (ReindexAllAsync 综合修正)
+
+- [ ] Task V13-2.1.1: sinceDate=null 改用 DateTime(1970,1,1,Utc)
+- [ ] Task V13-2.1.2: finally 块调用 resilient.Initialize(success)
+- [ ] Task V13-2.1.3: 全量重建前调用 TruncateSearchIndexPendingAsync
+- [ ] Task V13-2.1.4: spec V12-F7 矛盾描述删除
+- [ ] Task V13-2.1.5: Grep `SetPrimaryAvailable` 全后端零匹配
+
+### Task V13-2.2 (删除 IMeilisearchClient 引用)
+
+- [ ] Task V13-2.2.1: spec.md IMeilisearchClient → MeiliSearchProvider
+- [ ] Task V13-2.2.2: tasks.md IMeilisearchClient → MeiliSearchProvider
+- [ ] Task V13-2.2.3: checklist.md IMeilisearchClient → MeiliSearchProvider
+- [ ] Task V13-2.2.4: Grep `IMeilisearchClient` 全三件套零匹配
+
+### Task V13-2.3 (TruncateSearchIndexPendingAsync 实施)
+
+- [ ] Task V13-2.3.1: EtlImportService.cs 新增方法
+- [ ] Task V13-2.3.2: `dotnet build` 通过
+- [ ] Task V13-2.3.3: Grep 方法定义有 1 处
+
+### Task V13-2.4 (IndexReplayWorker 拆分两阶段)
+
+- [ ] Task V13-2.4.1: L97 `!` 操作符删除
+- [ ] Task V13-2.4.2: 阶段 1 (损坏 payload 隔离) 独立 SaveChanges
+- [ ] Task V13-2.4.3: 阶段 2 (validDocs 处理) 保持原批量逻辑
+- [ ] Task V13-2.4.4: `dotnet build` 通过
+- [ ] Task V13-2.4.5: 损坏 payload 不会无限重试验证
+
+### Task V13-3.1 (描述类问题批量修正)
+
+- [ ] Task V13-3.1.1: IndexReplayWorker 路径统一修正
+- [ ] Task V13-3.1.2: D12-8 TruncateAsync → ExecuteSqlRawAsync
+- [ ] Task V13-3.1.3: updatedAtIso/id → iso/cid
+- [ ] Task V13-3.1.4: SignV2 → Sign
+- [ ] Task V13-3.1.5: V9/V10 已实施 → V13 落地
+
+### Task V13-3.2 (isSafeRedirect 增强 + env.d.ts + 测试环境变量)
+
+- [ ] Task V13-3.2.1: security.ts 新增 safeDecode 函数
+- [ ] Task V13-3.2.2: isSafeRedirect 调用 safeDecode
+- [ ] Task V13-3.2.3: 空白字符前缀防护
+- [ ] Task V13-3.2.4: 反斜杠防护
+- [ ] Task V13-3.2.5: 解码后再次校验
+- [ ] Task V13-3.2.6: javascript/data/vbscript 协议拒绝
+- [ ] Task V13-3.2.7: env.d.ts 追加 VITE_SAFE_REDIRECT_HOSTS 声明
+- [ ] Task V13-3.2.8: security.test.ts 顶部注入环境变量
+- [ ] Task V13-3.2.9: security.test.ts 新增 3 个测试用例(空白/反斜杠/畸形编码)
+- [ ] Task V13-3.2.10: `npm run test:contract` 全部通过
+- [ ] Task V13-3.2.11: `npm run build` 编译通过
+
+## 三十三、v13 spec 自身凭空假设检查(四重核实机制 CHK-V13-1~25)
+
+> v13 引入第四重核实: 伪代码自洽性。每个 CHK-V13-x 验证点必须确认伪代码引用的方法/字段/类型在 v13 修复方案中存在,且伪代码内部逻辑自洽。
+
+- [ ] CHK-V13-1: V13-F1 阶段 1 伪代码 `db.SearchIndexPending.RemoveRange(corrupted)` 中 `SearchIndexPending` 是 ProductDbContext 已声明的 DbSet ✅(已核实)
+- [ ] CHK-V13-2: V13-F1 阶段 1 伪代码 `await db.SaveChangesAsync(ct)` 在 `if (corrupted.Count > 0)` 块内,确保持久化删除 ✅(自洽)
+- [ ] CHK-V13-3: V13-F1 阶段 2 伪代码 `meili.IndexAsync(validDocs.Select(x => x.Doc).ToList(), ct)` 中 meili 类型是 MeiliSearchProvider ✅(V13-F2 修正后)
+- [ ] CHK-V13-4: V13-F1 阶段 2 伪代码 `UpdateRetryAsync(db, validDocs.Select(x => x.Entity).ToList(), ex.Message, ct)` 中 UpdateRetryAsync 方法存在(IndexReplayWorker.cs L130 附近)
+- [ ] CHK-V13-5: V13-F4 伪代码 `p.Mr1` 中 Mr1 是 Product 实体字段(Pre-Task-V13-3 核实)
+- [ ] CHK-V13-6: V13-F4 伪代码 `p.Oem2` 中 Oem2 是 Product 实体字段(已核实)
+- [ ] CHK-V13-7: V13-F5 伪代码 `new Claim(ClaimTypes.NameIdentifier, "admin-token")` 中 ClaimTypes 来自 System.Security.Claims 命名空间
+- [ ] CHK-V13-8: V13-F5 伪代码 `new Claim(ClaimTypes.Role, "admin")` 与 AdminPolicy `RequireRole("admin")` 匹配
+- [ ] CHK-V13-9: V13-F6 伪代码 `db.Database.ExecuteSqlRawAsync("TRUNCATE TABLE search_index_pending RESTART IDENTITY", ct)` 中表名 search_index_pending 与 ProductDbContext 配置一致
+- [ ] CHK-V13-10: V13-F11 伪代码 `new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc)` 在 Npgsql EnableLegacyTimestampBehavior 模式下安全(Kind=Utc)
+- [ ] CHK-V13-11: Task V13-2.1 伪代码 `resilient.Initialize(success)` 中 Initialize 方法签名是 `void Initialize(bool primaryAvailable)` ✅(已核实 ResilientSearchProvider.cs L118)
+- [ ] CHK-V13-12: Task V13-2.1 伪代码 `scope.ServiceProvider.GetRequiredService<ResilientSearchProvider>()` 中 ResilientSearchProvider 已注册为 Scoped(ServiceCollectionExtensions.cs)
+- [ ] CHK-V13-13: Task V13-2.4 伪代码 `JsonSerializer.Deserialize<ProductIndexDoc>(p.Payload)` 返回 nullable(ProductIndexDoc 是 record,无 nullable 标注但 Deserialize 返回 T? 隐式)
+- [ ] CHK-V13-14: Task V13-2.4 伪代码 `validDocs.Add((p, doc))` 中元组类型 `(SearchIndexPending Entity, ProductIndexDoc Doc)` 与下游 `validDocs.Select(x => x.Doc)` / `validDocs.Select(x => x.Entity)` 自洽
+- [ ] CHK-V13-15: Task V13-3.2 伪代码 `safeDecode` 函数返回 string,与 isSafeRedirect 内 `const decoded = safeDecode(rawUrl)` 自洽
+- [ ] CHK-V13-16: Task V13-3.2 伪代码 `/^\s/.test(rawUrl)` 正则匹配空白字符前缀(包括 \t \n \r \f \v)
+- [ ] CHK-V13-17: Task V13-3.2 伪代码 `rawUrl.includes('\\')` 反斜杠检测(注意 TypeScript 字符串中 `\\` 表示单个反斜杠字符)
+- [ ] CHK-V13-18: Task V13-3.2 伪代码 `(/^(javascript|data|vbscript):/i.test(decoded))` 协议白名单(case insensitive)
+- [ ] CHK-V13-19: V13-F7 spec 描述"统一为 V12-F21 方案(保留 TRUNCATE)"与 Task V13-2.1.3 子任务"全量重建前调用 TruncateSearchIndexPendingAsync"自洽
+- [ ] CHK-V13-20: V13-F15 spec 描述 VerifyAndExtract 返回 `(string iso, long cid)` 与 AdminProductService.cs L603 实际调用 `var (iso, cid) = _cursorHmac.VerifyAndExtract(req.Cursor);` 自洽
+- [ ] CHK-V13-21: V13-F16 spec L7468 SignV2 → Sign 与 CursorHmac.cs L77 `public string Sign(string updatedAtIso, long id)` 自洽
+- [ ] CHK-V13-22: V13 设计调整 A2 (拆分两阶段) 与 Task V13-2.4 子任务 2.4.2 自洽
+- [ ] CHK-V13-23: V13 设计调整 A3 (SetPrimaryAvailable → Initialize) 与 Task V13-2.1 子任务 2.1.2 自洽
+- [ ] CHK-V13-24: V13 设计调整 A7 (TruncateSearchIndexPendingAsync 新增) 与 Pre-Task-V13-2 + Task V13-2.3 自洽
+- [ ] CHK-V13-25: V13 设计调整 A8 (DateTime(1970,1,1,Utc)) 与 Task V13-2.1 子任务 2.1.1 自洽
+
+## 三十四、v13 tasks.md 任务可执行性检查(EXEC-V13-1~14)
+
+- [ ] EXEC-V13-1: Pre-Task-V13-1 修改文件路径存在(ISearchProvider.cs + EtlImportService.cs)
+- [ ] EXEC-V13-2: Pre-Task-V13-2 修改文件路径存在(EtlImportService.cs)
+- [ ] EXEC-V13-3: Pre-Task-V13-3 核实文件路径存在(Product.cs)
+- [ ] EXEC-V13-4: Pre-Task-V13-4 核实文件路径存在(AdminProductService.cs)
+- [ ] EXEC-V13-5: Pre-Task-V13-5 核实文件路径存在(ServiceCollectionExtensions.cs)
+- [ ] EXEC-V13-6: Task V13-1.1 修改文件路径存在(ISearchProvider.cs)
+- [ ] EXEC-V13-7: Task V13-1.2 修改文件路径存在(EtlImportService.cs)
+- [ ] EXEC-V13-8: Task V13-1.3 修改文件路径存在(DevTokenAuthMiddleware.cs)
+- [ ] EXEC-V13-9: Task V13-2.1 全量重建端点路径已定位(待 Pre-Task-V13-4 核实后确定)
+- [ ] EXEC-V13-10: Task V13-2.2 纯文档修正无代码改动
+- [ ] EXEC-V13-11: Task V13-2.3 修改文件路径存在(EtlImportService.cs)
+- [ ] EXEC-V13-12: Task V13-2.4 修改文件路径存在(IndexReplayWorker.cs)
+- [ ] EXEC-V13-13: Task V13-3.1 纯文档修正无代码改动
+- [ ] EXEC-V13-14: Task V13-3.2 修改文件路径存在(security.ts + env.d.ts + security.test.ts)
+
+## 三十五、v13 修复方案一致性检查(CONS-V13-1~12)
+
+- [ ] CONS-V13-1: spec V13-F1 (拆分两阶段) 与 tasks Task V13-2.4 (拆分两阶段) 一致
+- [ ] CONS-V13-2: spec V13-F2 (删除 IMeilisearchClient) 与 tasks Task V13-2.2 (删除引用) 一致
+- [ ] CONS-V13-3: spec V13-F3 (SetPrimaryAvailable → Initialize) 与 tasks Task V13-2.1 子任务 2.1.2 一致
+- [ ] CONS-V13-4: spec V13-F4 (ProductIndexDoc 扩展) 与 tasks Pre-Task-V13-1 + Task V13-1.1 一致
+- [ ] CONS-V13-5: spec V13-F5 (DevTokenAuthMiddleware ClaimsPrincipal) 与 tasks Task V13-1.3 一致
+- [ ] CONS-V13-6: spec V13-F6 (TruncateSearchIndexPendingAsync 新增) 与 tasks Pre-Task-V13-2 + Task V13-2.3 一致
+- [ ] CONS-V13-7: spec V13-F7 (V12-F7 与 V12-F21 矛盾消除) 与 tasks Task V13-2.1 子任务 2.1.4 一致
+- [ ] CONS-V13-8: spec V13-F11 (DateTime(1970,1,1,Utc)) 与 tasks Task V13-2.1 子任务 2.1.1 一致
+- [ ] CONS-V13-9: spec V13-F12 (safeDecode) 与 tasks Task V13-3.2 子任务 3.2.1-3.2.2 一致
+- [ ] CONS-V13-10: spec V13-F13 (测试环境变量注入) 与 tasks Task V13-3.2 子任务 3.2.8 一致
+- [ ] CONS-V13-11: spec V13-F14 (env.d.ts 声明) 与 tasks Task V13-3.2 子任务 3.2.7 一致
+- [ ] CONS-V13-12: spec V13-F15 (iso/cid 变量名) 与 tasks Task V13-3.1 子任务 3.1.3 一致
+
+## 三十六、第十三轮深度审查验证点(D13 + S13 + F12,36 项)
+
+> 第十三轮深度审查将验证 v13 修复方案是否引入新的衍生问题,重点核查: 伪代码自洽性 + 四重核实机制落地 + v12 凭空假设是否真正消除。
+
+### 数据关联维度(D13)验证点(12 个)
+
+- [ ] D13-1: ProductIndexDoc 扩展为 15 字段后,所有调用方(EtlImportService / IndexReplayWorker / MeiliSearchProvider)是否同步更新
+- [ ] D13-2: ProductIndexDoc 扩展后,Meilisearch 索引 schema 是否需要更新(filterable/sortable attributes)
+- [ ] D13-3: Product.Mr1 字段(若新增 migration)是否影响现有 Product 实体使用方
+- [ ] D13-4: DevTokenAuthMiddleware ClaimsPrincipal 设置后,其他 middleware(如 AuthMiddleware)是否受影响
+- [ ] D13-5: AdminPolicy RequireRole("admin") 与 DevTokenAuthMiddleware ClaimsPrincipal Role="admin" 是否完全匹配(大小写敏感)
+- [ ] D13-6: TruncateSearchIndexPendingAsync 方法所属类(EtlImportService)是否合理(对比 SearchIndexPendingRepository 是否更合适)
+- [ ] D13-7: TRUNCATE TABLE search_index_pending RESTART IDENTITY 是否需要 CASCADE(若有外键引用)
+- [ ] D13-8: ProductIndexDoc 扩展字段 nullable 是否影响 Meilisearch 排序(null 值处理)
+- [ ] D13-9: OemBrand 临时方案取 Product.Oem2 是否符合 V2 架构过渡期设计(对比 Oem2 vs OemBrand 字段语义)
+- [ ] D13-10: BrandSortOrder 默认 null 后,Meilisearch 排序配置是否需要 sort ascending with nulls last
+- [ ] D13-11: Product.Mr1 字段长度约束(varchar(10))是否与 MR.1 编码规则(10 位字母数字)一致
+- [ ] D13-12: ProductIndexDoc 扩展后,JSON 序列化 payload 是否向后兼容(旧 payload 无 Mr1/OemBrand/BrandSortOrder 字段)
+
+### 检索逻辑维度(S13)验证点(12 个)
+
+- [ ] S13-1: IndexReplayWorker 拆分两阶段后,阶段 1 SaveChanges 失败时是否影响阶段 2 处理
+- [ ] S13-2: 阶段 1 SaveChanges 失败时,损坏 payload 是否会无限重试(应进入 dead_letter)
+- [ ] S13-3: 阶段 2 IndexAsync 失败时,validDocs 是否正确进入 UpdateRetryAsync(不应被删除)
+- [ ] S13-4: ReindexAllAsync DateTime(1970,1,1,Utc) 在 Npgsql EnableLegacyTimestampBehavior 模式下是否正常工作
+- [ ] S13-5: ReindexAllAsync finally 块调用 resilient.Initialize(success) 是否与熔断器状态冲突(Polly 内部状态 vs _primaryAvailable 字段)
+- [ ] S13-6: TruncateSearchIndexPendingAsync 在全量重建前调用,是否与并发 IndexReplayWorker 轮询冲突(竞态条件)
+- [ ] S13-7: IndexReplayWorker 拆分两阶段后,阶段 1 与阶段 2 之间是否需要重新查询 pending(避免并发问题)
+- [ ] S13-8: ProductIndexDoc 扩展字段(Mr1/OemBrand/BrandSortOrder)是否需要在 Meilisearch 索引配置中声明 searchable/filterable/sortable
+- [ ] S13-9: 全量重建流式分批(keyset p.Id > lastId)在 ProductIndexDoc 扩展后是否仍正常(Select 投影字段增加)
+- [ ] S13-10: SyncSearchIndexAsync 构造 ProductIndexDoc 时,Mr1/Oem2 字段 null 处理是否安全(无 NullReferenceException)
+- [ ] S13-11: IndexReplayWorker 损坏 payload 删除后,是否需要记录到 dead_letter 表(审计追踪)
+- [ ] S13-12: V13-F11 DateTime(1970,1,1,Utc) 与 EtlImportService.cs L1147 `Where(p => p.UpdatedAt >= importStartedAt)` 时间窗过滤兼容性
+
+### 前后端联动维度(F12)验证点(12 个)
+
+- [ ] F12-1: isSafeRedirect 增强后(safeDecode + 反斜杠/空白防护),原有 7 个测试用例是否全部通过
+- [ ] F12-2: 新增 3 个测试用例(空白字符绕过 / 反斜杠绕过 / decodeURIComponent 畸形编码)是否覆盖完整
+- [ ] F12-3: env.d.ts VITE_SAFE_REDIRECT_HOSTS 声明后,TypeScript 严格模式编译是否通过
+- [ ] F12-4: security.test.ts 测试内注入环境变量后,是否影响其他测试文件(全局污染)
+- [ ] F12-5: isSafeRedirect 反斜杠防护 `rawUrl.includes('\\')` 是否误拒合法 URL(合法 URL 通常不含反斜杠)
+- [ ] F12-6: isSafeRedirect 空白字符前缀防护 `/^\s/.test(rawUrl)` 是否误拒合法 URL(合法 URL 通常不以空白开头)
+- [ ] F12-7: isSafeRedirect 协议白名单 `(javascript|data|vbscript):` 是否覆盖所有危险协议(对比 IE/老 Edge 的 vbscript)
+- [ ] F12-8: spec.md L7468 SignV2 → Sign 修正后,CursorHmac VerifyAndExtract 调用是否仍正常(签名算法不变)
+- [ ] F12-9: VerifyAndExtract 变量名对齐(iso/cid)后,AdminProductService.cs L603 下游代码引用是否仍正常(变量名只是 destructure 别名)
+- [ ] F12-10: V9/V10 扩展状态描述修正后,是否影响其他引用 V9/V10 状态的章节
+- [ ] F12-11: IndexReplayWorker 路径修正后,spec/tasks/checklist 中所有引用是否全部更新(无遗漏)
+- [ ] F12-12: v13 修复方案是否引入新的前后端 API 契约破坏(如 ProductIndexDoc 字段增加是否影响前端类型定义)
+
+## 三十七、第十三轮循环终止条件
+
+- [ ] 第十三轮审查无任何新漏洞检出 → 完成 v13 修订,进入 v14 修订(如有新漏洞)或定稿
+- [ ] 第十三轮审查发现新漏洞 → 进入 v14 修订,继续迭代
+- [ ] 第十三轮审查发现 v13 仍有凭空假设 → 进入 v14 修订,加强核实机制(五重核实?)
+- [ ] 第十三轮审查重点: 伪代码自洽性(SaveChanges 位置 / 变量作用域 / null 处理 / 异常路径)
+- [ ] 第十三轮审查重点: v12 凭空假设是否真正消除(Grep 验证 IMeilisearchClient/SetPrimaryAvailable/TruncateSearchIndexPendingAsync/ProductIndexDoc 扩展)
+- [ ] 持续迭代直到连续一轮审查无任何新漏洞检出
+- [ ] v13 引入"四重核实机制"(代码存在性+字段名+API 签名+伪代码自洽性),目标: 真正实现"0 项凭空假设"+"0 项伪代码自洽性漏洞"
+
