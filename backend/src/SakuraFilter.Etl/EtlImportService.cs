@@ -1119,8 +1119,9 @@ public class EtlImportService
 
     /// <summary>
     /// 同步本次导入的 products 到 Meili
+    /// V2 改造 (Task 0.4):
     /// 1) 从 products 表查 updated_at >= import_started_at 的所有产品
-    /// 2) 构建 ProductIndexDoc 列表
+    /// 2) 调 BuildMr1DocumentAsync 构建 Mr1IndexDoc (含嵌套 oem_list + machine_list + 扁平化字段)
     /// 3) 尝试直接 IndexAsync;失败/超时则批量入队 search_index_pending
     /// 流式分批 (每批 1000) 避免 1M 规模 OOM
     /// </summary>
@@ -1133,7 +1134,7 @@ public class EtlImportService
         var db = scope.ServiceProvider.GetRequiredService<ProductDbContext>();
         var meili = scope.ServiceProvider.GetRequiredService<MeiliSearchProvider>();
 
-        // 2) 流式分批:每批 1000 个 OEM -> 从 products 查 (用 updated_at 时间窗)
+        // 2) 流式分批:每批 1000 个 MR.1 -> 从 products 查 (用 updated_at 时间窗)
         //    不再依赖 _affectedOems,避免 COPY 阶段加 lock
         const int batchSize = 1000;
         int directOk = 0, queuedFail = 0;
@@ -1146,24 +1147,24 @@ public class EtlImportService
                 var query = db.Products.AsNoTracking()
                     .Where(p => p.UpdatedAt >= importStartedAt);
                 if (lastId.HasValue) query = query.Where(p => p.Id > lastId.Value);
-                var batch = await query.OrderBy(p => p.Id).Take(batchSize)
-                    .Select(p => new
-                    {
-                        p.Id, p.OemNoNormalized, p.OemNoDisplay, p.Remark, p.Type,
-                        p.D1Mm, p.D2Mm, p.H1Mm, p.H3Mm, p.Media, p.IsDiscontinued, p.UpdatedAt
-                    })
-                    .ToListAsync(ct);
+                var batch = await query.OrderBy(p => p.Id).Take(batchSize).ToListAsync(ct);
                 if (batch.Count == 0) break;
                 lastId = batch[^1].Id;
-                var docs = batch.Select(p => new ProductIndexDoc(
-                    p.Id, p.OemNoNormalized, p.OemNoDisplay ?? "", p.Remark, p.Type ?? "UNKNOWN",
-                    p.D1Mm, p.D2Mm, p.H3Mm, p.H1Mm, p.Media, p.IsDiscontinued,
-                    // Day 9.9: 修复 EnableLegacyTimestampBehavior 下 Kind=Local 导致 DateTimeOffset 构造异常
-                    //   WHY: Npgsql.EnableLegacyTimestampBehavior 读 timestamptz 返回 Kind=Local,
-                    //        new DateTimeOffset(dt, TimeSpan.Zero) 要求 Kind==Utc, 否则抛 ArgumentException
-                    //   修复: SpecifyKind 改为 Utc (不改时间值, 只改 Kind 标记)
-                    new DateTimeOffset(DateTime.SpecifyKind(p.UpdatedAt, DateTimeKind.Utc), TimeSpan.Zero).ToUnixTimeSeconds()
-                )).ToList();
+
+                // V2: 调 BuildMr1DocumentAsync 构建嵌套文档 (含 oem_list + machine_list + 扁平化字段)
+                var docs = new List<Mr1IndexDoc>(batch.Count);
+                foreach (var p in batch)
+                {
+                    try
+                    {
+                        docs.Add(await meili.BuildMr1DocumentAsync(p, ct));
+                    }
+                    catch (Exception docEx)
+                    {
+                        _logger.LogWarning(docEx, "BuildMr1DocumentAsync 失败 mr1={Mr1},跳过", p.Mr1);
+                    }
+                }
+
                 try
                 {
                     await meili.IndexAsync(docs, ct);
@@ -1188,8 +1189,9 @@ public class EtlImportService
 
     /// <summary>
     /// Meili 不可用时,批量入队 search_index_pending (1000/批,避免单次 SaveChanges 过大)
+    /// V2: 文档类型从 ProductIndexDoc 改为 Mr1IndexDoc
     /// </summary>
-    private static async Task EnqueuePendingBatchAsync(ProductDbContext db, List<ProductIndexDoc> docs, CancellationToken ct)
+    private static async Task EnqueuePendingBatchAsync(ProductDbContext db, List<Mr1IndexDoc> docs, CancellationToken ct)
     {
         const int chunkSize = 1000;
         for (int i = 0; i < docs.Count; i += chunkSize)

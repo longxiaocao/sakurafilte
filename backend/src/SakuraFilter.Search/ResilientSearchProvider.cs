@@ -162,30 +162,36 @@ public class ResilientSearchProvider : ISearchProvider
         }
     }
 
-    public async Task IndexAsync(IEnumerable<ProductIndexDoc> docs, CancellationToken ct = default)
+    public async Task IndexAsync(IEnumerable<Mr1IndexDoc> docs, CancellationToken ct = default)
     {
         // 双写: 主备都写,主失败不阻塞备 (后台 worker 会补偿)
+        // V2: 文档类型从 ProductIndexDoc 改为 Mr1IndexDoc (嵌套结构)
         var primaryTask = SafeIndexAsync(_primary, docs, ct);
         var fallbackTask = SafeIndexAsync(_fallback, docs, ct);
         await Task.WhenAll(primaryTask, fallbackTask);
     }
 
-    public async Task DeleteAsync(IEnumerable<long> ids, CancellationToken ct = default)
+    /// <summary>
+    /// V2: DeleteAsync 签名从 IEnumerable&lt;long&gt; ids 改为 IEnumerable&lt;string&gt; mr1s
+    /// WHY: V2 主键改为 mr_1 (字符串),按主键删除更准确
+    /// </summary>
+    public async Task DeleteAsync(IEnumerable<string> mr1s, CancellationToken ct = default)
     {
-        var primaryTask = SafeDeleteAsync(_primary, ids, ct);
-        var fallbackTask = SafeDeleteAsync(_fallback, ids, ct);
+        var primaryTask = SafeDeleteAsync(_primary, mr1s, ct);
+        var fallbackTask = SafeDeleteAsync(_fallback, mr1s, ct);
         await Task.WhenAll(primaryTask, fallbackTask);
     }
 
-    private async Task SafeIndexAsync(ISearchProvider p, IEnumerable<ProductIndexDoc> docs, CancellationToken ct)
+    private async Task SafeIndexAsync(ISearchProvider p, IEnumerable<Mr1IndexDoc> docs, CancellationToken ct)
     {
         try { await p.IndexAsync(docs, ct); }
         catch (Exception ex) { _logger.LogWarning(ex, "{Provider} 索引失败(将由后台 worker 补偿)", p.Name); }
     }
 
-    private async Task SafeDeleteAsync(ISearchProvider p, IEnumerable<long> ids, CancellationToken ct)
+    /// <summary>V2: SafeDeleteAsync 签名同步改为 IEnumerable&lt;string&gt; mr1s</summary>
+    private async Task SafeDeleteAsync(ISearchProvider p, IEnumerable<string> mr1s, CancellationToken ct)
     {
-        try { await p.DeleteAsync(ids, ct); }
+        try { await p.DeleteAsync(mr1s, ct); }
         catch (Exception ex) { _logger.LogWarning(ex, "{Provider} 删除失败(将由后台 worker 补偿)", p.Name); }
     }
 }

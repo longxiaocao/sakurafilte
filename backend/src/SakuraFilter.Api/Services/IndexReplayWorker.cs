@@ -94,7 +94,8 @@ public class IndexReplayWorker : BackgroundService
         {
             try
             {
-                var docs = toIndex.Select(p => JsonSerializer.Deserialize<ProductIndexDoc>(p.Payload)!).ToList();
+                // V2 (Task 0.4): 反序列化 Mr1IndexDoc (嵌套结构,替代 ProductIndexDoc)
+                var docs = toIndex.Select(p => JsonSerializer.Deserialize<Mr1IndexDoc>(p.Payload)!).ToList();
                 await meili.IndexAsync(docs, ct);
                 // 成功后批量删除
                 db.SearchIndexPending.RemoveRange(toIndex);
@@ -113,8 +114,9 @@ public class IndexReplayWorker : BackgroundService
         {
             try
             {
-                var ids = toDelete.SelectMany(p => JsonSerializer.Deserialize<List<long>>(p.Payload) ?? new()).ToList();
-                await meili.DeleteAsync(ids, ct);
+                // V2 (Task 0.4): payload 存 List<string> mr1s (替代 List<long> ids)
+                var mr1s = toDelete.SelectMany(p => JsonSerializer.Deserialize<List<string>>(p.Payload) ?? new()).ToList();
+                await meili.DeleteAsync(mr1s, ct);
                 db.SearchIndexPending.RemoveRange(toDelete);
                 await db.SaveChangesAsync(ct);
                 _logger.LogInformation("Meili 重试删除成功: {Count} 条", toDelete.Count);
