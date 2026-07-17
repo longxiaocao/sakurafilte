@@ -9543,3 +9543,756 @@ Task V14-3.1 (spec L7468 SignV2 修正) ─→ 独立
 - [ ] 持续迭代直到连续一轮审查无任何新漏洞检出
 - [ ] v14 引入"五重核实机制"(代码存在性+字段名+API 签名+伪代码自洽性+运行时上下文自洽性)
 - [ ] v14 目标: 真正实现"0 项凭空假设"+"0 项伪代码自洽性漏洞"+"0 项运行时上下文漏洞"
+
+---
+
+# 第十六章 v15 修订版 — 第十四轮审查衍生漏洞纠正
+
+## 16.1 第十四轮深度审查结果摘要
+
+第十四轮三维度并行深度审查(D14/S14/F13)已完成,发现 v14 修复方案自身存在 25 项衍生漏洞(去重后):
+
+**严重等级分布**:
+- 高危: 9 项(D14-1 / D14-2 / D14-4 / D14-10 / D14-12 / S14-5 / S14-11 / S14-附-1 / F13-8 / F13-11)
+- 中危: 11 项(D14-7 / D14-8 / D14-11 / D14-14 / S14-1 / S14-3 / S14-6 / S14-7 / S14-12 / S14-附-3 / F13-2 / F13-3 / F13-4)
+- 低危: 5 项(D14-15 / S14-8 / S14-附-2 / F13-7 / F13-9)
+
+**核心发现**:
+1. v14 标榜"五重核实机制"实现"0 项凭空假设",但第十四轮发现至少 5 项新的凭空假设:
+   - IHostedServiceStatus.StopAsync/StartAsync 方法(接口不存在,D14-2/S14-11)
+   - Mr1Validator(全后端零匹配,D14-10)
+   - WithRateLimiter API(全后端零匹配,实际是 RequireRateLimiting,D14-11)
+   - MeiliSearchProvider.InitializeAsync 方法(全后端零匹配,S14-附-1)
+   - V14-F17 修复的"finally 块 Initialize"(凭空假设,S14-附-3)
+
+2. v14 修复方案引入回归漏洞:
+   - D14-4: DevTokenAuthMiddleware 伪代码丢失 Bearer 检测逻辑,实施后 JWT 认证体系崩溃
+   - S14-5: FilterableAttributes 遗漏 d1Mm/d2Mm/h1Mm 范围字段,导致范围搜索失效
+   - F13-11: Meilisearch FilterableAttributes(camelCase) 与现有 filter(snake_case) 命名不一致
+
+3. v14 修复方案不可实施:
+   - F13-8: 全量重建端点无前端入口(etlApi.reindexAll 方法不存在)
+   - S14-附-2: SakuraFilter.Etl.Tests 项目不存在,Task V14-1.2.4 单元测试无法落地
+
+**v15 核心创新**: 六重核实机制(代码存在性 + 字段名 + API 签名 + 伪代码自洽性 + 运行时上下文自洽性 + **API 完整签名比对**)
+- 新增第六重: API 完整签名比对(Grep 引用方法名 → Read 接口/类完整定义 → 验证方法存在 + 参数匹配)
+- 修正 v14 五重核实的盲区: 引用方法名存在但签名不匹配(如 StopAsync 存在但签名是 CancellationToken,非 string+CancellationToken)
+
+## 16.2 v14 凭空假设纠正 V15-F1~F9(9 项高危)
+
+### V15-F1 [高] D14-2/S14-11 IHostedServiceStatus.StopAsync/StartAsync 方法不存在
+
+**v14 spec 位置**: spec.md L9077-L9086(V14-F18)、tasks.md L5803-L5820(Task V14-2.1.3)
+**v14 错误描述**: `await hostedStatus.StopAsync("IndexReplayWorker", ct)` + `await hostedStatus.StartAsync("IndexReplayWorker", ct)`
+**真实代码事实**(经 Read 核实):
+- [HostedServiceHealth.cs#L15-L28](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Services/HostedServiceHealth.cs#L15): IHostedServiceStatus 接口仅 4 方法:
+  ```csharp
+  public interface IHostedServiceStatus
+  {
+      void ReportAlive(string serviceName);
+      DateTime? LastHeartbeat(string serviceName);
+      IReadOnlyCollection<string> TrackedServices { get; }
+      IReadOnlyList<string> GetStaleServices(TimeSpan threshold);
+  }
+  ```
+- 无 StopAsync / StartAsync 方法
+- v14 伪代码 `hostedStatus.StopAsync("IndexReplayWorker", ct)` 会 CS1061 编译错误
+**v15 修正方案**: 改用 PostgreSQL advisory lock 防止并发(对齐 EtlImportService.cs L807-L812 既有模式):
+```csharp
+public async Task ReindexAllAsync(DateTime sinceDate, CancellationToken ct = default)
+{
+    // V15-F1: 使用 advisory lock 7740005(新增 lock key)
+    // IndexReplayWorker.ProcessPendingAsync 内获取同一 lock 实现串行化
+    using var conn = new NpgsqlConnection(_connectionString);
+    await conn.OpenAsync(ct);
+    if (!await TryAcquireAdvisoryLockAsync(conn, 7740005L, ct))
+    {
+        throw new InvalidOperationException("另一全量重建任务正在运行 (advisory lock 7740005 被占用)");
+    }
+    try
+    {
+        await TruncateSearchIndexPendingAsync(ct);
+        await SyncSearchIndexAsync(sinceDate, ct);
+    }
+    finally
+    {
+        await ReleaseAdvisoryLockAsync(conn, 7740005L, ct);
+    }
+}
+```
+同步修改 IndexReplayWorker.ProcessPendingAsync 获取 advisory lock 7740005(共享锁,与 ReindexAllAsync 互斥):
+```csharp
+private async Task ProcessPendingAsync(CancellationToken ct)
+{
+    using var scope = _sp.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<ProductDbContext>();
+    
+    // V15-F1: 获取 advisory lock 7740005(与 ReindexAllAsync 互斥)
+    // ReindexAllAsync 持有锁时,worker 跳过本轮处理
+    var conn = db.Database.GetDbConnection();
+    if (!await TryAcquireAdvisoryLockAsync(conn, 7740005L, ct))
+    {
+        _logger.LogDebug("全量重建进行中,跳过本轮 IndexReplayWorker 处理");
+        return;
+    }
+    try
+    {
+        // 原有处理逻辑...
+    }
+    finally
+    {
+        await ReleaseAdvisoryLockAsync(conn, 7740005L, ct);
+    }
+}
+```
+
+### V15-F2 [高] D14-10 Mr1Validator 全后端零匹配
+
+**v14 spec 位置**: spec.md L9049(V14-F15)
+**v14 错误描述**: "业务层用 Mr1Validator 校验长度(已存在)"
+**真实代码事实**(经 Grep 核实):
+- Grep `Mr1Validator|Mr1.*Validator` 全后端: No matches found
+- spec.md L5496-L5497 仅作为 spec 描述存在,从未实施
+- V9-F10 / V10-F17 已指出 Mr1Validator 凭空假设
+**v15 修正方案**: v15 新建 Pre-Task-V15-1 实施 Mr1Validator 静态工具类:
+```csharp
+// 新建: backend/src/SakuraFilter.Core/Validation/Mr1Validator.cs
+namespace SakuraFilter.Core.Validation;
+
+public static class Mr1Validator
+{
+    public const int Mr1Length = 10;
+    
+    public static bool IsValid(string? mr1)
+    {
+        if (string.IsNullOrEmpty(mr1)) return false;
+        if (mr1.Length != Mr1Length) return false;
+        return mr1.All(char.IsLetterOrDigit);
+    }
+    
+    public static string? Normalize(string? mr1)
+    {
+        if (string.IsNullOrEmpty(mr1)) return null;
+        var upper = mr1.ToUpperInvariant();
+        return IsValid(upper) ? upper : null;
+    }
+}
+```
+在 EtlImportService 写入路径追加校验:
+```csharp
+// ImportProductsAsync 内,写入前校验
+if (!Mr1Validator.IsValid(mr1))
+{
+    progress.IncrSkippedNullField();
+    continue;
+}
+```
+
+### V15-F3 [高] D14-11 WithRateLimiter API 不存在
+
+**v14 spec 位置**: tasks.md L5564(Pre-Task-V14-1.3)、checklist.md L5038(V14-CHK-5)
+**v14 错误描述**: `.WithRateLimiter("etl")` 限流
+**真实代码事实**(经 Grep 核实):
+- Grep `WithRateLimiter` 全后端: No matches found
+- Grep `RequireRateLimiting` 全后端: 7 处使用
+- [AdminEtlEndpoints.cs#L21](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Endpoints/AdminEtlEndpoints.cs#L21): `.RequireRateLimiting("etl")`
+**v15 修正方案**: 所有 v14 文档中 `.WithRateLimiter("etl")` 改为 `.RequireRateLimiting("etl")`:
+```csharp
+app.MapPost("/api/admin/etl/reindex-all", ...)
+   .RequireAuthorization("Admin")
+   .RequireRateLimiting("etl");  // V15-F3 修正 API 名
+```
+
+### V15-F4 [高] S14-附-1 MeiliSearchProvider.InitializeAsync 方法不存在
+
+**v14 spec 位置**: tasks.md L5833-L5855(Task V14-2.2)
+**v14 错误描述**: "修改 MeiliSearchProvider.cs InitializeAsync 方法"
+**真实代码事实**(经 Grep 核实):
+- Grep `InitializeAsync` 全后端: No matches found
+- MeiliSearchProvider.cs 仅有构造函数、HealthCheckAsync、SearchAsync、IndexAsync、DeleteAsync、EscapeFilter
+- v14 Task V14-2.2.2 伪代码 `meili.InitializeAsync(ct)` 会 CS1061
+**v15 修正方案**: Task V14-2.2.1 改为"新增 InitializeAsync 方法"(非"修改"):
+```csharp
+// 新增方法到 MeiliSearchProvider.cs
+public async Task InitializeAsync(CancellationToken ct = default)
+{
+    var index = _client.Index("products");
+    
+    // V15-F6: FilterableAttributes 追加范围字段
+    var filterTask = await index.UpdateFilterableAttributesAsync(
+        new[] { "type", "isDiscontinued", "mr1", "oemBrand",
+                "d1Mm", "d2Mm", "d3Mm", "h1Mm", "h2Mm", "h3Mm" }, ct);
+    
+    var sortTask = await index.UpdateSortableAttributesAsync(
+        new[] { "updatedAtUnix", "oemNoDisplay", "brandSortOrder" }, ct);
+    
+    var searchTask = await index.UpdateSearchableAttributesAsync(
+        new[] { "oemNoDisplay", "remark", "type", "mr1", "oemBrand" }, ct);
+    
+    // V15-F15: 等待 Meilisearch 应用 schema 完成
+    await index.WaitForTaskAsync(filterTask.TaskUid, ct);
+    await index.WaitForTaskAsync(sortTask.TaskUid, ct);
+    await index.WaitForTaskAsync(searchTask.TaskUid, ct);
+}
+```
+
+### V15-F5 [高] D14-4 DevTokenAuthMiddleware 伪代码丢失 Bearer 检测逻辑
+
+**v14 spec 位置**: spec.md L8790-L8802(V14-F1 修正方案)、tasks.md L5751-L5765(Task V14-1.3.2)
+**v14 错误描述**: 伪代码仅 `if (validToken) { 设置 ClaimsPrincipal } await _next(ctx);`
+**真实代码事实**(经 Read 核实):
+- [DevTokenAuthMiddleware.cs#L117-L126](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Services/DevTokenAuthMiddleware.cs#L117): 现有代码含 Bearer 检测:
+  ```csharp
+  var authHeader = ctx.Request.Headers.Authorization.ToString();
+  if (authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+  {
+      await _next(ctx);
+      return;
+  }
+  ```
+- v14 伪代码会覆盖现有逻辑,丢失 Bearer 检测
+- 实施后 Bearer 请求(JWT)会被 X-Admin-Token 校验拦截,JWT 认证体系崩溃
+**v15 修正方案**: v14 伪代码必须保留现有 Bearer 检测逻辑:
+```csharp
+public async Task InvokeAsync(HttpContext ctx, RequestDelegate next)
+{
+    // 保留现有白名单/非受保护前缀逻辑...
+    if (!isProtected) { await next(ctx); return; }
+    
+    // V15-F5: 必须保留 Bearer 检测(JWT 认证体系)
+    var authHeader = ctx.Request.Headers.Authorization.ToString();
+    if (authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+    {
+        await next(ctx);
+        return;
+    }
+    
+    // X-Admin-Token 校验
+    var token = ctx.Request.Headers["X-Admin-Token"].FirstOrDefault();
+    if (!string.IsNullOrEmpty(token) && ValidToken(token))
+    {
+        // V14-F1: 设置 ClaimsPrincipal (在 UseAuthorization 之前执行)
+        var identity = new ClaimsIdentity(new[]
+        {
+            new Claim(ClaimTypes.Name, "admin"),
+            new Claim(ClaimTypes.Role, "admin")
+        }, "DevToken");
+        ctx.User = new ClaimsPrincipal(identity);
+    }
+    await next(ctx);
+}
+```
+
+### V15-F6 [高] S14-5 FilterableAttributes 遗漏范围字段
+
+**v14 spec 位置**: spec.md L9015-L9020(V14-F12)、tasks.md L5839-L5841(Task V14-2.2.1)
+**v14 错误描述**: FilterableAttributes 仅 `["type", "isDiscontinued", "mr1", "oemBrand"]`
+**真实代码事实**(经 Read 核实):
+- [MeiliSearchProvider.cs#L75-L91](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Search/MeiliSearchProvider.cs#L75): 现有 filter:
+  ```csharp
+  filters.Add($"type = \"{EscapeFilter(req.Type)}\"");
+  filters.Add($"d1_mm >= {lo} AND d1_mm <= {hi}");
+  filters.Add($"d2_mm >= {lo} AND d2_mm <= {hi}");
+  filters.Add($"h1_mm >= {lo} AND h1_mm <= {hi}");
+  filters.Add("is_discontinued = false");
+  ```
+- v14 FilterableAttributes 遗漏 d1_mm/d2_mm/h1_mm 等
+- Meilisearch 配置 schema 后,未在 FilterableAttributes 中的字段用于过滤会报错
+**v15 修正方案**: FilterableAttributes 追加范围字段(已在 V15-F4 伪代码中体现):
+```csharp
+await index.UpdateFilterableAttributesAsync(
+    new[] { 
+        "type", "isDiscontinued", "mr1", "oemBrand",
+        // V15-F6: 追加范围过滤字段
+        "d1Mm", "d2Mm", "d3Mm", "h1Mm", "h2Mm", "h3Mm"
+    }, ct);
+```
+
+### V15-F7 [高] F13-11 Meilisearch 字段命名不一致(camelCase vs snake_case)
+
+**v14 spec 位置**: tasks.md L5839-L5841(Task V14-2.2.1)
+**v14 错误描述**: FilterableAttributes 用 camelCase(`isDiscontinued`),现有 filter 用 snake_case(`is_discontinued`)
+**真实代码事实**(经 Read 核实):
+- ProductIndexDoc record 字段: PascalCase(`IsDiscontinued`/`D1Mm`)
+- 现有 Meilisearch filter: snake_case(`is_discontinued`/`d1_mm`)
+- v14 FilterableAttributes: camelCase(`isDiscontinued`)
+- ProductDbContext.cs L47: `UseSnakeCaseNamingConvention()` 仅用于 EF Core 数据库列名,不影响 System.Text.Json 序列化
+- Meilisearch C# SDK 0.15.4 默认使用 System.Text.Json,默认序列化为 camelCase
+**v15 修正方案**: 字段命名统一为 camelCase(对齐 Meilisearch SDK 默认序列化):
+```csharp
+// V15-F7: 修正 MeiliSearchProvider.cs 现有 filter 为 camelCase
+// 修改前: filters.Add($"d1_mm >= {lo} AND d1_mm <= {hi}");
+// 修改后: filters.Add($"d1Mm >= {lo} AND d1Mm <= {hi}");
+filters.Add($"type = \"{EscapeFilter(req.Type)}\"");
+filters.Add($"d1Mm >= {lo} AND d1Mm <= {hi}");
+filters.Add($"d2Mm >= {lo} AND d2Mm <= {hi}");
+filters.Add($"h1Mm >= {lo} AND h1Mm <= {hi}");
+filters.Add("isDiscontinued = false");
+```
+**重要**: 需先核实 Meilisearch SDK 0.15.4 实际序列化字段名(运行时验证),再决定统一方向。
+
+### V15-F8 [高] F13-8 全量重建端点无前端入口
+
+**v14 spec 位置**: spec.md L8825-L8835(V14-F2)、tasks.md L5551-L5565
+**v14 错误描述**: 后端新增 `/api/admin/etl/reindex-all`,前端无对应任务
+**真实代码事实**(经 Grep 核实):
+- Grep `reindex|ReindexAll|reindex-all` 全 frontend: No matches found
+- frontend/src/api/index.ts L342-L378 etlApi 无 reindexAll 方法
+**v15 修正方案**: 新增 Task V15-3.1 前端集成全量重建入口:
+```typescript
+// frontend/src/api/index.ts etlApi 追加:
+reindexAll(): Promise<{ message: string; startedAt: string }> {
+  return http.post('/admin/etl/reindex-all', {}).then((r) => r.data)
+}
+```
+```vue
+<!-- 在 ETL 管理页新增按钮(如 AdminEtlView.vue) -->
+<el-button
+  type="danger"
+  :loading="reindexLoading"
+  @click="handleReindexAll"
+>
+  全量重建搜索索引
+</el-button>
+
+<script setup lang="ts">
+import { etlApi } from '@/api'
+import { ElMessageBox, ElMessage } from 'element-plus'
+
+const reindexLoading = ref(false)
+
+async function handleReindexAll() {
+  try {
+    await ElMessageBox.confirm(
+      '全量重建将清空 Meilisearch 索引并重新同步,可能持续 10 分钟以上。确认继续?',
+      '危险操作',
+      { confirmButtonText: '确认重建', cancelButtonText: '取消', type: 'warning' }
+    )
+    reindexLoading.value = true
+    const result = await etlApi.reindexAll()
+    ElMessage.success(result.message)
+    // 跳转到进度页或轮询 progress
+  } catch (e) {
+    if (e !== 'cancel') ElMessage.error('全量重建失败')
+  } finally {
+    reindexLoading.value = false
+  }
+}
+</script>
+```
+
+### V15-F9 [高] D14-1 ReindexAllAsync 无 advisory lock,与 ImportProductsAsync 并发污染 Progress
+
+**v14 spec 位置**: spec.md L8814-L8824(Pre-Task-V14-1)
+**v14 错误描述**: ReindexAllAsync 直接调用 SyncSearchIndexAsync,无并发控制
+**真实代码事实**(经 Read 核实):
+- EtlImportService 是 Singleton(ServiceCollectionExtensions.cs L230)
+- ImportProductsAsync 使用 advisory lock 7740001 + _ctsLock 防并发
+- Progress 是 Singleton 共享状态,并发会污染计数
+**v15 修正方案**: ReindexAllAsync 复用 advisory lock + _ctsLock(已在 V15-F1 伪代码中体现,advisory lock 7740005):
+```csharp
+public async Task ReindexAllAsync(DateTime sinceDate, CancellationToken ct = default)
+{
+    // V15-F9: 复用 AcquireActiveCts 防并发(与 ImportProductsAsync 互斥)
+    var cts = AcquireActiveCts("reindex-all", ct);
+    try
+    {
+        // V15-F1: advisory lock 7740005(与 IndexReplayWorker 互斥)
+        using var conn = new NpgsqlConnection(_connectionString);
+        await conn.OpenAsync(cts.Token);
+        if (!await TryAcquireAdvisoryLockAsync(conn, 7740005L, cts.Token))
+        {
+            throw new InvalidOperationException("另一全量重建任务正在运行");
+        }
+        try
+        {
+            await TruncateSearchIndexPendingAsync(cts.Token);
+            await SyncSearchIndexAsync(sinceDate, cts.Token);
+        }
+        finally
+        {
+            await ReleaseAdvisoryLockAsync(conn, 7740005L, cts.Token);
+        }
+    }
+    finally
+    {
+        ReleaseActiveCts(cts);
+    }
+}
+```
+
+## 16.3 v14 中低危问题修正 V15-F10~F20(11 项中危 + 5 项低危)
+
+### V15-F10 [高] D14-12 SyncSearchIndexAsync 吞异常,ReindexAllAsync 失败仍返回 200 OK
+
+**v14 spec 位置**: spec.md L8818-L8823(Pre-Task-V14-1)
+**v14 错误描述**: SyncSearchIndexAsync 内部 catch 吞异常,ReindexAllAsync 仍返回 200 OK
+**真实代码事实**(经 Read 核实):
+- EtlImportService.cs L1183-1186: catch 块仅 LogError,不 rethrow
+**v15 修正方案**: ReindexAllAsync 返回详细结果对象,端点根据结果返回不同状态:
+```csharp
+public record ReindexResult(long DirectOk, long QueuedFail, TimeSpan Elapsed, string? Error);
+
+public async Task<ReindexResult> ReindexAllAsync(DateTime sinceDate, CancellationToken ct = default)
+{
+    var sw = Stopwatch.StartNew();
+    long beforeIndexed = Progress.Indexed;
+    long beforePending = Progress.IndexPending;
+    
+    // ... advisory lock + SyncSearchIndexAsync ...
+    
+    long directOk = Progress.Indexed - beforeIndexed;
+    long queuedFail = Progress.IndexPending - beforePending;
+    return new ReindexResult(directOk, queuedFail, sw.Elapsed, null);
+}
+```
+端点根据返回值:
+```csharp
+return result.QueuedFail == 0
+    ? Results.Ok(new { message = "全量重建成功", direct = result.DirectOk, elapsed = result.Elapsed.TotalSeconds })
+    : Results.Json(new { message = "全量重建部分失败", direct = result.DirectOk, queued = result.QueuedFail, elapsed = result.Elapsed.TotalSeconds }, statusCode: 207);
+```
+
+### V15-F11 [中] D14-7 SearchableAttributes 更新需重新索引已有文档
+
+**v14 spec 位置**: spec.md L9012-L9021(V14-F12)
+**v14 错误描述**: 配置 SearchableAttributes 后,已有文档无法被新字段搜索
+**v15 修正方案**: Task V14-2.2 后追加步骤,触发全量重新索引(或调用 ReindexAllAsync)
+
+### V15-F12 [中] D14-8 BrandSortOrder 999 desc 排序问题
+
+**v14 spec 位置**: spec.md L9034-L9041(V14-F14)
+**v14 错误描述**: BrandSortOrder 硬编码 999,未从 XrefOemBrand.SortOrder 取实际值
+**v15 修正方案**: BrandSortOrder 从 XrefOemBrand.SortOrder 取实际值:
+```csharp
+var brandSortOrder = await db.XrefOemBrands
+    .Where(x => x.Brand == primaryXref.OemBrand && x.DeletedAt == null)
+    .Select(x => x.SortOrder)
+    .FirstOrDefaultAsync(ct);
+BrandSortOrder: brandSortOrder > 0 ? brandSortOrder : 999
+```
+
+### V15-F13 [中] D14-14 CrossReference.OemBrand nullable 影响 Meilisearch facet
+
+**v14 spec 位置**: spec.md L8884-L8894(V14-F5)
+**v14 错误描述**: OemBrand 为 null 时无法被 facet 聚合
+**v15 修正方案**: OemBrand 为 null 时降级为占位值:
+```csharp
+OemBrand: primaryXref?.OemBrand ?? "UNKNOWN"
+```
+
+### V15-F14 [中] S14-1 全量重建未删除 Meilisearch 旧索引
+
+**v14 spec 位置**: spec.md L9200-L9224
+**v14 错误描述**: ReindexAllAsync 仅 upsert,不删除已删除产品的索引
+**v15 修正方案**: ReindexAllAsync 前置 DeleteAllDocumentsAsync:
+```csharp
+public async Task<ReindexResult> ReindexAllAsync(DateTime sinceDate, CancellationToken ct = default)
+{
+    // V15-F14: 全量重建前清空 Meilisearch 索引
+    var meili = _sp.CreateScope().ServiceProvider.GetRequiredService<MeiliSearchProvider>();
+    await meili.DeleteAllDocumentsAsync(ct);  // 新增 API
+    
+    await TruncateSearchIndexPendingAsync(ct);
+    await SyncSearchIndexAsync(sinceDate, ct);
+    // ...
+}
+```
+MeiliSearchProvider 新增方法:
+```csharp
+public async Task DeleteAllDocumentsAsync(CancellationToken ct = default)
+{
+    await _index.DeleteAllDocumentsAsync(ct);
+}
+```
+
+### V15-F15 [中] S14-12 Meilisearch schema 更新异步未等待生效
+
+**v14 spec 位置**: tasks.md L5834-L5850
+**v14 错误描述**: UpdateFilterableAttributesAsync 后立即返回,未 WaitForTaskAsync
+**v15 修正方案**: 在 V15-F4 伪代码中已体现 `await index.WaitForTaskAsync(task.TaskUid, ct)`
+
+### V15-F16 [中] S14-3 Include CrossReferences 笛卡尔积
+
+**v14 spec 位置**: tasks.md L5667-L5672(Task V14-1.2.1)
+**v14 错误描述**: `Include(p => p.CrossReferences)` 未用 `AsSplitQuery()`
+**v15 修正方案**: 追加 `AsSplitQuery()`:
+```csharp
+var batch = await query
+    .Include(p => p.CrossReferences)
+    .AsSplitQuery()  // V15-F16: 拆分为多个 SQL,避免笛卡尔积
+    .OrderBy(p => p.Id)
+    .Take(batchSize)
+    .ToListAsync(ct);
+```
+
+### V15-F17 [中] S14-7 阶段1 失败阻塞阶段2
+
+**v14 spec 位置**: tasks.md L5942-L5960(Task V14-2.4.1)
+**v14 错误描述**: 阶段1 SaveChanges 失败会抛异常,阶段2 不执行
+**v15 修正方案**: 阶段1 独立 try-catch,不阻塞阶段2:
+```csharp
+// V15-F17: 阶段1 独立 try-catch,失败不阻塞阶段2
+try
+{
+    if (corruptedItems.Count > 0)
+    {
+        await db.SearchIndexDeadLetters.AddRangeAsync(deadLetters, ct);
+        db.SearchIndexPending.RemoveRange(corruptedItems);
+        await db.SaveChangesAsync(ct);
+    }
+}
+catch (Exception ex)
+{
+    _logger.LogError(ex, "阶段1 失败,继续执行阶段2(有效条目处理)");
+    // 不 rethrow
+}
+
+// 阶段2 - 处理有效条目
+await ProcessValidItemsAsync(db, meili, validItems, ct);
+```
+
+### V15-F18 [中] F13-2 query.redirect 类型强转漏洞
+
+**v14 spec 位置**: spec.md L8977(V14-F10 伪代码)
+**v14 错误描述**: `(route.query.redirect as string)` 未处理 string[] 情况
+**v15 修正方案**: 显式处理 string[]:
+```typescript
+import { isSafeRedirect } from '@/utils/security'
+
+const rawQuery = route.query.redirect
+// V15-F18: 显式处理 string[] 情况
+const rawRedirect: string = (Array.isArray(rawQuery) ? rawQuery[0] : rawQuery) ?? '/admin/products'
+const allowedHosts = (import.meta.env.VITE_SAFE_REDIRECT_HOSTS || 'localhost,127.0.0.1').split(',')
+const redirect = isSafeRedirect(rawRedirect, allowedHosts) ? rawRedirect : '/admin/products'
+router.push(redirect)
+```
+
+### V15-F19 [中] F13-3 VITE_SAFE_REDIRECT_HOSTS 默认值覆盖生产域名
+
+**v14 spec 位置**: tasks.md L6016
+**v14 错误描述**: 默认值 'localhost,127.0.0.1' 不区分 dev/prod
+**v15 修正方案**: 区分 dev/prod 默认值:
+```typescript
+const DEFAULT_HOSTS_DEV = 'localhost,127.0.0.1'
+const DEFAULT_HOSTS_PROD = ''  // 空,生产环境必须显式配置
+
+const allowedHosts = (import.meta.env.VITE_SAFE_REDIRECT_HOSTS 
+  ?? (import.meta.env.DEV ? DEFAULT_HOSTS_DEV : DEFAULT_HOSTS_PROD))
+  .split(',')
+  .map(h => h.trim())
+  .filter(Boolean)
+
+// 若生产环境未配置,仅允许相对路径
+if (allowedHosts.length === 0) {
+  const redirect = rawRedirect.startsWith('/') && !rawRedirect.startsWith('//') 
+    ? rawRedirect : '/admin/products'
+  router.push(redirect)
+  return
+}
+```
+
+### V15-F20 [中] F13-4 security.test.ts 7 个测试用例边界覆盖不全
+
+**v14 spec 位置**: spec.md L9267-L9296
+**v14 错误描述**: 仅 7 个测试用例,未覆盖空字符串/null/undefined/数字/对象
+**v15 修正方案**: 补充 5 个边界测试(测试用例从 7 个扩展到 12 个)
+
+### V15-F21 [低] D14-15 Pre-Task-V14-3 路径修正遗漏 v13 章节
+
+**v14 spec 位置**: tasks.md L5597-L5618
+**v14 错误描述**: Pre-Task-V14-3 只修正 v14 章节,未修正 v13 及更早章节
+**v15 修正方案**: 全量替换所有章节中的错误路径(包括 v13),或标注"v13 历史路径,已被 v14 修正"
+
+### V15-F22 [低] S14-8 损坏 payload 审计日志含业务数据
+
+**v14 spec 位置**: tasks.md L5935-L5937
+**v14 错误描述**: 截断 200 字符仍含业务敏感数据
+**v15 修正方案**: 改用 hash(不打印完整内容):
+```csharp
+var payloadHash = p.Payload != null 
+    ? Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(p.Payload)))[..8]
+    : "null";
+_logger.LogWarning(ex, "损坏 payload 隔离: id={Id} op={Op} payloadLen={Len} payloadHash={Hash}",
+    p.Id, p.Operation, p.Payload?.Length ?? 0, payloadHash);
+```
+
+### V15-F23 [低] S14-附-2 SakuraFilter.Etl.Tests 项目不存在
+
+**v14 spec 位置**: tasks.md L5704-L5728(Task V14-1.2.4)
+**v14 错误描述**: 引用 `backend/tests/SakuraFilter.Etl.Tests/` 项目
+**真实代码事实**: 项目不存在,仅有 `SakuraFilter.Api.Tests`
+**v15 修正方案**: Pre-Task-V15-2 新建 SakuraFilter.Etl.Tests 项目:
+```bash
+cd backend/tests
+dotnet new xunit -o SakuraFilter.Etl.Tests
+cd SakuraFilter.Etl.Tests
+dotnet add reference ../../src/SakuraFilter.Etl/SakuraFilter.Etl.csproj
+dotnet add reference ../../src/SakuraFilter.Core/SakuraFilter.Core.csproj
+```
+
+### V15-F24 [低] F13-7 types.ts 新增 ProductIndexDoc 接口但前端无消费方
+
+**v14 spec 位置**: tasks.md L6035-L6063(Task V14-3.3)
+**v14 错误描述**: 新增 ProductIndexDoc 接口,但前端无任何组件消费
+**v15 修正方案**: 删除 Task V14-3.3,前端无需同步 ProductIndexDoc 类型(若未来需要再加)
+
+### V15-F25 [低] F13-9 .env 文件 Task 描述"追加"应为"新建"
+
+**v14 spec 位置**: tasks.md L6020-L6027
+**v14 错误描述**: 描述"追加"但文件不存在
+**v15 修正方案**: 修正描述为"新建 .env.development / .env.production 文件并添加配置"
+
+## 16.4 v15 关键设计调整(六重核实机制)
+
+### 调整 A1: 六重核实机制(代码存在性 + 字段名 + API 签名 + 伪代码自洽性 + 运行时上下文自洽性 + **API 完整签名比对**)
+
+**v14 五重核实机制的局限**: 引用方法名存在但签名不匹配(如 StopAsync 存在但签名是 CancellationToken,非 string+CancellationToken)
+**v15 六重核实机制**: 新增第六重 — API 完整签名比对:
+1. Grep 引用方法名 → 确认方法存在
+2. Read 接口/类完整定义 → 获取实际方法签名
+3. 比对伪代码调用签名与实际签名(参数类型、参数顺序、返回类型)
+4. 若签名不匹配,标记为凭空假设
+
+### 调整 A2: v15 前置任务设计
+
+v15 前置任务必须实施(非纯核实):
+- Pre-Task-V15-1: 实施 Mr1Validator 静态工具类(V15-F2)
+- Pre-Task-V15-2: 新建 SakuraFilter.Etl.Tests 测试项目(V15-F23)
+- Pre-Task-V15-3: 新增 MeiliSearchProvider.DeleteAllDocumentsAsync + InitializeAsync 方法(V15-F4/F14)
+
+## 16.5 v15 前置任务
+
+### Pre-Task-V15-1: 实施 Mr1Validator 静态工具类
+
+**目标**: 解决 D14-10(Mr1Validator 全后端零匹配)
+
+**步骤**:
+1. 新建 `backend/src/SakuraFilter.Core/Validation/Mr1Validator.cs`(实现见 V15-F2)
+2. 在 EtlImportService.ImportProductsAsync 写入路径追加校验
+3. 单元测试:`backend/tests/SakuraFilter.Core.Tests/Mr1ValidatorTests.cs`(若项目存在,否则新建)
+
+**验证**:
+- Grep `Mr1Validator` 全后端返回非零匹配
+- 单元测试通过
+
+### Pre-Task-V15-2: 新建 SakuraFilter.Etl.Tests 测试项目
+
+**目标**: 解决 S14-附-2(测试项目不存在)
+
+**步骤**:
+1. `cd backend/tests && dotnet new xunit -o SakuraFilter.Etl.Tests`
+2. `cd SakuraFilter.Etl.Tests && dotnet add reference ../../src/SakuraFilter.Etl/SakuraFilter.Etl.csproj`
+3. 添加到 backend/SakuraFilter.sln 解决方案
+
+**验证**:
+- Glob `backend/tests/SakuraFilter.Etl.Tests/*.csproj` 返回非零匹配
+- `dotnet build backend/tests/SakuraFilter.Etl.Tests` 成功
+
+### Pre-Task-V15-3: 新增 MeiliSearchProvider.DeleteAllDocumentsAsync + InitializeAsync 方法
+
+**目标**: 解决 V15-F4(InitializeAsync 不存在) + V15-F14(DeleteAllDocumentsAsync 不存在)
+
+**步骤**:
+1. 在 MeiliSearchProvider.cs 新增 InitializeAsync 方法(实现见 V15-F4)
+2. 在 MeiliSearchProvider.cs 新增 DeleteAllDocumentsAsync 方法(实现见 V15-F14)
+3. 在 WebApplicationExtensions.cs 启动时调用 `await meili.InitializeAsync(ct)`
+
+**验证**:
+- Grep `InitializeAsync` MeiliSearchProvider.cs 返回非零匹配
+- Grep `DeleteAllDocumentsAsync` MeiliSearchProvider.cs 返回非零匹配
+- 启动日志含 "Meilisearch schema 配置完成"
+
+## 16.6 v15 与 v14 根本区别对比表
+
+| 维度 | v14 | v15 |
+|------|-----|-----|
+| 核实机制 | 五重(代码存在性+字段名+API 签名+伪代码自洽性+运行时上下文自洽性) | 六重(+API 完整签名比对) |
+| IHostedServiceStatus.StopAsync/StartAsync | 凭空假设(接口不存在) | 改用 advisory lock 7740005 |
+| Mr1Validator | 凭空假设(零匹配) | Pre-Task-V15-1 实施 |
+| WithRateLimiter API | 凭空假设(零匹配) | 改为 RequireRateLimiting |
+| MeiliSearchProvider.InitializeAsync | 凭空假设(零匹配) | Pre-Task-V15-3 新增 |
+| V14-F17 finally Initialize | 凭空假设(实际无 finally) | 撤销 V14-F17(修复不存在的问题) |
+| DevTokenAuthMiddleware Bearer 检测 | 丢失(回归漏洞) | V15-F5 保留 |
+| FilterableAttributes 范围字段 | 遗漏 d1Mm/d2Mm/h1Mm | V15-F6 追加 |
+| Meilisearch 字段命名 | camelCase vs snake_case 不一致 | V15-F7 统一 camelCase |
+| 全量重建前端入口 | 无 etlApi.reindexAll | V15-F8 新增 |
+| ReindexAllAsync 并发控制 | 无 advisory lock | V15-F9 advisory lock 7740005 |
+| ReindexAllAsync 异常处理 | 吞异常,返回 200 | V15-F10 返回 ReindexResult |
+| SyncSearchIndexAsync 异常 | 不 rethrow | V15-F10 端点根据结果返回状态 |
+| BrandSortOrder 数据来源 | 硬编码 999 | V15-F12 从 XrefOemBrand.SortOrder 取 |
+| OemBrand null 处理 | null(Meilisearch facet 遗漏) | V15-F13 降级 "UNKNOWN" |
+| 全量重建 Meilisearch 索引 | 仅 upsert(残留脏数据) | V15-F14 前置 DeleteAllDocumentsAsync |
+| Meilisearch schema 等待 | 未 WaitForTaskAsync | V15-F15 WaitForTaskAsync |
+| Include CrossReferences 笛卡尔积 | 未 AsSplitQuery | V15-F16 AsSplitQuery |
+| IndexReplayWorker 阶段1 异常 | 阻塞阶段2 | V15-F17 独立 try-catch |
+| query.redirect 类型强转 | 未处理 string[] | V15-F18 显式处理 |
+| VITE_SAFE_REDIRECT_HOSTS 默认值 | 不区分 dev/prod | V15-F19 区分 |
+| security.test.ts 边界覆盖 | 7 个用例 | V15-F20 扩展到 12 个 |
+| 损坏 payload 审计 | 打印 200 字符 | V15-F22 改用 hash |
+| SakuraFilter.Etl.Tests 项目 | 凭空引用(不存在) | Pre-Task-V15-2 新建 |
+| types.ts ProductIndexDoc | 新增但无消费方 | V15-F24 删除 Task |
+
+## 16.7 v15 待启动第十五轮深度审查
+
+⏳ 第十五轮深度审查将验证 v15 修复方案是否引入新的衍生问题
+⏳ 持续迭代直到连续一轮审查无任何新漏洞检出
+⏳ v15 引入"六重核实机制"(代码存在性+字段名+API 签名+伪代码自洽性+运行时上下文自洽性+**API 完整签名比对**)
+⏳ v15 重点核查: API 完整签名比对(引用方法名存在但签名不匹配)
+⏳ v15 目标: 真正实现"0 项凭空假设"+"0 项伪代码自洽性漏洞"+"0 项运行时上下文漏洞"+"0 项 API 签名漏洞"
+
+**第十五轮审查重点维度**:
+
+### 数据关联维度(D15)审查点(12 个)
+- [ ] D15-1: Mr1Validator 实施后,所有 ETL 写入路径是否覆盖(ImportProducts/ImportXrefs/ImportApps)
+- [ ] D15-2: advisory lock 7740005 与 7740001/7740002/7740003 是否冲突(lock key 分配)
+- [ ] D15-3: AcquireActiveCts("reindex-all", ct) 与 ImportProductsAsync 的 _ctsLock 是否正确互斥
+- [ ] D15-4: DevTokenAuthMiddleware 保留 Bearer 检测后,ClaimsPrincipal 设置时机是否正确
+- [ ] D15-5: BrandSortOrder 从 XrefOemBrand.SortOrder 取,XrefOemBrand 表是否有 Brand 字段(非 OemBrand)
+- [ ] D15-6: ReindexResult 返回值,前端 etlApi.reindexAll 是否正确消费
+- [ ] D15-7: DeleteAllDocumentsAsync 后,Meilisearch primary key 是否保留(无需重新设置)
+- [ ] D15-8: TruncateSearchIndexPendingAsync 与 advisory lock 7740005 的执行顺序(lock 内 TRUNCATE)
+- [ ] D15-9: XrefOemBrand.SortOrder 字段类型(int? vs int),BuildProductIndexDocs 是否处理 null
+- [ ] D15-10: OemBrand "UNKNOWN" 占位值是否影响前端品牌筛选器(误显示 UNKNOWN 选项)
+- [ ] D15-11: Meilisearch schema WaitForTaskAsync 超时(默认 30s)是否足够
+- [ ] D15-12: SakuraFilter.Etl.Tests 项目引用 SakuraFilter.Etl.csproj 后,内部类是否可测(protected 方法)
+
+### 检索逻辑维度(S15)审查点(10 个)
+- [ ] S15-1: Meilisearch 字段命名统一 camelCase 后,现有 filter 是否全部修正(无遗漏 snake_case)
+- [ ] S15-2: FilterableAttributes 含 d1Mm/d2Mm/d3Mm/h1Mm/h2Mm/h3Mm,是否覆盖所有 SearchRequest 范围字段
+- [ ] S15-3: DeleteAllDocumentsAsync 后,索引 schema 是否保留(无需重新配置)
+- [ ] S15-4: BuildProductIndexDocs AsSplitQuery 后,跨批 keyset 分页(p.Id > lastId)是否仍正常
+- [ ] S15-5: IndexReplayWorker 阶段1 独立 try-catch,阶段2 是否仍能正常处理(无副作用)
+- [ ] S15-6: Meilisearch schema WaitForTaskAsync 失败时,是否影响应用启动(应 fail-fast)
+- [ ] S15-7: ReindexAllAsync DeleteAllDocumentsAsync 失败时,是否仍执行 SyncSearchIndexAsync(应中止)
+- [ ] S15-8: BrandSortOrder 从 XrefOemBrand.SortOrder 取,DB 查询是否在 batch 内(N+1 问题)
+- [ ] S15-9: Mr1Validator 校验失败时,是否记录日志(便于排查)
+- [ ] S15-10: 全量重建期间 IndexReplayWorker 跳过处理,是否有日志(便于运维监控)
+
+### 前后端联动维度(F14)审查点(10 个)
+- [ ] F14-1: etlApi.reindexAll 返回 ReindexResult,前端 TypeScript 类型是否同步
+- [ ] F14-2: 全量重建按钮 loading 状态,是否防止重复点击
+- [ ] F14-3: query.redirect string[] 处理,Vue Router 类型定义是否对齐
+- [ ] F14-4: VITE_SAFE_REDIRECT_HOSTS dev/prod 区分,env.d.ts 类型声明是否调整
+- [ ] F14-5: security.test.ts 12 个测试用例,是否覆盖所有 isSafeRedirect 内部分支
+- [ ] F14-6: Meilisearch 字段命名 camelCase,前端 filter 参数是否同步
+- [ ] F14-7: OemBrand "UNKNOWN" 占位值,前端品牌筛选器是否过滤
+- [ ] F14-8: BrandSortOrder 从 XrefOemBrand.SortOrder 取,前端排序方向(asc/desc)是否明确
+- [ ] F14-9: 全量重建进度展示,前端是否轮询 etlApi.progress() 显示
+- [ ] F14-10: v14 25 项衍生漏洞是否全部在 v15 修复方案中覆盖(无遗漏)
+
+## 16.8 第十五轮循环终止条件
+
+- [ ] 第十五轮审查无任何新漏洞检出 → 完成 v15 修订,进入 v16 修订(如有新漏洞)或定稿
+- [ ] 第十五轮审查发现新漏洞 → 进入 v16 修订,继续迭代
+- [ ] 第十五轮审查发现 v15 仍有凭空假设 → 进入 v16 修订,加强核实机制(七重核实?)
+- [ ] 第十五轮审查重点: API 完整签名比对(引用方法名存在但签名不匹配)
+- [ ] 第十五轮审查重点: v14 凭空假设是否真正消除(Grep 验证 IHostedServiceStatus.StopAsync/Mr1Validator/WithRateLimiter/InitializeAsync)
+- [ ] 持续迭代直到连续一轮审查无任何新漏洞检出
+- [ ] v15 引入"六重核实机制"(代码存在性+字段名+API 签名+伪代码自洽性+运行时上下文自洽性+API 完整签名比对)
+- [ ] v15 目标: 真正实现"0 项凭空假设"+"0 项伪代码自洽性漏洞"+"0 项运行时上下文漏洞"+"0 项 API 签名漏洞"
+- [ ] v15 实际新增代码: 3 个新文件(Mr1Validator.cs + SakuraFilter.Etl.Tests.csproj + EtlImportServiceTests.cs)
+- [ ] v15 实际修改后端文件: 7 个(EtlImportService.cs / AdminEtlEndpoints.cs / MeiliSearchProvider.cs / IndexReplayWorker.cs / WebApplicationExtensions.cs + Mr1Validator 新增)
+- [ ] v15 实际修改前端文件: 4 个(LoginView.vue / api/index.ts / AdminEtlView.vue / .env.development)
+- [ ] v15 纯文档修正: 3 个文件(spec.md / tasks.md / checklist.md)
+- [ ] v15 新增 migration: 0 个(v15 不涉及 DB schema 变更)
