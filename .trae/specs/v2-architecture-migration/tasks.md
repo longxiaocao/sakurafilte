@@ -293,6 +293,487 @@
 
 ---
 
+## v3 修订新增任务(第二轮深度审查衍生漏洞修复)
+
+> 共 30 个新任务,修复第二轮三维度并行深度审查发现的 62 个衍生漏洞
+> 任务编号沿用原 Phase 编号,带 .v3 后缀
+
+### Phase 0 v3 补丁任务
+
+- [ ] **Task 0.2.8**: ProductDbContext Fluent API 配置层清理(修复 D1/D2/D12/D13/D20)
+  - [ ] 0.2.8.1: 移除 `ProductDbContext.cs:62` 的 `.IsRequired()`(oem_no_normalized 允许 NULL)
+  - [ ] 0.2.8.2: 移除 `ProductDbContext.cs:86` 的 `IsUnique()`,改为 `e.HasIndex(p => p.OemNoNormalized).HasFilter("oem_no_normalized IS NOT NULL")`
+  - [ ] 0.2.8.3: 移除 `ProductDbContext.cs:153` 的 `IsUnique()`,改为两个部分唯一索引:
+    ```csharp
+    e.HasIndex(i => i.OemNo3).IsUnique()
+        .HasFilter("image_role = 'primary' AND oem_no_3 IS NOT NULL")
+        .HasDatabaseName("uq_product_images_primary");
+    e.HasIndex(i => new { i.ProductId, i.Slot }).IsUnique()
+        .HasFilter("image_role = 'detail'")
+        .HasDatabaseName("uq_product_images_detail_slot");
+    ```
+  - [ ] 0.2.8.4: `ProductDbContext.cs:114` 改为 `e.Property(x => x.OemNo3).HasMaxLength(200)`
+  - [ ] 0.2.8.5: `ProductDbContext.cs:164` 后补 `e.Property(s => s.UpdatedAt).HasDefaultValueSql("now()")`
+  - [ ] 0.2.8.6: 补 Fluent API 配置 `idx_products_mr_1_unique` 部分唯一索引:
+    ```csharp
+    e.HasIndex(p => p.Mr1).IsUnique()
+        .HasFilter("mr_1 IS NOT NULL")
+        .HasDatabaseName("idx_products_mr_1_unique");
+    ```
+  - **验证**: `dotnet ef migrations script --idempotent` 输出无 `AlterColumn(... nullable: false)` 或 `CreateIndex(... unique: true)` 旧约束重建
+  - **依赖**: Task 0.2
+
+- [ ] **Task 0.2.9**: partition6_placeholder 创建方式统一(修复 D14)
+  - [ ] 0.2.9.1: spec L592-595 的 `CREATE TABLE IF NOT EXISTS partition6_placeholder` SQL 移除
+  - [ ] 0.2.9.2: 仅通过 EF Core 迁移创建,配置:
+    ```csharp
+    mb.Entity<Partition6Placeholder>(e =>
+    {
+        e.ToTable("partition6_placeholder");
+        e.HasKey(x => x.Id);
+        e.Property(x => x.CreatedAt).HasDefaultValueSql("now()");
+    });
+    ```
+  - **验证**: `dotnet ef migrations script` 输出含 CreateTable;`psql \d partition6_placeholder` 表存在
+  - **依赖**: Task 0.2
+
+- [ ] **Task 0.4.12**: ISearchProvider.DeleteAsync 签名改造(修复 S19)
+  - [ ] 0.4.12.1: `ISearchProvider.cs:26` 接口签名改为 `Task DeleteAsync(IEnumerable<string> mr1s, CancellationToken ct = default)`
+  - [ ] 0.4.12.2: `MeiliSearchProvider.cs:132-139` 改为接收 `IEnumerable<string> mr1s`
+  - [ ] 0.4.12.3: `ResilientSearchProvider.cs:173-178` 双写删除同步改造
+  - [ ] 0.4.12.4: `AdminProductService.DeleteAsync` 调用方改为 `_search.DeleteAsync(new[] { product.Mr1 })`
+  - **验证**: 单元测试 `Meili_Delete_ByMr1` 通过
+  - **依赖**: Task 0.4
+
+- [ ] **Task 0.4.13**: Meilisearch 双索引灰度迁移脚本(修复 S7/F18)
+  - [ ] 0.4.13.1: 创建新索引 `products_v2`(主键 `mr_1`),配置 filterableAttributes
+  - [ ] 0.4.13.2: 后台批量写入 V2 文档(不影响现有 `products` 索引)
+  - [ ] 0.4.13.3: 切换 `MeiliSearchOptions.IndexName = "products_v2"`(热切换)
+  - [ ] 0.4.13.4: 验证搜索结果一致性后,删除旧索引 `products`
+  - [ ] 0.4.13.5: (可选)重命名 `products_v2` → `products`
+  - **验证**: 集成测试 `Meili_IndexMigration_ZeroDowntime` 通过(迁移期间搜索不中断)
+  - **依赖**: Task 0.4
+
+- [ ] **Task 0.4.14**: Mr1IndexDoc record 重写为嵌套结构(修复 S7)
+  - [ ] 0.4.14.1: `ISearchProvider.cs` 重写 `ProductIndexDoc` 为 `Mr1IndexDoc`:
+    ```csharp
+    public record Mr1IndexDoc(
+        string Mr1,
+        string ProductName1,
+        string ProductName2,
+        string Type,
+        string? Oem2,
+        bool IsPublished,
+        bool IsDiscontinued,
+        List<OemListItem> OemList,
+        List<MachineListItem> MachineList,
+        decimal? D1Mm, /* ... */
+        Dictionary<string, string> ImagePrimaryKeys,
+        List<string> ImageDetailKeys,
+        int BrandSortOrderMin,
+        int OemListSortOrderMin  // 新增(修复 S17)
+    );
+    public record OemListItem(string OemBrand, string OemNo3, int SortOrder, string? MachineType, bool IsPublished, string? Oem2);
+    public record MachineListItem(string MachineBrand, string MachineModel, string? MachineCategory);
+    ```
+  - [ ] 0.4.14.2: `MeiliSearchProvider.IndexAsync` 改为 `primaryKey: "mr_1"`
+  - **验证**: 单元测试 `Meili_BuildMr1Document_FlatToNested` 通过
+  - **依赖**: Task 0.4.2
+
+- [ ] **Task 0.5.5**: 前端 http.ts 拦截器双格式错误码兼容(修复 F3)
+  - [ ] 0.5.5.1: `frontend/src/utils/http.ts` 加 `ERROR_CODE_MAP`:
+    ```ts
+    const ERROR_CODE_MAP: Record<string, string> = {
+      'ERR_AUTH_FAILED': 'AUTH_FAILED',
+      'ERR_CONFLICT': 'CONFLICT',
+      'MR1_ALREADY_EXISTS': 'MR1_ALREADY_EXISTS',
+      'OEM3_ALREADY_EXISTS': 'OEM3_ALREADY_EXISTS',
+      'XREF_CONFLICT': 'XREF_CONFLICT',
+      'CURSOR_INVALID': 'CURSOR_INVALID',
+      'CURSOR_EXPIRED': 'CURSOR_EXPIRED',
+      // ... 其他 13 个新错误码
+    }
+    const normalized = ERROR_CODE_MAP[errorCode] ?? errorCode
+    ```
+  - [ ] 0.5.5.2: 拦截器根据 normalized 错误码路由到友好提示
+  - **验证**: 前端单元测试 `HttpInterceptor_LegacyCompat` 通过
+  - **依赖**: Task 0.5
+
+- [ ] **Task 0.5.6**: i18n 文案表补充新错误码翻译(修复 F3)
+  - [ ] 0.5.6.1: `frontend/src/i18n/zh-CN.ts` + `en-US.ts` 补充 13 个新错误码翻译:
+    - `MR1_ALREADY_EXISTS`: "MR.1 编码已存在" / "MR.1 code already exists"
+    - `MR1_FORMAT_INVALID`: "MR.1 编码须为 1-10 位字母+数字"
+    - `MR1_REQUIRED`: "V2 数据必须填写 MR.1 编码"
+    - `OEM3_ALREADY_EXISTS`: "同 Brand 下 OEM 3 已存在"
+    - `OEM3_REQUIRED` / `OEM_BRAND_REQUIRED` / `MACHINE_TYPE_INVALID`
+    - `XREF_CONFLICT`: "OEM 排序已被他人修改,请刷新后重试"
+    - `IMAGE_PRIMARY_DUPLICATE` / `IMAGE_DETAIL_SLOT_DUPLICATE` / `IMAGE_ROLE_SLOT_MISMATCH` / `IMAGE_DETAIL_SLOT_INVALID`
+    - `SEARCH_PAGE_TOO_DEEP` / `CURSOR_INVALID` / `CURSOR_EXPIRED`
+  - **验证**: 前端单元测试 `I18n_NewErrorCodes` 通过
+  - **依赖**: Task 0.5
+
+- [ ] **Task 0.6.3**: nginx Googlebot 白名单 + sitemap 单独 RateLimit(修复 F6)
+  - [ ] 0.6.3.1: `docker/nginx.conf` 加 Googlebot User-Agent 白名单:
+    ```nginx
+    map $http_user_agent $is_googlebot {
+        default 0;
+        ~*googlebot 1;
+        ~*bingbot 1;
+    }
+    ```
+  - [ ] 0.6.3.2: `/sitemap.xml` location 单独 RateLimit(600/min)
+  - [ ] 0.6.3.3: Googlebot 请求绕过 "public" RateLimit
+  - **验证**: 压测 Googlebot 600 req/min 不触发 503
+  - **依赖**: Task 0.6
+
+- [ ] **Task 0.7.5**: CommonEndpoints 移除根路由(修复 F1)
+  - [ ] 0.7.5.1: `CommonEndpoints.cs:18` 的 `MapGet("/")` 改为 `MapGet("/api/info")`
+  - [ ] 0.7.5.2: nginx `location = /` 显式 `try_files $uri /index.html =404`,不回源后端
+  - **验证**: `curl -I http://localhost/` 返回 `Content-Type: text/html`(非 JSON)
+  - **依赖**: Task 0.7
+
+- [ ] **Task 0.7.6**: 路由注册顺序(修复 F12)
+  - [ ] 0.7.6.1: `EndpointRouteBuilderExtensions.cs` 按顺序注册:
+    ```csharp
+    app.MapRazorPages();         // 1. Razor Pages(SEO 路由优先)
+    app.MapControllers();        // 2. API 控制器
+    app.MapGet("/api/info", ...); // 3. 其他端点
+    ```
+  - [ ] 0.7.6.2: `Detail.cshtml.cs` 显式 `@page "/products/{pn1}/{pn2}/{brand}/{oem3}"`
+  - **验证**: 路由测试 `/products/...` 命中 Razor Pages,非 controller
+  - **依赖**: Task 0.7
+
+### Phase 1 v3 补丁任务
+
+- [ ] **Task 1.2.8**: PostgresSearchProvider 手动 _formatted 高亮 + _rankingScore(修复 S9)
+  - [ ] 1.2.8.1: 实现 `BuildFormatted(string? source, string query)` 方法:
+    ```csharp
+    private static string BuildFormatted(string? source, string query)
+    {
+        if (string.IsNullOrEmpty(source) || string.IsNullOrEmpty(query)) return source ?? "";
+        var escapedQuery = Regex.Escape(query);
+        return Regex.Replace(source, escapedQuery, m => $"<mark>{m.Value}</mark>", RegexOptions.IgnoreCase);
+    }
+    ```
+  - [ ] 1.2.8.2: `_rankingScore` 固定 0.5(PG 无相关性评分)
+  - [ ] 1.2.8.3: 前端 v-html 兜底:`_formatted` 为空时回退显示原始字段
+  - **验证**: 单元测试 `Search_Fallback_Pg_FormattedHighlight` 通过
+  - **依赖**: Task 1.2
+
+- [ ] **Task 1.2.9**: PG WHERE 补全 6 字段 + EXISTS 子查询(修复 S10/S22)
+  - [ ] 1.2.9.1: PG WHERE 子句补全:
+    ```sql
+    AND (
+      p.product_name_1 ILIKE @kw ESCAPE '\' OR
+      p.product_name_2 ILIKE @kw ESCAPE '\' OR
+      p.oem_2 ILIKE @kw ESCAPE '\' OR
+      EXISTS (SELECT 1 FROM cross_references x
+              WHERE x.product_id = p.id
+                AND (x.oem_brand ILIKE @kw OR x.oem_no_3 ILIKE @kw OR x.oem_2 ILIKE @kw)) OR
+      EXISTS (SELECT 1 FROM machine_applications m
+              WHERE m.product_id = p.id
+                AND (m.machine_brand ILIKE @kw OR m.machine_model ILIKE @kw))
+    )
+    ```
+  - [ ] 1.2.9.2: `includeDiscontinued=false` 时加 EXISTS 子查询过滤 OEM 3 级 is_published
+  - **验证**: 对比测试 `Search_Meili_vs_Pg_Recall` 召回数差异 < 5%
+  - **依赖**: Task 1.2
+
+- [ ] **Task 1.2.10**: PG ORDER BY 三层对齐 Meilisearch + CTE 预计算(修复 S2/S11)
+  - [ ] 1.2.10.1: 引入 CTE 预计算 `brand_sort_order_min` + `oem_list_sort_order_min`:
+    ```sql
+    WITH mr1_sort AS (
+      SELECT p.id AS product_id,
+             MIN(b.sort_order) AS brand_sort_order_min,
+             MIN(x.sort_order) AS oem_list_sort_order_min
+      FROM products p
+      LEFT JOIN cross_references x ON x.product_id = p.id
+      LEFT JOIN xref_oem_brand b ON b.brand = x.oem_brand
+      GROUP BY p.id
+    )
+    ```
+  - [ ] 1.2.10.2: ORDER BY 三层:`ms.brand_sort_order_min ASC, ms.oem_list_sort_order_min ASC, p.updated_at DESC`
+  - **验证**: 对比测试 `Search_Meili_vs_Pg_SortOrder` 前 20 条结果顺序一致
+  - **依赖**: Task 1.2
+
+- [ ] **Task 1.2.11**: PG LATERAL 内 LIMIT 50 + 移除 DISTINCT(修复 S2)
+  - [ ] 1.2.11.1: LATERAL 子查询内部加 `LIMIT 50`(单 MR.1 最多 50 OEM 3)
+  - [ ] 1.2.11.2: 移除 `json_agg(DISTINCT ...)`,LATERAL 内本身不重复
+  - [ ] 1.2.11.3: ORDER BY 改 CTE 预计算(见 Task 1.2.10)
+  - **验证**: `EXPLAIN ANALYZE` 单条查询 < 100ms(1M 数据量)
+  - **依赖**: Task 1.2.10
+
+- [ ] **Task 1.2.12**: Meilisearch typoTolerance/separatorTokens/stopWords 配置调整(修复 S4/S5/S6)
+  - [ ] 1.2.12.1: `typoTolerance.minWordSizeForTypos` 改为 `{oneTypo: 3, twoTypos: 5}`
+  - [ ] 1.2.12.2: `separatorTokens` 改为 `[" ", "/", ",", "."]`(移除 `-`)
+  - [ ] 1.2.12.3: 新增 `nonSeparatorTokens: ["-"]`
+  - [ ] 1.2.12.4: `stopWords` 改为 `["the", "a", "an"]`(移除 of/for/and)
+  - **验证**: 单元测试 `Search_Aggregate_TypoTolerance_3LetterBrand`("BNW" 命中 "BMW")通过
+  - **验证**: 单元测试 `Search_Aggregate_OemNo3_Hyphen_Precise`(`F-000000001` 精确命中)通过
+  - **验证**: 单元测试 `Search_Aggregate_StopWords_OfInModel`(`OF-100` 不误命中 `D100`)通过
+  - **依赖**: Task 1.2
+
+- [ ] **Task 1.2.13**: _formatted XSS 占位符替换法(修复 S1)
+  - [ ] 1.2.13.1: `MeiliSearchProvider.SearchAsync` 返回前处理:
+    ```csharp
+    const string MARK_OPEN = "\u0001MARK_OPEN\u0001";
+    const string MARK_CLOSE = "\u0001MARK_CLOSE\u0001";
+    var safe = raw.Replace("<mark>", MARK_OPEN).Replace("</mark>", MARK_CLOSE);
+    safe = WebUtility.HtmlEncode(safe);
+    safe = safe.Replace(MARK_OPEN, "<mark>").Replace(MARK_CLOSE, "</mark>");
+    ```
+  - **验证**: 单元测试 `Search_Aggregate_XssDefense_LiteralMarkTag` 通过(录入产品名 `<mark>test</mark>` 渲染为纯文本)
+  - **依赖**: Task 1.2
+
+- [ ] **Task 1.2.14**: 嵌套字段 filter 多字段组合语义明确(修复 S14)
+  - [ ] 1.2.14.1: spec 明确:"单字段 OR 语义;多字段 AND 组合同元素 AND 语义"
+  - [ ] 1.2.14.2: 单元测试 `Search_Filter_NestedMultiField_SameElement`:构造 MR.1 下有 BOSCH(下架) + MANN(上架),筛选 `oem_brand=BOSCH AND is_published=true` 不命中
+  - **依赖**: Task 1.2
+
+- [ ] **Task 1.2.15**: oemList 响应层过滤 isPublished(修复 S3)
+  - [ ] 1.2.15.1: `MeiliSearchProvider.SearchAsync` 返回前,对每个 hit 的 `oemList` 过滤:
+    - `includeDiscontinued=false`: 仅含 `isPublished=true`
+    - `includeDiscontinued=true`: 含全部
+  - **验证**: 单元测试 `Search_Aggregate_OemList_FilterUnpublished` 通过
+  - **依赖**: Task 1.2
+
+### Phase 3 v3 补丁任务
+
+- [ ] **Task 3.2.9**: product_images 新增 naming_field 字段(修复 D16)
+  - [ ] 3.2.9.1: `product_images` 表新增 `naming_field varchar(20)` 字段(记录 'oem_no_3' 或 'mr_1')
+  - [ ] 3.2.9.2: EF Core 配置 + 迁移
+  - [ ] 3.2.9.3: `BuildKeyAsync` 写入时记录 naming_field
+  - [ ] 3.2.9.4: 前端查询 DB 拿 key,不根据配置动态生成
+  - **验证**: 集成测试:切换配置后,旧 OEM 3 详情页图片仍可显示
+  - **依赖**: Task 3.2
+
+### Phase 4 v3 补丁任务
+
+- [ ] **Task 4.1.8**: Detail.cshtml 挂载点分离(修复 F2)
+  - [ ] 4.1.8.1: SSR 内容放在 `<div id="seo-content">`
+  - [ ] 4.1.8.2: Vue 挂载点独立:`<div id="gallery-app"></div>` + `<div id="compare-app"></div>` + `<div id="inquiry-app"></div>`
+  - [ ] 4.1.8.3: spec 明确:"Vue 挂载点必须独立于 SSR 内容容器,严禁复用同一 div"
+  - **验证**: 浏览器禁用 JS → SSR 内容可见;启用 JS → Vue 画廊加载,SSR 内容不被清空
+  - **依赖**: Task 4.1
+
+- [ ] **Task 4.1.9**: product-detail-client.js try-catch 降级 + modulepreload(修复 F8)
+  - [ ] 4.1.9.1: `vite.config.ts` 配置 `manualChunks` 将 Vue 强制打入 `product-detail-client.js`
+  - [ ] 4.1.9.2: 或 `<link rel="modulepreload" href="/assets/vue-chunk.js">` 预加载
+  - [ ] 4.1.9.3: 脚本加 try-catch:
+    ```js
+    try {
+      const { createApp } = await import('vue')
+      const { GalleryApp } = await import('./GalleryApp')
+      createApp(GalleryApp, { initialData: window.__PRODUCT__ }).mount('#gallery-app')
+    } catch (e) {
+      console.error('Vue 加载失败,SSR 内容仍可用', e)
+    }
+    ```
+  - **验证**: 模拟 Vue chunk 加载失败,SSR 内容仍可见,控制台有降级日志
+  - **依赖**: Task 4.1
+
+- [ ] **Task 4.1.10**: 018_v2_legacy_data_cleanup.sql 双表灰度方案(修复 F20)
+  - [ ] 4.1.10.1: 阶段 1 创建 `products_v2` 表(新结构):
+    ```sql
+    CREATE TABLE products_v2 (LIKE products INCLUDING ALL);
+    ALTER TABLE products_v2 ALTER COLUMN mr_1 SET NOT NULL;
+    -- ... 其他 V2 字段改造
+    ```
+  - [ ] 4.1.10.2: 阶段 2 ETL 导入新数据到 `products_v2`(应用层脚本)
+  - [ ] 4.1.10.3: 阶段 3 切换读流量(应用层双写期间)
+  - [ ] 4.1.10.4: 阶段 4 删除旧表 + 重命名:
+    ```sql
+    DROP TABLE products;
+    ALTER TABLE products_v2 RENAME TO products;
+    ```
+  - [ ] 4.1.10.5: 阶段 5 重建 Meilisearch 索引(新结构)
+  - [ ] 4.1.10.6: 图片对象清理需应用层脚本(非 SQL)
+  - **验证**: 灰度期间 `products_v2` 与 `products` 数据一致性校验;MinIO 无孤儿对象
+  - **依赖**: Task 4.1
+
+- [ ] **Task 4.5.1**: 创建 GalleryApp.vue + props 接口(修复 F16)
+  - [ ] 4.5.1.1: `frontend/src/components/GalleryApp.vue`:
+    ```vue
+    <script setup lang="ts">
+    import { ref, onMounted } from 'vue'
+    interface GalleryProps {
+      images: Array<{ imageKey: string; imageUrl: string; oemNo3?: string; imageRole?: string }>
+      oemNo3: string
+      mr1: string
+    }
+    const props = defineProps<GalleryProps>()
+    const currentImage = ref(props.images[0]?.imageUrl ?? '')
+    </script>
+    <template>
+      <div class="gallery">
+        <img :src="currentImage" :alt="props.oemNo3" loading="lazy" />
+        <!-- 缩略图列表 -->
+      </div>
+    </template>
+    ```
+  - **依赖**: Task 4.5
+
+- [ ] **Task 4.5.2**: 创建 CompareApp.vue + InquiryApp.vue(修复 F16)
+  - [ ] 4.5.2.1: `CompareApp.vue` props 接口:`{ mr1, oemNo3, productName1 }`
+  - [ ] 4.5.2.2: `InquiryApp.vue` props 接口:`{ mr1, oemNo3, brand }`
+  - **依赖**: Task 4.5
+
+- [ ] **Task 4.5.3**: 抽取 buildProductUrl 工具函数(修复 F9)
+  - [ ] 4.5.3.1: `frontend/src/utils/product-url.ts`:
+    ```ts
+    export function buildProductUrl(p: {
+      productName1: string
+      productName2: string
+      oemBrand?: string
+      oemNo3: string
+    }): string {
+      const slugify = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+      const pn1 = slugify(p.productName1 || 'product')
+      const pn2 = slugify(p.productName2 || 'detail')
+      const brand = slugify(p.oemBrand || 'oem')
+      const oem3 = encodeURIComponent(p.oemNo3)
+      return `/products/${pn1}/${pn2}/${brand}/${oem3}`
+    }
+    ```
+  - **依赖**: Task 4.5
+
+- [ ] **Task 4.5.4**: 全局替换 router.push('/product/...') 为 window.location.href(修复 F9/F17)
+  - [ ] 4.5.4.1: 全项目 grep `router.push.*['"\`]/product/` 找出所有调用点
+  - [ ] 4.5.4.2: 替换为:
+    ```ts
+    window.location.href = buildProductUrl(product)
+    ```
+  - [ ] 4.5.4.3: 涉及文件:`PublicSearchView.vue` / `PublicCompareView.vue` / `PublicProductView.vue` / `AppHeader.vue` / `SearchView.vue` / `DemoView.vue`
+  - **验证**: 全项目 grep `router.push.*product/` 无遗留
+  - **依赖**: Task 4.5.3
+
+- [ ] **Task 4.5.5**: 对比列表状态 sessionStorage 持久化(修复 F17)
+  - [ ] 4.5.5.1: 对比列表 store 改造:写入 sessionStorage
+  - [ ] 4.5.5.2: 详情页 mount 时从 sessionStorage 恢复对比列表
+  - **验证**: E2E 测试:加入对比 → 跳转详情页 → 对比列表仍保留
+  - **依赖**: Task 4.5
+
+- [ ] **Task 4.6.4**: CursorHmac 加版本前缀 + 24h TTL(修复 F5/S13)
+  - [ ] 4.6.4.1: `CursorHmac.Sign` 改为:
+    ```csharp
+    public string Sign(string updatedAtIso, string mr1)
+    {
+        var expUnixTs = DateTimeOffset.UtcNow.ToUnixTimeSeconds() + 86400;
+        var mr1B64 = Base64UrlEncode(mr1);
+        var payload = $"v2:{expUnixTs}|{updatedAtIso}|{mr1B64}";
+        var hash = HMACSHA256.HashData(_currentKey, Encoding.UTF8.GetBytes(payload));
+        return $"{payload}|{ToBase64Url(hash)[..16]}";
+    }
+    ```
+  - [ ] 4.6.4.2: `VerifyAndExtract` 加版本前缀检查 + TTL 校验
+  - [ ] 4.6.4.3: 过渡期 7 天支持旧 cursor(无 v2: 前缀)
+  - **验证**: 单元测试 `Cursor_Expired_24h` + `Cursor_LegacyCompat_7days` 通过
+  - **依赖**: Task 4.6
+
+- [ ] **Task 4.6.5**: 新增错误码 CURSOR_INVALID / CURSOR_EXPIRED(修复 S13)
+  - [ ] 4.6.5.1: ProblemDetailsFactory 加 `CURSOR_INVALID`(400) / `CURSOR_EXPIRED`(400)
+  - [ ] 4.6.5.2: 前端拦截器处理 `CURSOR_EXPIRED` 自动重置到第 1 页
+  - **依赖**: Task 4.6.4
+
+- [ ] **Task 4.7**: 抽取 IProductDetailService 公共服务(修复 F19)
+  - [ ] 4.7.1: `SakuraFilter.Api/Services/IProductDetailService.cs` 接口定义
+  - [ ] 4.7.2: `ProductDetailService.GetByOem3Async(string oem3)` 实现(复用现有三级 fallback 逻辑)
+  - [ ] 4.7.3: `Detail.cshtml.cs` PageModel 注入 `IProductDetailService`
+  - [ ] 4.7.4: `PublicProductController` 注入 `IProductDetailService`
+  - [ ] 4.7.5: 旧 `/api/products/{oem}` 端点标记 `[Obsolete]`
+  - **验证**: 代码审查 `Detail.cshtml.cs` 与 `PublicProductController` 无重复查询代码
+  - **依赖**: Task 4.1
+
+- [ ] **Task 4.8**: 前端 types.ts ProductImageInfo 字段同步(修复 F10)
+  - [ ] 4.8.1: `frontend/src/api/types.ts` 更新 `ProductImageInfo`:
+    ```ts
+    export interface ProductImageInfo {
+      // 旧字段(过渡期保留)
+      slot?: number
+      // 新字段
+      oemNo3?: string
+      imageRole?: 'primary' | 'detail'
+      namingField?: string
+      imageKey: string
+      imageUrl: string
+      contentType: string
+      sizeBytes: number
+      width?: number
+      height?: number
+    }
+    ```
+  - [ ] 4.8.2: 画廊组件兼容两种格式:`const role = img.imageRole ?? (img.slot === 1 ? 'primary' : 'detail')`
+  - **验证**: `npm run typecheck` 通过
+  - **依赖**: Task 3.3
+
+- [ ] **Task 4.9**: 创建 html-sanitizer.ts + 安装 dompurify 依赖(修复 F14)
+  - [ ] 4.9.1: `npm install dompurify @types/dompurify`
+  - [ ] 4.9.2: `frontend/src/utils/html-sanitizer.ts`:
+    ```ts
+    import DOMPurify from 'dompurify'
+    const config: DOMPurify.Config = {
+      ALLOWED_TAGS: ['mark'],
+      ALLOWED_ATTR: [],
+      FORBID_SCRIPT: true,
+    }
+    export function sanitizeHtml(dirty: string): string {
+      return DOMPurify.sanitize(dirty, config) as string
+    }
+    ```
+  - [ ] 4.9.3: ESLint 规则禁止直接 `v-html`,必须经 `sanitizeHtml`
+  - **验证**: 单元测试 `sanitizeHtml('<script>alert(1)</script>')` 返回空字符串
+  - **依赖**: Task 1.3
+
+- [ ] **Task 4.10**: 更新 E2E 测试 URL + 创建 SEO 基线(修复 F15)
+  - [ ] 4.10.1: 更新 `public-product.spec.ts` / `smoke.spec.ts` / `public-search-flow.spec.ts` 访问 SEO URL
+  - [ ] 4.10.2: 创建新基线 `public-product-seo.spec.ts`(测试 SSR 内容、Vue mount、画廊交互)
+  - [ ] 4.10.3: 创建 `public-product-mobile.spec.ts`(移动端响应式)
+  - [ ] 4.10.4: 删除旧视觉基线截图,重新生成 V2 版本
+  - **验证**: `npm run test:e2e` + `npm run test:visual` 全绿
+  - **依赖**: Task 5
+
+### Phase 5 v3 补丁任务
+
+- [ ] **Task 5.1.7**: ETL COPY 列定义排除 xmin 系统列(修复 D22)
+  - [ ] 5.1.7.1: `EtlImportService.cs` 中 COPY products_stage 和 cross_references_stage 列清单明确排除 xmin
+  - **验证**: ETL 全量导入 100 万行,无 xmin 相关报错
+  - **依赖**: Task 5.1
+
+- [ ] **Task 5.1.8**: ETL ON CONFLICT 改造(修复 D5/D6)
+  - [ ] 5.1.8.1: `EtlImportService.cs:976` 改为 `ON CONFLICT (mr_1) WHERE mr_1 IS NOT NULL DO NOTHING`
+  - [ ] 5.1.8.2: `EtlImportService.cs:993` 改为 `ON CONFLICT (mr_1) WHERE mr_1 IS NOT NULL DO UPDATE SET ...`
+  - [ ] 5.1.8.3: `EtlImportService.cs:1470` 改为 `ON CONFLICT (oem_brand, oem_no_3) WHERE is_discontinued = false DO NOTHING`
+  - [ ] 5.1.8.4: `EtlImportService.cs:1478` 改为 `ON CONFLICT (oem_brand, oem_no_3) WHERE is_discontinued = false DO UPDATE SET ...`
+  - **验证**: 集成测试 ETL 导入 V2 mock 数据,无 42P10 错误
+  - **依赖**: Task 5.1
+
+- [ ] **Task 5.1.9**: AdminProductService 反向更新 products.oem_2(修复 D8)
+  - [ ] 5.1.9.1: `CreateAsync` 保存 xrefs 后补:
+    ```csharp
+    product.Oem2 = form.CrossReferences.FirstOrDefault()?.Oem2?.Trim();
+    await _db.SaveChangesAsync(ct);
+    ```
+  - [ ] 5.1.9.2: `UpdateAsync` 同样改造
+  - **验证**: 单元测试 `Product_Create_Oem2DerivedFromFirstXref` 通过
+  - **依赖**: Task 0.3
+
+---
+
+## Task Dependencies(v3 修订补充)
+
+- **Phase 0 v3 补丁**: Task 0.2 → (Task 0.2.8 ∥ Task 0.2.9);Task 0.4 → (Task 0.4.12 ∥ Task 0.4.13 ∥ Task 0.4.14);Task 0.5 → (Task 0.5.5 ∥ Task 0.5.6);Task 0.6 → Task 0.6.3;Task 0.7 → (Task 0.7.5 ∥ Task 0.7.6)
+- **Phase 1 v3 补丁**: Task 1.2 → (Task 1.2.8 ∥ 1.2.9 ∥ 1.2.10 ∥ 1.2.11 ∥ 1.2.12 ∥ 1.2.13 ∥ 1.2.14 ∥ 1.2.15)
+- **Phase 3 v3 补丁**: Task 3.2 → Task 3.2.9
+- **Phase 4 v3 补丁**: Task 4.1 → (Task 4.1.8 ∥ 4.1.9 ∥ 4.1.10);Task 4.5 → (Task 4.5.1 ∥ 4.5.2 ∥ 4.5.3 ∥ 4.5.4 ∥ 4.5.5);Task 4.6 → (Task 4.6.4 ∥ 4.6.5);Task 4.7 独立;Task 4.8 ∥ Task 4.9;Task 4.10
+- **Phase 5 v3 补丁**: Task 5.1 → (Task 5.1.7 ∥ 5.1.8 ∥ 5.1.9)
+
+**可并行任务补充**:
+- Phase 0 v3: Task 0.2.8 ∥ Task 0.2.9 ∥ Task 0.4.12 ∥ Task 0.4.13 ∥ Task 0.4.14 ∥ Task 0.5.5 ∥ Task 0.5.6 ∥ Task 0.6.3 ∥ Task 0.7.5 ∥ Task 0.7.6
+- Phase 1 v3: 8 个 Task 1.2.x 全部可并行
+- Phase 4 v3: Task 4.5.x 五个子任务全部可并行
+
+---
+
 ## Task Dependencies
 
 - **Phase 0 内部**: Task 0.1 → Task 0.2 → (Task 0.3 ∥ Task 0.4 ∥ Task 0.5 ∥ Task 0.6 ∥ Task 0.7) 并行

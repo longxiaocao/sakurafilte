@@ -1464,3 +1464,328 @@ public async Task<string> BuildKeyAsync(string namingValue, short slot, string r
 - ✅ **方案 B Machine Type 双轨**: `cross_references.machine_type` + `machine_applications.machine_category` 双字段存在 + CHECK 约束;前端分类树读 `machine_applications.machine_category`
 - ✅ **方案 A 图片分层**: Image1 主图(`image_role='primary'` + `oem_no_3` 关联) + Image2-6 详情图(`image_role='detail'` + `product_id` 关联 MR.1);`uq_product_images_primary` + `uq_product_images_detail_slot` 唯一约束存在,旧约束已 DROP
 - ✅ **分区 6 预留空表**: `partition6_placeholder` 表存在(仅 id + created_at),EF Core OnModelCreating 显式注册,不暴露 DbSet,不展示前端,不进 Meilisearch 索引
+
+---
+
+## 第二轮深度审查衍生漏洞修复清单(v3 修订)
+
+> 第二轮三维度并行深度审查(数据关联 / 检索逻辑 / 前后端联动)发现 64 个衍生漏洞(去重后 62 个),其中高危 19 个。本章节为 v3 修订版,系统性修复全部衍生漏洞。
+
+### 一、数据关联维度衍生漏洞(22 项 → 修复方案)
+
+#### 高危(4 项)
+
+| # | 漏洞 | 修复方案 |
+|---|------|----------|
+| D1 | spec DROP INDEX 语句索引名与实际数据库不一致(实际无 `_unique` 后缀) | 修正:`DROP INDEX IF EXISTS ix_products_oem_no_normalized` + `DROP INDEX IF EXISTS uq_products_oem_normalized`(008 脚本创建) + `DROP INDEX IF EXISTS ix_product_images_product_id_slot`(无后缀);同步移除 `ProductDbContext.cs:86/153` 的 `IsUnique()` Fluent API 配置 |
+| D2 | ProductDbContext 残留 `.IsRequired()` / `.IsUnique()` 与 spec 改造冲突 | 移除 `ProductDbContext.cs:62` 的 `.IsRequired()`;移除 `:86` 的 `IsUnique()` 改为 `HasFilter("oem_no_normalized IS NOT NULL")`;移除 `:153` 的 `IsUnique()` 改为两个部分唯一索引 + `HasFilter` |
+| D5 | ETL `ON CONFLICT (oem_no_normalized)` 在 V2 后报 42P10 | `EtlImportService.cs:976/993` 改为 `ON CONFLICT (mr_1) WHERE mr_1 IS NOT NULL DO NOTHING/UPDATE` |
+| D6 | ETL `ON CONFLICT (product_id, oem_brand, oem_no_3)` 与 V2 新唯一索引不匹配 | `EtlImportService.cs:1470/1478` 改为 `ON CONFLICT (oem_brand, oem_no_3) WHERE is_discontinued = false DO NOTHING/UPDATE` |
+
+#### 中危(13 项,含 D3/D4/D7-D10/D12-D16/D19-D22)
+
+| # | 漏洞 | 修复方案 |
+|---|------|----------|
+| D3 | spec 误用 `byte[]/ulong?` 描述 RowVersion,实际应为 `uint` | spec.md L521 改为 `EF Core 配置: e.Property(x => x.RowVersion).IsRowVersion().IsConcurrencyToken()(复用现有 RowVersion uint 映射 xmin;禁用 byte[]/ulong?,Npgsql 抛 InvalidCastException)` |
+| D4 | product_images 外键名与 spec DROP CONSTRAINT 不匹配 | 修正 spec DROP 语句:`DROP CONSTRAINT IF EXISTS fk_product_images_products_product_id`(实际名);现有外键已是 CASCADE,spec 改为"验证现有外键策略,无需 DROP/ADD" |
+| D7 | AdminProductService.CreateAsync 未实现 MR.1 必填/唯一校验 | tasks Task 0.3 明确列出"现有 CreateAsync/UpdateAsync 完全无 MR.1 校验逻辑,需新增" |
+| D8 | AdminProductService Oem2 处理与"代表值"语义不一致 | tasks Task 0.3.7 新增子任务:"CreateAsync/UpdateAsync 保存 xrefs 后,反向更新 products.oem_2 为第一个 xref.oem_2" |
+| D9 | oem_no_normalized 派生关系大小写冲突 | spec 明确"V2 中 oem_no_normalized 不再保证唯一性,派生规则改为 `oem_no_normalized = mr_1`(保留原大小写,不转换)" |
+| D10 | numeric(10,2) ALTER TYPE 截断旧数据 | spec 明确执行顺序:`先 TRUNCATE 旧数据 → 再 ALTER 字段类型`;补 `USING d1_mm::numeric(10,2)` 子句 |
+| D12 | cross_references.oem_no_3 长度与 EF Core 配置不一致 | tasks Task 0.2.6 明确:`ProductDbContext.cs:114` 改为 `HasMaxLength(200)` |
+| D13 | system_settings updated_at EF Core 配置层缺默认值 | tasks Task 0.2.6 补充:`ProductDbContext.cs:164` 后补 `e.Property(s => s.UpdatedAt).HasDefaultValueSql("now()")` |
+| D14 | partition6_placeholder 双重创建(SQL + EF Core 迁移)冲突 | spec 明确:"partition6_placeholder 仅通过 EF Core 迁移创建,018 SQL 脚本不 CREATE TABLE";移除 spec L592-595 的 CREATE TABLE SQL |
+| D15 | product_images.slot CHECK 与 image_role DEFAULT 'detail' 对 slot=1 旧数据冲突 | spec 明确执行顺序:`先 TRUNCATE product_images → 再 ADD COLUMN image_role → 再 ADD CONSTRAINT chk_image_role_slot` |
+| D16 | 图片命名配置切换旧图不迁移导致前端显示断裂 | spec 补充方案:`product_images` 表新增 `naming_field` 字段记录该图按什么规则命名,前端查询 DB 拿 key 而非动态生成 |
+| D19 | oem_no_normalized DROP NOT NULL 后 ETL 旧代码路径派生关系未明 | spec 明确:"V2 新数据(含 mr_1):oem_no_normalized = mr_1;旧数据(无 mr_1):保留源值,mr_1=NULL;V2 迁移后旧数据全部 TRUNCATE" |
+| D20 | EF Core [Index] 特性不支持 WHERE 条件的部分索引 | tasks Task 0.2.7 补充 Fluent API 配置:`e.HasIndex(p => p.Mr1).IsUnique().HasFilter("mr_1 IS NOT NULL").HasDatabaseName("idx_products_mr_1_unique")` |
+| D21 | xref_oem_brand 字典与 cross_references.oem_brand 外键缺失 | spec 明确:"cross_references.oem_brand 不加外键,仅为字符串引用;字典软删除后历史数据保留,前端 typeahead 过滤 deleted_at IS NULL" |
+| D22 | ETL COPY 列清单可能误包含 xmin 系统列 | tasks Task 5.1.6 补充:"COPY products_stage 和 cross_references_stage 列定义必须排除 xmin 系统列(由 PG 自动维护)" |
+
+#### 低危(5 项,含 D11/D17/D18)
+
+| # | 漏洞 | 修复方案 |
+|---|------|----------|
+| D11 | idx_xrefs_brand_oem3_sort 与现有 ix_cross_references_oem_brand_oem_no_3 索引重叠 | spec 明确:"DROP 旧索引 `ix_cross_references_oem_brand_oem_no_3`,新增 `idx_xrefs_brand_oem3_sort`(选择性更优)" |
+| D17 | system_settings ON CONFLICT 多实例并发丢更新(性能问题) | spec 部署文档明确:"V2 迁移脚本仅单实例执行,通过 `pg_advisory_lock(20260717)` 防止并发" |
+| D18 | cross_references.product_id 外键策略未明 | spec 明确:"cross_references.product_id → products.id ON DELETE CASCADE(已存在,无需修改);删除 MR.1 时 OEM 3 自动级联删除" |
+
+### 二、检索逻辑维度衍生漏洞(22 项 → 修复方案)
+
+#### 高危(6 项)
+
+| # | 漏洞 | 修复方案 |
+|---|------|----------|
+| S1 | _formatted HTML escape + `<mark>` Replace 还原存在二次 XSS 漏洞 | 改用占位符替换法:`<mark>` → `\u0001MARK_OPEN\u0001` → HtmlEncode → 还原占位符;用户输入的 `<mark>` 字面量经过 HtmlEncode 后被还原为标签,占位符用 `\u0001` 控制字符 |
+| S2 | LATERAL JOIN 兜底 SQL 在 1M 数据量下性能严重退化 | LATERAL 内部加 `LIMIT 50`(单 MR.1 最多 50 OEM 3);移除 `json_agg(DISTINCT ...)` 的 DISTINCT(LATERAL 内本身不重复);ORDER BY 改 CTE 预计算 brand_sort_order_min |
+| S3 | oem_list.is_published 嵌套过滤 OR 语义与前端展示不一致 | spec 明确:"后端响应层过滤:`includeDiscontinued=false` 时响应中 oemList 仅含 isPublished=true 的项;`includeDiscontinued=true` 时含全部" |
+| S4 | typoTolerance minWordSizeForTypos=4 致 3 字品牌缩写无法容错 | 改为 `{oneTypo: 3, twoTypos: 5}`;system_settings 拆分为 `search.typo_min_word_size_one_typo=3` + `search.typo_min_word_size_two_typos=5` |
+| S5 | separatorTokens 含 `-` 致 OEM 号 `F-000000001` 被错误分割 | 移除 `-`,改为 `[" ", "/", ",", "."]` + `nonSeparatorTokens: ["-"]` |
+| S7 | Meilisearch 索引主键改 mr_1 后无停机迁移策略 | 双索引切换策略:创建 `products_v2`(主键 mr_1)→ 批量写入 → 热切换 IndexName → 删除旧 `products` 索引;`ProductIndexDoc` record 重写为 `Mr1IndexDoc` 嵌套结构;`DeleteAsync(IEnumerable<long>)` 改为 `DeleteAsync(IEnumerable<string> mr1s)` |
+
+#### 中危(13 项,含 S6/S8-S15/S17-S19/S22)
+
+| # | 漏洞 | 修复方案 |
+|---|------|----------|
+| S6 | stopWords 含 of/for/and 致型号 OF-100 误删词 | 移除 of/for/and,只保留 `["the", "a", "an"]` |
+| S8 | brand_sort_order_min 更新时机与 Brand 字典 sort_order 变更联动缺失 | XrefOemBrandService.UpdateAsync 触发后台任务批量重建相关 MR.1 文档;ResilientSearchProvider.IndexAsync 加 5 秒内同 MR.1 去重(`ConcurrentDictionary<string, DateTime>`) |
+| S9 | PG 兜底未返回 _formatted 与 _rankingScore | PostgresSearchProvider 手动实现高亮(Regex.Replace + `<mark>` 包裹);_rankingScore 固定 0.5;前端 v-html 兜底回退显示原始字段 |
+| S10 | PG 兜底查询字段不完整 | PG WHERE 补全:product_name_1/2 + oem_2 + EXISTS cross_references(oem_brand/oem_no_3/oem_2) + EXISTS machine_applications(machine_brand/model) |
+| S11 | PG 兜底排序逻辑与 Meilisearch 不一致 | PG ORDER BY 三层:`brand_sort_order_min ASC → oem_list_sort_order_min ASC → updated_at DESC` |
+| S12 | LikeEscapeExtensions 跨项目引用矛盾 | 移动 `LikeEscapeExtensions` 到 `SakuraFilter.Core/Extensions/`(让 Api 与 Search 都能引用) |
+| S13 | cursor 分页无过期时间,可绕过分页深度限制 | cursor 加 24h 过期时间:`{expUnixTs}|{updatedAtIso}|{mr1}|{sig16}`;新增错误码 `CURSOR_INVALID`(400)/`CURSOR_EXPIRED`(400);cursor 模式禁用 page 参数 |
+| S14 | 嵌套数组多字段组合 filter 语义未明确 | spec 明确:"单字段 OR 语义;多字段 AND 组合同元素 AND 语义(存在一个元素同时满足所有条件)" |
+| S15 | Meilisearch 1M 嵌套文档索引大小估算缺失 | spec 补充索引大小估算(6-10 GB);Meilisearch 配置 `--max-indexing-memory 8192`;监控告警超 8GB 触发;P2 优化考虑分索引策略 |
+| S17 | Meilisearch 嵌套数组排序实际是 first element 非 MIN | spec 明确:"Meilisearch 对数组字段排序取第一个元素;BuildMr1DocumentAsync 中 oem_list 数组必须先按 sort_order 升序排序后入索引,等价于 MIN 语义";或新增文档级 `oem_list_sort_order_min` 字段(推荐) |
+| S18 | MeiliSearchProvider.IndexAsync 仍用 `primaryKey: "id"` | 改为 `primaryKey: "mr_1"`;tasks Task 0.4.1 补充此改造点 |
+| S19 | MeiliSearchProvider.DeleteAsync 签名仍是 `IEnumerable<long>` | 改为 `IEnumerable<string> mr1s`;ISearchProvider 接口签名同步;ResilientSearchProvider 双写删除同步;tasks Task 0.4 补充 0.4.12 |
+| S22 | PG 兜底 IncludeDiscontinued 与 is_published 双层过滤未对齐 | PG WHERE 补充:`EXISTS (SELECT 1 FROM cross_references x WHERE x.product_id = p.id AND x.is_published = true AND x.is_discontinued = false)` |
+
+#### 低危(3 项,含 S16/S20/S21)
+
+| # | 漏洞 | 修复方案 |
+|---|------|----------|
+| S16 | spec PG SQL 误用 `value` 列名(实际是 `brand`) | 修正:`WHERE b.brand = ANY(@oemBrands)` |
+| S20 | system_settings typoTolerance 配置项不完整 | 拆分为 3 项:`search.typo_tolerance_enabled='true'` / `search.typo_min_word_size_one_typo='3'` / `search.typo_min_word_size_two_typos='5'` |
+| S21 | Meilisearch searchableAttributes 嵌套字段路径配置实际行为未验证 | spec 补充:"部署后用 `/indexes/products/search` API 验证搜索 BOSCH 时 _formatted 只在 oem_brand 字段高亮;若行为不符,改为扁平字段策略(oem_brands_str = `BOSCH|MANN|NTN`)" |
+
+### 三、前后端联动维度衍生漏洞(20 项 → 修复方案)
+
+#### 高危(8 项)
+
+| # | 漏洞 | 修复方案 |
+|---|------|----------|
+| F1 | nginx `/` SPA fallback 与后端 `MapGet("/")` 路由冲突 | `CommonEndpoints.cs` 将 `MapGet("/")` 改为 `MapGet("/api/info")`;nginx `location = /` 显式 `try_files $uri /index.html =404`,不回源后端 |
+| F2 | Vue client mount 清空 SSR 内容,与"渐进增强"承诺矛盾 | 方案 A(推荐):SSR 内容放在 `<div id="seo-content">`,Vue 挂载到**独立的** `<div id="gallery-app">`(初始为空);spec 明确:"Vue 挂载点必须独立于 SSR 内容容器,严禁复用同一 div" |
+| F3 | ProblemDetailsFactory 旧 `ERR_*` 映射缺失,前端拦截器未兼容新格式 | spec 补充"错误码迁移矩阵"表格(旧码 → 新码);`ProblemDetailsFactory.cs` 添加新错误码常量,保留 ERR_* 别名;前端 `http.ts` 拦截器扩展为 `ERROR_CODE_MAP` 双格式兼容;i18n 文案表补充新错误码翻译 |
+| F5 | CursorHmac 旧 cursor 客户端无过渡期设计 | cursor 添加版本前缀 `v2:{base64(payload)}`;`VerifyAndExtract` 根据前缀路由到旧/新解析逻辑;过渡期 7 天;前端拦截器处理 `CURSOR_EXPIRED` 错误码自动重置到第 1 页 |
+| F12 | Razor MapRazorPages 与 CommonEndpoints.MapGet("/") 路由优先级冲突 | `EndpointRouteBuilderExtensions.cs` 按顺序注册:`MapRazorPages()` → `MapControllers()` → 其他端点;`Detail.cshtml.cs` 显式 `@page "/products/{pn1}/{pn2}/{brand}/{oem3}"` |
+| F14 | DOMPurify 依赖未安装,html-sanitizer.ts 未创建 | `frontend/package.json` 添加 `dompurify @types/dompurify`;创建 `frontend/src/utils/html-sanitizer.ts`(白名单 `ALLOWED_TAGS: ['mark']` + `ALLOWED_ATTR: []`);ESLint 规则禁止直接 v-html,必须经 sanitizeHtml |
+| F18 | Meilisearch 主键仍为 id,文档结构未嵌套化(与 S7 重叠) | 见 S7 双索引切换策略 |
+| F20 | ETL 重导顺序错误,TRUNCATE → IndexAsync 用旧结构导致索引重建失败 | 创建 `018_v2_legacy_data_cleanup.sql` 双表灰度方案:阶段 1 创建 `products_v2` 表导入数据;阶段 2 切换读流量(应用层双写);阶段 3 删除 `products` 重命名 `products_v2`;阶段 4 重建 Meilisearch 索引(新结构);图片对象清理需应用层脚本(非 SQL) |
+
+#### 中危(12 项,含 F4/F6-F11/F13/F15-F17/F19)
+
+| # | 漏洞 | 修复方案 |
+|---|------|----------|
+| F4 | AdminProductImageService.UploadAsync 签名改造后调用点遗漏 | spec 补充"调用点改造清单":`AdminProductEndpoints.cs:186/198` 端点签名 + 调用同步改造;`BuildKey` 保留旧重载标记 `[Obsolete]` 用于历史数据迁移 |
+| F6 | RateLimit "public" 策略未实施,Googlebot 抓取可能误伤 | `ServiceCollectionExtensions.cs` 添加 "public" 策略(120/min per IP);新增 "sitemap" 策略(600/min per IP);nginx 层 Googlebot User-Agent 白名单 |
+| F7 | sitemap 缓存击穿,无 SemaphoreSlim 防护 | sitemap 服务加 `SemaphoreSlim(1, 1)` + double-check;多实例用 PG NOTIFY/LISTEN 协调 |
+| F8 | product-detail-client.js defer 加载顺序,Vue chunk 未保证 | `vite.config.ts` 配置 `manualChunks` 将 Vue 强制打入 `product-detail-client.js`;或使用 `<link rel="modulepreload">` 预加载;脚本加 try-catch 降级 |
+| F9 | SPA 跳转改造清单遗漏 SearchView.vue 与 DemoView.vue | spec 补充改造清单:`SearchView.vue:121/207` + `DemoView.vue:200`;抽取公共工具函数 `buildProductUrl(product)` 统一生成 SEO URL;全局 grep `router.push.*product/` 无遗漏 |
+| F10 | 前端 ProductImageInfo 类型缺 oemNo3/imageRole 字段 | `frontend/src/api/types.ts` 更新 `ProductImageInfo`:加 `oemNo3?: string` + `imageRole?: string`;过渡期字段可选;画廊组件兼容两种格式 |
+| F11 | 图片端点 [Authorize] 缺失,依赖 DevTokenAuthMiddleware 前缀匹配 | `AdminProductEndpoints.cs` 图片端点加 `.RequireAuthorization("AdminPolicy")`;spec 明确:"所有 /api/admin/* 端点必须同时满足:(a) 路由前缀匹配 DevTokenAuthMiddleware;(b) 添加 [Authorize] 或 .RequireAuthorization()" |
+| F13 | HMAC payload 分隔符 `\|` 与 MR.1 字符集冲突 | MR.1 CHECK 约束 `^[A-Za-z0-9]{1,10}$` 已禁止 `\|`;`CursorHmac.Sign` 对 mr1 做 Base64Url 编码后再拼接;spec 明确:"HMAC payload 中所有字符串字段必须 Base64Url 编码" |
+| F15 | E2E 基线与视觉测试用例未更新 SEO URL | 更新 `public-product.spec.ts` / `smoke.spec.ts` / `public-search-flow.spec.ts` 访问 SEO URL;创建新基线 `public-product-seo.spec.ts` / `public-product-mobile.spec.ts`;删除旧视觉基线截图重新生成 |
+| F16 | Vue 子组件 GalleryApp/CompareApp/InquiryApp 未创建,props 接口未定义 | 创建 `frontend/src/components/GalleryApp.vue` / `CompareApp.vue` / `InquiryApp.vue`;定义 props 接口(images/oemNo3/mr1);`Detail.cshtml` 添加独立挂载点 `<div id="gallery-app">` + `<div id="compare-app">` + `<div id="inquiry-app">` + `window.__PRODUCT__` 数据 |
+| F17 | AppHeader 聚合搜索跳转 SSR 详情页丢失 SPA 上下文 | `AppHeader.vue` 改用 `window.location.href`(整页跳转);对比列表状态持久化到 `sessionStorage`;或 router `beforeEnter` 守卫重定向 |
+| F19 | Detail.cshtml.cs 与 PublicProductController 查询逻辑重复 | 抽取 `IProductDetailService.GetByOem3Async(string oem3)` 公共服务;PageModel 与 Controller 都调用该服务;旧 `/api/products/{oem}` 端点标记 `[Obsolete]` 过渡期后删除 |
+
+### 四、关键设计调整(v3 修订)
+
+#### 调整 1: XSS 防御方案重写(修复 S1)
+
+```csharp
+// MeiliSearchProvider.SearchAsync 返回前处理
+const string MARK_OPEN = "\u0001MARK_OPEN\u0001";
+const string MARK_CLOSE = "\u0001MARK_CLOSE\u0001";
+
+// 1. Meilisearch 返回的 <mark>...</mark> 替换为占位符
+var safe = raw.Replace("<mark>", MARK_OPEN).Replace("</mark>", MARK_CLOSE);
+// 2. HtmlEncode 所有内容(占位符不受影响)
+safe = WebUtility.HtmlEncode(safe);
+// 3. 把占位符还原为真实 <mark> 标签
+safe = safe.Replace(MARK_OPEN, "<mark>").Replace(MARK_CLOSE, "</mark>");
+```
+
+#### 调整 2: Vue client mount 挂载点分离(修复 F2)
+
+```html
+<!-- Detail.cshtml -->
+<div id="seo-content">
+  <h1>@Model.OemNo3 @Model.ProductName1 @Model.ProductName2</h1>
+  <table><!-- 参数表格 SSR --></table>
+  <ul><!-- 适配机型 SSR --></ul>
+</div>
+<div id="gallery-app"></div>      <!-- Vue 画廊挂载点(独立) -->
+<div id="compare-app"></div>      <!-- Vue 对比挂载点(独立) -->
+<div id="inquiry-app"></div>      <!-- Vue 询盘挂载点(独立) -->
+<script>window.__PRODUCT__ = @Html.Raw(Json.Serialize(Model.Product));</script>
+<script defer src="/assets/product-detail-client.js"></script>
+```
+
+#### 调整 3: Meilisearch 双索引灰度迁移(修复 S7/F18)
+
+```
+阶段 1: 创建新索引 products_v2(主键 mr_1),配置 filterableAttributes
+阶段 2: 后台批量写入 V2 文档(不影响现有 products 索引)
+阶段 3: 切换 MeiliSearchOptions.IndexName = "products_v2"(热切换)
+阶段 4: 删除旧索引 products
+阶段 5: (可选)重命名 products_v2 → products
+```
+
+#### 调整 4: ETL 双表灰度方案(修复 F20)
+
+```sql
+-- 018_v2_legacy_data_cleanup.sql(双表灰度,非 TRUNCATE)
+-- 阶段 1: 创建 products_v2 表(新结构)
+CREATE TABLE products_v2 (LIKE products INCLUDING ALL);
+ALTER TABLE products_v2 ALTER COLUMN mr_1 SET NOT NULL;
+-- ... 其他 V2 字段改造
+
+-- 阶段 2: ETL 导入新数据到 products_v2
+-- (应用层脚本,通过 ETL 服务导入 XLSX)
+
+-- 阶段 3: 切换读流量(应用层双写期间)
+
+-- 阶段 4: 删除旧表,重命名
+DROP TABLE products;
+ALTER TABLE products_v2 RENAME TO products;
+
+-- 阶段 5: 重建 Meilisearch 索引(新结构)
+```
+
+#### 调整 5: cursor 版本前缀 + TTL(修复 F5/S13)
+
+```csharp
+// cursor 格式: v2:{expUnixTs}|{updatedAtIso}|{mr1Base64Url}|{sig16}
+public string Sign(string updatedAtIso, string mr1)
+{
+    var expUnixTs = DateTimeOffset.UtcNow.ToUnixTimeSeconds() + 86400; // 24h
+    var mr1B64 = Base64UrlEncode(mr1);
+    var payload = $"v2:{expUnixTs}|{updatedAtIso}|{mr1B64}";
+    var hash = HMACSHA256.HashData(_currentKey, Encoding.UTF8.GetBytes(payload));
+    return $"{payload}|{ToBase64Url(hash)[..16]}";
+}
+
+public (string updatedAtIso, string mr1) VerifyAndExtract(string cursor)
+{
+    var parts = cursor.Split('|');
+    if (!parts[0].StartsWith("v2:")) throw new ArgumentException("CURSOR_INVALID");
+    var expUnixTs = long.Parse(parts[0][3..]);
+    if (DateTimeOffset.UtcNow.ToUnixTimeSeconds() > expUnixTs)
+        throw new ArgumentException("CURSOR_EXPIRED");
+    // ... HMAC 验签
+    return (parts[1], Base64UrlDecode(parts[2]));
+}
+```
+
+#### 调整 6: typoTolerance 配置调整(修复 S4)
+
+```json
+{
+  "typoTolerance": {
+    "enabled": true,
+    "minWordSizeForTypos": {
+      "oneTypo": 3,
+      "twoTypos": 5
+    }
+  },
+  "separatorTokens": [" ", "/", ",", "."],
+  "nonSeparatorTokens": ["-"],
+  "stopWords": ["the", "a", "an"]
+}
+```
+
+#### 调整 7: PG 兜底 SQL 重写(修复 S2/S10/S11/S22)
+
+```sql
+-- CTE 预计算 brand_sort_order_min + oem_list_sort_order_min
+WITH mr1_sort AS (
+  SELECT p.id AS product_id,
+         MIN(b.sort_order) AS brand_sort_order_min,
+         MIN(x.sort_order) AS oem_list_sort_order_min
+  FROM products p
+  LEFT JOIN cross_references x ON x.product_id = p.id
+  LEFT JOIN xref_oem_brand b ON b.brand = x.oem_brand
+  GROUP BY p.id
+)
+SELECT p.*, lat_oem.oem_list, lat_machine.machine_list
+FROM products p
+LEFT JOIN mr1_sort ms ON ms.product_id = p.id
+LEFT JOIN LATERAL (
+  SELECT jsonb_agg(jsonb_build_object(
+    'oemBrand', x.oem_brand, 'oemNo3', x.oem_no_3,
+    'sortOrder', x.sort_order, 'isPublished', x.is_published
+  ) ORDER BY x.oem_brand, x.sort_order, x.oem_no_3) AS oem_list
+  FROM (
+    SELECT * FROM cross_references
+    WHERE product_id = p.id AND is_published = true AND is_discontinued = false
+    ORDER BY oem_brand, sort_order, oem_no_3
+    LIMIT 50
+  ) x
+) lat_oem ON true
+LEFT JOIN LATERAL (...) lat_machine ON true
+WHERE p.is_published = true AND p.is_discontinued = false
+  AND EXISTS (
+    SELECT 1 FROM cross_references x
+    WHERE x.product_id = p.id AND x.is_published = true AND x.is_discontinued = false
+  )
+  AND (
+    p.product_name_1 ILIKE @kw ESCAPE '\' OR
+    p.product_name_2 ILIKE @kw ESCAPE '\' OR
+    p.oem_2 ILIKE @kw ESCAPE '\' OR
+    EXISTS (SELECT 1 FROM cross_references x
+            WHERE x.product_id = p.id
+              AND (x.oem_brand ILIKE @kw OR x.oem_no_3 ILIKE @kw OR x.oem_2 ILIKE @kw)) OR
+    EXISTS (SELECT 1 FROM machine_applications m
+            WHERE m.product_id = p.id
+              AND (m.machine_brand ILIKE @kw OR m.machine_model ILIKE @kw))
+  )
+ORDER BY ms.brand_sort_order_min ASC, ms.oem_list_sort_order_min ASC, p.updated_at DESC
+LIMIT @pageSize;
+```
+
+### 五、tasks.md 新增任务(v3 修订)
+
+| 任务 ID | 任务 | 依赖 |
+|---|---|---|
+| Task 0.4.12 | ISearchProvider.DeleteAsync 签名改为 `IEnumerable<string> mr1s`(修复 S19) | Task 0.4 |
+| Task 0.4.13 | Meilisearch 双索引灰度迁移脚本(修复 S7/F18) | Task 0.4 |
+| Task 0.4.14 | Mr1IndexDoc record 重写为嵌套结构(修复 S7) | Task 0.4.2 |
+| Task 0.5.5 | 前端 `http.ts` 拦截器 ERROR_CODE_MAP 双格式兼容(修复 F3) | Task 0.5 |
+| Task 0.5.6 | i18n 文案表补充 13 个新错误码翻译(修复 F3) | Task 0.5 |
+| Task 0.6.3 | nginx Googlebot User-Agent 白名单 + sitemap 单独 RateLimit(修复 F6) | Task 0.6 |
+| Task 0.7.5 | `CommonEndpoints.cs` 移除 `MapGet("/")` 改为 `MapGet("/api/info")`(修复 F1) | Task 0.7 |
+| Task 0.7.6 | `EndpointRouteBuilderExtensions.cs` 路由注册顺序:MapRazorPages → MapControllers → 其他(修复 F12) | Task 0.7 |
+| Task 1.2.8 | PostgresSearchProvider 手动 _formatted 高亮 + _rankingScore=0.5(修复 S9) | Task 1.2 |
+| Task 1.2.9 | PG WHERE 补全 6 字段 + EXISTS 子查询(修复 S10/S22) | Task 1.2 |
+| Task 1.2.10 | PG ORDER BY 三层对齐 Meilisearch + CTE 预计算(修复 S2/S11) | Task 1.2 |
+| Task 1.2.11 | PG LATERAL 内 LIMIT 50 + 移除 DISTINCT(修复 S2) | Task 1.2 |
+| Task 3.2.9 | product_images 新增 `naming_field` 字段记录命名规则(修复 D16) | Task 3.2 |
+| Task 4.1.8 | Detail.cshtml 挂载点分离:`<div id="seo-content">` 独立于 `<div id="gallery-app">`(修复 F2) | Task 4.1 |
+| Task 4.1.9 | product-detail-client.js try-catch 降级 + modulepreload 预加载 Vue chunk(修复 F8) | Task 4.1 |
+| Task 4.1.10 | 018_v2_legacy_data_cleanup.sql 双表灰度方案(修复 F20) | Task 4.1 |
+| Task 4.5.1 | 创建 GalleryApp.vue + props 接口(images/oemNo3/mr1)(修复 F16) | Task 4.5 |
+| Task 4.5.2 | 创建 CompareApp.vue + InquiryApp.vue(修复 F16) | Task 4.5 |
+| Task 4.5.3 | 抽取公共工具函数 `buildProductUrl(product)`(修复 F9) | Task 4.5 |
+| Task 4.5.4 | 全局 grep 替换 `router.push('/product/...')` 为 `window.location.href`(修复 F9/F17) | Task 4.5 |
+| Task 4.5.5 | 对比列表状态持久化到 sessionStorage(修复 F17) | Task 4.5 |
+| Task 4.6.4 | CursorHmac 加版本前缀 v2 + 24h TTL(修复 F5/S13) | Task 4.6 |
+| Task 4.6.5 | 新增错误码 `CURSOR_INVALID` / `CURSOR_EXPIRED`(修复 S13) | Task 4.6 |
+| Task 4.7 | 抽取 `IProductDetailService.GetByOem3Async` 公共服务(修复 F19) | Task 4.1 |
+| Task 4.8 | `frontend/src/api/types.ts` ProductImageInfo 加 oemNo3/imageRole(修复 F10) | Task 3.3 |
+| Task 4.9 | 创建 `html-sanitizer.ts` + 安装 dompurify 依赖 + ESLint 规则(修复 F14) | Task 1.3 |
+| Task 4.10 | 更新 E2E 测试 URL + 创建 SEO 基线(修复 F15) | Task 5 |
+| Task 5.1.7 | ETL COPY 列定义排除 xmin 系统列(修复 D22) | Task 5.1 |
+| Task 5.1.8 | ETL `ON CONFLICT (mr_1)` + `ON CONFLICT (oem_brand, oem_no_3)` 改造(修复 D5/D6) | Task 5.1 |
+| Task 5.1.9 | AdminProductService 保存 xrefs 后反向更新 products.oem_2(修复 D8) | Task 0.3 |
+
+### 六、第二轮审查总结
+
+- 第二轮三维度并行深度审查共发现 64 个衍生漏洞(去重后 62 个)
+- 高危 19 个、中危 38 个、低危 5 个
+- v3 修订版已系统性修复全部衍生漏洞,关键设计调整 7 项、新增任务 30 个
+- v3 修订版的核心改进:
+  1. **XSS 防御方案重写**:占位符替换法替代 escape + Replace(杜绝二次 XSS)
+  2. **Vue client mount 挂载点分离**:SSR 内容与 Vue 应用独立 div(真正渐进增强)
+  3. **Meilisearch 双索引灰度迁移**:杜绝直接改主键导致服务中断
+  4. **ETL 双表灰度方案**:替代 TRUNCATE,杜绝业务中断
+  5. **cursor 版本前缀 + TTL**:解决旧客户端兼容 + 防止永久翻页
+  6. **typoTolerance/separatorTokens/stopWords 调整**:适配外贸场景
+  7. **PG 兜底 SQL 重写**:CTE 预计算 + LATERAL LIMIT + 6 字段补全
+
+### 七、待启动第三轮深度审查
+
+⏳ 第三轮深度审查将验证 v3 修复后是否产生新的衍生问题
+⏳ 持续迭代直到无漏洞检出
