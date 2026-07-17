@@ -5815,3 +5815,150 @@ _待启动第七轮深度审查后追加_
 - [ ] 120. v16 纯文档修正: 3 个文件(spec.md / tasks.md / checklist.md)
 - [ ] 121. v16 新增 migration: 0 个(v16 不涉及 DB schema 变更,仅 ProductIndexDoc record 扩展)
 
+
+---
+
+# v17 验证清单 — 第八重核实机制与衍生漏洞修复
+
+> 基于 v16 第十六轮审查发现的 40 项衍生漏洞(D16:8 / S16:14 / F15:18),v17 引入第八重核实机制(类归属验证+代码语义对齐),并实施 18 项修复方案(V17-F1~F18)。本清单用于验证 v17 修订是否真正实现"0 项凭空假设 + 0 项类归属错误 + 0 项语义不对齐"。
+
+## 第一部分: 第八重核实机制验证(30 项)
+
+### 第八重核实: 类归属验证(15 项)
+
+- [ ] 1. Grep 验证 `IsPrimary` 字段属于 Product 类(Product.cs L110)而非 CrossReference 类(L122-L131),v17 改用 OrderBy(Id).FirstOrDefault()(V17-F1)
+- [ ] 2. Grep 验证 `OemBrand` 字段属于 CrossReference 类(L127)而非 XrefOemBrand 类(L208-L216),v17 Join 用 b.Brand(V17-F2)
+- [ ] 3. Grep 验证 `OemNo3` 字段属于 CrossReference 类(L128)而非 XrefOemBrand 类,v17 删除 b.OemNo3 引用(V17-F2)
+- [ ] 4. Grep 验证 `Brand` 字段属于 XrefOemBrand 类(L211),v17 Join 用 b.Brand(V17-F2)
+- [ ] 5. Grep 验证 `SortOrder` 字段属于 XrefOemBrand 类(L212),v17 BrandSortOrder 从 b.SortOrder 取
+- [ ] 6. Grep 验证 `UpdatedAt` 字段属于 Product 类(L77)为 DateTime 类型,v17 用 DateTimeOffset 转换(V17-F3)
+- [ ] 7. Grep 验证 `UpdatedAtUnix` 全后端零匹配(v17 新增 ProductIndexDoc.UpdatedAtUnix 字段,用 DateTimeOffset 转换)
+- [ ] 8. Grep 验证 `Result.Fail` 属于 Alerts 命名空间(AlertSendResult.Fail),v17 改用 throw ArgumentException(V17-F5)
+- [ ] 9. Grep 验证 `Mr1` 字段属于 Product 类(v17 ProductIndexDoc.Mr1 从 p.Mr1 取)
+- [ ] 10. Grep 验证 `D3Mm/H2Mm/H3Mm` 字段属于 Product 类(v17 ProductIndexDoc 扩展)
+- [ ] 11. Grep 验证 `OemNoDisplay` 字段属于 Product 类(v17 ProductIndexDoc.OemNoDisplay 从 p.OemNoDisplay 取)
+- [ ] 12. Grep 验证 `IsDiscontinued` 字段同时存在于 Product 类和 CrossReference 类,v17 BuildFilter 用 Product 的(L94 is_discontinued)
+- [ ] 13. Grep 验证 `ProductId` 字段属于 CrossReference 类(L125),v17 Join 用 x.ProductId == p.Id
+- [ ] 14. Grep 验证 `DeletedAt` 字段属于 XrefOemBrand 类(L215),v17 Join 过滤 b.DeletedAt == null
+- [ ] 15. Grep 验证 `IsDiscontinued` 字段属于 CrossReference 类(L129),v17 子查询过滤 !x.IsDiscontinued
+
+### 第八重核实: 代码语义对齐验证(15 项)
+
+- [ ] 16. Grep 验证 `ValidToken` 全后端零匹配,v17 保留内联 CryptographicOperations.FixedTimeEquals(V17-F4)
+- [ ] 17. Read DevTokenAuthMiddleware.cs L140-L153 确认内联 FixedTimeEquals 实现 ValidToken 语义(V17-F4)
+- [ ] 18. Read DevTokenAuthMiddleware.cs L154-L168 确认 token 无效时 return 401(V16-F6 修复取消)
+- [ ] 19. Grep 验证 `Mr1Validator` 全后端零匹配,v17 Pre-Task-V17-1 显式新建(V17-F6)
+- [ ] 20. Grep 验证 `request` 函数全前端零匹配,v17 改用 http.post(V17-F7)
+- [ ] 21. Read frontend/src/api/index.ts L36 确认 `export const http: AxiosInstance`(V17-F7)
+- [ ] 22. Grep 验证 `TruncateSearchIndexPendingAsync` 全后端零匹配,v17 改用 EF Core RemoveRange(V17-F11)
+- [ ] 23. Grep 验证 `ReleaseAdvisoryLockAsync` 全后端零匹配,v17 用 pg_try_advisory_xact_lock 事务自动释放
+- [ ] 24. Grep 验证 `TryAcquireAdvisoryLockAsync` 存在(EtlImportService.cs L1229),v17 ReindexAllAsync 复用(V17-F14)
+- [ ] 25. Grep 验证 `AcquireActiveCts` 存在(L577),v17 ReindexAllAsync 复用 entityType="reindex-all"(V17-F14)
+- [ ] 26. Grep 验证 `StartSnapshotTimerIfNeeded` 存在(L681)返回 BroadcastCtx,v17 接收返回值(V17-F10)
+- [ ] 27. Grep 验证 `StopSnapshotTimer` 签名需要 BroadcastCtx 参数(L708),v17 传参调用(V17-F10)
+- [ ] 28. Grep 验证 `InitializeAsync` 在 MeiliSearchProvider 中零匹配,v17 Task V17-2.2 显式新增(V17-F15)
+- [ ] 29. Grep 验证 `DeleteAllDocumentsAsync` 在 MeiliSearchProvider 中零匹配,v17 Task V17-2.2 显式新增(V17-F15)
+- [ ] 30. Grep 验证 `SyncAllSearchIndexAsync` 全后端零匹配,v17 Task V17-2.4 显式新增(V17-F16)
+
+## 第二部分: V17-F1 ~ V17-F18 修复方案验证(18 项)
+
+- [ ] 31. V17-F1: SyncSearchIndexAsync 用 OrderBy(x.Id).FirstOrDefault() 取主交叉引用(无 IsPrimary 字段)
+- [ ] 32. V17-F2: Join XrefOemBrand 用 b.Brand(非 b.OemBrand),删除 b.OemNo3 引用
+- [ ] 33. V17-F3: UpdatedAtUnix 用 new DateTimeOffset(p.UpdatedAt).ToUnixTimeSeconds() 转换
+- [ ] 34. V17-F4: DevTokenAuthMiddleware 保留现有内联 FixedTimeEquals,不引用 ValidToken
+- [ ] 35. V17-F5: Mr1Validator 校验失败 throw ArgumentException(非 Result.Fail)
+- [ ] 36. V17-F6: Pre-Task-V17-1 新建 Mr1Validator.cs(Pre-Task-V15-1/v16 Task V16-1.4 落地)
+- [ ] 37. V17-F7: etlApi.reindexAll 用 http.post(非 request.post)
+- [ ] 38. V17-F8: BuildFilter 补充 D3Mm/H2Mm/H3Mm 范围 filter
+- [ ] 39. V17-F9: InitializeSearchAsync 后台 Task.Run 内创建独立 scope(非 disposed scope)
+- [ ] 40. V17-F10: ReindexAllAsync 接收 StartSnapshotTimerIfNeeded 返回值,StopSnapshotTimer 传参调用
+- [ ] 41. V17-F11: 清空 SearchIndexPending 用 EF Core RemoveRange(非 TruncateSearchIndexPendingAsync)
+- [ ] 42. V17-F12: 使用 _pgConn 字段名(非 _connectionString)
+- [ ] 43. V17-F13: advisory lock 用 BeginTransactionAsync 包裹(pg_try_advisory_xact_lock 事务级)
+- [ ] 44. V17-F14: ReindexAllAsync 复用 AcquireActiveCts(entityType="reindex-all")
+- [ ] 45. V17-F15: MeiliSearchProvider 新增 InitializeAsync + DeleteAllDocumentsAsync
+- [ ] 46. V17-F16: EtlImportService 新增 SyncAllSearchIndexAsync(全量查询,不按 UpdatedAt 筛选)
+- [ ] 47. V17-F17: etlApi 对象追加 reindexAll 方法
+- [ ] 48. V17-F18: Core/DTOs/ 新建 ReindexResult.cs record
+
+## 第三部分: v17 第十七轮审查点(40 项)
+
+### 数据关联维度(D17)审查点(14 个)
+
+- [ ] 49. D17-1: ProductIndexDoc 扩展为 18 字段后,所有构造调用点是否同步更新
+- [ ] 50. D17-2: V17-F1 Join 子查询 `let primaryXref = (...).FirstOrDefault()` 是否产生 N+1 问题
+- [ ] 51. D17-3: V17-F1 `orderby x.Id` 取主交叉引用,业务语义是否正确(最早创建=主)
+- [ ] 52. D17-4: V17-F2 `on primaryXref.OemBrand equals b.Brand` Join 条件是否正确
+- [ ] 53. D17-5: V17-F3 `new DateTimeOffset(p.UpdatedAt).ToUnixTimeSeconds()` 是否处理 Kind=Unspecified 问题
+- [ ] 54. D17-6: V17-F10 ReindexAllAsync advisory lock 7740005 在显式事务内,commit 时是否正确释放
+- [ ] 55. D17-7: V17-F10 ReindexAllAsync 与 ImportProductsAsync 共享 _ctsLock,是否正确互斥
+- [ ] 56. D17-8: V17-F10 ReindexAllAsync 失败时,事务是否 rollback(using var tx 自动 rollback)
+- [ ] 57. D17-9: V17-F11 EF Core RemoveRange 是否在 advisory lock 内执行
+- [ ] 58. D17-10: V17-F14 AcquireActiveCts("reindex-all", ct) 与 ImportProductsAsync 是否正确互斥
+- [ ] 59. D17-11: V17-F15 DeleteAllDocumentsAsync 后,Meilisearch primary key 是否保留
+- [ ] 60. D17-12: V17-F16 SyncAllSearchIndexAsync batch size 1000 是否合理
+- [ ] 61. D17-13: Mr1Validator.Normalize 抛 ArgumentException,AdminProductService 是否正确捕获并返回 400
+- [ ] 62. D17-14: ReindexResult 返回值,前端 etlApi.reindexAll 是否正确消费
+
+### 检索逻辑维度(S17)审查点(14 个)
+
+- [ ] 63. S17-1: V17-F8 BuildFilter 补充 D3Mm/H2Mm/H3Mm 后,所有 SearchRequest 范围字段是否全覆盖
+- [ ] 64. S17-2: V17-F8 字段命名方向是否与 Pre-Task-V17-0-Verify 运行时验证一致
+- [ ] 65. S17-3: V17-F15 InitializeAsync FilterableAttributes 是否包含所有 BuildFilter 引用的字段
+- [ ] 66. S17-4: V17-F15 InitializeAsync SortableAttributes 是否包含 BrandSortOrder/UpdatedAtUnix
+- [ ] 67. S17-5: V17-F15 InitializeAsync SearchableAttributes 是否包含 OemNoDisplay/Remark/Type/OemBrand/Mr1
+- [ ] 68. S17-6: V17-F15 WaitForTaskAsync 30s 超时,1M 文档 schema 配置是否足够
+- [ ] 69. S17-7: V17-F15 DeleteAllDocumentsAsync 后,InitializeAsync 是否需要重新执行(schema 保留)
+- [ ] 70. S17-8: V17-F16 SyncAllSearchIndexAsync 全量查询,是否覆盖所有产品(含 UpdatedAt=null)
+- [ ] 71. S17-9: V17-F16 batch size 1000,Meilisearch AddDocumentsAsync 是否支持
+- [ ] 72. S17-10: ProductIndexDoc 扩展后,Meilisearch 索引是否需要全量重建
+- [ ] 73. S17-11: Mr1Validator 校验失败时,是否记录日志
+- [ ] 74. S17-12: 全量重建期间 IndexReplayWorker 跳过处理,是否有日志
+- [ ] 75. S17-13: V17-F8 EscapeFilter 是否处理特殊字符(引号/反斜杠)
+- [ ] 76. S17-14: V17-F15 字段命名方向与 V17-F8 BuildFilter 是否一致
+
+### 前后端联动维度(F16)审查点(12 个)
+
+- [ ] 77. F16-1: V17-F7 etlApi.reindexAll 返回 ReindexResult,前端 TypeScript 类型是否同步
+- [ ] 78. F16-2: V17-F7 http.post('/admin/etl/reindex-all') 端点是否与后端路由一致
+- [ ] 79. F16-3: 全量重建按钮 loading 状态,是否防止重复点击
+- [ ] 80. F16-4: V17-F9 InitializeSearchAsync 后台 Task.Run,启动时是否阻塞(应不阻塞)
+- [ ] 81. F16-5: V17-F9 后台任务失败时,是否正确降级到 PG(ResilientSearchProvider)
+- [ ] 82. F16-6: V17-F10 ReindexAllAsync 进度推送,前端是否轮询 etlApi.progress() 显示
+- [ ] 83. F16-7: Mr1Validator 校验失败,前端是否收到 400 + 友好错误信息
+- [ ] 84. F16-8: ReindexResult.Error 字段,前端是否正确展示错误信息
+- [ ] 85. F16-9: V17-F17 reindex-all 端点 [Authorize] + X-Admin-Token 校验是否正确
+- [ ] 86. F16-10: V17-F17 reindex-all 端点 RequireRateLimiting("etl") 限流是否配置
+- [ ] 87. F16-11: v16 18 项衍生漏洞是否全部在 v17 修复方案中覆盖(无遗漏)
+- [ ] 88. F16-12: v17 引入的第八重核实机制(类归属+代码语义对齐)是否在 spec 修订时同步完成
+
+## 第四部分: v17 vs v16 凭空假设消除验证(8 项)
+
+- [ ] 89. v16 凭空假设 1(CrossReference.IsPrimary): v17 改用 OrderBy(x.Id).FirstOrDefault(),Grep 验证 CrossReference 类无 IsPrimary 字段
+- [ ] 90. v16 凭空假设 2(XrefOemBrand.OemBrand/OemNo3): v17 改用 b.Brand,Grep 验证 XrefOemBrand 类字段是 Brand 无 OemNo3
+- [ ] 91. v16 凭空假设 3(Product.UpdatedAtUnix): v17 用 DateTimeOffset 转换,Grep 验证 Product 类无 UpdatedAtUnix 字段
+- [ ] 92. v16 凭空假设 4(ValidToken): v17 保留内联 FixedTimeEquals,Grep 验证 ValidToken 零匹配 + Read 确认 L146 内联实现语义
+- [ ] 93. v16 凭空假设 5(Result.Fail): v17 改用 throw ArgumentException,Grep 验证通用 Result.Fail 不存在(仅 AlertSendResult.Fail)
+- [ ] 94. v16 凭空假设 6(Mr1Validator): v17 Pre-Task-V17-1 显式新建,Grep 验证 v17 实施后存在
+- [ ] 95. v16 凭空假设 7(前端 request 函数): v17 改用 http.post,Grep 验证 request 零匹配 + Read 确认 http.post 存在
+- [ ] 96. v16 凭空假设 8(BuildFilter 遗漏 D3/H2/H3): v17 补充范围 filter,Read 确认 V17-F8 伪代码覆盖 D3/H2/H3
+
+## 第五部分: v17 第十七轮循环终止条件(16 项)
+
+- [ ] 97. 第十七轮审查无任何新漏洞检出 → 完成 v17 修订,进入 v18 修订(如有新漏洞)或定稿
+- [ ] 98. 第十七轮审查发现新漏洞 → 进入 v18 修订,继续迭代
+- [ ] 99. 第十七轮审查发现 v17 仍有凭空假设 → 进入 v18 修订,加强核实机制(九重核实?)
+- [ ] 100. 第十七轮审查重点: 第八重核实机制(类归属验证 + 代码语义对齐验证)
+- [ ] 101. 第十七轮审查重点: v16 凭空假设是否真正消除(Grep 验证 IsPrimary 类归属/OemBrand 类归属/UpdatedAtUnix/ValidToken 语义对齐/Result.Fail 类归属)
+- [ ] 102. 第十七轮审查重点: V17-F8 BuildFilter 补充 D3/H2/H3 后字段命名方向是否与运行时验证一致
+- [ ] 103. 第十七轮审查重点: V17-F1 OrderBy(Id).FirstOrDefault() 是否产生 N+1 问题(EF Core 子查询展开)
+- [ ] 104. 第十七轮审查重点: V17-F9 fire-and-forget Task.Run 内独立 scope 是否正确释放
+- [ ] 105. 持续迭代直到连续一轮审查无任何新漏洞检出
+- [ ] 106. v17 引入"八重核实机制"(代码存在性+字段名+API 签名+伪代码自洽性+运行时上下文自洽性+API 完整签名比对+方法/字段名 Grep 零匹配验证+类归属验证+代码语义对齐验证)
+- [ ] 107. v17 目标: 真正实现"0 项凭空假设"+"0 项类归属错误"+"0 项语义不对齐"+"0 项伪代码自洽性漏洞"+"0 项运行时上下文漏洞"+"0 项 API 签名漏洞"+"0 项方法/字段名零匹配漏洞"
+- [ ] 108. v17 实际新增代码: 5 个新文件(Mr1Validator.cs + ReindexResult.cs + security.ts + security.test.ts + EtlImportServiceTests.cs)
+- [ ] 109. v17 实际修改后端文件: 7 个(ISearchProvider.cs / MeiliSearchProvider.cs / EtlImportService.cs / AdminProductService.cs / WebApplicationExtensions.cs / AdminEtlEndpoints.cs + 新建 ReindexResult.cs)
+- [ ] 110. v17 实际修改前端文件: 5 个(env.d.ts / api/index.ts / api/types.ts / LoginView.vue / AdminEtlView.vue)
+- [ ] 111. v17 纯文档修正: 3 个文件(spec.md / tasks.md / checklist.md)
+- [ ] 112. v17 新增 migration: 0 个(v17 不涉及 DB schema 变更,CrossReference 不新增 IsPrimary 字段,改用 OrderBy(Id) 业务约定)
+

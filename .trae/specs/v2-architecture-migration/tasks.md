@@ -6721,3 +6721,232 @@ Task V15-3.5 (损坏 payload hash 日志) ─→ 独立
 **纯文档修正**: 3 个文件(spec.md / tasks.md / checklist.md)
 **新增 migration**: 0 个(v16 不涉及 DB schema 变更,仅 ProductIndexDoc record 扩展)
 
+---
+
+# v17 任务清单 — 第八重核实机制与衍生漏洞修复
+
+> 基于 v16 第十六轮审查发现的 40 项衍生漏洞(D16:8 / S16:14 / F15:18),v17 引入第八重核实机制(类归属验证+代码语义对齐),并实施 18 项修复方案(V17-F1~F18)。本清单为 v17 实施任务。
+
+## Task V17-0: v17 前置任务(5 个)
+
+### Pre-Task-V17-0: ProductIndexDoc 显式扩展为 18 字段
+
+- [ ] 1. 修改 `backend/src/SakuraFilter.Search/ISearchProvider.cs`,扩展 ProductIndexDoc record
+  - 现有字段(8): Id/OemNoDisplay/Remark/Type/D1Mm/D2Mm/H1Mm/IsDiscontinued
+  - v17 新增(10): D3Mm/H2Mm/H3Mm/Mr1/OemBrand/BrandSortOrder/UpdatedAtUnix
+- [ ] 2. 编译验证: `dotnet build backend/src/SakuraFilter.Search/SakuraFilter.Search.csproj`
+- [ ] 3. 验证: ProductIndexDoc 所有字段类型正确(D3Mm/H2Mm/H3Mm 为 decimal?,Mr1 为 string,OemBrand 为 string,BrandSortOrder 为 int?,UpdatedAtUnix 为 long)
+
+### Pre-Task-V17-0-Verify: 运行时验证 Meilisearch SDK 序列化字段名
+
+- [ ] 1. 启动 Meilisearch: `docker run -p 7700:7700 getmeili/meilisearch`
+- [ ] 2. 写最小化测试: 构造一条 ProductIndexDoc,通过 MeiliSearchProvider.IndexAsync 写入
+- [ ] 3. `curl http://localhost:7700/indexes/products/documents` 查看实际字段名
+- [ ] 4. 确认是 PascalCase(D1Mm) 还是 camelCase(d1Mm)
+- [ ] 5. 记录结果,决定 V17-F8/V17-F15 字段命名方向
+- [ ] 6. **WHY 必须执行**: v16 V16-F2 假设 PascalCase 但未验证,导致 S16-10 漏洞
+
+### Pre-Task-V17-1: 新建 Mr1Validator 静态工具类
+
+- [ ] 1. 新建目录 `backend/src/SakuraFilter.Core/Validation/`(若不存在)
+- [ ] 2. 新建 `backend/src/SakuraFilter.Core/Validation/Mr1Validator.cs`
+- [ ] 3. 实现 `public static class Mr1Validator`(见 spec.md V17-F5 伪代码)
+- [ ] 4. 实现 `Normalize(string? input): string` 方法(校验空/长度/字母数字)
+- [ ] 5. 定义 `public const int Mr1Length = 10`(待 Pre-Task-V17-2 确认)
+- [ ] 6. 编译验证: `dotnet build`
+- [ ] 7. 单元测试: 验证 null/空/长度≠10/非字母数字 抛 ArgumentException
+- [ ] 8. 单元测试: 验证 "ABC1234567" 通过(10 字符字母数字)
+- [ ] 9. **WHY 必须执行**: v15/v16 均未实施,S16-6/F15-2 漏洞
+
+### Pre-Task-V17-2: SELECT 统计 Mr1 长度分布
+
+- [ ] 1. 连接 PostgreSQL: `psql -d sakurafilter`
+- [ ] 2. 执行 SQL: `SELECT LENGTH(mr_1), COUNT(*) FROM products WHERE mr_1 IS NOT NULL GROUP BY LENGTH(mr_1) ORDER BY COUNT(*) DESC`
+- [ ] 3. 记录结果: 长度分布 / 95% 分位 / 最大长度
+- [ ] 4. 若 95%+ 长度=10,保持 Mr1Length=10
+- [ ] 5. 否则改为 `Mr1Length <= 10` 规则,调整 Normalize 方法
+
+### Pre-Task-V17-3: Grep 验证 Product.CrossReferences 导航属性
+
+- [ ] 1. `Grep "CrossReferences" backend/src/SakuraFilter.Core/Entities/Product.cs`
+- [ ] 2. `Grep "public.*List<CrossReference>|public.*ICollection<CrossReference>" backend/src/SakuraFilter.Core/Entities/Product.cs`
+- [ ] 3. 若存在导航属性,记录字段名
+- [ ] 4. 若不存在,确认使用 V17-F1 显式 Join 子查询
+- [ ] 5. 验证: ProductDbContext.cs 是否声明 DbSet<CrossReference>
+
+## Task V17-1: 数据关联维度修复(5 个任务)
+
+### Task V17-1.1: ProductIndexDoc 扩展 + SyncSearchIndexAsync Join 改造
+
+- [ ] 1. 完成 Pre-Task-V17-0(ProductIndexDoc 18 字段)
+- [ ] 2. 完成 Pre-Task-V17-3(导航属性 Grep 验证)
+- [ ] 3. 修改 `backend/src/SakuraFilter.Etl/EtlImportService.cs` SyncSearchIndexAsync
+- [ ] 4. 使用 V17-F1 伪代码(OrderBy(x.Id).FirstOrDefault() 取主交叉引用)
+- [ ] 5. Join XrefOemBrand 用 `b.Brand`(非 b.OemBrand, V17-F2)
+- [ ] 6. UpdatedAtUnix 用 `new DateTimeOffset(p.UpdatedAt).ToUnixTimeSeconds()`(V17-F3)
+- [ ] 7. 编译验证: `dotnet build`
+- [ ] 8. 单元测试: 验证一个 Product 多个 CrossReference 时取 Id 最小的 OemBrand
+- [ ] 9. 单元测试: 验证 Product 无 CrossReference 时 OemBrand="UNKNOWN"
+
+### Task V17-1.2: ReindexResult 新建 + ReindexAllAsync 新增 + advisory lock + 显式事务
+
+- [ ] 1. 新建 `backend/src/SakuraFilter.Core/DTOs/ReindexResult.cs`(V17-F18 伪代码)
+- [ ] 2. 在 EtlImportService.cs 新增 `public async Task<ReindexResult> ReindexAllAsync(CancellationToken ct)`
+- [ ] 3. 使用 V17-F10 伪代码(AcquireActiveCts + StartSnapshotTimerIfNeeded + advisory lock + 显式事务)
+- [ ] 4. 使用 `_pgConn` 字段名(V17-F12)
+- [ ] 5. BeginTransactionAsync 包裹 advisory lock(V17-F13)
+- [ ] 6. EF Core RemoveRange 清空 SearchIndexPending(V17-F11)
+- [ ] 7. 调用 MeiliSearchProvider.DeleteAllDocumentsAsync(V17-F15,需先完成 Task V17-2.2)
+- [ ] 8. 调用 SyncAllSearchIndexAsync(V17-F16,需先完成 Task V17-2.4)
+- [ ] 9. finally 块 StopSnapshotTimer(broadcastCtx) + ReleaseActiveCts(V17-F10)
+- [ ] 10. 编译验证: `dotnet build`
+- [ ] 11. 集成测试: 验证 ReindexAllAsync 与 ImportProductsAsync 互斥(_ctsLock + advisory lock)
+
+### Task V17-1.3: AdminProductService Mr1Validator 校验扩展
+
+- [ ] 1. 完成 Pre-Task-V17-1(Mr1Validator 类)
+- [ ] 2. 修改 `backend/src/SakuraFilter.Api/Services/AdminProductService.cs` L39 CreateAsync
+- [ ] 3. 在 Mr1 赋值前追加 `var normalizedMr1 = Mr1Validator.Normalize(form.Mr1)`(V17-F5)
+- [ ] 4. 修改 L145 UpdateAsync,同样追加 Mr1Validator 校验
+- [ ] 5. WHY throw ArgumentException: AdminProductService 返回 Task<ProductDetailDto>,无 Result 类型
+- [ ] 6. 编译验证: `dotnet build`
+- [ ] 7. 单元测试: 验证 CreateAsync Mr1 格式无效时抛 ArgumentException
+- [ ] 8. 单元测试: 验证 UpdateAsync Mr1 格式无效时抛 ArgumentException
+- [ ] 9. 集成测试: 验证 Mr1 校验失败时 Controller 返回 400 + 友好错误信息
+
+### Task V17-1.4: XrefOemBrand.SortOrder 字段验证 + BrandSortOrder 默认值
+
+- [ ] 1. Grep 验证 XrefOemBrand.cs SortOrder 字段类型(int, Product.cs L212)
+- [ ] 2. 在 SyncSearchIndexAsync 改造中处理 null BrandSortOrder(默认 null, V17-F1 伪代码)
+- [ ] 3. 验证前端排序方向(asc/desc, V17-F15 SortableAttributes 含 BrandSortOrder)
+- [ ] 4. 单元测试: 验证 XrefOemBrand=null 时 BrandSortOrder=null
+- [ ] 5. 单元测试: 验证 XrefOemBrand.SortOrder=5 时 BrandSortOrder=5
+
+### Task V17-1.5: DevTokenAuthMiddleware 保留现有代码(V17-F4)
+
+- [ ] 1. 验证 DevTokenAuthMiddleware.cs L140-L153 内联 FixedTimeEquals(语义已实现 ValidToken)
+- [ ] 2. 验证 L154-L168 token 无效时 return 401(已正确)
+- [ ] 3. 验证 L172 token 有效时 await _next(ctx)
+- [ ] 4. **不修改 DevTokenAuthMiddleware**(V16-F6 修复取消)
+- [ ] 5. 集成测试: 验证 JWT 请求跳过 X-Admin-Token 校验(Bearer 检测 L122)
+- [ ] 6. 集成测试: 验证无 token / 无效 token 返回 401
+
+## Task V17-2: 检索逻辑维度修复(5 个任务)
+
+### Task V17-2.1: MeiliSearchProvider BuildFilter 补充 D3/H2/H3 范围 filter
+
+- [ ] 1. 完成 Pre-Task-V17-0-Verify(运行时验证字段名)
+- [ ] 2. 修改 `backend/src/SakuraFilter.Search/MeiliSearchProvider.cs` L72-L95 BuildFilter
+- [ ] 3. 使用 V17-F8 伪代码(补充 D3/H2/H3 范围 filter)
+- [ ] 4. 字段命名以 Pre-Task-V17-0-Verify 结果为准(PascalCase 或 snake_case)
+- [ ] 5. 编译验证: `dotnet build`
+- [ ] 6. 集成测试: 验证范围搜索 D3Mm filter 正常工作
+- [ ] 7. 集成测试: 验证范围搜索 H2Mm filter 正常工作
+- [ ] 8. 集成测试: 验证范围搜索 H3Mm filter 正常工作
+
+### Task V17-2.2: MeiliSearchProvider 新增 InitializeAsync + DeleteAllDocumentsAsync
+
+- [ ] 1. 在 MeiliSearchProvider.cs 新增 `public async Task InitializeAsync(CancellationToken ct = default)`(V17-F15)
+- [ ] 2. InitializeAsync 内部调用 UpdateFilterableAttributesAsync / UpdateSortableAttributesAsync / UpdateSearchableAttributesAsync
+- [ ] 3. 字段命名以 Pre-Task-V17-0-Verify 结果为准
+- [ ] 4. WaitForTaskAsync 配置 30s 超时
+- [ ] 5. 新增 `public async Task DeleteAllDocumentsAsync(CancellationToken ct = default)`(V17-F15)
+- [ ] 6. 编译验证: `dotnet build`
+- [ ] 7. 集成测试: 验证 InitializeAsync 后 Meilisearch schema 配置正确
+- [ ] 8. 集成测试: 验证 DeleteAllDocumentsAsync 后 primary key 保留
+
+### Task V17-2.3: WebApplicationExtensions 改为后台异步执行 InitializeAsync
+
+- [ ] 1. 修改 `backend/src/SakuraFilter.Api/Extensions/WebApplicationExtensions.cs` L94-L104 InitializeSearchAsync(V17-F9)
+- [ ] 2. 保留现有 rsp.Initialize(meiliOk) 同步调用(立即降级)
+- [ ] 3. Meili 可用时,后台 Task.Run 异步执行(内部创建独立 scope)
+- [ ] 4. 使用 CancellationToken.None(后台任务不随启动取消)
+- [ ] 5. try-catch 包装后台任务,失败时 LogWarning 不抛异常
+- [ ] 6. 编译验证: `dotnet build`
+- [ ] 7. 集成测试: 验证 Meili 不可用时 Api 仍能启动(降级 PG)
+- [ ] 8. 集成测试: 验证 Meili 可用时 Api 启动不阻塞
+
+### Task V17-2.4: SyncAllSearchIndexAsync 新增(全量重建)
+
+- [ ] 1. 在 EtlImportService.cs 新增 `private async Task SyncAllSearchIndexAsync(CancellationToken ct)`(V17-F16)
+- [ ] 2. 全量查询所有产品(不按 UpdatedAt 筛选): `from p in _db.Products.AsNoTracking()`
+- [ ] 3. 使用 V17-F16 伪代码(Join 子查询 + batch 1000)
+- [ ] 4. 调用 search.IndexAsync 写入 Meilisearch
+- [ ] 5. 编译验证: `dotnet build`
+- [ ] 6. 集成测试: 验证 SyncAllSearchIndexAsync 覆盖所有产品(含 UpdatedAt=null)
+
+### Task V17-2.5: FilterableAttributes 三处描述统一(v16 V16-F17 保留)
+
+- [ ] 1. 在 spec.md 旧章节加注 `[已被 V17-F15 取代,统一为 Pre-Task-V17-0-Verify 验证后版本]`
+- [ ] 2. 验证: v17 spec.md 第十八章 V17-F15 的 FilterableAttributes 为最终权威版本
+- [ ] 3. 验证: 字段命名与 Pre-Task-V17-0-Verify 结果一致
+
+## Task V17-3: 前后端联动维度修复(5 个任务)
+
+### Task V17-3.1: etlApi.reindexAll 前端入口 + UI 按钮
+
+- [ ] 1. 修改 `frontend/src/api/index.ts` L342-L378 etlApi 对象,新增 reindexAll 方法(V17-F7)
+- [ ] 2. 使用 `http.post('/admin/etl/reindex-all')`(非 request.post)
+- [ ] 3. 返回类型: `Promise<ReindexResult>`
+- [ ] 4. 修改 `frontend/src/api/types.ts`,新增 ReindexResult 接口(V17-F7)
+- [ ] 5. 修改 `frontend/src/views/admin/AdminEtlView.vue`,新增"全量重建"按钮
+- [ ] 6. 按钮 loading 状态防止重复点击(F16-3)
+- [ ] 7. 点击后调用 etlApi.reindexAll(),成功后轮询 progress 显示进度(F16-6)
+- [ ] 8. 编译验证: `npm run build`
+- [ ] 9. 手动测试: 点击"全量重建"按钮,验证 loading 状态和进度展示
+
+### Task V17-3.2: reindex-all 后端端点新增
+
+- [ ] 1. 修改 `backend/src/SakuraFilter.Api/Endpoints/AdminEtlEndpoints.cs`,新增 POST /api/admin/etl/reindex-all 端点
+- [ ] 2. 端点调用 _etl.ReindexAllAsync(ct)
+- [ ] 3. 返回 ReindexResult 序列化结果(message + direct + queued + elapsed + error)
+- [ ] 4. 使用 RequireRateLimiting("etl") 限流(F16-10)
+- [ ] 5. 使用 [Authorize] + X-Admin-Token 校验(F16-9)
+- [ ] 6. 编译验证: `dotnet build`
+- [ ] 7. 集成测试: 验证 POST /api/admin/etl/reindex-all 返回 200 + ReindexResult
+- [ ] 8. 集成测试: 验证无 X-Admin-Token 返回 401
+
+### Task V17-3.3: LoginView.vue redirect 安全处理(v16 V16-F12 保留)
+
+- [ ] 1. 完成 Pre-Task-V16-1(security.ts 模块,v16 任务)
+- [ ] 2. 修改 `frontend/src/views/LoginView.vue` L46
+- [ ] 3. 替换 `route.query.redirect as string` 强转为安全处理
+- [ ] 4. 使用 `isSafeRedirect(redirect, parseRedirectHosts(import.meta.env.VITE_SAFE_REDIRECT_HOSTS))`
+- [ ] 5. 不安全 redirect 时跳转默认页(/admin)
+- [ ] 6. 编译验证: `npm run build`
+- [ ] 7. 单元测试: 验证 javascript: redirect 被拒绝
+- [ ] 8. 单元测试: 验证非允许主机 redirect 被拒绝
+
+### Task V17-3.4: env.d.ts + .env.development + .env.production
+
+- [ ] 1. 修改 `frontend/src/env.d.ts`,追加 `readonly VITE_SAFE_REDIRECT_HOSTS?: string`
+- [ ] 2. 新建 `frontend/.env.development`,内容: `VITE_SAFE_REDIRECT_HOSTS=localhost,127.0.0.1`
+- [ ] 3. 新建 `frontend/.env.production`,内容: `VITE_SAFE_REDIRECT_HOSTS=your-domain.com`
+- [ ] 4. 编译验证: `npm run build`(TS 类型检查通过)
+- [ ] 5. 手动测试: 开发环境 redirect 到 localhost 正常,生产环境 redirect 到 your-domain.com 正常
+
+### Task V17-3.5: SakuraFilter.Etl.Tests 项目新建 + EtlImportServiceTests
+
+- [ ] 1. 新建 `backend/tests/SakuraFilter.Etl.Tests/SakuraFilter.Etl.Tests.csproj`
+- [ ] 2. 项目引用: SakuraFilter.Etl + SakuraFilter.Core + SakuraFilter.Infrastructure
+- [ ] 3. 新建 `backend/tests/SakuraFilter.Etl.Tests/EtlImportServiceTests.cs`
+- [ ] 4. 测试用例: ReindexAllAsync 与 ImportProductsAsync 互斥
+- [ ] 5. 测试用例: SyncAllSearchIndexAsync 覆盖所有产品
+- [ ] 6. 测试用例: Mr1Validator 校验覆盖 ImportProductsAsync + AdminProductService.CreateAsync/UpdateAsync
+- [ ] 7. 测试用例: V17-F1 OrderBy(Id).FirstOrDefault() 取主交叉引用
+- [ ] 8. 运行测试: `dotnet test backend/tests/SakuraFilter.Etl.Tests/`
+
+## v17 任务总结
+
+- **前置任务**: 5 个(Pre-Task-V17-0 / V17-0-Verify / V17-1 / V17-2 / V17-3)
+- **数据关联维度**: 5 个任务(V17-1.1 ~ V17-1.5)
+- **检索逻辑维度**: 5 个任务(V17-2.1 ~ V17-2.5)
+- **前后端联动维度**: 5 个任务(V17-3.1 ~ V17-3.5)
+- **总任务数**: 20 个(5 前置 + 15 实施)
+
+**实际新增代码**: 5 个新文件(Mr1Validator.cs + ReindexResult.cs + security.ts + security.test.ts + EtlImportServiceTests.cs)
+**实际修改后端文件**: 7 个(ISearchProvider.cs / MeiliSearchProvider.cs / EtlImportService.cs / AdminProductService.cs / WebApplicationExtensions.cs / AdminEtlEndpoints.cs + 新建 ReindexResult.cs)
+**实际修改前端文件**: 5 个(env.d.ts / api/index.ts / api/types.ts / LoginView.vue / AdminEtlView.vue)
+**纯文档修正**: 3 个文件(spec.md / tasks.md / checklist.md)
+**新增 migration**: 0 个(v17 不涉及 DB schema 变更,CrossReference 不新增 IsPrimary 字段)
+

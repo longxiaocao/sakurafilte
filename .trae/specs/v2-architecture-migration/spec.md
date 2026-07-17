@@ -10967,3 +10967,752 @@ private async Task SyncAllSearchIndexAsync(CancellationToken ct)
 - [ ] v16 纯文档修正: 3 个文件(spec.md / tasks.md / checklist.md)
 - [ ] v16 新增 migration: 0 个(v16 不涉及 DB schema 变更,仅 ProductIndexDoc record 扩展)
 
+---
+
+# 第十八章 v17 修订 — 第八重核实机制(类归属验证 + 代码语义对齐)
+
+> 基于第十六轮三维度并行深度审查(D16:8 / S16:14 / F15:18,共 40 项衍生漏洞),v17 引入第八重核实机制(伪代码引用字段的类归属验证 + 代码语义对齐验证),彻底消除 v16 仍存在的 7 项高危凭空假设与 BuildFilter 范围遗漏、fire-and-forget disposed scope、StopSnapshotTimer 签名错误等技术漏洞。
+
+## 18.1 第十六轮审查结果摘要(40 项衍生漏洞)
+
+### D16 数据关联维度(8 项,全部为新凭空假设或衍生问题)
+
+| 编号 | 问题 | 危险等级 | v16 伪代码引用 | 实际代码 |
+|------|------|---------|--------------|---------|
+| D16-1 | CrossReference.IsPrimary 字段不存在 | 高 | V16-F1 `x.IsPrimary` | CrossReference 类(Product.cs L122-L131)字段仅 Id/ProductId/ProductName1/OemBrand/OemNo3/IsDiscontinued/CreatedAt。L110 的 IsPrimary 属于 **Product 类**,非 CrossReference |
+| D16-2 | XrefOemBrand.OemBrand/OemNo3 字段不存在 | 高 | V16-F1 `b.OemBrand`/`b.OemNo3` | XrefOemBrand 类(Product.cs L208-L216)字段仅 Id/**Brand**(非 OemBrand)/SortOrder/CreatedAt/UpdatedAt/DeletedAt,**无 OemNo3** |
+| D16-3 | Product.UpdatedAtUnix 字段不存在 | 中 | V16-F1 `p.UpdatedAtUnix` | Product 类有 DateTime UpdatedAt(Product.cs L77),**无 UpdatedAtUnix**。需用 `new DateTimeOffset(p.UpdatedAt).ToUnixTimeSeconds()` 转换 |
+| D16-4 | ValidToken 方法不存在 | 高 | V16-F6 伪代码引用 | DevTokenAuthMiddleware.cs L140-L153 用**内联** `CryptographicOperations.FixedTimeEquals(providedBytes, Encoding.UTF8.GetBytes(currentToken))`,无 ValidToken 方法 |
+| D16-5 | MeiliSearchProvider.InitializeAsync 方法不存在 | 中 | V16-F10/V16-F20 引用 | MeiliSearchProvider.cs 无 InitializeAsync/DeleteAllDocumentsAsync/UpdateFilterableAttributesAsync 方法(v16 Task V16-2.2 未实施) |
+| D16-6 | fire-and-forget 中使用 disposed scope | 高 | V16-F10 `Task.Run(async () => { using var scope = sp.CreateScope(); })` | MeiliSearchProvider 注册为 **Scoped**(ServiceCollectionExtensions.cs L213),Task.Run 内 using scope 会在任务完成时 disposed,但若任务未完成则 scope 生命周期不可控 |
+| D16-7 | StopSnapshotTimer() 无参数调用错误 | 中 | V16-F11 `StopSnapshotTimer()` | EtlImportService.cs L708 签名 `private void StopSnapshotTimer(BroadcastCtx? ctx)`,**需要 BroadcastCtx 参数**。L681 `StartSnapshotTimerIfNeeded()` 返回 BroadcastCtx |
+| D16-8 | Result.Fail 方法不存在 | 高 | V16-F14 `return Result.Fail(...)` | AdminProductService.cs L39/L145 返回 `Task<ProductDetailDto>`,用 `throw new InvalidOperationException/ArgumentException` 异常处理。通用 Result.Fail **不存在**(仅 AlertSendResult.Fail/ValidateOptionsResult.Fail) |
+
+### S16 检索逻辑维度(14 项,高危 8 / 中危 4 / 低危 2)
+
+| 编号 | 问题 | 危险等级 | 根因 |
+|------|------|---------|------|
+| S16-1 | BuildFilter 遗漏 D3Mm/H2Mm/H3Mm 范围 filter | 高 | MeiliSearchProvider.cs L72-L95 仅实现 type/d1_mm/d2_mm/h1_mm/is_discontinued,**遗漏 d3_mm/h2_mm/h3_mm**。SearchRequest 含 D3/H2/H3 字段,PostgresSearchProvider 已实现 |
+| S16-2 | CrossReference.IsPrimary 凭空假设 | 高 | 同 D16-1 |
+| S16-3 | XrefOemBrand.OemBrand 凭空假设(应为 Brand) | 高 | 同 D16-2 |
+| S16-4 | XrefOemBrand.OemNo3 凭空假设 | 高 | 同 D16-2 |
+| S16-5 | p.UpdatedAtUnix 凭空假设 | 高 | 同 D16-3 |
+| S16-6 | Mr1Validator 类凭空假设 | 高 | 全后端 Grep 零匹配,v15 Pre-Task-V15-1 与 v16 Task V16-1.4 均未实施 |
+| S16-7 | Result.Fail 凭空假设 | 高 | 同 D16-8 |
+| S16-8 | ValidToken 方法凭空假设 | 高 | 同 D16-4 |
+| S16-9 | Meilisearch schema 配置方法不存在 | 中 | MeiliSearchProvider 无 UpdateFilterableAttributesAsync/UpdateSortableAttributesAsync/UpdateSearchableAttributesAsync |
+| S16-10 | 字段命名方向未运行时验证 | 中 | V16-F2 假设 PascalCase,但未执行 Pre-Task-V16-0-Verify 运行时验证 |
+| S16-11 | DeleteAllDocumentsAsync 后 schema 保留未验证 | 低 | Meilisearch SDK 0.15.4 行为未验证 |
+| S16-12 | SyncAllSearchIndexAsync 批量大小未明确 | 低 | V16-F25 未指定 batch size |
+| S16-13 | WaitForTaskAsync 30s 超时是否足够 | 低 | 1M 文档全量重建可能超时 |
+| S16-14 | IndexReplayWorker 全量重建期间跳过逻辑未明确 | 低 | 与 ReindexAllAsync 协调机制未定义 |
+
+### F15 前后端联动维度(18 项,高危 7 / 中危 7 / 低危 4)
+
+| 编号 | 问题 | 危险等级 | 根因 |
+|------|------|---------|------|
+| F15-1 | Result.Fail 方法不存在 | 高 | 同 D16-8 |
+| F15-2 | Mr1Validator.Normalize 方法不存在 | 高 | Mr1Validator 类未创建 |
+| F15-3 | CrossReference.IsPrimary 字段不存在 | 高 | 同 D16-1 |
+| F15-4 | XrefOemBrand.OemBrand/OemNo3 字段不存在 | 高 | 同 D16-2 |
+| F15-5 | V16-F21 显式 Join 引用不存在字段 | 高 | `join x in xrefs on x.OemBrand equals b.OemBrand` 中 b.OemBrand 不存在(应为 b.Brand) |
+| F15-6 | request 函数不存在 | 高 | frontend/src/api/index.ts L36 `export const http: AxiosInstance = axios.create(...)`,etlApi 所有方法用 `http.post/http.get/http.delete`,**无 request 函数** |
+| F15-7 | ValidToken 函数不存在 | 高 | 同 D16-4 |
+| F15-8 | etlApi.reindexAll 方法不存在 | 中 | frontend/src/api/index.ts L342-L378 etlApi 现有方法: trigger/cancel/pause/resume/progress/status/history/historyAggregate,**无 reindexAll** |
+| F15-9 | reindex-all 端点不存在 | 中 | AdminEtlEndpoints.cs 无 reindex-all 端点 |
+| F15-10 | ReindexResult 类型不存在 | 中 | Core/DTOs/ 无 ReindexResult.cs |
+| F15-11 | VITE_SAFE_REDIRECT_HOSTS 未声明 | 中 | env.d.ts 仅声明 VITE_ERROR_REPORT_URL 和 VITE_HOOK_CONSOLE_ERROR |
+| F15-12 | .env.development/.env.production 不存在 | 中 | frontend/ 目录无 .env 文件 |
+| F15-13 | isSafeRedirect 模块不存在 | 中 | frontend/src/utils/ 无 security.ts |
+| F15-14 | ReindexAllAsync 与 ImportProductsAsync 不互斥 | 中 | 不同 entityType("reindex-all" vs "products"),但共享 _ctsLock,AcquireActiveCts 会拒绝(单任务模式) |
+| F15-15 | LoginView.vue redirect 安全处理未实施 | 低 | L46 `route.query.redirect as string` 强转 |
+| F15-16 | security.test.ts 不存在 | 低 | Pre-Task-V16-1 未实施 |
+| F15-17 | SakuraFilter.Etl.Tests 项目不存在 | 低 | Pre-Task-V15-2 未实施 |
+| F15-18 | AdminEtlView.vue 全量重建按钮不存在 | 低 | UI 未新增 |
+
+## 18.2 v17 核心创新 — 第八重核实机制(类归属验证 + 代码语义对齐)
+
+### 第八重核实机制定义
+
+v16 第七重核实机制(方法/字段名 Grep 零匹配验证)存在盲区: **字段名存在但类归属错误**(如 IsPrimary 在 Product 类存在但在 CrossReference 类不存在),以及 **方法名不存在但语义已由其他代码实现**(如 ValidToken 不存在但内联 FixedTimeEquals 实现相同语义)。
+
+v17 引入第八重核实机制,在第七重基础上追加:
+
+1. **类归属验证**: Grep 验证字段所属的类。如 `IsPrimary` 需确认属于 CrossReference 类还是 Product 类,通过 Read 类定义文件确认字段在类块范围内的位置。
+2. **代码语义对齐验证**: 伪代码引用的方法名不存在时,验证现有代码是否已用其他方式(内联/委托/扩展方法)实现相同语义。若已实现,伪代码改用现有实现;若未实现,显式新增。
+
+### 八重核实机制完整定义(v17)
+
+| 重数 | 名称 | 验证内容 | 工具 |
+|------|------|---------|------|
+| 第一重 | 代码存在性 | 类/方法是否存在 | Grep |
+| 第二重 | 字段名 | 字段名是否存在 | Grep |
+| 第三重 | API 签名 | 方法签名与代码一致 | Read |
+| 第四重 | 伪代码自洽性 | 伪代码逻辑无矛盾 | 人工审查 |
+| 第五重 | 运行时上下文自洽性 | 锁/事务/取消三层互斥自洽 | 人工审查 |
+| 第六重 | API 完整签名比对 | 参数类型/返回值/泛型一致 | Read |
+| 第七重 | 方法/字段名 Grep 零匹配 | 引用的方法/字段名实际存在 | Grep 零匹配验证 |
+| **第八重** | **类归属 + 代码语义对齐** | **字段所属类正确 + 方法不存在时语义已实现** | **Grep + Read 类块范围** |
+
+### 第八重核实机制执行流程
+
+```
+Step 1: Grep 验证字段名是否存在(第七重)
+  ├─ 零匹配 → 凭空假设,显式新增或改用现有字段
+  └─ 有匹配 → 进入 Step 2
+
+Step 2: Read 字段所在文件,确认字段在目标类块范围内(第八重-类归属)
+  ├─ 字段在目标类块内 → 通过
+  └─ 字段在其他类块内 → 类归属错误,改用正确字段或改用其他方案
+
+Step 3: Grep 验证方法名是否存在(第七重)
+  ├─ 有匹配 → 进入 Step 5
+  └─ 零匹配 → 进入 Step 4
+
+Step 4: Grep 验证方法语义是否已由其他代码实现(第八重-代码语义对齐)
+  ├─ 已实现(如内联 FixedTimeEquals 替代 ValidToken) → 伪代码改用现有实现
+  └─ 未实现 → 显式新增方法,在 Pre-Task 中声明
+
+Step 5: 通过,写入伪代码
+```
+
+### v17 第八重核实机制验证结果(针对 v16 凭空假设)
+
+| 凭空假设 | 第七重结果 | 第八重验证 | v17 修复方案 |
+|---------|-----------|-----------|------------|
+| CrossReference.IsPrimary | Grep 有匹配(L110) | **类归属错误**: L110 属于 Product 类(L8-L118),CrossReference 类(L122-L131)无此字段 | V17-F1: 改用 `OrderBy(x => x.Id).FirstOrDefault()` 取第一条 |
+| XrefOemBrand.OemBrand | Grep 有匹配(L127) | **类归属错误**: L127 的 OemBrand 属于 CrossReference 类,XrefOemBrand 类(L208-L216)字段是 Brand | V17-F2: 改用 `b.Brand` 单字段 Join |
+| XrefOemBrand.OemNo3 | Grep 有匹配(L128) | **类归属错误**: L128 的 OemNo3 属于 CrossReference 类,XrefOemBrand 类无此字段 | V17-F2: 删除 OemNo3 引用 |
+| Product.UpdatedAtUnix | Grep 零匹配 | **不存在**: Product 类有 DateTime UpdatedAt(L77) | V17-F3: 用 `new DateTimeOffset(p.UpdatedAt).ToUnixTimeSeconds()` |
+| ValidToken | Grep 零匹配 | **语义已实现**: DevTokenAuthMiddleware L146 内联 `CryptographicOperations.FixedTimeEquals` | V17-F4: 保留内联实现,伪代码不引用 ValidToken |
+| Result.Fail | Grep 有匹配(AlertSendResult.Fail) | **类归属错误 + 语义不对齐**: AlertSendResult.Fail 属于 Alerts 命名空间,AdminProductService 用 throw 异常 | V17-F5: 改用 `throw new ArgumentException` |
+| Mr1Validator | Grep 零匹配 | **不存在**: v15/v16 均未实施 | V17-F6: Pre-Task-V17-1 显式新建 Mr1Validator.cs |
+| 前端 request 函数 | Grep 零匹配 | **不存在**: 前端用 http.post/http.get/http.delete | V17-F7: 伪代码改用 http.post |
+
+## 18.3 v17 修复方案(V17-F1 ~ V17-F18)
+
+### V17-F1: CrossReference.IsPrimary 凭空假设 → 改用 OrderBy(Id).FirstOrDefault() [高危纠正]
+
+**问题**: v16 V16-F1 伪代码引用 `x.IsPrimary` 取主交叉引用,但 CrossReference 类(Product.cs L122-L131)无 IsPrimary 字段。L110 的 IsPrimary 属于 Product 类。
+
+**第八重核实**: Grep `IsPrimary` 有匹配(L110),但 Read 类块范围确认 L110 在 Product 类(L8-L118)内,不在 CrossReference 类(L122-L131)内。**类归属错误**。
+
+**修复**: CrossReference 表无主/次标记字段。业务语义上,一个 Product 对应多个 CrossReference,取第一条(按 Id 升序,即最早创建的)作为主交叉引用。无需新增字段,避免 migration。
+
+```csharp
+// v17: SyncSearchIndexAsync Join 子查询(纠正 v16 V16-F1/V16-F21)
+private async Task SyncSearchIndexAsync(DateTime importStartedAt, CancellationToken ct)
+{
+    // WHY Join: Product 无 CrossReferences 导航属性(Pre-Task-V17-3 Grep 验证),
+    //          需显式 Join 查询关联数据
+    var query = from p in _db.Products.AsNoTracking()
+                where p.UpdatedAt >= importStartedAt
+                // v17: 取最早创建的 CrossReference 作为主交叉引用(无 IsPrimary 字段)
+                let primaryXref = (
+                    from x in _db.CrossReferences
+                    where x.ProductId == p.Id && !x.IsDiscontinued
+                    orderby x.Id  // WHY Id 升序: 最早创建的为主,业务约定
+                    select x
+                ).FirstOrDefault()
+                // v17: Join XrefOemBrand 用 Brand 字段(非 OemBrand, V17-F2)
+                join b in _db.XrefOemBrands.Where(b => b.DeletedAt == null)
+                     on primaryXref.OemBrand equals b.Brand into brandGroup
+                from b in brandGroup.DefaultIfEmpty()
+                select new ProductIndexDoc
+                {
+                    Id = p.Id,
+                    OemNoDisplay = p.OemNoDisplay,
+                    Remark = p.Remark,
+                    Type = p.Type,
+                    D1Mm = p.D1Mm,
+                    D2Mm = p.D2Mm,
+                    D3Mm = p.D3Mm,           // v17 新增(Pre-Task-V17-0 扩展)
+                    H1Mm = p.H1Mm,
+                    H2Mm = p.H2Mm,           // v17 新增
+                    H3Mm = p.H3Mm,           // v17 新增
+                    IsDiscontinued = p.IsDiscontinued,
+                    // v17: OemBrand 从 primaryXref 取(非 x.IsPrimary, V17-F1)
+                    OemBrand = primaryXref != null ? primaryXref.OemBrand ?? "UNKNOWN" : "UNKNOWN",
+                    // v17: BrandSortOrder 从 XrefOemBrand.SortOrder 取(b.Brand 非 b.OemBrand, V17-F2)
+                    BrandSortOrder = b != null ? (int?)b.SortOrder : null,
+                    // v17: UpdatedAtUnix 用 DateTimeOffset 转换(非 p.UpdatedAtUnix, V17-F3)
+                    UpdatedAtUnix = new DateTimeOffset(p.UpdatedAt).ToUnixTimeSeconds(),
+                    Mr1 = p.Mr1 ?? "",       // v17 新增(Pre-Task-V17-0 扩展)
+                };
+
+    var batch = new List<ProductIndexDoc>(1000);
+    await foreach (var doc in query.AsAsyncEnumerable().WithCancellation(ct))
+    {
+        batch.Add(doc);
+        if (batch.Count >= 1000)
+        {
+            await search.IndexAsync(batch, ct);
+            batch.Clear();
+        }
+    }
+    if (batch.Count > 0) await search.IndexAsync(batch, ct);
+}
+```
+
+**关键纠正**:
+- 删除 `x.IsPrimary` 引用,改用 `orderby x.Id ... FirstOrDefault()` 取主交叉引用
+- `b.OemBrand` 改为 `b.Brand`(V17-F2)
+- `p.UpdatedAtUnix` 改为 `new DateTimeOffset(p.UpdatedAt).ToUnixTimeSeconds()`(V17-F3)
+- `primaryXref.OemBrand` 仍可引用(CrossReference 类有 OemBrand 字段,L127)
+
+### V17-F2: XrefOemBrand.OemBrand/OemNo3 凭空假设 → 改用 b.Brand [高危纠正]
+
+**问题**: v16 V16-F1 伪代码 `join b in _db.XrefOemBrands on x.OemBrand equals b.OemBrand` 引用 `b.OemBrand`,但 XrefOemBrand 类(Product.cs L208-L216)字段是 **Brand**(非 OemBrand),且无 OemNo3 字段。
+
+**第八重核实**: Grep `OemBrand` 有匹配(L127),但 L127 属于 CrossReference 类(L122-L131),XrefOemBrand 类(L208-L216)字段是 Brand(L211)。**类归属错误**。
+
+**修复**: 见 V17-F1 伪代码,Join 条件改为 `on primaryXref.OemBrand equals b.Brand`。删除所有 `b.OemNo3` 引用。
+
+### V17-F3: Product.UpdatedAtUnix 凭空假设 → 用 DateTimeOffset 转换 [中危纠正]
+
+**问题**: v16 V16-F1 伪代码引用 `p.UpdatedAtUnix`,但 Product 类无此字段。Product 类有 DateTime UpdatedAt(L77)。
+
+**第八重核实**: Grep `UpdatedAtUnix` 零匹配。**不存在**。
+
+**修复**: 见 V17-F1 伪代码,用 `new DateTimeOffset(p.UpdatedAt).ToUnixTimeSeconds()` 转换。ProductIndexDoc 的 UpdatedAtUnix 字段类型为 long(Pre-Task-V17-0 扩展时定义)。
+
+### V17-F4: ValidToken 凭空假设 → 保留内联 FixedTimeEquals [高危纠正]
+
+**问题**: v16 V16-F6 伪代码引用 `ValidToken(provided, currentToken)` 方法,但 DevTokenAuthMiddleware 无此方法。
+
+**第八重核实**: Grep `ValidToken` 零匹配。但 Read DevTokenAuthMiddleware.cs L140-L153 确认 L146 内联 `CryptographicOperations.FixedTimeEquals(providedBytes, Encoding.UTF8.GetBytes(currentToken))` 已实现相同语义。**语义已实现**。
+
+**修复**: v17 不引用 ValidToken 方法,保留现有内联实现。DevTokenAuthMiddleware 无需修改(V16-F6 修复取消,现有代码 L154-L168 已正确返回 401)。
+
+```csharp
+// v17: DevTokenAuthMiddleware 保留现有代码,无修改(V16-F6 修复取消)
+// L140-L153: 内联 CryptographicOperations.FixedTimeEquals(语义已实现 ValidToken)
+// L154-L168: token 无效时 return 401(已正确,无需修复)
+// L172: token 有效时 await _next(ctx)
+```
+
+### V17-F5: Result.Fail 凭空假设 → 改用 throw ArgumentException [高危纠正]
+
+**问题**: v16 V16-F14 伪代码 `return Result.Fail("MR.1 格式无效")`,但 AdminProductService 返回 `Task<ProductDetailDto>`,用 throw 异常。通用 Result.Fail 不存在(仅 AlertSendResult.Fail/ValidateOptionsResult.Fail)。
+
+**第八重核实**: Grep `Result.Fail` 有匹配,但属于 Alerts 命名空间(AlertSendResult.Fail)和 Options(ValidateOptionsResult.Fail)。AdminProductService 用 throw 异常(L59/L154/L294/L312)。**类归属错误 + 语义不对齐**。
+
+**修复**: Mr1Validator 校验失败时 throw 异常,不引用 Result.Fail。
+
+```csharp
+// v17: AdminProductService.CreateAsync Mr1 校验(V17-F5 纠正 V16-F14)
+public async Task<ProductDetailDto> CreateAsync(ProductFormDto form, string? createdBy, CancellationToken ct = default)
+{
+    // v17: Mr1Validator 校验(Pre-Task-V17-1 新建 Mr1Validator 类)
+    // WHY throw: AdminProductService 返回 Task<ProductDetailDto>,无 Result 类型,用 throw 异常
+    var normalizedMr1 = Mr1Validator.Normalize(form.Mr1);  // 抛 ArgumentException 若格式无效
+    // ... 后续逻辑 ...
+}
+
+// v17: Mr1Validator 静态工具类(Pre-Task-V17-1 新建)
+public static class Mr1Validator
+{
+    public const int Mr1Length = 10;  // Pre-Task-V17-2 SELECT 统计后确认
+
+    public static string Normalize(string? input)
+    {
+        if (string.IsNullOrWhiteSpace(input))
+            throw new ArgumentException("MR.1 不能为空");
+        var normalized = input.Trim().ToUpperInvariant();
+        if (normalized.Length != Mr1Length)
+            throw new ArgumentException($"MR.1 长度必须为 {Mr1Length} 字符(实际 {normalized.Length})");
+        if (!normalized.All(char.IsLetterOrDigit))
+            throw new ArgumentException("MR.1 必须为字母数字");
+        return normalized;
+    }
+}
+```
+
+### V17-F6: Mr1Validator 类不存在 → Pre-Task-V17-1 显式新建 [高危纠正]
+
+**问题**: v15 Pre-Task-V15-1 与 v16 Task V16-1.4 均声明新建 Mr1Validator,但全后端 Grep 零匹配,从未实施。
+
+**第八重核实**: Grep `Mr1Validator` 零匹配。**不存在**。
+
+**修复**: v17 Pre-Task-V17-1 显式新建 `backend/src/SakuraFilter.Core/Validation/Mr1Validator.cs`(见 V17-F5 伪代码)。Pre-Task-V17-1 必须先于其他 v17 任务完成。
+
+### V17-F7: 前端 request 函数凭空假设 → 改用 http.post [高危纠正]
+
+**问题**: v16 V16-F15 伪代码引用 `request.post('/admin/etl/reindex-all')`,但前端 api/index.ts 无 request 函数,用 `http.post/http.get/http.delete`(基于 axios AxiosInstance)。
+
+**第八重核实**: Grep `export const request` / `export function request` 零匹配。**不存在**。
+
+**修复**: v17 前端伪代码改用 http.post。
+
+```typescript
+// v17: etlApi.reindexAll 新增(V17-F7 纠正 V16-F15,改用 http.post)
+// 文件: frontend/src/api/index.ts L342-L378 etlApi 对象内追加
+reindexAll(): Promise<ReindexResult> {
+  return http.post('/admin/etl/reindex-all').then((r) => r.data)
+}
+
+// v17: ReindexResult 类型定义(V17-F10 新增 ReindexResult.cs 后前端对齐)
+// 文件: frontend/src/api/types.ts 追加
+export interface ReindexResult {
+  message: string
+  direct: number
+  queued?: number
+  elapsed: number
+  error?: string
+}
+```
+
+### V17-F8: BuildFilter 遗漏 D3Mm/H2Mm/H3Mm 范围 filter [高危纠正]
+
+**问题**: MeiliSearchProvider.cs L72-L95 BuildFilter 仅实现 type/d1_mm/d2_mm/h1_mm/is_discontinued filter,**遗漏 d3_mm/h2_mm/h3_mm**。SearchRequest 含 D3/H2/H3 字段,PostgresSearchProvider 已实现。
+
+**修复**: 补充 D3Mm/H2Mm/H3Mm 范围 filter。字段命名方向由 Pre-Task-V17-0-Verify 运行时验证决定(PascalCase 或 snake_case)。
+
+```csharp
+// v17: MeiliSearchProvider.BuildFilter 补充 D3/H2/H3 范围 filter(V17-F8)
+// 字段命名以 Pre-Task-V17-0-Verify 运行时验证为准(此处假设 PascalCase)
+var filters = new List<string>();
+if (!string.IsNullOrWhiteSpace(req.Type))
+    filters.Add($"Type = \"{EscapeFilter(req.Type)}\"");  // v17: PascalCase(V17-F11 统一)
+if (req.D1.HasValue)
+{
+    var (lo, hi) = (req.D1.Value - req.Tolerance, req.D1.Value + req.Tolerance);
+    filters.Add($"D1Mm >= {lo} AND D1Mm <= {hi}");
+}
+if (req.D2.HasValue)
+{
+    var (lo, hi) = (req.D2.Value - req.Tolerance, req.D2.Value + req.Tolerance);
+    filters.Add($"D2Mm >= {lo} AND D2Mm <= {hi}");
+}
+if (req.D3.HasValue)  // v17 新增(V17-F8)
+{
+    var (lo, hi) = (req.D3.Value - req.Tolerance, req.D3.Value + req.Tolerance);
+    filters.Add($"D3Mm >= {lo} AND D3Mm <= {hi}");
+}
+if (req.H1.HasValue)
+{
+    var (lo, hi) = (req.H1.Value - req.Tolerance, req.H1.Value + req.Tolerance);
+    filters.Add($"H1Mm >= {lo} AND H1Mm <= {hi}");
+}
+if (req.H2.HasValue)  // v17 新增(V17-F8)
+{
+    var (lo, hi) = (req.H2.Value - req.Tolerance, req.H2.Value + req.Tolerance);
+    filters.Add($"H2Mm >= {lo} AND H2Mm <= {hi}");
+}
+if (req.H3.HasValue)  // v17 新增(V17-F8)
+{
+    var (lo, hi) = (req.H3.Value - req.Tolerance, req.H3.Value + req.Tolerance);
+    filters.Add($"H3Mm >= {lo} AND H3Mm <= {hi}");
+}
+if (!req.IncludeDiscontinued)
+    filters.Add("IsDiscontinued = false");  // v17: PascalCase
+```
+
+### V17-F9: V16-F10 fire-and-forget disposed scope → Task.Run 内创建独立 scope [高危纠正]
+
+**问题**: v16 V16-F10 用 `Task.Run(async () => { using var scope = sp.CreateScope(); var meili = scope.ServiceProvider.GetRequiredService<MeiliSearchProvider>(); await meili.InitializeAsync(ct); })`。MeiliSearchProvider 注册为 Scoped(ServiceCollectionExtensions.cs L213),fire-and-forget Task.Run 中 using scope 会在任务完成时 disposed,但若任务未完成则 scope 生命周期不可控,且 CancellationToken ct 在启动后已取消。
+
+**修复**: 在 Task.Run 内部创建独立 scope,使用 CancellationToken.None(后台任务不随启动取消),try-catch 包装失败不抛异常。
+
+```csharp
+// v17: WebApplicationExtensions.InitializeSearchAsync 改为后台异步(V17-F9 纠正 V16-F10)
+// 文件: backend/src/SakuraFilter.Api/Extensions/WebApplicationExtensions.cs L94-L104
+public static async Task InitializeSearchAsync(this WebApplication app)
+{
+    var rsp = app.Services.GetRequiredService<ResilientSearchProvider>();
+    var meiliOk = await rsp.IsPrimaryHealthyAsync();
+    rsp.Initialize(meiliOk);  // 立即设置降级标志
+
+    if (meiliOk)
+    {
+        // v17: 后台异步执行 InitializeAsync,不阻塞启动
+        // WHY Task.Run 内 CreateScope: MeiliSearchProvider 是 Scoped,需独立 scope
+        // WHY CancellationToken.None: 启动后 ct 会取消,后台任务应独立运行
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var scope = app.Services.CreateScope();
+                var meili = scope.ServiceProvider.GetRequiredService<MeiliSearchProvider>();
+                await meili.InitializeAsync(CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                var logger = app.Services.GetRequiredService<ILogger<Program>>();
+                logger.LogWarning(ex, "Meilisearch InitializeAsync 后台执行失败(不影响启动,降级 PG)");
+            }
+        });
+    }
+}
+```
+
+### V17-F10: V16-F11 StopSnapshotTimer 无参数调用错误 → 接收 BroadcastCtx 返回值并传参 [中危纠正]
+
+**问题**: v16 V16-F11 伪代码 `StopSnapshotTimer()` 无参数调用,但 EtlImportService.cs L708 签名 `private void StopSnapshotTimer(BroadcastCtx? ctx)` 需要 BroadcastCtx 参数。L681 `StartSnapshotTimerIfNeeded()` 返回 BroadcastCtx。
+
+**第八重核实**: Grep `StopSnapshotTimer` 有匹配(L708/L1113/L1366/L1817),Read 确认签名 `StopSnapshotTimer(BroadcastCtx? ctx)`。现有代码 L800/L1113/L1257/L1366/L1606/L1817 都正确使用 `var broadcastCtx = StartSnapshotTimerIfNeeded(); ... StopSnapshotTimer(broadcastCtx);` 模式。
+
+**修复**: ReindexAllAsync 复用现有模式。
+
+```csharp
+// v17: ReindexAllAsync 进度推送(V17-F10 纠正 V16-F11,复用现有模式)
+public async Task<ReindexResult> ReindexAllAsync(CancellationToken ct)
+{
+    var cts = AcquireActiveCts("reindex-all", ct);  // V17-F14 复用现有方法
+    // v17: 接收 BroadcastCtx 返回值(非无参数调用, V17-F10)
+    var broadcastCtx = StartSnapshotTimerIfNeeded();
+    try
+    {
+        using var conn = new NpgsqlConnection(_pgConn);  // V17-F12: _pgConn 字段名(v16 V16-F4 已纠正)
+        await conn.OpenAsync(ct);
+        using var tx = await conn.BeginTransactionAsync(ct);  // V17-F13: 显式事务包裹 advisory lock
+
+        if (!await TryAcquireAdvisoryLockAsync(conn, 7740005L, ct))  // V17-F14 复用现有方法
+        {
+            Progress.Fail("另一全量重建任务正在跑 (advisory lock 7740005 被占用)");
+            return new ReindexResult { Message = "advisory lock 获取失败", Error = "lock_busy" };
+        }
+
+        // v17: advisory lock 在显式事务内,commit/rollback 时自动释放(pg_try_advisory_xact_lock)
+        // WHY 无需 ReleaseAdvisoryLockAsync: 事务级锁自动释放(v15 凭空假设已纠正)
+
+        // v17: 清空 SearchIndexPending 队列(EF Core RemoveRange, V17-F11)
+        using (var scope = _sp.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ProductDbContext>();
+            db.SearchIndexPending.RemoveRange(db.SearchIndexPending);
+            await db.SaveChangesAsync(ct);
+        }
+
+        // v17: 调用 MeiliSearchProvider.DeleteAllDocumentsAsync(V17-F15 新增方法)
+        using (var scope = _sp.CreateScope())
+        {
+            var meili = scope.ServiceProvider.GetRequiredService<MeiliSearchProvider>();
+            await meili.DeleteAllDocumentsAsync(ct);  // 保留 primary key(V17-F15)
+        }
+
+        // v17: 全量重建索引(不按 UpdatedAt 筛选, V17-F16)
+        await SyncAllSearchIndexAsync(ct);
+
+        await tx.CommitAsync(ct);  // 提交事务,释放 advisory lock
+        return new ReindexResult { Message = "全量重建完成", Direct = Progress.Indexed, Elapsed = Progress.Elapsed?.TotalSeconds ?? 0 };
+    }
+    catch (Exception ex)
+    {
+        Progress.Fail(ex.Message);
+        return new ReindexResult { Message = "全量重建失败", Error = ex.Message, Elapsed = Progress.Elapsed?.TotalSeconds ?? 0 };
+    }
+    finally
+    {
+        // v17: 传参 StopSnapshotTimer(非无参数, V17-F10)
+        StopSnapshotTimer(broadcastCtx);
+        ReleaseActiveCts();
+    }
+}
+```
+
+### V17-F11: TruncateSearchIndexPendingAsync 不存在 → 用 EF Core RemoveRange [中危纠正]
+
+**问题**: v15 凭空假设 TruncateSearchIndexPendingAsync,v16 V16-F3 改用 EF Core RemoveRange。v17 重申并给出完整伪代码。
+
+**修复**: 见 V17-F10 伪代码,`db.SearchIndexPending.RemoveRange(db.SearchIndexPending)` + `SaveChangesAsync`。
+
+### V17-F12: _connectionString 字段名错误 → _pgConn [中危纠正]
+
+**问题**: v15 伪代码引用 `_connectionString`,实际字段名是 `_pgConn`(EtlImportService.cs L346)。
+
+**修复**: 见 V17-F10 伪代码,`new NpgsqlConnection(_pgConn)`。
+
+### V17-F13: advisory lock 无显式事务 → BeginTransactionAsync 包裹 [中危纠正]
+
+**问题**: v15 用 `pg_try_advisory_xact_lock` 但无显式事务,事务级锁在无事务时立即释放。
+
+**修复**: 见 V17-F10 伪代码,`BeginTransactionAsync` 包裹 advisory lock,`CommitAsync` 提交后释放锁。
+
+### V17-F14: AcquireActiveCts 已存在 → ReindexAllAsync 复用 [中危纠正]
+
+**问题**: v16 V16-F11 引用 AcquireActiveCts,需确认存在性。
+
+**第八重核实**: Grep `AcquireActiveCts` 有匹配(L577/L791/L1250/L1599),签名 `private CancellationTokenSource AcquireActiveCts(string entityType, CancellationToken externalCt)`。**已存在**。
+
+**修复**: ReindexAllAsync 复用,entityType="reindex-all"。ReindexAllAsync 与 ImportProductsAsync 共享 _ctsLock,AcquireActiveCts 单任务模式会拒绝(互斥正确,F15-14 已解决)。
+
+### V17-F15: MeiliSearchProvider.InitializeAsync/DeleteAllDocumentsAsync 不存在 → 显式新增 [中危纠正]
+
+**问题**: v16 V16-F10/V16-F20/V16-F24 引用 InitializeAsync/DeleteAllDocumentsAsync,但 MeiliSearchProvider 无此方法(v16 Task V16-2.2 未实施)。
+
+**修复**: v17 Task V17-2.2 显式新增。
+
+```csharp
+// v17: MeiliSearchProvider 新增 InitializeAsync + DeleteAllDocumentsAsync(V17-F15)
+public async Task InitializeAsync(CancellationToken ct = default)
+{
+    // v17: 复用 _index 字段(非硬编码 "products", V16-F20)
+    // WHY WaitForTaskAsync 30s 超时: 避免 1M 文档 schema 配置阻塞启动
+    var filterTaskInfo = await _index.UpdateFilterableAttributesAsync(
+        new[] { "Type", "D1Mm", "D2Mm", "D3Mm", "H1Mm", "H2Mm", "H3Mm", "IsDiscontinued", "OemBrand", "BrandSortOrder", "Mr1" },
+        cancellationToken: ct);
+    var sortTaskInfo = await _index.UpdateSortableAttributesAsync(
+        new[] { "BrandSortOrder", "UpdatedAtUnix" },
+        cancellationToken: ct);
+    var searchTaskInfo = await _index.UpdateSearchableAttributesAsync(
+        new[] { "OemNoDisplay", "Remark", "Type", "OemBrand", "Mr1" },
+        cancellationToken: ct);
+
+    await _index.WaitForTaskAsync(filterTaskInfo.TaskUid, TimeSpan.FromSeconds(30), ct);
+    await _index.WaitForTaskAsync(sortTaskInfo.TaskUid, TimeSpan.FromSeconds(30), ct);
+    await _index.WaitForTaskAsync(searchTaskInfo.TaskUid, TimeSpan.FromSeconds(30), ct);
+}
+
+// v17: DeleteAllDocumentsAsync 保留 primary key(V16-F24)
+public async Task DeleteAllDocumentsAsync(CancellationToken ct = default)
+{
+    // WHY DeleteAllDocumentsAsync: 只删除文档,保留 index schema(primary key/filterable/sortable/searchable)
+    await _index.DeleteAllDocumentsAsync(cancellationToken: ct);
+}
+```
+
+**字段命名说明**: 上述伪代码假设 PascalCase。Pre-Task-V17-0-Verify 运行时验证后,若 Meilisearch SDK 0.15.4 默认 camelCase,则字段名改为 camelCase。
+
+### V17-F16: SyncAllSearchIndexAsync 不存在 → 显式新增 [中危纠正]
+
+**问题**: v16 V16-F25 引用 SyncAllSearchIndexAsync,但未实施。
+
+**修复**: v17 Task V17-2.4 显式新增,全量查询所有产品(不按 UpdatedAt 筛选)。
+
+```csharp
+// v17: SyncAllSearchIndexAsync 新增(V17-F16, 纠正 V16-F25)
+private async Task SyncAllSearchIndexAsync(CancellationToken ct)
+{
+    // WHY 不按 UpdatedAt 筛选: 全量重建需覆盖所有产品(含 UpdatedAt=null 的老产品)
+    var query = from p in _db.Products.AsNoTracking()
+                let primaryXref = (
+                    from x in _db.CrossReferences
+                    where x.ProductId == p.Id && !x.IsDiscontinued
+                    orderby x.Id
+                    select x
+                ).FirstOrDefault()
+                join b in _db.XrefOemBrands.Where(b => b.DeletedAt == null)
+                     on primaryXref.OemBrand equals b.Brand into brandGroup
+                from b in brandGroup.DefaultIfEmpty()
+                select new ProductIndexDoc
+                {
+                    Id = p.Id,
+                    OemNoDisplay = p.OemNoDisplay,
+                    Remark = p.Remark,
+                    Type = p.Type,
+                    D1Mm = p.D1Mm,
+                    D2Mm = p.D2Mm,
+                    D3Mm = p.D3Mm,
+                    H1Mm = p.H1Mm,
+                    H2Mm = p.H2Mm,
+                    H3Mm = p.H3Mm,
+                    IsDiscontinued = p.IsDiscontinued,
+                    OemBrand = primaryXref != null ? primaryXref.OemBrand ?? "UNKNOWN" : "UNKNOWN",
+                    BrandSortOrder = b != null ? (int?)b.SortOrder : null,
+                    UpdatedAtUnix = new DateTimeOffset(p.UpdatedAt).ToUnixTimeSeconds(),
+                    Mr1 = p.Mr1 ?? "",
+                };
+
+    var batch = new List<ProductIndexDoc>(1000);  // v17: batch size 1000(S16-12)
+    await foreach (var doc in query.AsAsyncEnumerable().WithCancellation(ct))
+    {
+        batch.Add(doc);
+        if (batch.Count >= 1000)
+        {
+            await search.IndexAsync(batch, ct);
+            batch.Clear();
+        }
+    }
+    if (batch.Count > 0) await search.IndexAsync(batch, ct);
+}
+```
+
+### V17-F17: etlApi.reindexAll 不存在 → 新增方法 [中危纠正]
+
+**问题**: v16 V16-F15 引用 etlApi.reindexAll,但前端 api/index.ts L342-L378 etlApi 无此方法。
+
+**修复**: 见 V17-F7 伪代码,etlApi 对象内追加 reindexAll 方法。
+
+### V17-F18: ReindexResult 类型不存在 → 新建 [中危纠正]
+
+**问题**: v16 V16-F15 引用 ReindexResult,但 Core/DTOs/ 无 ReindexResult.cs。
+
+**修复**: v17 Task V17-1.2 新建 `backend/src/SakuraFilter.Core/DTOs/ReindexResult.cs`。
+
+```csharp
+// v17: ReindexResult.cs 新建(V17-F18)
+namespace SakuraFilter.Core.DTOs;
+
+public record ReindexResult
+{
+    public string Message { get; init; } = "";
+    public long Direct { get; init; }
+    public long? Queued { get; init; }
+    public double Elapsed { get; init; }
+    public string? Error { get; init; }
+}
+```
+
+## 18.4 v17 前置任务
+
+### Pre-Task-V17-0: ProductIndexDoc 显式扩展为 18 字段(必须先于其他 v17 任务)
+
+1. 修改 `backend/src/SakuraFilter.Search/ISearchProvider.cs`,扩展 ProductIndexDoc record 为 18 字段(在 v16 17 字段基础上确认):
+   - 现有字段: Id/OemNoDisplay/Remark/Type/D1Mm/D2Mm/H1Mm/IsDiscontinued
+   - v17 新增: D3Mm/H2Mm/H3Mm/Mr1/OemBrand/BrandSortOrder/UpdatedAtUnix
+2. 修改 `backend/src/SakuraFilter.Etl/EtlImportService.cs` SyncSearchIndexAsync,改造为 V17-F1 Join 子查询
+3. 编译验证: `dotnet build backend/src/SakuraFilter.Search/SakuraFilter.Search.csproj`
+
+### Pre-Task-V17-0-Verify: 运行时验证 Meilisearch SDK 序列化字段名
+
+1. 写最小化测试: 构造一条 ProductIndexDoc,通过 MeiliSearchProvider.IndexAsync 写入 Meilisearch
+2. `curl http://localhost:7700/indexes/products/documents` 查看实际字段名
+3. 确认是 PascalCase(D1Mm) 还是 camelCase(d1Mm)
+4. 根据结果决定 V17-F8/V17-F15 的字段命名方向
+5. **WHY 必须执行**: v16 V16-F2 假设 PascalCase 但未验证,导致 S16-10 漏洞
+
+### Pre-Task-V17-1: 新建 Mr1Validator 静态工具类
+
+1. 新建 `backend/src/SakuraFilter.Core/Validation/Mr1Validator.cs`(目录不存在则创建)
+2. 实现 `Normalize(string? input): string` 方法(见 V17-F5 伪代码)
+3. 编译验证: `dotnet build`
+4. **WHY 必须执行**: v15 Pre-Task-V15-1 与 v16 Task V16-1.4 均未实施,S16-6/F15-2 漏洞
+
+### Pre-Task-V17-2: SELECT 统计 Mr1 长度分布
+
+1. 执行 SQL: `SELECT LENGTH(mr_1), COUNT(*) FROM products WHERE mr_1 IS NOT NULL GROUP BY LENGTH(mr_1) ORDER BY COUNT(*) DESC`
+2. 根据结果确认 Mr1Validator.Mr1Length 值(假设 10,但需数据验证)
+3. 若 95%+ 长度=10,保持 Mr1Length=10;否则改为 Mr1Length <= 10
+
+### Pre-Task-V17-3: Grep 验证 Product.CrossReferences 导航属性
+
+1. `Grep "CrossReferences" backend/src/SakuraFilter.Core/Entities/Product.cs`
+2. `Grep "public.*List<CrossReference>|public.*ICollection<CrossReference>" backend/src/SakuraFilter.Core/Entities/Product.cs`
+3. 若存在导航属性,使用 `p.CrossReferences.Where(...).OrderBy(x => x.Id).FirstOrDefault()`
+4. 若不存在,使用 V17-F1 显式 Join 子查询(当前假设)
+
+## 18.5 v17 vs v16 对比表(18 项)
+
+| 编号 | 问题简述 | v16 状态 | v17 修复 |
+|------|---------|---------|---------|
+| V17-F1 | CrossReference.IsPrimary 凭空假设 | 类归属错误 | OrderBy(x.Id).FirstOrDefault() |
+| V17-F2 | XrefOemBrand.OemBrand/OemNo3 凭空假设 | 类归属错误 | b.Brand 单字段 Join |
+| V17-F3 | Product.UpdatedAtUnix 凭空假设 | 不存在 | DateTimeOffset 转换 |
+| V17-F4 | ValidToken 凭空假设 | 语义已实现 | 保留内联 FixedTimeEquals |
+| V17-F5 | Result.Fail 凭空假设 | 类归属+语义错误 | throw ArgumentException |
+| V17-F6 | Mr1Validator 类不存在 | 未实施 | Pre-Task-V17-1 显式新建 |
+| V17-F7 | 前端 request 函数凭空假设 | 不存在 | 改用 http.post |
+| V17-F8 | BuildFilter 遗漏 D3Mm/H2Mm/H3Mm | 范围 filter 缺失 | 补充范围 filter |
+| V17-F9 | fire-and-forget disposed scope | Scoped 生命周期错 | Task.Run 内独立 scope |
+| V17-F10 | StopSnapshotTimer 无参数调用 | 签名错误 | 接收 BroadcastCtx 传参 |
+| V17-F11 | TruncateSearchIndexPendingAsync 不存在 | 凭空假设 | EF Core RemoveRange |
+| V17-F12 | _connectionString 字段名错误 | 错误 | _pgConn |
+| V17-F13 | advisory lock 无显式事务 | 锁立即释放 | BeginTransactionAsync 包裹 |
+| V17-F14 | AcquireActiveCts 已存在 | 需确认 | 复用现有方法 |
+| V17-F15 | InitializeAsync/DeleteAllDocumentsAsync 不存在 | 未实施 | Task V17-2.2 显式新增 |
+| V17-F16 | SyncAllSearchIndexAsync 不存在 | 未实施 | Task V17-2.4 显式新增 |
+| V17-F17 | etlApi.reindexAll 不存在 | 未实施 | etlApi 追加方法 |
+| V17-F18 | ReindexResult 类型不存在 | 凭空假设 | Task V17-1.2 新建 |
+
+## 18.6 v17 实际修改文件清单
+
+### 后端修改(7 个文件)
+1. `backend/src/SakuraFilter.Search/ISearchProvider.cs` - ProductIndexDoc 扩展为 18 字段(Pre-Task-V17-0)
+2. `backend/src/SakuraFilter.Search/MeiliSearchProvider.cs` - BuildFilter 补充 D3/H2/H3 + InitializeAsync + DeleteAllDocumentsAsync(V17-F8/V17-F15)
+3. `backend/src/SakuraFilter.Etl/EtlImportService.cs` - SyncSearchIndexAsync Join 改造 + ReindexAllAsync 新增 + SyncAllSearchIndexAsync 新增(V17-F1/F10/F16)
+4. `backend/src/SakuraFilter.Api/Services/AdminProductService.cs` - Mr1Validator 校验扩展(V17-F5)
+5. `backend/src/SakuraFilter.Api/Extensions/WebApplicationExtensions.cs` - InitializeSearchAsync 后台异步(V17-F9)
+6. `backend/src/SakuraFilter.Api/Endpoints/AdminEtlEndpoints.cs` - reindex-all 端点新增(V17-F17)
+7. `backend/src/SakuraFilter.Core/DTOs/ReindexResult.cs` - 新建(V17-F18)
+
+### 后端新建(2 个文件)
+1. `backend/src/SakuraFilter.Core/Validation/Mr1Validator.cs` - 新建(Pre-Task-V17-1, V17-F6)
+2. `backend/tests/SakuraFilter.Etl.Tests/EtlImportServiceTests.cs` - 新建(v15 Pre-Task-V15-2 落地)
+
+### 前端修改(4 个文件)
+1. `frontend/src/api/index.ts` - etlApi.reindexAll 新增(V17-F7/F17)
+2. `frontend/src/api/types.ts` - ReindexResult 接口新增
+3. `frontend/src/views/admin/AdminEtlView.vue` - 全量重建按钮新增
+4. `frontend/src/views/LoginView.vue` - redirect 安全处理(v16 V16-F12 保留)
+
+### 前端新建(3 个文件)
+1. `frontend/src/utils/security.ts` - isSafeRedirect 模块(v16 Pre-Task-V16-1 保留)
+2. `frontend/src/utils/__tests__/security.test.ts` - 12 测试用例
+3. `frontend/.env.development` / `frontend/.env.production` - 环境变量模板
+
+### 配置修改(1 个文件)
+1. `frontend/src/env.d.ts` - VITE_SAFE_REDIRECT_HOSTS 声明
+
+### 纯文档修正(3 个文件)
+1. `.trae/specs/v2-architecture-migration/spec.md` - 第十八章 v17
+2. `.trae/specs/v2-architecture-migration/tasks.md` - v17 任务清单
+3. `.trae/specs/v2-architecture-migration/checklist.md` - v17 验证清单
+
+## 18.7 v17 第十七轮审查重点(40 个审查点)
+
+### 数据关联维度(D17)审查点(14 个)
+- [ ] D17-1: ProductIndexDoc 扩展为 18 字段后,所有构造调用点是否同步更新(EtlImportService SyncSearchIndexAsync/SyncAllSearchIndexAsync)
+- [ ] D17-2: V17-F1 Join 子查询 `let primaryXref = (...).FirstOrDefault()` 是否产生 N+1 问题(EF Core 子查询展开)
+- [ ] D17-3: V17-F1 `orderby x.Id` 取主交叉引用,业务语义是否正确(最早创建=主)
+- [ ] D17-4: V17-F2 `on primaryXref.OemBrand equals b.Brand` Join 条件是否正确(b.Brand 非 b.OemBrand)
+- [ ] D17-5: V17-F3 `new DateTimeOffset(p.UpdatedAt).ToUnixTimeSeconds()` 转换是否处理 Kind=Unspecified 问题
+- [ ] D17-6: V17-F10 ReindexAllAsync advisory lock 7740005 在显式事务内,commit 时是否正确释放
+- [ ] D17-7: V17-F10 ReindexAllAsync 与 ImportProductsAsync 共享 _ctsLock,AcquireActiveCts 是否正确互斥(单任务模式)
+- [ ] D17-8: V17-F10 ReindexAllAsync 失败时(catch 块),事务是否 rollback(using var tx 自动 rollback)
+- [ ] D17-9: V17-F11 EF Core RemoveRange 是否在 advisory lock 内执行(lock 内 TRUNCATE 语义)
+- [ ] D17-10: V17-F14 AcquireActiveCts("reindex-all", ct) 与 ImportProductsAsync 的 _ctsLock 是否正确互斥
+- [ ] D17-11: V17-F15 DeleteAllDocumentsAsync 后,Meilisearch primary key 是否保留(保留)
+- [ ] D17-12: V17-F16 SyncAllSearchIndexAsync batch size 1000 是否合理(1M 产品=1000 批)
+- [ ] D17-13: Mr1Validator.Normalize 抛 ArgumentException,AdminProductService 是否正确捕获并返回 400
+- [ ] D17-14: ReindexResult 返回值,前端 etlApi.reindexAll 是否正确消费
+
+### 检索逻辑维度(S17)审查点(14 个)
+- [ ] S17-1: V17-F8 BuildFilter 补充 D3Mm/H2Mm/H3Mm 后,所有 SearchRequest 范围字段是否全覆盖
+- [ ] S17-2: V17-F8 字段命名方向(PascalCase/snake_case)是否与 Pre-Task-V17-0-Verify 运行时验证一致
+- [ ] S17-3: V17-F15 InitializeAsync FilterableAttributes 是否包含所有 BuildFilter 引用的字段
+- [ ] S17-4: V17-F15 InitializeAsync SortableAttributes 是否包含 BrandSortOrder/UpdatedAtUnix
+- [ ] S17-5: V17-F15 InitializeAsync SearchableAttributes 是否包含 OemNoDisplay/Remark/Type/OemBrand/Mr1
+- [ ] S17-6: V17-F15 WaitForTaskAsync 30s 超时,1M 文档 schema 配置是否足够
+- [ ] S17-7: V17-F15 DeleteAllDocumentsAsync 后,InitializeAsync 是否需要重新执行(schema 保留)
+- [ ] S17-8: V17-F16 SyncAllSearchIndexAsync 全量查询,是否覆盖所有产品(含 UpdatedAt=null)
+- [ ] S17-9: V17-F16 batch size 1000,Meilisearch AddDocumentsAsync 是否支持
+- [ ] S17-10: ProductIndexDoc 扩展后,Meilisearch 索引是否需要全量重建(旧文档无新字段)
+- [ ] S17-11: Mr1Validator 校验失败时,是否记录日志(便于排查)
+- [ ] S17-12: 全量重建期间 IndexReplayWorker 跳过处理,是否有日志(便于运维监控)
+- [ ] S17-13: V17-F8 EscapeFilter 是否处理特殊字符(引号/反斜杠)
+- [ ] S17-14: V17-F15 字段命名方向与 V17-F8 BuildFilter 是否一致(避免 schema 与 filter 不匹配)
+
+### 前后端联动维度(F16)审查点(12 个)
+- [ ] F16-1: V17-F7 etlApi.reindexAll 返回 ReindexResult,前端 TypeScript 类型是否同步
+- [ ] F16-2: V17-F7 http.post('/admin/etl/reindex-all') 端点是否与后端路由一致
+- [ ] F16-3: 全量重建按钮 loading 状态,是否防止重复点击
+- [ ] F16-4: V17-F9 InitializeSearchAsync 后台 Task.Run,启动时是否阻塞(应不阻塞)
+- [ ] F16-5: V17-F9 后台任务失败时,是否正确降级到 PG(ResilientSearchProvider)
+- [ ] F16-6: V17-F10 ReindexAllAsync 进度推送,前端是否轮询 etlApi.progress() 显示
+- [ ] F16-7: Mr1Validator 校验失败,前端是否收到 400 + 友好错误信息
+- [ ] F16-8: ReindexResult.Error 字段,前端是否正确展示错误信息
+- [ ] F16-9: V17-F17 reindex-all 端点 [Authorize] + X-Admin-Token 校验是否正确
+- [ ] F16-10: V17-F17 reindex-all 端点 RequireRateLimiting("etl") 限流是否配置
+- [ ] F16-11: v16 18 项衍生漏洞是否全部在 v17 修复方案中覆盖(无遗漏)
+- [ ] F16-12: v17 引入的第八重核实机制(类归属+代码语义对齐)是否在 spec 修订时同步完成
+
+## 18.8 第十七轮循环终止条件
+
+- [ ] 第十七轮审查无任何新漏洞检出 → 完成 v17 修订,进入 v18 修订(如有新漏洞)或定稿
+- [ ] 第十七轮审查发现新漏洞 → 进入 v18 修订,继续迭代
+- [ ] 第十七轮审查发现 v17 仍有凭空假设 → 进入 v18 修订,加强核实机制(九重核实?)
+- [ ] 第十七轮审查重点: 第八重核实机制(类归属验证 + 代码语义对齐验证)
+- [ ] 第十七轮审查重点: v16 凭空假设是否真正消除(Grep 验证 IsPrimary 类归属/OemBrand 类归属/UpdatedAtUnix/ValidToken 语义对齐/Result.Fail 类归属)
+- [ ] 第十七轮审查重点: V17-F8 BuildFilter 补充 D3/H2/H3 后字段命名方向是否与运行时验证一致
+- [ ] 第十七轮审查重点: V17-F1 OrderBy(Id).FirstOrDefault() 是否产生 N+1 问题(EF Core 子查询展开)
+- [ ] 第十七轮审查重点: V17-F9 fire-and-forget Task.Run 内独立 scope 是否正确释放
+- [ ] 持续迭代直到连续一轮审查无任何新漏洞检出
+- [ ] v17 引入"八重核实机制"(代码存在性+字段名+API 签名+伪代码自洽性+运行时上下文自洽性+API 完整签名比对+方法/字段名 Grep 零匹配验证+类归属验证+代码语义对齐验证)
+- [ ] v17 目标: 真正实现"0 项凭空假设"+"0 项类归属错误"+"0 项语义不对齐"+"0 项伪代码自洽性漏洞"+"0 项运行时上下文漏洞"+"0 项 API 签名漏洞"+"0 项方法/字段名零匹配漏洞"
+- [ ] v17 实际新增代码: 4 个新文件(Mr1Validator.cs + ReindexResult.cs + security.ts + security.test.ts + EtlImportServiceTests.cs)
+- [ ] v17 实际修改后端文件: 7 个(ISearchProvider.cs / MeiliSearchProvider.cs / EtlImportService.cs / AdminProductService.cs / WebApplicationExtensions.cs / AdminEtlEndpoints.cs + 新建 ReindexResult.cs)
+- [ ] v17 实际修改前端文件: 5 个(env.d.ts / api/index.ts / api/types.ts / LoginView.vue / AdminEtlView.vue + 新建 security.ts/security.test.ts/.env.*)
+- [ ] v17 纯文档修正: 3 个文件(spec.md / tasks.md / checklist.md)
+- [ ] v17 新增 migration: 0 个(v17 不涉及 DB schema 变更,CrossReference 不新增 IsPrimary 字段,改用 OrderBy(Id) 业务约定)
+
