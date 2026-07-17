@@ -7103,3 +7103,470 @@ public void Mr1Validator_IsValid(string mr1, bool expected) { ... }
 ⏳ 持续迭代直到连续一轮审查无任何新漏洞检出
 ⏳ v10 引入"行号+类名"双重核实机制,所有字段引用必须确认所属类
 
+---
+
+# 第十二章 v11 修订 — 第十轮深度审查结果 + v10 凭空假设纠正
+
+> **修订日期**: 2026-07-17
+> **触发原因**: 第十轮三维度并行深度审查发现 v10 仍存在 10 项高危凭空假设(v10 spec L7087 自称"0 项凭空假设"是第二次讽刺),其中 V11-F1(BuildProductIndexDocAsync 方法根本不存在)是最大的讽刺 — v10 在撤销 v9 凭空假设的同时引入了新的凭空假设
+> **核心目标**: (1) 纠正 v10 引入的 10 项高危凭空假设 (2) 修正 7 项中低危问题 (3) 引入"方法存在性 + API 签名"双重核实机制: 所有方法引用必须确认方法存在且签名匹配
+
+## 12.1 第十轮深度审查结果摘要
+
+### 审查维度与发现
+
+| 维度 | 子代理 | 发现总数 | 高危 | 中危 | 低危 | 真实漏洞 |
+|------|--------|---------|------|------|------|---------|
+| 数据关联 | D10 | 7 | 6 | 1 | 0 | 7 |
+| 检索逻辑 | S10 | 9 | 5 | 4 | 0 | 9 |
+| 前后端联动 | F9 | 4 | 2 | 0 | 2 | 4 |
+| **合计(去重前)** | — | **20** | **13** | **5** | **2** | **20** |
+| **合计(去重后)** | — | **17** | **10** | **5** | **2** | **17** |
+
+### 关键发现
+
+1. **v10 V11-F1 是最大的讽刺**: v10 Task V10-2.4 标题"BuildProductIndexDocAsync 修正"和子任务 2.4.1"方法签名增加 brands 参数"均暗示该方法已存在。经 Grep 核实:**全项目无 BuildProductIndexDocAsync 方法**,EtlImportService.cs L1158-1166 是内联 lambda `batch.Select(p => new ProductIndexDoc(...))`。v10 在"撤销凭空假设"的同时引入了新的凭空假设
+
+2. **v10 V11-F2 LocalStorage 类凭空假设**: v10 Task V10-1.8 子任务 1.8.4 要求"LocalStorage 实现 ListAllAsync",但 LocalStorage 类在全项目中不存在。Storage 目录仅有 MinioStorage + AliyunOssStorage
+
+3. **v10 V11-F3 ProductIndexDoc.Id 类型凭空改变**: v10 Task V10-1.5 将 Id 类型从 `long` 改为 `int`,但 ISearchProvider.cs L33 是 `long`,Product.cs L10 是 `long`,类型不匹配导致编译错误
+
+4. **v10 V11-F4 SyncSearchIndexAsync private 方法外部调用**: v10 Task V10-2.1 在 AdminSearchEndpoints 中调用 `etl.SyncSearchIndexAsync(...)`,但该方法在 EtlImportService.cs L1127 是 `private`,编译错误 CS0122
+
+5. **v10 V11-F5 router.isReady() Promise 被当作同步布尔值**: v10 Task V10-3.5 伪代码 `if (router.isReady())` 把 Promise 当布尔,Vue Router 4 的 isReady() 返回 Promise<void>,Promise 对象本身是 truthy,兜底硬跳转永不执行
+
+6. **v10 V11-F6 VerifyAndExtractV2 丢失 V1 兼容期验签路径**: v10 撤销 V9-R3 时把 v9 的 V1 兜底逻辑一起改丢,V1 cursor 解析会抛异常
+
+7. **v10 V11-F7 ResilientSearchProvider 无运行时强制切换 API**: v10 Task V10-2.1 子任务 2.1.2"切到 PG 兜底"无具体实现方案,ResilientSearchProvider 仅有 Initialize(bool) 启动时初始化,无运行时切换 API
+
+## 12.2 v10 凭空假设纠正(V11-F1 ~ V11-F10,10 项高危)
+
+### V11-F1 [高] Task V10-2.4 BuildProductIndexDocAsync 方法根本不存在
+
+**v10 spec 位置**: spec.md L6804-L6820(V10-F7 修正方案);tasks.md L3434-L3478(Task V10-2.4)
+**v10 错误描述**: Task V10-2.4 标题"BuildProductIndexDocAsync 修正"和子任务 2.4.1"方法签名增加 brands 参数"均暗示该方法已存在
+**真实代码事实**(经 Grep 核实):
+- Grep `BuildProductIndexDocAsync` 全项目返回 `No matches found`
+- [EtlImportService.cs#L1158-L1166](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Etl/EtlImportService.cs#L1158) 是 `var docs = batch.Select(p => new ProductIndexDoc(...)).ToList();` 内联在 SyncSearchIndexAsync 中
+- L1167-1211 是 EnqueuePendingBatchAsync 等其他方法,非 BuildProductIndexDocAsync
+**修正方案**:
+1. Task V10-2.4 标题改为"新建 BuildProductIndexDocAsync 方法"(非"修正")
+2. 子任务 2.4.1 改为"从 SyncSearchIndexAsync 内联代码抽取为独立方法 BuildProductIndexDocs,签名增加 brands 参数"
+3. 文件行号引用 L1158-1166(非 L1158-1211)
+4. 方法名改为 `BuildProductIndexDocs`(去掉 Async 后缀,见 V11-F14)
+
+### V11-F2 [高] Task V10-1.8 LocalStorage 类凭空假设
+
+**v10 spec 位置**: tasks.md L3374, L3383(Task V10-1.8 子任务 1.8.4)
+**v10 错误描述**: 子任务 1.8.4 要求"LocalStorage 实现 ListAllAsync(用 Directory.EnumerateFiles)"
+**真实代码事实**(经 Glob 核实):
+- Glob `backend/src/SakuraFilter.Infrastructure/Storage/LocalStorage.cs` 返回 No file found
+- Grep 全 backend 目录 `class LocalStorage|LocalStorage :` 返回 No matches found
+- Storage 目录仅有: [MinioStorage.cs](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Infrastructure/Storage/MinioStorage.cs) + [AliyunOssStorage.cs](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Infrastructure/Storage/AliyunOssStorage.cs)
+- [ServiceCollectionExtensions.cs#L244-L287](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Extensions/ServiceCollectionExtensions.cs#L244) 注册逻辑仅支持 `minio` 和 `aliyun-oss` 两种 provider,无 `local` 分支
+**修正方案**: 删除子任务 1.8.4,V10-1.8 仅需修改 2 个实现类(MinioStorage + AliyunOssStorage)
+
+### V11-F3 [高] Task V10-1.5 ProductIndexDoc.Id 类型 long→int 凭空改变
+
+**v10 spec 位置**: tasks.md L3295(Task V10-1.5 子任务 1.5.1)
+**v10 错误描述**: `int Id, string OemNoNormalized, ...` — 将 Id 类型改为 int
+**真实代码事实**(经 Read 核实):
+- [ISearchProvider.cs#L33](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Search/ISearchProvider.cs#L33) `public record ProductIndexDoc(long Id, ...)` — 现有类型是 long
+- [Product.cs#L10](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Core/Entities/Product.cs#L10) `public long Id` — Product.Id 是 long(数据库 bigint)
+- [EtlImportService.cs#L1158-L1159](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Etl/EtlImportService.cs#L1158) `new ProductIndexDoc(p.Id, ...)` — 直接传入 p.Id(long)
+**修正方案**: 保持 `long Id`,tasks.md V10-1.5 伪代码修正为:
+```csharp
+public record ProductIndexDoc(
+    long Id,  // ← 保持 long,非 int
+    string OemNoNormalized, ...
+```
+
+### V11-F4 [高] Task V10-2.1 SyncSearchIndexAsync private 方法外部调用
+
+**v10 spec 位置**: tasks.md L3403-L3408(Task V10-2.1 子任务 2.1.1)
+**v10 错误描述**: `await etl.SyncSearchIndexAsync(DateTime.MinValue, ct);` — 在 AdminSearchEndpoints 中调用
+**真实代码事实**(经 Read 核实):
+- [EtlImportService.cs#L1127](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Etl/EtlImportService.cs#L1127) `private async Task SyncSearchIndexAsync(DateTime importStartedAt, CancellationToken ct)` — 显式声明为 private
+- C# 访问修饰符规则: private 方法只能在声明它的类内部调用
+**修正方案**: V10-2.1 补充子任务:在 EtlImportService 中新增 public 包装方法:
+```csharp
+// EtlImportService.cs 新增 public 包装方法
+public Task ReindexAllAsync(CancellationToken ct) 
+    => SyncSearchIndexAsync(DateTime.MinValue, ct);
+```
+然后调用 `await etl.ReindexAllAsync(ct);`
+
+### V11-F5 [高] Task V10-3.5 router.isReady() Promise 被当作同步布尔值
+
+**v10 spec 位置**: tasks.md L3653-L3665(Task V10-3.5 子任务 3.5.3)
+**v10 错误描述**: `if (router.isReady()) { router.push(...) } else { window.location.href = ... }`
+**真实代码事实**(经 Read 核实):
+- [router/index.ts#L223](file:///d:/projects/sakurafilter/frontend/src/router/index.ts#L223) `const router = createRouter({ history: createWebHistory(), routes })` — 使用 Vue Router 4
+- package.json L29 `"vue-router": "^4.5.0"` — Vue Router 4
+- Vue Router 4 官方 API: `router.isReady(): Promise<void>` — 返回 Promise,不是同步布尔值
+- Promise 对象本身是 truthy,`if` 分支永远命中,`else` 分支(兜底硬跳转)永远不会执行
+- [router/index.ts#L52-L55](file:///d:/projects/sakurafilter/frontend/src/router/index.ts#L52) `{ path: '/login', name: 'Login', ... }` — 路由 name 是 `'Login'`(非 `'login'` 小写)
+**修正方案**: 改为 await 模式(推荐,axios 拦截器本身是 async):
+```typescript
+async function redirectToLogin() {
+  const auth = useAdminAuthStore()
+  auth.clearAuth()
+  if (window.location.pathname !== '/login') {
+    const redirect = window.location.pathname + window.location.search
+    try {
+      await router.isReady()
+      router.push({ name: 'Login', query: { redirect } })  // name 是 'Login' 非 'login'
+    } catch {
+      // 兜底: router 未就绪时硬跳转
+      window.location.href = `/login?redirect=${encodeURIComponent(redirect)}`
+    }
+  }
+}
+```
+
+### V11-F6 [高] Task V10-3.1 VerifyAndExtractV2 丢失 V1 兼容期验签路径
+
+**v10 spec 位置**: tasks.md L3523-L3538(Task V10-3.1 子任务 3.1.2);验证项 L3545 "V1 cursor 在兼容期内验签通过"与伪代码实现矛盾
+**v10 错误描述**: VerifyAndExtractV2 直接 `cursor[3..]` 截断前 3 个字符,假设 cursor 一定是 `V2:` 前缀格式,无 V1 兜底分支
+**真实代码事实**(经 Read 核实):
+- [CursorHmac.cs#L89](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Services/CursorHmac.cs#L89) `public (string updatedAtIso, long id) VerifyAndExtract(string cursor)` — 现有 V1 方法返回 (string, long)
+- [CursorHmac.cs#L120](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Services/CursorHmac.cs#L120) `private static bool VerifyKey(byte[] key, string updatedAtIso, long id, string sig)` — 私有验签方法
+- [AdminProductService.cs#L866-L868](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Services/AdminProductService.cs#L866) 主列表 cursor 现用 ISO8601: `{iso}|{id}|{sig}` 格式(V1,无 V2: 前缀)
+- v9 tasks.md L3042-3066 原设计: "V2 优先 V1 兜底"(返回可空元组 `(long, long)?`,V1 走 VerifyAndExtract + DateTime.TryParse 转 ticks)
+- v10 tasks.md L3525: `public (long ticks, long id) VerifyAndExtractV2(string cursor)` — 返回非空元组,无 V2 前缀判断,无 V1 兜底
+**衍生影响**: 用户在 V2 部署前生成的 V1 cursor(`{iso}|{id}|{sig}` 格式)会被截断 ISO8601 前 3 个字符(如 `202` 被截断),`long.TryParse` 失败抛 ArgumentException,破坏 V1 兼容期
+**修正方案**: 恢复 v9 的 "V2 优先 V1 兜底" 设计:
+```csharp
+public (long Ticks, long Id)? VerifyAndExtractV2(string cursor)
+{
+    // V2 优先
+    if (cursor.StartsWith("V2:"))
+    {
+        var body = cursor[3..];
+        var parts = body.Split('|', 3);
+        if (parts.Length != 3) throw new ArgumentException("V2 cursor 格式错误");
+        if (!long.TryParse(parts[0], out var ticks)) throw new ArgumentException();
+        if (!long.TryParse(parts[1], out var id)) throw new ArgumentException();
+        if (!VerifyKey(_currentKey, parts[0], id, parts[2])
+            && (_previousKey == null || !VerifyKey(_previousKey, parts[0], id, parts[2])))
+            throw new ArgumentException("V2 cursor 签名验证失败");
+        return (ticks, id);
+    }
+    // V1 兼容(主列表 ISO8601 cursor,30 天兼容期)
+    var v1Result = VerifyAndExtract(cursor);
+    if (DateTime.TryParse(v1Result.updatedAtIso, null,
+        System.Globalization.DateTimeStyles.RoundtripKind, out var dt))
+        return (dt.Ticks, v1Result.id);
+    throw new ArgumentException("V1 cursor updatedAt 解析失败");
+}
+```
+
+### V11-F7 [高] Task V10-2.1 ResilientSearchProvider 无运行时强制切换 API
+
+**v10 spec 位置**: tasks.md L3410(Task V10-2.1 子任务 2.1.2)
+**v10 错误描述**: "重建期间让 ResilientSearchProvider 切到 PG 兜底" — 无具体实现方案
+**真实代码事实**(经 Read 核实):
+- [ResilientSearchProvider.cs#L21](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Search/ResilientSearchProvider.cs#L21) `private volatile bool _primaryAvailable = true;` — 内部状态
+- [ResilientSearchProvider.cs#L118](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Search/ResilientSearchProvider.cs#L118) `public void Initialize(bool primaryAvailable)` — 注释 L116 "启动时初始化 (P3-6.2)",不适合运行时切换
+- [ResilientSearchProvider.cs#L127-L163](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Search/ResilientSearchProvider.cs#L127) SearchAsync 仅依赖 `_primaryAvailable` 判断,无外部强制切换 API
+- L44-L67 熔断器由 Polly 内部统计驱动(FailureRatio=0.5, MinimumThroughput=4),Meili 返回空结果不算失败(返回 200 + 空 hits)
+**衍生影响**: 全量重建期间 Meili 服务本身健康(HealthCheckAsync 通过),只是索引数据不完整,熔断器不会触发,SearchAsync 仍会走 Meili 返回不完整结果
+**修正方案**: 方案 A(推荐)— 在 ResilientSearchProvider 新增 `public void SetPrimaryAvailable(bool available)` 运行时切换方法,重建前调用 `SetPrimaryAvailable(false)`,重建后调用 `SetPrimaryAvailable(true)`:
+```csharp
+// ResilientSearchProvider.cs 新增
+private readonly object _switchLock = new();
+public void SetPrimaryAvailable(bool available)
+{
+    lock (_switchLock)
+    {
+        _primaryAvailable = available;
+    }
+}
+```
+方案 B — 重建期间在 Meili 端临时 swap 主索引名(Meili 原子 swap index),避免数据不完整期间被查询
+
+### V11-F8 [高] Task V10-1.2 WithMany() 无参数破坏导航属性
+
+**v10 spec 位置**: tasks.md L3257(Task V10-1.2 子任务 1.2.1)
+**v10 错误描述**: `e.HasOne<Product>().WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Cascade)` — WithMany() 无参数
+**真实代码事实**(经 Read 核实):
+- [ProductDbContextModelSnapshot.cs#L1707-L1715](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Infrastructure/Data/Migrations/ProductDbContextModelSnapshot.cs#L1707) 已记录(按 EF Core 8 导航属性约定自动生成):
+  ```
+  b.HasOne("SakuraFilter.Core.Entities.Product", null)
+      .WithMany("CrossReferences")    // ← 注意:带导航属性名
+      .HasForeignKey("ProductId")
+      .OnDelete(DeleteBehavior.Cascade)
+      .IsRequired()
+      .HasConstraintName("fk_cross_references_products_product_id");
+  ```
+- [ProductDbContext.cs#L108-L117](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Infrastructure/Data/ProductDbContext.cs#L108) 当前 CrossReference 配置无 HasOne(依赖约定)
+- [Product.cs#L92](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Core/Entities/Product.cs#L92) `public ICollection<CrossReference> CrossReferences` 导航属性确实存在
+**衍生影响**: WithMany()(无参数)告诉 EF Core "Product 端没有导航属性",与 ModelSnapshot 中 WithMany("CrossReferences") 冲突,导致 V10-2.4 的 `p.CrossReferences.FirstOrDefault()?.OemBrand` 无法加载(Include 失效)
+**修正方案**: 改为带参数,或直接不修改 ProductDbContext(保持现状):
+```csharp
+// 方案 A: 显式指定导航属性
+e.HasOne<Product>()
+ .WithMany(p => p.CrossReferences)  // 显式指定导航属性
+ .HasForeignKey(x => x.ProductId)
+ .OnDelete(DeleteBehavior.Cascade)
+ .HasConstraintName("fk_cross_references_products_product_id");
+
+// 方案 B(推荐): 保持现状,ModelSnapshot 已正确记录关系,无需新增显式配置
+// 删除 Task V10-1.2(无必要)
+```
+
+### V11-F9 [高] Task V10-1.7 RequireAuthorization("Admin") 破坏 X-Admin-Token 访问
+
+**v10 spec 位置**: tasks.md L3356(Task V10-1.7 子任务 1.7.2);spec.md L6881-L6892(V10-F12)
+**v10 错误描述**: AdminEtlEndpoints.cs L21 补充 `.RequireAuthorization("Admin")`
+**真实代码事实**(经 Read 核实):
+- [DevTokenAuthMiddleware.cs#L142-L172](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Services/DevTokenAuthMiddleware.cs#L142) 验证 X-Admin-Token 后直接 `await _next(ctx)` 放行,**未设置** `ctx.User` 的 ClaimsPrincipal
+- L122-L126: Bearer 请求跳过 X-Admin-Token 校验,由 JwtBearer 中间件处理(会设置 ClaimsPrincipal)
+- [ServiceCollectionExtensions.cs#L178](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Extensions/ServiceCollectionExtensions.cs#L178) `options.AddPolicy("Admin", p => p.RequireRole("admin"))` — Admin 策略要求 role=admin Claim
+- [AdminEtlEndpoints.cs#L21](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Endpoints/AdminEtlEndpoints.cs#L21) 当前: 仅 `RequireRateLimiting("etl")`,无 RequireAuthorization
+**衍生影响**: 现有 CI 脚本若用 X-Admin-Token 调用 `/api/admin/etl/trigger`,会被 RequireAuthorization("Admin") 拒绝(403 Forbidden),因为 X-Admin-Token 验证成功后 ClaimsPrincipal 仍为空(IsAuthenticated=false)
+**修正方案**: V10-1.7 补充子任务:在 DevTokenAuthMiddleware 验证 X-Admin-Token 成功后设置 ClaimsPrincipal:
+```csharp
+// DevTokenAuthMiddleware.InvokeAsync 中 tokenValid=true 后
+var identity = new ClaimsIdentity(new[]
+{
+    new Claim(ClaimTypes.NameIdentifier, "dev-token"),
+    new Claim(ClaimTypes.Role, "admin")  // 让 RequireAuthorization("Admin") 通过
+}, "DevToken");
+ctx.User = new ClaimsPrincipal(identity);
+await _next(ctx);
+```
+
+### V11-F10 [高] Task V10-2.4 投影与签名类型不匹配
+
+**v10 spec 位置**: tasks.md L3481-L3484(Task V10-2.4 子任务 2.4.4);spec.md L6821-L6824(V10-F7 注意)
+**v10 错误描述**: 子任务 2.4.4 投影返回匿名类型 `new { Product = p, CrossReferences = ... }`,但子任务 2.4.1 签名是 `IEnumerable<Product>`,匿名类型集合无法传给 IEnumerable<Product>
+**真实代码事实**(经 Read 核实):
+- tasks.md L3442-L3445 子任务 2.4.1 签名: `IEnumerable<Product> products`
+- tasks.md L3481-L3484 子任务 2.4.4 投影: `.Select(p => new { Product = p, CrossReferences = p.CrossReferences.Select(c => new { c.OemBrand }).ToList() })`
+- tasks.md L3463 子任务 2.4.3: `var oemBrand = p.CrossReferences.FirstOrDefault()?.OemBrand;` — p 直接访问 CrossReferences
+- C# 编译器无法将 `List<{Product, CrossReferences}>` 匿名类型传给 `IEnumerable<Product>` 参数
+**修正方案**: 改用 .Include 替代投影(见 V11-F11 修正伪代码):
+```csharp
+// SyncSearchIndexAsync 查询时 Include 导航属性(非投影)
+var batch = await query.OrderBy(p => p.Id).Take(batchSize)
+    .Include(p => p.CrossReferences)  // 显式加载导航属性
+    .AsNoTracking()
+    .ToListAsync(ct);
+// batch 是 List<Product>,CrossReferences 已加载
+var docs = BuildProductIndexDocs(batch, brands);
+```
+
+## 12.3 v10 中低危问题修正(V11-F11 ~ V11-F17,7 项)
+
+### V11-F11 [中] Task V10-2.4 .ToList() 内存爆炸风险
+
+**v10 spec 位置**: tasks.md L3483(Task V10-2.4 子任务 2.4.4)
+**v10 问题**: 投影 `p.CrossReferences.Select(c => new { c.OemBrand }).ToList()` 在 EF Core 翻译为 SQL 时,会为每个 Product 加载其所有 CrossReferences 到内存(ToList 强制客户端求值)
+**真实代码事实**:
+- [Product.cs#L92](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Core/Entities/Product.cs#L92) `public ICollection<CrossReference> CrossReferences` — 一对多关系
+- 1M 产品 * 平均 5-20 个 CrossReference = 5M-20M 行一次性物化到内存,会导致 OOM 或严重 GC 压力
+**修正方案**: 改用 EF Core 的 Select 投影不 ToList(让 EF Core 翻译为 JOIN 子查询),或用 FirstOrDefault 直接取首个 OemBrand:
+```csharp
+// 方案 A: Include + FirstOrDefault(配合 V11-F10)
+.Include(p => p.CrossReferences)
+// 内部: var oemBrand = p.CrossReferences.FirstOrDefault()?.OemBrand;
+
+// 方案 B: 投影直接计算 oemBrand(不 ToList)
+.Select(p => new { 
+    p.Id, ..., 
+    OemBrand = p.CrossReferences.FirstOrDefault().OemBrand 
+})
+// EF Core 翻译为 LEFT JOIN 子查询,不物化整个集合
+```
+
+### V11-F12 [中] Task V10-2.4 FirstOrDefault 业务语义不确定
+
+**v10 spec 位置**: spec.md L6808, L6816;tasks.md L3463(Task V10-2.4 子任务 2.4.3)
+**v10 问题**: 一个 Product 可能有 5-20 个 CrossReference,每个 CrossReference 可能有不同的 OemBrand。v10 用 `p.CrossReferences.FirstOrDefault()?.OemBrand` 取第一个,但 CrossReferences 集合无 OrderBy(默认顺序不确定)
+**真实代码事实**:
+- [Product.cs#L92](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Core/Entities/Product.cs#L92) `ICollection<CrossReference> CrossReferences` — 集合无 OrderBy
+- CrossReference 实体(L122-L131)无 SortOrder 字段,无法确定性排序
+- 同一 Product 在不同同步批次中可能取到不同 OemBrand(若 CrossReference 顺序变化),导致 Meili 索引中 oemBrand 字段不稳定
+**修正方案**: 明确业务规则(需业务方确认,新增前置任务 Pre-Task-V11-6):
+- 方案 A: 取 Product.Oem2 字段([Product.cs#L23](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Core/Entities/Product.cs#L23) `public string? Oem2`)
+- 方案 B: 取 CrossReferences 中按 CreatedAt 最早的 OemBrand(`p.CrossReferences.OrderBy(c => c.CreatedAt).FirstOrDefault()?.OemBrand`)
+- 方案 C: 取出现频次最高的 OemBrand(需 GroupBy)
+**临时方案**(业务方确认前): 用 Product.Oem2 作为 OemBrand 的来源(单值,无歧义):
+```csharp
+var oemBrand = p.Oem2;  // 临时方案,业务方确认后可能改为 CrossReferences 来源
+```
+
+### V11-F13 [中] Task V10-2.1 AdminSearchEndpoints.cs 文件不存在
+
+**v10 spec 位置**: tasks.md L3398(Task V10-2.1 文件)
+**v10 问题**: 文件声明 `backend/src/SakuraFilter.Api/Endpoints/AdminSearchEndpoints.cs(新增端点)`,但 Endpoints 目录下不存在该文件,需新建整个文件而非"新增端点"
+**真实代码事实**(经 LS 核实):
+- LS Endpoints 目录显示 9 个文件: AdminAlertEndpoints.cs, AdminEtlEndpoints.cs, AdminProductEndpoints.cs, CommonEndpoints.cs, DeadLetterEndpoints.cs, DictionaryEndpoints.cs, EtlEndpoints.cs, ProductEndpoints.cs, PublicTypeaheadEndpoints.cs — 无 AdminSearchEndpoints.cs
+**修正方案**: Task V10-2.1 新增前置子任务 2.1.0:新建 AdminSearchEndpoints.cs 文件,包含完整骨架:
+```csharp
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Routing;
+
+namespace SakuraFilter.Api.Endpoints;
+
+public static class AdminSearchEndpoints
+{
+    public static IEndpointRouteBuilder MapAdminSearchEndpoints(this IEndpointRouteBuilder app)
+    {
+        var group = app.MapGroup("/api/admin/search").WithTags("AdminSearch")
+            .RequireAuthorization("Admin");
+        
+        // V11-F4: 调用 public 包装方法 ReindexAllAsync(非 private SyncSearchIndexAsync)
+        group.MapPost("/reindex", async (EtlImportService etl, CancellationToken ct) =>
+        {
+            await etl.ReindexAllAsync(ct);
+            return Results.Ok(new { message = "全量重建完成" });
+        });
+        
+        return app;
+    }
+}
+```
+并在 Program.cs 中注册 `app.MapAdminSearchEndpoints();`
+
+### V11-F14 [中] Task V10-2.4 Async 命名违反 .NET 约定
+
+**v10 spec 位置**: tasks.md L3442-L3445(Task V10-2.4 子任务 2.4.1)
+**v10 问题**: 方法名 `BuildProductIndexDocAsync` 带 Async 后缀但返回 `List<T>`(非 Task)。.NET 命名约定 Async 后缀方法应返回 Task/Task<T>/ValueTask/ValueTask<T>
+**修正方案**: 方法名改为 `BuildProductIndexDocs`(去掉 Async 后缀,因为内部无 IO 操作,无需异步化):
+```csharp
+private List<ProductIndexDoc> BuildProductIndexDocs(
+    IEnumerable<Product> products, 
+    Dictionary<string, int> brands)
+```
+
+### V11-F15 [中] Task V10-2.1 旧 payload 反序列化兼容性未处理
+
+**v10 spec 位置**: tasks.md L3286-L3308(Task V10-1.5) + L3434-L3490(Task V10-2.4)
+**v10 问题**: V10-1.5 将 ProductIndexDoc 从 12 字段扩展为 14 字段,但 IndexReplayWorker.cs L97 用 `JsonSerializer.Deserialize<ProductIndexDoc>(p.Payload)` 反序列化旧 payload(仅 12 字段 JSON)时,新字段 Mr1/OemBrand/BrandSortOrder 会用默认值(null/0)
+**真实代码事实**(经 Read 核实):
+- [IndexReplayWorker.cs#L97](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Services/IndexReplayWorker.cs#L97) `var docs = toIndex.Select(p => JsonSerializer.Deserialize<ProductIndexDoc>(p.Payload)!).ToList();`
+- System.Text.Json 对 record 位置参数缺失字段会用默认值(不抛异常),但数据语义错误
+**衍生影响**: 旧 pending 数据被 Meili 索引后,Mr1=null, OemBrand=null, BrandSortOrder=0,搜索结果中这些字段缺失
+**修正方案**: 在 Task V10-2.1 全量重建端点的子任务中补充:
+```
+- [ ] 2.1.4: 全量重建前清空 search_index_pending 表(避免旧 payload 反序列化后污染新索引)
+  ```sql
+  TRUNCATE search_index_pending;
+  ```
+```
+
+### V11-F16 [低] Task V10-3.1 "历史页与 V2 天然兼容"说法歧义
+
+**v10 spec 位置**: tasks.md L3542(Task V10-3.1 子任务 3.1.5)
+**v10 问题**: "历史页 L400-401 保持不变(已用 Ticks,与 V2 天然兼容)" 有歧义,容易被误解为"历史页 cursor 能走 V2 验签路径"
+**真实代码事实**(经 Read 核实):
+- [AdminProductService.cs#L400-L401](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Services/AdminProductService.cs#L400) 历史 cursor 格式是 `{ticks}|{id}|{sig}`(无 `V2:` 前缀)
+- v10 tasks.md L3527 VerifyAndExtractV2 伪代码 `var body = cursor[3..];` 假设 cursor 带 `V2:` 前缀
+**修正方案**: 改为 "历史页 L400-401 保持不变(cursor 走现有 VerifyAndExtract V1 路径,payload 格式 ticks|id 与 SignV2 一致,但 cursor 不带 V2: 前缀,不 V2 化)"
+
+### V11-F17 [低] Task V10-3.2 isSafeRedirect 测试用例未覆盖合法绝对路径
+
+**v10 spec 位置**: tasks.md L3578-L3587(Task V10-3.2 子任务 3.2.3);checklist.md L4075(V10-AUDIT-22 声明"覆盖所有边界")
+**v10 问题**: 7 个测试用例全部是"相对路径合法"或"非法应拒绝",缺失"合法绝对路径(同 hostname)应通过"用例
+**修正方案**: 补充用例:
+```typescript
+// 合法绝对路径(同 hostname)应通过
+expect(isSafeRedirect(`${window.location.origin}/login`)).toBe(true)
+// 空字符串
+expect(isSafeRedirect('')).toBe(false)
+```
+或将 V10-AUDIT-22 描述改为"7 个用例覆盖主要边界(非法路径全覆盖,合法路径仅覆盖相对路径)"
+
+## 12.4 v11 关键设计调整(A1 ~ A17)
+
+| 编号 | 决策点 | v10 方案 | v11 调整 | 理由 |
+|------|--------|---------|---------|------|
+| A1 | Task V10-2.4 方法存在性 | 假设已存在 | 新建方法(从内联抽取) | V11-F1: 方法不存在 |
+| A2 | Task V10-1.8 LocalStorage | 凭空假设 | 删除子任务 1.8.4 | V11-F2: 类不存在 |
+| A3 | Task V10-1.5 Id 类型 | int | 保持 long | V11-F3: 类型不匹配 |
+| A4 | Task V10-2.1 SyncSearchIndexAsync | private 外部调用 | 新增 public 包装 ReindexAllAsync | V11-F4: 访问修饰符 |
+| A5 | Task V10-3.5 router.isReady() | 同步布尔判断 | await 模式 + name 'Login' | V11-F5: Promise 类型 |
+| A6 | Task V10-3.1 VerifyAndExtractV2 | 无 V1 兜底 | 恢复 V2 优先 V1 兜底 | V11-F6: 兼容期破坏 |
+| A7 | Task V10-2.1 PG 兜底切换 | 无实现 | 新增 SetPrimaryAvailable | V11-F7: 无运行时 API |
+| A8 | Task V10-1.2 WithMany() | 无参数 | 带参数或保持现状 | V11-F8: 破坏导航 |
+| A9 | Task V10-1.7 RequireAuthorization | 破坏 X-Admin-Token | DevTokenAuthMiddleware 设置 ClaimsPrincipal | V11-F9: 认证冲突 |
+| A10 | Task V10-2.4 投影 vs 签名 | 类型不匹配 | 改用 .Include | V11-F10: 类型一致 |
+| A11 | Task V10-2.4 .ToList() | 内存爆炸 | FirstOrDefault 不 ToList | V11-F11: OOM 风险 |
+| A12 | Task V10-2.4 OemBrand 来源 | FirstOrDefault 无序 | Product.Oem2 临时方案 | V11-F12: 业务语义 |
+| A13 | Task V10-2.1 AdminSearchEndpoints | 假设已存在 | 新增前置子任务新建文件 | V11-F13: 文件不存在 |
+| A14 | Task V10-2.4 Async 命名 | 违反约定 | 改为 BuildProductIndexDocs | V11-F14: .NET 约定 |
+| A15 | Task V10-2.1 旧 payload | 未处理 | 全量重建前 TRUNCATE search_index_pending | V11-F15: 数据兼容 |
+| A16 | Task V10-3.1 历史页描述 | 歧义 | 明确 V1 路径 | V11-F16: 描述精确 |
+| A17 | Task V10-3.2 测试用例 | 未覆盖 | 补充合法绝对路径用例 | V11-F17: 覆盖完整 |
+
+## 12.5 v11 前置任务(Pre-Task-V11-1 ~ Pre-Task-V11-6)
+
+### Pre-Task-V11-1: 核实 BuildProductIndexDocAsync 方法是否真的不存在(双重确认)
+- **核实方式**: Grep `BuildProductIndexDocAsync` 全项目
+- **核实结论**: 全项目无匹配,EtlImportService.cs L1158-1166 是内联 lambda
+- **影响**: Task V10-2.4 改为"新建方法"
+- **状态**: ✅ 已完成(本轮 Grep 核实)
+
+### Pre-Task-V11-2: 核实 LocalStorage 类是否真的不存在(双重确认)
+- **核实方式**: Glob `backend/src/SakuraFilter.Infrastructure/Storage/LocalStorage.cs` + Grep `class LocalStorage`
+- **核实结论**: 文件不存在,类不存在,Storage 目录仅有 MinioStorage + AliyunOssStorage
+- **影响**: Task V10-1.8 删除子任务 1.8.4
+- **状态**: ✅ 已完成(本轮 Glob+Grep 核实)
+
+### Pre-Task-V11-3: 核实 ProductIndexDoc.Id 类型是否为 long(双重确认)
+- **核实方式**: Read ISearchProvider.cs L33 + Product.cs L10
+- **核实结论**: ISearchProvider.cs L33 `long Id`,Product.cs L10 `public long Id`
+- **影响**: Task V10-1.5 保持 long Id
+- **状态**: ✅ 已完成(本轮 Read 核实)
+
+### Pre-Task-V11-4: 核实 SyncSearchIndexAsync 访问修饰符是否为 private(双重确认)
+- **核实方式**: Read EtlImportService.cs L1127
+- **核实结论**: `private async Task SyncSearchIndexAsync(...)` — 显式 private
+- **影响**: Task V10-2.1 新增 public 包装方法 ReindexAllAsync
+- **状态**: ✅ 已完成(本轮 Read 核实)
+
+### Pre-Task-V11-5: 核实 router.isReady() 返回类型是否为 Promise<void>(双重确认)
+- **核实方式**: Read router/index.ts L223 + package.json L29 + Vue Router 4 官方 API
+- **核实结论**: Vue Router 4.5.0,isReady() 返回 Promise<void>
+- **影响**: Task V10-3.5 改为 await 模式,路由 name 用 'Login'
+- **状态**: ✅ 已完成(本轮 Read 核实)
+
+### Pre-Task-V11-6: 核实 OemBrand 业务规则(需业务方确认)
+- **核实方式**: 待业务方确认 Product.Oem2 vs CrossReferences.OemBrand 的业务语义
+- **临时方案**: 用 Product.Oem2 作为 OemBrand 来源(单值,无歧义)
+- **影响**: Task V10-2.4 OemBrand 来源改为 Product.Oem2
+- **状态**: ⏳ 待业务方确认(临时用 Product.Oem2)
+
+## 12.6 v11 与 v10 根本区别对比表
+
+| 维度 | v10 | v11 |
+|------|-----|-----|
+| 凭空假设数量 | 10 项(全高危) | 0 项(方法存在性+API 签名双重核实) |
+| Task V10-2.4 方法 | 假设已存在 | 新建 BuildProductIndexDocs(从内联抽取) |
+| Task V10-1.8 实现类 | 3 个(含 LocalStorage) | 2 个(MinioStorage + AliyunOssStorage) |
+| ProductIndexDoc.Id | int | long |
+| SyncSearchIndexAsync | private 外部调用 | 新增 public ReindexAllAsync 包装 |
+| router.isReady() | 同步布尔判断 | await 模式 + name 'Login' |
+| VerifyAndExtractV2 | 无 V1 兜底 | V2 优先 V1 兜底 |
+| ResilientSearchProvider | 无运行时切换 | 新增 SetPrimaryAvailable |
+| WithMany() | 无参数 | 带参数 p => p.CrossReferences |
+| RequireAuthorization | 破坏 X-Admin-Token | DevTokenAuthMiddleware 设置 ClaimsPrincipal |
+| 投影 vs 签名 | 类型不匹配 | 改用 .Include |
+| .ToList() | 内存爆炸 | FirstOrDefault 不 ToList |
+| OemBrand 来源 | FirstOrDefault 无序 | Product.Oem2 临时方案 |
+| AdminSearchEndpoints | 假设已存在 | 新增前置子任务新建文件 |
+| Async 命名 | 违反约定 | BuildProductIndexDocs |
+| 旧 payload | 未处理 | TRUNCATE search_index_pending |
+| 历史页描述 | 歧义 | 明确 V1 路径 |
+| isSafeRedirect 测试 | 未覆盖合法绝对路径 | 补充用例 |
+
+## 12.7 v11 待启动第十一轮深度审查
+
+⏳ 第十一轮深度审查将验证 v11 修复方案是否引入新的衍生问题
+⏳ 持续迭代直到连续一轮审查无任何新漏洞检出
+⏳ v11 引入"方法存在性 + API 签名"双重核实机制,所有方法引用必须确认方法存在且签名匹配
+⏳ v11 目标: 实现 v10 自称但未达成的"真正 0 项凭空假设"
+
