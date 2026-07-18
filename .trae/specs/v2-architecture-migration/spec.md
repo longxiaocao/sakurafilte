@@ -14206,3 +14206,218 @@ dotnet test backend/SakuraFilter.sln
 - **前端 contract**: npx vitest run tests/contract/ **12/12 通过**(V24-F13 修复后,含 V2 兼容性 4 项)
 - **远程仓库**: 已推送至 origin/master(`b420b02`)
 
+---
+
+# 第二十六章 v25 实施状态总览 — spec 治理专项
+
+> v24 第二十五章仅记录到 V24-F13,后续 V24-F14~F52 共 39 项修复未写入 spec。v25 本章补齐这 39 项的实施记录,并标注已废弃/暂缓/仍需实施的任务,作为 spec 治理基线。后续 v26+ 修订应基于本章状态表,而非历史章节。
+
+## 26.1 v25 修订背景
+
+v24 第二十五章以 V24-F13 收尾(commit `b420b02`),后续在 b420b02 → 94c3361 区间内连续实施 39 项修复(V24-F14~F52),均通过 git commit 落地但未同步写入 spec.md。导致 spec 与代码状态严重脱节:
+
+- spec.md 最后记录为 V24-F13(2026-07 早期)
+- 实际代码已推进到 V24-F52(commit 94c3361,2026-07-18)
+- 中间 39 项修复涉及 30+ 文件改动、8 个新增测试文件、近 1000 行新增测试代码
+
+v25 本章以"实施状态对齐"为目标,**不重写历史章节**(保留 v2-v24 修订记录作为审计轨迹),仅在末尾追加状态总览表。后续 v26+ 修订应基于本章状态表决策下一步。
+
+## 26.2 V24-F14~F52 实施记录补齐(39 项)
+
+### 26.2.1 后端修复批次(V24-F14~F27,14 项)
+
+| 编号 | 标题 | commit | 涉及文件 | 关联 spec 任务 | 状态 |
+|---|---|---|---|---|---|
+| V24-F14 | EnsureEfmigrationsHistorySeededAsync 三个 bug 修复 | `df714b0` | WebApplicationExtensions.cs | - | ✅ 已实施 |
+| V24-F15 | ProductDbContext 字段类型对齐(mr_1 varchar(10) + oem_no_normalized nullable + 8 numeric(10,2) + is_discontinued default false) | `88c46bd` | ProductDbContext.cs, Product.cs, ProductDetail.cs | spec D3-1, Task 0.1.1, D4-18, Task 0.2.19, D3-22, Task 0.2.15 | ✅ 已实施 |
+| V24-F16 | 删除 NormalizeOem 方法 + CreateAsync/UpdateAsync 用 mr_1 原值 + ETL 不大写转换 | `88c46bd` | AdminProductService.cs, EtlImportService.cs | Task 0.3.10, Task 0.3.13, spec D3-1 | ✅ 已实施 |
+| V24-F17 | CreateAsync/UpdateAsync 反向更新 products.oem_2(按 sort_order+oem_brand+oem_no_3 取首非空) | `88c46bd` | AdminProductService.cs | Task 5.1.9, Task 0.3.15 | ✅ 已实施 |
+| V24-F18 | DevTokenAuthMiddleware 验证后设置 ClaimsPrincipal(admin role) | `88c46bd` | DevTokenAuthMiddleware.cs | spec V11-F9, V13-F5 | ✅ 已实施 |
+| V24-F19 | 5 个 admin 端点组添加 RequireAuthorization(Admin) | `88c46bd` | AdminProductEndpoints.cs 等 5 个 | spec F11 | ✅ 已实施 |
+| V24-F20 | SanitizeString 步骤 0 过滤 U+E000/U+E001 字面量(防 XSS 绕过) | `88c46bd` | MeiliSearchProvider.cs | spec S6-1 | ✅ 已实施 |
+| V24-F22 | AdminProductService.UpdateAsync 补全 xref V2 字段(Oem2/SortOrder/MachineType/IsPublished) | `9b830a6` | AdminProductService.cs | Task 0.3.17 | ✅ 已实施 |
+| V24-F23 | StringSanitizer.StripControlChars 输入校验 | `9b830a6` | StringSanitizer.cs | - | ✅ 已实施 |
+| V24-F24 | CursorHmac V2 升级(双签名 + 24h TTL + Base64Url) | `9b830a6` | CursorHmac.cs | spec E20, Task 0.3.22 | ✅ 已实施 |
+| V24-F25 | CommonEndpoints 根路由 "/" 改为 "/api/info" | `d064e25` | CommonEndpoints.cs | Task 0.7.5.1, F1 | ✅ 已实施 |
+| V24-F26 | ReindexAll/IndexReplay advisory lock 7740005 互斥(三子项 F26-1/2/3) | `9fedc28` | EtlImportService.cs, IndexReplayWorker.cs | spec V15-CHK-13, Task V15-1.1.1, Task V15-1.1.3, Task 5.1.26.1 | ✅ 已实施 |
+| V24-F27 | IndexReplayWorker FOR UPDATE SKIP LOCKED(最小版本) | `84b3408` | IndexReplayWorker.cs | Task 5.1.22 | ✅ 已实施(部分) |
+
+**V24-F27 实施备注**: spec Task 5.1.22 原要求 `pg_advisory_xact_lock(mr1_hash)` + `retry_count > 3 标记 is_dead`,因表结构不符(mr_1/action 字段不存在,无 is_dead 字段)仅实施核心 FOR UPDATE SKIP LOCKED,其余跳过。
+
+**V24-F21 编号空缺说明**: F21 在 commit 历史中未出现,推测为规划阶段废弃的编号,不影响连续性。
+
+### 26.2.2 前端修复批次(V24-F31~F41,11 项)
+
+| 编号 | 标题 | commit | 涉及文件 | 关联 spec 任务 | 状态 |
+|---|---|---|---|---|---|
+| V24-F31 | safeStorage.ts Safari 隐私模式降级 + perf.ts 替换裸 sessionStorage | `ca314f5` | safeStorage.ts(新建), perf.ts | spec F4-8, F5-2, Task 4.5.19 | ✅ 已实施 |
+| V24-F32 | PublicCompareView ID 数组 sessionStorage 持久化 | `ca314f5` | PublicCompareView.vue | spec F2-13, Task 4.5.10 | ✅ 已实施 |
+| V24-F33 | http.ts handle401 + isRedirecting + returnUrl + LoginView 接 return 参数 | `ca314f5` | http.ts, PublicSearchView.vue, LoginView.vue | spec F4-4, F5-4, F5-9, Task 4.5.16/22/23 | ✅ 已实施 |
+| V24-F34 | searchApi.aggregate + searchWithFallback + VITE_ENABLE_LEGACY_FALLBACK | `ca314f5` | api/index.ts, env.d.ts, .env.* | spec F5-8, Task 4.5.27 | ✅ 已实施 |
+| V24-F35 | 3 个前端单测(html-sanitizer/GalleryApp/error-code-map,37 测试) | `ca314f5` | html-sanitizer.test.ts 等 3 个新建 | spec Task 4.9.1 | ✅ 已实施 |
+| V24-F36 | html-sanitizer.ts 注释修正(后端输出 raw HTML 含真实 mark 标签) | `329ad8f` | html-sanitizer.ts | spec F5-2 | ✅ 已实施 |
+| V24-F37 | http.ts handleCursorExpired SPA 重置 + App.vue 一次性 toast | `329ad8f` | http.ts, App.vue | spec F3-5, Task 4.5.14 | ✅ 已实施 |
+| V24-F38 | searchWithFallback 降级 UI(隐藏 OEM 展开 + "基础模式" tag) | `329ad8f` | api/index.ts, AggregateSearchView.vue | - | ✅ 已实施 |
+| V24-F39 | http-cursor-reset.test.ts 11 测试补齐 Task 4.5.14 验证 | `00b481e` | http-cursor-reset.test.ts(新建) | spec Task 4.5.14 | ✅ 已实施 |
+| V24-F40 | 降级提示 5 秒去重(shouldShowLegacyFallbackWarn + lastLegacyWarnTs) | `00b481e` | api/index.ts, AggregateSearchView.vue | - | ✅ 已实施 |
+| V24-F41 | 路径检查精确匹配(/search 与 /search/aggregate,避免误清 /admin/search) | `00b481e` | http.ts | - | ✅ 已实施 |
+
+**V24-F28~F30 编号空缺说明**: F28/F29/F30 在 commit 历史中未出现,推测为规划阶段合并到其他编号或废弃,不影响连续性。
+
+### 26.2.3 前后端综合修复批次(V24-F42~F52,11 项)
+
+| 编号 | 标题 | commit | 涉及文件 | 关联 spec 任务 | 状态 |
+|---|---|---|---|---|---|
+| V24-F42 | oem3 URL 段大小写保留(后端 Uri.EscapeDataString + 前端 encodeURIComponent) | `51a8647` | IProductDetailService.cs, build-product-url.ts, build-product-url.test.ts | spec F5-1, Task 4.5.21 | ✅ 已实施 |
+| V24-F43 | errorCode i18n fallback 链(25 翻译 + ERROR_CODE_I18N + resolveErrorMessage + safeT) | `51a8647` | http.ts, zh-CN.ts, en-US.ts, error-code-i18n.test.ts(新建) | - | ✅ 已实施 |
+| V24-F44 | vite.config.ts __API_VERSION__ + http.ts X-Client-Version 头 | `51a8647` | vite.config.ts, env.d.ts, http.ts | - | ✅ 已实施 |
+| V24-F45 | Detail.cshtml error 事件处理器完善(IMG 标签 + children.length + __fallbackMounted 去重) | `ef1da35` | Detail.cshtml | - | ✅ 已实施 |
+| V24-F46 | main.ts router.afterEach 延迟 1000ms 重置 __fallbackMounted | `ef1da35` | main.ts | - | ✅ 已实施 |
+| V24-F47 | useFormDraft composable(debounce 500ms + 7 天 TTL + localStorage + Safari 降级) | `58e686a` | useFormDraft.ts(新建) | spec F6-3/F6-5, Task 5.1.25 | ✅ 已实施 |
+| V24-F48 | AdminProductFormView.vue 集成 useFormDraft + 409 恢复提示 | `58e686a` | AdminProductFormView.vue | Task 5.1.25 | ✅ 已实施 |
+| V24-F49 | useFormDraft.test.ts 18 测试(含 Safari 隐私模式 + JSON 自愈) | `58e686a` | useFormDraft.test.ts(新建) | Task 5.1.25 | ✅ 已实施 |
+| V24-F50 | OemBrandDictService.ApplyChangeAsync 实现(查受影响产品 + 批量写 search_index_pending) | `94c3361` | OemBrandDictService.cs | spec Task 5.1.21 | ✅ 已实施 |
+| V24-F51 | IndexReplayWorker 双 payload 兼容(完整 Mr1IndexDoc + 简化 {product_id, mr1, trigger}) | `94c3361` | IndexReplayWorker.cs | spec Task 5.1.21 | ✅ 已实施 |
+| V24-F52 | ApplyChangeAsync 12 单测(TestProductDbContext 子类 Ignore Alert* 实体绕过 InMemory JsonDocument 限制) | `94c3361` | OemBrandDictServiceApplyChangeTests.cs(新建), SakuraFilter.Api.Tests.csproj | Task 5.1.21 | ✅ 已实施 |
+
+## 26.3 已废弃任务清单(spec 中规划但实施时判定废弃)
+
+### 26.3.1 IProductWriteStrategy 整套(spec Task 4.5.7 / 4.6.8 / 0.3.17 / 0.3.22)
+
+**废弃原因**: V2 迁移已直接用 EF Core RENAME(原 oem_no_normalized UNIQUE → mr_1 UNIQUE)实现主键切换,不需要 IProductWriteStrategy 抽象层。
+
+**涉及 spec 任务**:
+- Task 4.5.7 (IProductWriteStrategy 接口定义)
+- Task 4.6.8 (IProductWriteStrategy 实现)
+- Task 0.3.17 (AdminProductService 用 IProductWriteStrategy)
+- Task 0.3.22 (CursorHmac 用 IProductWriteStrategy)
+
+**建议处理**: 在 spec 对应章节标注"已废弃 - V2 直接 RENAME 实现"。
+
+### 26.3.2 IObjectStorage 扩展(spec D4-15/D5-4/D7-11)
+
+**废弃原因**: spec 原要求在 IObjectStorage 公共接口扩展 ListAllAsync/DeleteBatchAsync,会污染所有消费方。实际方案改为 ETL/CleanupOrphanImagesService 内部直接持有 IEnumerable<IObjectStorage>,不修改公共接口。
+
+**涉及 spec 任务**:
+- D4-15 (CleanupOrphanImagesAsync 多存储后端覆盖)
+- D5-4 (CleanupOrphanImagesAsync 异常隔离 + UTC 时区)
+- D7-11 (CleanupOrphanImagesService 10万+文件 OOM)
+- Pre-Task-V8-2 (扩展 IObjectStorage 接口)
+
+**建议处理**: 在 spec 对应章节标注"方案变更 - 改为内部持有 IEnumerable<IObjectStorage>,不扩展公共接口"。
+
+### 26.3.3 oem_2 多值检测(spec Task 5.1.26.2 / 5.1.26.3)
+
+**废弃原因**: LoadExistingOem2MapAsync(V24-F26-3 已实施)是为此任务准备的方法,但核查后发现 `LoadExistingOemMapAsync` 已改为仅查 mr_1(不查 oem_2),原问题前提不成立。oem_2 多值场景在实际数据中不存在。
+
+**涉及 spec 任务**:
+- Task 5.1.26.2 (oem_2 多值检测告警)
+- Task 5.1.26.3 (单元测试 Etl_Oem2MultiValue_Detection)
+
+**建议处理**: 在 spec 对应章节标注"暂缓 - 前提不成立,LoadExistingOem2MapAsync 保留为死代码待未来评估"。
+
+### 26.3.4 spec Task 5.1.22 部分要求(已部分实施)
+
+**未实施部分**:
+- `pg_advisory_xact_lock(mr1_hash)`: 被 V24-F26-2 的 advisory lock 7740005 覆盖(单实例下足够)
+- `retry_count > 3 标记 is_dead`: 表无 is_dead 字段,保留现有 retry_count >= 5 转死信队列逻辑
+- spec 假设表字段 mr_1/action: 实际表字段为 Id/Operation/Payload
+
+**建议处理**: spec Task 5.1.22 章节标注"实施差异 - 详见 V24-F27 备注"。
+
+## 26.4 暂缓实施任务(用户决策)
+
+### 26.4.1 Task 5.1.20 CleanupOrphanImagesAsync(孤儿图片清理)
+
+**spec 版本演进**: v5 → v6 → v7 → v8 共 4 轮修订,核心约束持续变化(v5 一次性方法 / v7 BackgroundService / v8 状态机 + ListAllAsync 流式分页)。
+
+**用户决策(2026-07-18)**: 暂缓实施,转向 spec 文档治理。原因:完整实施 v8 终态需 6 步大改造(IObjectStorage 接口扩展 + EF Core 迁移 + 新建 BackgroundService + DI 模型调整),不符合最小设计原则。
+
+**当前代码状态**: 完全未实施。`IObjectStorage.ListAllAsync` / `CleanupFailure` 实体 / `cleanup_failures` 表 / 多 IObjectStorage DI 注册均不存在。
+
+**实际业务风险**: `AdminProductImageService.DeleteAsync` 异步删文件失败时(catch 仅记日志),文件即成为孤儿;`products` 删除时 `product_images` 行被 CASCADE 清除但文件未清 —— 这些是当前代码中实际存在的孤儿图片产生路径,值得未来实施。
+
+**建议处理**: spec Task 5.1.20 章节标注"暂缓 - 等待用户明确目标版本(v5/v8)后实施"。后续 v26+ 修订时重新评估优先级。
+
+## 26.5 仍需实施任务清单(按优先级)
+
+### 26.5.1 P0(高优先级,阻塞生产)
+
+**无**。当前 P0 任务已全部通过 V24-F14~F52 实施。
+
+### 26.5.2 P1(中优先级,建议下一轮实施)
+
+| 任务编号 | 标题 | 评估 | 来源 |
+|---|---|---|---|
+| spec 文档治理 | 补齐 spec.md 中废弃/暂缓标注 | 已在本章 v25 完成 | v25 |
+| Task 5.1.20 | CleanupOrphanImagesAsync 孤儿图片清理 | 用户决策暂缓 | spec v5-v8 |
+| LoadExistingOem2MapAsync 死代码清理 | 删除 EtlImportService.cs L1485-1497 | 暂缓(未来 Task 5.1.26.2 可能需要) | v25 核查 |
+| EF Core 版本统一 | NU1603/MSB3277 依赖警告 | V24-F10 已大幅改善,残留非阻塞 | V24-F10 备注 |
+
+### 26.5.3 P2(低优先级,长期演进)
+
+| 任务编号 | 标题 | 评估 | 来源 |
+|---|---|---|---|
+| AuthTokenBroadcaster 指数退避 | V24-F11 已实施 5s→60s 封顶,可考虑加 jitter | 非必要,当前实现已足够 | V24-F11 |
+| LoadExistingOem2MapAsync 调用方接入 | 若未来实施 Task 5.1.26.2 需接入 ETL 流程 | 待 oem_2 多值场景出现 | spec Task 5.1.26 |
+| ProductDbContext 拆分 | Alert* 实体拆到独立 AlertDbContext | 长期优化,当前 TestProductDbContext 子类已足够 | V24-F52 备注 |
+
+## 26.6 测试现状基线(v25)
+
+### 26.6.1 后端测试
+
+| 测试项目 | 用例数 | 状态 | 关键测试文件 |
+|---|---|---|---|
+| SakuraFilter.Api.Tests | 232 | ✅ 全部通过 | OemBrandDictServiceApplyChangeTests.cs(V24-F52, 12 测试) |
+| SakuraFilter.Etl.Tests | 37 | ✅ 全部通过 | ReindexAllMutexTests.cs, CoreLikeEscapeExtensionsTests.cs |
+| **合计** | **269** | **✅ 0 失败** | - |
+
+### 26.6.2 前端测试
+
+| 测试类型 | 用例数 | 状态 | 关键测试文件 |
+|---|---|---|---|
+| 单元测试(tests/unit/) | 226 | ✅ 全部通过 | useFormDraft.test.ts(18), error-code-i18n.test.ts(39), http-cursor-reset.test.ts(11) |
+| 契约测试(tests/contract/) | 12 | ✅ 全部通过 | dict-schema.test.ts(V24-F13 修复后) |
+| **合计** | **238** | **✅ 0 失败** | - |
+
+### 26.6.3 编译/类型检查
+
+| 项目 | 命令 | 状态 |
+|---|---|---|
+| 后端 | `dotnet build backend/SakuraFilter.sln` | ✅ 0 warning 0 error |
+| 前端 | `npx vue-tsc --noEmit` | ✅ 类型检查通过 |
+
+## 26.7 v25 文件改动清单
+
+| 类型 | 路径 | 修改摘要 |
+|---|---|---|
+| spec 文档 | `.trae/specs/v2-architecture-migration/spec.md` | 追加第二十六章 v25 实施状态总览(本章) |
+| spec 文档 | `.trae/specs/v2-architecture-migration/tasks.md` | 追加 v25 任务状态汇总(可选) |
+| spec 文档 | `.trae/specs/v2-architecture-migration/checklist.md` | 追加 v25 验证检查点(可选) |
+
+## 26.8 v25 后续演进方向
+
+### 26.8.1 v26 修订建议方向
+
+1. **spec 历史章节标注**: 在 v2-v24 各章节中,对已废弃/暂缓任务添加"⚠️ 状态变更:详见第二十六章 v25"标注,便于读者快速定位
+2. **Pre-Task-V8-* 重新评估**: Pre-Task-V8-1(cleanup_failures 表)/Pre-Task-V8-2(IObjectStorage 扩展)/Pre-Task-V8-3(SEO 多段 URL 独立路由)等前置任务,根据 v25 状态表重新评估必要性
+3. **spec 章节合并**: v2-v18 章节中重复定义的需求(如 CleanupOrphanImagesAsync 在 v5/v6/v7/v8 反复修订)合并为单一权威定义
+
+### 26.8.2 不建议方向
+
+1. **重写历史章节**: v2-v24 修订记录是审计轨迹,重写会丢失决策上下文
+2. **继续无限迭代**: spec 已迭代到 v24(第二十五章),继续追加 v26/v27/... 修订只会让文档更长。建议 v25 作为"实施状态基线",后续改动直接更新对应章节,不再追加新章节
+
+### 26.8.3 v25 循环终止条件
+
+- [x] V24-F14~F52 共 39 项实施记录已补齐到本章
+- [x] 已废弃任务清单已标注(26.3 节)
+- [x] 暂缓实施任务已标注(26.4 节)
+- [x] 仍需实施任务已分级(26.5 节)
+- [x] 测试现状基线已记录(26.6 节)
+- [ ] spec 历史章节标注(26.8.1 第 1 项)— 可在 v26 修订时批量处理
+- [ ] Pre-Task-V8-* 重新评估(26.8.1 第 2 项)— 可在 v26 修订时处理
+
+v25 本章作为 spec 治理基线,不再继续追加 v26/v27 章节。后续改动应直接更新对应历史章节或本章状态表。
+
+
