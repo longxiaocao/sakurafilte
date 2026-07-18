@@ -14909,21 +14909,11 @@ await DefaultSettingsEnsurer.EnsureAsync(db, Defaults, _logger, nameof(XxxServic
    - 用 Testcontainers PG 启动临时实例
    - 覆盖:正常创建 / ETL_IN_PROGRESS 409 / 并发 23505 → 409 / 乐观锁 RowVersion 冲突
 
-2. **IndexReplayWorker 单元测试**: 死信重放逻辑是后台核心,建议补:
-   - `TryWithAdvisoryLockAsync` 成功/失败路径
-   - 死信合并逻辑 (重复 payload 去重)
-   - 指数退避重试 (NextRetryAt 计算)
+2. ~~**IndexReplayWorker 单元测试**~~ (✅ 已实施 V24-F66,见 26.15.2): 16 单测覆盖 UpdateRetryAsync (退避逻辑) + ProcessDeadLetterAsync (死信转移/复用),ProcessPendingAsync 依赖 PG advisory lock 留待 Testcontainers。
 
-3. **ProblemDetailsFactory 单元测试**: 全局异常映射是 API 安全关键,建议补:
-   - ArgumentException → 400
-   - KeyNotFoundException → 404
-   - InvalidOperationException → 409
-   - DbUpdateException + 23505/23503/40P01 SqlState 细分映射
+3. ~~**ProblemDetailsFactory 单元测试**~~ (✅ 已实施 V24-F65,见 26.15.1): 31 单测覆盖 4xx/5xx/DB 异常/V2 错误码映射 (15 个 V2 码 Theory) + logger 调用验证 + 5xx 不泄露 ex.Message。
 
-4. **CI 覆盖率门禁**: 当前 20%,建议:
-   - 短期目标:核心 Service (AdminProductService/UserService/EtlImportService) 覆盖率 ≥ 60%
-   - 长期目标:全 Service 覆盖率 ≥ 40%,新 PR 不允许降低覆盖率
-   - 工具:`dotnet test --collect:"XPlat Code Coverage"` + reportgenerator 阈值门禁
+4. ~~**CI 覆盖率门禁**~~ (✅ 部分实施 V24-F68,见 26.15.3): CI 添加后端 `dotnet test --no-build -c Release` + 前端 `npm run test:contract` 步骤,每次 push/PR 自动运行 400+ 后端 + 200+ 前端单元测试。覆盖率收集 (XPlat Code Coverage + reportgenerator 阈值门禁) 留待后续。
 
 ### 26.13.7 💡 改进建议(后续 v26+ 决策)
 
@@ -14944,6 +14934,161 @@ await DefaultSettingsEnsurer.EnsureAsync(db, Defaults, _logger, nameof(XxxServic
    - 由 Task 5.1.20 `CleanupOrphanImagesAsync` 兜底清理
 
 3. **覆盖上传并发竞态测试**: 当前测试未覆盖并发场景(两个请求同时上传同 slot)。建议后续用 PG 集成测试验证 23505 → 409 映射路径。
+
+---
+
+## 26.15 V24-F65~F68: 全局异常映射 + 后台 Worker + CI 门禁补强 (2026-07-18)
+
+### 26.15.1 V24-F65: ProblemDetailsFactory 单元测试 (31 单测)
+
+**问题**: `ProblemDetailsFactory.FromException` 是全局异常→ProblemDetails 映射的核心入口,影响所有 API 4xx/5xx 响应格式,但之前无单元测试覆盖。
+
+**实施**:
+- 新增 `backend/tests/SakuraFilter.Api.Tests/ProblemDetailsFactoryTests.cs` (31 单测)
+- 测试覆盖范围:
+  - **4xx 业务异常**: ArgumentException→400 / KeyNotFoundException→404 / UnauthorizedAccessException→403 / OperationCanceledException→499
+  - **DbUpdateConcurrencyException**: 乐观锁冲突→409 + ERR_DB_CONFLICT
+  - **DbUpdateException + PostgresException SqlState 细分**:
+    - 23505 unique_violation → 409 + ERR_DB_CONFLICT
+    - 23503 foreign_key_violation → 400 + ERR_DB_CONSTRAINT
+    - 23502 not_null_violation → 400 + ERR_DB_CONSTRAINT
+    - 40P01 deadlock_detected → 408 + ERR_DB_TIMEOUT
+    - 无 InnerException → 400 + ERR_DB_CONSTRAINT (默认分支)
+  - **5xx 兜底**: 不泄露 ex.Message (P0-2 安全要求),验证 detail 为通用提示
+  - **V2 错误码映射**: 15 个 V2 码 Theory 测试 (MR1_REQUIRED / OEM3_ALREADY_EXISTS / XREF_CONFLICT / CURSOR_INVALID / IMAGE_ROLE_SLOT_MISMATCH 等)
+  - **logger 调用验证**:
+    - 5xx 异常记 LogError (含 path/method)
+    - DB 异常记 LogWarning (非 Error,业务可恢复)
+    - 业务异常不记日志 (避免 404 等高频异常污染日志流)
+  - **instance 字段**: 所有异常设置 instance 为请求路径
+
+**关键技术点**:
+- `Results.Problem(...)` 返回类型为 `ProblemHttpResult`,通过 `problem.ProblemDetails.Extensions["errorCode"]` 取 errorCode
+- `Npgsql.PostgresException` 公开构造函数: `new PostgresException(messageText, severity, invariantSeverity, sqlState)`,可作为 DbUpdateException 的 InnerException
+- `Mock<ILogger>` 的 `It.Is<It.IsAnyType>` 验证日志消息内容 (LogLevel + 消息含特定字符串)
+
+**验证结果**:
+```
+dotnet test --filter "FullyQualifiedName~ProblemDetailsFactoryTests"
+已通过! - 失败: 0, 通过: 31, 已跳过: 0, 总计: 31
+```
+
+**文件清单**:
+- 新增: `backend/tests/SakuraFilter.Api.Tests/ProblemDetailsFactoryTests.cs` (+268 行)
+
+### 26.15.2 V24-F66: IndexReplayWorker 单元测试 (16 单测)
+
+**问题**: `IndexReplayWorker` 是 Meili 索引写入补偿 Worker (死信重放核心),之前无单元测试覆盖。
+
+**实施**:
+- 新增 `backend/tests/SakuraFilter.Api.Tests/IndexReplayWorkerTests.cs` (16 单测)
+- 测试策略: 反射调用 private/private static 方法
+  - WHY: UpdateRetryAsync/ProcessDeadLetterAsync 是私有方法,改 internal 会扩大 API 表面,反射测试保持生产代码封装性
+- 测试覆盖范围:
+  - **UpdateRetryAsync (private static, 9 单测)**:
+    - retry_count 递增
+    - last_error 设置
+    - last_error 截断到 500 字符 (DB 列长度限制)
+    - 第 1/2/5 次重试分别用 60s/120s/1800s 退避 (BackoffSeconds 数组)
+    - retry_count 超过 BackoffSeconds.Length 时用最后值 1800s
+    - SaveChangesAsync 持久化到 DB
+    - 多条目批量处理
+  - **ProcessDeadLetterAsync (private 实例方法, 7 单测)**:
+    - 无 retry_count >= 5 条目时不操作
+    - retry_count >= 5 时转移到死信表 (验证 OriginalId/Operation/Payload/RetryCount/LastError/Status/CreatedAt/MovedAt)
+    - 多条目批量转移
+    - **复用 recovered 死信** (Day 7.10.1 BUG FIX): 同 operation+payload 已 recovered 时复用,保持 RecoveryCount,重置 Status='active',清 RecoveredAt
+    - active 死信不复用 (新建)
+    - BatchSize 限制单批处理数量
+    - CreatedAt 保留原入队时间 (非当前时间)
+
+**关键技术点**:
+- **反射调用**: `typeof(IndexReplayWorker).GetMethod("UpdateRetryAsync", BindingFlags.NonPublic | BindingFlags.Static)`
+- **CancellationToken 装箱**: `new object[] { db, items, "err", CancellationToken.None }` 显式装箱避免 CS8625 警告 (default 被推断为 null)
+- **IServiceProvider mock**: 用 `ServiceCollection.AddSingleton(_ => db)` 注册 db,WHY AddSingleton 而非 AddScoped:
+  - ProcessDeadLetterAsync 内部 `using var scope = _sp.CreateScope()` 在方法结束时 dispose scope
+  - AddScoped 注册的 db 会被 scope dispose,导致测试无法继续查询 db 验证结果
+  - AddSingleton 的 db 不会被 scope dispose,测试可在 worker 调用后继续查询
+- **TestProductDbContext 子类**: V24-F52 复用模式,Ignore AlertRule/AlertHistory/SecurityEvent 实体 (InMemory 不支持 JsonDocument)
+
+**为什么不测 ProcessPendingAsync**:
+- 它调用 `pg_try_advisory_xact_lock(7740005)` raw SQL (InMemory 不支持)
+- 需 PG 集成测试 (Testcontainers,后续 v26+ 补)
+
+**验证结果**:
+```
+dotnet test --filter "FullyQualifiedName~IndexReplayWorkerTests"
+已通过! - 失败: 0, 通过: 16, 已跳过: 0, 总计: 16
+```
+
+**文件清单**:
+- 新增: `backend/tests/SakuraFilter.Api.Tests/IndexReplayWorkerTests.cs` (+538 行)
+
+### 26.15.3 V24-F68: CI 添加单元测试运行
+
+**问题**: 之前 CI 只跑 smoke test + type-check + build,单元测试需本地手动运行,回归可能合入 master。
+
+**实施**:
+- 修改 `.github/workflows/ci.yml` (+17 行)
+- backend job: 在 "Build backend (Release)" 后添加 "Run backend unit tests" 步骤
+  - 命令: `dotnet test tests/SakuraFilter.Api.Tests/SakuraFilter.Api.Tests.csproj --no-build -c Release --logger "trx;LogFileName=test-results.trx"`
+  - `--no-build`: 上一步已 build,避免重复编译
+  - `-c Release`: 与 build 配置一致
+  - 失败即阻塞合并 (CI 红线)
+- frontend job: 在 "Type check" 后添加 "Run frontend unit tests" 步骤
+  - 命令: `npm run test:contract` (vitest run,单次运行后退出,适合 CI)
+
+**效果**:
+- 每次 push/PR 自动运行 400+ 后端单元测试 + 200+ 前端单元测试
+- 单元测试回归在 PR 阶段即被拦截,无法合入 master
+
+**验证结果**:
+- 后端 Release 配置: 406/406 通过 (3s)
+- 前端 vitest: 238/238 通过 (之前已验证)
+
+**文件清单**:
+- 修改: `.github/workflows/ci.yml` (+17 行)
+
+### 26.15.4 累计总结 (V24-F65~F68)
+
+| 任务 | 类型 | 新增单测 | 文件改动 | 提交 |
+|------|------|---------|---------|------|
+| V24-F65 | ProblemDetailsFactory 测试 | 31 | +1 文件 (+268 行) | 1cee6bc |
+| V24-F66 | IndexReplayWorker 测试 | 16 | +1 文件 (+538 行) | 1cee6bc |
+| V24-F68 | CI 单测门禁 | - | +1 文件 (+17 行) | b49bf20 |
+| **合计** | - | **+47 单测** | **+3 文件 (+823 行)** | - |
+
+### 26.15.5 测试覆盖率提升统计
+
+| 阶段 | 已测 Service | 单测总数 | 覆盖率 |
+|------|-------------|---------|--------|
+| V24-F64 后 | 9 (DefaultSettingsEnsurer/BaseDictService/UserService/AdminProductService 等) | 359 | 20% (9/45) |
+| V24-F66 后 | 11 (+ProblemDetailsFactory + IndexReplayWorker) | 406 | **24% (11/45)** |
+
+### 26.15.6 验证结果
+
+```
+后端全量测试 (Debug):
+dotnet test tests/SakuraFilter.Api.Tests/SakuraFilter.Api.Tests.csproj
+已通过! - 失败: 0, 通过: 406, 已跳过: 0, 总计: 406
+
+后端 Release 配置 (模拟 CI):
+dotnet test tests/SakuraFilter.Api.Tests/SakuraFilter.Api.Tests.csproj -c Release
+已通过! - 失败: 0, 通过: 406, 已跳过: 0, 总计: 406
+```
+
+### 26.15.7 💡 改进建议(后续 v26+ 决策)
+
+1. **CreateAsync/UpdateAsync 集成测试**: 仍待实施,需 Testcontainers PG 启动临时实例覆盖 advisory lock 路径 (InMemory 不支持 raw SQL)。
+
+2. **CI 覆盖率收集与门禁**: 当前 CI 只运行单元测试,未收集覆盖率。建议:
+   - `dotnet test --collect:"XPlat Code Coverage"` 生成 cobertura 覆盖率报告
+   - 用 reportgenerator 合并 + 阈值门禁 (核心 Service ≥ 60%,全 Service ≥ 40%)
+   - 上传覆盖率到 Codecov/Coveralls 可视化
+
+3. **前端 eslint 显式声明 vue/require-v-for-key**: 当前通过 `vue/flat/recommended` 隐式启用 (error),所有 v-for 已有 :key (多行属性写法)。建议在 `eslint.config.js` 显式声明 `'vue/require-v-for-key': 'error'` 防御未来配置改动意外关闭。
+
+4. **IndexReplayWorker ProcessPendingAsync 集成测试**: 用 Testcontainers PG 覆盖 advisory lock 7740005 获取/失败路径 + FOR UPDATE SKIP LOCKED 多实例行为。
 
 
 
