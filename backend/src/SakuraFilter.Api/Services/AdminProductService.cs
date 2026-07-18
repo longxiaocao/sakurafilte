@@ -57,6 +57,13 @@ public class AdminProductService
         await using var tx = await _db.Database.BeginTransactionAsync(ct);
         try
         {
+            // V24-F21: pg_try_advisory_xact_lock(7740001) 防止与 ETL TRUNCATE 冲突 (spec Task 0.3.18)
+            //   WHY: ETL ImportProductsAsync 用 advisory lock 7740001, AdminProductService 也需获取同一锁
+            //        避免管理员编辑产品时 ETL TRUNCATE 导致 23505 唯一约束冲突或表级锁等待 504
+            //   失败处理: 锁被 ETL 占用时返回 409 ETL_IN_PROGRESS, 让前端提示用户稍后重试
+            if (!await TryAcquireAdvisoryLockAsync(7740001L, ct))
+                throw new InvalidOperationException("ETL_IN_PROGRESS: ETL 导入进行中, 请稍后重试");
+
             // 唯一性检查 (oem_no_normalized 唯一索引) - 仍保留, 提供业务友好错误
             //   注意: READ COMMITTED 下此检查不能消除并发竞态, 仅为常见路径提供 409 而非 500
             var exists = await _db.Products.AnyAsync(p => p.OemNoNormalized == oemNormalized, ct);
@@ -117,6 +124,10 @@ public class AdminProductService
             };
             _db.Products.Add(product);
             await _db.SaveChangesAsync(ct);  // 拿到 product.Id
+
+            // V24-F21: xref 写入前加 advisory_xact_lock(7740002) 防止与 ETL DELETE+INSERT 冲突 (spec Task 0.3.19)
+            if (form.CrossReferences.Count > 0 && !await TryAcquireAdvisoryLockAsync(7740002L, ct))
+                throw new InvalidOperationException("ETL_IN_PROGRESS: ETL xrefs 导入进行中, 请稍后重试");
 
             // 分区 2: xref (V2: 加 Oem2/SortOrder/MachineType/IsPublished)
             foreach (var x in form.CrossReferences)
@@ -193,6 +204,10 @@ public class AdminProductService
         await using var tx = await _db.Database.BeginTransactionAsync(ct);
         try
         {
+            // V24-F21: pg_try_advisory_xact_lock(7740001) 防止与 ETL TRUNCATE 冲突 (spec Task 0.3.18)
+            if (!await TryAcquireAdvisoryLockAsync(7740001L, ct))
+                throw new InvalidOperationException("ETL_IN_PROGRESS: ETL 导入进行中, 请稍后重试");
+
             var product = await _db.Products.FirstOrDefaultAsync(p => p.Id == id, ct)
                 ?? throw new KeyNotFoundException($"产品 id={id} 不存在");
 
@@ -287,8 +302,13 @@ public class AdminProductService
             // xref: 全量替换 (后台表单语义 = 全量编辑)
             if (form.CrossReferences != null)
             {
+                // V24-F21: xref 写入前加 advisory_xact_lock(7740002) 防止与 ETL DELETE+INSERT 冲突 (spec Task 0.3.19)
+                if (form.CrossReferences.Count > 0 && !await TryAcquireAdvisoryLockAsync(7740002L, ct))
+                    throw new InvalidOperationException("ETL_IN_PROGRESS: ETL xrefs 导入进行中, 请稍后重试");
+
                 var oldXref = await _db.CrossReferences.Where(x => x.ProductId == id).ToListAsync(ct);
                 if (oldXref.Count > 0) _db.CrossReferences.RemoveRange(oldXref);
+                // V24-F22: 补全 V2 字段 Oem2/SortOrder/MachineType/IsPublished (spec Task 0.3.11, 与 CreateAsync 对称)
                 foreach (var x in form.CrossReferences)
                 {
                     _db.CrossReferences.Add(new CrossReference
@@ -297,6 +317,10 @@ public class AdminProductService
                         ProductName1 = x.ProductName1?.Trim(),
                         OemBrand = x.OemBrand?.Trim(),
                         OemNo3 = x.OemNo3?.Trim(),
+                        Oem2 = x.Oem2?.Trim(),               // V2
+                        SortOrder = x.SortOrder,               // V2
+                        MachineType = string.IsNullOrEmpty(x.MachineType) ? "others" : x.MachineType,  // V2
+                        IsPublished = x.IsPublished,           // V2
                         CreatedAt = DateTime.UtcNow
                     });
                 }
@@ -679,7 +703,11 @@ public class AdminProductService
                 // Day 8.3: HMAC 验签 + 提取 updatedAt/mr1
                 // V2 Task 4.6: cursor 载荷从 id 改为 mr1, 验签返回 (iso, mr1)
                 //   仍需 id 用于 keyset 排序: 通过 mr1 反查 Product.Id (单次查询, O(1) 索引)
-                var (iso, cmr1) = _cursorHmac.VerifyAndExtract(req.Cursor);
+                // V24-F24 (spec S3-13/S3-14): 公开搜索 cursor 升级到 V2 格式
+                //   - VerifyAndExtractV2: 5 段格式 + v2: 前缀 + 24h TTL + Base64Url + pageNum
+                //   - 旧格式 (无 v2: 前缀) 直接拒绝 (LEGACY_CUTOFF_TS=2025-07-25 已过)
+                //   - pageNum 用于防深翻页 DoS (> 1000 拒绝), 此处忽略返回值 (keyset 不需要页码)
+                var (iso, cmr1, _) = _cursorHmac.VerifyAndExtractV2(req.Cursor);
                 if (!DateTime.TryParse(iso, null,
                     System.Globalization.DateTimeStyles.RoundtripKind,
                     out var cdt))
@@ -958,8 +986,12 @@ public class AdminProductService
                 //   WHY: mr1 是 V2 对外主键, 客户端可见; Id 是内部自增, 暴露会泄露产品创建顺序/数量
                 //   keyset 排序仍用 Id (查询内通过 mr1 反查), 但 cursor 字符串只含 mr1
                 var lastMr1 = last.Mr1 ?? throw new InvalidOperationException($"产品 id={last.Id} 的 Mr1 为空, 无法生成 cursor (V2 要求 Mr1 必填)");
-                var sig = _cursorHmac.Sign(iso, lastMr1);
-                nextCursor = $"{iso}|{lastMr1}|{sig}";
+                // V24-F24 (spec S3-14): 公开搜索 cursor 升级到 V2 格式
+                //   - SignV2 返回完整 cursor 字符串 (v2:exp|tsB64|mr1B64|pageNum|sig)
+                //   - pageNum = 当前页 + 1 (cursor 用于加载下一页, 携带下一页页码用于防深翻页)
+                //   - 旧 Sign + 手动拼接 3 段格式已废弃
+                var nextPageNum = (req.Page ?? 1) + 1;
+                nextCursor = _cursorHmac.SignV2(iso, lastMr1, nextPageNum);
             }
         }
         return (items, total, nextCursor, countModeUsed);
@@ -1109,6 +1141,37 @@ public class AdminProductService
     // ========== 辅助 ==========
     private static void ValidateForm(ProductFormDto form)
     {
+        // V24-F23: StripControlChars 过滤控制字符 (spec Task 0.3.16, 修复 D3-12)
+        //   WHY: MR.1 / Oem2 / 产品名等字段若含控制字符或 BMP 私用区字符,
+        //        会破坏 Meilisearch 高亮占位符 \uE000/\uE001, 导致 XSS 防御绕过
+        //   规则: 移除 U+0000-U+001F (保留 \t\n\r) + U+007F-U+009F + BMP 私用区 + 非字符
+        //   注意: ProductFormDto 是 record (init-only), 无法重新赋值;
+        //         这里仅校验是否含非法字符, 含则抛 ArgumentException (映射为 400)
+        //         实际清理在 CreateAsync/UpdateAsync 的 ?.Trim() 之前由调用方决定是否替换
+        //   实现策略: 对所有字符串字段做 StripControlChars, 若结果与原值不同则抛异常提示用户输入非法字符
+        ValidateNoControlChars(form.Mr1, nameof(form.Mr1));
+        ValidateNoControlChars(form.Oem2, nameof(form.Oem2));
+        ValidateNoControlChars(form.ProductName1, nameof(form.ProductName1));
+        ValidateNoControlChars(form.ProductName2, nameof(form.ProductName2));
+        ValidateNoControlChars(form.Type, nameof(form.Type));
+        ValidateNoControlChars(form.Remark, nameof(form.Remark));
+        ValidateNoControlChars(form.Media, nameof(form.Media));
+        ValidateNoControlChars(form.MediaModel, nameof(form.MediaModel));
+        ValidateNoControlChars(form.D7Thread, nameof(form.D7Thread));
+        ValidateNoControlChars(form.D8Thread, nameof(form.D8Thread));
+        ValidateNoControlChars(form.Efficiency1, nameof(form.Efficiency1));
+        ValidateNoControlChars(form.Efficiency2, nameof(form.Efficiency2));
+        ValidateNoControlChars(form.SealingMaterial, nameof(form.SealingMaterial));
+        ValidateNoControlChars(form.TempRange, nameof(form.TempRange));
+        foreach (var x in form.CrossReferences)
+        {
+            ValidateNoControlChars(x.ProductName1, "CrossReferences.ProductName1");
+            ValidateNoControlChars(x.OemBrand, "CrossReferences.OemBrand");
+            ValidateNoControlChars(x.OemNo3, "CrossReferences.OemNo3");
+            ValidateNoControlChars(x.Oem2, "CrossReferences.Oem2");
+            ValidateNoControlChars(x.MachineType, "CrossReferences.MachineType");
+        }
+
         // V2 Task V17-1.3: MR.1 校验抽取到 Mr1Validator (复用 ETL/Admin 双路径)
         //   WHY 抽取: 之前内联 regex 在 AdminProductService 和 ETL 重复,规则变更易漏改
         //   Mr1Validator.Normalize 内部完成: 必填校验 + 格式校验 + Trim
@@ -1157,6 +1220,37 @@ public class AdminProductService
     // V24-F16: NormalizeOem 方法已删除 (spec Task 0.3.10)
     //   WHY: V2 主键改为 mr_1, oem_no_normalized 派生规则统一为 mr_1 原值, 不再做大小写转换 + 去特殊字符
     //   历史调用点已全部替换: CreateAsync 用 form.Mr1?.Trim() ?? "", 批量搜索用 OemNoDisplay 原值
+
+    // V24-F23: ValidateNoControlChars 辅助方法 (spec Task 0.3.16, 修复 D3-12)
+    //   WHY: ValidateForm 调用, 对单个字段做 StripControlChars, 含非法字符则抛 ArgumentException
+    //   策略: 选择"抛异常"而非"静默清理", 因为产品录入是人工操作, 应提示用户输入了非法字符
+    //   null/空字符串直接通过 (nullable 字段允许)
+    private static void ValidateNoControlChars(string? value, string fieldName)
+    {
+        if (string.IsNullOrEmpty(value)) return;
+        var cleaned = SakuraFilter.Core.Validation.StringSanitizer.StripControlChars(value);
+        if (cleaned!.Length != value.Length)
+            throw new ArgumentException(
+                $"CONTROL_CHAR_DETECTED: {fieldName} 含非法控制字符/私用区字符 (原长度 {value.Length}, 清理后 {cleaned.Length})");
+    }
+
+    // V24-F21: pg_try_advisory_xact_lock 辅助方法 (spec Task 0.3.18/0.3.19)
+    //   WHY: 与 ETL ImportProductsAsync (7740001) / ImportXrefsAsync (7740002) 共享 advisory lock key
+    //        防止管理员编辑产品时 ETL TRUNCATE/DELETE+INSERT 导致 23505 唯一约束冲突或 504 锁等待
+    //   实现: 通过 EF Core Database.GetDbConnection() 执行 raw SQL, 事务结束时自动释放 advisory_xact_lock
+    //   返回 false: 锁被 ETL 占用, 调用方抛 InvalidOperationException (映射为 409 ETL_IN_PROGRESS)
+    private async Task<bool> TryAcquireAdvisoryLockAsync(long key, CancellationToken ct)
+    {
+        var conn = _db.Database.GetDbConnection();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT pg_try_advisory_xact_lock(@key)";
+        var p = cmd.CreateParameter();
+        p.ParameterName = "key";
+        p.Value = key;
+        cmd.Parameters.Add(p);
+        var result = await cmd.ExecuteScalarAsync(ct);
+        return result is bool b && b;
+    }
 
     private static string DeriveTypeFromName(string? productName3)
     {

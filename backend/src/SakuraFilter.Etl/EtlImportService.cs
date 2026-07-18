@@ -2170,7 +2170,9 @@ public class EtlImportService
         { "agriculture", "commercial", "construction", "industrial", "others" };
 
     private static string? GetStringOrNull(JsonElement e, string prop) =>
-        e.TryGetProperty(prop, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+        e.TryGetProperty(prop, out var v) && v.ValueKind == JsonValueKind.String
+            ? SakuraFilter.Core.Validation.StringSanitizer.StripControlChars(v.GetString())
+            : null;
 
     // P2-9.3: 改为实例方法以访问 Progress/_logger; prop 兼作 fieldName 用于日志
     private decimal? GetDecimalOrNull(JsonElement e, string prop, string? fieldName = null)

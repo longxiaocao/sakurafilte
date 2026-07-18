@@ -309,4 +309,61 @@ public class V2ValidatorTests
         var (ok, _) = InvokeValidate(form);
         ok.Should().BeTrue("完整合法 V2 表单应通过校验");
     }
+
+    // ===== V24-F23: 控制字符过滤 (spec Task 0.3.16, 修复 D3-12) =====
+
+    [Theory]
+    [InlineData("\u0000")]      // U+0000 NULL (C0)
+    [InlineData("\u0001")]      // U+0001 SOH (C0)
+    [InlineData("\u001F")]      // U+001F US (C0)
+    [InlineData("\u007F")]      // U+007F DEL
+    [InlineData("\u0080")]      // U+0080 PAD (C1)
+    [InlineData("\u009F")]      // U+009F APC (C1)
+    [InlineData("\uE000")]      // U+E000 BMP 私用区起点 (Meilisearch 高亮占位符 MarkOpen)
+    [InlineData("\uE001")]      // U+E001 BMP 私用区 (MarkClose)
+    [InlineData("\uFDD0")]      // U+FDD0 非字符 (StashOpen)
+    [InlineData("\uFDD1")]      // U+FDD1 非字符 (StashClose)
+    [InlineData("\uFFFE")]      // U+FFFE 非字符
+    [InlineData("\uFFFF")]      // U+FFFF 非字符
+    public void ValidateForm_StripsControlChars_RejectsAllCategories(string badChar)
+    {
+        // WHY: spec D3-12 要求 ValidateForm 过滤控制字符, 防止 Meilisearch 高亮占位符注入
+        //   实现策略: 检测到非法字符直接抛 ArgumentException (CONTROL_CHAR_DETECTED), 提示用户
+        //   覆盖: C0 (U+0000-U+001F, 不含 \t\n\r) + C1 (U+007F-U+009F) + BMP 私用区 + 非字符
+        var form = BuildValidForm() with { ProductName1 = "Bad" + badChar + "Name" };
+        var (ok, err) = InvokeValidate(form);
+        ok.Should().BeFalse($"ProductName1 含非法字符 U+{(int)badChar[0]:X4} 应被拦截");
+        err.Should().Contain("CONTROL_CHAR_DETECTED");
+        err.Should().Contain("ProductName1");
+    }
+
+    [Theory]
+    [InlineData("\t")]          // U+0009 TAB (Excel 多行文本兼容, 允许)
+    [InlineData("\n")]          // U+000A LF (允许)
+    [InlineData("\r")]          // U+000D CR (允许)
+    public void ValidateForm_StripsControlChars_AllowsTabNewlineCr(string allowedChar)
+    {
+        // WHY: spec 明确允许 \t \n \r, 因 Excel 多行文本含这些字符
+        //   不应误判为非法控制字符, 应通过校验
+        var form = BuildValidForm() with { Remark = "Multi" + allowedChar + "Line" };
+        var (ok, _) = InvokeValidate(form);
+        ok.Should().BeTrue($"Remark 含 '{allowedChar.Replace("\t", "\\t").Replace("\n", "\\n").Replace("\r", "\\r")}' 应允许");
+    }
+
+    [Fact]
+    public void ValidateForm_StripsControlChars_RejectsInXrefFields()
+    {
+        // WHY: CrossReferences 嵌套字段也应过滤, 防止 xref 注入占位符破坏搜索高亮
+        var form = BuildValidForm() with
+        {
+            CrossReferences = new List<XrefInput>
+            {
+                new("Air\uE000Filter", "BOSCH", "F0001", "OEM2-X", 0, "commercial", true),
+            },
+        };
+        var (ok, err) = InvokeValidate(form);
+        ok.Should().BeFalse("xref.ProductName1 含 U+E000 应被拦截");
+        err.Should().Contain("CONTROL_CHAR_DETECTED");
+        err.Should().Contain("CrossReferences.ProductName1");
+    }
 }
