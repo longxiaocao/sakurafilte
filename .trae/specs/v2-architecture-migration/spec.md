@@ -14695,11 +14695,249 @@ v25 本章作为 spec 治理基线,不再继续追加 v26/v27 章节。后续改
 | 三 (26.11) | V24-F56 | AdminProductImageService 29 单元测试 | 298/298 |
 | 四 (26.12) | V24-F57 | AdminProductImageService 覆盖上传 bug 修复 | 261/261 |
 
+## 26.13 v25 改进实施记录(自主决策批次五 — flaky 测试 + 前端 key + N+1 批量修复)
+
+### 26.13.1 V24-F58: JwtTokenService flaky 测试修复
+
+**问题**: [JwtTokenServiceTests.cs](file:///d:/projects/sakurafilter/backend/tests/SakuraFilter.Api.Tests/JwtTokenServiceTests.cs#L89-L102) `ValidateAccessToken_WithTamperedSignature_ReturnsNull` 翻转 base64url 末字符,间歇性失败。
+
+**根因**: base64url 末字符低位可能是 padding 位,翻转后解码出的字节序列可能不变 → 签名仍有效 → 测试间歇性失败。
+
+**修复**: 改用不同 signing key 生成同 issuer/audience 的 token,签名必然不同 → 验证必然失败。覆盖场景更贴近真实攻击(token 被替换 payload 或用错误 key 伪造)。
+
+**验证**: JwtTokenServiceTests 11/11 通过。
+
+### 26.13.2 V24-F59: AdminProductFormView v-for key 修复(规则 5.3)
+
+**问题**: [AdminProductFormView.vue](file:///d:/projects/sakurafilter/frontend/src/views/admin/AdminProductFormView.vue#L587) `crossReferences` 和 `machineApplications` 的 v-for 用 `index` 作 key,可增删动态列表删除中间项时输入框/校验状态错位。
+
+**修复**:
+1. 模块级 `rowUidSeq` 统一计数器,`addXref`/`addApp`/`load` 时分配 `_uid`
+2. `v-for :key` 改用 `x._uid` / `m._uid`
+3. `save` 时 `stripUid` 剥离 `_uid` 字段,不提交后端
+
+**验证**: type-check 通过,244/244 单元测试通过(12 contract 测试失败是后端未启动,与改动无关)。
+
+### 26.13.3 V24-F60: 批量修复 6 个 Service EnsureDefaultSettingsAsync N+1(规则 4.2)
+
+**问题**: 6 个 Service 的 `EnsureDefaultSettingsAsync` 完全相同的 N+1 反模式:
+- [EtlAlertService.cs](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Services/EtlAlertService.cs#L95) L95-115
+- [HistoryCleanupService.cs](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Services/HistoryCleanupService.cs#L60) L60-80
+- [EtlLogCleanupService.cs](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Services/EtlLogCleanupService.cs#L64) L64-84
+- [DeadLetterCleanupService.cs](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Services/DeadLetterCleanupService.cs#L63) L63-83
+- [PerfAlertService.cs](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Services/PerfAlertService.cs#L92) L92-112
+- [DeadLetterRecoveryService.cs](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Services/DeadLetterRecoveryService.cs#L87) L87-107
+
+**反模式**: `foreach (var (key, value, desc) in Defaults) { var exists = await db.SystemSettings.AnyAsync(s => s.Key == key, ct); }` — N 条 Defaults 触发 N 次 SQL 查询。
+
+**修复**: 抽取公共 helper [DefaultSettingsEnsurer.cs](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Services/DefaultSettingsEnsurer.cs),`EnsureAsync` 方法 1 次 SQL 批量预拉已存在 key + 内存 HashSet 判断。6 个 Service 改为一行调用:
+```csharp
+await DefaultSettingsEnsurer.EnsureAsync(db, Defaults, _logger, nameof(XxxService), ct);
+```
+
+**WHY 静态 helper 而非基类**:
+- 6 个 Service 已分别继承 `BackgroundService` / `object`,无法共享基类
+- 静态 helper 无状态,调用简单
+- 避免引入新抽象,符合"最小设计"原则
+
+**批量预拉模板复用**: 参考 [IndexReplayWorker.cs](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Services/IndexReplayWorker.cs#L245-L264) L245-264 和 V24-F55 (AdminProductService.CreateAsync)。
+
+### 26.13.4 验证结果
+
+| 项目 | 命令 | 结果 |
+|---|---|---|
+| 后端编译 | `dotnet build backend/src/SakuraFilter.Api/SakuraFilter.Api.csproj --no-incremental` | ✅ 0 warning 0 error |
+| 后端测试 | `dotnet test backend/tests/SakuraFilter.Api.Tests` | ✅ 261/261 通过 |
+| 前端类型检查 | `npm run type-check` | ✅ 通过 |
+| 前端单元测试 | `npm run test:contract` | ✅ 244/244 通过 (12 contract 失败是后端未启动) |
+
+### 26.13.5 v25 改进批次五文件清单
+
+| 类型 | 路径 | 修改摘要 |
+|---|---|---|
+| 测试 | `backend/tests/SakuraFilter.Api.Tests/JwtTokenServiceTests.cs` | V24-F58 用不同 signing key 替代末字符翻转 |
+| 前端 | `frontend/src/views/admin/AdminProductFormView.vue` | V24-F59 加 _uid 字段 + v-for key + save 剥离 |
+| 新增 | `backend/src/SakuraFilter.Api/Services/DefaultSettingsEnsurer.cs` | V24-F60 公共 helper |
+| 后端 | `backend/src/SakuraFilter.Api/Services/EtlAlertService.cs` | V24-F60 调用 helper |
+| 后端 | `backend/src/SakuraFilter.Api/Services/HistoryCleanupService.cs` | V24-F60 调用 helper |
+| 后端 | `backend/src/SakuraFilter.Api/Services/EtlLogCleanupService.cs` | V24-F60 调用 helper |
+| 后端 | `backend/src/SakuraFilter.Api/Services/DeadLetterCleanupService.cs` | V24-F60 调用 helper |
+| 后端 | `backend/src/SakuraFilter.Api/Services/PerfAlertService.cs` | V24-F60 调用 helper |
+| 后端 | `backend/src/SakuraFilter.Api/Services/DeadLetterRecoveryService.cs` | V24-F60 调用 helper |
+| spec | `.trae/specs/v2-architecture-migration/spec.md` | 追加 26.13 改进实施记录(本节) |
+
+### 26.13.6 v25 改进批次总结(累计)
+
+| 批次 | 编号 | 改动 | 验证 |
+|---|---|---|---|
+| 一 (26.9) | V24-F53 | AlertCenter Console.WriteLine → _logger.LogWarning | 269/269 |
+| 一 (26.9) | V24-F54 | AppHeader.vue debounceTimer 副作用清理 | 244/244 单测 |
+| 二 (26.10) | V24-F55 | AdminProductService.CreateAsync N+1 修复 | 269/269 |
+| 三 (26.11) | V24-F56 | AdminProductImageService 29 单元测试 | 298/298 |
+| 四 (26.12) | V24-F57 | AdminProductImageService 覆盖上传 bug 修复 | 261/261 |
+| 五 (26.13) | V24-F58 | JwtTokenService flaky 测试修复 | 11/11 |
+| 五 (26.13) | V24-F59 | AdminProductFormView v-for key 修复 | 244/244 单测 |
+| 五 (26.13) | V24-F60 | 6 个 Service EnsureDefaultSettingsAsync N+1 批量修复 | 261/261 |
+
+## 26.14 v25 改进实施记录(自主决策批次六 — 测试覆盖率提升 Top 4 高风险服务)
+
+### 26.14.1 V24-F61: DefaultSettingsEnsurer 单元测试(补 V24-F60 测试盲区)
+
+**测试目标**: [DefaultSettingsEnsurer.cs](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Services/DefaultSettingsEnsurer.cs)
+
+**测试场景** (8 个):
+- `EnsureAsync_AllNew_InsertsAllDefaults` — 0 已存在 → N 条 INSERT
+- `EnsureAsync_PartiallyExists_InsertsOnlyMissing` — M 已存在 → N-M 条 INSERT
+- `EnsureAsync_AllExist_InsertsNothing` — N 已存在 → 0 条 INSERT
+- `EnsureAsync_EmptyDefaults_ReturnsImmediately` — 空 defaults 直接 return
+- `EnsureAsync_PreservesExistingValue_DoesNotOverwrite` — 已存在记录不被覆盖
+- `EnsureAsync_DuplicateKeysInDefaults_InsertsOnce` — **发现并修复了重复 key 边界 bug**
+- `EnsureAsync_LogsInsertedConfigs` — 插入时记录 LogInformation
+- `EnsureAsync_DoesNotLogWhenAllExist` — 全部已存在时无日志噪音
+
+**修复的 bug**: `EnsureAsync_DuplicateKeysInDefaults_InsertsOnce` 测试发现,defaults 数组中存在重复 key 时,helper 会重复 `Add` 触发 EF Core 实体跟踪冲突 (`InvalidOperationException`)。修复方案:循环内 `existingSet.Add(key)` 标记本次已添加,内存层去重。
+
+**验证**: 8/8 通过。
+
+### 26.14.2 V24-F62: BaseDictService 单元测试(7 个 DictService 基类)
+
+**测试目标**: [BaseDictService.cs](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Services/BaseDictService.cs) (通过 [OemBrandDictService](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Services/OemBrandDictService.cs) 作为测试代理)
+
+**测试场景** (30 个):
+- **ListAsync** (4): 过滤已软删 / 含已删时已删排末尾 / 默认 limit=200 兜底 / 尊重 caller limit
+- **TypeaheadAsync** (3): limit clamp 上限 50 / limit clamp 下限 1 / 排除已软删
+- **CreateAsync** (6): 自动分配 sortOrder (max+10) / 重复 value 抛错 / 软删同名占用抛错 / 空 value 抛错 / 超长 value 抛错 / trim 处理
+- **UpdateAsync** (4): 不存在抛错 / 其他行重复 value 抛错 / 同行同值不抛错 / 仅更新 sortOrder
+- **DeleteAsync** (3): 软删设 DeletedAt / 已删重复抛错 / 不存在抛错
+- **RestoreAsync** (3): 清除 DeletedAt / 未删恢复抛错 / value 冲突抛错
+- **ReorderAsync** (4): 空列表抛错 / null 列表抛错 / id 不存在抛错 / 批量更新 sortOrder
+- **GetXrefCountAsync** (2): 计数匹配 xref / 无匹配返回 0
+- **NormalizeValue** (1): 内部空格保留 (如 "Foo Bar")
+
+**验证**: 30/30 通过。
+
+### 26.14.3 V24-F63: UserService 单元测试(安全敏感)
+
+**测试目标**: [UserService.cs](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Services/UserService.cs)
+
+**测试场景** (37 个):
+- **AuthenticateAsync** (7): 成功重置失败计数 / 用户不存在 / 禁用 / 锁定中 / 密码错递增计数 / 第5次失败触发锁定 / 锁过期允许尝试
+- **CreateAsync** (4): BCrypt 哈希 / 重复用户名抛错 / 非法角色抛错 / XSS 消毒 Email/FullName
+- **ChangePasswordAsync** (3): 旧密码正确更新哈希 / 旧密码错返回 false / 用户不存在返回 false
+- **ResetPasswordAsync** (2): 成功 + 清除锁定状态 / 用户不存在返回 false
+- **DeactivateAsync** (2): 软删 + 撤销所有有效 refresh token (已过期不撤销) / 用户不存在返回 false
+- **Refresh Token Lifecycle** (6): 入库存 hash 返回原文 / 有效 token 验证通过 / 已撤销 token 验证失败 / 已过期 token 验证失败 / 篡改 token 验证失败 / RevokeAndIssueAsync 撤销旧 + 链路指向新
+- **RevokeRefreshTokenAsync** (2): 幂等撤销 / 不存在不抛错
+- **SeedDefaultUsersAsync** (3): 非空表跳过 / 空表无环境变量跳过 / 空表有 admin 密码创建 admin
+- **ListAsync** (3): 排除软删 / pageSize clamp 200 / page 0 当作 1
+- **GetCurrentUserAsync** (3): 有效 claim 返回用户 / 无 claim 返回 null / 无效 userId 返回 null
+
+**关键发现**: `IssueRefreshTokenAsync` 返回的 token 实体被 EF Core 跟踪,修改 `TokenHash` 字段会同步到 db。测试用 `AsNoTracking` 重新查 DB 验证存的是 hash。
+
+**验证**: 37/37 通过。
+
+### 26.14.4 V24-F64: AdminProductService 核心方法单测
+
+**测试目标**: [AdminProductService.cs](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Services/AdminProductService.cs)
+
+**测试范围**: 不依赖 PG advisory lock 的 5 个公开方法 (`CreateAsync`/`UpdateAsync` 依赖 `pg_try_advisory_xact_lock` raw SQL,InMemory 不支持,需 PG 集成测试,后续 v26+ 补)。
+
+**测试场景** (23 个):
+- **DeleteAsync** (3): 软删 + 历史记录 / 不存在抛错 / 已下架重复抛错
+- **RestoreAsync** (3): 恢复 + 历史记录 / 不存在抛错 / 未下架恢复抛错
+- **GetByIdAsync** (4): 不存在抛错 / 详情含 xref + 机型 / 图片返回签名 URL / OSS 失败兜底空字符串 / 无 storage 返回空字符串
+- **EncodeCursor/DecodeCursor** (5): 往返一致 / null/empty 返回 null / 篡改签名返回 null / 格式错误返回 null / 不同 HMAC key 验签失败
+- **GetHistoryAsync** (6): 不存在抛错 / 倒序返回 / changeType 筛选 / 分页返回 nextCursor / 末页无 nextCursor / cursor 翻页 / 日期范围筛选
+
+**关键设计点验证**:
+- `DecodeCursor` 的 HMAC 防篡改机制 (5 个测试覆盖)
+- `GetByIdAsync` 的 per-image try-catch 容错 (OSS 失败兜底空字符串)
+- `GetHistoryAsync` 的 keyset pagination (cursor 严格小于上一批末尾)
+
+**验证**: 23/23 通过。
+
+### 26.14.5 验证结果
+
+| 项目 | 命令 | 结果 |
+|---|---|---|
+| 后端测试 (单类) | `dotnet test --filter DefaultSettingsEnsurerTests` | ✅ 8/8 通过 |
+| 后端测试 (单类) | `dotnet test --filter BaseDictServiceTests` | ✅ 30/30 通过 |
+| 后端测试 (单类) | `dotnet test --filter UserServiceTests` | ✅ 37/37 通过 |
+| 后端测试 (单类) | `dotnet test --filter AdminProductServiceTests` | ✅ 23/23 通过 |
+| 后端测试 (全量) | `dotnet test backend/tests/SakuraFilter.Api.Tests` | ✅ 359/359 通过 |
+
+### 26.14.6 v25 改进批次六文件清单
+
+| 类型 | 路径 | 修改摘要 |
+|---|---|---|
+| 测试 | `backend/tests/SakuraFilter.Api.Tests/DefaultSettingsEnsurerTests.cs` | V24-F61 新增 8 单测 |
+| 后端 | `backend/src/SakuraFilter.Api/Services/DefaultSettingsEnsurer.cs` | V24-F61 修复重复 key 边界 bug |
+| 测试 | `backend/tests/SakuraFilter.Api.Tests/BaseDictServiceTests.cs` | V24-F62 新增 30 单测 |
+| 测试 | `backend/tests/SakuraFilter.Api.Tests/UserServiceTests.cs` | V24-F63 新增 37 单测 |
+| 测试 | `backend/tests/SakuraFilter.Api.Tests/AdminProductServiceTests.cs` | V24-F64 新增 23 单测 |
+| spec | `.trae/specs/v2-architecture-migration/spec.md` | 追加 26.14 改进实施记录(本节) |
+
+### 26.14.7 v25 改进批次总结(累计)
+
+| 批次 | 编号 | 改动 | 验证 |
+|---|---|---|---|
+| 一 (26.9) | V24-F53 | AlertCenter Console.WriteLine → _logger.LogWarning | 269/269 |
+| 一 (26.9) | V24-F54 | AppHeader.vue debounceTimer 副作用清理 | 244/244 单测 |
+| 二 (26.10) | V24-F55 | AdminProductService.CreateAsync N+1 修复 | 269/269 |
+| 三 (26.11) | V24-F56 | AdminProductImageService 29 单元测试 | 298/298 |
+| 四 (26.12) | V24-F57 | AdminProductImageService 覆盖上传 bug 修复 | 261/261 |
+| 五 (26.13) | V24-F58 | JwtTokenService flaky 测试修复 | 11/11 |
+| 五 (26.13) | V24-F59 | AdminProductFormView v-for key 修复 | 244/244 单测 |
+| 五 (26.13) | V24-F60 | 6 个 Service EnsureDefaultSettingsAsync N+1 批量修复 | 261/261 |
+| 六 (26.14) | V24-F61 | DefaultSettingsEnsurer 8 单测 + 重复 key bug 修复 | 8/8 |
+| 六 (26.14) | V24-F62 | BaseDictService 30 单测 | 30/30 |
+| 六 (26.14) | V24-F63 | UserService 37 单测 | 37/37 |
+| 六 (26.14) | V24-F64 | AdminProductService 23 单测 | 23/23 |
+| **累计** | **V24-F53~F64** | **12 项改进** | **359/359 全通过** |
+
+### 26.14.8 测试覆盖率提升统计
+
+| 阶段 | 已测 Service | 测试总数 | 覆盖率 |
+|---|---|---|---|
+| V24-F56 前 | 4 (Jwt/Cursor/Xss/OemBrandApplyChange) | 269 | ~9% (4/45) |
+| V24-F56 后 | 5 (+AdminProductImageService) | 298 | ~11% |
+| V24-F64 后 | 9 (+DefaultSettingsEnsurer/BaseDictService/UserService/AdminProductService) | 359 | **20% (9/45)** |
+
+### 26.14.9 💡 改进建议(后续 v26+ 决策)
+
+1. **CreateAsync/UpdateAsync 集成测试**: 当前 InMemory 无法测试 advisory lock 路径,建议:
+   - 用 Testcontainers PG 启动临时实例
+   - 覆盖:正常创建 / ETL_IN_PROGRESS 409 / 并发 23505 → 409 / 乐观锁 RowVersion 冲突
+
+2. **IndexReplayWorker 单元测试**: 死信重放逻辑是后台核心,建议补:
+   - `TryWithAdvisoryLockAsync` 成功/失败路径
+   - 死信合并逻辑 (重复 payload 去重)
+   - 指数退避重试 (NextRetryAt 计算)
+
+3. **ProblemDetailsFactory 单元测试**: 全局异常映射是 API 安全关键,建议补:
+   - ArgumentException → 400
+   - KeyNotFoundException → 404
+   - InvalidOperationException → 409
+   - DbUpdateException + 23505/23503/40P01 SqlState 细分映射
+
+4. **CI 覆盖率门禁**: 当前 20%,建议:
+   - 短期目标:核心 Service (AdminProductService/UserService/EtlImportService) 覆盖率 ≥ 60%
+   - 长期目标:全 Service 覆盖率 ≥ 40%,新 PR 不允许降低覆盖率
+   - 工具:`dotnet test --collect:"XPlat Code Coverage"` + reportgenerator 阈值门禁
+
+### 26.13.7 💡 改进建议(后续 v26+ 决策)
+
+1. ~~**DefaultSettingsEnsurer 单元测试**~~ (✅ 已实施 V24-F61,见 26.14.1): 8 单测覆盖全部场景,并修复重复 key 边界 bug。
+
+2. **前端 v-for key 静态检查**: 建议在 `frontend/eslint.config.js` 启用 `vue/require-v-for-key` + 自定义规则禁止 `:key="index"` / `:key="i"` / `:key="idx"`,从源头杜绝(扫描发现 7 处剩余 index key,多为静态数组可豁免)。
+
+3. ~~**测试覆盖率基线**~~ (✅ 部分实施 V24-F62/F63/F64,见 26.14): Top 4 高风险服务已补 3 个 (BaseDictService/UserService/AdminProductService),IndexReplayWorker 待补。覆盖率从 11% 提升到 20%。
+
+4. **EnsureDefaultSettingsAsync 死代码清理**: 6 个 Service 的 `Defaults` 数组定义保留(传给 helper),但 `EnsureDefaultSettingsAsync` 方法体已简化为一行,可考虑直接内联到调用点(减少一层无意义封装)。
+
 ### 26.12.6 💡 改进建议(后续 v26+ 决策)
 
-1. **JwtTokenService flaky 测试修复**: `ValidateAccessToken_WithTamperedSignature_ReturnsNull` 翻转 base64url 末字符的设计不稳定。建议改为:
-   - 用随机字节生成完全无效的签名段,或
-   - 用不同 secret 重新签名 token,确保签名验证必然失败
+1. ~~**JwtTokenService flaky 测试修复**~~ (✅ 已实施 V24-F58,见 26.13.1): 改用不同 signing key 生成 token,签名必然不同。
 
 2. **覆盖上传异步删旧文件的容错**: 当前 fire-and-forget `Task.Run` 删旧文件失败仅 log warning,长期可能累积孤儿图片。建议:
    - 引入 dead-letter 队列记录失败删除任务,或

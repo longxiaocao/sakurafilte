@@ -51,6 +51,9 @@ public static class DefaultSettingsEnsurer
 
         foreach (var (key, value, desc) in defaultsList)
         {
+            // V24-F61: 同时检查 DB 已存在和本次循环已添加, 防御 defaults 数组内重复 key
+            //   WHY: 重复 Add 同 key 会触发 EF Core 实体跟踪冲突 (InvalidOperationException)
+            //        或 DB 唯一约束冲突 (23505), 应在内存层提前去重
             if (existingSet.Contains(key)) continue;
 
             db.SystemSettings.Add(new SystemSetting
@@ -60,6 +63,7 @@ public static class DefaultSettingsEnsurer
                 Description = desc,
                 UpdatedAt = DateTime.UtcNow
             });
+            existingSet.Add(key);  // 标记本次已添加, 防御 defaults 数组内重复 key
             logger.LogInformation("插入 {Service} 默认配置: {Key} = {Value}", serviceName, key, value);
         }
         await db.SaveChangesAsync(ct);
