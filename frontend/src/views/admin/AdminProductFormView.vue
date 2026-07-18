@@ -74,6 +74,15 @@ const form = reactive<any>({
   machineApplications: []
 })
 
+// V24-F59: 客户端稳定 uid (v-for key 用, 不提交后端)
+//   WHY: xref/machineApp 行可增删, 用 index 作 key 会导致删除中间项时输入框/校验状态错位
+//   - 统一计数器, 组件实例生命周期内全局唯一 (xref/app 共享, 避免双计数器混淆)
+//   - addXref/addApp/load 时分配, save 时剥离 (_uid 不提交后端)
+let rowUidSeq = 0
+const newXrefRow = () => ({ _uid: ++rowUidSeq, oemBrand: '', oemNo3: '' }) as any
+const newAppRow = () => ({ _uid: ++rowUidSeq, machineBrand: '', machineModel: '' }) as any
+const withUid = <T,>(item: T) => ({ _uid: ++rowUidSeq, ...item }) as any
+
 // E2E BD.3 修复 v2: 乐观锁并发令牌 (PG xmin), GET 时保存, PUT 时带回
 //   后端用此值覆盖实体加载时的 xmin, 检测"先读后写"并发丢失更新
 const rowVersion = ref<number>(0)
@@ -208,8 +217,8 @@ async function load() {
       masterBoxQty: p.masterBoxQty, masterBoxWeightKgs: p.masterBoxWeightKgs,
       masterBoxLengthMm: p.masterBoxLengthMm, masterBoxWidthMm: p.masterBoxWidthMm, masterBoxHeightMm: p.masterBoxHeightMm
     })
-    form.crossReferences = p.crossReferences.map((x) => ({ ...x }))
-    form.machineApplications = p.machineApplications.map((m) => ({ ...m }))
+    form.crossReferences = p.crossReferences.map((x) => withUid(x))
+    form.machineApplications = p.machineApplications.map((m) => withUid(m))
     // V2 Task 3.3.1: images 改为 Record<slot, img> 结构 (主图 slot=1, 详情图 slot=2-6)
     images.value = {}
     if (Array.isArray(p.images)) {
@@ -250,12 +259,20 @@ async function save() {
   }
   saving.value = true
   try {
+    // V24-F59: 剥离客户端 _uid 字段, 不提交后端
+    //   _uid 仅用于 v-for key, 后端 XrefInput/MachineAppInput 不识别此字段
+    const stripUid = (arr: any[]) => arr.map(({ _uid, ...rest }) => rest)
+    const payload = {
+      ...form,
+      crossReferences: stripUid(form.crossReferences),
+      machineApplications: stripUid(form.machineApplications)
+    }
     if (isEdit.value) {
       // E2E BD.3 修复 v2: 带回 GET 时的 RowVersion, 后端用此值检测并发冲突
-      await adminProductApi.update(productId.value, { ...form, rowVersion: rowVersion.value }, 'admin')
+      await adminProductApi.update(productId.value, { ...payload, rowVersion: rowVersion.value }, 'admin')
       ElMessage.success(t('admin.productformview.success.saved'))
     } else {
-      await adminProductApi.create(form, 'admin')
+      await adminProductApi.create(payload, 'admin')
       ElMessage.success(t('admin.productformview.success.created'))
     }
     // V24-F48: 保存成功后清理草稿 (避免下次进入表单时提示恢复旧数据)
@@ -312,13 +329,13 @@ async function save() {
 }
 
 function addXref() {
-  form.crossReferences.push({ oemBrand: '', oemNo3: '' })
+  form.crossReferences.push(newXrefRow())
 }
 function removeXref(idx: number) {
   form.crossReferences.splice(idx, 1)
 }
 function addApp() {
-  form.machineApplications.push({ machineBrand: '', machineModel: '' })
+  form.machineApplications.push(newAppRow())
 }
 function removeApp(idx: number) {
   form.machineApplications.splice(idx, 1)
@@ -584,7 +601,7 @@ onBeforeUnmount(() => {
 
         <!-- 分区 2: 交叉引用 -->
         <el-collapse-item :title="`t('admin.productformview.string.cross_reference_count', { count: form.crossReferences.length })`" name="2">
-          <div v-for="(x, i) in form.crossReferences" :key="i" class="flex gap-2 mb-2">
+          <div v-for="(x, i) in form.crossReferences" :key="x._uid" class="flex gap-2 mb-2">
             <!-- Day 10: P1.3 自动补全 — 字典为空时降级为自由输入 -->
             <el-autocomplete
               v-model="x.oemBrand"
@@ -719,7 +736,7 @@ onBeforeUnmount(() => {
 
         <!-- 分区 7: 车型 (P2.2: machine/engine 字段全部 typeahead) -->
         <el-collapse-item :title="`t('admin.productformview.string.machine_applications_count', { count: form.machineApplications.length })`" name="7">
-          <div v-for="(m, i) in form.machineApplications" :key="i" class="grid grid-cols-5 gap-2 mb-2">
+          <div v-for="(m, i) in form.machineApplications" :key="m._uid" class="grid grid-cols-5 gap-2 mb-2">
             <!-- 机型品牌: typeahead -->
             <el-autocomplete v-model="m.machineBrand" :fetch-suggestions="queryMachineBrand"
               :placeholder="t('admin.productformview.placeholder.brand_required')" size="small" clearable :trigger-on-focus="true" :debounce="200"

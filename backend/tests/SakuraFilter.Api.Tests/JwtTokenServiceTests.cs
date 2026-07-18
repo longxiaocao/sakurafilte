@@ -89,13 +89,32 @@ public class JwtTokenServiceTests
     [Fact]
     public void ValidateAccessToken_WithTamperedSignature_ReturnsNull()
     {
+        // V24-F58: 修复 flaky 测试
+        //   WHY 旧实现: 翻转 base64url 末字符, 但末字符低位可能是 base64 padding 位,
+        //     解码后字节序列不变 → 签名仍有效 → 测试间歇性失败
+        //   修复: 用不同 signing key 生成同 payload token, 签名必然不同 → 验证必然失败
+        //     覆盖场景: token 被替换 payload 或用错误 key 伪造
         var sut = CreateSut();
-        var token = sut.GenerateAccessToken(NewUser());
-        // 翻转签名段最后一字符
-        var parts = token.Split('.');
-        var last = parts[2].ToCharArray();
-        last[^1] = last[^1] == 'A' ? 'B' : 'A';
-        var tampered = $"{parts[0]}.{parts[1]}.{new string(last)}";
+
+        // 用不同 key 构造同 issuer/audience 的 token, 签名段必然不同
+        var otherKey = "another-valid-signing-key-with-32-chars-min-Z9Y8W7V6U5";
+        var handler = new JwtSecurityTokenHandler();
+        var creds = new Microsoft.IdentityModel.Tokens.SigningCredentials(
+            new Microsoft.IdentityModel.Tokens.SymmetricSecurityKey(
+                System.Text.Encoding.UTF8.GetBytes(otherKey)),
+            Microsoft.IdentityModel.Tokens.SecurityAlgorithms.HmacSha256);
+        var forged = new System.IdentityModel.Tokens.Jwt.JwtSecurityToken(
+            issuer: "SakuraFilter",
+            audience: "SakuraFilter.Web",
+            claims: new[]
+            {
+                new System.Security.Claims.Claim("sub", "1"),
+                new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Name, "tester")
+            },
+            notBefore: DateTime.UtcNow,
+            expires: DateTime.UtcNow.AddMinutes(30),
+            signingCredentials: creds);
+        var tampered = handler.WriteToken(forged);
 
         var principal = sut.ValidateAccessToken(tampered);
         principal.Should().BeNull();
