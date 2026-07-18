@@ -404,63 +404,134 @@ public class AdminProductImageServiceTests
     }
 
     /// <summary>
-    /// 详情图 slot 重复: 抛 IMAGE_DETAIL_SLOT_DUPLICATE
-    ///   注: 生产代码 L182-185 软校验先于 L188-193 覆盖上传逻辑, 导致覆盖上传永远不会触发
-    ///       这是生产代码的已知行为, 测试反映当前实际行为 (覆盖上传逻辑待后续修复)
+    /// V24-F57: 详情图 slot 重复 → 覆盖上传 (更新记录 + 删旧 S3 文件)
+    ///   WHY: V24-F57 删除了"重复即拒绝"软校验, 同 slot 上传改为覆盖
+    ///     - spike-test/SPIKE-REPORT-day8.1.md L30/115/217 设计意图: "覆盖上传 key 纯净, 避免废弃对象"
+    ///     - 前端 AdminProductFormView.vue 无"先删除"逻辑, 用户预期直接替换
+    ///   验证点:
+    ///     1. DB 记录数量不变 (更新而非新增)
+    ///     2. DB 记录字段已更新 (ImageKey/ContentType/FileSize/UploadedBy)
+    ///     3. S3 UploadAsync 被调用 1 次 (新 key)
+    ///     4. S3 DeleteAsync 被调用 1 次 (旧 key, 异步删旧文件)
     /// </summary>
     [Fact]
-    public async Task UploadAsync_DetailSlotDuplicate_Throws()
+    public async Task UploadAsync_DetailOverwrite_UpdatesRecordAndDeletesOldFile()
     {
         await using var db = CreateInMemoryDb();
         db.Products.Add(CreateProduct());
+        const string oldKey = "products/detail/MR000001/MR000001-3.jpg";
         db.ProductImages.Add(new ProductImage
         {
             ProductId = 1,
             Slot = 3,
             ImageRole = "detail",
-            ImageKey = "products/detail/MR000001/MR000001-3.jpg",
+            ImageKey = oldKey,
             ContentType = "image/jpeg",
-            UploadedAt = DateTime.UtcNow
+            FileSize = 1024,
+            UploadedBy = "old-user",
+            UploadedAt = DateTime.UtcNow.AddHours(-1)
         });
         await db.SaveChangesAsync();
-        var sut = CreateSut(db);
+        var storageMock = CreateStorageMock();
+        var sut = CreateSut(db, storageMock: storageMock);
 
-        var act = async () => await sut.UploadAsync("MR000001", "detail", null, slot: 3,
-            CreateImageStream(), "image/png", "tester");
+        var result = await sut.UploadAsync("MR000001", "detail", null, slot: 3,
+            CreateImageStream(size: 2048), "image/png", "tester");
 
-        var ex = await act.Should().ThrowAsync<InvalidOperationException>();
-        ex.Which.Message.Should().Contain("IMAGE_DETAIL_SLOT_DUPLICATE");
+        // 1. DB 记录数量不变 (1 条, 更新而非新增)
+        var imgs = await db.ProductImages.ToListAsync();
+        imgs.Should().HaveCount(1);
+
+        // 2. DB 记录字段已更新
+        var img = imgs[0];
+        img.ImageKey.Should().Be("products/detail/MR000001/MR000001-3.png");
+        img.ContentType.Should().Be("image/png");
+        img.FileSize.Should().Be(2048);
+        img.UploadedBy.Should().Be("tester");
+
+        // 3. S3 上传新文件 1 次
+        storageMock.Verify(s => s.UploadAsync(
+            It.Is<string>(k => k == "products/detail/MR000001/MR000001-3.png"),
+            It.IsAny<Stream>(), "image/png", It.IsAny<CancellationToken>()), Times.Once);
+
+        // 4. S3 删除旧文件 1 次 (异步 fire-and-forget, 需短暂等待)
+        await Task.Delay(200);
+        storageMock.Verify(s => s.DeleteAsync(
+            It.Is<string>(k => k == oldKey), It.IsAny<CancellationToken>()), Times.Once);
+
+        // 返回值校验
+        result.ImageRole.Should().Be("detail");
+        result.Slot.Should().Be(3);
     }
 
     /// <summary>
-    /// 主图重复上传同 OEM 3: 抛 IMAGE_PRIMARY_DUPLICATE
-    ///   WHY: uq_product_images_primary 约束的软校验, 避免直接撞 DB 23505
+    /// V24-F57: 主图同 OEM 3 重复上传 → 覆盖上传 (更新记录 + 删旧 S3 文件 + 同步 products.image_key)
+    ///   WHY: V24-F57 删除了"重复即拒绝"软校验, 同 OEM 3 主图上传改为覆盖
+    ///     - 用户替换主图预期: 直接上传新图, 旧文件自动清理
+    ///   验证点:
+    ///     1. DB 记录数量不变 (更新而非新增)
+    ///     2. DB 记录字段已更新 (ImageKey/ContentType/FileSize/OemNo3)
+    ///     3. products.image_key 同步更新为主图新 key
+    ///     4. S3 UploadAsync 被调用 1 次 (新 key)
+    ///     5. S3 DeleteAsync 被调用 1 次 (旧 key, 异步删旧文件)
     /// </summary>
     [Fact]
-    public async Task UploadAsync_PrimaryDuplicateOemNo3_Throws()
+    public async Task UploadAsync_PrimaryOverwrite_UpdatesRecordAndSyncsProductImageKey()
     {
         await using var db = CreateInMemoryDb();
         db.Products.Add(CreateProduct());
         db.CrossReferences.Add(CreateXref(1, "OEM001"));
-        // 预置一条同 OEM 3 的主图
+        const string oldKey = "products/primary/OEM001/OEM001-1.jpg";
         db.ProductImages.Add(new ProductImage
         {
             ProductId = 1,
             Slot = 1,
             ImageRole = "primary",
             OemNo3 = "OEM001",
-            ImageKey = "products/primary/OEM001/OEM001-1.jpg",
+            ImageKey = oldKey,
             ContentType = "image/jpeg",
-            UploadedAt = DateTime.UtcNow
+            FileSize = 1024,
+            UploadedBy = "old-user",
+            UploadedAt = DateTime.UtcNow.AddHours(-1)
         });
         await db.SaveChangesAsync();
-        var sut = CreateSut(db);
+        var storageMock = CreateStorageMock();
+        var sut = CreateSut(db, storageMock: storageMock);
 
-        var act = async () => await sut.UploadAsync("MR000001", "primary", "OEM001", slot: 1,
-            CreateImageStream(), "image/png", "tester");
+        var result = await sut.UploadAsync("MR000001", "primary", "OEM001", slot: 1,
+            CreateImageStream(size: 2048), "image/png", "tester");
 
-        var ex = await act.Should().ThrowAsync<InvalidOperationException>();
-        ex.Which.Message.Should().Contain("IMAGE_PRIMARY_DUPLICATE");
+        // 1. DB ProductImage 记录数量不变 (1 条, 更新而非新增)
+        var imgs = await db.ProductImages.ToListAsync();
+        imgs.Should().HaveCount(1);
+
+        // 2. DB 记录字段已更新
+        var img = imgs[0];
+        img.ImageKey.Should().Be("products/primary/OEM001/OEM001-1.png");
+        img.ContentType.Should().Be("image/png");
+        img.FileSize.Should().Be(2048);
+        img.OemNo3.Should().Be("OEM001");
+        img.UploadedBy.Should().Be("tester");
+
+        // 3. products.image_key 同步更新
+        var product = await db.Products.SingleAsync();
+        product.ImageKey.Should().Be("products/primary/OEM001/OEM001-1.png");
+        product.ImageStatus.Should().Be("pending");
+
+        // 4. S3 上传新文件 1 次
+        storageMock.Verify(s => s.UploadAsync(
+            It.Is<string>(k => k == "products/primary/OEM001/OEM001-1.png"),
+            It.IsAny<Stream>(), "image/png", It.IsAny<CancellationToken>()), Times.Once);
+
+        // 5. S3 删除旧文件 1 次 (异步 fire-and-forget, 需短暂等待)
+        await Task.Delay(200);
+        storageMock.Verify(s => s.DeleteAsync(
+            It.Is<string>(k => k == oldKey), It.IsAny<CancellationToken>()), Times.Once);
+
+        // 返回值校验
+        result.ImageRole.Should().Be("primary");
+        result.Slot.Should().Be(1);
+        result.OemNo3.Should().Be("OEM001");
     }
 
     /// <summary>

@@ -14631,6 +14631,82 @@ v25 本章作为 spec 治理基线,不再继续追加 v26/v27 章节。后续改
 | 二 (26.10) | V24-F55 | AdminProductService.CreateAsync N+1 修复 | 269/269 |
 | 三 (26.11) | V24-F56 | AdminProductImageService 29 单元测试 | 298/298 |
 
+## 26.12 v25 改进实施记录(自主决策批次四 — 覆盖上传 bug 修复)
+
+### 26.12.1 V24-F57: AdminProductImageService.UploadAsync 覆盖上传 bug 修复
+
+**问题**: 26.11.2 记录的死代码 bug — 软校验先抛异常导致覆盖上传逻辑永远不触发。
+
+**修复**: 删除 [AdminProductImageService.cs](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Services/AdminProductImageService.cs#L171-L186) L171-186 的"重复即拒绝"软校验块。
+
+**WHY 删除软校验**:
+- 软校验先于覆盖上传逻辑,导致覆盖上传永远不会触发(死代码)
+- spike-test/SPIKE-REPORT-day8.1.md L30/115/217 设计意图:"覆盖上传 key 纯净,避免废弃对象"
+- 前端 [AdminProductFormView.vue](file:///d:/projects/sakurafilter/frontend/src/views/admin/AdminProductFormView.vue) 直接调用 uploadPrimary/uploadDetail,无"先删除"逻辑
+- 用户预期:替换同 slot 图片直接上传,旧 S3 文件自动清理
+
+**安全性保障**:
+- DB 唯一约束 `uq_product_images_primary` / `uq_product_images_detail_slot` 仍保留
+- 覆盖上传时 `old.OemNo3 == oemNo3`(主图) / `old.ProductId+Slot == product.Id+slot`(详情图),更新旧记录不触发 23505
+- 并发竞态(两个请求同时上传同 slot)→ 第二个撞 23505 → `ProblemDetailsFactory` 映射为 409 `ERR_DB_CONFLICT`
+
+**errorCode 保留**:
+- `IMAGE_PRIMARY_DUPLICATE` / `IMAGE_DETAIL_SLOT_DUPLICATE` 仍定义在 [ProblemDetailsFactory.cs](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Services/ProblemDetailsFactory.cs) 和前端 [http.ts](file:///d:/projects/sakurafilter/frontend/src/utils/http.ts)
+- 仅供 DB 23505 兜底场景使用(不再由软校验主动抛出)
+
+### 26.12.2 V24-F57 测试更新
+
+**替换的测试**(2 个,反映修复后的覆盖上传行为):
+- `UploadAsync_DetailSlotDuplicate_Throws` → `UploadAsync_DetailOverwrite_UpdatesRecordAndDeletesOldFile`
+- `UploadAsync_PrimaryDuplicateOemNo3_Throws` → `UploadAsync_PrimaryOverwrite_UpdatesRecordAndSyncsProductImageKey`
+
+**新增测试验证点**:
+1. DB 记录数量不变(更新而非新增)
+2. DB 记录字段已更新(ImageKey/ContentType/FileSize/UploadedBy)
+3. 主图场景下 `products.image_key` 同步更新
+4. S3 `UploadAsync` 被调用 1 次(新 key)
+5. S3 `DeleteAsync` 被调用 1 次(旧 key,异步 fire-and-forget 删除)
+
+### 26.12.3 验证结果
+
+| 项目 | 命令 | 结果 |
+|---|---|---|
+| 后端编译 | `dotnet build backend/SakuraFilter.sln` | ✅ 0 warning 0 error |
+| 后端测试 (单类) | `dotnet test --filter AdminProductImageServiceTests` | ✅ 29/29 通过 |
+| 后端测试 (全量) | `dotnet test backend/tests/SakuraFilter.Api.Tests` | ✅ 261/261 通过 |
+
+**注**: 全量测试首次运行时,`JwtTokenServiceTests.ValidateAccessToken_WithTamperedSignature_ReturnsNull` 一次性失败,单独运行通过。该测试翻转 base64url 末字符的设计存在 flaky 风险(末位 padding 字符变化不一定破坏签名),与 V24-F57 改动无关。
+
+### 26.12.4 v25 改进批次四文件清单
+
+| 类型 | 路径 | 修改摘要 |
+|---|---|---|
+| 生产代码 | `backend/src/SakuraFilter.Api/Services/AdminProductImageService.cs` | 删除 L171-186 软校验块 + V24-F57 决策注释 |
+| 测试 | `backend/tests/SakuraFilter.Api.Tests/AdminProductImageServiceTests.cs` | 替换 2 个软校验测试为 2 个覆盖上传测试 |
+| spec | `.trae/specs/v2-architecture-migration/spec.md` | 追加 26.12 改进实施记录(本节) |
+
+### 26.12.5 v25 改进批次总结(累计)
+
+| 批次 | 编号 | 改动 | 验证 |
+|---|---|---|---|
+| 一 (26.9) | V24-F53 | AlertCenter Console.WriteLine → _logger.LogWarning | 269/269 |
+| 一 (26.9) | V24-F54 | AppHeader.vue debounceTimer 副作用清理 | 244/244 单测 |
+| 二 (26.10) | V24-F55 | AdminProductService.CreateAsync N+1 修复 | 269/269 |
+| 三 (26.11) | V24-F56 | AdminProductImageService 29 单元测试 | 298/298 |
+| 四 (26.12) | V24-F57 | AdminProductImageService 覆盖上传 bug 修复 | 261/261 |
+
+### 26.12.6 💡 改进建议(后续 v26+ 决策)
+
+1. **JwtTokenService flaky 测试修复**: `ValidateAccessToken_WithTamperedSignature_ReturnsNull` 翻转 base64url 末字符的设计不稳定。建议改为:
+   - 用随机字节生成完全无效的签名段,或
+   - 用不同 secret 重新签名 token,确保签名验证必然失败
+
+2. **覆盖上传异步删旧文件的容错**: 当前 fire-and-forget `Task.Run` 删旧文件失败仅 log warning,长期可能累积孤儿图片。建议:
+   - 引入 dead-letter 队列记录失败删除任务,或
+   - 由 Task 5.1.20 `CleanupOrphanImagesAsync` 兜底清理
+
+3. **覆盖上传并发竞态测试**: 当前测试未覆盖并发场景(两个请求同时上传同 slot)。建议后续用 PG 集成测试验证 23505 → 409 映射路径。
+
 
 
 

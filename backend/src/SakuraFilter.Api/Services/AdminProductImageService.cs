@@ -168,22 +168,17 @@ public class AdminProductImageService
         // ===== 1. DB 事务占位 =====
         await using var tx = await _db.Database.BeginTransactionAsync(ct);
 
-        // V2 Task 3.2.6/3.2.7: 唯一约束软校验 (在 DB 之前, 给出更友好的 errorCode)
-        //   WHY 软校验先于 DB: 避免直接撞 PostgresException 23505 兜底为 ERR_DB_CONFLICT
-        if (imageRole == "primary")
-        {
-            var primaryExists = await _db.ProductImages
-                .AnyAsync(i => i.ImageRole == "primary" && i.OemNo3 == oemNo3, ct);
-            if (primaryExists)
-                throw new InvalidOperationException($"IMAGE_PRIMARY_DUPLICATE: OEM 3 '{oemNo3}' 已有主图 (uq_product_images_primary 约束)");
-        }
-        else
-        {
-            var detailSlotExists = await _db.ProductImages
-                .AnyAsync(i => i.ProductId == product.Id && i.Slot == slot && i.ImageRole == "detail", ct);
-            if (detailSlotExists)
-                throw new InvalidOperationException($"IMAGE_DETAIL_SLOT_DUPLICATE: MR.1 '{mr1}' slot {slot} 已有详情图 (uq_product_images_detail_slot 约束)");
-        }
+        // V24-F57: 删除 V2 Task 3.2.6/3.2.7 的"重复即拒绝"软校验, 改为支持覆盖上传
+        //   WHY 删除: 软校验先于覆盖上传逻辑, 导致覆盖上传永远不会触发 (死代码)
+        //     - spike-test/SPIKE-REPORT-day8.1.md L30/115/217 设计意图: "覆盖上传 key 纯净, 避免废弃对象"
+        //     - 前端 AdminProductFormView.vue 直接调用 uploadPrimary/uploadDetail, 无"先删除"逻辑
+        //     - 用户预期: 替换同 slot 图片直接上传, 旧 S3 文件自动清理
+        //   安全性: DB 唯一约束 (uq_product_images_primary / uq_product_images_detail_slot) 仍保留
+        //     - 覆盖上传时 old.OemNo3 == oemNo3 (主图) / old.ProductId+Slot == product.Id+slot (详情图)
+        //     - 更新旧记录不触发 23505 (同主键更新, 非新增)
+        //     - 若并发竞态 (两个请求同时上传同 slot), 第二个会撞 23505 → ProblemDetailsFactory 映射为 409 ERR_DB_CONFLICT
+        //   errorCode 保留: IMAGE_PRIMARY_DUPLICATE / IMAGE_DETAIL_SLOT_DUPLICATE 仍定义在 ProblemDetailsFactory
+        //     和前端 http.ts, 仅供 DB 23505 兜底场景使用 (不再由软校验主动抛出)
 
         // 覆盖上传: 查旧记录 (主图按 oem_no_3, 详情图按 product_id + slot)
         ProductImage? old;
