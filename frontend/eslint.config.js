@@ -64,6 +64,11 @@ export default tseslint.config(
       'no-unreachable': 'error',
       'no-eval': 'error',
       'vue/no-v-html': 'warn',
+      // V24-F69 (spec 26.15.7 建议 3): 显式声明 v-for key 规则
+      //   WHY: vue/flat/recommended 已隐式启用为 error, 但显式声明防止未来 eslint/plugin-vue
+      //        版本升级或配置调整导致规则被意外关闭
+      //   所有 v-for 已有 :key (多行属性写法), 此规则为防御性配置
+      'vue/require-v-for-key': 'error',
       // Vue 模板规则
       'vue/multi-word-component-names': 'off',  // 允许单字组件名 (Login, Search)
       'vue/require-default-prop': 'off',  // 配合 withDefaults 即可

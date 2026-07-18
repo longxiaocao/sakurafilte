@@ -89,9 +89,21 @@ jobs:
       #        添加此步骤后, 每次 push/PR 自动运行 400+ 单元测试, 防止回归合入 master
       #   --no-build: 上一步已 build, 避免重复编译
       #   continue-on-error: false: 单元测试失败即阻塞合并 (CI 红线)
+      # V24-F70 (spec 26.15.7 建议 2): 添加覆盖率收集 (XPlat Code Coverage)
+      #   --collect:"XPlat Code Coverage": 生成 cobertura 覆盖率报告 (在 TestResults/*/coverage.cobertura.xml)
+      #   后续可用 reportgenerator 合并 + 阈值门禁, 当前仅收集不做门禁
       - name: Run backend unit tests
         working-directory: backend
-        run: dotnet test tests/SakuraFilter.Api.Tests/SakuraFilter.Api.Tests.csproj --no-build -c Release --logger "trx;LogFileName=test-results.trx"
+        run: dotnet test tests/SakuraFilter.Api.Tests/SakuraFilter.Api.Tests.csproj --no-build -c Release --logger "trx;LogFileName=test-results.trx" --collect:"XPlat Code Coverage"
+
+      # V24-F70: 上传后端覆盖率报告 (供 reportgenerator 合并/Codecov 上传, 当前仅归档)
+      - name: Upload backend coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage
+          path: backend/tests/SakuraFilter.Api.Tests/TestResults/*/coverage.cobertura.xml
+          if-no-files-found: ignore
 
       # P2-7.1: EF Core 迁移冲突检测 — 验证 idempotent SQL 可生成 + 一次性 SQL 脚本头注释完整
       #   WHY: EF 迁移链与 backend/migrations/*.sql 共存, 迁移语法错误/手动脚本误标会导致生产启动失败
