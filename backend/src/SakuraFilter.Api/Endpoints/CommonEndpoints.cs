@@ -15,7 +15,14 @@ public static class CommonEndpoints
 {
     public static IEndpointRouteBuilder MapCommonEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapGet("/", () => Results.Ok(new { name = "SakuraFilter API", version = "0.3.0", status = "running" }));
+        // V24-F25 (spec Task 0.7.5.1): 移除根路由 "/", 改为 "/api/info" (修复 F1)
+        //   WHY: 根路由 "/" 返回 JSON 会与前端 index.html 冲突
+        //        - 生产环境: nginx try_files 优先静态文件, 后端 "/" 不应被访问
+        //        - 开发环境: 直接访问后端 "/" 返回 JSON, 误导开发者以为后端是前端入口
+        //   spec 验证: curl -I http://localhost/ 返回 Content-Type: text/html (非 JSON, 由 nginx 提供 index.html)
+        //   注: Task 0.7.5.2 (nginx try_files 配置) 不在代码修改范围, 需运维同步调整
+        app.MapGet("/api/info", () => Results.Ok(new { name = "SakuraFilter API", version = "0.3.0", status = "running" }))
+            .WithSummary("API 元信息 (名称/版本/状态)").WithName("ApiInfo");
         app.MapMetrics("/metrics")
             .WithSummary("Prometheus 兼容 /metrics 端点 (含 HTTP + 业务 + 进程指标)").WithName("Metrics")
             .WithOpenApi();
