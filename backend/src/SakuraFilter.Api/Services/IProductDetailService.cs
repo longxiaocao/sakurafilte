@@ -200,7 +200,7 @@ public class ProductDetailService : IProductDetailService
     {
         // V2 Task 4.5.13: /products/{pn1Slug}-{mr1Suffix6}/{pn2Slug}/{brandSlug}/{oem3Slug}
         //   mr1Suffix6: mr1 末 6 位, 防多产品同 pn1/pn2/brand/oem3 时 slug 冲突
-        //   全部小写 (BuildSlug 内已小写, 此处再 ToLowerInvariant 兜底)
+        //   pn1/pn2/brand 段走 BuildSlug 小写化 (SEO 友好, 不参与 DB 反查)
         var pn1Slug = BuildSlug(p.ProductName1);
         var pn2Slug = BuildSlug(p.ProductName2);
         // brand: 取第一个 crossReference 的 OemBrand (V2 OEM 3 主图命名同口径)
@@ -209,10 +209,19 @@ public class ProductDetailService : IProductDetailService
         // oem3: 取 OemNoDisplay (兼容老 OEM) 或第一个 crossReference 的 OemNo3
         var oem3 = !string.IsNullOrEmpty(p.OemNoDisplay) ? p.OemNoDisplay
                   : (p.CrossReferences?.FirstOrDefault()?.OemNo3 ?? p.Mr1 ?? "");
-        var oem3Slug = BuildSlug(oem3);
-        // mr1 末 6 位 (Task 4.5.13 防冲突)
-        var mr1Suffix = (p.Mr1?.Length ?? 0) > 6 ? p.Mr1![^6..] : (p.Mr1 ?? "nomr1");
+        // V24-F42 (spec F5-1): oem3 段保留大小写, 不走 BuildSlug
+        //   WHY: 后端 GetByOemAsync 用 == 大小写敏感查询 (p.OemNoDisplay == oem),
+        //        BuildSlug 会 ToLowerInvariant 小写化, 若 DB 中 OEM 含大写字母 (如 "F0001"),
+        //        URL 输出 "f0001", 反查 p.OemNoDisplay == "f0001" 失败 → 404
+        //   修复: oem3 段仅 URL 编码 (Uri.EscapeDataString), 保留原值大小写,
+        //        后端 GetByOemAsync 用 Uri.UnescapeDataString 解码后精确匹配
+        //   注: oem3 是 OEM 编号 (数字+字母), 通常不含空格/下划线, 无需 BuildSlug 折叠
+        var oem3Slug = string.IsNullOrEmpty(oem3) ? "untitled" : Uri.EscapeDataString(oem3);
+        // mr1 末 6 位 (Task 4.5.13 防冲突, 仅用于 URL 唯一性, 不参与 DB 反查, 可小写化)
+        var mr1Suffix = (p.Mr1?.Length ?? 0) > 6 ? p.Mr1![^6..].ToLowerInvariant() : (p.Mr1 ?? "nomr1");
 
-        return $"/products/{pn1Slug}-{mr1Suffix}/{pn2Slug}/{brandSlug}/{oem3Slug}".ToLowerInvariant();
+        // V24-F42: 不再整体 ToLowerInvariant (oem3Slug 已保留大小写)
+        //   pn1Slug/pn2Slug/brandSlug/mr1Suffix 已各自小写化, 仅 oem3Slug 保留原值
+        return $"/products/{pn1Slug}-{mr1Suffix}/{pn2Slug}/{brandSlug}/{oem3Slug}";
     }
 }

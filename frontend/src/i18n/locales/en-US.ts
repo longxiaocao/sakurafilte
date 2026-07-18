@@ -1047,6 +1047,38 @@ export default {
     dictviewcommon: {
       total_drag: 'Total {total} (Active {active}, Soft-deleted {soft}) · Drag to Sort',
     },
+    // V24-F43 (spec Task 0.5.6/F3-4): backend errorCode → English friendly message mapping
+    //   WHY: http.ts interceptor fallback chain i18n.global.t('common.error.' + errorCode) looks up this table
+    //   Unmatched errorCode falls back to ERROR_CODE_MAP[status] → data.title → Request failed (status)
+    error: {
+      // ===== Legacy ERR_ prefix error codes (10) =====
+      ERR_VALIDATION_FAILED: 'Request validation failed',
+      ERR_NOT_FOUND: 'Requested resource not found',
+      ERR_CONFLICT: 'Resource already exists or conflict',
+      ERR_FORBIDDEN: 'No permission to perform this operation',
+      ERR_CANCELLED: 'Request cancelled',
+      ERR_INTERNAL: 'Internal server error, please retry later',
+      ERR_DB_CONFLICT: 'Data conflict (possibly modified by another user), please refresh and retry',
+      ERR_DB_CONSTRAINT: 'Data constraint failed (foreign key or not-null violation)',
+      ERR_DB_TIMEOUT: 'Database busy, please retry later',
+      ERR_AUTH_FAILED: 'Invalid username or password',
+      // ===== V2 error codes (15, no ERR_ prefix) =====
+      MR1_REQUIRED: 'MR.1 number is required',
+      MR1_FORMAT_INVALID: 'MR.1 number format is invalid',
+      MR1_ALREADY_EXISTS: 'MR.1 number already exists',
+      OEM3_ALREADY_EXISTS: 'OEM 3 number already exists',
+      MACHINE_TYPE_INVALID: 'Machine type is invalid',
+      XREF_CONFLICT: 'Cross-reference conflict (possibly modified by another user), please refresh and retry',
+      SEARCH_PAGE_TOO_DEEP: 'Search page too deep, please search again',
+      CURSOR_INVALID: 'Pagination cursor invalid, reset to page 1',
+      CURSOR_EXPIRED: 'Pagination cursor expired, reset to page 1',
+      IMAGE_ROLE_SLOT_MISMATCH: 'Image role and slot mismatch',
+      IMAGE_DETAIL_SLOT_INVALID: 'Image detail slot invalid (must be 1-6)',
+      IMAGE_PRIMARY_DUPLICATE: 'Primary image already exists (only 1 primary image per product)',
+      IMAGE_DETAIL_SLOT_DUPLICATE: 'Image detail slot duplicate',
+      MR1_NOT_FOUND: 'MR.1 number not found',
+      OEM3_NOT_FOUND: 'OEM 3 number not found',
+    },
   },
   nav: {
     productSearch: 'Product Search',

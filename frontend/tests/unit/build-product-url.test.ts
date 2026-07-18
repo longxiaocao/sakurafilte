@@ -9,6 +9,7 @@
  *   - oemNoDisplay 降级路径 (走 301 重定向)
  *   - oem3 缺失时降级到 mr1
  *   - 空字段降级 ("untitled" / "nomr1")
+ *   - V24-F42 (spec F5-1): oem3 段保留大小写, 其他段小写化
  *
  * WHY 纯函数测试: buildProductUrl 是 V2 SEO URL 的核心逻辑
  *   - 前后端必须一致 (后端 IProductDetailService.BuildProductUrl 同口径)
@@ -27,8 +28,8 @@ describe('buildProductUrl', () => {
       oemNo3: 'F0001',
       mr1: 'MR000001'
     })
-    // mr1 8 位 → 末 6 位 = "MR000001" 的 slice(-6) = "000001"
-    expect(url).toBe('/products/air-filter-000001/premium/bosch/f0001')
+    // V24-F42: oem3 段保留大小写 (F0001), mr1 末 6 位 '000001' 小写化
+    expect(url).toBe('/products/air-filter-000001/premium/bosch/F0001')
   })
 
   it('mr1 超过 6 位时取末 6 位防 slug 冲突', () => {
@@ -38,9 +39,9 @@ describe('buildProductUrl', () => {
       productName2: 'Premium',
       oemBrand: 'BOSCH',
       oemNo3: 'F0001',
-      mr1: 'ABCDEFGHIJ' // 10 位 → 末 6 位 = "EFGHIJ"
+      mr1: 'ABCDEFGHIJ' // 10 位 → 末 6 位 = "EFGHIJ" → 小写化 "efghij"
     })
-    expect(url).toBe('/products/air-filter-efghij/premium/bosch/f0001')
+    expect(url).toBe('/products/air-filter-efghij/premium/bosch/F0001')
   })
 
   it('mr1 正好 6 位时直接使用不截断', () => {
@@ -49,9 +50,9 @@ describe('buildProductUrl', () => {
       productName2: 'Standard',
       oemBrand: 'MANN',
       oemNo3: 'W7001',
-      mr1: 'ABCDEF' // 6 位 → 直接用
+      mr1: 'ABCDEF' // 6 位 → 直接用, 小写化 "abcdef"
     })
-    expect(url).toBe('/products/oil-filter-abcdef/standard/mann/w7001')
+    expect(url).toBe('/products/oil-filter-abcdef/standard/mann/W7001')
   })
 
   // ===== slug 化规则 =====
@@ -63,7 +64,8 @@ describe('buildProductUrl', () => {
       oemNo3: 'F0001',
       mr1: 'MR000001'
     })
-    expect(url).toBe('/products/air-filter-pro-x-000001/cabin-type-filter/wix-filters/f0001')
+    // V24-F42: oem3 段保留大小写 (F0001)
+    expect(url).toBe('/products/air-filter-pro-x-000001/cabin-type-filter/wix-filters/F0001')
   })
 
   it('slug 首尾 - 截断', () => {
@@ -74,7 +76,7 @@ describe('buildProductUrl', () => {
       oemNo3: 'F0001',
       mr1: 'MR000001'
     })
-    expect(url).toBe('/products/air-filter-000001/premium/bosch/f0001')
+    expect(url).toBe('/products/air-filter-000001/premium/bosch/F0001')
   })
 
   it('非 ASCII 字符 (含中文) 用 encodeURIComponent 编码', () => {
@@ -85,10 +87,13 @@ describe('buildProductUrl', () => {
       oemNo3: 'F0001',
       mr1: 'MR000001'
     })
-    // encodeURIComponent('机油滤清器') = %E6%9C%BA%E6%B2%B9%E6%BB%A4%E6%B8%85%E5%99%A8
-    expect(url).toBe('/products/%e6%9c%ba%e6%b2%b9%e6%bb%a4%e6%b8%85%e5%99%a8-000001/premium/bosch/f0001')
-    // URL 必须小写 (与后端 BuildProductUrl 一致)
-    expect(url).toBe(url.toLowerCase())
+    // V24-F42: pn1 段 encodeURIComponent 输出大写 %XX (不再整体 toLowerCase)
+    //   encodeURIComponent('机油滤清器') = %E6%9C%BA%E6%B2%B9%E6%BB%A4%E6%B8%85%E5%99%A8
+    //   oem3 段保留大小写 (F0001)
+    expect(url).toBe('/products/%E6%9C%BA%E6%B2%B9%E6%BB%A4%E6%B8%85%E5%99%A8-000001/premium/bosch/F0001')
+    // V24-F42: 不再断言 url === url.toLowerCase() (oem3 段保留大小写)
+    //   改为断言 oem3 段保留原值 (F0001 而非 f0001)
+    expect(url).toContain('/F0001')
   })
 
   // ===== 空字段降级 =====
@@ -100,7 +105,7 @@ describe('buildProductUrl', () => {
       oemNo3: 'F0001',
       mr1: 'MR000001'
     })
-    expect(url).toBe('/products/untitled-000001/premium/bosch/f0001')
+    expect(url).toBe('/products/untitled-000001/premium/bosch/F0001')
   })
 
   it('pn2 缺失时降级为 "untitled"', () => {
@@ -111,7 +116,7 @@ describe('buildProductUrl', () => {
       oemNo3: 'F0001',
       mr1: 'MR000001'
     })
-    expect(url).toBe('/products/air-filter-000001/untitled/bosch/f0001')
+    expect(url).toBe('/products/air-filter-000001/untitled/bosch/F0001')
   })
 
   it('brand 缺失时降级为 "untitled"', () => {
@@ -122,7 +127,7 @@ describe('buildProductUrl', () => {
       oemNo3: 'F0001',
       mr1: 'MR000001'
     })
-    expect(url).toBe('/products/air-filter-000001/premium/untitled/f0001')
+    expect(url).toBe('/products/air-filter-000001/premium/untitled/F0001')
   })
 
   it('mr1 缺失时 mr1Suffix 降级为 "nomr1"', () => {
@@ -133,7 +138,7 @@ describe('buildProductUrl', () => {
       oemNo3: 'F0001',
       mr1: null
     })
-    expect(url).toBe('/products/air-filter-nomr1/premium/bosch/f0001')
+    expect(url).toBe('/products/air-filter-nomr1/premium/bosch/F0001')
   })
 
   it('oemNo3 缺失时降级用 oemNoDisplay', () => {
@@ -145,7 +150,9 @@ describe('buildProductUrl', () => {
       oemNoDisplay: 'DISPLAY-001',
       mr1: 'MR000001'
     })
-    expect(url).toBe('/products/air-filter-000001/premium/bosch/display-001')
+    // V24-F42: oem3 段保留大小写 (DISPLAY-001), 不再小写化为 display-001
+    //   encodeURIComponent('DISPLAY-001') = 'DISPLAY-001' (- 是合法 URL 字符, 不编码)
+    expect(url).toBe('/products/air-filter-000001/premium/bosch/DISPLAY-001')
   })
 
   it('oemNo3 和 oemNoDisplay 都缺失时降级用 mr1', () => {
@@ -157,8 +164,9 @@ describe('buildProductUrl', () => {
       oemNoDisplay: null,
       mr1: 'MR000001'
     })
-    // oem3 段降级为 mr1
-    expect(url).toBe('/products/air-filter-000001/premium/bosch/mr000001')
+    // V24-F42: oem3 段降级为 mr1, 保留大小写 (MR000001)
+    //   mr1Suffix 末 6 位 '000001' 小写化 (仅防冲突, 不参与反查)
+    expect(url).toBe('/products/air-filter-000001/premium/bosch/MR000001')
   })
 
   // ===== oemNoDisplay 降级路径 (走 301) =====
@@ -183,7 +191,7 @@ describe('buildProductUrl', () => {
     expect(url).toBe('/products/untitled-nomr1/untitled/untitled/untitled')
   })
 
-  it('URL 全小写 (与后端 BuildProductUrl 一致)', () => {
+  it('V24-F42: oem3 段保留大小写, 其他段小写化 (与后端 BuildProductUrl 一致)', () => {
     const url = buildProductUrl({
       productName1: 'AIR FILTER',
       productName2: 'PREMIUM',
@@ -191,9 +199,16 @@ describe('buildProductUrl', () => {
       oemNo3: 'F0001',
       mr1: 'MR000001'
     })
-    // 注意: encodeURIComponent 后的 %XX 不被 toLowerCase 影响 (已是大写)
-    //   但 slug 化本身已转小写, 所以最终 URL 全小写
-    expect(url).toBe(url.toLowerCase())
-    expect(url).toBe('/products/air-filter-000001/premium/bosch/f0001')
+    // V24-F42 (spec F5-1): oem3 段保留原值大小写 (F0001), 其他段小写化
+    //   WHY: 后端 GetByOemAsync 用 === 大小写敏感查询, oem3 段必须保留原值才能反查命中
+    //   pn1/pn2/brand 段走 buildSlug 小写化 (SEO 友好, 后端用 OrdinalIgnoreCase 二次校验)
+    //   mr1Suffix 末 6 位小写化 (仅防冲突, 不参与反查)
+    expect(url).toBe('/products/air-filter-000001/premium/bosch/F0001')
+    // oem3 段保留大小写
+    expect(url).toContain('/F0001')
+    // 其他段小写化
+    expect(url).toContain('/air-filter-')
+    expect(url).toContain('/premium/')
+    expect(url).toContain('/bosch/')
   })
 })

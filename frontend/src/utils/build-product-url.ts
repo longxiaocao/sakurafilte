@@ -52,8 +52,13 @@ function buildSlug(input: string | null | undefined): string {
  *   - brand 缺失 → "untitled" (与后端一致)
  *   - mr1Suffix: mr1 长度 > 6 取末 6 位, 否则取原值, 都缺失 → "nomr1"
  *
+ * V24-F42 (spec F5-1): oem3 段保留大小写, 不走 buildSlug
+ *   - 后端 GetByOemAsync 用 === 大小写敏感查询, BuildSlug 小写化会导致 OEM 含大写字母时反查失败
+ *   - oem3 段仅 encodeURIComponent (保留原值大小写), 后端 Uri.UnescapeDataString 解码后精确匹配
+ *   - 其他段 (pn1/pn2/brand/mr1Suffix) 仍小写化 (SEO 友好, 不参与 DB 反查)
+ *
  * @param product 产品字段对象
- * @returns SEO URL (小写)
+ * @returns SEO URL (oem3 段保留大小写, 其他段小写)
  */
 export function buildProductUrl(product: ProductUrlInput): string {
   // V2 Task 4.4: 若仅有 oemNoDisplay (无 pn1/pn2/brand), 降级走 /product/{oem} 触发后端 301
@@ -68,11 +73,14 @@ export function buildProductUrl(product: ProductUrlInput): string {
   const pn2Slug = buildSlug(product.productName2)
   const brandSlug = buildSlug(product.oemBrand)
   const oem3 = product.oemNo3 ?? product.oemNoDisplay ?? product.mr1 ?? ''
-  const oem3Slug = buildSlug(oem3)
+  // V24-F42 (spec F5-1): oem3 段保留大小写, 仅 URL 编码 (不走 buildSlug)
+  //   WHY: 后端 GetByOemAsync 用 === 大小写敏感查询, buildSlug 会 toLowerCase 导致反查失败
+  const oem3Slug = oem3 ? encodeURIComponent(oem3) : 'untitled'
 
-  // mr1 末 6 位 (与后端 BuildProductUrl 一致)
+  // mr1 末 6 位 (与后端 BuildProductUrl 一致, 仅用于 URL 唯一性, 可小写化)
   const mr1Val = product.mr1 ?? ''
-  const mr1Suffix = mr1Val.length > 6 ? mr1Val.slice(-6) : (mr1Val || 'nomr1')
+  const mr1Suffix = mr1Val.length > 6 ? mr1Val.slice(-6).toLowerCase() : (mr1Val.toLowerCase() || 'nomr1')
 
-  return `/products/${pn1Slug}-${mr1Suffix}/${pn2Slug}/${brandSlug}/${oem3Slug}`.toLowerCase()
+  // V24-F42: 不再整体 toLowerCase (oem3Slug 已保留大小写)
+  return `/products/${pn1Slug}-${mr1Suffix}/${pn2Slug}/${brandSlug}/${oem3Slug}`
 }

@@ -39,6 +39,11 @@ http.interceptors.request.use((cfg: InternalAxiosRequestConfig) => {
       cfg.headers.set(TOKEN_HEADER_LEGACY, auth.token)
     }
   }
+  // V24-F44 (spec F3-13 修复方案 4): 携带前端版本号, 后端可选择性路由到对应 API
+  //   WHY: 灰度发布期间, 旧前端版本调用旧 API, 新前端版本调用新 API
+  //   __API_VERSION__ 由 vite.config.ts define 注入 (package.json version)
+  //   后端可不读取此头 (向后兼容), 也可根据版本路由 (灰度发布)
+  cfg.headers.set('X-Client-Version', __API_VERSION__)
   return cfg
 })
 
@@ -62,6 +67,91 @@ export const ERROR_CODE_MAP: Record<number, string> = {
   409: '资源已存在 (冲突)',
   422: '请求参数验证失败',
   429: '请求过于频繁,请稍后重试'
+}
+
+// V24-F43 (spec Task 0.5.5/F3-4): errorCode → 中文友好提示 静态映射 (不依赖 i18n)
+//   WHY 静态映射: i18n locale 文件异步加载期间, t(key) 返回 key 本身, 需要静态兜底
+//   fallback 链: data.errorCode → ERROR_CODE_I18N[errorCode] → i18n.global.t('common.error.' + errorCode)
+//                → ERROR_CODE_MAP[status] → data.title → 请求失败 (status)
+//   与 zh-CN.ts common.error 保持同步 (此处为 i18n 未加载完成时的兜底)
+export const ERROR_CODE_I18N: Record<string, string> = {
+  // ===== 旧 ERR_ 前缀错误码 (10 个) =====
+  ERR_VALIDATION_FAILED: '请求参数验证失败',
+  ERR_NOT_FOUND: '请求的资源不存在',
+  ERR_CONFLICT: '资源已存在或冲突',
+  ERR_FORBIDDEN: '没有权限执行此操作',
+  ERR_CANCELLED: '请求已取消',
+  ERR_INTERNAL: '服务器内部错误,请稍后重试',
+  ERR_DB_CONFLICT: '数据冲突 (可能被其他用户修改),请刷新重试',
+  ERR_DB_CONSTRAINT: '数据约束失败 (外键或非空校验)',
+  ERR_DB_TIMEOUT: '数据库繁忙,请稍后重试',
+  ERR_AUTH_FAILED: '用户名或密码错误',
+  // ===== V2 错误码 (15 个,无 ERR_ 前缀) =====
+  MR1_REQUIRED: 'MR.1 编号必填',
+  MR1_FORMAT_INVALID: 'MR.1 编号格式无效',
+  MR1_ALREADY_EXISTS: 'MR.1 编号已存在',
+  OEM3_ALREADY_EXISTS: 'OEM 3 编号已存在',
+  MACHINE_TYPE_INVALID: '机型类型无效',
+  XREF_CONFLICT: '交叉引用冲突 (可能被其他用户修改),请刷新重试',
+  SEARCH_PAGE_TOO_DEEP: '搜索页数过深,请重新搜索',
+  CURSOR_INVALID: '分页游标无效,已重置到第 1 页',
+  CURSOR_EXPIRED: '分页游标已过期,已重置到第 1 页',
+  IMAGE_ROLE_SLOT_MISMATCH: '图片角色与槽位不匹配',
+  IMAGE_DETAIL_SLOT_INVALID: '图片详情槽位无效 (必须在 1-6 之间)',
+  IMAGE_PRIMARY_DUPLICATE: '主图已存在 (每个产品仅允许 1 张主图)',
+  IMAGE_DETAIL_SLOT_DUPLICATE: '图片详情槽位重复',
+  MR1_NOT_FOUND: 'MR.1 编号不存在',
+  OEM3_NOT_FOUND: 'OEM 3 编号不存在'
+}
+
+/**
+ * V24-F43 (spec F3-11): 安全 i18n 翻译
+ *   WHY: i18n locale 文件异步加载期间, t(key) 返回 key 本身, 需要 fallback
+ *   @param key i18n key (如 'common.error.ERR_AUTH_FAILED')
+ *   @param fallback i18n 未命中时的兜底文案 (空字符串表示无兜底, 调用方自行处理)
+ *   @returns 翻译后的文案; 未命中返回 fallback
+ */
+function safeT(key: string, fallback: string): string {
+  const msg = i18n.global.t(key)
+  return msg === key ? fallback : msg
+}
+
+/**
+ * V24-F43 (spec F3-4): 错误消息 fallback 链
+ *   优先级: data.errorCode → ERROR_CODE_I18N[errorCode] → i18n.global.t('common.error.' + errorCode)
+ *           → ERROR_CODE_MAP[status] → data.title → fallback
+ *   WHY fallback 链: 旧前端版本收到新错误码不会白屏, 至少有通用提示
+ *   @param errorCode 后端 ProblemDetails.extensions.errorCode
+ *   @param status HTTP 状态码
+ *   @param data ProblemDetails 响应体
+ *   @param fallback 最终兜底文案 (如 `请求失败 (${status})`)
+ *   @returns 友好的错误提示文案
+ */
+export function resolveErrorMessage(
+  errorCode: string | undefined,
+  status: number | undefined,
+  data: ProblemDetails | undefined,
+  fallback: string
+): string {
+  // 1. data.errorCode → ERROR_CODE_I18N 静态映射 (不依赖 i18n, 最快)
+  if (errorCode && ERROR_CODE_I18N[errorCode]) {
+    return ERROR_CODE_I18N[errorCode]
+  }
+  // 2. i18n.global.t('common.error.' + errorCode) (依赖 i18n 加载完成)
+  if (errorCode) {
+    const i18nMsg = safeT(`common.error.${errorCode}`, '')
+    if (i18nMsg) return i18nMsg
+  }
+  // 3. ERROR_CODE_MAP[status] (HTTP status 级别兜底)
+  if (status !== undefined && ERROR_CODE_MAP[status]) {
+    return ERROR_CODE_MAP[status]
+  }
+  // 4. data.title (ProblemDetails 业务可读标题, 不含堆栈)
+  if (data?.title) {
+    return data.title
+  }
+  // 5. 最终兜底
+  return fallback
 }
 
 // ===== 401 自动 refresh (防并发) =====
@@ -306,21 +396,22 @@ http.interceptors.response.use(
       ElMessage.warning(`请求频率超限, 请 ${retryAfter || 60}s 后重试`)
     } else if (status === 401) {
       // 401 但已重试过 / 是 auth 端点: 用业务可读提示
-      // 后端 ProblemDetails.errorCode 映射 (如 ERR_AUTH_FAILED)
-      // V24-F37: 复用顶层 errorCode 声明 (避免重复声明)
+      // V24-F43 (spec F3-4): 改用 resolveErrorMessage fallback 链
+      //   WHY: 统一错误提示逻辑, 避免散落判断; 旧前端版本收到新错误码也有兜底
+      //   特殊处理: ERR_AUTH_FAILED 走 common.feedback.error_029 (历史兼容, 登录页专用文案)
       if (errorCode === 'ERR_AUTH_FAILED') {
         ElMessage.error(i18n.global.t('common.feedback.error_029'))
-      } else if (isProblemDetails && data.title) {
-        ElMessage.error(data.title)
       } else {
-        ElMessage.error(ERROR_CODE_MAP[401])
+        // V24-F43: fallback 链: errorCode → ERROR_CODE_I18N → i18n → ERROR_CODE_MAP[401] → data.title → 请求失败 (401)
+        ElMessage.error(resolveErrorMessage(errorCode, status, isProblemDetails ? data : undefined, '请求失败 (401)'))
       }
-    } else if (ERROR_CODE_MAP[status]) {
-      ElMessage.error(ERROR_CODE_MAP[status])
-    } else if (isProblemDetails) {
-      // 其他 ProblemDetails 响应: 透传 title (业务可读, 不含堆栈)
-      ElMessage.error(data.title)
+    } else if (errorCode || ERROR_CODE_MAP[status] || isProblemDetails) {
+      // V24-F43 (spec F3-4): 统一 4xx 错误提示 (合并原 ERROR_CODE_MAP[status] + isProblemDetails + else 分支)
+      //   fallback 链: errorCode → ERROR_CODE_I18N → i18n → ERROR_CODE_MAP[status] → data.title → 请求失败 (status)
+      //   WHY 合并: 原 3 分支逻辑等价于 resolveErrorMessage, 合并后更清晰且支持新错误码自动兜底
+      ElMessage.error(resolveErrorMessage(errorCode, status, isProblemDetails ? data : undefined, `请求失败 (${status})`))
     } else {
+      // 非 ProblemDetails 响应 (如纯文本/空响应): 用 detail 或状态码兜底
       ElMessage.error(detail || `请求失败 (${status})`)
     }
 

@@ -1,6 +1,11 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import path from 'node:path'
+// V24-F44 (spec F3-13 修复方案 4): 读取 package.json 版本号作为 API 版本标识
+//   WHY import json: tsconfig.json 已开启 resolveJsonModule, Vite 默认支持 json import
+//   用途: define __API_VERSION__ 全局常量, http.ts 请求拦截器读取后写入 X-Client-Version 头
+//   后端可根据 X-Client-Version 路由到对应 API (灰度发布兼容, 旧前端走旧 API)
+import pkg from './package.json' with { type: 'json' }
 
 // Vite 配置
 //   - @ 别名: @/ -> src/
@@ -14,6 +19,12 @@ import path from 'node:path'
 //     - manualChunks: vue/vue-router/pinia 单独 chunk, 主 bundle 更小
 export default defineConfig({
   plugins: [vue()],
+  // V24-F44 (spec F3-13 修复方案 4): build flag 标记 API 版本
+  //   __API_VERSION__ 在构建时被替换为 package.json 的 version 字符串
+  //   http.ts 请求拦截器读取后写入 X-Client-Version 头, 后端可选择性路由
+  define: {
+    __API_VERSION__: JSON.stringify(pkg.version)
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src')

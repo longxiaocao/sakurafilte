@@ -1,5 +1,10 @@
 /// <reference types="vite/client" />
 
+// V24-F44 (spec F3-13 修复方案 4): build flag 标记 API 版本
+//   vite.config.ts define 注入, 构建时替换为 package.json version 字符串
+//   http.ts 请求拦截器读取后写入 X-Client-Version 头
+declare const __API_VERSION__: string
+
 interface ImportMetaEnv {
   readonly VITE_ERROR_REPORT_URL?: string
   readonly VITE_HOOK_CONSOLE_ERROR?: string

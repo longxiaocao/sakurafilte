@@ -1056,6 +1056,38 @@ export default {
     dictviewcommon: {
       total_drag: '共 {total} 条 (启用 {active}, 软删 {soft}) · 拖动以排序',
     },
+    // V24-F43 (spec Task 0.5.6/F3-4): 后端 errorCode → 中文友好提示映射
+    //   WHY: http.ts 拦截器 fallback 链 i18n.global.t('common.error.' + errorCode) 查找此表
+    //   未命中的 errorCode 回退到 ERROR_CODE_MAP[status] → data.title → 请求失败 (status)
+    error: {
+      // ===== 旧 ERR_ 前缀错误码 (10 个) =====
+      ERR_VALIDATION_FAILED: '请求参数验证失败',
+      ERR_NOT_FOUND: '请求的资源不存在',
+      ERR_CONFLICT: '资源已存在或冲突',
+      ERR_FORBIDDEN: '没有权限执行此操作',
+      ERR_CANCELLED: '请求已取消',
+      ERR_INTERNAL: '服务器内部错误,请稍后重试',
+      ERR_DB_CONFLICT: '数据冲突 (可能被其他用户修改),请刷新重试',
+      ERR_DB_CONSTRAINT: '数据约束失败 (外键或非空校验)',
+      ERR_DB_TIMEOUT: '数据库繁忙,请稍后重试',
+      ERR_AUTH_FAILED: '用户名或密码错误',
+      // ===== V2 错误码 (15 个,无 ERR_ 前缀) =====
+      MR1_REQUIRED: 'MR.1 编号必填',
+      MR1_FORMAT_INVALID: 'MR.1 编号格式无效',
+      MR1_ALREADY_EXISTS: 'MR.1 编号已存在',
+      OEM3_ALREADY_EXISTS: 'OEM 3 编号已存在',
+      MACHINE_TYPE_INVALID: '机型类型无效',
+      XREF_CONFLICT: '交叉引用冲突 (可能被其他用户修改),请刷新重试',
+      SEARCH_PAGE_TOO_DEEP: '搜索页数过深,请重新搜索',
+      CURSOR_INVALID: '分页游标无效,已重置到第 1 页',
+      CURSOR_EXPIRED: '分页游标已过期,已重置到第 1 页',
+      IMAGE_ROLE_SLOT_MISMATCH: '图片角色与槽位不匹配',
+      IMAGE_DETAIL_SLOT_INVALID: '图片详情槽位无效 (必须在 1-6 之间)',
+      IMAGE_PRIMARY_DUPLICATE: '主图已存在 (每个产品仅允许 1 张主图)',
+      IMAGE_DETAIL_SLOT_DUPLICATE: '图片详情槽位重复',
+      MR1_NOT_FOUND: 'MR.1 编号不存在',
+      OEM3_NOT_FOUND: 'OEM 3 编号不存在',
+    },
   },
   nav: {
     productSearch: '产品搜索',
