@@ -96,22 +96,8 @@ public class EtlAlertService : BackgroundService
     {
         using var scope = _sp.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ProductDbContext>();
-        foreach (var (key, value, desc) in Defaults)
-        {
-            var exists = await db.SystemSettings.AnyAsync(s => s.Key == key, ct);
-            if (!exists)
-            {
-                db.SystemSettings.Add(new Core.Entities.SystemSetting
-                {
-                    Key = key,
-                    Value = value,
-                    Description = desc,
-                    UpdatedAt = DateTime.UtcNow
-                });
-                _logger.LogInformation("插入 ETL 告警默认配置: {Key} = {Value}", key, value);
-            }
-        }
-        await db.SaveChangesAsync(ct);
+        // V24-F60: 批量预拉消除 N+1 (原 foreach 内 AnyAsync, N 条 Defaults 触发 N 次 SQL)
+        await DefaultSettingsEnsurer.EnsureAsync(db, Defaults, _logger, nameof(EtlAlertService), ct);
     }
 
     private async Task<int> RunOnceAsync(CancellationToken ct)
