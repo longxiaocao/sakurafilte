@@ -14556,5 +14556,81 @@ v25 本章作为 spec 治理基线,不再继续追加 v26/v27 章节。后续改
 | 一 (26.9) | V24-F54 | AppHeader.vue debounceTimer 副作用清理 | 244/244 单测 |
 | 二 (26.10) | V24-F55 | AdminProductService.CreateAsync N+1 修复 | 269/269 |
 
+## 26.11 v25 改进实施记录(自主决策批次三 — 测试治理)
+
+> 基于 26.9.5 评估清单中"测试覆盖盲区(30+ 服务类无测试)"项, 按"核心业务服务 > 基础设施"顺序推进。本轮补测 AdminProductImageService (352 行, S3 上传+事务, 之前无任何测试覆盖)。
+
+### 26.11.1 V24-F56: AdminProductImageService 单元测试(29 测试)
+
+**测试文件**: `backend/tests/SakuraFilter.Api.Tests/AdminProductImageServiceTests.cs` (新增)
+
+**测试范围**:
+
+| 方法 | 测试数 | 关键场景 |
+|---|---|---|
+| `BuildKeyAsync` | 7 | 主图/详情图分层 + system_settings 配置读取 + 路径穿越防御 + 缓存命中 + 非法配置回退 |
+| `UploadAsync` (校验链) | 8 | imageRole/slot 一致性 + mr_1 存在 + oemNo3 归属 + 大小 + 类型 + 重复软校验 |
+| `UploadAsync` (业务流程) | 4 | 新主图/详情图写入 + 主图同步 products.image_key + S3 失败回滚 |
+| `DeleteAsync` | 5 | slot 校验 + mr_1 存在 + 主图清 products.image_key + 详情图仅删记录 + slot 不存在 |
+| `ListAsync` | 4 | mr_1 存在 + 排序 (image_role 字母序 + slot) + 空列表 + GetUrl 异常降级 |
+| **合计** | **29** | - |
+
+**测试技术**:
+- EF Core InMemory + `TestProductDbContext` 子类 (复用 V24-F52 模式, Ignore AlertRule/AlertHistory/SecurityEvent 的 JsonDocument 实体)
+- `ConfigureWarnings.Ignore(InMemoryEventId.TransactionIgnoredWarning)` 忽略 InMemory 不支持事务的警告
+- Moq `IObjectStorage` Mock S3 上传/删除/GetUrl
+- `IMemoryCache` 真实实例 (验证缓存命中行为)
+
+### 26.11.2 补测过程中发现生产代码 bug (记录待后续修复)
+
+**Bug**: [AdminProductImageService.cs](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Services/AdminProductImageService.cs#L171-L193) UploadAsync 的"覆盖上传"逻辑为死代码。
+
+**详情**:
+- L173-186: 唯一约束软校验, 若同 slot 已有记录 → 抛 `IMAGE_DETAIL_SLOT_DUPLICATE` / `IMAGE_PRIMARY_DUPLICATE`
+- L188-193: 覆盖上传逻辑, 查旧记录 → 更新 (而非新增)
+- **矛盾**: 软校验先抛异常, 覆盖上传逻辑永远不会触发
+
+**设计意图 (来自 spike-test/output/SPIKE-REPORT-day8.1.md L30/115/217)**:
+- "覆盖上传 key 稳定 = products/{oem_norm}/{oem_norm}-{slot}.{ext} 避免废弃对象"
+- 设计预期是支持覆盖上传, 但实际实现是拒绝重复
+
+**影响**:
+- 用户想替换同 slot 图片时, 必须先调用 `DeleteAsync` 删除旧记录, 再 `UploadAsync` 上传新图
+- 若直接 `UploadAsync` 会得到 `IMAGE_DETAIL_SLOT_DUPLICATE` 错误, 与用户预期不符
+- 旧 S3 文件不会被自动删除 (因为覆盖逻辑未触发), 长期累积孤儿图片 (与 Task 5.1.20 相关)
+
+**未立即修复原因**:
+- 修复需调整业务行为 (从拒绝重复 → 覆盖上传), 影响前端调用流程
+- 需确认 spec 中其他章节是否依赖当前"拒绝重复"行为
+- 应作为独立 Task 评估, 而非在补测过程中顺手修改
+
+**建议处理**: 在 spec v26 修订时新增 Task (如 Task 5.1.28) 处理此 bug, 评估是否切换为覆盖上传语义。
+
+### 26.11.3 验证结果
+
+| 项目 | 命令 | 结果 |
+|---|---|---|
+| 后端编译 | `dotnet build backend/SakuraFilter.sln --no-incremental` | ✅ 0 warning 0 error |
+| 后端测试 | `dotnet test backend/SakuraFilter.sln` | ✅ 298/298 通过 (37 Etl + 261 Api) |
+
+注: Api 测试从 232 → 261 (+29 个 AdminProductImageService 测试)。
+
+### 26.11.4 v25 改进批次三文件清单
+
+| 类型 | 路径 | 修改摘要 |
+|---|---|---|
+| 测试 | `backend/tests/SakuraFilter.Api.Tests/AdminProductImageServiceTests.cs` | 新增 29 个单元测试 (BuildKeyAsync 7 + UploadAsync 12 + DeleteAsync 5 + ListAsync 4 + S3 失败回滚 1) |
+| spec | `.trae/specs/v2-architecture-migration/spec.md` | 追加 26.11 改进实施记录(本节) |
+
+### 26.11.5 v25 改进批次总结(累计)
+
+| 批次 | 编号 | 改动 | 验证 |
+|---|---|---|---|
+| 一 (26.9) | V24-F53 | AlertCenter Console.WriteLine → _logger.LogWarning | 269/269 |
+| 一 (26.9) | V24-F54 | AppHeader.vue debounceTimer 副作用清理 | 244/244 单测 |
+| 二 (26.10) | V24-F55 | AdminProductService.CreateAsync N+1 修复 | 269/269 |
+| 三 (26.11) | V24-F56 | AdminProductImageService 29 单元测试 | 298/298 |
+
+
 
 
