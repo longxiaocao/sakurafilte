@@ -94,11 +94,21 @@ public class IndexReplayWorker : BackgroundService
         }
 
         // 1) 取到期的待重试条目 (最多 BatchSize=500 条,避免长事务)
+        // V24-F27 (spec Task 5.1.22): FOR UPDATE SKIP LOCKED 防多实例重复处理
+        //   WHY: 多实例 IndexReplayWorker 并发时, SKIP LOCKED 让每个实例拉取不同行, 避免重复处理
+        //   注1: V24-F26-2 的 advisory lock 7740005 已让 IndexReplayWorker 之间互斥,
+        //        FOR UPDATE SKIP LOCKED 在单实例下无实际效果, 但满足 spec 验证项, 为未来多实例做准备
+        //   注2: spec 假设表有 mr_1/action 字段, 实际表用 Id/Operation/Payload (表结构不符, 按实际查询)
+        //   注3: spec 要求 pg_advisory_xact_lock(mr1_hash) 防跨实例重复, 已被 advisory lock 7740005 覆盖
+        //   注4: spec 要求 retry_count > 3 标记 is_dead, 实际无 is_dead 字段, 保留现有 retry_count >= 5 转死信队列
         var now = DateTime.UtcNow;
         var pending = await db.SearchIndexPending
-            .Where(p => p.NextRetryAt <= now && p.RetryCount < MaxRetryCount)
-            .OrderBy(p => p.NextRetryAt)
-            .Take(BatchSize)
+            .FromSqlRaw(@"
+                SELECT * FROM search_index_pending
+                WHERE next_retry_at <= {0} AND retry_count < {1}
+                ORDER BY next_retry_at
+                LIMIT {2}
+                FOR UPDATE SKIP LOCKED", now, MaxRetryCount, BatchSize)
             .ToListAsync(ct);
 
         if (pending.Count == 0)
