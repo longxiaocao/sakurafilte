@@ -2375,6 +2375,7 @@ public class MeiliSearchProvider
 
 - **漏洞**: D3-23 修复只提 OSS bucket,MinIO→OSS 迁移期间双存储共存,TRUNCATE 后只清理 OSS 孤儿,MinIO 中的孤儿文件不会被清理。
 - **修复方案**: CleanupOrphanImagesAsync 通过 `IObjectStorage` 抽象遍历所有已配置存储后端;spec 明确 "扫描所有 IObjectStorage 实现(MinIO + OSS + 任何已注册后端)";迁移完成后单独跑 MinIO 清理脚本。
+  - **⚠️ v25 状态(2026-07-18)**: 方案已变更。不扩展 IObjectStorage 公共接口,改由 CleanupOrphanImagesService 内部持有 IEnumerable<IObjectStorage>。Task 5.1.20 暂缓实施时此修复方案同步暂缓。详见第二十六章 v25 26.3.2 + 26.4.1。
 
 **D4-16: CleanupOrphanImagesAsync 扫描与删除之间存在竞态,新上传图被误删 [中]**
 
@@ -3117,6 +3118,8 @@ public static string BuildProductUrl(Product p, CrossReference x)
 2. 时间戳统一用 UTC: `uploaded_at < DateTime.UtcNow.AddHours(-1)` + 数据库列类型统一 `timestamptz`
 3. 单次清理失败的存储后端记录到 `cleanup_failures` 表 (id/storage_backend/last_failure_at/retry_count),下次清理优先重试
 4. 单元测试: `CleanupOrphanImages_PartialFailure_Continues` + `CleanupOrphanImages_UtcTimezone`
+
+> **⚠️ v25 状态(2026-07-18)**: 方案已变更。不扩展 IObjectStorage 公共接口,改由 CleanupOrphanImagesService 内部持有 IEnumerable<IObjectStorage>。Task 5.1.20 暂缓实施时此修复方案同步暂缓。详见第二十六章 v25 26.3.2 + 26.4.1。
 
 #### D5-5 [中] LoadExistingOemMapAsync 双 key fallback 的关联冲突
 **问题**: v5 规定 LoadExistingOemMapAsync 同时返回 mr_1 map 和 oem_2 map,mr_1 缺失时 fallback 到 oem_2。但如果同一条 xlsx 记录的 oem_2 在数据库中关联到多个不同的 mr_1 (历史数据 oem_2 重复),fallback 会随机选择其中一个,导致 MR.1 错误关联。
@@ -5650,6 +5653,8 @@ const string resetStuckSql = @"
 
 ### D7-11 [中] CleanupOrphanImagesService 10万+文件 OOM
 
+> **⚠️ v25 状态(2026-07-18)**: 方案已变更。不扩展 IObjectStorage 公共接口(避免污染所有消费方),改由 CleanupOrphanImagesService 内部持有 IEnumerable<IObjectStorage>。Task 5.1.20 暂缓实施时此修复方案同步暂缓。详见第二十六章 v25 26.3.2 + 26.4.1。
+
 **问题**: ListAllAsync 返回全量列表可能 OOM。
 **修复方案**: 分页迭代 + 流式处理:
 ```csharp
@@ -6123,6 +6128,8 @@ window.addEventListener('unhandledrejection', (e) => {
 ## 八、v8 前置任务清单(Pre-Task-V8-1 ~ Pre-Task-V8-8)
 
 > 这些前置任务必须在 v8 主任务执行前完成,确保依赖项就绪。
+>
+> **⚠️ v25 状态评估(2026-07-18)**: 详见第二十六章 v25。8 项前置任务中 3 项已实施(V8-3/4-部分/5/6),5 项未实施(V8-1/2/4-完整版/7/8)。其中 V8-1/V8-2 因 Task 5.1.20 暂缓而无需立即实施(详见 v25 26.4.1),V8-7 spec 已标注"可选,延后执行"。**当前阻塞 v8 主任务的硬性前置任务为 0 项**。
 
 ### Pre-Task-V8-1: 创建 cleanup_failures 表 + CleanupFailure 实体
 - 文件:
@@ -6132,6 +6139,7 @@ window.addEventListener('unhandledrejection', (e) => {
 - DDL: 见 E11
 - 实体字段: Id/FileKey/Backend/FailureType/ErrorMessage/RetryCount/Status/LastAttemptAt/NextRetryAt/CreatedAt/UpdatedAt
 - 验证: `dotnet ef migrations has-pending-model-changes` 无 diff
+- **⚠️ v25 状态**: ❌ 未实施。Task 5.1.20 暂缓后此任务无阻塞对象,可延后到 Task 5.1.20 实施前再创建。
 
 ### Pre-Task-V8-2: 扩展 IObjectStorage 接口
 - 文件:
@@ -6142,6 +6150,7 @@ window.addEventListener('unhandledrejection', (e) => {
 - MinIO 实现: ListObjectsAsync 迭代 + DeleteObjectsAsync 批量
 - Aliyun OSS 实现: ListObjectsV2 迭代 + DeleteObjects 批量
 - 验证: 单元测试 `MinioStorage_ListAll_Pagination` + `DeleteBatch_Idempotent` 通过
+- **⚠️ v25 状态**: ❌ 未实施。**方案已变更**(详见 v25 26.3.2):不扩展公共接口,改由 CleanupOrphanImagesService 内部持有 IEnumerable<IObjectStorage>。此 Pre-Task 标注为"方案变更,原任务废弃"。
 
 ### Pre-Task-V8-3: SEO 多段 URL 独立路由(可选,低优先级)
 - 文件:
@@ -6150,33 +6159,39 @@ window.addEventListener('unhandledrejection', (e) => {
 - 新增路由: `/products/:pn1/:pn2/:brand/:mr1Suffix` (与现有 /product/:oem 并存)
 - 不破坏现有契约
 - 验证: 现有 /product/:oem 路由仍可访问
+- **✅ v25 状态**: 已实施。`/products/:pn1/:pn2/:brand/:oem3` 路由存在于 `frontend/src/router/index.ts` L58。旧 `/product/:oem` 已移除,由后端 PublicProductController.LegacyRedirect 301 处理(spec F1 修复)。
 
 ### Pre-Task-V8-4: 创建 frontend/src/utils/url.ts
 - 文件: `frontend/src/utils/url.ts` (新建)
 - 导出: buildProductUrl / getProductSlugFromRoute / isSafeRedirect
 - 实现: 见 E19
 - 验证: 单元测试 `isSafeRedirect_RejectsExternalUrl` + `buildProductUrl_EncodesSpecialChars` 通过
+- **⚠️ v25 状态**: 部分实施(拆分为 2 个文件)。`buildProductUrl` 在 `frontend/src/utils/build-product-url.ts`(V24-F42 已修复 oem3 大小写),`isSafeRedirect` 在 `frontend/src/utils/security.ts`(V17 已实施)。原 spec 要求的单一 `url.ts` 拆分为 2 个职责更清晰的文件,符合单一职责原则。`getProductSlugFromRoute` 未实施(无调用方需求)。
 
 ### Pre-Task-V8-5: 创建 frontend/src/utils/safeStorage.ts
 - 文件: `frontend/src/utils/safeStorage.ts` (新建)
 - 导出: safeLocalStorage / safeSessionStorage
 - 实现: 见 E19
 - 验证: 单元测试 `safeLocalStorage_HandlesQuotaExceeded` 通过
+- **✅ v25 状态**: 已实施(V24-F31)。函数式 API(safeGetItem/safeSetItem/safeRemoveItem),Safari 隐私模式降级到 memoryStore。
 
 ### Pre-Task-V8-6: 创建 Mr1Validator 静态工具
 - 文件: `backend/src/SakuraFilter.Core/Validation/Mr1Validator.cs` (新建)
 - 实现: 见 E23
 - 验证: 单元测试 `Mr1Validator_ValidChk` + `InvalidLength` + `InvalidCharset` + `InvalidChk` 通过
+- **✅ v25 状态**: 已实施。`backend/src/SakuraFilter.Core/Validation/Mr1Validator.cs` 存在,Mr1ValidatorTests.cs 单元测试已通过。
 
 ### Pre-Task-V8-7: 升级 Meilisearch SDK 到 1.6+(可选,延后执行)
 - 文件: `backend/src/SakuraFilter.Search/SakuraFilter.Search.csproj` (修改)
 - 风险: API 签名变更可能影响 MeiliSearchProvider 全部方法
 - v8 不强制执行,列入 v9 评估
+- **⚠️ v25 状态**: ❌ 未实施。当前仍 `MeiliSearch 0.15.4`。spec 已标注"可选,延后执行",非阻塞。v26+ 修订时重新评估升级必要性(当前 0.15.4 功能满足业务需求)。
 
 ### Pre-Task-V8-8: 创建 MeiliFilterEscapeExtensions
 - 文件: `backend/src/SakuraFilter.Search/Extensions/MeiliFilterEscapeExtensions.cs` (新建)
 - 实现: 见 S7-6
 - 验证: 单元测试 `EscapeMeiliFilter_AllSpecialChars` 通过
+- **⚠️ v25 状态**: ❌ 未实施。spec S7-6 描述的"Meilisearch filter 不支持转义单引号/方括号"问题,当前代码通过 `EscapeFilter` 内联实现(见 MeiliSearchProvider.cs L114/L153 等)。是否需要抽取为独立 Extensions 类,可在 v26+ 修订时评估(当前内联实现可用,非阻塞)。
 
 ## 九、v8 修订核心改进总结
 
@@ -14415,8 +14430,12 @@ v25 本章以"实施状态对齐"为目标,**不重写历史章节**(保留 v2-v
 - [x] 暂缓实施任务已标注(26.4 节)
 - [x] 仍需实施任务已分级(26.5 节)
 - [x] 测试现状基线已记录(26.6 节)
-- [ ] spec 历史章节标注(26.8.1 第 1 项)— 可在 v26 修订时批量处理
-- [ ] Pre-Task-V8-* 重新评估(26.8.1 第 2 项)— 可在 v26 修订时处理
+- [x] spec 历史章节标注(26.8.1 第 1 项)— 已完成关键任务标注:
+  - tasks.md: Task 4.5.7/4.6.8/0.3.17/0.3.22(IProductWriteStrategy 已废弃)
+  - tasks.md: Task 5.1.20(暂缓) / 5.1.21(已实施) / 5.1.22(部分实施) / 5.1.25(已实施) / 5.1.26.1-3(暂缓)
+  - spec.md: D4-15/D5-4/D7-11(IObjectStorage 方案变更)
+  - spec.md: Pre-Task-V8-1 ~ V8-8 全部 8 项标注状态
+- [x] Pre-Task-V8-* 重新评估(26.8.1 第 2 项)— 已完成,8 项中 3 项已实施 + 1 项部分实施 + 4 项未实施(均非阻塞)
 
 v25 本章作为 spec 治理基线,不再继续追加 v26/v27 章节。后续改动应直接更新对应历史章节或本章状态表。
 

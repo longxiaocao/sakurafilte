@@ -775,14 +775,16 @@
 - [ ] **Task 4.1.16**: Meilisearch 双索引切换回滚预案:阶段 5a/5b/5c 拆分 + 旧索引保留 7 天(修复 F2-23)
 
 - [ ] **Task 4.5.6**: `CursorHmac.cs` 验签顺序调整(先 HMAC 后 TTL)+ 统一 Base64Url 编码 + 旧 cursor 过渡期分支(`LEGACY_CUTOFF_TS`)+ 双 key 验签 + `pageNum` 字段(修复 S3-9/S3-13/S3-14/S3-24/F2-2/F2-10/F2-17)
-- [ ] **Task 4.5.7**: `IProductWriteStrategy` / `IProductReadStrategy` 接口 + 阶段 3 双写策略表(修复 F2-19)
+- [ ] **Task 4.5.7**: `IProductWriteStrategy` / `IProductReadStrategy` 接口 + 阶段 3 双写策略表(修复 F2-19)
+  - **⚠️ v25 状态(2026-07-18)**: 已废弃。V2 迁移已直接用 EF Core RENAME(原 oem_no_normalized UNIQUE → mr_1 UNIQUE)实现主键切换,不需要 IProductWriteStrategy 抽象层。详见 spec.md 第二十六章 v25 26.3.1。
 - [ ] **Task 4.5.8**: `frontend/src/utils/build-product-url.ts` 实现 `buildProductUrl(p)` 工具函数 + 中文 slugify 兜底(`Uri.EscapeDataString`)(修复 F2-6/F2-12)
 - [ ] **Task 4.5.9**: 全局 grep 替换 `router.push('/product/...')` 4 处遗漏(`SearchView.vue:121,207` / `AppHeader.vue:202` / `PublicCompareView.vue:336` / `PublicProductView.vue:59`)(修复 F2-12)
 - [ ] **Task 4.5.10**: `PublicCompareView.vue` 对比列表 sessionStorage 仅持久化 ID 数组 + `QuotaExceededError` 降级(修复 F2-13)
 
 - [ ] **Task 4.6.6**: `docker/nginx.conf` Googlebot UA 白名单限定 location(仅 `^/(products|product|sitemap.xml|sitemaps|robots.txt)`),admin 路径严格 RateLimit 无视 UA(修复 F2-14)
 - [ ] **Task 4.6.7**: `Detail.cshtml.cs` OnGetAsync 404 渲染友好页 + 站内搜索入口(修复 F2-16)
-- [ ] **Task 4.6.8**: `AdminProductService` 注入 `IProductWriteStrategy`,CreateAsync/UpdateAsync 按 strategy 决定写入目标;ETL `EtlImportService` 同理(修复 F2-19)
+- [ ] **Task 4.6.8**: `AdminProductService` 注入 `IProductWriteStrategy`,CreateAsync/UpdateAsync 按 strategy 决定写入目标;ETL `EtlImportService` 同理(修复 F2-19)
+  - **⚠️ v25 状态(2026-07-18)**: 已废弃(V2 直接 RENAME 实现主键切换,不需要 IProductWriteStrategy 抽象层)。详见 spec.md 第二十六章 v25 26.3.1。
 
 - [ ] **Task 4.8.1**: `frontend/src/api/types.ts` 新增 `AggregateSearchHit`(含 mr1/productName1/oemList[]/machineList[]/_formatted/_rankingScore)+ `AggregateSearchResponse` 类型;`SearchHit` 补 `mr1`/`productName1`/`oemList` 字段(修复 F2-7)
 - [ ] **Task 4.8.2**: `frontend/src/api/index.ts` 新增 `searchApi.aggregate(req)` 对接 `POST /api/public/search/aggregate`;`SearchView.vue` 改用新 API + 新类型(修复 F2-7)
@@ -914,7 +916,8 @@
   - **依赖**: Task 0.3.12
   - **验证**: 单元测试 `ValidateForm_StripsControlChars` 通过(输入 `\u0001MO\u0001` 字面量被过滤)
 
-- [ ] **Task 0.3.17**: `SakuraFilter.Api/Services/AdminProductService.cs:307-342` `DeleteAsync` + `RestoreAsync` 注入 `IProductWriteStrategy`,显式开启事务 + 调用 `_writeStrategy.DeleteAsync(productId, ct)` / `RestoreAsync(productId, ct)` + 提交事务(修复 D4-4 Delete/Restore 未走双写策略)
+- [ ] **Task 0.3.17**: `SakuraFilter.Api/Services/AdminProductService.cs:307-342` `DeleteAsync` + `RestoreAsync` 注入 `IProductWriteStrategy`,显式开启事务 + 调用 `_writeStrategy.DeleteAsync(productId, ct)` / `RestoreAsync(productId, ct)` + 提交事务(修复 D4-4 Delete/Restore 未走双写策略)
+  - **⚠️ v25 状态(2026-07-18)**: 已废弃(V2 直接 RENAME 实现主键切换,不需要 IProductWriteStrategy 抽象层)。详见 spec.md 第二十六章 v25 26.3.1。
   - **依赖**: spec v5 调整 2(IProductWriteStrategy 接口扩展)
   - **验证**: 单元测试 `Product_Delete_WriteStrategyInvoked` + `Product_Restore_WriteStrategyInvoked` 通过;`AdminProductService` 构造函数注入 `IProductWriteStrategy`
 
@@ -1041,14 +1044,19 @@
 - [ ] **Task 5.1.20**: `SakuraFilter.Api/Services/EtlImportService.cs` 新增 `CleanupOrphanImagesAsync(CancellationToken ct)` 方法: ① 遍历所有 `IObjectStorage` 实现(MinIO + Aliyun OSS) ② 查 `product_images WHERE uploaded_at < now() - interval '1 hour' AND product_id IS NULL`(孤立主图) + `product_images WHERE product_id IS NOT NULL AND product_id NOT IN (SELECT id FROM products)`(产品已删除但图片残留) ③ 扠除 `IObjectStorage.DeleteObjectAsync(key)` + `product_images` 表对应行(修复 D4-15/D4-16 多存储后端孤儿图片清理)
   - **依赖**: Task 5.1.19
   - **验证**: 单元测试 `Etl_CleanupOrphanImages_MultiBackend` 通过(mock 2 个 IObjectStorage,验证 2 次删除调用);`Etl_CleanupOrphanImages_TimestampFilter` 通过(1 小时内的图片不删除)
+  - **⚠️ v25 状态(2026-07-18)**: 暂缓实施。spec 跨 v5/v6/v7/v8 共 4 轮修订,完整实施 v8 终态需 6 步大改造(IObjectStorage 接口扩展 + EF Core 迁移 + 新建 BackgroundService + DI 模型调整),不符合最小设计原则。用户决策暂缓,等待明确目标版本(v5/v8)后实施。详见 spec.md 第二十六章 v25 26.4.1。
 
 - [ ] **Task 5.1.21**: `SakuraFilter.Api/Services/XrefOemBrandService.cs` 实现 `ApplyChangeAsync(string brand, bool isDeleted)` 统一方法: ① Update/SoftDelete/Restore 全部调用此方法 ② 内部 `Channel<string>.Writer.WriteAsync(brand)` 触发 Brand sort_order 变更后台重建 ③ Channel 写入失败 fallback 到 `search_index_pending` 表持久化(`INSERT INTO search_index_pending (mr_1, action, created_at) SELECT mr_1, 'rebuild', now() FROM cross_references WHERE oem_brand = @brand`)(修复 D4-7 brand 变更无 Channel 写入 + D4-8 Channel 崩溃丢任务 + S4-7 单点故障)
   - **依赖**: Task 0.4.15(v4 Brand sort_order 变更后台重建)
-  - **验证**: 单元测试 `XrefOemBrand_ApplyChange_ChannelWrite` 通过(Update/SoftDelete/Restore 都触发 Channel 写入);`XrefOemBrand_ApplyChange_FallbackToDb` 通过(Channel.Writer 抛异常时 fallback 到 `search_index_pending` 表 INSERT);`XrefOemBrand_Restore_TriggersRebuild` 通过(brand 从软删除恢复触发 Channel 写入)
+  - **验证**: 单元测试 `XrefOemBrand_ApplyChange_ChannelWrite` 通过(Update/SoftDelete/Restore 都触发 Channel 写入);`XrefOemBrand_ApplyChange_FallbackToDb` 通过(Channel.Writer 抛异常时 fallback 到 `search_index_pending` 表 INSERT);`XrefOemBrand_Restore_TriggersRebuild` 通过(brand 从软删除恢复触发 Channel 写入)
+  - **✅ v25 状态(2026-07-18)**: 已实施(V24-F50/F51/F52)。OemBrandDictService.ApplyChangeAsync 实现简化方案(不引入 Channel, 直接写 search_index_pending), IndexReplayWorker 兼容两种 payload 格式。12 个单元测试通过(OemBrandDictServiceApplyChangeTests.cs)。详见 spec.md 第二十六章 v25 26.2.3。
+  - **✅ v25 状态(2026-07-18)**: 已实施(V24-F50/F51/F52)。OemBrandDictService.ApplyChangeAsync 实现简化方案(不引入 Channel, 直接写 search_index_pending), IndexReplayWorker 兼容两种 payload 格式。12 个单元测试通过(OemBrandDictServiceApplyChangeTests.cs)。详见 spec.md 第二十六章 v25 26.2.3。
 
 - [ ] **Task 5.1.22**: `SakuraFilter.Api/Workers/IndexReplayWorker.cs` 后台轮询改造: ① `SELECT mr_1, action FROM search_index_pending ORDER BY created_at LIMIT 100 FOR UPDATE SKIP LOCKED`(跳过其他实例锁定的行) ② 每行处理时 `pg_advisory_xact_lock(mr1_hash)` 防跨实例重复处理(mr1_hash = `hashtext(mr_1)` 取模 1000000) ③ 处理成功 `DELETE FROM search_index_pending WHERE mr_1 = @mr1` ④ 失败 `UPDATE search_index_pending SET retry_count = retry_count + 1, last_error = @err WHERE mr_1 = @mr1`,retry_count > 3 时标记 `is_dead = true`(修复 S4-8 多实例重复处理)
   - **依赖**: Task 5.1.21
-  - **验证**: 单元测试 `IndexReplayWorker_SkipLocked` 通过(2 个实例并发处理 100 条,无重复);`IndexReplayWorker_AdvisoryLock_PreventsDuplicate` 通过(同 mr_1 被同时提交 2 次,只处理 1 次);`IndexReplayWorker_DeadLetter_After3Retries` 通过(retry_count = 4 时 is_dead = true)
+  - **验证**: 单元测试 `IndexReplayWorker_SkipLocked` 通过(2 个实例并发处理 100 条,无重复);`IndexReplayWorker_AdvisoryLock_PreventsDuplicate` 通过(同 mr_1 被同时提交 2 次,只处理 1 次);`IndexReplayWorker_DeadLetter_After3Retries` 通过(retry_count = 4 时 is_dead = true)
+  - **⚠️ v25 状态(2026-07-18)**: 部分实施(V24-F26-2/V24-F27)。仅实施 FOR UPDATE SKIP LOCKED 核心要求;pg_advisory_xact_lock(mr1_hash) 被 V24-F26-2 advisory lock 7740005 覆盖跳过;etry_count > 3 标记 is_dead 跳过(表无 is_dead 字段,保留 retry_count >= 5 转死信队列);spec 假设 mr_1/action 字段实际为 Id/Operation/Payload。详见 spec.md 第二十六章 v25 26.2.1 + 26.3.4。
+  - **⚠️ v25 状态(2026-07-18)**: 部分实施(V24-F26-2/V24-F27)。仅实施 FOR UPDATE SKIP LOCKED 核心要求;pg_advisory_xact_lock(mr1_hash) 被 V24-F26-2 advisory lock 7740005 覆盖跳过;etry_count > 3 标记 is_dead 跳过(表无 is_dead 字段,保留 retry_count >= 5 转死信队列);spec 假设 mr_1/action 字段实际为 Id/Operation/Payload。详见 spec.md 第二十六章 v25 26.2.1 + 26.3.4。
 
 ---
 
@@ -1147,6 +1155,7 @@
   - **依赖**: Task 0.3.17(v5 IProductWriteStrategy 接口)
 
 - [ ] **Task 0.3.22**: IProductWriteStrategy 对账脚本 mr_1 NULL 一致性(修复 D5-2)
+  - **⚠️ v25 状态(2026-07-18)**: 已废弃(V2 直接 RENAME 实现主键切换,不需要 IProductWriteStrategy 抽象层)。详见 spec.md 第二十六章 v25 26.3.1。
   - [ ] 0.3.22.1: `SakuraFilter.Api/Services/ReconcileService.cs`(新增)对账 SQL:
     ```sql
     SELECT p.mr_1, m.mr_1 AS meili_mr1
@@ -1372,7 +1381,9 @@
     }
     ```
   - **验证**: `Http_401_DynamicImportRouter_NoCircular` 单元测试通过
-  - **依赖**: Task 4.5.14(v5 http.ts 拦截器)
+  - **依赖**: Task 4.5.14(v5 http.ts 拦截器)
+  - **✅ v25 状态(2026-07-18)**: 已实施(V24-F47/F48/F49)。useFormDraft composable(debounce 500ms + 7 天 TTL + localStorage + Safari 降级),AdminProductFormView.vue 集成 + 409 恢复提示,18 个单元测试通过。详见 spec.md 第二十六章 v25 26.2.3。
+  - **✅ v25 状态(2026-07-18)**: 已实施(V24-F47/F48/F49)。useFormDraft composable(debounce 500ms + 7 天 TTL + localStorage + Safari 降级),AdminProductFormView.vue 集成 + 409 恢复提示,18 个单元测试通过。详见 spec.md 第二十六章 v25 26.2.3。
 
 - [ ] **Task 4.5.17**: `Detail.cshtml` crossorigin + CookiePolicy SameSite=None(修复 F4-6)
   - [ ] 4.5.17.1: 文档明确: crossorigin="use-credentials" 必须配合 SameSite=None; Secure
@@ -1938,6 +1949,7 @@
   - [ ] 5.1.26.2: ETL 流程中调用,oem_2 多值占比 > 1% 记录告警(不阻断)
   - [ ] 5.1.26.3: 单元测试 `Etl_Oem2MultiValue_Detection` 通过
   - **依赖**: Task 0.2.2(CrossReference 实体 Oem2 属性)
+  - **⚠️ v25 状态(2026-07-18)**: 5.1.26.1 已实施(V24-F26-3,LoadExistingOem2MapAsync 存在但未接入 ETL 流程,为死代码);5.1.26.2/5.1.26.3 暂缓(LoadExistingOemMapAsync 已改为仅查 mr_1,oem_2 多值场景前提不成立)。详见 spec.md 第二十六章 v25 26.3.3。
 
 - [ ] **Task 5.1.27**: Program.cs 启动时 Meilisearch 版本检测 + 健康检查服务(修复 S6-13)
   - [ ] 5.1.27.1: `CheckMeiliVersionAsync` 方法,3s 超时:
