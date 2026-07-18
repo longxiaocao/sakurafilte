@@ -15254,6 +15254,66 @@ POST /api/public/search/aggregate:
 
 5. **Element Plus 选择器规范**: E2E 测试中遇到 el-input 的 id 在外层 div 问题。建议在测试规范中明确: el-input 选择器优先用 `autocomplete` 属性或 `placeholder` 文本, 避免用 id (Element Plus 会将 id 绑定到外层 div 而非内部 input)。
 
+## 26.17 v25 收尾 — 剩余任务汇总与优先级分类
+
+**汇总时间**: 2026-07-18
+**汇总范围**: 26.5 / 26.12.6 / 26.13.7 / 26.14.9 / 26.15.7 / 26.16.9 中所有"未实施"或"部分实施"的改进建议, 以及用户决策暂缓的任务。
+**目的**: 为 v26+ 规划提供单一查阅入口, 避免任务分散在多个章节中遗失。
+
+### 26.17.1 P0 (高优先级, 阻塞生产)
+
+**无**。v25 累计实施 V24-F14~F77 (64 项), 已清除全部 P0 阻塞项。
+
+### 26.17.2 P1 (中优先级, 建议下一轮实施)
+
+| 编号 | 任务 | 评估 | 来源 |
+|---|---|---|---|
+| P1-1 | **SSE 401 修复**: AdminEtlView 进度无法实时推送 | EventSource 不支持 auth header, 推荐 cookie auth 方案 | 26.16.5 / 26.16.9 |
+| P1-2 | **PostgresSearchProvider 性能恢复**: V24-F76 折衷 (不分词 + 排序简化) | Phase 1 改原生 SQL + LATERAL JOIN + CTE 预计算 (Task 1.2.9-1.2.11) | 26.16.3 / 26.16.9 |
+| P1-3 | **CreateAsync/UpdateAsync 集成测试**: advisory lock 路径 | 需 Testcontainers PG, InMemory 不支持 raw SQL | 26.14.9 / 26.15.7 |
+| P1-4 | **IndexReplayWorker ProcessPendingAsync 集成测试**: advisory lock 7740005 | 需 Testcontainers PG, 覆盖 FOR UPDATE SKIP LOCKED 多实例行为 | 26.15.7 |
+| P1-5 | **Task 5.1.20 CleanupOrphanImagesAsync**: 孤儿图片清理 | 用户决策暂缓, 可同时兜底覆盖上传异步删旧文件失败场景 | 26.4.1 / 26.12.6 |
+| P1-6 | **CI 覆盖率收集与门禁**: XPlat Code Coverage + reportgenerator | 核心 Service ≥ 60%, 全 Service ≥ 40%, 上传 Codecov | 26.15.7 |
+| P1-7 | **覆盖上传并发竞态测试**: 23505 → 409 映射路径 | 需 PG 集成测试, 与 P1-3 同批实施 | 26.12.6 |
+
+### 26.17.3 P2 (低优先级, 长期演进)
+
+| 编号 | 任务 | 评估 | 来源 |
+|---|---|---|---|
+| P2-1 | **前端 v-for key 静态检查**: 7 处剩余 index key | 多为静态数组可豁免, eslint 已隐式启用 | 26.13.7 |
+| P2-2 | **EnsureDefaultSettingsAsync 死代码清理**: 内联到调用点 | 6 个 Service, 影响小 | 26.13.7 |
+| P2-3 | **E2E 巡检纳入 CI**: _design_audit.py + _api_contract_test.py | 需 Testcontainers PG + 启动前后端服务 | 26.16.9 |
+| P2-4 | **MemoryCache Size 统一约束**: 封装 SetWithSize 扩展方法 | 避免再次遗漏 Size 声明 | 26.16.9 |
+| P2-5 | **Element Plus 选择器规范**: E2E 测试用 autocomplete 优先于 id | el-input id 在外层 div | 26.16.9 |
+| P2-6 | **LoadExistingOem2MapAsync 死代码清理**: EtlImportService.cs L1485-1497 | 待 Task 5.1.26.2 可能需要 | 26.5.2 |
+| P2-7 | **EF Core 版本统一**: NU1603/MSB3277 残留警告 | V24-F10 已大幅改善, 残留非阻塞 | 26.5.2 |
+| P2-8 | **AuthTokenBroadcaster 指数退避加 jitter**: V24-F11 已实施 5s→60s 封顶 | 非必要, 当前实现已足够 | 26.5.3 |
+| P2-9 | **LoadExistingOem2MapAsync 调用方接入**: ETL 流程 | 待 oem_2 多值场景出现 | 26.5.3 / 26.3.3 |
+| P2-10 | **ProductDbContext 拆分**: Alert* 实体拆到 AlertDbContext | 长期优化, TestProductDbContext 子类已足够 | 26.5.3 |
+
+### 26.17.4 依赖关系矩阵
+
+```
+P1-3 (CreateAsync 集成测试) ─┬─→ 需 Testcontainers PG 基础设施
+P1-4 (IndexReplayWorker 集成) ─┘
+P1-7 (覆盖上传并发竞态) ───────→ 与 P1-3 同批实施 (共用 PG 集成测试环境)
+
+P1-5 (CleanupOrphanImages) ──→ 同时兜底 P1 (覆盖上传异步删旧文件失败)
+
+P1-1 (SSE 401) ──→ 独立, 可单独实施
+P1-2 (PG 搜索性能) ──→ 独立, Phase 1 任务
+P1-6 (CI 覆盖率) ──→ 独立, CI 配置改动
+```
+
+### 26.17.5 v25 收尾结论
+
+- **v25 循环终止条件**: 全部满足 (见 26.8.3)
+- **生产阻断**: 0 项
+- **测试基线**: 后端 269 + 前端 244 = 513 单元测试全通过, E2E API 契约全通过, E2E 设计巡检 20/21 OK
+- **建议下一轮 (v26) 优先实施**: P1-1 (SSE 401) + P1-6 (CI 覆盖率) — 二者独立, 无 Testcontainers 依赖, 见效快
+- **建议中期投入**: P1-3 + P1-4 + P1-7 同批实施 — 共用 Testcontainers PG 基础设施
+- **建议长期演进**: P1-2 (Phase 1 原生 SQL) — 与 spec Task 1.2.9-1.2.11 合并实施
+
 
 
 
