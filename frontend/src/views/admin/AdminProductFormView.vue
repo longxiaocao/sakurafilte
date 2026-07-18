@@ -13,6 +13,8 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { adminProductApi, imageApi, dictApi } from '@/api'
 import type { ProductDetail } from '@/api/types'
 import FieldHelpPopover from '@/components/FieldHelpPopover.vue'  // P5.2
+// V24-F48 (spec Task 5.1.25): 表单数据 localStorage 持久化, 409 冲突时恢复草稿
+import { useFormDraft } from '@/composables/useFormDraft'
 
 const { t } = useI18n()
 
@@ -75,6 +77,14 @@ const form = reactive<any>({
 // E2E BD.3 修复 v2: 乐观锁并发令牌 (PG xmin), GET 时保存, PUT 时带回
 //   后端用此值覆盖实体加载时的 xmin, 检测"先读后写"并发丢失更新
 const rowVersion = ref<number>(0)
+
+// V24-F48 (spec Task 5.1.25): 表单草稿管理
+//   - key 用 mr1 (编辑模式有值) 或 'new' (新增模式), 区分不同记录的草稿
+//   - startAutoSave 在 load() 完成后启动 (避免 GET 期间触发 watch)
+//   - 409 XREF_CONFLICT 时弹窗询问是否恢复本地草稿
+//   - save 成功后清理草稿 (避免下次进入表单时提示恢复旧数据)
+const draftKey = computed(() => form.mr1 || (isEdit.value ? `edit_${productId.value}` : 'new'))
+const draft = useFormDraft('product_form', () => ({ ...form, crossReferences: form.crossReferences, machineApplications: form.machineApplications }), draftKey.value)
 
 // V2 Task 1.1: MR.1 前端校验规则 (与后端 AdminProductService.ValidateForm 对齐)
 //   - required: 后端 MR1_REQUIRED 抛 ArgumentException, 前端同步拦截避免 400 往返
@@ -222,6 +232,9 @@ async function load() {
   } catch (e: any) {} finally {
     loading.value = false
   }
+  // V24-F48: load 完成后启动自动保存 (避免 GET 期间 Object.assign 触发 watch 写脏数据)
+  //   WHY 在 finally 之后: 无论 GET 成功或失败, 都启动 watch (新增模式 GET 不触发, 直接启动)
+  draft.startAutoSave()
 }
 
 async function save() {
@@ -245,6 +258,8 @@ async function save() {
       await adminProductApi.create(form, 'admin')
       ElMessage.success(t('admin.productformview.success.created'))
     }
+    // V24-F48: 保存成功后清理草稿 (避免下次进入表单时提示恢复旧数据)
+    draft.clear()
     router.push('/admin/products')
   } catch (e: any) {
     // P0-1.3: 识别 409 (产品已存在), 给出用户友好提示
@@ -258,10 +273,35 @@ async function save() {
       const detail = e?.response?.data?.detail || e?.problem?.detail || ''
       if (title.includes(t('admin.productformview.string.by_modify')) || detail.includes(t('admin.productformview.string.by_user_modify')) || detail.includes('lost update')) {
         ElMessage.error(t('admin.productformview.error.data_has_been_modified_by'))
-        // 自动重新加载最新数据, 避免用户手动刷新
-        // P2-7 修复 v2: 保存 timer 引用, 卸载时清理, 避免用户导航离开后意外 reload
-        if (reloadTimer !== null) clearTimeout(reloadTimer)
-        reloadTimer = setTimeout(() => window.location.reload(), 1500)
+        // V24-F48: 乐观锁冲突时检查是否有本地草稿, 弹窗询问是否恢复
+        //   WHY: 用户可能填写了大量字段, 冲突后页面会 reload 丢失数据, 草稿可恢复
+        if (draft.hasDraft()) {
+          try {
+            await ElMessageBox.confirm(
+              '检测到本地草稿 (您之前填写的数据), 是否恢复?\n点击"恢复"将用草稿覆盖当前表单, 点击"放弃"将加载服务器最新数据',
+              '数据冲突恢复',
+              { confirmButtonText: '恢复草稿', cancelButtonText: '放弃草稿', type: 'warning' }
+            )
+            // 用户点击"恢复草稿": 加载草稿到表单
+            const draftData = draft.load()
+            if (draftData) {
+              Object.assign(form, draftData)
+              ElMessage.success('已恢复本地草稿, 请检查后重新保存')
+            }
+          } catch {
+            // 用户点击"放弃草稿": 清理草稿, 加载服务器最新数据
+            draft.clear()
+            ElMessage.info('已放弃本地草稿, 加载服务器最新数据')
+            // 自动重新加载最新数据, 避免用户手动刷新
+            // P2-7 修复 v2: 保存 timer 引用, 卸载时清理, 避免用户导航离开后意外 reload
+            if (reloadTimer !== null) clearTimeout(reloadTimer)
+            reloadTimer = setTimeout(() => window.location.reload(), 1500)
+          }
+        } else {
+          // 无草稿: 直接 reload 加载最新数据
+          if (reloadTimer !== null) clearTimeout(reloadTimer)
+          reloadTimer = setTimeout(() => window.location.reload(), 1500)
+        }
       } else {
         ElMessage.error(t('admin.productformview.error.product_already_exists_please'))
       }
@@ -487,6 +527,8 @@ onBeforeUnmount(() => {
     clearTimeout(reloadTimer)
     reloadTimer = null
   }
+  // V24-F48: 停止草稿自动保存 (清理 watch + debounce timer, 避免内存泄漏)
+  draft.stopAutoSave()
 })
 </script>
 
