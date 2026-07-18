@@ -11,7 +11,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 // V24-F38: 改用 searchWithFallback (封装聚合 API 404 降级逻辑)
 //   保留 publicSearchApi 导入: clearSearch 等其他函数可能用到 (此处仅类型兼容)
-import { searchWithFallback, wasLastSearchLegacyFallback } from '@/api'
+// V24-F40: shouldShowLegacyFallbackWarn 5 秒去重, 避免连续搜索刷屏
+import { searchWithFallback, wasLastSearchLegacyFallback, shouldShowLegacyFallbackWarn } from '@/api'
 import type { AggregateSearchHit, AggregateSearchResponse } from '@/api/types'
 import { sanitizeFormatted } from '@/utils/html-sanitizer'
 import { buildProductUrl } from '@/utils/build-product-url'
@@ -85,8 +86,12 @@ async function doSearch() {
     // V24-F38: 检查是否降级, 降级时隐藏 oemList/machineList 展开按钮
     isLegacyFallback.value = wasLastSearchLegacyFallback()
     if (isLegacyFallback.value) {
-      // 降级提示: 让用户知道当前是基础搜索模式 (无 OEM 交叉引用嵌套)
-      ElMessage.warning('聚合搜索 API 暂不可用,已降级到基础搜索 (不展示 OEM 交叉引用详情)')
+      // V24-F40: 5 秒去重, 避免连续搜索时 ElMessage.warning 刷屏
+      //   WHY: 用户输入关键词时 500ms 防抖触发搜索, 连续输入会多次降级
+      //        5 秒窗口内只提示一次, 类似后端 ETL 告警抑制窗口
+      if (shouldShowLegacyFallbackWarn()) {
+        ElMessage.warning('聚合搜索 API 暂不可用,已降级到基础搜索 (不展示 OEM 交叉引用详情)')
+      }
     }
     results.value = resp.hits || []
     total.value = resp.total

@@ -183,10 +183,14 @@ async function handleCursorExpired(errorCode: string): Promise<void> {
     //   注: 这里不用 safeStorage, 因为 cursor 重置是低频事件, 失败时仅丢失 toast 提示, 不影响功能
   }
 
-  // 仅在 /search 路径触发重置 (其他路径如 /admin/products 也可能用 cursor, 但重置策略不同)
-  //   WHY 路径检查: 避免在 /login 或其他页面误清 URL query
+  // 仅在搜索相关路径触发重置 (其他路径如 /admin/products 也可能用 cursor, 但重置策略不同)
+  //   V24-F41 (spec 改进建议): 改用精确匹配, 避免 /admin/search 等非预期路径被误清 URL
+  //   WHY 旧实现 pathname.includes('/search') 会匹配 /admin/search, 误清后台搜索的 cursor
+  //   精确匹配 /search 和 /search/aggregate (前端两个公开搜索页)
+  //   不匹配 /admin/search (后台搜索有自己的分页策略, 不应被公开搜索的 cursor 重置影响)
   const { pathname, search } = window.location
-  if (!pathname.includes('/search')) return
+  const isPublicSearchPath = pathname === '/search' || pathname === '/search/aggregate'
+  if (!isPublicSearchPath) return
 
   // 解析当前 URL query, 移除 cursor, 重置 page=1
   const url = new URL(pathname + search, window.location.origin)

@@ -232,6 +232,13 @@ export const searchApi = {
 //   - 每次 searchWithFallback 调用前重置为 false, 降级时设为 true
 let lastSearchWasLegacy = false
 
+// V24-F40 (spec 改进建议): 降级提示 5 秒去重时间戳
+//   - 避免用户连续搜索时反复弹 ElMessage.warning 刷屏
+//   - 5 秒窗口内只提示一次 (类似后端 ETL 告警抑制窗口)
+//   - 0 表示从未提示, > 0 表示上次提示的 unix 毫秒时间戳
+let lastLegacyWarnTs = 0
+const LEGACY_WARN_SUPPRESS_MS = 5000
+
 /**
  * V24-F38: 查询上一次 searchWithFallback 是否降级到旧 API
  *   - 供 AggregateSearchView 检查, 降级时隐藏 oemList/machineList 展开按钮 (因为旧 API 返回空数组)
@@ -240,6 +247,21 @@ let lastSearchWasLegacy = false
  */
 export function wasLastSearchLegacyFallback(): boolean {
   return lastSearchWasLegacy
+}
+
+/**
+ * V24-F40: 检查是否应该显示降级提示 (5 秒去重)
+ *   - 5 秒窗口内只提示一次, 避免连续搜索刷屏
+ *   - 调用时机: AggregateSearchView 检测到降级时调用
+ *   - 返回值: true 表示可以提示 (上次提示超过 5 秒), false 表示抑制 (5 秒内已提示)
+ */
+export function shouldShowLegacyFallbackWarn(): boolean {
+  const now = Date.now()
+  if (now - lastLegacyWarnTs < LEGACY_WARN_SUPPRESS_MS) {
+    return false  // 5 秒内已提示, 抑制
+  }
+  lastLegacyWarnTs = now
+  return true
 }
 
 /**
