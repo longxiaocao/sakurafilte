@@ -73,6 +73,26 @@ public class IndexReplayWorker : BackgroundService
         var db = scope.ServiceProvider.GetRequiredService<ProductDbContext>();
         var meili = scope.ServiceProvider.GetRequiredService<MeiliSearchProvider>();
 
+        // V24-F26 (spec Task V15-1.1.3): 与 ReindexAllAsync 互斥 (advisory lock 7740005)
+        //   WHY: ReindexAllAsync 全量重建时清空 Meili + search_index_pending,
+        //        若 IndexReplayWorker 并发写入会导致: (1) pending 条目被清空但 Meili 已写入 (脏数据);
+        //        (2) ReindexAllAsync 重建完成后又被 IndexReplayWorker 写入旧数据 (数据回退)
+        //   实现: 用 EF Core 显式事务包裹整个处理逻辑, 在事务内获取 pg_try_advisory_xact_lock(7740005)
+        //   - 失败 (锁被 ReindexAllAsync 占用): rollback + return (跳过本次批次, 等下次轮询)
+        //   - 成功: 继续处理, commit 释放锁 (锁持有时间 = DB 查询 + Meili 调用 + DB save)
+        //   spec 验证: "IndexReplayWorker.ProcessPendingAsync 含 advisory lock 7740005 获取"
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+
+        var lockAcquired = await db.Database.SqlQueryRaw<int>(
+            "SELECT CASE WHEN pg_try_advisory_xact_lock(7740005) THEN 1 ELSE 0 END AS \"Value\""
+        ).FirstAsync(ct);
+        if (lockAcquired == 0)
+        {
+            await tx.RollbackAsync(ct);
+            _logger.LogDebug("IndexReplayWorker 跳过本次批次 (advisory lock 7740005 被占用, 与 ReindexAllAsync 互斥)");
+            return;
+        }
+
         // 1) 取到期的待重试条目 (最多 BatchSize=500 条,避免长事务)
         var now = DateTime.UtcNow;
         var pending = await db.SearchIndexPending
@@ -81,7 +101,11 @@ public class IndexReplayWorker : BackgroundService
             .Take(BatchSize)
             .ToListAsync(ct);
 
-        if (pending.Count == 0) return;
+        if (pending.Count == 0)
+        {
+            await tx.RollbackAsync(ct);  // 无待处理条目, 释放锁
+            return;
+        }
 
         _logger.LogInformation("待重试条目: {Count}", pending.Count);
 
@@ -97,7 +121,7 @@ public class IndexReplayWorker : BackgroundService
                 // V2 (Task 0.4): 反序列化 Mr1IndexDoc (嵌套结构,替代 ProductIndexDoc)
                 var docs = toIndex.Select(p => JsonSerializer.Deserialize<Mr1IndexDoc>(p.Payload)!).ToList();
                 await meili.IndexAsync(docs, ct);
-                // 成功后批量删除
+                // 成功后批量删除 (在事务内, 不 commit)
                 db.SearchIndexPending.RemoveRange(toIndex);
                 await db.SaveChangesAsync(ct);
                 _logger.LogInformation("Meili 重试索引成功: {Count} 条", toIndex.Count);
@@ -127,6 +151,8 @@ public class IndexReplayWorker : BackgroundService
                 await UpdateRetryAsync(db, toDelete, ex.Message, ct);
             }
         }
+
+        await tx.CommitAsync(ct);  // 提交事务, 释放 advisory lock
     }
 
     /// <summary>
