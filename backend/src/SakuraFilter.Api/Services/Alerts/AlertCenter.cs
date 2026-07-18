@@ -286,7 +286,7 @@ public class AlertCenter
         }
     }
 
-    private static async Task PersistAsync(
+    private async Task PersistAsync(
         ProductDbContext db,
         string type, string severity, string title,
         Dictionary<string, object?>? context,
@@ -323,8 +323,8 @@ public class AlertCenter
         }
         catch (Exception ex)
         {
-            // 持久化失败不能阻塞告警流程
-            Console.WriteLine($"[AlertCenter] 持久化失败: {ex.Message}");
+            // 持久化失败不能阻塞告警流程, 仅记日志 (V24-F53: 改用 _logger 替代 Console.WriteLine, 遵循规则 4.3 日志规范)
+            _logger.LogWarning(ex, "[AlertCenter] 告警历史持久化失败 type={Type} channel={Channel} correlationId={Cid}", type, channel, correlationId);
         }
     }
 }

@@ -14439,4 +14439,61 @@ v25 本章以"实施状态对齐"为目标,**不重写历史章节**(保留 v2-v
 
 v25 本章作为 spec 治理基线,不再继续追加 v26/v27 章节。后续改动应直接更新对应历史章节或本章状态表。
 
+## 26.9 v25 改进实施记录(自主决策批次)
+
+> v25 spec 治理完结后,基于子代理扫描发现的潜在改进点(异常处理/N+1/前端副作用泄漏/测试覆盖盲区),按价值/风险/工作量三维评估,自主决策实施风险最低的 2 项小改动。
+
+### 26.9.1 V24-F53: AlertCenter 日志规范修复(规则 4.3)
+
+**问题**: `AlertCenter.cs` L327 `PersistAsync` 的 catch 块使用 `Console.WriteLine` 记录持久化失败,违反规则 4.3(关键业务节点必须有日志,异常必须有日志)。原方法为 `static`,无法访问实例字段 `_logger`。
+
+**修复**:
+1. `PersistAsync` 改为实例方法(去 `static`)
+2. `Console.WriteLine($"[AlertCenter] 持久化失败: {ex.Message}")` → `_logger.LogWarning(ex, "[AlertCenter] 告警历史持久化失败 type={Type} channel={Channel} correlationId={Cid}", type, channel, correlationId)`
+3. 保留完整异常堆栈(原仅打印 Message),并补充上下文字段便于审计
+
+**影响范围**: 仅 AlertCenter.cs 单文件 1 处修改,无调用方变更(调用方仍为同类内部 L156/L190)。
+
+### 26.9.2 V24-F54: AppHeader.vue 副作用清理修复(规则 5.2)
+
+**问题**: `AppHeader.vue` onMounted 内 `let debounceTimer: number | null = null` 是局部变量,onBeforeUnmount 闭包无法访问。组件卸载后若 50ms 内有最后一次 ResizeObserver 触发,`measureButtons()` 仍会执行,访问已卸载的 ref/DOM,属于内存泄漏隐患,违反规则 5.2(副作用清理)。
+
+**修复**:
+1. 新增 setup 顶层变量 `let resizeDebounceTimer: number | null = null`(与 `resizeObserver` 同前缀,语义清晰)
+2. onMounted 内 ResizeObserver 回调改用顶层变量
+3. onBeforeUnmount 补充 `clearTimeout(resizeDebounceTimer)` + 置 null,并 `resizeObserver = null` 释放引用
+
+**影响范围**: 仅 AppHeader.vue 单文件 1 处修改,无外部 API 变更。
+
+### 26.9.3 验证结果
+
+| 项目 | 命令 | 结果 |
+|---|---|---|
+| 后端编译 | `dotnet build backend/SakuraFilter.sln --no-incremental` | ✅ 0 warning 0 error |
+| 后端测试 | `dotnet test backend/SakuraFilter.sln` | ✅ 269/269 通过 (37 Etl + 232 Api) |
+| 前端类型检查 | `npx vue-tsc --noEmit` | ✅ 通过 |
+| 前端单元测试 | `npx vitest run tests/unit` | ✅ 244/244 通过 |
+
+注:契约测试 `tests/contract/dict-schema.test.ts` 12 项因后端服务未启动(端口 5148)失败,非本次修改导致。
+
+### 26.9.4 v25 改进批次文件清单
+
+| 类型 | 路径 | 修改摘要 |
+|---|---|---|
+| 后端 | `backend/src/SakuraFilter.Api/Services/Alerts/AlertCenter.cs` | PersistAsync 改实例方法, Console.WriteLine → _logger.LogWarning |
+| 前端 | `frontend/src/components/AppHeader.vue` | debounceTimer 提到 setup 顶层 + onBeforeUnmount clearTimeout |
+| spec | `.trae/specs/v2-architecture-migration/spec.md` | 追加 26.9 改进实施记录(本节) |
+
+### 26.9.5 已评估但未实施的发现(供后续 v26+ 决策)
+
+子代理扫描还发现以下问题,本次未实施(原因:风险较高或工作量较大,需单独评估):
+
+| 优先级 | 项 | 未实施原因 |
+|---|---|---|
+| P2 | UserService.cs 11 个方法无 try-catch | 认证核心服务,需保证语义不变,风险较高 |
+| P2 | BaseDictService.cs 7 个方法无 try-catch | 影响 7 个派生类,需统一测试 |
+| P2 | AdminProductService.CreateAsync N+1(循环内 AnyAsync) | 用户单次提交 ≤20 条,影响有限 |
+| P2 | 测试覆盖盲区(30+ 服务类无测试) | 长期治理,需按批次推进 |
+
+
 

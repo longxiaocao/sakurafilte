@@ -89,6 +89,9 @@ const overflowKeys = ref<Set<string>>(new Set())
 //   3) 模板内 v-if 隐藏溢出项
 const BUTTON_WIDTHS: Record<string, number> = {}
 let resizeObserver: ResizeObserver | null = null
+// V24-F54: 防抖 timer 提到 setup 顶层, onBeforeUnmount 才能清理 (避免内存泄漏)
+//   WHY: 原 onMounted 内 let 是局部变量, onBeforeUnmount 闭包访问不到, 卸载后最后一次 50ms 触发仍会执行 measureButtons
+let resizeDebounceTimer: number | null = null
 
 function recalcOverflow() {
   if (!navContainerRef.value) return
@@ -159,10 +162,10 @@ onMounted(() => {
   })
   // P-Admin-UX v3.1: ResizeObserver 回调里加防抖 (50ms) + 仅在结果变化时才更新 overflowKeys,
   //   避免 "改 overflowKeys → 模板更新 → ResizeObserver 触发 → 改 overflowKeys" 反馈循环
-  let debounceTimer: number | null = null
+  // V24-F54: 防抖 timer 改用 setup 顶层变量, 便于 onBeforeUnmount 清理
   resizeObserver = new ResizeObserver(() => {
-    if (debounceTimer !== null) window.clearTimeout(debounceTimer)
-    debounceTimer = window.setTimeout(() => {
+    if (resizeDebounceTimer !== null) window.clearTimeout(resizeDebounceTimer)
+    resizeDebounceTimer = window.setTimeout(() => {
       measureButtons()
     }, 50)
   })
@@ -172,6 +175,12 @@ onMounted(() => {
 })
 onBeforeUnmount(() => {
   resizeObserver?.disconnect()
+  resizeObserver = null
+  // V24-F54: 清理最后一次未触发的防抖回调, 防止卸载后访问已销毁的 ref/DOM
+  if (resizeDebounceTimer !== null) {
+    window.clearTimeout(resizeDebounceTimer)
+    resizeDebounceTimer = null
+  }
 })
 // 路由变化 → 重新计算
 watch(() => route.path, () => {
