@@ -9,7 +9,9 @@
 import { ref, reactive, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { publicSearchApi } from '@/api'
+// V24-F38: 改用 searchWithFallback (封装聚合 API 404 降级逻辑)
+//   保留 publicSearchApi 导入: clearSearch 等其他函数可能用到 (此处仅类型兼容)
+import { searchWithFallback, wasLastSearchLegacyFallback } from '@/api'
 import type { AggregateSearchHit, AggregateSearchResponse } from '@/api/types'
 import { sanitizeFormatted } from '@/utils/html-sanitizer'
 import { buildProductUrl } from '@/utils/build-product-url'
@@ -40,6 +42,11 @@ const provider = ref<string>('')
 const lastError = ref('')
 // 展开的 MR.1 卡片 (展示完整 oemList)
 const expandedMr1 = ref<Set<string>>(new Set())
+// V24-F38 (spec 改进建议): 标记本次搜索是否降级到旧 API
+//   - true: 聚合 API 404, 降级到 searchApi.search, 无 oemList/machineList 嵌套
+//   - false: 聚合 API 正常, 完整渲染
+//   - 渲染时检查: 降级时隐藏 "展开 OEM" 按钮 + 机型列表区域
+const isLegacyFallback = ref(false)
 
 // ===== 防抖 + AbortController (Task 1.3.5) =====
 let debounceTimer: number | null = null
@@ -60,7 +67,10 @@ async function doSearch() {
   loading.value = true
   lastError.value = ''
   try {
-    const resp: AggregateSearchResponse = await publicSearchApi.aggregate(
+    // V24-F38: 改用 searchWithFallback, 支持聚合 API 404 时降级到旧 API
+    //   WHY 不直接用 publicSearchApi.aggregate: 降级逻辑封装在 searchWithFallback 中
+    //   降级时 wasLastSearchLegacyFallback() 返回 true, 设置 isLegacyFallback 标志
+    const resp: AggregateSearchResponse = await searchWithFallback(
       {
         q: q.value.trim() || undefined,
         page: page.value,
@@ -70,8 +80,14 @@ async function doSearch() {
         type: advancedForm.type || undefined,
         machineCategory: advancedForm.machineCategory || undefined
       },
-      { signal: abortCtrl.signal }
+      abortCtrl.signal
     )
+    // V24-F38: 检查是否降级, 降级时隐藏 oemList/machineList 展开按钮
+    isLegacyFallback.value = wasLastSearchLegacyFallback()
+    if (isLegacyFallback.value) {
+      // 降级提示: 让用户知道当前是基础搜索模式 (无 OEM 交叉引用嵌套)
+      ElMessage.warning('聚合搜索 API 暂不可用,已降级到基础搜索 (不展示 OEM 交叉引用详情)')
+    }
     results.value = resp.hits || []
     total.value = resp.total
     totalPages.value = resp.totalPages
@@ -286,18 +302,25 @@ onBeforeUnmount(() => {
             <span v-if="hit.rankingScore != null" class="text-xs text-gray-400">
               相关度 {{ (hit.rankingScore * 100).toFixed(0) }}%
             </span>
+            <!-- V24-F38: 降级模式 (isLegacyFallback=true) 隐藏 "展开 OEM" 按钮 -->
+            <!--   WHY: 旧 API 返回空 oemList, 展开后无内容, 按钮点击无意义 -->
             <el-button
+              v-if="!isLegacyFallback"
               text
               size="small"
               @click.stop="toggleExpand(hit.mr1)"
             >
               {{ expandedMr1.has(hit.mr1) ? '收起' : `展开 OEM (${hit.oemList.length})` }}
             </el-button>
+            <!-- V24-F38: 降级模式显示 "基础模式" 标记, 告知用户无 OEM 嵌套详情 -->
+            <el-tag v-if="isLegacyFallback" size="small" type="info">基础模式</el-tag>
           </div>
         </div>
 
         <!-- OEM 3 列表 (展开时显示) -->
-        <div v-if="expandedMr1.has(hit.mr1)" class="mt-3 pt-3 border-t border-gray-100">
+        <!-- V24-F38: 降级模式 (isLegacyFallback=true) 不渲染 oemList 区域 -->
+        <!--   WHY: 旧 API 返回空 oemList, 渲染空表格无意义且误导用户 -->
+        <div v-if="!isLegacyFallback && expandedMr1.has(hit.mr1)" class="mt-3 pt-3 border-t border-gray-100">
           <div class="text-xs text-gray-500 mb-2">交叉引用 (OEM 3 列表,按品牌优先级排序)</div>
           <table class="w-full text-xs">
             <thead class="text-gray-500 border-b border-gray-200">

@@ -4,8 +4,11 @@
 //   - 错误自动持久化到 localStorage (最近 20 条)
 //   - P2.6: ElConfigProvider 响应式跟随 i18n locale 切换 Element Plus 语言 (无需刷新)
 //   - Day 14+: 顶部"跳到主内容"链接 (A11y 键盘用户必备)
-import { computed } from 'vue'
+//   - V24-F37 (spec F3-5/Task 4.5.14): mounted 检查 sessionStorage 'cursor-reset-toast'
+//     显示一次性 ElMessage.warning (整页刷新后 ElMessage 提示消失的兜底方案)
+import { computed, onMounted } from 'vue'
 import { RouterView } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import AppHeader from './components/AppHeader.vue'
 import ErrorBoundary from './components/ErrorBoundary.vue'
 import DragDropOverlay from './components/DragDropOverlay.vue'
@@ -16,6 +19,27 @@ import en from 'element-plus/es/locale/lang/en'
 const { locale, t } = useI18n()
 // 响应式映射: i18n locale → Element Plus locale
 const elLocale = computed(() => (locale.value === 'en-US' ? en : zhCn))
+
+// V24-F37 (spec F3-5/Task 4.5.14): App.vue mounted 检查 sessionStorage 显示一次性 cursor 重置 toast
+//   WHY App.vue mounted: 整页刷新后 http.ts 的 ElMessage.warning 会消失
+//   WHY 一次性: 读取后立即 removeItem, 避免重复提示
+//   WHY sessionStorage 不用 safeStorage: cursor 重置是低频事件, 隐私模式降级丢失 toast 不影响功能
+onMounted(() => {
+  try {
+    const cursorFlag = sessionStorage.getItem('cursor-reset-toast')
+    if (cursorFlag) {
+      sessionStorage.removeItem('cursor-reset-toast')
+      const msg = cursorFlag === 'CURSOR_EXPIRED'
+        ? '分页游标已过期,已重置到第 1 页'
+        : '分页游标无效,已重置到第 1 页'
+      // nextTick 确保 ElMessage 实例已挂载 (App.vue mounted 时子组件可能未完全就绪)
+      //   注: ElMessage 是命令式 API, 不依赖 DOM 挂载, 可直接调用
+      ElMessage.warning(msg)
+    }
+  } catch {
+    // Safari 隐私模式 sessionStorage.getItem 可能抛错, 静默忽略
+  }
+})
 </script>
 
 <template>

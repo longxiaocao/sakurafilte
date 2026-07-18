@@ -161,6 +161,52 @@ function redirectToLogin(): void {
   handle401()
 }
 
+/**
+ * V24-F37 (spec F3-5/Task 4.5.14): CURSOR 过期/无效自动重置到第 1 页
+ *   - 后端返回 400 + errorCode=CURSOR_EXPIRED 或 CURSOR_INVALID 时触发
+ *   - 改用 SPA router.replace (不触发整页刷新), 保留 SPA 状态 (滚动位置/对比列表/搜索条件)
+ *   - 同步 sessionStorage 设置 'cursor-reset-toast' 标记, App.vue mounted 读取并显示一次性 toast
+ *   - 仅在 /search 路径触发重置 (其他路径忽略, 避免误清 URL)
+ *
+ * spec F3-5 漏洞: 旧方案用 window.location.href 整页刷新, 丢失 SPA 状态 + ElMessage 提示消失
+ *
+ * @param errorCode 后端错误码 ('CURSOR_EXPIRED' | 'CURSOR_INVALID')
+ */
+async function handleCursorExpired(errorCode: string): Promise<void> {
+  // V24-F37: sessionStorage 标记, App.vue mounted 显示一次性 toast
+  //   WHY sessionStorage: 整页刷新后 toast 不丢失 (ElMessage 在刷新后消失)
+  //   WHY 不用 localStorage: cursor 重置是会话级事件, 关闭标签页后不应再提示
+  try {
+    sessionStorage.setItem('cursor-reset-toast', errorCode)
+  } catch {
+    // Safari 隐私模式 sessionStorage.setItem 可能抛 QuotaExceededError
+    //   注: 这里不用 safeStorage, 因为 cursor 重置是低频事件, 失败时仅丢失 toast 提示, 不影响功能
+  }
+
+  // 仅在 /search 路径触发重置 (其他路径如 /admin/products 也可能用 cursor, 但重置策略不同)
+  //   WHY 路径检查: 避免在 /login 或其他页面误清 URL query
+  const { pathname, search } = window.location
+  if (!pathname.includes('/search')) return
+
+  // 解析当前 URL query, 移除 cursor, 重置 page=1
+  const url = new URL(pathname + search, window.location.origin)
+  url.searchParams.delete('cursor')
+  url.searchParams.set('page', '1')
+  const newPath = url.pathname + url.search
+
+  // V24-F37 (spec F3-5): 改用 SPA router.replace (不触发整页刷新)
+  //   WHY router.replace: 保留 SPA 状态 (已勾选对比列表、已填搜索条件、滚动位置)
+  //   WHY 不用 window.location.href: 整页刷新丢失所有 SPA 状态 + ElMessage 提示消失
+  try {
+    const { default: router } = await import('@/router')
+    await router.replace(newPath)
+  } catch (chunkError) {
+    // chunk 加载失败兜底: 降级到 window.location.href (极端情况)
+    console.warn('[http] router chunk 加载失败, cursor 重置降级到原生跳转', chunkError)
+    window.location.href = newPath
+  }
+}
+
 interface RetriableConfig extends InternalAxiosRequestConfig {
   _retry?: boolean
 }
@@ -179,6 +225,20 @@ http.interceptors.response.use(
     const data = err.response?.data
     const isProblemDetails = !!(data && typeof data === 'object' && 'title' in data)
     const detail = isProblemDetails ? (data.detail || data.title) : undefined
+    // V24-F37: 提取 errorCode 用于 CURSOR_EXPIRED/CURSOR_INVALID 分支判断
+    const errorCode = (data as { errorCode?: string } | undefined)?.errorCode
+
+    // ===== V24-F37 (spec F3-5/Task 4.5.14): CURSOR 过期/无效自动重置到第 1 页 =====
+    //   - 后端返回 400 + errorCode=CURSOR_EXPIRED/CURSOR_INVALID (spec S13/F5)
+    //   - 改用 SPA router.replace (不触发整页刷新, 保留 ElMessage + SPA 状态)
+    //   - sessionStorage 标记 + App.vue mounted 显示一次性 toast
+    //   - 触发后仍 reject (调用方 catch 可选处理, 默认显示错误提示)
+    if (errorCode === 'CURSOR_EXPIRED' || errorCode === 'CURSOR_INVALID') {
+      // 异步触发重置, 不阻塞 reject (避免调用方等待 router.replace 完成)
+      handleCursorExpired(errorCode)
+      ElMessage.warning(errorCode === 'CURSOR_EXPIRED' ? '分页游标已过期,已重置到第 1 页' : '分页游标无效,已重置到第 1 页')
+      return Promise.reject(err)
+    }
 
     // ===== 401 自动 refresh 流程 =====
     //   条件: 状态 401 + 配置存在 + 未重试过 + 不是 /auth/* 端点本身 (避免登录失败也触发 refresh)
@@ -243,7 +303,7 @@ http.interceptors.response.use(
     } else if (status === 401) {
       // 401 但已重试过 / 是 auth 端点: 用业务可读提示
       // 后端 ProblemDetails.errorCode 映射 (如 ERR_AUTH_FAILED)
-      const errorCode = data?.errorCode
+      // V24-F37: 复用顶层 errorCode 声明 (避免重复声明)
       if (errorCode === 'ERR_AUTH_FAILED') {
         ElMessage.error(i18n.global.t('common.feedback.error_029'))
       } else if (isProblemDetails && data.title) {

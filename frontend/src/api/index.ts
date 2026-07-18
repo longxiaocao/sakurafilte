@@ -226,6 +226,22 @@ export const searchApi = {
   }
 }
 
+// V24-F38 (spec 改进建议): 记录上一次 searchWithFallback 是否降级到旧 API
+//   - 供 AggregateSearchView 渲染时检查, 降级时只渲染基础字段 (无 oemList/machineList 嵌套)
+//   - 与 isHttpRedirecting 同样的模块级标志模式 (不污染 AggregateSearchResponse 类型)
+//   - 每次 searchWithFallback 调用前重置为 false, 降级时设为 true
+let lastSearchWasLegacy = false
+
+/**
+ * V24-F38: 查询上一次 searchWithFallback 是否降级到旧 API
+ *   - 供 AggregateSearchView 检查, 降级时隐藏 oemList/machineList 展开按钮 (因为旧 API 返回空数组)
+ *   - 调用时机: searchWithFallback 返回后立即检查
+ *   - 返回值: true 表示降级到旧 API (基础字段渲染), false 表示用聚合 API (完整渲染)
+ */
+export function wasLastSearchLegacyFallback(): boolean {
+  return lastSearchWasLegacy
+}
+
 /**
  * V24-F34 (spec F5-8/Task 4.5.27): searchWithFallback — 聚合搜索 API 404 降级到旧 API
  *
@@ -246,6 +262,8 @@ export async function searchWithFallback(
   req: import('./types').AggregateSearchRequest,
   signal?: AbortSignal
 ): Promise<import('./types').AggregateSearchResponse> {
+  // V24-F38: 每次调用前重置标志, 避免上一次降级状态污染本次结果
+  lastSearchWasLegacy = false
   try {
     return await searchApi.aggregate(req, { signal })
   } catch (err) {
@@ -271,6 +289,8 @@ export async function searchWithFallback(
       //   WHY: 旧 API 仅返回基础搜索结果, 无聚合 oemList/machineList 嵌套
       //        兼容期返回空 oemList/machineList, 前端按基础字段渲染
       console.warn('[searchWithFallback] 降级到旧 API (searchApi.search)')
+      // V24-F38: 标记本次降级, 供 AggregateSearchView 渲染时检查
+      lastSearchWasLegacy = true
       const legacyResp = await searchApi.search(
         {
           q: req.q,

@@ -21,10 +21,12 @@ export function sanitizeFormatted(raw: string | null | undefined): string {
   if (!raw) return ''
   // 步骤 1: 全量 HTML 转义 (所有 < > & " ' 都变实体)
   //   WHY 先全量转义: 假设后端可能被绕过 (配置错误/版本回退), 前端独立防御
+  //   V24-F36 修正注释: 后端 SanitizeFormatted 输出的是 raw HTML (含真实 <mark> 标签)
+  //     而非预转义字符串, 前端先全量转义再还原 <mark>
   let s = escapeHtml(raw)
   // 步骤 2: 还原 <mark></mark> 为真实标签
-  //   后端 SanitizeFormatted 输出形如 "Oil &lt;mark&gt;Filter&lt;/mark&gt;"
-  //   转义后变成 "Oil &lt;mark&gt;Filter&lt;/mark&gt;"
+  //   后端 SanitizeFormatted 输出 raw HTML: 'Oil <mark>Filter</mark>'
+  //   步骤 1 escapeHtml 后变成 'Oil &lt;mark&gt;Filter&lt;/mark&gt;'
   //   还原 &lt;mark&gt; → <mark>, &lt;/mark&gt; → </mark>
   s = s.replace(/&lt;mark&gt;/g, '<mark>').replace(/&lt;\/mark&gt;/g, '</mark>')
   return s
