@@ -76,16 +76,31 @@ public class AdminProductService
                 throw new InvalidOperationException($"MR1_ALREADY_EXISTS: MR.1 已存在 (mr1={form.Mr1})");
 
             // V2: OEM 3 唯一性检查(同 Brand 下未下架 OEM 3)
-            foreach (var x in form.CrossReferences)
+            // V24-F55: 批量预拉消除 N+1 (原 foreach 内 AnyAsync, N 条 xref 触发 N 次 SQL)
+            //   参考 IndexReplayWorker.cs L245-264 批量预拉模板: 1 次 SQL 拉所有候选 → 内存按复合 key 查找
+            //   场景: form.CrossReferences 通常 1-5 条, 但批次导入或 API 自动化可放大
+            var oem3PairsToCheck = form.CrossReferences
+                .Where(x => !string.IsNullOrEmpty(x.OemBrand) && !string.IsNullOrEmpty(x.OemNo3))
+                .Select(x => (Brand: x.OemBrand!.Trim(), Oem3: x.OemNo3!.Trim()))
+                .Distinct()
+                .ToList();
+            if (oem3PairsToCheck.Count > 0)
             {
-                if (!string.IsNullOrEmpty(x.OemBrand) && !string.IsNullOrEmpty(x.OemNo3))
+                var brands = oem3PairsToCheck.Select(p => p.Brand).Distinct().ToList();
+                var oem3s = oem3PairsToCheck.Select(p => p.Oem3).Distinct().ToList();
+                // 1 次 SQL 拉所有候选 (brand IN (...) AND oem_no_3 IN (...) AND NOT is_discontinued)
+                //   注意: 此查询是超集 (brand × oem3 笛卡尔积), 内存内再精确匹配 (Brand, Oem3) 对
+                var existingOem3 = await _db.CrossReferences
+                    .Where(c => brands.Contains(c.OemBrand!) && oem3s.Contains(c.OemNo3!) && !c.IsDiscontinued)
+                    .Select(c => new { c.OemBrand, c.OemNo3 })
+                    .ToListAsync(ct);
+                var existingOem3Set = existingOem3
+                    .Select(c => (c.OemBrand!, c.OemNo3!))
+                    .ToHashSet();  // ValueTuple 默认用 Ordinal 比较 string
+                foreach (var pair in oem3PairsToCheck)
                 {
-                    var oem3Exists = await _db.CrossReferences
-                        .AnyAsync(c => c.OemBrand == x.OemBrand!.Trim()
-                            && c.OemNo3 == x.OemNo3!.Trim()
-                            && !c.IsDiscontinued, ct);
-                    if (oem3Exists)
-                        throw new InvalidOperationException($"OEM3_ALREADY_EXISTS: OEM 3 已存在 (brand={x.OemBrand}, oem3={x.OemNo3})");
+                    if (existingOem3Set.Contains((pair.Brand, pair.Oem3)))
+                        throw new InvalidOperationException($"OEM3_ALREADY_EXISTS: OEM 3 已存在 (brand={pair.Brand}, oem3={pair.Oem3})");
                 }
             }
 

@@ -14495,5 +14495,66 @@ v25 本章作为 spec 治理基线,不再继续追加 v26/v27 章节。后续改
 | P2 | AdminProductService.CreateAsync N+1(循环内 AnyAsync) | 用户单次提交 ≤20 条,影响有限 |
 | P2 | 测试覆盖盲区(30+ 服务类无测试) | 长期治理,需按批次推进 |
 
+## 26.10 v25 改进实施记录(自主决策批次二)
+
+> 基于 26.9.5 评估清单继续推进,本轮实施 V24-F55 (AdminProductService N+1 修复),并完成 P2-2 重新评估(结论:不需要实施)。
+
+### 26.10.1 V24-F55: AdminProductService.CreateAsync N+1 修复(规则 4.2)
+
+**问题**: `AdminProductService.cs` L79-90 `CreateAsync` 中 `foreach (var x in form.CrossReferences)` 循环内调用 `_db.CrossReferences.AnyAsync(...)` 检查 OEM 3 唯一性。若表单提交 N 条交叉引用,将触发 N 次 SQL 查询,违反规则 4.2(循环内严禁执行 DB 查询,防范 N+1 问题)。
+
+**修复方案**(参考 [IndexReplayWorker.cs](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Services/IndexReplayWorker.cs#L245-L264) 批量预拉模板):
+1. 先从 `form.CrossReferences` 收集所有非空 `(OemBrand, OemNo3)` 对(Distinct 去重)
+2. 提取 distinct 的 brand 列表 + oem3 列表
+3. **1 次 SQL** 拉所有候选(`brand IN (...) AND oem3 IN (...) AND NOT is_discontinued`)
+4. 内存内用 `HashSet<(string, string)>` 精确匹配(避免 IN 笛卡尔积误判)
+5. 循环内 O(1) 查找,触发业务异常时抛 `InvalidOperationException("OEM3_ALREADY_EXISTS: ...")`
+
+**语义保持**:
+- 原 `c.OemBrand == x.OemBrand!.Trim()` 严格相等 → 新 `brands.Contains(c.OemBrand!)` 严格相等(db 中 OemBrand 由 ETL/AdminProductService 写入时已 Trim,语义一致)
+- 原 `c.OemBrand` 为 null 时返回 false → 新 `brands.Contains(null)` 在 SQL `IN` 中 NULL 返回 NULL(视为 false),语义一致
+- 异常消息格式保持 `OEM3_ALREADY_EXISTS: OEM 3 已存在 (brand={Brand}, oem3={Oem3})`,不影响前端 errorCode 映射
+
+**影响范围**: 仅 [AdminProductService.cs](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Services/AdminProductService.cs#L78-L105) 单文件 1 处修改,无调用方变更。
+
+### 26.10.2 P2-2 重新评估: BaseDictService/UserService 异常处理补全 — 不需要实施
+
+**评估结论**: 子代理报告"BaseDictService 7 方法无 try-catch"和"UserService 11 方法无 try-catch"是**误报**,无需补全。
+
+**核查依据**:
+1. **全局异常中间件已完善**: [ProblemDetailsFactory.cs](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Services/ProblemDetailsFactory.cs#L63-L153) L63-153 `FromException` 方法处理所有异常类型:
+   - `ArgumentException` → 400 + ERR_VALIDATION_FAILED
+   - `KeyNotFoundException` → 404 + ERR_NOT_FOUND
+   - `InvalidOperationException` → 409 + 按 message 映射 V2 errorCode
+   - `DbUpdateConcurrencyException` → 409 + ERR_DB_CONFLICT
+   - `DbUpdateException` → 按 SqlState 细分(23505→409, 23503→400, 40P01→408)
+   - 5xx 兜底不泄露 ex.Message(OWASP Top 10 Security Misconfiguration)
+2. **Endpoint 层已有 try-catch**: [DictionaryEndpoints.cs](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Endpoints/DictionaryEndpoints.cs#L66-L96) L66-96 捕获业务异常并调用 `ProblemDetailsFactory.FromException`
+3. **设计原则**: ProblemDetailsFactory 注释 L14 明确"减少每个端点 try-catch",业务异常直接抛出由全局中间件统一处理是合理设计
+
+**保留现状**: BaseDictService/UserService 的业务异常(InvalidOperationException "字典值已存在" / 认证失败)直接抛出,由全局异常中间件映射为合适的 HTTP 状态码 + errorCode。这是符合架构设计的最优解,不需要补全 try-catch。
+
+### 26.10.3 验证结果
+
+| 项目 | 命令 | 结果 |
+|---|---|---|
+| 后端编译 | `dotnet build backend/SakuraFilter.sln --no-incremental` | ✅ 0 warning 0 error |
+| 后端测试 | `dotnet test backend/SakuraFilter.sln` | ✅ 269/269 通过 (37 Etl + 232 Api) |
+
+### 26.10.4 v25 改进批次二文件清单
+
+| 类型 | 路径 | 修改摘要 |
+|---|---|---|
+| 后端 | `backend/src/SakuraFilter.Api/Services/AdminProductService.cs` | CreateAsync OEM 3 唯一性检查改批量预拉,N+1 → 1 次 SQL |
+| spec | `.trae/specs/v2-architecture-migration/spec.md` | 追加 26.10 改进实施记录(本节) |
+
+### 26.10.5 v25 改进批次总结
+
+| 批次 | 编号 | 改动 | 验证 |
+|---|---|---|---|
+| 一 (26.9) | V24-F53 | AlertCenter Console.WriteLine → _logger.LogWarning | 269/269 |
+| 一 (26.9) | V24-F54 | AppHeader.vue debounceTimer 副作用清理 | 244/244 单测 |
+| 二 (26.10) | V24-F55 | AdminProductService.CreateAsync N+1 修复 | 269/269 |
+
 
 
