@@ -128,13 +128,64 @@ public class IndexReplayWorker : BackgroundService
         {
             try
             {
-                // V2 (Task 0.4): 反序列化 Mr1IndexDoc (嵌套结构,替代 ProductIndexDoc)
-                var docs = toIndex.Select(p => JsonSerializer.Deserialize<Mr1IndexDoc>(p.Payload)!).ToList();
-                await meili.IndexAsync(docs, ct);
+                // V24-F51 (spec Task 5.1.21): 兼容两种 payload 格式
+                //   1. 完整 Mr1IndexDoc JSON (ETL/产品编辑写入): 直接反序列化
+                //   2. 简化 { product_id, mr1, trigger } (字典变更写入): 调 BuildMr1DocumentAsync 重建
+                //   WHY 兼容: OemBrandDictService.ApplyChangeAsync 不构建完整 Mr1IndexDoc (避免重复逻辑),
+                //            而是写入 product_id, 由 IndexReplayWorker 调 BuildMr1DocumentAsync 重建
+                var fullDocs = new List<Mr1IndexDoc>();
+                var needRebuild = new List<(SearchIndexPending pending, long productId)>();
+
+                foreach (var p in toIndex)
+                {
+                    // 尝试解析为简化 payload (含 product_id 字段)
+                    using var docNode = JsonDocument.Parse(p.Payload);
+                    if (docNode.RootElement.TryGetProperty("product_id", out var pidNode))
+                    {
+                        // 简化 payload: 需调 BuildMr1DocumentAsync 重建
+                        var pid = pidNode.GetInt64();
+                        needRebuild.Add((p, pid));
+                    }
+                    else
+                    {
+                        // 完整 Mr1IndexDoc payload: 直接反序列化
+                        fullDocs.Add(JsonSerializer.Deserialize<Mr1IndexDoc>(p.Payload)!);
+                    }
+                }
+
+                // 处理需要重建的条目: 查 Product + 调 BuildMr1DocumentAsync
+                if (needRebuild.Count > 0)
+                {
+                    var productIds = needRebuild.Select(x => x.productId).Distinct().ToList();
+                    var products = await db.Products
+                        .AsNoTracking()
+                        .Where(p => productIds.Contains(p.Id))
+                        .ToListAsync(ct);
+                    foreach (var (pendingRec, pid) in needRebuild)
+                    {
+                        var product = products.FirstOrDefault(p => p.Id == pid);
+                        if (product == null)
+                        {
+                            // 产品已删除: 跳过 (不应重建, 但也不报错)
+                            db.SearchIndexPending.Remove(pendingRec);
+                            continue;
+                        }
+                        var doc = await meili.BuildMr1DocumentAsync(product, ct);
+                        fullDocs.Add(doc);
+                    }
+                    await db.SaveChangesAsync(ct);  // 保存已删除的无效条目
+                }
+
+                if (fullDocs.Count > 0)
+                {
+                    await meili.IndexAsync(fullDocs, ct);
+                }
+
                 // 成功后批量删除 (在事务内, 不 commit)
                 db.SearchIndexPending.RemoveRange(toIndex);
                 await db.SaveChangesAsync(ct);
-                _logger.LogInformation("Meili 重试索引成功: {Count} 条", toIndex.Count);
+                _logger.LogInformation("Meili 重试索引成功: {Count} 条 (重建 {RebuildCount} 条)",
+                    toIndex.Count, needRebuild.Count);
             }
             catch (Exception ex)
             {
