@@ -322,6 +322,8 @@ function doPrint() {
 
 <template>
   <div class="p-3 max-w-screen-2xl mx-auto compare-root">
+    <!-- V24-F72: 补充 h1 提升语义和无障碍 (原 span 无语义) -->
+    <h1 class="sr-only">产品对比</h1>
     <!-- 工具条 -->
     <div class="compare-toolbar flex items-center gap-2 mb-3 flex-wrap">
       <span class="text-sm font-medium">产品对比</span>

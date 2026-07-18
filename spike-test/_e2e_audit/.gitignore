@@ -1,0 +1,8 @@
+# 临时巡检产物, 不入 git
+screenshots/
+*.png
+*.json
+db_backup_*.sql
+audit-report.json
+login-debug.png
+__pycache__/

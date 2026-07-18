@@ -192,10 +192,11 @@ const planComparison = [
         <div class="flex items-center gap-2 mb-4 flex-wrap">
           <span class="text-sm text-muted">方案选择:</span>
           <el-radio-group v-model="layoutOption" size="small">
-            <el-radio-button label="D">D. 工业极简融合风 (已实现, 推荐)</el-radio-button>
-            <el-radio-button label="A">A. 卡片网格</el-radio-button>
-            <el-radio-button label="B">B. 时间线折叠</el-radio-button>
-            <el-radio-button label="C">C. 左右分栏</el-radio-button>
+            <!-- V24-F72: el-radio label→value (Element Plus 3.0.0 弃用 label 作 value) -->
+            <el-radio-button value="D">D. 工业极简融合风 (已实现, 推荐)</el-radio-button>
+            <el-radio-button value="A">A. 卡片网格</el-radio-button>
+            <el-radio-button value="B">B. 时间线折叠</el-radio-button>
+            <el-radio-button value="C">C. 左右分栏</el-radio-button>
           </el-radio-group>
           <el-button size="small" @click="goReal('/product/P00050000')" plain>
             查看实际页面

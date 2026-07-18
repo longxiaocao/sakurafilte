@@ -814,6 +814,12 @@ export default {
         username_cannot_be_empty: 'Username cannot be empty',
       },
     },
+    // V24-F72: 补充 errorview aria key (AdminErrorView 用)
+    errorview: {
+      aria: {
+        trigger_test_error: 'Trigger test error',
+      },
+    },
   },
 
   common: {
@@ -987,6 +993,10 @@ export default {
 
       optional: 'Optional',
 
+      // V24-F72: 补充 common.action 下缺失的通用操作 key
+      search: 'Search',
+      reset: 'Reset',
+      refresh: 'Refresh',
     },
     confirm: 'Confirm',
     cancel: 'Cancel',

@@ -55,7 +55,15 @@ public static class AdminXrefReorderEndpoints
                 }).ToListAsync(ct);
 
             var result = brands.Cast<object>().ToList();
-            cache.Set(cacheKey, result, TimeSpan.FromMinutes(5));
+            // V24-F71: 修复 MemoryCache Size 缺失导致 500
+            //   WHY: ServiceCollectionExtensions L387 设置了 options.SizeLimit=10000, 所有 cache.Set 必须指定 Size
+            //   参考 PublicTypeaheadService L81 / SitemapEndpoints L103 的做法 (MemoryCacheEntryOptions + Size=1)
+            //   否则抛 InvalidOperationException: Cache entry must specify a value for Size when SizeLimit is set
+            cache.Set(cacheKey, result, new MemoryCacheEntryOptions
+            {
+                AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5),
+                Size = 1
+            });
             return Results.Ok(new { total = result.Count, items = result });
         })
         .WithSummary("获取 OEM 品牌列表 (含 sortOrder + oem3Count, 按 sortOrder 排序)")

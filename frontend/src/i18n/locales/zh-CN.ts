@@ -823,6 +823,12 @@ export default {
         username_cannot_be_empty: '用户名不能为空',
       },
     },
+    // V24-F72: 补充 errorview aria key (AdminErrorView 用)
+    errorview: {
+      aria: {
+        trigger_test_error: '触发测试错误',
+      },
+    },
   },
 
   common: {
@@ -996,6 +1002,11 @@ export default {
 
       optional: '可选',
 
+      // V24-F72: 补充 common.action 下缺失的通用操作 key
+      //   WHY: AdminAlertsView/AdminEtlView 用 t('common.action.search/reset/refresh') 但 i18n 里缺失
+      search: '搜索',
+      reset: '重置',
+      refresh: '刷新',
     },
     confirm: '确认',
     cancel: '取消',
