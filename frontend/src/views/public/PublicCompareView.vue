@@ -6,19 +6,26 @@ const { t } = useI18n()
 //   - 复用 AdminCompareView 6 字段组布局 (基础/尺寸/性能/包装/外箱/CrossRef)
 //   - 数据源: GET /api/public/compare?ids=1,2,3 (排除下架产品, 最多 6 个)
 //   - 保留差异高亮 + 列调序 + 加入/移除 + 打印
-//   - 不写 localStorage (游客会话性, 不持久化列顺序)
+//   - V24-F32 (spec F2-13/Task 4.5.10): 对比列表 sessionStorage 仅持久化 ID 数组
+//     WHY: 持久化完整产品对象可能超过 5MB, setItem 抛 QuotaExceededError
+//          仅持久化 ID 数组 (最多 6 个 number), 通过 safeStorage 自动降级 Safari 隐私模式
+//          读取后调 API 拉详情 (loadByIds), 不依赖 sessionStorage 完整数据
+//          URL query.ids 优先, sessionStorage 作为刷新后兜底恢复
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { publicCompareApi } from '@/api'
 import type { ProductDetail, XrefInfo, MachineAppInfo } from '@/api/types'
 import { buildProductUrl } from '@/utils/build-product-url'
+import { safeGetItem, safeSetItem, safeRemoveItem } from '@/utils/safeStorage'
 
 const route = useRoute()
 const router = useRouter()
 
 // ===== 常量 =====
 const MAX_COMPARE = 6
+// V24-F32: sessionStorage key 仅持久化 ID 数组 (非完整产品对象)
+const COMPARE_KEY = 'sakurafilter_compare_ids'
 
 // ===== 字段定义 (与 AdminCompareView 一致) =====
 interface FieldDef {
@@ -150,7 +157,17 @@ function parseIdsFromQuery(): number[] {
 onMounted(async () => {
   const ids = parseIdsFromQuery()
   if (ids.length > 0) {
+    // V24-F32: URL 有 ids 时, 同步写入 sessionStorage (兜底恢复用)
+    persistCompareIds(ids)
     await loadByIds(ids)
+  } else {
+    // V24-F32: URL 无 ids 时, 尝试从 sessionStorage 恢复 (刷新后兜底)
+    const restoredIds = loadCompareIds()
+    if (restoredIds.length > 0) {
+      // 写回 URL (不触发 history push, 用 replace 避免循环)
+      router.replace({ path: '/compare', query: { ids: restoredIds.join(',') } })
+      await loadByIds(restoredIds)
+    }
   }
 })
 
@@ -193,6 +210,40 @@ function removeProduct(idx: number) {
 function persistUrlOrder() {
   const ids = products.value.map((p) => p.id).join(',')
   router.replace({ path: '/compare', query: ids ? { ids } : {} })
+  // V24-F32: 同步持久化 ID 数组到 sessionStorage (刷新后兜底恢复)
+  persistCompareIds(products.value.map((p) => p.id))
+}
+
+// V24-F32 (spec F2-13): sessionStorage 仅持久化 ID 数组 (最多 6 个 number)
+//   - safeSetItem 自动降级 Safari 隐私模式 (不抛 QuotaExceededError)
+//   - 仅存 ID 数组, 容量极小 (< 100 字节), 不存完整产品对象
+//   - 读取后调 API 拉详情 (loadByIds), 避免数据膨胀
+function persistCompareIds(ids: number[]): void {
+  try {
+    const trimmed = ids.slice(0, MAX_COMPARE)
+    if (trimmed.length === 0) {
+      safeRemoveItem(COMPARE_KEY)
+    } else {
+      safeSetItem(COMPARE_KEY, JSON.stringify(trimmed))
+    }
+  } catch {
+    // 兜底: 即使 safeSetItem 内部异常也不影响 UI (safeStorage 已处理, 此 catch 极少见)
+  }
+}
+
+function loadCompareIds(): number[] {
+  try {
+    const raw = safeGetItem(COMPARE_KEY)
+    if (!raw) return []
+    const arr = JSON.parse(raw)
+    if (!Array.isArray(arr)) return []
+    return arr
+      .map((s: unknown) => (typeof s === 'number' ? s : parseInt(String(s), 10)))
+      .filter((n: number) => !isNaN(n) && n > 0)
+      .slice(0, MAX_COMPARE)
+  } catch {
+    return []
+  }
 }
 
 // ===== 加入产品 (公开版本, 通过公开 compare API 拉取单个) =====

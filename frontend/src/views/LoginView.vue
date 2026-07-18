@@ -50,9 +50,13 @@ async function handleLogin() {
     ElMessage.success(t('auth.loginSuccess'))
     // V2 Task V17-3.3: 开放重定向防护 - 仅允许同源相对路径或白名单主机
     //   WHY 修复: 之前 `route.query.redirect as string` 强转可被构造 javascript:evil() 或钓鱼站点
-    const redirectRaw = route.query.redirect as string | undefined
-    const safeRedirect = isSafeRedirect(redirectRaw, SAFE_REDIRECT_HOSTS)
-    router.push(safeRedirect ? redirectRaw! : '/admin/products')
+    // V24-F33 (spec F5-9/Task 4.5.23.4): 优先用 returnUrl (新参数名), 向后兼容 redirect (旧参数)
+    //   WHY: http.ts handle401 改用 ?return= 替代 ?redirect=, 但旧分享链接可能仍含 redirect=
+    //        兼容期同时支持两个参数名, 后续版本可移除 redirect 兼容
+    const returnUrlRaw = (route.query.return as string | undefined) ?? (route.query.redirect as string | undefined)
+    const safeReturn = isSafeRedirect(returnUrlRaw, SAFE_REDIRECT_HOSTS)
+    // V24-F33: spec F5-9 用 router.replace 替代 router.push (登录回跳不入 history 栈, 避免后退回到登录页)
+    router.replace(safeReturn ? returnUrlRaw! : '/admin/products')
   } catch (e: any) {
     // 后端 ProblemDetails.errorCode 优先, 走 i18n 映射; title 兜底
     const errorCode = e?.response?.data?.errorCode

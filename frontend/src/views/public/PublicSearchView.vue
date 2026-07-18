@@ -16,6 +16,10 @@ import { ElMessage } from 'element-plus'
 import { publicSearchApi } from '@/api'
 import type { PublicSearchHit, PublicEightResponse } from '@/api/types'
 import { buildProductUrl } from '@/utils/build-product-url'
+// V24-F33 (spec F5-4/Task 4.5.22.4): 401 重定向时跳过 URL 同步, 避免 sync loop
+//   WHY: 401 时 router.replace 触发 watch route.query, 若继续执行 syncUrlFromForm + doSearch
+//        会再次发请求 → 再次 401 → 循环
+import { isHttpRedirecting } from '@/utils/http'
 
 const route = useRoute()
 const router = useRouter()
@@ -165,6 +169,9 @@ watch(pageSize, () => {
 // 监听 route 变化 (浏览器后退/前进/分享链接打开) → 还原 form
 watch(() => route.query, () => {
   if (syncing) return
+  // V24-F33 (spec F5-4): 401 重定向过程中跳过 URL 同步, 避免 sync loop
+  //   WHY: router.replace('/login?return=...') 触发此 watch, 若执行 doSearch 会再次 401 → 循环
+  if (isHttpRedirecting()) return
   syncing = true
   syncFormFromUrl()
   syncing = false

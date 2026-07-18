@@ -1,5 +1,7 @@
 // Day 9: API 客户端 (按业务域拆分)
 import { http } from '@/utils/http'
+import { AxiosError } from 'axios'
+import { captureException } from '@/utils/errorMonitor'
 import type {
   SearchRequest,
   SearchResult,
@@ -210,6 +212,96 @@ export const searchApi = {
   //   返: { total, hits, miss, results: [{ oem, hit, productId, oemBrand, productName1, oem2 }] }
   batchOem(req: import('./types').BatchOemRequest): Promise<import('./types').BatchOemResponse> {
     return http.post('/public/search/batch-oem', req).then((r) => r.data)
+  },
+
+  // V24-F34 (spec Task 4.8.2/4.5.27): 聚合搜索 API (POST /public/search/aggregate)
+  //   WHY: spec Task 4.8.2 要求 searchApi.aggregate 对接聚合 API
+  //        之前 aggregate 挂在 publicSearchApi 上, 与 spec 不符, 此处补充 searchApi.aggregate
+  //        publicSearchApi.aggregate 保留 (向后兼容, 后续版本可移除)
+  aggregate(
+    req: import('./types').AggregateSearchRequest,
+    config?: { signal?: AbortSignal }
+  ): Promise<import('./types').AggregateSearchResponse> {
+    return http.post('/public/search/aggregate', req, { signal: config?.signal }).then((r) => r.data)
+  }
+}
+
+/**
+ * V24-F34 (spec F5-8/Task 4.5.27): searchWithFallback — 聚合搜索 API 404 降级到旧 API
+ *
+ * 触发条件 (v7 最终版, 三重判断):
+ *   1. HTTP 状态码 === 404 (聚合 API 端点不存在, 如 nginx 路由漏配)
+ *   2. console.error + captureException Sentry 上报 (避免掩盖配置错误)
+ *   3. import.meta.env.VITE_ENABLE_LEGACY_FALLBACK === 'true' 才真正 fallback
+ *      - dev (true): 降级到 searchApi.search, 便于本地开发
+ *      - prod (false): 直接抛错 "聚合搜索 API 不可用,请联系管理员"
+ *
+ * 非 404 错误 (5xx / network error) 一律 throw err, 不降级
+ *
+ * @param req 聚合搜索请求
+ * @param signal AbortSignal 用于取消请求
+ * @returns AggregateSearchResponse 或降级后的兼容响应
+ */
+export async function searchWithFallback(
+  req: import('./types').AggregateSearchRequest,
+  signal?: AbortSignal
+): Promise<import('./types').AggregateSearchResponse> {
+  try {
+    return await searchApi.aggregate(req, { signal })
+  } catch (err) {
+    // F5-8: 仅 HTTP 404 触发 fallback 逻辑 (5xx / network error 不降级)
+    if (err instanceof AxiosError && err.response?.status === 404) {
+      // F5-8: 404 时记录 error 级别日志 + Sentry 上报
+      //   WHY: 404 可能是 API 路径配置错误 (nginx 路由漏配), 降级会掩盖问题
+      console.error('[searchWithFallback] 聚合搜索 API 返回 404,可能 API 路径配置错误', {
+        url: err.config?.url,
+        method: err.config?.method,
+      })
+      captureException(err, {
+        tags: { component: 'searchWithFallback' },
+        extra: { url: err.config?.url, status: 404 },
+      })
+
+      // F5-8: 仅在明确降级模式 (配置开关) 下才 fallback, 默认不 fallback 直接抛错
+      if (import.meta.env.VITE_ENABLE_LEGACY_FALLBACK !== 'true') {
+        throw new Error('聚合搜索 API 不可用,请联系管理员')
+      }
+
+      // 降级到旧 API (searchApi.search, POST /search)
+      //   WHY: 旧 API 仅返回基础搜索结果, 无聚合 oemList/machineList 嵌套
+      //        兼容期返回空 oemList/machineList, 前端按基础字段渲染
+      console.warn('[searchWithFallback] 降级到旧 API (searchApi.search)')
+      const legacyResp = await searchApi.search(
+        {
+          q: req.q,
+          page: req.page ?? 1,
+          pageSize: req.pageSize ?? 20,
+          tolerance: req.tolerance,
+          includeDiscontinued: req.includeDiscontinued ?? false,
+          type: req.type
+        } as SearchRequest,
+        { signal }
+      )
+      // 将旧 SearchResult 适配为 AggregateSearchResponse 形状 (空 oemList/machineList)
+      return {
+        total: legacyResp.result.total,
+        page: req.page ?? 1,
+        pageSize: req.pageSize ?? 20,
+        totalPages: Math.ceil(legacyResp.result.total / (req.pageSize ?? 20)),
+        processingTimeMs: legacyResp.result.elapsedMs,
+        provider: legacyResp.provider,
+        hits: (legacyResp.result.items || []).map((item) => ({
+          mr1: '',  // 旧 API 无 mr1 字段, 留空
+          type: item.type || '',
+          isPublished: !item.isDiscontinued,
+          isDiscontinued: item.isDiscontinued,
+          oemList: [],
+          machineList: []
+        }))
+      } as import('./types').AggregateSearchResponse
+    }
+    // 非 404 错误 (5xx / network error / AbortError) 直接抛出
+    throw err
   }
 }
 

@@ -9,6 +9,10 @@
 //   - 10/30s 平衡实时性 vs 网络开销
 //   - 后端 /api/perf/ingest 上限 100 条/批, 防止恶意大批量
 import { http } from './http'
+// V24-F31 (spec F5-2): sessionStorage 替换为 safeStorage, 兼容 Safari 隐私模式
+//   WHY: Safari 隐私模式 sessionStorage.setItem 抛 QuotaExceededError
+//        旧版 try-catch 仅捕获异常, 数据丢失; safeStorage 自动降级到 memoryStore
+import { safeGetItem, safeSetItem } from './safeStorage'
 
 export interface PerfSample {
   path: string
@@ -30,8 +34,9 @@ let installed = false
 let interceptorIds: { request: number; response: number } = { request: -1, response: -1 }
 
 function loadFromStorage(): PerfSample[] {
+  // V24-F31: 用 safeGetItem 替代裸 sessionStorage.getItem (Safari 隐私模式降级)
+  const raw = safeGetItem(STORAGE_KEY)
   try {
-    const raw = sessionStorage.getItem(STORAGE_KEY)
     if (!raw) return []
     const arr = JSON.parse(raw)
     if (Array.isArray(arr)) return arr as PerfSample[]
@@ -42,12 +47,10 @@ function loadFromStorage(): PerfSample[] {
 }
 
 function saveToStorage() {
-  try {
-    // WHY sessionStorage: 跨页面刷新保留, 关闭标签页自动清, 避免长期堆积
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(buffer))
-  } catch {
-    // quota 超限或隐私模式, 静默忽略
-  }
+  // V24-F31: 用 safeSetItem 替代裸 sessionStorage.setItem
+  //   WHY sessionStorage: 跨页面刷新保留, 关闭标签页自动清, 避免长期堆积
+  //   safeSetItem 在 Safari 隐私模式自动降级到 memoryStore, 不抛 QuotaExceededError
+  safeSetItem(STORAGE_KEY, JSON.stringify(buffer))
 }
 
 /**

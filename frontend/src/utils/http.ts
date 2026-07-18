@@ -53,7 +53,8 @@ export interface ProblemDetails {
 }
 
 // P2-8.2: 错误码 → 友好提示映射表 (Record<number, string>, 便于扩展)
-const ERROR_CODE_MAP: Record<number, string> = {
+// V24-F35 (spec Task 4.9.1): 导出便于单元测试覆盖
+export const ERROR_CODE_MAP: Record<number, string> = {
   400: '请求参数错误',
   401: '未登录或登录已过期',
   403: '没有权限执行此操作',
@@ -67,6 +68,12 @@ const ERROR_CODE_MAP: Record<number, string> = {
 //   全局 Promise: 多个 401 同时触发时, 共享同一次 refresh 调用
 //   _retry 标记: 防止 refresh 后重试的请求再次 401 时无限循环
 let refreshPromise: Promise<string | null> | null = null
+
+// V24-F33 (spec F5-4/F5-9/Task 4.5.22/4.5.23): 401 重定向防重入标志
+//   - 同步设置: 在 router.replace 之前立即 true, 避免导航过程中 watch 触发 URL sync loop
+//   - 延迟重置: setTimeout 1500ms, 让导航完成 + watch 触发完毕
+//   - 导出 isHttpRedirecting() 供 PublicSearchView 检查, 避免 401 重定向时 URL 同步循环
+let isRedirecting = false
 
 async function doRefresh(): Promise<string | null> {
   const auth = useAdminAuthStore()
@@ -85,14 +92,73 @@ async function doRefresh(): Promise<string | null> {
   }
 }
 
-function redirectToLogin() {
+/**
+ * V24-F33 (spec F5-9/Task 4.5.23): 异步执行 401 重定向
+ *   - 动态 import router 避免 ESM 循环依赖 (http → router → SearchView → api → http)
+ *   - 保留 returnUrl (pathname + search) 完整路径, 登录后回跳原页面
+ *   - chunk 加载失败时降级到 window.location.href (网络问题/部署中)
+ *   - 单独抽出为 async 函数, 便于 try/catch + console.warn 上报
+ */
+async function handle401Redirect(): Promise<void> {
+  // V24-F33 (spec F5-9): returnUrl 保留 pathname + search 完整路径
+  //   WHY pathname + search: 用户在第 50 页时 URL 含 ?page=50&cursor=xxx, 仅 pathname 会丢失分页状态
+  const returnUrl = encodeURIComponent(window.location.pathname + window.location.search)
+  const loginUrl = `/login?return=${returnUrl}`
+
+  try {
+    // V24-F33 (spec F4-4/Task 4.5.16): 动态 import router 避免循环依赖
+    //   WHY 动态 import: 静态 import 会形成 http → router → SearchView → api → http 循环
+    //                    运行时 router 可能为 undefined (ESM 模块加载顺序)
+    const { default: router } = await import('@/router')
+    await router.replace(loginUrl)
+  } catch (chunkError) {
+    // V24-F33 (spec F5-9): chunk 加载失败 (网络问题/部署中), 用原生跳转兜底
+    //   WHY: 动态 import 失败时不能让用户卡死, 必须降级到原生 location.href
+    console.warn('[http] router chunk 加载失败, 用原生跳转', chunkError)
+    window.location.href = loginUrl
+  }
+}
+
+/**
+ * V24-F33 (spec F5-4/Task 4.5.22): 401 重定向处理 (防重入)
+ *   - 同步设置 isRedirecting = true (在 router.replace 之前), 避免 watch 触发 URL sync loop
+ *   - 多次 401 共享同一次重定向 (幂等)
+ *   - 延迟 1500ms 重置 isRedirecting, 让导航完成 + watch 触发完毕
+ *
+ * @param _reason 重定向原因 (日志用, 默认 'refresh-failed')
+ */
+export function handle401(_reason: string = 'refresh-failed'): void {
+  // 幂等: 多次 401 共享同一次重定向
+  if (isRedirecting) return
+  // F5-4: 同步设置, 在 router.replace 之前 (避免导航过程中 watch 触发)
+  isRedirecting = true
+
+  // 调用异步重定向, finally 延迟重置 isRedirecting
+  handle401Redirect().finally(() => {
+    // F5-4: 延迟 1500ms 重置, 避免导航过程中触发的 watch
+    //   WHY 1500ms: router.replace 异步完成 + Vue watch 触发 + URL sync 完成, 经验值
+    setTimeout(() => { isRedirecting = false }, 1500)
+  })
+}
+
+/**
+ * V24-F33 (spec F5-4/Task 4.5.22.3): 查询 http 是否正在 401 重定向
+ *   - 供 PublicSearchView watch route.query 检查, 避免 URL sync loop
+ *   - watch 内同步检查, 触发时跳过 URL 同步逻辑
+ */
+export function isHttpRedirecting(): boolean {
+  return isRedirecting
+}
+
+/**
+ * V24-F33 兼容: 旧 redirectToLogin 内联实现 (已废弃, 内部转调 handle401)
+ *   WHY 保留: 避免破坏其他可能引用 redirectToLogin 的代码 (虽然当前仅 http.ts 内部用)
+ *   @deprecated 改用 handle401()
+ */
+function redirectToLogin(): void {
   const auth = useAdminAuthStore()
   auth.clearAuth()
-  // 避免在登录页本身 401 时再带 redirect=login 死循环
-  if (window.location.pathname !== '/login') {
-    const redirect = window.location.pathname + window.location.search
-    window.location.href = `/login?redirect=${encodeURIComponent(redirect)}`
-  }
+  handle401()
 }
 
 interface RetriableConfig extends InternalAxiosRequestConfig {
