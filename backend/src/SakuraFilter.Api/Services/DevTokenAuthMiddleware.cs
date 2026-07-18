@@ -1,4 +1,5 @@
 using System.Threading.Tasks;
+using System.Security.Claims;            // V24-F18: ClaimsIdentity / ClaimTypes
 using System.Security.Cryptography;   // P1-2: CryptographicOperations.FixedTimeEquals
 using System.Text;                    // P1-2: Encoding.UTF8
 using Microsoft.AspNetCore.Http;
@@ -168,6 +169,23 @@ public class DevTokenAuthMiddleware
         }
         if (usingPrevious)
             _logger.LogWarning("PreviousKey 验证成功 path={Path}, 过渡期旧 token 仍在使用", path);
+
+        // V24-F18: 验证 X-Admin-Token 成功后设置 ClaimsPrincipal (spec V11-F9 / V13-F5)
+        //   WHY: 之前仅 await _next(ctx) 未设置 ctx.User, 导致:
+        //     - 添加 .RequireAuthorization("Admin") 的端点 (如 AdminAlertEndpoints) 对 X-Admin-Token 请求返回 403
+        //     - [Authorize(Policy="Admin")] 的 Controller (如 UsersController) 同样 403
+        //   修复: 设置 ClaimsIdentity + admin role claim, 让后续 AuthorizationPolicy 评估通过
+        //   注意: 仅在 ctx.User 未被 JWT Bearer 认证设置时才覆盖 (避免覆盖 JWT 的 ClaimsPrincipal)
+        if (ctx.User.Identity?.IsAuthenticated != true)
+        {
+            var identity = new ClaimsIdentity(new[]
+            {
+                new Claim(ClaimTypes.NameIdentifier, "dev-token"),
+                new Claim(ClaimTypes.Name, "dev-admin"),
+                new Claim(ClaimTypes.Role, "admin")
+            }, "DevToken");
+            ctx.User = new ClaimsPrincipal(identity);
+        }
 
         await _next(ctx);
     }

@@ -66,11 +66,23 @@ public class ProductDbContext : DbContext
                 t.HasCheckConstraint("chk_mr_1_format", "mr_1 IS NULL OR mr_1 ~ '^[A-Za-z0-9]{1,10}$'");
             });
             e.HasKey(p => p.Id);
-            // V2: oem_no_normalized 降级为普通索引(允许 NULL/重复),MR.1 为内部主键
-            e.Property(p => p.OemNoNormalized).HasMaxLength(50);
+            // V24-F15: 修复 Model 与 Migration 不一致 (防止下次 migration 回滚 spec D3-1 修复)
+            //   mr_1: varchar(10) (spec D3-1, Task 0.1.1)
+            //   oem_no_normalized: nullable + varchar(100) (spec D3-1, Task 0.1.1, 降级为普通索引)
+            //   8 个 numeric 字段: numeric(10,2) (spec D4-18, Task 0.2.19)
+            e.Property(p => p.Mr1).HasMaxLength(10).HasColumnType("character varying(10)");
+            e.Property(p => p.OemNoNormalized).HasMaxLength(100).IsRequired(false);
             e.Property(p => p.OemNoDisplay).HasMaxLength(50).IsRequired();
             e.Property(p => p.Type).HasMaxLength(50).IsRequired();
             e.Property(p => p.Remark).HasColumnType("text");
+            e.Property(p => p.D1Mm).HasColumnType("numeric(10,2)");
+            e.Property(p => p.D2Mm).HasColumnType("numeric(10,2)");
+            e.Property(p => p.D3Mm).HasColumnType("numeric(10,2)");
+            e.Property(p => p.D4Mm).HasColumnType("numeric(10,2)");
+            e.Property(p => p.H1Mm).HasColumnType("numeric(10,2)");
+            e.Property(p => p.H2Mm).HasColumnType("numeric(10,2)");
+            e.Property(p => p.H3Mm).HasColumnType("numeric(10,2)");
+            e.Property(p => p.H4Mm).HasColumnType("numeric(10,2)");
             e.Property(p => p.ImageKey).HasMaxLength(500);
             e.Property(p => p.ImageStatus).HasMaxLength(20).HasDefaultValue("pending");
             e.Property(p => p.IsPublished).HasDefaultValue(true);
@@ -118,6 +130,8 @@ public class ProductDbContext : DbContext
             e.Property(x => x.SortOrder).HasDefaultValue(0);
             e.Property(x => x.MachineType).HasMaxLength(50).HasDefaultValue("others");
             e.Property(x => x.IsPublished).HasDefaultValue(true);
+            // V24-F15: is_discontinued 默认值 false (spec D3-22, Task 0.2.15)
+            e.Property(x => x.IsDiscontinued).HasDefaultValue(false);
             // V2: xmin 乐观锁令牌(OEM 3 排序并发控制)
             e.Property(x => x.RowVersion).IsRowVersion().IsConcurrencyToken();
             e.HasIndex(x => x.ProductId);

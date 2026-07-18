@@ -2150,20 +2150,15 @@ public class EtlImportService
     /// V2 Task 5.1.2: 从 mr_1 派生 oem_no_normalized (临时方案, spec L265)
     ///   - 规则: mr_1 转大写 + 去特殊字符 (仅保留字母数字)
     ///   - 用途: oem_no_normalized 在 V2 已降级为可空普通索引, 但兼容旧查询逻辑仍需派生
-    ///   - 示例: "mr-0001" → "MR0001", "Mr_001" → "MR001"
+    ///   - V24-F16 修订: spec D3-1 要求 "派生规则 = mr_1 原值, 不做大小写转换"
+    ///     之前做大写转换 + 去特殊字符, 与 AdminProductService 双轨写入数据不一致
+    ///     现在统一为: 直接返回 mr_1?.Trim() ?? ""
     /// </summary>
     private static string NormalizeMr1ToOemNo(string mr1)
     {
-        if (string.IsNullOrEmpty(mr1)) return "";
-        var upper = mr1.ToUpperInvariant();
-        // 仅保留字母数字, 其他字符全部移除
-        var sb = new System.Text.StringBuilder(upper.Length);
-        foreach (var c in upper)
-        {
-            if ((uint)(c - 'A') < 26u || (uint)(c - '0') < 10u)
-                sb.Append(c);
-        }
-        return sb.ToString();
+        // V24-F16: spec D3-1 要求 mr_1 原值派生, 不做大小写转换 + 去特殊字符
+        //   修复后与 AdminProductService 派生规则统一, 消除双轨写入数据不一致
+        return string.IsNullOrEmpty(mr1) ? "" : mr1.Trim();
     }
 
     /// <summary>

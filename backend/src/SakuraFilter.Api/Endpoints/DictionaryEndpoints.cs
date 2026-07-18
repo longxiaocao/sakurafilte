@@ -19,7 +19,9 @@ public static class DictionaryEndpoints
 {
     public static IEndpointRouteBuilder MapDictionaryEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/admin/dict").WithTags("AdminDict").RequireRateLimiting("global");
+        var group = app.MapGroup("/api/admin/dict").WithTags("AdminDict")
+            .RequireAuthorization("Admin")  // V24-F19: spec F11
+            .RequireRateLimiting("global");
 
         MapOemBrandEndpoints(group);
         MapProductName1Endpoints(group);

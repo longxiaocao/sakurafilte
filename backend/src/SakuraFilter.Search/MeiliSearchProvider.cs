@@ -613,6 +613,12 @@ public class MeiliSearchProvider : ISearchProvider
     {
         if (string.IsNullOrEmpty(s)) return s;
 
+        // V24-F20 步骤 0: 过滤用户输入字面量中的 U+E000/U+E001 (spec S6-1, 修复 XSS 绕过)
+        //   WHY: 用户在产品名/Remark 中输入字面量 \uE000, 会被步骤 1 误识别为 <mark> 起始标签暂存
+        //        最终步骤 4 还原为 <mark> 标签, 导致 XSS 绕过
+        //   修复: 在步骤 1 之前先移除字面量 \uE000/\uE001, 防止与暂存字符冲突
+        s = s.Replace(MarkOpenStash, "").Replace(MarkCloseStash, "");
+
         // 步骤 1: 暂存 Meilisearch 高亮标签为非字符
         var stashed = s.Replace(MarkOpen, MarkOpenStash).Replace(MarkClose, MarkCloseStash);
 

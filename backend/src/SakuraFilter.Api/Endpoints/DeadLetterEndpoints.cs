@@ -15,7 +15,8 @@ public static class DeadLetterEndpoints
 {
     public static IEndpointRouteBuilder MapDeadLetterEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/admin/dead-letter").WithTags("AdminDeadLetter");
+        var group = app.MapGroup("/api/admin/dead-letter").WithTags("AdminDeadLetter")
+            .RequireAuthorization("Admin");  // V24-F19: spec F11
 
         // 分页查询
         group.MapGet("/", async (

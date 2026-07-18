@@ -17,7 +17,8 @@ public static class AdminProductEndpoints
 {
     public static IEndpointRouteBuilder MapAdminProductEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/admin/products").WithTags("AdminProducts");
+        var group = app.MapGroup("/api/admin/products").WithTags("AdminProducts")
+            .RequireAuthorization("Admin");  // V24-F19: spec F11 要求所有 /api/admin/* 端点必须 RequireAuthorization
 
         // 新增产品
         group.MapPost("/", async (ProductFormDto form, AdminProductService svc, HttpContext ctx, CancellationToken ct) =>

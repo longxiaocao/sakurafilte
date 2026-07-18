@@ -18,7 +18,9 @@ public static class AdminEtlEndpoints
 {
     public static IEndpointRouteBuilder MapAdminEtlEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/admin/etl").WithTags("AdminEtl").RequireRateLimiting("etl");
+        var group = app.MapGroup("/api/admin/etl").WithTags("AdminEtl")
+            .RequireAuthorization("Admin")  // V24-F19: spec F11
+            .RequireRateLimiting("etl");
 
         // 手动触发（含 dry-run）
         group.MapPost("/trigger", async (

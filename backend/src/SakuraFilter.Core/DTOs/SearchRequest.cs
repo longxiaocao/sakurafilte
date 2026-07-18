@@ -50,7 +50,7 @@ public record SearchResult(
 public record ProductDetail(
     long Id,
     string OemNoDisplay,
-    string OemNoNormalized,
+    string? OemNoNormalized,
     string? Remark,
     string Type,
     decimal? D1Mm,

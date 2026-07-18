@@ -42,7 +42,10 @@ public class AdminProductService
     {
         ValidateForm(form);
 
-        var oemNormalized = NormalizeOem(form.Oem2);
+        // V24-F16: 删除 NormalizeOem (spec Task 0.3.10), 派生规则改为 mr_1 原值 (spec D3-1)
+        //   WHY: 之前按 Oem2 派生 oem_no_normalized, 与 ETL 的 mr_1 派生形成双轨写入数据不一致
+        //   修复后: oem_no_normalized = mr_1?.Trim() ?? "", 不做大小写转换, 不去特殊字符
+        var oemNormalized = form.Mr1?.Trim() ?? "";
         var oemDisplay = form.Oem2.Trim();
 
         // P0-1.3: 开启事务, 保证 Product + xref + machine_application + history 四表原子写入
@@ -139,6 +142,21 @@ public class AdminProductService
             if (form.CrossReferences.Count > 0 || form.MachineApplications.Count > 0)
                 await _db.SaveChangesAsync(ct);
 
+            // V24-F17: 反向更新 products.oem_2 (spec Task 5.1.9 / 0.3.15, 修复 D8)
+            //   WHY: products.oem_2 应代表"第一个有效 xref 的 oem_2", 与 xrefs 联动
+            //   规则: 按 sort_order + oem_brand + oem_no_3 排序后取第一个非空 oem_2
+            //   空列表或全部为空时置 null (允许 NULL)
+            //   注意: CreateAsync 无 changed 字典, 不调用 Track, oem_2 直接赋值
+            if (form.CrossReferences.Count > 0)
+            {
+                product.Oem2 = form.CrossReferences
+                    .OrderBy(x => x.SortOrder)
+                    .ThenBy(x => x.OemBrand, StringComparer.Ordinal)
+                    .ThenBy(x => x.OemNo3, StringComparer.Ordinal)
+                    .FirstOrDefault(x => !string.IsNullOrEmpty(x.Oem2))?.Oem2?.Trim();
+                await _db.SaveChangesAsync(ct);
+            }
+
             // 历史
             _db.ProductHistory.Add(new ProductHistory
             {
@@ -208,6 +226,10 @@ public class AdminProductService
             }
             Track(nameof(product.Mr1), product.Mr1, form.Mr1?.Trim());
             product.Mr1 = form.Mr1?.Trim();
+            // V24-F16: UpdateAsync 同步更新 OemNoNormalized = Mr1 (spec Task 0.3.13, 修复 D3-4)
+            //   WHY: 之前 Mr1 修改后 OemNoNormalized 仍是旧值, 公共搜索查询 p.OemNoNormalized == normalized 漏掉此产品
+            Track(nameof(product.OemNoNormalized), product.OemNoNormalized, form.Mr1?.Trim() ?? "");
+            product.OemNoNormalized = form.Mr1?.Trim() ?? "";
             if (!string.IsNullOrWhiteSpace(form.Oem2))
             {
                 Track(nameof(product.Oem2), product.Oem2, form.Oem2.Trim());
@@ -302,6 +324,23 @@ public class AdminProductService
                     ChangedFields = JsonSerializer.Serialize(changed)
                 });
             }
+
+            // V24-F17: 反向更新 products.oem_2 (spec Task 5.1.9 / 0.3.15, 修复 D8)
+            //   xref 全量替换后, products.oem_2 也需同步更新为代表值
+            if (form.CrossReferences != null && form.CrossReferences.Count > 0)
+            {
+                var representativeOem2 = form.CrossReferences
+                    .OrderBy(x => x.SortOrder)
+                    .ThenBy(x => x.OemBrand, StringComparer.Ordinal)
+                    .ThenBy(x => x.OemNo3, StringComparer.Ordinal)
+                    .FirstOrDefault(x => !string.IsNullOrEmpty(x.Oem2))?.Oem2?.Trim();
+                if (product.Oem2 != representativeOem2)
+                {
+                    Track(nameof(product.Oem2), product.Oem2, representativeOem2);
+                    product.Oem2 = representativeOem2;
+                }
+            }
+
             await _db.SaveChangesAsync(ct);
 
             await tx.CommitAsync(ct);
@@ -735,8 +774,9 @@ public class AdminProductService
             var oems = req.Oem2Batch.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             if (oems.Length > 0)
             {
-                var normalized = oems.Select(NormalizeOem).ToArray();
-                query = query.Where(p => normalized.Contains(p.OemNoNormalized));
+                // V24-F16: 删除 NormalizeOem 调用, 直接用原始 OEM 值查询 (spec Task 0.3.10)
+                //   派生规则已统一为 mr_1 原值, 此处查询改用 OemNoDisplay (原 OEM 2 原值)
+                query = query.Where(p => oems.Contains(p.OemNoDisplay));
             }
         }
 
@@ -1114,13 +1154,9 @@ public class AdminProductService
         }
     }
 
-    private static string NormalizeOem(string oem)
-    {
-        // 归一化: 大写 + 去空格 + 去常见分隔符, 保证唯一性
-        return oem.Trim().ToUpperInvariant()
-            .Replace(" ", "").Replace("-", "").Replace("/", "")
-            .Replace("(", "").Replace(")", "").Replace(".", "");
-    }
+    // V24-F16: NormalizeOem 方法已删除 (spec Task 0.3.10)
+    //   WHY: V2 主键改为 mr_1, oem_no_normalized 派生规则统一为 mr_1 原值, 不再做大小写转换 + 去特殊字符
+    //   历史调用点已全部替换: CreateAsync 用 form.Mr1?.Trim() ?? "", 批量搜索用 OemNoDisplay 原值
 
     private static string DeriveTypeFromName(string? productName3)
     {

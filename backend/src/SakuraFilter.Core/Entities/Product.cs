@@ -8,7 +8,8 @@ using System.ComponentModel.DataAnnotations.Schema;
 public class Product
 {
     public long Id { get; set; }
-    public string OemNoNormalized { get; set; } = "";
+    // V24-F15: oem_no_normalized 改为 nullable string (spec D3-1, V2 主键改为 mr_1, 此字段降级允许 NULL)
+    public string? OemNoNormalized { get; set; }
     public string OemNoDisplay { get; set; } = "";
     public string? Remark { get; set; }
     [Column("product_name_3")] public string? ProductName3 { get; set; }

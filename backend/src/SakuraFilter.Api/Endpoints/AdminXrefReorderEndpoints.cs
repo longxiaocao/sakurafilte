@@ -21,7 +21,8 @@ public static class AdminXrefReorderEndpoints
 {
     public static IEndpointRouteBuilder MapAdminXrefReorderEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/admin/xrefs/reorder").WithTags("AdminXrefReorder");
+        var group = app.MapGroup("/api/admin/xrefs/reorder").WithTags("AdminXrefReorder")
+            .RequireAuthorization("Admin");  // V24-F19: spec F11
 
         // ===== Task 2.1.2: GET /brands — 返回 Brand 列表 (brand / sortOrder / oem3Count) =====
         //   改进 2.1: IMemoryCache 5 分钟缓存 (brand 字典变更频率低, 避免每次聚合查询)
