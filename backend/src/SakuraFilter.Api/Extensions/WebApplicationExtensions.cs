@@ -130,19 +130,31 @@ public static class StartupExtensions
     {
         try
         {
-            var exists = await db.Database.ExecuteSqlRawAsync(
-                "SELECT 1 FROM information_schema.tables WHERE table_name = '__EFMigrationsHistory'") > 0;
-            if (!exists)
+            // V24-F14: 三个 bug 一起修复
+            //   bug 1 (exists 判断): ExecuteSqlRawAsync 对 SELECT 语句返回 -1 (非行数),
+            //     导致 exists = -1 > 0 = false, 误判"表不存在", 每次启动都触发 CREATE+INSERT
+            //     修复: 改用 SqlQueryRaw<int> 执行 COUNT 查询 (需 AS "Value" 列别名匹配 EF 约定)
+            //   bug 2 (列名): CREATE TABLE + INSERT 用 PascalCase ("MigrationId"/"ProductVersion"),
+            //     但 ProductDbContext 启用 UseSnakeCaseNamingConvention, EF 期望 snake_case 列名,
+            //     INSERT 时报 42703 (字段不存在)
+            //     修复: 列名改为 snake_case (migration_id/product_version)
+            //   bug 3 (SqlQueryRaw 列名约定): SqlQueryRaw<int> 默认期望列名 "Value",
+            //     不加 AS "Value" 会报 42703 (字段 t.Value 不存在)
+            //     修复: SQL 加 AS "Value" 列别名
+            var count = await db.Database.SqlQueryRaw<int>(
+                "SELECT COUNT(*)::int AS \"Value\" FROM information_schema.tables WHERE table_name = '__EFMigrationsHistory'"
+            ).FirstOrDefaultAsync();
+            if (count == 0)
             {
                 logger.LogInformation("__EFMigrationsHistory 表不存在,创建并标记 InitialCreate 为已应用 (老环境兼容)");
                 await db.Database.ExecuteSqlRawAsync(@"
                     CREATE TABLE IF NOT EXISTS ""__EFMigrationsHistory"" (
-                        ""MigrationId"" character varying(150) NOT NULL,
-                        ""ProductVersion"" character varying(32) NOT NULL,
-                        CONSTRAINT ""PK___EFMigrationsHistory"" PRIMARY KEY (""MigrationId"")
+                        ""migration_id"" character varying(150) NOT NULL,
+                        ""product_version"" character varying(32) NOT NULL,
+                        CONSTRAINT ""PK___EFMigrationsHistory"" PRIMARY KEY (""migration_id"")
                     );");
                 await db.Database.ExecuteSqlRawAsync(@"
-                    INSERT INTO ""__EFMigrationsHistory"" (""MigrationId"", ""ProductVersion"")
+                    INSERT INTO ""__EFMigrationsHistory"" (""migration_id"", ""product_version"")
                     VALUES ('InitialCreate', '8.0.0')
                     ON CONFLICT DO NOTHING;");
             }
