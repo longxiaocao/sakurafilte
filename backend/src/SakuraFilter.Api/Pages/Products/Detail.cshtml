@@ -152,18 +152,35 @@
         V2 Task 4.1.18 (修复 F3-14): 跨域部署加 crossorigin="use-credentials" + nginx/CDN 配 ACAO *@
 <script type="module" src="/assets/product-detail-client.js" crossorigin="use-credentials"></script>
 
-@* V2 Task 4.1.17 (修复 F3-2): 捕获资源加载错误 (SCRIPT/LINK) + 渲染 mount-fallback
+@* V2 Task 4.1.17 (修复 F3-2): 捕获资源加载错误 (SCRIPT/LINK/IMG) + 渲染 mount-fallback
+        V24-F45 (spec Task 4.5.18): 完善错误处理器
+          - 增加 IMG 标签检测 (spec 要求 SCRIPT/LINK/IMG 三类)
+          - children.length > 0 双重保险 (即使 vueMounted dataset 未设置, 已挂载也跳过)
+          - window.__fallbackMounted 全局去重 (避免多次触发重复渲染 fallback)
         safeMount 无法捕获 module 加载失败, 需用 window error 事件 (捕获阶段) 兜底 *@
 <script>
     window.addEventListener('error', function (e) {
+        // V24-F45: 全局去重标志, 避免多次 error 事件重复渲染 fallback
+        if (window.__fallbackMounted) return;
         var target = e.target;
-        if (target && (target.tagName === 'SCRIPT' || target.tagName === 'LINK')) {
-            var apps = document.querySelectorAll('[id$="-app"]');
-            apps.forEach(function (el) {
-                if (!el.dataset.vueMounted) {
-                    el.innerHTML = '<div class="mount-fallback">JS 加载失败, <button onclick="location.reload()">刷新重试</button></div>';
-                }
-            });
-        }
+        // V24-F45 (spec 4.5.18.2): 检查 SCRIPT/LINK/IMG 标签 (资源加载错误 vs 运行时错误)
+        if (!target || !['SCRIPT', 'LINK', 'IMG'].includes(target.tagName)) return;
+        // V24-F45 (spec 4.5.18.1): 双重保险 - 即使 vueMounted dataset 未设置, 已挂载也跳过
+        //   WHY children.length: Vue mount 后挂载点至少有 1 个子元素, 0 表示未挂载
+        var apps = document.querySelectorAll('[id$="-app"]');
+        var anyUnmounted = false;
+        apps.forEach(function (el) {
+            if (!el.dataset.vueMounted && el.children.length === 0) {
+                anyUnmounted = true;
+            }
+        });
+        if (!anyUnmounted) return;
+        // V24-F45: 设置全局去重标志, 后续 error 事件直接跳过
+        window.__fallbackMounted = true;
+        apps.forEach(function (el) {
+            if (!el.dataset.vueMounted && el.children.length === 0) {
+                el.innerHTML = '<div class="mount-fallback">JS 加载失败, <button onclick="location.reload()">刷新重试</button></div>';
+            }
+        });
     }, true);
 </script>

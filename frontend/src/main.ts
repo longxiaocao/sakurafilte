@@ -36,6 +36,17 @@ app.use(ElementPlus)
 
 app.mount('#app')
 
+// V24-F46 (spec Task 4.5.26): 路由切换后重置 __fallbackMounted 标志
+//   WHY: Detail.cshtml error 处理器用 window.__fallbackMounted 全局去重, 避免重复渲染 fallback
+//        但路由切换到新页面后, 旧 fallback 已被卸载, 需重置标志以允许新页面 error 处理
+//   WHY 延迟 1000ms: SPA 路由切换期间可能触发短暂的资源加载错误 (chunk 切换),
+//                    延迟重置避免误清; 1000ms 后新页面 chunk 加载完成, 可安全重置
+router.afterEach(() => {
+  setTimeout(() => {
+    ;(window as any).__fallbackMounted = false
+  }, 1000)
+})
+
 // A11y: 给所有 el-table 可滚动区域加 tabindex=0, 满足 WCAG scrollable-region-focusable
 //   axe-core 检查的是 .el-scrollbar__wrap (真正的滚动容器), 必须在该元素上设 tabindex
 //   给 el-pagination 内部的 el-select (每页条数) 加 aria-label, 满足 WCAG label
