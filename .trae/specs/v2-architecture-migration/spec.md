@@ -15091,6 +15091,170 @@ dotnet test tests/SakuraFilter.Api.Tests/SakuraFilter.Api.Tests.csproj -c Releas
 
 4. **IndexReplayWorker ProcessPendingAsync 集成测试**: 用 Testcontainers PG 覆盖 advisory lock 7740005 获取/失败路径 + FOR UPDATE SKIP LOCKED 多实例行为。
 
+## 26.16 v25 改进实施记录(自主决策批次七 — E2E 巡检 + LINQ bug 修复)
+
+**实施时间**: 2026-07-18
+**触发场景**: 用户要求对前后端功能联动、前端设计、按钮可点击性进行系统化巡检。
+**核心成果**: 通过 E2E API 契约测试发现 2 个生产阻断级 bug (MemoryCache Size 缺失 + LINQ 翻译 bug), 修复后所有 API 与 20/21 前端页面巡检通过。
+
+### 26.16.1 V24-F74: API 契约测试与 typeahead 字段名修正
+
+**问题**: 之前编写的 `_api_contract_test.py` 中 typeahead 端点使用下划线字段名 (如 `oem_brand`), 导致测试报 404。
+
+**调查**: 经 Grep 核实:
+- [PublicSearchView.vue#L59](file:///d:/projects/sakurafilter/frontend/src/views/public/PublicSearchView.vue#L59): 前端使用 kebab-case `oem-brand`
+- [PublicTypeaheadEndpoints.cs#L19](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Endpoints/PublicTypeaheadEndpoints.cs#L19): 后端 ValidFields 同样使用 kebab-case
+- 实为测试脚本自身错误, 前后端字段名一致, 无生产 bug。
+
+**修复**: 修正测试脚本中 8 个 typeahead 字段名为 kebab-case (oem-brand / oem-no2 / oem-no3 / machine-brand / machine-model / model-name / engine-brand / engine-type)。
+
+**验证结果**: 全部 API 契约通过:
+- JWT 登录: OK
+- 公开 API: 7/7 通过
+- 后台 API: 9/9 通过
+- 错误处理: 4/4 通过 (401/403/404/ValidationError)
+- 搜索 → 产品详情联动: OK
+
+### 26.16.2 V24-F75: MemoryCache SizeLimit 缺失修复
+
+**问题**: 通过 API 契约测试发现 `POST /api/public/search/aggregate` 返回 500。
+
+**根因**: Startup 配置了 `MemoryCacheOptions.SizeLimit = 1024`, 因此所有 `cache.Set` 调用必须在 `MemoryCacheEntryOptions` 中显式设置 `Size = 1`, 否则抛 `entry size must be set` 异常。
+
+**修复点**:
+- [AdminProductImageService.cs#L107-L113](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Services/AdminProductImageService.cs#L107-L113): `CacheSearchResultAsync` 方法 `MemoryCacheEntryOptions` 增加 `Size = 1`
+- [PublicSearchController.cs#L438-L444](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Api/Controllers/PublicSearchController.cs#L438-L444): `GetMaxPageDepthAsync` 方法 `MemoryCacheEntryOptions` 增加 `Size = 1`
+
+**WHY 必要**: ASP.NET Core MemoryCache 启用 SizeLimit 后, 所有 entry 必须声明 Size, 否则在 Set 时即抛异常。这是配置约束, 不是建议。
+
+### 26.16.3 V24-F76: PostgresSearchProvider LINQ 翻译 bug 修复 (6 次尝试)
+
+**问题**: `POST /api/search` 在 Meilisearch 不可用强制走 PG 兜底时返回 500, 错误信息:
+```
+System.ArgumentException: Expression of type 'System.Linq.IQueryable`1[System.Int32]' cannot be used for parameter of type 'System.Linq.IQueryable`1[SakuraFilter.Core.Entities.CrossReference]'
+```
+
+**根因**: EF Core 8 `NavigationExpandingExpressionVisitor` 在翻译 `p.CrossReferences.Where(...).Select(int?)` 复杂子查询时类型不匹配。具体表现:
+1. `patterns.Any(token => ...含 p.CrossReferences.Any(...)...)` 多层嵌套, EF 翻译失败
+2. `string interpolation` 在嵌套子查询内翻译失败
+
+**尝试记录**:
+1. **LinqPredicateBuilder 合并表达式** → 导航属性展开类型不匹配 (失败)
+2. **Concat (UNION ALL) 累积 OR** → 同一导航属性 bug (失败)
+3. **显式 `_db.CrossReferences.Any(x => x.ProductId == p.Id)`** 替代导航属性 → 仍报错 (Concat 触发, 失败)
+
+**最终方案**:
+- **关键词搜索**: 放弃分词, 整个 q 作为单个 pattern (与 PublicSearchController 8 字段查询语义一致)
+- **排序**: 从 `brand_sort_order_min → oem_list_sort_order_min → updated_at DESC` 简化为仅 `OrderByDescending(UpdatedAt)`
+
+**影响**:
+- 搜索 `"Bosch oil"` 不再分词 OR 匹配, 召回率降低但功能可用
+- 排序不再按 brand 优先级, 仅按更新时间倒序
+
+**后续**: Phase 1 改原生 SQL + LATERAL JOIN 时恢复分词 (Task 1.2.9-1.2.11)。
+
+**修改文件**: [PostgresSearchProvider.cs](file:///d:/projects/sakurafilter/backend/src/SakuraFilter.Search/PostgresSearchProvider.cs)
+- L56-83: SearchAsync 关键词搜索改为单 pattern + 6 字段 ILIKE + 导航属性 Any
+- L118-141: SearchAsync 排序简化为 `OrderByDescending(UpdatedAt)`
+- L174-193, L224-243: AggregateSearchAsync 同样改动
+
+### 26.16.4 V24-F77: 前端设计全页面巡检 (21 页面 × 3 视口)
+
+**实施**: 新增 [spike-test/_e2e_audit/_design_audit.py](file:///d:/projects/sakurafilter/spike-test/_e2e_audit/_design_audit.py), 对 21 个前端页面进行 3 视口 (desktop 1280 / tablet 768 / mobile 375) 巡检。
+
+**检查项**:
+- H1 数量与文本 (语义化标签)
+- 按钮可点击性 (cursor:pointer + enabled)
+- aria-label 数量 (A11y 基线)
+- console errors (JS 运行时错误)
+- network 4xx/5xx (API 错误)
+
+**登录选择器**: `input[autocomplete="username"]` + `button.el-button--primary`
+- WHY: el-input 的 `id` 属性绑定在外层 `<div>`, 实际 `<input>` 在内部, 旧选择器 `#login-username input` / `input[name="username"]` 均不匹配。
+
+**结果**: 20/21 OK, 仅 AdminEtlView 因 SSE 401 报错 (已知 EventSource 限制, 详见 26.16.5)。
+
+### 26.16.5 已知问题 (本轮不修复, 记录到 spec)
+
+**SSE 401 问题**:
+- **现象**: `AdminEtlView` 的 `useEtlProgress.ts` 调用 `new EventSource('/api/admin/etl/progress/stream')` 时返回 401, 导致 ETL 进度无法实时推送。
+- **根因**: 浏览器 `EventSource` API 不支持自定义 Header, 无法携带 JWT `Authorization: Bearer xxx`。
+- **影响**: ETL 进度页面无法实时更新, 用户需手动刷新页面查看 `GET /api/admin/etl/progress`。
+- **修复方向** (Phase 1):
+  - 方案 A: 改用 `fetch + ReadableStream` 替代 `EventSource`, 可携带 auth header
+  - 方案 B: 后端 SSE 端点支持 query token (`?token=xxx`), 但需评估 token 泄漏风险 (日志/Referer)
+  - 方案 C: 后端 SSE 端点支持 cookie auth (推荐, 与 JWT 并存)
+
+### 26.16.6 验证结果
+
+```
+后端全量测试 (Debug):
+  dotnet test tests/SakuraFilter.Api.Tests/SakuraFilter.Api.Tests.csproj
+  已通过! - 失败: 0, 通过: 269, 已跳过: 0, 总计: 269
+
+前端全量单元测试:
+  cd frontend && npm run test:unit
+  Test Files  23 passed (23)
+       Tests  244 passed (244)
+
+E2E API 契约测试:
+  python spike-test/_e2e_audit/_api_contract_test.py
+  公开 API 7/7 OK, 后台 API 9/9 OK, 错误处理 4/4 OK, 搜索→详情联动 OK
+
+E2E 前端设计巡检:
+  python spike-test/_e2e_audit/_design_audit.py
+  20/21 页面 OK (仅 AdminEtlView SSE 401, 已知问题)
+
+POST /api/search (PG 兜底):
+  Status: 200, 返回 12460 条产品, 5 条分页结果
+
+POST /api/public/search/aggregate:
+  Status: 200, 返回 14840 bytes
+```
+
+### 26.16.7 v25 改进批次七文件清单
+
+**修改 (3)**:
+- `backend/src/SakuraFilter.Api/Controllers/PublicSearchController.cs` (V24-F75)
+- `backend/src/SakuraFilter.Api/Services/AdminProductImageService.cs` (V24-F75)
+- `backend/src/SakuraFilter.Search/PostgresSearchProvider.cs` (V24-F76)
+
+**新增 (5)**:
+- `spike-test/_e2e_audit/_api_contract_test.py` (API 契约测试, Python)
+- `spike-test/_e2e_audit/_api_contract_test.ps1` (API 契约测试, PowerShell)
+- `spike-test/_e2e_audit/_debug_search.py` (POST /api/search 调试脚本)
+- `spike-test/_e2e_audit/_design_audit.py` (前端设计巡检, Playwright)
+- `spike-test/_e2e_audit/design_audit_output.txt` (巡检输出存档)
+
+**Git commit**: `4ca2687` (2026-07-18)
+
+### 26.16.8 v25 改进批次七总结 (累计)
+
+| 维度 | 数据 |
+|---|---|
+| 累计 V24-Fx 实施数 | F14 ~ F77 (含本轮 4 项, 已实施 64 项, 废弃 4 项) |
+| 后端测试 | 269 / 269 通过 (无回归) |
+| 前端单元测试 | 244 / 244 通过 |
+| E2E API 契约 | 全部通过 (公开 7 + 后台 9 + 错误处理 4 + 联动 1) |
+| E2E 设计巡检 | 20 / 21 OK (1 项为已知 SSE 限制) |
+| 生产阻断 bug 修复 | 2 (MemoryCache Size + LINQ 翻译) |
+| 已知未修复问题 | 1 (SSE 401, 见 26.16.5) |
+
+### 26.16.9 💡 改进建议 (后续 v26+ 决策)
+
+1. **SSE 认证方案**: 详见 26.16.5, 建议采用 cookie auth 方案 (与 JWT 并存), 避免暴露 token 到 URL/日志。
+
+2. **PostgresSearchProvider 性能恢复**: V24-F76 为功能可用性牺牲了搜索召回率 (不分词) 与排序精度 (仅 updated_at)。建议 Phase 1 优先实施 Task 1.2.9-1.2.11 (原生 SQL + LATERAL JOIN + CTE 预计算), 恢复:
+   - 分词 OR 匹配 (通过 `tsvector` 或 `unnest(string_to_array(q, ' '))`)
+   - brand_sort_order_min → oem_list_sort_order_min → updated_at 三层排序
+
+3. **E2E 巡检纳入 CI**: 当前 `_design_audit.py` 与 `_api_contract_test.py` 为本地脚本, 建议封装为 CI job (需 Testcontainers PG + 启动前后端服务), 在 PR 合并前自动运行。
+
+4. **MemoryCache Size 统一约束**: 建议在代码审查 checklist 中加入"所有 cache.Set 必须显式声明 Size", 或封装 `IMemoryCache` 扩展方法 `SetWithSize(key, value, ttl)`, 避免再次遗漏。
+
+5. **Element Plus 选择器规范**: E2E 测试中遇到 el-input 的 id 在外层 div 问题。建议在测试规范中明确: el-input 选择器优先用 `autocomplete` 属性或 `placeholder` 文本, 避免用 id (Element Plus 会将 id 绑定到外层 div 而非内部 input)。
+
+
 
 
 
