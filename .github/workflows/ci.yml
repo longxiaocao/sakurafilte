@@ -275,9 +275,10 @@ jobs:
       #   WHY: 之前 CI 只跑 type-check + build, vitest 单元测试需本地手动运行
       #        添加此步骤后, 每次 push/PR 自动运行 200+ 单元测试 (vitest run 退出码即结果)
       #   依赖: vitest run 不启动 watch 模式, 单次运行后退出, 适合 CI
+      #   注: 只运行 tests/unit/, 不运行 tests/contract/ (契约测试需后端运行, 留待 e2e.yml)
       - name: Run frontend unit tests
         working-directory: frontend
-        run: npm run test:contract
+        run: npx vitest run tests/unit/
 
       - name: Build
         working-directory: frontend

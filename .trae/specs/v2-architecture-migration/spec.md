@@ -15036,15 +15036,16 @@ dotnet test --filter "FullyQualifiedName~IndexReplayWorkerTests"
   - `-c Release`: 与 build 配置一致
   - 失败即阻塞合并 (CI 红线)
 - frontend job: 在 "Type check" 后添加 "Run frontend unit tests" 步骤
-  - 命令: `npm run test:contract` (vitest run,单次运行后退出,适合 CI)
+  - 命令: `npx vitest run tests/unit/` (只运行单元测试,契约测试 tests/contract/ 需后端运行留待 e2e.yml)
 
 **效果**:
-- 每次 push/PR 自动运行 400+ 后端单元测试 + 200+ 前端单元测试
+- 每次 push/PR 自动运行 400+ 后端单元测试 + 244 前端单元测试
 - 单元测试回归在 PR 阶段即被拦截,无法合入 master
+- 契约测试 (tests/contract/) 需后端运行,留待 e2e.yml 集成
 
 **验证结果**:
 - 后端 Release 配置: 406/406 通过 (3s)
-- 前端 vitest: 238/238 通过 (之前已验证)
+- 前端 vitest (tests/unit/): 244/244 通过 (15 个测试文件)
 
 **文件清单**:
 - 修改: `.github/workflows/ci.yml` (+17 行)
