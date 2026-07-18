@@ -84,6 +84,15 @@ jobs:
         working-directory: backend
         run: dotnet build SakuraFilter.sln -c Release --no-restore
 
+      # V24-F68 (spec 26.14.9 建议 4): 后端单元测试运行
+      #   WHY: 之前 CI 只跑 smoke test, 单元测试回归需本地手动 dotnet test
+      #        添加此步骤后, 每次 push/PR 自动运行 400+ 单元测试, 防止回归合入 master
+      #   --no-build: 上一步已 build, 避免重复编译
+      #   continue-on-error: false: 单元测试失败即阻塞合并 (CI 红线)
+      - name: Run backend unit tests
+        working-directory: backend
+        run: dotnet test tests/SakuraFilter.Api.Tests/SakuraFilter.Api.Tests.csproj --no-build -c Release --logger "trx;LogFileName=test-results.trx"
+
       # P2-7.1: EF Core 迁移冲突检测 — 验证 idempotent SQL 可生成 + 一次性 SQL 脚本头注释完整
       #   WHY: EF 迁移链与 backend/migrations/*.sql 共存, 迁移语法错误/手动脚本误标会导致生产启动失败
       #   容错策略: continue-on-error=true, 失败仅警告不阻塞构建 (避免环境/工具问题误伤)
@@ -249,6 +258,14 @@ jobs:
         # WHY: vue-tsc --noEmit 比 vue-tsc -b 更轻, 直接捕获类型错误
         run: npm run type-check
         continue-on-error: false
+
+      # V24-F68 (spec 26.14.9 建议 4): 前端单元测试运行
+      #   WHY: 之前 CI 只跑 type-check + build, vitest 单元测试需本地手动运行
+      #        添加此步骤后, 每次 push/PR 自动运行 200+ 单元测试 (vitest run 退出码即结果)
+      #   依赖: vitest run 不启动 watch 模式, 单次运行后退出, 适合 CI
+      - name: Run frontend unit tests
+        working-directory: frontend
+        run: npm run test:contract
 
       - name: Build
         working-directory: frontend
