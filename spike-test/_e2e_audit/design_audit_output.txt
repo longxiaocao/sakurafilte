@@ -1,0 +1,80 @@
+================================================================================
+V24-F77: 前端设计审查 - 全页面巡检
+================================================================================
+
+[登录] admin / Admin@2026 ...
+[OK] 登录成功
+
+[审查] / (home_public)
+  [OK] h1=1 buttons=12 aria=22 | h1='产品搜索'
+
+[审查] /search (public_search)
+  [OK] h1=1 buttons=12 aria=22 | h1='产品搜索'
+
+[审查] /product/P00050000 (public_product)
+  [OK] h1=1 buttons=10 aria=13 | h1='页面不存在'
+
+[审查] /compare?ids= (public_compare_empty)
+  [OK] h1=1 buttons=11 aria=13 | h1='产品对比'
+
+[审查] /login (login)
+  [OK] h1=1 buttons=9 aria=18 | h1='SakuraFilter'
+
+[审查] /admin (admin_home)
+  [OK] h1=1 buttons=166 aria=88 | h1='产品管理'
+
+[审查] /admin/products (admin_products)
+  [OK] h1=1 buttons=166 aria=88 | h1='产品管理'
+
+[审查] /admin/products/new (admin_product_new)
+  [OK] h1=1 buttons=12 aria=68 | h1='新增产品'
+
+[审查] /admin/etl (admin_etl)
+  [ISSUE] h1=1 buttons=12 aria=17 | h1='ETL 触发与监控'
+    - console errors: 1
+    - network 4xx/5xx: 1
+    [CE] Failed to load resource: the server responded with a status of 401 (Unauthorized)
+    [NET] 401 http://localhost:5175/api/admin/etl/progress/stream
+
+[审查] /admin/compare (admin_compare)
+  [OK] h1=1 buttons=11 aria=13 | h1='产品对比'
+
+[审查] /admin/dict/oem-brands (admin_dict_oembrands)
+  [OK] h1=1 buttons=20 aria=14 | h1='OEM 品牌字典'
+
+[审查] /admin/dict/types (admin_dict_types)
+  [OK] h1=1 buttons=102 aria=14 | h1='类型字典 (Type)'
+
+[审查] /admin/users (admin_users)
+  [OK] h1=1 buttons=22 aria=31 | h1='用户管理'
+
+[审查] /admin/alerts (admin_alerts)
+  [OK] h1=1 buttons=19 aria=22 | h1='告警中心'
+
+[审查] /admin/xrefs/reorder (admin_xref_reorder)
+  [OK] h1=1 buttons=9 aria=13 | h1='OEM 排序管理'
+
+[审查] /admin/perf (admin_perf)
+  [OK] h1=1 buttons=10 aria=14 | h1='性能监控'
+
+[审查] /admin/help (admin_help)
+  [OK] h1=1 buttons=8 aria=19 | h1='后台操作指南'
+
+[审查] /admin/api-docs (admin_api_docs)
+  [OK] h1=1 buttons=9 aria=15 | h1='API 文档'
+
+[审查] /admin/error-test (admin_error_test)
+  [OK] h1=1 buttons=10 aria=13 | h1='页面不存在'
+
+[审查] /demo (demo)
+  [OK] h1=1 buttons=18 aria=20 | h1='前端优化 Demo 演示'
+
+[审查] /nonexistent (404)
+  [OK] h1=1 buttons=10 aria=13 | h1='页面不存在'
+
+================================================================================
+汇总
+================================================================================
+总数: 21 | OK: 20 | 有问题: 1
+截图目录: spike-test\_e2e_audit\screenshots_design
+详细报告: spike-test\_e2e_audit\screenshots_design\audit_report.json

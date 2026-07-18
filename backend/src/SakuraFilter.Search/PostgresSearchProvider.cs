@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using SakuraFilter.Core.DTOs;
@@ -56,28 +57,29 @@ public class PostgresSearchProvider : ISearchProvider
         if (!string.IsNullOrWhiteSpace(req.Q))
         {
             var raw = req.Q.Trim();
-            // S3-3: 分词 OR 拼接,对齐 Meilisearch 分词召回口径
-            var tokens = raw.Split(new[] { ' ', '-' }, StringSplitOptions.RemoveEmptyEntries);
-            var patterns = tokens.Select(t =>
-                t.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_")).ToList();
+            // V24-F76: 修复 patterns.Any 翻译失败 (EF Core 8 NavigationExpandingExpressionVisitor bug)
+            //   原代码: patterns.Any(token => ...含 p.CrossReferences.Any(...)...) 多层嵌套, EF 翻译失败
+            //   尝试 1: LinqPredicateBuilder 合并表达式 → 导航属性展开类型不匹配
+            //   尝试 2: Concat(UNION ALL) 累积 OR → 同样导航属性 bug
+            //   尝试 3: 显式 _db.CrossReferences.Any(x => x.ProductId == p.Id) 替代导航属性 → 仍报错 (Concat 触发)
+            //   最终方案: 放弃分词, 整个 q 作为单个 pattern 处理 (与 PublicSearchController 8 字段查询语义一致)
+            //   影响: 搜索 "Bosch oil" 不再分词 OR 匹配, 只能整体模糊匹配, 召回率降低但功能可用
+            //   后续: Phase 1 改原生 SQL + LATERAL JOIN 时再恢复分词 (Task 1.2.9-1.2.11)
+            var pattern = raw.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
 
-            // S3-22: 每个_token 都走 6 字段 ILIKE OR
             q = q.Where(p =>
-                patterns.Any(token =>
-                    EF.Functions.ILike(p.ProductName1 ?? "", $"%{token}%", "\\") ||
-                    EF.Functions.ILike(p.ProductName2 ?? "", $"%{token}%", "\\") ||
-                    EF.Functions.ILike(p.Oem2 ?? "", $"%{token}%", "\\") ||
-                    EF.Functions.ILike(p.Mr1 ?? "", $"%{token}%", "\\") ||
-                    EF.Functions.ILike(p.Remark ?? "", $"%{token}%", "\\") ||
-                    p.CrossReferences.Any(x =>
-                        EF.Functions.ILike(x.OemBrand ?? "", $"%{token}%", "\\") ||
-                        EF.Functions.ILike(x.OemNo3 ?? "", $"%{token}%", "\\") ||
-                        EF.Functions.ILike(x.Oem2 ?? "", $"%{token}%", "\\")) ||
-                    p.MachineApplications.Any(m =>
-                        EF.Functions.ILike(m.MachineBrand ?? "", $"%{token}%", "\\") ||
-                        EF.Functions.ILike(m.MachineModel ?? "", $"%{token}%", "\\"))
-                )
-            );
+                EF.Functions.ILike(p.ProductName1 ?? "", $"%{pattern}%", "\\") ||
+                EF.Functions.ILike(p.ProductName2 ?? "", $"%{pattern}%", "\\") ||
+                EF.Functions.ILike(p.Oem2 ?? "", $"%{pattern}%", "\\") ||
+                EF.Functions.ILike(p.Mr1 ?? "", $"%{pattern}%", "\\") ||
+                EF.Functions.ILike(p.Remark ?? "", $"%{pattern}%", "\\") ||
+                p.CrossReferences.Any(x =>
+                    EF.Functions.ILike(x.OemBrand ?? "", $"%{pattern}%", "\\") ||
+                    EF.Functions.ILike(x.OemNo3 ?? "", $"%{pattern}%", "\\") ||
+                    EF.Functions.ILike(x.Oem2 ?? "", $"%{pattern}%", "\\")) ||
+                p.MachineApplications.Any(m =>
+                    EF.Functions.ILike(m.MachineBrand ?? "", $"%{pattern}%", "\\") ||
+                    EF.Functions.ILike(m.MachineModel ?? "", $"%{pattern}%", "\\")));
         }
 
         // V2: Type 过滤
@@ -115,25 +117,19 @@ public class PostgresSearchProvider : ISearchProvider
 
         // V2 排序 (S3-5): brand_sort_order_min ASC → oem_list_sort_order_min ASC → updated_at DESC
         //   Phase 1 改原生 SQL 用 CTE 预计算;Phase 0 用 LINQ 子查询 (性能差但功能正确)
+        //   V24-F76: 简化排序为 OrderByDescending(UpdatedAt)
+        //     WHY 简化: 原排序含 p.CrossReferences.Where(...).Select(int?) 复杂子查询,
+        //     EF Core 8 NavigationExpandingExpressionVisitor 翻译时报类型不匹配
+        //     (IQueryable<Int32> vs IQueryable<CrossReference>)
+        //     此 bug 在 Meili 可用时不触发 (走 Meili), Meili 不可用强制走 PG 时才暴露
+        //     影响: 排序不按 brand_sort_order, 仅按 updated_at DESC, 召回结果顺序变化但功能可用
+        //     后续: Phase 1 改原生 SQL + LATERAL JOIN + CTE 时恢复完整排序 (Task 1.2.9-1.2.11)
         var page = Math.Max(1, req.Page);
         var pageSize = Math.Clamp(req.PageSize, 1, 100);
         var total = await q.LongCountAsync(ct);
 
         var items = await q
-            .OrderBy(p => p.CrossReferences
-                .Where(x => !x.IsDiscontinued)
-                .Select(x => _db.XrefOemBrands
-                    .Where(b => b.Brand == x.OemBrand && b.DeletedAt == null)
-                    .Select(b => (int?)b.SortOrder)
-                    .FirstOrDefault() ?? int.MaxValue)
-                .DefaultIfEmpty(int.MaxValue)
-                .Min())
-            .ThenBy(p => p.CrossReferences
-                .Where(x => x.IsPublished && !x.IsDiscontinued)
-                .Select(x => (int?)x.SortOrder)
-                .DefaultIfEmpty(int.MaxValue)
-                .Min())
-            .ThenByDescending(p => p.UpdatedAt)
+            .OrderByDescending(p => p.UpdatedAt)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .Select(p => new SearchResultItem(
@@ -172,26 +168,22 @@ public class PostgresSearchProvider : ISearchProvider
         if (!string.IsNullOrWhiteSpace(req.Q))
         {
             var raw = req.Q.Trim();
-            var tokens = raw.Split(new[] { ' ', '-' }, StringSplitOptions.RemoveEmptyEntries);
-            var patterns = tokens.Select(t =>
-                t.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_")).ToList();
+            // V24-F76: 同 SearchAsync, 不分词整体匹配 (避开 EF Core 8 嵌套 Any 翻译 bug)
+            var pattern = raw.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
 
             q = q.Where(p =>
-                patterns.Any(token =>
-                    EF.Functions.ILike(p.ProductName1 ?? "", $"%{token}%", "\\") ||
-                    EF.Functions.ILike(p.ProductName2 ?? "", $"%{token}%", "\\") ||
-                    EF.Functions.ILike(p.Oem2 ?? "", $"%{token}%", "\\") ||
-                    EF.Functions.ILike(p.Mr1 ?? "", $"%{token}%", "\\") ||
-                    EF.Functions.ILike(p.Remark ?? "", $"%{token}%", "\\") ||
-                    p.CrossReferences.Any(x =>
-                        EF.Functions.ILike(x.OemBrand ?? "", $"%{token}%", "\\") ||
-                        EF.Functions.ILike(x.OemNo3 ?? "", $"%{token}%", "\\") ||
-                        EF.Functions.ILike(x.Oem2 ?? "", $"%{token}%", "\\")) ||
-                    p.MachineApplications.Any(m =>
-                        EF.Functions.ILike(m.MachineBrand ?? "", $"%{token}%", "\\") ||
-                        EF.Functions.ILike(m.MachineModel ?? "", $"%{token}%", "\\"))
-                )
-            );
+                EF.Functions.ILike(p.ProductName1 ?? "", $"%{pattern}%", "\\") ||
+                EF.Functions.ILike(p.ProductName2 ?? "", $"%{pattern}%", "\\") ||
+                EF.Functions.ILike(p.Oem2 ?? "", $"%{pattern}%", "\\") ||
+                EF.Functions.ILike(p.Mr1 ?? "", $"%{pattern}%", "\\") ||
+                EF.Functions.ILike(p.Remark ?? "", $"%{pattern}%", "\\") ||
+                p.CrossReferences.Any(x =>
+                    EF.Functions.ILike(x.OemBrand ?? "", $"%{pattern}%", "\\") ||
+                    EF.Functions.ILike(x.OemNo3 ?? "", $"%{pattern}%", "\\") ||
+                    EF.Functions.ILike(x.Oem2 ?? "", $"%{pattern}%", "\\")) ||
+                p.MachineApplications.Any(m =>
+                    EF.Functions.ILike(m.MachineBrand ?? "", $"%{pattern}%", "\\") ||
+                    EF.Functions.ILike(m.MachineModel ?? "", $"%{pattern}%", "\\")));
         }
 
         if (!string.IsNullOrWhiteSpace(req.Type))
@@ -230,21 +222,9 @@ public class PostgresSearchProvider : ISearchProvider
         var total = await q.LongCountAsync(ct);
 
         // 取分页结果 (含排序: brand_sort_order_min → oem_list_sort_order_min → updated_at DESC)
+        //   V24-F76: 同 SearchAsync, 简化排序为 OrderByDescending(UpdatedAt) 避开 EF Core 8 翻译 bug
         var pagedProducts = await q
-            .OrderBy(p => p.CrossReferences
-                .Where(x => !x.IsDiscontinued)
-                .Select(x => _db.XrefOemBrands
-                    .Where(b => b.Brand == x.OemBrand && b.DeletedAt == null)
-                    .Select(b => (int?)b.SortOrder)
-                    .FirstOrDefault() ?? int.MaxValue)
-                .DefaultIfEmpty(int.MaxValue)
-                .Min())
-            .ThenBy(p => p.CrossReferences
-                .Where(x => x.IsPublished && !x.IsDiscontinued)
-                .Select(x => (int?)x.SortOrder)
-                .DefaultIfEmpty(int.MaxValue)
-                .Min())
-            .ThenByDescending(p => p.UpdatedAt)
+            .OrderByDescending(p => p.UpdatedAt)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .Select(p => new

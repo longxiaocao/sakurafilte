@@ -435,7 +435,13 @@ public class PublicSearchController : ControllerBase
             .Select(s => s.Value)
             .FirstOrDefaultAsync(ct);
         var depth = (string.IsNullOrEmpty(value) || !int.TryParse(value, out var d) || d < 1) ? 100 : d;
-        _cache.Set(cacheKey, depth, TimeSpan.FromMinutes(5));
+        // V24-F75: 修复 MemoryCache Size 缺失 (同 V24-F71 根因)
+        //   WHY: ServiceCollectionExtensions 设置了 options.SizeLimit=10000, cache.Set 必须指定 Size
+        _cache.Set(cacheKey, depth, new MemoryCacheEntryOptions
+        {
+            AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5),
+            Size = 1
+        });
         return depth;
     }
 }

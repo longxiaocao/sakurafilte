@@ -104,7 +104,13 @@ public class AdminProductImageService
 
         // 校验值合法性 (仅允许 oem_no_3 / mr_1)
         var result = (value == "oem_no_3" || value == "mr_1") ? value! : defaultValue;
-        _cache.Set(cacheKey, result, CacheTtl);
+        // V24-F75: 修复 MemoryCache Size 缺失 (同 V24-F71 根因)
+        //   WHY: ServiceCollectionExtensions 设置了 options.SizeLimit=10000, cache.Set 必须指定 Size
+        _cache.Set(cacheKey, result, new MemoryCacheEntryOptions
+        {
+            AbsoluteExpirationRelativeToNow = CacheTtl,
+            Size = 1
+        });
         return result;
     }
 
