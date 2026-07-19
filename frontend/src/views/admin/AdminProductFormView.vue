@@ -108,6 +108,9 @@ const mr1Rules = [
 const formRef = ref()
 
 const loading = ref(false)
+// V24-F101 (P2-2, 规则 8): 加 loadError 让加载失败时显示 el-result + 重试按钮
+//   WHY 不依赖拦截器 toast: 编辑模式加载失败用户看到空表单, 提交时才发现, 体验差
+const loadError = ref<string | null>(null)
 const saving = ref(false)
 const uploading = ref(false)
 const removing = ref(false)
@@ -192,6 +195,8 @@ watch(cartonVolume, (v) => {
 
 async function load() {
   if (!isEdit.value) return
+  // V24-F101 (P2-2, 规则 8): 编辑模式加载失败时显示 error UI + 重试, 不再静默吞
+  loadError.value = null
   loading.value = true
   try {
     const p = await adminProductApi.get(productId.value)
@@ -238,7 +243,11 @@ async function load() {
     selectedOemNo3ForPrimary.value = form.crossReferences.find((x: any) => x.oemNo3)?.oemNo3 || ''
     // E2E BD.3 修复 v2: 保存 GET 时的 RowVersion (xmin), PUT 时带回实现乐观锁
     rowVersion.value = p.rowVersion ?? 0
-  } catch (e: any) {} finally {
+  } catch (e: any) {
+    // V24-F101 (P2-2, 规则 8): 加载失败时记录 error, 让模板显示 el-result + 重试按钮
+    //   WHY 不静默吞: 之前 catch 块为空, 加载失败用户看到空表单, 提交时才发现, 体验差
+    loadError.value = e?.response?.data?.message || e?.message || '产品加载失败'
+  } finally {
     loading.value = false
   }
   // V24-F48: load 完成后启动自动保存 (避免 GET 期间 Object.assign 触发 watch 写脏数据)
@@ -558,7 +567,20 @@ onBeforeUnmount(() => {
       <el-button type="primary" @click="save" :loading="saving">保存</el-button>
     </div>
 
-    <el-form ref="formRef" :model="form" label-position="top" label-width="100px" size="small">
+    <!-- V24-F101 (P2-2, 规则 8): 编辑模式加载失败时显示 error UI + 重试, 不显示空表单 -->
+    <el-result
+      v-if="loadError"
+      icon="error"
+      :title="loadError"
+      sub-title="无法加载产品数据, 请重试或返回列表"
+    >
+      <template #extra>
+        <el-button type="primary" @click="load" :loading="loading">重试</el-button>
+        <el-button @click="router.back()">返回列表</el-button>
+      </template>
+    </el-result>
+
+    <el-form v-else ref="formRef" :model="form" label-position="top" label-width="100px" size="small">
       <el-collapse v-model="activeNames">
         <!-- 分区 1: 基础信息 -->
         <el-collapse-item :title="t('admin.productformview.title.basic_info')" name="1">

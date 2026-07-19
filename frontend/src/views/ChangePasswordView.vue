@@ -41,8 +41,10 @@ async function handleSubmit() {
     await authApi.changePassword(form.oldPassword, form.newPassword)
     ElMessage.success(t('common.feedback.success_010'))
     router.push('/admin/products')
-  } catch {
-    // axios 拦截器已统一弹错误提示, 这里不重复
+  } catch (e) {
+    // V24-F101 (P2-2, 规则 8): 拦截器已弹 toast, console.warn 便于排查
+    //   WHY 不加字段级错误: 拦截器已根据 400 (旧密码错误) / 422 (新密码策略) 弹对应 toast, 字段级提示改动量大收益有限
+    console.warn('[ChangePasswordView] changePassword 失败:', e)
   } finally {
     loading.value = false
   }

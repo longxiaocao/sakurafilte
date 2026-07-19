@@ -133,8 +133,9 @@ async function doTrigger() {
     if (form.dryRun) {
       lastDryRun.value = r as any
     }
-  } catch {
-    // 拦截器处理
+  } catch (e) {
+    // V24-F101 (P2-2, 规则 8): 拦截器已弹 toast, 这里 console.warn 便于排查 (如 504 网关超时拦截器可能未捕获)
+    console.warn('[AdminEtlView] doTrigger 失败:', e)
   } finally {
     submitting.value = false
   }
@@ -208,8 +209,9 @@ async function doCancel() {
     } else {
       ElMessage.info(r.reason || t('common.field.no_active_task_to_cancel'))
     }
-  } catch {
-    // 拦截器处理
+  } catch (e) {
+    // V24-F101 (P2-2, 规则 8): 拦截器已弹 toast, console.warn 便于排查
+    console.warn('[AdminEtlView] doCancel 失败:', e)
   } finally {
     cancelling.value = false
   }
@@ -234,8 +236,9 @@ async function doPause() {
     } else {
       ElMessage.info(r.reason || t('admin.etlview.info.task_pause'))
     }
-  } catch {
-    // 拦截器处理
+  } catch (e) {
+    // V24-F101 (P2-2, 规则 8): 拦截器已弹 toast, console.warn 便于排查
+    console.warn('[AdminEtlView] doPause 失败:', e)
   } finally {
     pausing.value = false
   }
@@ -258,8 +261,9 @@ async function doResume() {
     } else {
       ElMessage.warning(r.error || t('common.action.restore_failed'))
     }
-  } catch {
-    // 拦截器处理
+  } catch (e) {
+    // V24-F101 (P2-2, 规则 8): 拦截器已弹 toast, console.warn 便于排查
+    console.warn('[AdminEtlView] doResume 失败:', e)
   } finally {
     resuming.value = false
   }

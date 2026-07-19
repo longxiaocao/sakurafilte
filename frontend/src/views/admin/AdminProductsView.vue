@@ -16,6 +16,8 @@ const { t } = useI18n()
 const router = useRouter()
 
 const loading = ref(false)
+// V24-F101 (P2-2, 规则 8): 加 loadError, 列表加载失败时显示重试 UI
+const loadError = ref<string | null>(null)
 const items = ref<ProductListItem[]>([])
 const total = ref(0)
 const page = ref(1)
@@ -105,6 +107,8 @@ async function load() {
   const myAbort = new AbortController()
   loadAbort = myAbort
   loading.value = true
+  // V24-F101 (P2-2, 规则 8): 清除上次的 loadError (重试场景)
+  loadError.value = null
   try {
     const req = { ...filter, page: page.value, pageSize: pageSize.value }
     const data = await adminProductApi.search(req, { signal: myAbort.signal })
@@ -115,7 +119,8 @@ async function load() {
   } catch (e: any) {
     // P2-8.1: 请求被取消时静默返回 (用户主动翻页/筛选切换/卸载组件触发)
     if (e?.code === 'ERR_CANCELED' || e?.name === 'CanceledError') return
-    // 其他错误已被拦截器处理
+    // V24-F101 (P2-2, 规则 8): 显式记录 loadError, 让表格上方显示重试 UI
+    loadError.value = e?.response?.data?.message || e?.message || '产品列表加载失败'
   } finally {
     // P2-8.1: 仅当前请求未被新请求取代时才重置 loading, 避免旧请求 finally 覆盖新请求的 loading 状态
     if (loadAbort === myAbort) loading.value = false
@@ -159,8 +164,9 @@ async function discontinue(row: ProductListItem) {
     await adminProductApi.discontinue(row.id, 'admin')
     ElMessage.success(t('admin.productsview.success.discontinued_v2'))
     load()
-  } catch {
-    // 错误已被拦截器
+  } catch (e: any) {
+    // V24-F101 (P2-2, 规则 8): 显式 ElMessage.error 兜底, 防止拦截器异常时操作无反馈
+    ElMessage.error(e?.response?.data?.message || e?.message || '停售失败')
   } finally {
     productMutating.value = false
   }
@@ -173,8 +179,9 @@ async function restore(row: ProductListItem) {
     await adminProductApi.restore(row.id, 'admin')
     ElMessage.success(t('common.action.restored'))
     load()
-  } catch {
-    // 错误已被拦截器
+  } catch (e: any) {
+    // V24-F101 (P2-2, 规则 8): 显式 ElMessage.error 兜底
+    ElMessage.error(e?.response?.data?.message || e?.message || '恢复失败')
   } finally {
     productMutating.value = false
   }
@@ -220,7 +227,8 @@ async function loadHistory(productId: number, append = false) {
     historyNextCursor.value = result.nextCursor ?? null
     historyHasMore.value = !!result.nextCursor
   } catch (e: any) {
-    // 错误已被拦截器
+    // V24-F101 (P2-2, 规则 8): 历史加载失败时显式提示, 不再静默吞
+    ElMessage.error(e?.response?.data?.message || e?.message || '历史加载失败')
   } finally {
     historyLoading.value = false
   }
@@ -319,6 +327,23 @@ onBeforeUnmount(() => {
     </div>
 
     <!-- 表格 -->
+    <!-- V24-F101 (P2-2, 规则 8): 列表加载失败时显示重试 UI -->
+    <el-alert
+      v-if="loadError"
+      type="error"
+      show-icon
+      :closable="false"
+      class="mb-2"
+    >
+      <template #default>
+        <div class="flex items-center justify-between">
+          <span>{{ loadError }}</span>
+          <el-button size="small" @click="load" :disabled="loading">
+            {{ loading ? '重试中…' : '重试' }}
+          </el-button>
+        </div>
+      </template>
+    </el-alert>
     <!-- P1-5 修复: 表格容器加 overflow-x-auto - 13 列总宽 800+px, 移动端触发水平滚动而非列被裁切 -->
     <!-- P-Admin-UX v2: tableLayout="auto" 让列按内容分配, 加一个无 width 的弹性列填满右侧空区 -->
     <div class="hairline overflow-x-auto">

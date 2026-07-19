@@ -256,8 +256,9 @@ async function handleLogout() {
     if (refreshToken.value) {
       await authApi.logout(refreshToken.value)
     }
-  } catch {
-    // 即使后端 logout 失败也前端清场
+  } catch (e) {
+    // V24-F101 (P2-2, 规则 8): 即使后端 logout 失败也前端清场, console.warn 便于排查
+    console.warn('[AppHeader] handleLogout 后端 logout 失败 (前端继续清场):', e)
   } finally {
     loading.close()
   }

@@ -75,8 +75,9 @@ async function loadUsers() {
     const resp = await usersApi.list(usersPage.value, usersPageSize.value)
     users.value = resp.items
     usersTotal.value = resp.total
-  } catch {
-    // axios 拦截器已统一弹错误
+  } catch (e) {
+    // V24-F101 (P2-2, 规则 8): 拦截器已弹 toast, console.warn 便于排查
+    console.warn('[AdminUsersView] loadUsers 失败:', e)
   } finally {
     usersLoading.value = false
   }
@@ -118,8 +119,9 @@ async function saveCreate() {
     ElMessage.success(t('admin.usersview.success.user_created'))
     createOpen.value = false
     await loadUsers()
-  } catch {
-    // axios 拦截器已统一弹错误
+  } catch (e) {
+    // V24-F101 (P2-2, 规则 8): 拦截器已弹 toast, console.warn 便于排查
+    console.warn('[AdminUsersView] saveCreate 失败:', e)
   } finally {
     userSubmitting.value = false
   }
@@ -150,8 +152,9 @@ async function saveEdit() {
     ElMessage.success(t('admin.usersview.success.user_updated'))
     editOpen.value = false
     await loadUsers()
-  } catch {
-    // axios 拦截器已统一弹错误
+  } catch (e) {
+    // V24-F101 (P2-2, 规则 8): 拦截器已弹 toast, console.warn 便于排查
+    console.warn('[AdminUsersView] saveEdit 失败:', e)
   } finally {
     userSubmitting.value = false
   }
@@ -173,8 +176,9 @@ async function softDelete(row: UserListItem) {
     await usersApi.remove(row.id)
     ElMessage.success(t('common.action.deleted'))
     await loadUsers()
-  } catch {
-    // axios 拦截器已统一弹错误
+  } catch (e) {
+    // V24-F101 (P2-2, 规则 8): 拦截器已弹 toast, console.warn 便于排查
+    console.warn('[AdminUsersView] softDelete 失败:', e)
   } finally {
     userSubmitting.value = false
   }
@@ -199,8 +203,9 @@ async function saveReset() {
     await usersApi.resetPassword(resetForm.id, resetForm.newPassword)
     ElMessage.success(t('admin.usersview.string.password_of_user_has', { user: resetForm.username }))
     resetOpen.value = false
-  } catch {
-    // axios 拦截器已统一弹错误
+  } catch (e) {
+    // V24-F101 (P2-2, 规则 8): 拦截器已弹 toast, console.warn 便于排查
+    console.warn('[AdminUsersView] saveReset 失败:', e)
   } finally {
     userSubmitting.value = false
   }
@@ -219,8 +224,9 @@ async function loadAudit() {
     const resp = await usersApi.auditLogin(auditPage.value, auditPageSize.value)
     audit.value = resp.items
     auditTotal.value = resp.total
-  } catch {
-    // axios 拦截器已统一弹错误
+  } catch (e) {
+    // V24-F101 (P2-2, 规则 8): 拦截器已弹 toast, console.warn 便于排查
+    console.warn('[AdminUsersView] loadAudit 失败:', e)
   } finally {
     auditLoading.value = false
   }
@@ -246,8 +252,9 @@ async function handleLogout() {
     if (auth.refreshToken) {
       await authApi.logout(auth.refreshToken)
     }
-  } catch {
-    // 即使后端 logout 失败也前端清场
+  } catch (e) {
+    // V24-F101 (P2-2, 规则 8): 即使后端 logout 失败也前端清场, console.warn 便于排查
+    console.warn('[AdminUsersView] handleLogout 后端 logout 失败 (前端继续清场):', e)
   } finally {
     userSubmitting.value = false
   }

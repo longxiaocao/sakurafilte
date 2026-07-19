@@ -17,6 +17,9 @@ const router = useRouter()
 const stats = ref<AlertStats | null>(null)
 const latest = ref<AlertHistoryItem | null>(null)
 const loading = ref(false)
+// V24-F101 (P2-2, 规则 8): 记录最后成功刷新时间 + stale 状态, 避免静默显示过期数据
+const lastUpdate = ref<Date | null>(null)
+const stale = ref(false)
 let timer: number | null = null
 
 async function fetchData() {
@@ -28,8 +31,14 @@ async function fetchData() {
     ])
     stats.value = s
     latest.value = h.items[0] ?? null
-  } catch {
-    // 拦截器处理
+    // V24-F101: 成功刷新时更新 lastUpdate, 清除 stale 标记
+    lastUpdate.value = new Date()
+    stale.value = false
+  } catch (e) {
+    // V24-F101 (P2-2, 规则 8): 失败时标记 stale, 让用户知道数据可能过期
+    //   WHY 不静默吞: 30s 定时刷新失败时如果不提示, 用户看到的是 30s 前的旧数据, 误导以为"无告警"
+    stale.value = true
+    console.warn('[EtlAlertStatus] fetchData 失败, 数据可能过期:', e)
   } finally {
     loading.value = false
   }
@@ -60,6 +69,12 @@ function severityTagType(sev: string): 'danger' | 'warning' | 'info' | 'success'
 
 function fmtTime(s: string | undefined) {
   return s ? s.slice(0, 19).replace('T', ' ') : '-'
+}
+
+// V24-F101: 格式化最后更新时间 (用于 stale 提示)
+function fmtLastUpdate(d: Date | null): string {
+  if (!d) return ''
+  return d.toTimeString().slice(0, 8)
 }
 
 function goToAlerts() {
@@ -107,6 +122,10 @@ function goToAlerts() {
 
       <!-- 操作 (右) -->
       <div class="status-actions">
+        <!-- V24-F101 (P2-2, 规则 8): stale 状态提示用户数据可能过期, 不再静默显示旧数据 -->
+        <div v-if="stale" class="stale-tip" :title="`最后成功刷新: ${fmtLastUpdate(lastUpdate)}`">
+          <span class="stale-dot" /> 数据可能过期
+        </div>
         <el-button type="primary" plain size="small" @click="goToAlerts">
           {{ t('admin.etlview.alert.view_all_btn') }}
         </el-button>
@@ -177,6 +196,29 @@ function goToAlerts() {
   padding: 8px 0;
 }
 .status-actions { flex: 0 0 auto; }
+/* V24-F101 (P2-2): stale 提示样式 — 灰色文字 + 闪烁圆点 */
+.stale-tip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--el-color-warning);
+  margin-bottom: 4px;
+}
+.stale-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--el-color-warning);
+  animation: stale-blink 1.4s ease-in-out infinite;
+}
+@keyframes stale-blink {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .stale-dot { animation: none; opacity: 0.8; }
+}
 @media (max-width: 768px) {
   .alert-summary { flex-direction: column; align-items: stretch; gap: 12px; }
   .status-grid { justify-content: space-between; }

@@ -26,6 +26,8 @@ const pagination = reactive({ limit: 50, offset: 0 })
 const items = ref<AlertHistoryItem[]>([])
 const total = ref(0)
 const loading = ref(false)
+// V24-F101 (P2-2, 规则 8): 加 loadError 用于显示加载失败 + 重试
+const loadError = ref<string | null>(null)
 let pollTimer: number | null = null
 
 // ===== KPI =====
@@ -48,6 +50,7 @@ const currentPage = computed(() => Math.floor(pagination.offset / pagination.lim
 
 async function fetchData() {
   loading.value = true
+  loadError.value = null
   try {
     const r = await alertsApi.history({
       type: filter.type || undefined,
@@ -58,8 +61,9 @@ async function fetchData() {
     })
     items.value = r.items
     total.value = r.total
-  } catch {
-    // 拦截器处理
+  } catch (e: any) {
+    // V24-F101 (P2-2, 规则 8): 显式赋值 loadError, 让表格上方显示重试 UI
+    loadError.value = e?.response?.data?.message || e?.message || '告警历史加载失败'
   } finally {
     loading.value = false
   }
@@ -68,8 +72,10 @@ async function fetchData() {
 async function fetchStats() {
   try {
     stats.value = await alertsApi.stats()
-  } catch {
-    // 忽略
+  } catch (e) {
+    // V24-F101 (P2-2, 规则 8): 统计加载失败不影响主表, 但需提示用户
+    console.warn('[AdminAlertsView] fetchStats 失败:', e)
+    ElMessage.warning('告警统计加载失败, 不影响主表')
   }
 }
 
@@ -277,6 +283,24 @@ onBeforeUnmount(() => {
           <el-tag size="small">{{ total.toLocaleString() }} {{ t('admin.alertsview.table.records') }}</el-tag>
         </div>
       </template>
+      <!-- V24-F101 (P2-2, 规则 8): 加载失败时显示 error UI + 重试按钮 -->
+      <el-alert
+        v-if="loadError"
+        type="error"
+        :title="loadError"
+        show-icon
+        :closable="false"
+        class="mb-2"
+      >
+        <template #default>
+          <div class="flex items-center justify-between">
+            <span>{{ loadError }}</span>
+            <el-button size="small" @click="fetchData" :disabled="loading">
+              {{ loading ? '重试中…' : '重试' }}
+            </el-button>
+          </div>
+        </template>
+      </el-alert>
       <el-table :data="items" v-loading="loading" size="small" border stripe>
         <el-table-column prop="id" label="#" width="70" />
         <el-table-column :label="t('admin.alertsview.table.severity')" width="80">
