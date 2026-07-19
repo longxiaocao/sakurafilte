@@ -704,7 +704,9 @@ jobs:
 
       # V27-9-2: 安装 Python Playwright + Chromium (design audit 需要)
       #   ~30s, 与 Node Playwright 独立 (Python 包不共享 Node 浏览器二进制)
+      #   v28-4: 加 if: always() — 与 V27-9-3 配套, 即使前面 step 失败也能装依赖跑巡检
       - name: V27-9-2 Install Python Playwright + chromium
+        if: always()
         run: |
           echo "===== V27-9-2 安装 Python Playwright + Chromium ====="
           pip install playwright
@@ -714,7 +716,10 @@ jobs:
       # V27-9-3: 设计巡检 (21 页面 × 3 视口 × 多检查项)
       #   覆盖: 页面加载 + console error + 4xx/5xx + H1 语义 + 按钮 + A11y + 响应式截图
       #   continue-on-error: 首次接入怕有 console error 误判 (如 favicon 404), 设为非阻塞
+      #   v28-4: 加 if: always() — Day 9.6 cursor baseline 500 (独立 P1) 会阻断后续 step,
+      #     但 V27-9-3 与 Day 9.6 业务测试无依赖, 应 always 跑 (与 continue-on-error 语义一致)
       - name: V27-9-3 Design audit (21 pages, 3 viewports)
+        if: always()
         working-directory: spike-test
         env:
           FRONTEND_URL: http://localhost:5173

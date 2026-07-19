@@ -108,7 +108,7 @@ function fmtDuration(sec: number): string {
       {{ loading ? '重试中…' : '重试' }}
     </button>
   </div>
-  <div v-else v-loading="loading" class="kpi-grid" aria-busy="loading">
+  <div v-else v-loading="loading" class="kpi-grid" :aria-busy="loading">
     <div class="kpi-card">
       <div class="kpi-label">{{ t('admin.etlview.kpi.trigger_24h') }}</div>
       <div class="kpi-value">{{ total.toLocaleString() }}</div>
