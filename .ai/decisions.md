@@ -207,3 +207,44 @@ v29-2 高频词分布调研 (V24-F98, 2026-07-19, spec 28.7, 候选 2 不实施)
   - backend/src/SakuraFilter.Api/Services/AdminProductService.cs (L2 修复)
   - backend/src/SakuraFilter.Etl/EtlImportService.cs (L3 保留+注释, 2 处)
   - .trae/specs/v2-architecture-migration/spec.md chapter 28.8 (v29-3 完整审计与修复记录)
+
+#8 前端 loading 兜底全量审计与分层修复策略 (2026-07-19, V24-F100/F101/F102 v30-1/2/3, spec 29.1/2/3)
+决策:
+  - 审计全部 .vue 文件 (22 个问题: 3 HIGH + 9 MEDIUM + 10 LOW), 按 HIGH → MEDIUM → LOW 三波分层修复 (V24-F100/F101/F102)
+  - 选择"在 9 个文件独立加 loadError ref + el-alert + SkeletonCard"模式, 不提取 DictManagerLayout 通用组件
+  - P0-1 i18n key 字面量 BUG 修复选择硬编码模式, 与 AdminEnginesView 等其他字典页一致, 不修复 i18n key 调用方式
+理由:
+  - 规则 8 防白屏是硬性要求, 必须全量审计修复, 不能遗漏
+  - 分层修复 (HIGH → MEDIUM → LOW) 让最高风险 (首屏白屏) 优先解决, 避免一次性大改动引入回归
+  - DictManagerLayout 提取预估 9h, 超 15min 高价值阈值, 且当前 8 字典页兜底缺失是阻断级问题, 应先快速修复兜底再考虑重构
+  - i18n key soft_delete_confirm 值本身被截断 (' 吗? (软删除, 可在'), 设计不合理, 修复 i18n 调用方式不如直接硬编码与其他字典页一致
+  - V24-F100/F101/F102 三波修复共 20 文件 +535/-69 行, 全部通过 vitest 258 测试 (12 ECONNREFUSED 非回归)
+排除方案:
+  - 一次性全量修复 22 个问题: 改动面过大, 难以审查, 易引入回归
+  - 提取 DictManagerLayout 通用组件 (P1-1): 9h 成本过高, 超 15min 高价值阈值, 且本次先解决兜底缺失阻断级问题更优先; 8 字典页 1477 行重复代码留 P1-1 单独提案 (已归档 .ai/suggestions.md)
+  - 修复 i18n key 调用方式 (用 ${t('...')} 插值): i18n key soft_delete_confirm 值本身被截断, 修复后语义不完整, 不如硬编码与其他字典页一致
+  - 加 30s 定时刷新到字典页 (P2-2): 字典数据 stale 影响小, 可用 visibilitychange 替代, 留 P2 候选
+关联文件:
+  - frontend/src/components/EtlKpiCards.vue (V24-F100 HIGH-3)
+  - frontend/src/views/admin/AdminPerfView.vue (V24-F100 HIGH-2)
+  - frontend/src/views/admin/AdminCompareView.vue (V24-F100 HIGH-1)
+  - frontend/src/views/admin/AdminAlertsView.vue (V24-F101 M-1)
+  - frontend/src/views/admin/AdminEtlView.vue (V24-F101 M-2)
+  - frontend/src/views/admin/AdminProductFormView.vue (V24-F101 M-3)
+  - frontend/src/views/admin/AdminProductsView.vue (V24-F101 M-4)
+  - frontend/src/views/admin/AdminUsersView.vue (V24-F101 M-5)
+  - frontend/src/components/AppHeader.vue (V24-F101 M-7)
+  - frontend/src/components/EtlAlertStatus.vue (V24-F101 M-8, 30s stale 提示)
+  - frontend/src/views/ChangePasswordView.vue (V24-F101 M-9)
+  - frontend/src/views/admin/AdminEnginesView.vue (V24-F102 P0-2 + P1-2)
+  - frontend/src/views/admin/AdminOemNo3sView.vue (V24-F102 P0-2 + P1-2)
+  - frontend/src/views/admin/AdminMachinesView.vue (V24-F102 P0-2 + P1-2)
+  - frontend/src/views/admin/AdminOemBrandsView.vue (V24-F102 P0-1 i18n BUG + P0-2 + P1-2)
+  - frontend/src/views/admin/AdminMediasView.vue (V24-F102 P0-2 + P1-2)
+  - frontend/src/views/admin/AdminProductName1sView.vue (V24-F102 P0-1 i18n BUG + P0-2 + P1-2)
+  - frontend/src/views/admin/AdminProductName2sView.vue (V24-F102 P0-2 + P1-2)
+  - frontend/src/views/admin/AdminTypesView.vue (V24-F102 P0-2 + P1-2)
+  - frontend/src/views/admin/AdminApiDocsView.vue (V24-F102 P0-2 + P1-2 + P1-3 v-loading 统一)
+  - .trae/specs/v2-architecture-migration/spec.md chapter 29 (v30 三波修复完整记录)
+  - .ai/suggestions.md (P1-1 DictManagerLayout 提取建议, P2-1 空状态文案统一, P2-2 visibilitychange 监听)
+

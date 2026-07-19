@@ -16848,3 +16848,125 @@ Aggregate  (cost=511634.92..511634.93 rows=1 width=8) (actual time=6524.562..652
 - `.ai/decisions.md` ADR #7 — 新增: V24-F99 后端日志脱敏审计与修复决策
 
 ---
+
+## 29 v30: 前端 loading 兜底全量审计与分层修复 (P2-2, 2026-07-19)
+
+**背景**: 规则 8 "所有前端异步请求必须设计 loading 状态和 error 兜底 UI (骨架屏或重试按钮), 严禁白屏或未捕获报错红屏"。spec 26.20.6 P2-2 改进建议要求审计全部 .vue 文件 loading/error 兜底缺失情况, 按 HIGH → MEDIUM → LOW 三波修复
+
+**关联**: 规则 8 (全栈契约与联调规范 - 加载与兜底), spec 26.20.6 P2-2
+
+**审计方法**: 用 Task subagent (search 类型) 扫描全部 .vue 文件, 按 6 维度评估:
+- A. catch 块是否静默吞错
+- B. 异步请求是否有 loading 状态
+- C. 加载失败是否有持久 error UI (el-alert / el-result + 重试按钮)
+- D. 首屏加载是否有骨架屏
+- E. 表格/列表是否有空状态 UI
+- F. 是否有 30s 定时刷新类逻辑 (stale 数据提示)
+
+**审计结果**: 22 个问题 (3 HIGH + 9 MEDIUM + 10 LOW)
+
+### 29.1 v30-1: V24-F100 HIGH 级修复 (commit fa94175)
+
+**修复范围**: 3 个文件, 解决首屏白屏风险
+
+| 文件 | 问题 | 修复 |
+|---|---|---|
+| `EtlKpiCards.vue` | catch 静默吞 + 无 v-loading + 无 error UI, 4 张卡片永远显示 0/— | 加 error ref + retry() + v-loading + el-alert 重试 UI |
+| `AdminPerfView.vue` | fetchPerf/fetchAuth catch 静默吞, 首屏缺骨架屏 | 引入 SkeletonCard variant=list, catch 加 console.warn, 暂无数据加重试按钮 |
+| `AdminCompareView.vue` | 已有 error ref 但模板未使用, 首屏纯文字"加载中..."缺骨架屏 | 引入 SkeletonCard variant=table-row, lastFailedIds ref + retryLoad(), error 持久 UI + 重试按钮 |
+
+**测试**: 前端 vitest 258 通过 (12 个 contract/dict-schema.test.ts ECONNREFUSED 非回归)
+
+### 29.2 v30-2: V24-F101 MEDIUM 级修复 (commit 53014c3)
+
+**修复范围**: 8 个文件, 解决操作无反馈与静默吞错问题
+
+| 文件 | 问题 | 修复 |
+|---|---|---|
+| `AdminAlertsView.vue` | fetchData/fetchStats catch 静默吞 | loadError ref + el-alert 重试 UI + fetchStats ElMessage.warning |
+| `AdminEtlView.vue` | 5 个 action (trigger/cancel/pause/resume) catch 均静默 | 4 处 catch 加 console.warn |
+| `AdminProductFormView.vue` | load() catch 块完全为空, 加载失败用户看到空表单 | loadError ref + el-result 错误 UI + 重试/返回按钮 + el-form v-else |
+| `AdminProductsView.vue` | load/history catch 依赖拦截器, 列表加载失败无重试 | loadError ref + el-alert 重试 UI + discontinue/restore/history ElMessage.error |
+| `AdminUsersView.vue` | 所有 catch 块依赖拦截器 | 6 处 catch 加 console.warn |
+| `AppHeader.vue` | logout catch 静默 | catch 加 console.warn (前端清场行为不变) |
+| `EtlAlertStatus.vue` | 30s 定时刷新失败静默, 显示过期数据误导用户 | lastUpdate + stale ref + stale-tip 闪烁提示 (含 prefers-reduced-motion 关闭动画) |
+| `ChangePasswordView.vue` | catch 静默 | catch 加 console.warn |
+
+**测试**: 前端 vitest 258 通过
+
+### 29.3 v30-3: V24-F102 LOW 级修复 (commit 72611c7)
+
+**修复范围**: 9 个文件 (8 字典页 + AdminApiDocsView), 解决加载失败无持久 error UI 与首屏无骨架屏问题
+
+**审计方法**: 用 Task subagent 二次扫描 8 字典页 + AdminApiDocsView, 评估 DictManagerLayout 通用组件提取可行性
+
+**P0-1 i18n key 字面量 BUG (已上线)**:
+- `AdminOemBrandsView.vue` L98: `` `确定删除品牌 "${row.brand}t('common.field.soft_delete_confirm')含已删"模式下恢复)` `` 中 `t(...)` 未被 `${}` 包裹, 被当作字符串字面量
+- `AdminProductName1sView.vue` L84: 同上
+- **修复**: 与 AdminEnginesView 一致, 改为硬编码 `确定删除 "${row.xxx}" 吗? (软删除)`
+
+**P0-2 持久 error UI 缺失 (违反规则 8 防白屏)**:
+- 9 个文件 (8 字典页 + AdminApiDocsView) 加 loadError ref
+- 模板加 el-alert + 重试按钮 (调 load/refresh), 不再仅依赖一次性 ElMessage.error toast
+- catch 块保留原 ElMessage.error, 追加 loadError.value 赋值
+
+**P1-2 首屏骨架屏 (复用 SkeletonCard)**:
+- 8 字典页加 `<SkeletonCard v-if="loading && items.length === 0 && !loadError" variant="table-row" :count="5" />`
+- AdminApiDocsView 加 `<SkeletonCard v-if="loading && !schema && !loadError" variant="list" :count="3" />`
+- v-if 条件加 `!loadError` 避免与 el-alert 视觉冲突
+
+**P1-3 AdminApiDocsView loading 风格统一**:
+- 原文字"加载中…"改为 SkeletonCard 骨架屏
+- 模块列表容器加 `v-loading="loading"` (刷新场景显示遮罩)
+
+**审计附加发现**:
+
+| 维度 | 9 个文件平均得分 |
+|---|---|
+| A. catch 静默吞错 | 8/9 ✅, 1/9 ⚠️ (AdminApiDocsView 内层 catch) |
+| B. loading 状态 | 8/9 ✅, 1/9 ⚠️ (AdminApiDocsView 用文字非 v-loading) |
+| C. 持久 error UI | 0/9 ❌ (全员缺失, 违反规则 8 防白屏) — P0-2 修复后全部 ✅ |
+| D. 骨架屏 | 0/9 ❌ (全员缺失, SkeletonCard 已存在可直接复用) — P1-2 修复后全部 ✅ |
+| E. 空状态 UI | 9/9 ✅ |
+| F. 30s 定时刷新 | 0/9 (非强制, P2 级) |
+
+**DictManagerLayout 通用组件提取可行性评估**:
+
+| 维度 | 结论 |
+|---|---|
+| G. 代码结构相似度 | 8 个字典页 ~80% 代码逐字复制粘贴 (state/load/onSearch/openCreate/openEdit/saveDialog/softDelete/restore/拖拽 5 函数/fmtDate/isDraggable/rowClass/total/activeCount/style) |
+| H. 重复代码量 | 总 1812 行, 业务差异 ~335 行, 重复 ~1477 行 |
+| I. 可复用 composable 现状 | 项目无 `composables/` 目录, 无 `useDictManager` 类 composable |
+| J. 提取成本 vs 收益 | 成本 ~9h, 提取后 8 文件 1812 行 → ~400 行 (减少 78%), 后续新增字典页 1.5h → 20min |
+
+**未实施项 (归档到 `.ai/suggestions.md`)**:
+- P1-1 DictManagerLayout 通用组件提取 (~9h, 超 15min 高价值阈值, 非紧急)
+- P2-1 字典页空状态文案不统一 (AdminOemBrandsView L283 / AdminProductName1sView L224 用手写中文, 其他 7 页用 i18n key)
+- P2-2 字典页跨标签页 stale 数据感知 (visibilitychange 监听)
+- P2-3 AdminApiDocsView 内层 catch 持久化 (已纳入本次 P0-2, 不再单列)
+
+**测试**:
+- 前端 vitest 258 通过 (12 个 contract/dict-schema.test.ts ECONNREFUSED 5148 后端未启动, 与基线一致, 非回归)
+
+**边界测试建议**:
+- ⚠️ 边界 1: 后端 500 错误时, 8 字典页 el-alert 是否正确显示 `e.response.data.detail` — loadError.value 已用 `e?.response?.data?.detail || e?.message || '字典加载失败'` 兜底, 安全
+- ⚠️ 边界 2: 首次加载慢 + 空列表时, SkeletonCard 是否正确显示 — `v-if="loading && items.length === 0 && !loadError"` 三重条件, 加载完成后 items.length>0 自动消失, 安全
+- ⚠️ 边界 3: 网络断开后访问字典页 — loadError 显示 `字典加载失败`, 重试按钮在网络恢复后可恢复, 安全
+- ⚠️ 边界 4: AdminApiDocsView 双层 catch (外层 swagger.json → 内层 openapi.json) 都失败时 — 外层与内层 catch 都赋值 loadError, 模板 el-alert 显示最近一次错误, 安全
+
+**实际改动文件清单 (v30-3)**:
+- `frontend/src/views/admin/AdminEnginesView.vue` — P0-2 + P1-2
+- `frontend/src/views/admin/AdminOemNo3sView.vue` — P0-2 + P1-2
+- `frontend/src/views/admin/AdminMachinesView.vue` — P0-2 + P1-2
+- `frontend/src/views/admin/AdminOemBrandsView.vue` — P0-1 (i18n BUG) + P0-2 + P1-2
+- `frontend/src/views/admin/AdminMediasView.vue` — P0-2 + P1-2
+- `frontend/src/views/admin/AdminProductName1sView.vue` — P0-1 (i18n BUG) + P0-2 + P1-2
+- `frontend/src/views/admin/AdminProductName2sView.vue` — P0-2 + P1-2
+- `frontend/src/views/admin/AdminTypesView.vue` — P0-2 + P1-2
+- `frontend/src/views/admin/AdminApiDocsView.vue` — P0-2 + P1-2 + P1-3
+
+**关联文档**:
+- `.ai/suggestions.md` — P1-1 DictManagerLayout 提取建议, P2-1 空状态文案统一, P2-2 visibilitychange 监听
+
+---
+
