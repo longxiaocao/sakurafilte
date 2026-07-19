@@ -22,3 +22,40 @@
   - frontend/src/composables/useEtlProgress.ts
   - frontend/src/utils/http.ts (新增 buildAuthHeaders 导出)
   - backend/src/SakuraFilter.Api/Endpoints/AdminEtlEndpoints.cs (未改动)
+
+#2 V24-F83 23505 唯一约束并发测试方案 (2026-07-19)
+决策: 用 raw SQL 两个并行 NpgsqlTransaction 触发 23505, 不用 EF Core 并发
+理由: AdminProductImageService.UploadAsync 内部用 EF Core + BeginTransactionAsync。两个并行 DbContext 调用 UploadAsync 时, EF Core 内部时序难以稳定复现 23505:
+  - task1 可能先 commit, task2 的 FirstOrDefaultAsync 读到 task1 写入的记录 → 走 UPDATE 路径 (不撞 23505)
+  - 即使两个 Task 都查到 old=null, task2 的 INSERT 在 task1 commit 后才被阻塞, 但 EF Core 可能直接抛 ObjectDisposedException
+用 raw SQL 两个并行 NpgsqlTransaction 可稳定复现 (tx1 持有行锁 → tx2 阻塞 → tx1 commit → tx2 撞 23505)
+排除方案:
+  - EF Core 双 DbContext 并发调用 UploadAsync: 时序不稳定, 测试偶发失败
+  - Moq 模拟 EF Core 抛 DbUpdateException(23505): 不验证真实 DB 唯一约束存在
+关联文件:
+  - backend/tests/SakuraFilter.Api.Tests/Integration/AdminProductImageServiceIntegrationTests.cs (ConcurrentInsertSameDetailSlot_SecondThrows23505_Integration)
+  - backend/tests/SakuraFilter.Api.Tests/ProblemDetailsFactoryTests.cs (L134, 23505 → 409 ERR_DB_CONFLICT 映射单元测试)
+
+#3 V24-F84 CleanupOrphanImages MVP 方案选择 (2026-07-19)
+决策: 采用方案 A (MVP) — 仅增强 AdminProductImageService 异步删旧文件容错, 不实施全量孤儿清理
+理由: spec 26.4.1 用户决策暂缓 Task 5.1.20 v8 终态 (6 步大改造, 不符合最小设计原则)。MVP 方案与 spec 26.3.2「不扩展 IObjectStorage 公共接口」+ 26.17.2 P1-5「兜底覆盖上传异步删旧文件失败场景」次要目标一致, 改动 < 50 行
+排除方案:
+  - 方案 B (单 IObjectStorage + 时间戳过滤): 需扩展 IObjectStorage 接口, 与 spec 26.3.2 冲突
+  - 方案 D (完整 v8 终态): 6 步大改造 (接口扩展 + EF 迁移 + BackgroundService + DI 调整 + cleanup_failures 表 + 状态机), spec 26.4.1 明确「不符合最小设计原则」
+  - 方案 C (维持暂缓): 0 改动, 但 P1-5 不算完成
+关联文件:
+  - backend/src/SakuraFilter.Api/Services/AdminProductImageService.cs (SafeDeleteOldImageAsync 私有方法)
+  - backend/tests/SakuraFilter.Api.Tests/AdminProductImageServiceTests.cs (UploadAsync_OverwriteDeleteOldFile* 2 测试)
+
+#4 PG 集成测试基础设施选择 (2026-07-19)
+决策: 本地 PG + 独立测试库 sakurafilter_int_tests + TRUNCATE CASCADE 重置, 不用 Testcontainers
+理由: 团队成员环境不一 (Docker 不可用), 复用本地 PG 实例更轻量。通过 PG_TEST_CONNECTION_STRING 环境变量注入连接串, CI 中可用 GitHub Actions service container 启动 PG
+排除方案:
+  - Testcontainers: 需本地 Docker 守护进程, 团队成员环境不一
+  - EF Core InMemory: 不支持 raw SQL / advisory lock / FOR UPDATE SKIP LOCKED / 23505 / xmin
+关联文件:
+  - backend/tests/SakuraFilter.Api.Tests/Integration/PgIntegrationTestBase.cs (基类)
+  - backend/tests/SakuraFilter.Api.Tests/Integration/AdminProductServiceIntegrationTests.cs (V24-F81)
+  - backend/tests/SakuraFilter.Api.Tests/Integration/IndexReplayWorkerLockMechanismTests.cs (V24-F82)
+  - backend/tests/SakuraFilter.Api.Tests/Integration/AdminProductImageServiceIntegrationTests.cs (V24-F83)
+  - .env (PG_TEST_CONNECTION_STRING 指向 sakurafilter_int_tests)
