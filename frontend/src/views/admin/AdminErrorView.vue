@@ -316,7 +316,8 @@ onMounted(() => {
           <div v-if="selected.breadcrumbs.length" class="mb-2">
             <div class="text-xs text-muted mb-1">Breadcrumbs (最近 {{ selected.breadcrumbs.length }} 条)</div>
             <ul class="text-[10px] space-y-0.5">
-              <li v-for="(b, i) in selected.breadcrumbs" :key="i" class="flex gap-2">
+              <!-- V24-F86 (P2-1): 复合 key 防同 timestamp 重复场景下 key 冲突 -->
+              <li v-for="(b, i) in selected.breadcrumbs" :key="`${b.timestamp}-${i}`" class="flex gap-2">
                 <span class="text-muted shrink-0">{{ formatTime(b.timestamp).slice(-8) }}</span>
                 <span class="px-1 hairline shrink-0">{{ b.type || 'default' }}</span>
                 <span class="break-all">{{ b.message }}</span>

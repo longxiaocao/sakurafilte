@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using SakuraFilter.Api.Extensions;
 using SakuraFilter.Core.Extensions;
 using SakuraFilter.Infrastructure.Data;
 
@@ -76,14 +77,8 @@ public class PublicTypeaheadService
         try
         {
             var result = await QueryAsync(field, pattern, escape, limit, ct);
-            // 写入缓存 (5 分钟 TTL, size=1 配合 SizeLimit=10000 防止内存膨胀)
-            // WHY: 必须显式指定 size, 否则 SizeLimit 配置不生效 (Microsoft.Extensions.Caching.Memory 要求)
-            var cacheEntryOptions = new MemoryCacheEntryOptions
-            {
-                AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(CacheTtlSeconds),
-                Size = 1
-            };
-            _cache.Set(cacheKey, result, cacheEntryOptions);
+            // V24-F85: 用 SetWithSize 替代手写 MemoryCacheEntryOptions (5 分钟 TTL + Size=1 配合 SizeLimit=10000)
+            _cache.SetWithSize(cacheKey, result, TimeSpan.FromSeconds(CacheTtlSeconds));
             return result;
         }
         catch (Exception ex)

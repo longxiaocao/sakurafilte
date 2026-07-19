@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using SakuraFilter.Api.Extensions;
 using SakuraFilter.Core.DTOs;
 using SakuraFilter.Core.Entities;
 using SakuraFilter.Core.Interfaces;
@@ -104,13 +105,8 @@ public class AdminProductImageService
 
         // 校验值合法性 (仅允许 oem_no_3 / mr_1)
         var result = (value == "oem_no_3" || value == "mr_1") ? value! : defaultValue;
-        // V24-F75: 修复 MemoryCache Size 缺失 (同 V24-F71 根因)
-        //   WHY: ServiceCollectionExtensions 设置了 options.SizeLimit=10000, cache.Set 必须指定 Size
-        _cache.Set(cacheKey, result, new MemoryCacheEntryOptions
-        {
-            AbsoluteExpirationRelativeToNow = CacheTtl,
-            Size = 1
-        });
+        // V24-F85: 用 SetWithSize 替代手写 MemoryCacheEntryOptions (避免再次遗漏 Size 声明)
+        _cache.SetWithSize(cacheKey, result, CacheTtl);
         return result;
     }
 

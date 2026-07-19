@@ -173,6 +173,9 @@ const helpPreview = computed(() => helpPreviewKeys
     <section id="faq" class="hairline p-4 mb-3">
       <h2 class="text-base font-medium mb-2">5. 常见问题 (FAQ)</h2>
       <el-collapse>
+        <!-- V24-F86 (P2-1): 保留 index key — faqs 是静态数组(6 项永不增删),
+             el-collapse-item 的 :name="String(i)" 依赖 index, :title Q${i+1} 依赖序号,
+             改 key 需同步改 :name/:title 逻辑且无收益, 豁免 -->
         <el-collapse-item v-for="(f, i) in faqs" :key="i" :title="`Q${i + 1}. ${f.q}`" :name="String(i)">
           <div class="text-sm text-[var(--color-text-muted)] pl-2 leading-6">
             {{ f.a }}

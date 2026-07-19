@@ -15623,6 +15623,86 @@ V24-F82 IndexReplayWorkerLockMechanismTests (8 测试):
 
 ---
 
+## 26.20 v26 改进实施记录(批次三 — P2 MemoryCache + 前端 v-for key)
+
+**实施时间**: 2026-07-19
+**spec 任务**: 26.17.3 P2-4 / P2-1 (2 项)
+**git commits**: 待提交 (F85/F86 合并 commit)
+
+### 26.20.1 V24-F85: P2-4 MemoryCache Size 统一约束 (SetWithSize 扩展方法)
+
+**问题**: V24-F71/F75 历史曾出现 `_cache.Set` 未声明 `Size` 导致 IMemoryCache SizeLimit=10000 形同虚设的 bug。当前 5 处调用点各自手写 `MemoryCacheEntryOptions { Size = N }`,易遗漏。
+
+**方案**: 封装 `IMemoryCache.SetWithSize<T>(key, value, TTL, size=1)` 扩展方法,强制 Size 显式传参。
+
+**改动**:
+- 新建 `backend/src/SakuraFilter.Api/Extensions/MemoryCacheExtensions.cs`
+- 新建 `backend/tests/SakuraFilter.Api.Tests/MemoryCacheExtensionsTests.cs` (4 测试: 默认 size=1 / 显式 size=2000 / 复杂类型 List / TTL 过期验证)
+- 替换 5 处调用点:
+  - `PublicSearchController.cs` L438 (深度缓存, size=1 默认)
+  - `AdminProductImageService.cs` L108 (naming_field 配置缓存, size=1 默认)
+  - `PublicTypeaheadService.cs` L80 (typeahead 缓存, size=1 默认)
+  - `AdminXrefReorderEndpoints.cs` L59 (brand 列表缓存, size=1 默认)
+  - `SitemapEndpoints.cs` L202 (单分片 sitemap, size=2000 显式)
+
+**验证**: MemoryCacheExtensions 4/4 单测通过, Api.Tests 全套 434/434 通过。
+
+### 26.20.2 V24-F86: P2-1 前端 v-for key 静态检查 (7 处)
+
+**问题**: 前端 `:key="i"` (i 为 v-for index) 在动态增删列表中会导致 Vue diff 错位,影响交互。
+
+**审计结果** (grep `v-for.*:key` 全前端):
+1. `SkeletonCard.vue` (4 处): `v-for="i in N"` 中 `i` 是循环值非 index — **豁免**
+2. `DemoView.vue` L295: `:key="i"` → `:key="s"` (静态字符串列表) — **已改**
+3. `AdminErrorView.vue` L319: `:key="i"` → `:key="`${b.timestamp}-${i}`"` (复合 key 防同 timestamp 重复) — **已改**
+4. `AdminHelpView.vue` L176: `:key="i"` 保留 + 豁免注释 (faqs 静态数组 + el-collapse-item :name="String(i)" 依赖 index + :title="Q${i+1}" 依赖序号) — **保留+注释**
+5. `AdminErrorView.vue` L268/L300: `:key="k"` (对象迭代,k 是属性名) — **已是稳定 key**
+
+### 26.20.3 验证结果
+
+- 后端 `dotnet test`: **434/434 通过** (含 MemoryCacheExtensions 4 新单测)
+- 前端 `npx vitest run`: **258/258 通过** (16 test files)
+- V24-F85 5 调用点全部替换, 无遗漏
+- V24-F86 7 处 v-for key 全部审计完成, 3 处改动 + 4 处豁免(含注释说明)
+
+### 26.20.4 v26 改进批次三文件清单
+
+**新建**:
+- `backend/src/SakuraFilter.Api/Extensions/MemoryCacheExtensions.cs`
+- `backend/tests/SakuraFilter.Api.Tests/MemoryCacheExtensionsTests.cs`
+
+**修改**:
+- `backend/src/SakuraFilter.Api/Controllers/PublicSearchController.cs` (V24-F85)
+- `backend/src/SakuraFilter.Api/Services/AdminProductImageService.cs` (V24-F85)
+- `backend/src/SakuraFilter.Api/Services/PublicTypeaheadService.cs` (V24-F85)
+- `backend/src/SakuraFilter.Api/Endpoints/AdminXrefReorderEndpoints.cs` (V24-F85)
+- `backend/src/SakuraFilter.Api/Endpoints/SitemapEndpoints.cs` (V24-F85)
+- `frontend/src/views/DemoView.vue` (V24-F86)
+- `frontend/src/views/admin/AdminErrorView.vue` (V24-F86)
+- `frontend/src/views/admin/AdminHelpView.vue` (V24-F86 注释)
+
+### 26.20.5 v26 改进批次三总结
+
+P2 阶段首批 (P2-1 + P2-4) 完成, 累计:
+- **2 个 P2 任务** 完成 (P2-1 前端 v-for key 静态检查 / P2-4 MemoryCache Size 统一约束)
+- **8 个文件** 修改 (5 后端 + 3 前端)
+- **2 个新文件** (扩展方法 + 4 单测)
+- **测试基线**: 后端 434/434 + 前端 258/258, 全绿
+- **历史 bug 防复发**: V24-F71/F75 (MemoryCache Size 遗漏) 通过 SetWithSize 强制显式传参, 杜绝再次遗漏
+
+### 26.20.6 💡 改进建议 (后续 v27+ 决策)
+
+1. **P2 剩余项优先级**: spec 26.17.3 P2 列表剩余 8 项 (P2-2/3/5/6/7/8/9/10),建议 v27+ 按以下顺序:
+   - P2-2 (前端 loading 兜底): 与用户体验强相关, 高优先
+   - P2-3 (后端日志脱敏): 安全合规, 中优先
+   - P2-5~P2-10: 长线重构, 低优先
+
+2. **SetWithSize 覆盖率扩展**: 当前仅替换 5 处,后续新增 IMemoryCache.Set 调用点应统一用 SetWithSize,建议加 ESLint/Roslyn analyzer 强制。
+
+3. **前端 v-for key 静态规则**: 建议在 ESLint vue/require-v-for-key 基础上加自定义规则,禁止 `:key="i"` (i 为 index 变量)。
+
+---
+
 
 
 

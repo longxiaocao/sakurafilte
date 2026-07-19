@@ -2,6 +2,7 @@ using System.Text;
 using System.Xml.Linq;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using SakuraFilter.Api.Extensions;
 using SakuraFilter.Api.Services;
 using SakuraFilter.Infrastructure.Data;
 
@@ -198,11 +199,8 @@ public static class SitemapEndpoints
         var xml = sb.ToString();
         // Size 估算: 50000 URL × 200 bytes = 10MB; 但 IMemoryCache SizeLimit=10000, 单条 10MB 会撑爆
         //   折中: 单分片缓存 Size=2000 (占容量 20%), 实际缓存命中显著降低 PG 查询压力
-        cache.Set(cacheKey, (xml, DateTime.UtcNow), new MemoryCacheEntryOptions
-        {
-            AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(ttl),
-            Size = 2000
-        });
+        // V24-F85: 用 SetWithSize 替代手写 MemoryCacheEntryOptions (size=2000 显式传参)
+        cache.SetWithSize(cacheKey, (xml, DateTime.UtcNow), TimeSpan.FromSeconds(ttl), size: 2000);
 
         return Results.Text(xml, "application/xml", Encoding.UTF8);
     }

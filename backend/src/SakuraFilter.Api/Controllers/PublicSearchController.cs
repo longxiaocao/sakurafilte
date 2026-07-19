@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using SakuraFilter.Api.Extensions;
 using SakuraFilter.Api.Services;
 using SakuraFilter.Core.DTOs;
 using SakuraFilter.Core.Extensions;
@@ -435,13 +436,8 @@ public class PublicSearchController : ControllerBase
             .Select(s => s.Value)
             .FirstOrDefaultAsync(ct);
         var depth = (string.IsNullOrEmpty(value) || !int.TryParse(value, out var d) || d < 1) ? 100 : d;
-        // V24-F75: 修复 MemoryCache Size 缺失 (同 V24-F71 根因)
-        //   WHY: ServiceCollectionExtensions 设置了 options.SizeLimit=10000, cache.Set 必须指定 Size
-        _cache.Set(cacheKey, depth, new MemoryCacheEntryOptions
-        {
-            AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5),
-            Size = 1
-        });
+        // V24-F85: 用 SetWithSize 替代手写 MemoryCacheEntryOptions (避免再次遗漏 Size 声明)
+        _cache.SetWithSize(cacheKey, depth, TimeSpan.FromMinutes(5));
         return depth;
     }
 }

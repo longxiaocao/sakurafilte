@@ -292,9 +292,10 @@ const planComparison = [
             <aside class="hairline p-3">
               <div class="text-xs font-medium mb-2 text-muted">分区导航</div>
               <ul class="space-y-1 text-xs">
-                <li v-for="(s, i) in ['基础信息', '替代 OEM', '尺寸', '性能', '包装', '适配车型']" :key="i"
+                <li v-for="s in ['基础信息', '替代 OEM', '尺寸', '性能', '包装', '适配车型']" :key="s"
                     class="cursor-pointer hover:text-accent py-1 hairline-b">
-                  {{ i + 1 }}. {{ s }}
+                  {{ s }}
+                  <!-- V24-F86 (P2-1): 移除 i+1 序号前缀, 用 s 作 key (静态字符串唯一稳定) -->
                 </li>
               </ul>
             </aside>
