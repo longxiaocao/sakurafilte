@@ -83,6 +83,40 @@ public class AliyunOssStorage : IObjectStorage
         }
     }
 
+    /// <summary>
+    /// V24-F89 (v27-2): 列出指定前缀下所有对象 key (供 CleanupOrphanImages CLI 枚举存储桶)
+    ///   WHY: 阿里云 OSS ListObjects 一次性返回最多 1000 个对象, 需用 Marker 翻页迭代
+    ///   与 MinioStorage.ListAsync 行为对称, 上层 CLI 无感知存储类型
+    /// </summary>
+    public async Task<IReadOnlyList<string>> ListAsync(string prefix = "", CancellationToken ct = default)
+    {
+        var keys = new List<string>();
+        string? marker = null;
+        do
+        {
+            var listing = await Task.Run(() =>
+            {
+                var request = new ListObjectsRequest(_bucket)
+                {
+                    Prefix = string.IsNullOrEmpty(prefix) ? null : prefix,
+                    Marker = marker,
+                    MaxKeys = 1000
+                };
+                return _client.ListObjects(request);
+            }, ct);
+
+            foreach (var summary in listing.ObjectSummaries)
+            {
+                keys.Add(summary.Key);
+            }
+
+            // ObjectListing.IsTruncated=true 表示还有更多对象, NextMarker 翻页
+            marker = listing.IsTruncated ? listing.NextMarker : null;
+        } while (!string.IsNullOrEmpty(marker));
+
+        return keys;
+    }
+
     private async Task EnsureBucketAsync(CancellationToken ct)
     {
         // 阿里云 Bucket 需用户先在控制台创建 (全局唯一), 运行时不存在则抛错

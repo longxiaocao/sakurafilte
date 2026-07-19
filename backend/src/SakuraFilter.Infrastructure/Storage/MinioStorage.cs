@@ -74,6 +74,27 @@ public class MinioStorage : IObjectStorage
         }
     }
 
+    /// <summary>
+    /// V24-F89 (v27-2): 列出指定前缀下所有对象 key (供 CleanupOrphanImages CLI 枚举存储桶)
+    ///   WHY: MinIO 6.0.x 用 ListObjectsEnumAsync 返回 IAsyncEnumerable&lt;Item&gt;
+    ///   1000 对象 / 批次 (S3 协议默认), 大存储桶需多次迭代 (SDK 内部自动翻页)
+    /// </summary>
+    public async Task<IReadOnlyList<string>> ListAsync(string prefix = "", CancellationToken ct = default)
+    {
+        var args = new ListObjectsArgs()
+            .WithBucket(_bucket)
+            .WithPrefix(string.IsNullOrEmpty(prefix) ? null : prefix)
+            .WithRecursive(true);
+
+        var keys = new List<string>();
+        // MinIO 6.0.x: ListObjectsEnumAsync 返回 IAsyncEnumerable<Item>, SDK 内部自动翻页
+        await foreach (var item in _client.ListObjectsEnumAsync(args, ct).WithCancellation(ct))
+        {
+            keys.Add(item.Key);
+        }
+        return keys;
+    }
+
     private async Task EnsureBucket()
     {
         var exists = await _client.BucketExistsAsync(new BucketExistsArgs().WithBucket(_bucket));

@@ -96,6 +96,39 @@ jobs:
         working-directory: backend
         run: dotnet test tests/SakuraFilter.Api.Tests/SakuraFilter.Api.Tests.csproj --no-build -c Release --logger "trx;LogFileName=test-results.trx" --collect:"XPlat Code Coverage"
 
+      # V24-F88 (v27-4, spec 27.1): PG 集成测试 CI 化
+      #   WHY: V24-F81/F82/F83 写了 22 个 PG 集成测试 (advisory lock / 23505 / xmin 乐观锁),
+      #        但 CI 未注入 PG_TEST_CONNECTION_STRING, 这些测试在 CI 全部 Skip (本地才跑)
+      #        改造后 CI 用独立测试库 sakurafilter_int_tests, 与 smoke test 库 spike_test_v3 隔离
+      #        避免 TRUNCATE CASCADE 干扰 smoke test
+      #   依赖: 上一步 build 已完成, 此处只跑 Category=Integration 的测试
+      #   --no-build: 复用 build 产物, 避免重复编译
+      #   --filter Category=Integration: 只跑集成测试 (单元测试已在上一步跑过)
+      #   continue-on-error: false: 集成测试失败即阻塞合并
+      - name: Create integration test database
+        env:
+          PGPASSWORD: 784533
+        run: |
+          # 创建独立测试库 (与 spike_test_v3 隔离, 避免 TRUNCATE 污染 smoke test 数据)
+          psql -h localhost -U postgres -c "DROP DATABASE IF EXISTS sakurafilter_int_tests;" || true
+          psql -h localhost -U postgres -c "CREATE DATABASE sakurafilter_int_tests;"
+
+      - name: Apply EF migrations to integration test database
+        working-directory: backend/src/SakuraFilter.Api
+        env:
+          ConnectionStrings__Postgres: "Host=localhost;Port=5432;Database=sakurafilter_int_tests;Username=postgres;Password=784533"
+        run: |
+          export PATH="$HOME/.dotnet/tools:$PATH"
+          dotnet ef database update --no-build \
+            --project ../SakuraFilter.Infrastructure/SakuraFilter.Infrastructure.csproj \
+            --startup-project .
+
+      - name: Run PG integration tests
+        working-directory: backend
+        env:
+          PG_TEST_CONNECTION_STRING: "Host=localhost;Port=5432;Database=sakurafilter_int_tests;Username=postgres;Password=784533"
+        run: dotnet test tests/SakuraFilter.Api.Tests/SakuraFilter.Api.Tests.csproj --no-build -c Release --filter "Category=Integration" --logger "trx;LogFileName=integration-test-results.trx"
+
       # V24-F70: 上传后端覆盖率报告 (供 reportgenerator 合并/Codecov 上传, 当前仅归档)
       - name: Upload backend coverage
         if: always()

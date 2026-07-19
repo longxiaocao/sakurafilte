@@ -19,6 +19,14 @@ public interface IObjectStorage
 
     /// <summary>检查文件存在</summary>
     Task<bool> ExistsAsync(string key, CancellationToken ct = default);
+
+    /// <summary>
+    /// 列出指定前缀下的所有对象 key (V24-F89 v27-2 新增, 供 CleanupOrphanImages CLI 枚举存储桶)
+    /// </summary>
+    /// <param name="prefix">对象 key 前缀 (如 "products/"), 传空字符串列出全部</param>
+    /// <param name="ct">取消令牌</param>
+    /// <returns>所有匹配的对象 key 列表 (不含 bucket 名)</returns>
+    Task<IReadOnlyList<string>> ListAsync(string prefix = "", CancellationToken ct = default);
 }
 
 /// <summary>

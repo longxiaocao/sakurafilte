@@ -5,13 +5,28 @@
 //       不修改 appsettings.json (无重启副作用, 不污染 git 跟踪)
 //     status [--pg-conn <conn>]
 //       打印当前 DB 状态 (current 前缀 + previous 前缀 + rotated_at + rotated_by)
-//   优势:
-//     - 无状态 CLI, 单文件 dotnet run 即用
-//     - 不需要连接运行中的 API, 独立可执行
-//     - DB 写入成功即生效 (API 实例通过 PG LISTEN 广播自动重载)
+// V24-F89 (v27-2): cleanup-orphan-images 子命令
+//   枚举 S3/MinIO/OSS 存储桶中所有对象, 与 DB product_images.image_key 比对, 删除孤儿
+//   选项 C (spec 26.4.1): 不引入 BackgroundService, 一次性 CLI 脚本, 适合低频运维场景
+//     --pg-conn <conn>     PG 连接串 (覆盖 appsettings.json)
+//     --storage <minio|oss>  存储类型 (默认 minio)
+//     --endpoint <url>     存储端点 (MinIO: http://localhost:9000, OSS: oss-cn-hangzhou.aliyuncs.com)
+//     --bucket <name>      存储桶名
+//     --access-key <key>   访问 key
+//     --secret-key <key>   密钥
+//     --prefix <prefix>    仅扫描指定前缀 (默认 "products/", 避免误删非产品对象)
+//     --dry-run            只列出孤儿, 不删除
+//     --batch-size <n>     每批删除数量 (默认 100, 防止单次 DELETE 过多触发限流)
+//   使用场景:
+//     1. V24-F84 SafeDeleteOldImageAsync 3 次重试失败产生的孤儿
+//     2. 历史数据迁移遗留的废弃 key
+//     3. 测试环境清理 (CI 每次跑后清桶)
 using System.Text.Json;
 using Microsoft.Extensions.Configuration;
+using Minio;
 using Npgsql;
+using SakuraFilter.Core.Interfaces;
+using SakuraFilter.Infrastructure.Storage;
 
 namespace SakuraFilter.Cli;
 
@@ -38,6 +53,7 @@ public static class Program
         {
             "rotate-token" => await RotateTokenAsync(args, pgConn),
             "status" => await ShowStatusAsync(pgConn),
+            "cleanup-orphan-images" => await CleanupOrphanImagesAsync(args, config, pgConn),
             _ => Fail($"未知子命令: {subCommand}"),
         };
     }
@@ -233,25 +249,226 @@ public static class Program
         Console.WriteLine("用法:");
         Console.WriteLine("  rotate-token --new <token> [--old <token>] [--by <user>] [--dry-run] [--pg-conn <conn>]");
         Console.WriteLine("  status [--pg-conn <conn>]");
+        Console.WriteLine("  cleanup-orphan-images [--storage <minio|oss>] [--endpoint <url>] [--bucket <name>]");
+        Console.WriteLine("                        [--access-key <k>] [--secret-key <k>] [--prefix <p>]");
+        Console.WriteLine("                        [--dry-run] [--batch-size <n>] [--pg-conn <conn>]");
         Console.WriteLine();
         Console.WriteLine("子命令:");
-        Console.WriteLine("  rotate-token  轮转 X-Admin-Token (写 DB + 广播 NOTIFY)");
-        Console.WriteLine("  status        查看 DB 当前状态 (不写)");
+        Console.WriteLine("  rotate-token           轮转 X-Admin-Token (写 DB + 广播 NOTIFY)");
+        Console.WriteLine("  status                 查看 DB 当前状态 (不写)");
+        Console.WriteLine("  cleanup-orphan-images  扫描存储桶与 DB 比对, 删除孤儿对象 (V24-F89 v27-2)");
         Console.WriteLine();
         Console.WriteLine("参数:");
         Console.WriteLine("  --new         必填, 新 token (≥ 32 字符)");
         Console.WriteLine("  --old         可选, 旧 token (作为 previous 保留过渡)");
         Console.WriteLine("  --by          可选, 操作人 (审计用, 默认 anonymous)");
-        Console.WriteLine("  --dry-run     只预览, 不写 DB");
+        Console.WriteLine("  --dry-run     只预览, 不写 DB / 不删对象");
         Console.WriteLine("  --pg-conn     可选, PG 连接串 (覆盖 appsettings.json)");
+        Console.WriteLine("  --storage     存储类型: minio (默认) | oss");
+        Console.WriteLine("  --endpoint    存储端点 (MinIO 默认 http://localhost:9000)");
+        Console.WriteLine("  --bucket      存储桶名 (默认 sakurafilter)");
+        Console.WriteLine("  --access-key  访问 key (默认 minioadmin)");
+        Console.WriteLine("  --secret-key  密钥 (默认 minioadmin)");
+        Console.WriteLine("  --prefix      扫描前缀 (默认 products/, 避免误删非产品对象)");
+        Console.WriteLine("  --batch-size  每批删除数量 (默认 100, 防限流)");
         Console.WriteLine();
         Console.WriteLine("环境变量:");
         Console.WriteLine("  SakuraFilter_Postgres   PG 连接串 (覆盖 appsettings.json)");
+        Console.WriteLine("  Storage__Provider       存储类型 (minio/oss, 与后端配置一致)");
+        Console.WriteLine("  Minio__Endpoint / Minio__AccessKey / Minio__SecretKey / Minio__Bucket");
+        Console.WriteLine("  Oss__Endpoint / Oss__AccessKey / Oss__SecretKey / Oss__Bucket");
         Console.WriteLine();
         Console.WriteLine("轮转步骤 (4 步零停机):");
         Console.WriteLine("  1. 配 appsettings.json: DevStaticTokenPrevious=old + DevStaticToken=new");
         Console.WriteLine("  2. 部署 (滚动重启, 旧 token 仍可用)");
         Console.WriteLine("  3. 前端刷新, 用新 token 验证");
         Console.WriteLine("  4. CLI rotate-token --new <新token> --old <旧token> --by <运维>");
+        Console.WriteLine();
+        Console.WriteLine("孤儿清理典型用法:");
+        Console.WriteLine("  # 预览 (不删除, 只列出孤儿)");
+        Console.WriteLine("  dotnet run -- cleanup-orphan-images --dry-run");
+        Console.WriteLine("  # 实际删除");
+        Console.WriteLine("  dotnet run -- cleanup-orphan-images --prefix products/");
+    }
+
+    // ============================================================================
+    // V24-F89 (v27-2): cleanup-orphan-images 子命令实现
+    // ============================================================================
+
+    private static async Task<int> CleanupOrphanImagesAsync(string[] args, IConfiguration config, string pgConn)
+    {
+        // 解析参数 (?? 兜底确保非 null, 避免后续 storage 构造时 CS8602 警告)
+        var storageType = ResolveArg(args, "--storage", config["Storage:Provider"] ?? "minio") ?? "minio";
+        // MinIO endpoint 不含 scheme (用 UseSSL 控制), OSS endpoint 是完整域名
+        //   WHY: MinIO SDK WithEndpoint 要求 "host:port" 格式, 含 http:// 会抛 InvalidEndpointException
+        //   OSS SDK OssClient(endpoint, ...) 接受完整域名 (如 oss-cn-hangzhou.aliyuncs.com)
+        var defaultEndpoint = storageType == "oss" ? "oss-cn-hangzhou.aliyuncs.com" : "localhost:9000";
+        var endpoint = ResolveArg(args, "--endpoint",
+            storageType == "oss" ? config["Oss:Endpoint"] : config["Minio:Endpoint"]) ?? defaultEndpoint;
+        // 兼容用户误传 http:// 前缀 (MinIO 场景自动剥离)
+        if (storageType != "oss" && (endpoint.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+                                      endpoint.StartsWith("https://", StringComparison.OrdinalIgnoreCase)))
+        {
+            endpoint = endpoint.Substring(endpoint.IndexOf("://") + 3);
+        }
+        var bucket = ResolveArg(args, "--bucket",
+            storageType == "oss" ? config["Oss:Bucket"] : config["Minio:Bucket"]) ?? "sakurafilter";
+        var accessKey = ResolveArg(args, "--access-key",
+            storageType == "oss" ? config["Oss:AccessKey"] : config["Minio:AccessKey"]) ?? "minioadmin";
+        var secretKey = ResolveArg(args, "--secret-key",
+            storageType == "oss" ? config["Oss:SecretKey"] : config["Minio:SecretKey"]) ?? "minioadmin";
+        var prefix = ResolveArg(args, "--prefix", "products/") ?? "products/";
+        var dryRun = Array.IndexOf(args, "--dry-run") >= 0;
+        var batchSizeStr = ResolveArg(args, "--batch-size", "100");
+        if (!int.TryParse(batchSizeStr, out var batchSize) || batchSize <= 0)
+            return Fail($"--batch-size 值无效: {batchSizeStr}");
+        batchSize = Math.Min(batchSize, 1000);  // 上限 1000 防 OSS 限流
+
+        Console.WriteLine($"[cleanup-orphan-images] 配置:");
+        Console.WriteLine($"  storage     = {storageType}");
+        Console.WriteLine($"  endpoint    = {endpoint}");
+        Console.WriteLine($"  bucket      = {bucket}");
+        Console.WriteLine($"  prefix      = {prefix}");
+        Console.WriteLine($"  dry-run     = {dryRun}");
+        Console.WriteLine($"  batch-size  = {batchSize}");
+        Console.WriteLine($"  pg-conn     = {Mask(pgConn)}");
+        Console.WriteLine();
+
+        // 1. 构造 IObjectStorage 实例 (直接 new, 不走 DI)
+        var storageTypeNorm = storageType.ToLowerInvariant();
+        IObjectStorage storage = storageTypeNorm switch
+        {
+            "minio" => CreateMinioStorage(endpoint, bucket, accessKey, secretKey),
+            "oss" => CreateOssStorage(endpoint, bucket, accessKey, secretKey, config["Oss:CdnEndpoint"]),
+            _ => throw new ArgumentException($"不支持的 storage 类型: {storageType}")
+        };
+
+        // 2. 从 DB 拉取所有 product_images.image_key + products.image_key (主图兼容字段)
+        //   WHY 同时拉两个表: products.image_key 是 V1 兼容字段, 仍可能有引用
+        //   DISTINCT 去重: 同一 key 可能出现在 product_images + products 两表
+        Console.WriteLine("[1/3] 从 DB 拉取所有 image_key...");
+        var dbKeys = new HashSet<string>();
+        await using (var conn = new NpgsqlConnection(pgConn))
+        {
+            await conn.OpenAsync();
+            await using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText = @"
+                    SELECT image_key FROM product_images WHERE image_key IS NOT NULL
+                    UNION
+                    SELECT image_key FROM products WHERE image_key IS NOT NULL";
+                await using var reader = await cmd.ExecuteReaderAsync();
+                while (await reader.ReadAsync())
+                {
+                    dbKeys.Add(reader.GetString(0));
+                }
+            }
+        }
+        Console.WriteLine($"  DB 共 {dbKeys.Count} 个有效 image_key");
+
+        // 3. 枚举存储桶中所有对象 (按 prefix 过滤)
+        Console.WriteLine($"[2/3] 枚举存储桶 {bucket}/{prefix} ...");
+        List<string> objectKeys;
+        try
+        {
+            objectKeys = (await storage.ListAsync(prefix ?? "", CancellationToken.None)).ToList();
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[error] 枚举存储桶失败: {ex.Message}");
+            Console.Error.WriteLine("  请检查 endpoint/bucket/access-key/secret-key 是否正确, 以及存储服务是否可达");
+            return 1;
+        }
+        Console.WriteLine($"  存储桶共 {objectKeys.Count} 个对象 (前缀 {prefix})");
+
+        // 4. 比对找孤儿
+        Console.WriteLine("[3/3] 比对找孤儿...");
+        var orphans = objectKeys.Where(k => !dbKeys.Contains(k)).ToList();
+        Console.WriteLine($"  发现 {orphans.Count} 个孤儿对象");
+        Console.WriteLine();
+
+        if (orphans.Count == 0)
+        {
+            Console.WriteLine("✅ 无孤儿对象, 操作完成");
+            return 0;
+        }
+
+        // 列出前 20 个孤儿预览
+        var previewCount = Math.Min(20, orphans.Count);
+        Console.WriteLine($"孤儿预览 (前 {previewCount} 个, 共 {orphans.Count} 个):");
+        for (var i = 0; i < previewCount; i++)
+        {
+            Console.WriteLine($"  {i + 1}. {orphans[i]}");
+        }
+        if (orphans.Count > previewCount)
+        {
+            Console.WriteLine($"  ... 还有 {orphans.Count - previewCount} 个未显示");
+        }
+        Console.WriteLine();
+
+        if (dryRun)
+        {
+            Console.WriteLine($"[dry-run] 不删除对象, 操作预览完成");
+            return 0;
+        }
+
+        // 5. 批量删除 (按 batch_size 分批, 每批后短暂 sleep 防限流)
+        Console.WriteLine($"开始删除 {orphans.Count} 个孤儿对象 (batch_size={batchSize})...");
+        var deleted = 0;
+        var failed = 0;
+        for (var i = 0; i < orphans.Count; i++)
+        {
+            var key = orphans[i];
+            try
+            {
+                await storage.DeleteAsync(key);
+                deleted++;
+                if (deleted % batchSize == 0)
+                {
+                    Console.WriteLine($"  已删除 {deleted}/{orphans.Count}...");
+                    await Task.Delay(500);  // 防限流
+                }
+            }
+            catch (Exception ex)
+            {
+                failed++;
+                Console.Error.WriteLine($"  [warn] 删除失败 key={key}: {ex.Message}");
+            }
+        }
+
+        Console.WriteLine();
+        Console.WriteLine($"✅ 清理完成: 删除 {deleted} 个, 失败 {failed} 个 (总计 {orphans.Count} 个孤儿)");
+        return failed > 0 ? 2 : 0;  // 部分失败返回 2 (非 0 但区分于参数错误 1)
+    }
+
+    /// <summary>解析 --key value 形式的命令行参数</summary>
+    private static string? ResolveArg(string[] args, string key, string? defaultValue)
+    {
+        for (var i = 0; i < args.Length - 1; i++)
+        {
+            if (args[i] == key) return args[i + 1];
+        }
+        return defaultValue;
+    }
+
+    private static MinioStorage CreateMinioStorage(string endpoint, string bucket, string accessKey, string secretKey)
+    {
+        // WHY new MinioClient: CLI 不走 DI, 直接构造 (与 Production ServiceProvider 配置一致)
+        //   endpoint 格式: host:port (不含 scheme), WithSSL 控制协议
+        //   如用户传 https://minio.example.com:9000, 调用前已剥离 scheme 为 minio.example.com:9000
+        var useSSL = false;  // CLI 默认不启用 SSL (本地 MinIO 场景), 生产环境通过 --endpoint + 显式配置
+        var client = new MinioClient()
+            .WithEndpoint(endpoint)
+            .WithCredentials(accessKey, secretKey)
+            .WithSSL(useSSL)
+            .Build();
+        return new MinioStorage(client, bucket, endpoint);
+    }
+
+    private static AliyunOssStorage CreateOssStorage(
+        string endpoint, string bucket, string accessKey, string secretKey, string? cdnEndpoint)
+    {
+        var client = new Aliyun.OSS.OssClient(endpoint, accessKey, secretKey);
+        return new AliyunOssStorage(client, bucket, endpoint, cdnEndpoint);
     }
 }
