@@ -13,6 +13,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { adminProductApi } from '@/api'
 import type { ProductDetail, XrefInfo, MachineAppInfo } from '@/api/types'
+import SkeletonCard from '@/components/SkeletonCard.vue'
 
 const { t } = useI18n()
 
@@ -128,6 +129,8 @@ const fieldGroups: FieldGroup[] = [
 // ===== 状态 =====
 const loading = ref(false)
 const error = ref('')
+// V24-F100 (P2-2, 规则 8): 保存上次加载的 ids, 用于 error UI 重试
+const lastFailedIds = ref<number[]>([])
 const products = ref<ProductDetail[]>([])
 // addById 输入框
 const newIdInput = ref('')
@@ -176,6 +179,7 @@ async function loadByIds(ids: number[]) {
   }
   loading.value = true
   error.value = ''
+  lastFailedIds.value = ids
   try {
     // 用批量 API, 限 6 个
     const capped = ids.slice(0, MAX_COMPARE)
@@ -189,6 +193,13 @@ async function loadByIds(ids: number[]) {
     ElMessage.error(error.value)
   } finally {
     loading.value = false
+  }
+}
+
+// V24-F100 (P2-2, 规则 8): error UI 重试按钮 — 重新加载上次失败的 ids
+function retryLoad() {
+  if (lastFailedIds.value.length > 0) {
+    loadByIds(lastFailedIds.value)
   }
 }
 
@@ -343,13 +354,34 @@ function doPrint() {
     </div>
 
     <!-- 空状态 -->
-    <div v-if="products.length === 0 && !loading" class="py-12 text-center text-muted hairline">
+    <div v-if="products.length === 0 && !loading && !error" class="py-12 text-center text-muted hairline">
       <div>暂无对比产品</div>
       <div class="text-xs mt-2">从产品列表勾选 2-6 个 → 批量对比, 或在 URL 加 <code>?ids=1,2,3</code></div>
     </div>
 
-    <!-- 加载中 -->
-    <div v-if="loading && products.length === 0" class="py-12 text-center text-muted">加载中...</div>
+    <!-- V24-F100 (P2-2, 规则 8): 加载中用骨架屏替代纯文字, 避免首屏白屏 -->
+    <SkeletonCard
+      v-if="loading && products.length === 0"
+      variant="table-row"
+      :count="5"
+    />
+
+    <!-- V24-F100 (P2-2, 规则 8): error 持久 UI + 重试按钮, 不依赖 ElMessage toast -->
+    <div
+      v-else-if="error && products.length === 0"
+      class="py-12 text-center hairline"
+      role="alert"
+      aria-live="assertive"
+    >
+      <div class="text-red-600 mb-2">{{ error }}</div>
+      <button
+        class="text-xs hairline px-3 py-1 hover:bg-[var(--color-bg-hover)]"
+        :disabled="loading"
+        @click="retryLoad"
+      >
+        {{ loading ? '重试中…' : '重试' }}
+      </button>
+    </div>
 
     <!-- 对比表格 -->
     <div v-if="products.length > 0" class="compare-grid-wrap hairline">

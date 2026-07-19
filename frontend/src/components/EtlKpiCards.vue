@@ -27,6 +27,8 @@ const { t } = useI18n()
 
 const history = ref<EtlHistoryItem[]>([])
 const loading = ref(false)
+// V24-F100 (P2-2, 规则 8): 加 error 状态, KPI 加载失败时显示 error UI 而非静默吞
+const error = ref<string | null>(null)
 let timer: number | null = null
 
 // 24h 窗口起点
@@ -58,14 +60,22 @@ const successRate = computed(() => {
 
 async function fetchData() {
   loading.value = true
+  error.value = null
   try {
     const r = await etlApi.history(200)
     history.value = r.items
-  } catch {
-    // 拦截器处理
+  } catch (e: any) {
+    // V24-F100 (P2-2, 规则 8): 显式记录 error, 让 UI 显示加载失败 + 重试
+    //   WHY 不依赖拦截器: KPI 卡片在首页, 静默吞会让 4 张卡片永远显示 0/—, 误导用户"无数据"
+    error.value = e?.response?.data?.message || e?.message || 'KPI 加载失败'
   } finally {
     loading.value = false
   }
+}
+
+// V24-F100: 手动重试 (自动刷新失败时让用户可点击重试)
+function retry() {
+  fetchData()
 }
 
 onMounted(() => {
@@ -91,7 +101,14 @@ function fmtDuration(sec: number): string {
 </script>
 
 <template>
-  <div class="kpi-grid">
+  <!-- V24-F100 (P2-2, 规则 8): 加 error UI + v-loading, 避免静默吞 + 白屏 -->
+  <div v-if="error" class="kpi-error hairline" role="alert" aria-live="assertive">
+    <div class="kpi-error-text">{{ error }}</div>
+    <button class="kpi-error-retry" @click="retry" :disabled="loading">
+      {{ loading ? '重试中…' : '重试' }}
+    </button>
+  </div>
+  <div v-else v-loading="loading" class="kpi-grid" aria-busy="loading">
     <div class="kpi-card">
       <div class="kpi-label">{{ t('admin.etlview.kpi.trigger_24h') }}</div>
       <div class="kpi-value">{{ total.toLocaleString() }}</div>
@@ -137,6 +154,36 @@ function fmtDuration(sec: number): string {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 12px;
+}
+/* V24-F100 (P2-2): error UI 样式, Musk 风格 hairline + 红色文字 */
+.kpi-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px;
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-color-danger-light-5);
+}
+.kpi-error-text {
+  color: var(--el-color-danger);
+  font-size: 13px;
+}
+.kpi-error-retry {
+  padding: 4px 12px;
+  font-size: 12px;
+  border: 1px solid var(--el-border-color);
+  background: var(--el-bg-color);
+  color: var(--el-text-color-primary);
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.kpi-error-retry:hover:not(:disabled) {
+  border-color: var(--el-color-primary-light-5);
+}
+.kpi-error-retry:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 .kpi-card {
   /* Musk 风格: 1px hairline + 0 shadow */

@@ -7,6 +7,7 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { http } from '@/utils/http'
+import SkeletonCard from '@/components/SkeletonCard.vue'
 
 const { t } = useI18n()
 
@@ -47,8 +48,9 @@ async function fetchPerf() {
   try {
     const r = await http.get<PerfSnapshot>('/perf')
     perf.value = r.data
-  } catch {
-    // 拦截器处理
+  } catch (e) {
+    // V24-F100 (P2-2, 规则 8): 不静默吞, 让 perf.value 保持 null, UI 显示"暂无数据"+重试
+    console.warn('[AdminPerfView] fetchPerf 失败:', e)
   }
 }
 
@@ -56,8 +58,9 @@ async function fetchAuth() {
   try {
     const r = await http.get<AuthStatus>('/admin/auth/status')
     auth.value = r.data
-  } catch {
-    // 401 等已处理
+  } catch (e) {
+    // V24-F100 (P2-2, 规则 8): 不静默吞, 401 等业务错误由拦截器弹 toast, 这里 console.warn 便于排查
+    console.warn('[AdminPerfView] fetchAuth 失败:', e)
   }
 }
 
@@ -257,7 +260,9 @@ function fmtTime(ts: string | null): string {
     <!-- 性能指标卡片 -->
     <section class="hairline p-4 mb-3">
       <h2 class="text-base font-medium mb-3">响应时间 (最近 {{ perf?.sampleCount ?? 0 }} 条样本)</h2>
-      <div v-if="perf" class="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <!-- V24-F100 (P2-2, 规则 8): 首屏加载用骨架屏, 加载失败用重试按钮 -->
+      <SkeletonCard v-if="loading && !perf" variant="list" :count="4" height="80px" />
+      <div v-else-if="perf" class="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div class="hairline p-3">
           <div class="text-xs text-muted mb-1">P50 (中位数)</div>
           <div class="text-xl font-medium">{{ perf.p50Ms.toFixed(1) }}<span class="text-xs ml-1">ms</span></div>
@@ -275,7 +280,12 @@ function fmtTime(ts: string | null): string {
           <div class="text-xl font-medium">{{ perf.maxMs.toFixed(1) }}<span class="text-xs ml-1">ms</span></div>
         </div>
       </div>
-      <div v-else class="text-sm text-muted py-4 text-center">暂无数据</div>
+      <div v-else class="text-sm text-muted py-4 text-center">
+        <div class="mb-2">暂无数据</div>
+        <button class="text-xs hairline px-3 py-1 hover:bg-[var(--color-bg-hover)]" @click="refreshAll">
+          {{ t('admin.perfview.templatetext.refresh') }}
+        </button>
+      </div>
 
       <div v-if="perf" class="grid grid-cols-2 md:grid-cols-3 gap-3 mt-3">
         <div class="hairline p-3">
@@ -316,7 +326,9 @@ function fmtTime(ts: string | null): string {
     <!-- Token 轮转状态 -->
     <section class="hairline p-4 mb-3">
       <h2 class="text-base font-medium mb-3">X-Admin-Token 轮转状态</h2>
-      <div v-if="auth" class="grid grid-cols-2 md:grid-cols-3 gap-3">
+      <!-- V24-F100 (P2-2, 规则 8): 首屏加载用骨架屏, 加载失败用重试 -->
+      <SkeletonCard v-if="loading && !auth" variant="list" :count="3" height="60px" />
+      <div v-else-if="auth" class="grid grid-cols-2 md:grid-cols-3 gap-3">
         <div class="hairline p-3">
           <div class="text-xs text-muted mb-1">当前 Token</div>
           <div class="text-base font-medium font-mono">
@@ -350,7 +362,10 @@ function fmtTime(ts: string | null): string {
         </div>
       </div>
       <div v-else class="text-sm text-muted py-4 text-center">
-        无法获取 Token 状态 (需鉴权)
+        <div class="mb-2">无法获取 Token 状态 (需鉴权)</div>
+        <button class="text-xs hairline px-3 py-1 hover:bg-[var(--color-bg-hover)]" @click="refreshAll">
+          {{ t('admin.perfview.templatetext.refresh') }}
+        </button>
       </div>
     </section>
 
