@@ -16494,3 +16494,135 @@ Aggregate  (cost=62534.61..62534.62 rows=1 width=8) (actual time=616.197..616.32
 - P2 候选 (低优先级): PostgresSearchProvider 限制最大 token 数量 (如 8 个), 防御性兜底 (当前 5 token 610ms 仍可接受, 暂不实施)
 
 ---
+
+### 28.3 v28-3: 1M 数据扩容压测验证 (V24-F96, 2026-07-19)
+
+**背景**: v28-2 在 50K 数据下验证 P95 305ms (6.0x), v28-5 在 50K 数据下多 token 退化 2.64x。但实际生产数据规模为 1M products + 5M xrefs + 5M apps (20x 数据量), 需验证:
+1. v28-2 CTE UNION 加速比是否保持 (vs 50K 6.0x)?
+2. 多 token 1-5 INTERSECT 退化是否放大 (vs 50K v28-5 2.64x)?
+3. PG 优化器在 1M 数据下是否仍选 GIN trgm Bitmap Index Scan?
+
+**关联**: v28-2 (CTE UNION 拆分落地, chapter 28.2), v28-5 (50K 多 token 边界压测, chapter 28.5), ADR #5
+
+**执行环境**:
+- 库: sakurafilter_perf_tests (独立库, 避免污染 spike_test_v3)
+- 数据量: 950,209 products + 4,751,045 cross_references + 4,751,045 machine_applications (vs spike_test_v3 50K/623K/775K, 约 19x 扩容)
+- schema: pg_dump --schema-only 从 spike_test_v3 导出 (含 10 个 GIN trgm 索引 + 所有约束)
+- 数据生成: 基于 spike_test_v3 50K 模板膨胀 19x, mr_1="P"+9位数字 (符合 chk_mr_1_format), machine_applications 用 random.sample 保证 (product_id, brand, model) 唯一
+- 直连 PG (psycopg2-binary, 10 轮/场景 + 2 轮 warmup, 取 P95)
+
+**场景 A: baseline (OR+2EXISTS) vs v28-2 (CTE UNION) 单 token 对比**
+
+| 场景 | q | 方案 | P50 (ms) | P95 (ms) | P99 (ms) | 加速比 | 执行计划 |
+|---|---|---|---|---|---|---|---|
+| 高频 oil | oil | baseline | 22100 | 22848 | 22848 | - | Index Scan + Seq Scan |
+| 高频 oil | oil | v28-2 | 4523 | 5027 | 5027 | **4.54x** | Bitmap Index Scan + Index Scan |
+| 高频 filter | filter | baseline | 7894 | 8176 | 8176 | - | Index Scan + Seq Scan |
+| 高频 filter | filter | v28-2 | 4907 | 5346 | 5346 | **1.53x** ⚠️ | Bitmap Index Scan + Index Scan + Seq Scan |
+| 中频 CAT | CAT | baseline | 23557 | 24361 | 24361 | - | Index Scan + Seq Scan |
+| 中频 CAT | CAT | v28-2 | 3482 | 3523 | 3523 | **6.91x** | Bitmap Index Scan + Index Scan + Seq Scan |
+| 中频 bosch | bosch | baseline | 22553 | 22693 | 22693 | - | Index Scan + Seq Scan |
+| 中频 bosch | bosch | v28-2 | 3215 | 3258 | 3258 | **6.97x** | Bitmap Index Scan + Index Scan + Seq Scan |
+| 低频 kubota | kubota | baseline | 25610 | 26316 | 26316 | - | Index Scan + Seq Scan |
+| 低频 kubota | kubota | v28-2 | 1807 | 1864 | 1864 | **14.12x** 🔥 | Bitmap Index Scan + Index Scan + Seq Scan |
+
+**场景 A 汇总**: 平均加速比 **6.82x** (vs 50K 6.0x, 反而提升 0.82x)
+
+**场景 A 关键发现**:
+1. **加速比与词频负相关**: 低频词 (kubota) 加速 14.12x, 中频词 (CAT/bosch) 6.91-6.97x, 高频词 (oil/filter) 仅 1.53-4.54x
+2. **高频词 filter 仅 1.53x 加速** — 候选集爆炸: "filter" 是 type 通用词, 命中 90%+ products, CTE UNION 返回大量 product_id, INTERSECT HashSetOp 退化为接近全表扫描
+3. **baseline 在 1M 数据下严重退化**: P95 8-26s (50K 数据 1.8s, 放大 4-14x), PG 优化器放弃 GIN trgm 改用 Index Scan + Seq Scan
+4. **v28-2 仍保持 GIN trgm Bitmap Index Scan** (除高频 filter 出现 Seq Scan)
+
+**场景 B: v28-2 多 token 1-5 INTERSECT 退化曲线 (vs 50K v28-5)**
+
+| 场景 | token 数 | P50 (ms) | P95 (ms) | P99 (ms) | vs 1 token | 执行计划 |
+|---|---|---|---|---|---|---|
+| 1 token | 1 | 3998 | 4053 | 4053 | 1.00x (基准) | Bitmap Index Scan + Index Scan |
+| 2 token | 2 | 5955 | 6391 | 6391 | 1.58x | Bitmap Index Scan + Index Scan |
+| 3 token | 3 | 5140 | 5337 | 5337 | 1.32x | Bitmap Index Scan + Index Scan |
+| 4 token | 4 | 5448 | 5488 | 5488 | 1.35x | Bitmap Index Scan + Index Scan |
+| 5 token | 5 | 6004 | 6024 | 6024 | 1.49x | Bitmap Index Scan + Index Scan |
+
+**场景 B 对比 (1M vs 50K v28-5)**:
+
+| token 数 | 1M P95 (ms) | 50K P95 (ms) | 放大倍数 |
+|---|---|---|---|
+| 1 | 4053 | 231 | 17.55x |
+| 2 | 6391 | 312 | 20.48x |
+| 3 | 5337 | 600 | 8.89x |
+| 4 | 5488 | 682 | 8.05x |
+| 5 | 6024 | 610 | 9.88x |
+
+**场景 B 关键发现**:
+1. **1M 数据多 token 退化 1.49x** (vs 50K v28-5 2.64x, 反而更稳定) — 多 token INTERSECT 把候选集快速收敛, 1M 数据下 INTERSECT 收益更明显
+2. **1M 数据绝对延迟显著放大**: 1 token P95 4053ms (50K 231ms, 17.5x), 5 token P95 6024ms (50K 610ms, 9.88x) — 放大倍数远超数据量 19x 的线性外推预期
+3. **退化曲线在 1M 数据下变平缓**: 50K 数据 2→3 token 跳跃 +0.88x, 1M 数据 2→3 token 反而下降 -0.26x (因 2 token "oil filter" 都是高频词候选集爆炸, 3 token 加 "CAT" 后 INTERSECT 收敛)
+4. **PG 优化器仍选 GIN trgm Bitmap Index Scan** (所有 1-5 token 场景) — chapter 28.2 边界测试建议 #2 风险未触发
+
+**场景 C: 5 token 场景执行计划 (前 25 行)**
+```
+Aggregate  (cost=511634.92..511634.93 rows=1 width=8) (actual time=6524.562..6524.600 rows=1 loops=1)
+  ->  GroupAggregate  (cost=511621.17..511628.67 rows=500 width=16) (actual time=6522.315..6524.467 rows=5108 loops=1)
+        Group Key: p.id
+        ->  Sort  (cost=511621.17..511622.42 rows=500 width=8) (actual time=6522.310..6522.923 rows=25540 loops=1)
+              Sort Key: p.id
+              Sort Method: quicksort  Memory: 769kB
+              ->  Nested Loop Left Join  (cost=61618.80..511598.75 rows=500 width=8) (actual time=6344.670..6519.946 rows=25540 loops=1)
+                    ->  Nested Loop Semi Join  (cost=61618.37..511506.69 rows=100 width=8) (actual time=6344.665..6506.803 rows=5108 loops=1)
+                          Join Filter: (q_match.product_id = x_1.product_id)
+                          ->  Nested Loop  (cost=61617.93..511363.39 rows=200 width=16) (actual time=6344.605..6420.453 rows=5108 loops=1)
+                                ->  Subquery Scan on q_match  (cost=61617.51..509702.89 rows=200 width=8) (actual time=6344.471..6345.687 rows=5108 loops=1)
+                                      ->  HashSetOp Intersect  (cost=61617.51..509702.89 rows=200 width=12) (actual time=6344.470..6345.350 rows=5108 loops=1)
+                                            ->  Append  (cost=61617.51..509205.15 rows=199094 width=12) (actual time=5440.949..6330.762 rows=239652 loops=1)
+                                                  ->  Result  (cost=61617.51..427332.78 rows=200 width=12) (actual time=5440.948..5444.070 rows=25127 loops=1)
+                                                        ->  HashSetOp Intersect  (cost=61617.51..427330.78 rows=200 width=12) (actual time=5440.946..5442.823 rows=25127 loops=1)
+                                                              ->  Append  (cost=61617.51..426517.56 rows=325286 width=12) (actual time=4262.896..5419.894 rows=363705 loops=1)
+                                                                    ->  Result  (cost=61617.51..330771.60 rows=200 width=12) (actual time=4262.895..4271.720 rows=69126 loops=1)
+                                                                          ->  HashSetOp Intersect  (cost=61617.51..330769.60 rows=200 width=12) (actual time=4262.894..4268.302 rows=69126 loops=1)
+                                                                                ->  Append  (cost=61617.51..329850.33 rows=367706 width=12) (actual time=2766.686..4225.463 rows=514346 loops=1)
+                                                                                      ->  Result  (cost=61617.51..180749.99 rows=200 width=12) (actual time=2766.685..2786.881 rows=236778 loops=1)
+                                                                                            ->  HashSetOp Intersect  (cost=61617.51..180747.99 rows=200 width=12) (actual time=2766.683..2775.298 rows=236778 loops=1)
+                                                                                                  ->  Append  (cost=61617.51..177436.49 rows=1324600 width=12) (actual time=475.429..2492.409 rows=1185106 loops=1)
+                                                                                                        ->  Subquery Scan on "*SELECT* 1"  (cost=61617.51..69121.93 rows=375221 width=12) (actual time=475.429..515.428 rows=236778 loops=1)
+                                                                                                              ->  HashAggregate  (cost=61617.51..65369.72 rows=375221 width=8) (actual time=475.428..505.579 rows=236778 loops=1)
+                                                                                                                    Group Key: p_1.id
+```
+
+**最终决策**:
+1. ✅ **v28-2 CTE UNION 方案在 1M 数据下保持有效性** — 平均加速 6.82x (vs 50K 6.0x), 维持当前实现, 无需启用 v27-1 q_match 候选集爆炸防御
+2. ✅ **多 token 退化可控** — 1M 数据 5 token 退化 1.49x (vs 50K v28-5 2.64x, 反而更稳定), 无需限制 token 数量
+3. ✅ **PG 优化器未放弃 GIN trgm** — 1-5 token 所有场景都选 GIN trgm Bitmap Index Scan, chapter 28.2 边界测试建议 #2 风险未触发
+
+**风险提示 (P2 候选, 暂不实施)**:
+1. ⚠️ **1M 数据绝对延迟显著放大**: v28-2 单 token P95 1.8-5.3s (50K 231ms, 放大 17.5x), 5 token P95 6s — 远超用户期望的 40s 总响应时间, 但单查询 5s 体验较差
+2. ⚠️ **高频词候选集爆炸**: 高频词 filter 仅 1.53x 加速, CTE UNION 退化为接近 Seq Scan — 生产环境如出现 "filter"/"oil" 等通用词搜索, 用户体验会显著下降
+3. ⚠️ **生产环境需配合 Meili 主路径**: v28-2 作为 PG 兜底, 1M 数据下 P95 5s 仍可接受, 但不应作为主路径. Meili 主路径 + PG 兜底的双层架构是正确选择
+
+**P2 候选改进 (低优先级, 留后续)**:
+- v29+ 候选 1: PostgresSearchProvider 限制最大 token 数量 (如 8 个), 防御性兜底
+- v29+ 候选 2: 高频词黑名单 (如 "filter"/"oil"/"air" 等 type 通用词), 命中时跳过 q_match CTE 直接走 base filter
+- v29+ 候选 3: q_match CTE 添加 LIMIT (如 50000), 防止候选集爆炸 (但可能漏数据, 需评估)
+- v29+ 候选 4: Meili 主路径 P99 监控告警, 当 Meili 故障率 > 阈值时主动告警 (避免 PG 兜底成为默认路径)
+
+**实际改动文件清单**:
+- `spike-test/_perf_v28_3_1m_verify.py` — 1M 数据压测脚本 (场景 A baseline vs v28-2 + 场景 B 多 token 1-5 + 场景 C EXPLAIN)
+- `spike-test/_perf_v28_3_1m_results.json` — raw 结果数据
+- `spike-test/_v28_3_perf.log` — 压测执行日志
+- `spike-test/_check_v28_3_baseline.py` — 数据量 + schema 检查脚本
+- `spike-test/_check_xref_app_schema.py` — xref/apps 表结构检查脚本
+- `spike-test/_gen_v28_3_1m_data.py` — 1M 数据生成主脚本 (step1-3: 建库 + schema + 950K products)
+- `spike-test/_gen_v28_3_continue.py` — 1M 数据续传脚本 (step4: 4.75M xrefs)
+- `spike-test/_gen_v28_3_apps_only.py` — 1M 数据 apps 续传脚本 (step5-7: 4.75M apps + xref_oem_brand + ANALYZE)
+- `spike-test/_v28_3_schema_dump.sql` — spike_test_v3 schema 导出 (含 10 个 GIN trgm 索引)
+- `spike-test/_v28_3_gen.log` — 数据生成日志
+
+**关联文档**:
+- `.ai/decisions.md` ADR #5 — 追加 v28-3 验证数据 (1M 数据加速比 6.82x 保持, 多 token 退化 1.49x 可控)
+- `.ai/context.md` — 覆盖写入 v28-3 完成状态
+
+**未完成事项 (留后续)**:
+- v28-4: v27-9-3 设计巡检 CI 跑完后基于实际数据决策 (continue-on-error → 阻塞?)
+- v29+ 候选: 见上述 P2 候选改进 1-4
+
+---

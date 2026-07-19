@@ -60,8 +60,8 @@
   - backend/tests/SakuraFilter.Api.Tests/Integration/AdminProductImageServiceIntegrationTests.cs (V24-F83)
   - .env (PG_TEST_CONNECTION_STRING 指向 sakurafilter_int_tests)
 
-#5 PostgresSearchProvider Phase 2 keyset 分页暂缓 (2026-07-19, 50K 压测验证 2026-07-19, v28-1 GIN trgm 验证 2026-07-19, v28-2 CTE UNION 拆分验证 2026-07-19)
-决策: v27-1 暂不实施 keyset 分页改造, 保留 OFFSET 分页; v27-3 50K 压测后维持暂缓决策; v28-1 GIN trgm 索引对 baseline SQL 无收益; v28-2 CTE UNION 拆分 + 三表 GIN trgm 索引 P95 1827ms → 305ms (6.0x), 达 4x 目标, 已落地
+#5 PostgresSearchProvider Phase 2 keyset 分页暂缓 (2026-07-19, 50K 压测验证 2026-07-19, v28-1 GIN trgm 验证 2026-07-19, v28-2 CTE UNION 拆分验证 2026-07-19, v28-3 1M 扩容压测验证 2026-07-19)
+决策: v27-1 暂不实施 keyset 分页改造, 保留 OFFSET 分页; v27-3 50K 压测后维持暂缓决策; v28-1 GIN trgm 索引对 baseline SQL 无收益; v28-2 CTE UNION 拆分 + 三表 GIN trgm 索引 P95 1827ms → 305ms (6.0x), 达 4x 目标, 已落地; v28-3 1M 扩容压测 v28-2 加速比保持 6.82x, 多 token 退化 1.49x, 维持当前实现
 理由:
   - 当前 SearchRequest DTO 用 Page/PageSize 页式分页, 前端依赖 Page 契约
   - 改 keyset 需破坏前端 Page 契约或引入 cursor 参数, 改动面大
@@ -95,13 +95,31 @@ v28-5 多 token INTERSECT 边界压测数据 (2026-07-19, spike_test_v3 50K, 直
   - PG 优化器计划稳定: 1-5 token 所有场景都选 GIN trgm Bitmap Index Scan (Seq Scan 是 INTERSECT HashSetOp Append 阶段, 非表扫描)
   - 结论: PG 优化器未放弃 GIN trgm, chapter 28.2 边界测试建议 #2 风险未触发
   - 决策: 暂不限制最大 token 数量 (5 token 610ms 仍可接受, 退化曲线趋于平缓, 实际场景 5+ token 罕见)
+v28-3 1M 数据扩容压测验证数据 (2026-07-19, sakurafilter_perf_tests 950K products/4.75M xrefs/4.75M apps, 直连 PG cache hit):
+  - 场景 A baseline (OR+2EXISTS) vs v28-2 (CTE UNION) 单 token 对比 (5 个 q 场景):
+    - 高频 oil: baseline P95=22848ms → v28-2 P95=5027ms (4.54x)
+    - 高频 filter: baseline P95=8176ms → v28-2 P95=5346ms (1.53x, 候选集爆炸)
+    - 中频 CAT: baseline P95=24361ms → v28-2 P95=3523ms (6.91x)
+    - 中频 bosch: baseline P95=22693ms → v28-2 P95=3258ms (6.97x)
+    - 低频 kubota: baseline P95=26316ms → v28-2 P95=1864ms (14.12x, 低频词加速最佳)
+    - 平均加速比: 6.82x (vs 50K 6.0x, 反而提升 0.82x, 因低频词加速 14.12x 拉高均值)
+  - 场景 B v28-2 多 token 1-5 INTERSECT 退化曲线 (vs 50K v28-5):
+    - 1 token P95=4053ms (vs 50K 231ms, 放大 17.55x)
+    - 2 token P95=6391ms (vs 1 token 1.58x)
+    - 3 token P95=5337ms (vs 1 token 1.32x, 2→3 token 反而下降, 因 2 token "oil filter" 高频爆炸, 3 token 加 CAT 后 INTERSECT 收敛)
+    - 4 token P95=5488ms (vs 1 token 1.35x)
+    - 5 token P95=6024ms (vs 1 token 1.49x, vs 50K v28-5 2.64x, 反而更稳定)
+  - PG 优化器行为: 1-5 token 所有场景都选 GIN trgm Bitmap Index Scan, chapter 28.2 边界测试建议 #2 风险未触发
+  - 结论: v28-2 CTE UNION 方案在 1M 数据下保持有效性, 维持当前实现, 无需启用 v27-1 q_match 候选集爆炸防御
+  - 风险提示: 1M 数据下 v28-2 单 token P95 1.8-5.3s (绝对延迟显著放大 17.5x), 高频词 filter 仅 1.53x 加速 (候选集爆炸), 生产环境需配合 Meili 主路径
 排除方案:
   - 立即改 keyset: 工作量大 (前后端契约改造) 且 50K 压测显示 OFFSET 深度非主要瓶颈
   - 加 GIN trgm 索引 (v28-1 验证): 对当前 SQL 模式无收益, PG 优化器不选, 不应加索引 (50MB 索引浪费)
   - v28-2 CTE 拆分 v1 (仅 products 5 字段 GIN trgm): 2.56x 未达 4x 目标, EXISTS xref (623K 行) + EXISTS machine (775K 行) 仍拖累
   - v28-5 限制最大 token 数量 (如 8 个): 5 token 610ms 仍可接受, 退化曲线趋于平缓, 防御性兜底留 P2 候选 (1M 数据下退化情况留 v28-3 验证)
+  - v28-3 启用 v27-1 q_match 候选集爆炸防御: 1M 数据加速比 6.82x 保持, 多 token 退化 1.49x 可控, 无需启用
   - 加 covering index: 涉及 DB schema 变更, 需 migration, 不适合 v27 阶段
-  - 1M 扩容压测: 50K 数据下退化比 ≤1.03x (OFFSET) / ≤2.64x (多 token), 1M 留后续独立库 (sakurafilter_perf_tests) 验证, 避免污染 spike_test_v3
+  - 1M 扩容压测: ✅ 已执行 (v28-3), 50K 数据下退化比 ≤1.03x (OFFSET) / ≤2.64x (多 token), 1M 数据下退化 1.49x, 验证完成
 关联文件:
   - backend/src/SakuraFilter.Search/PostgresSearchProvider.cs (V24-F94: BuildBaseFilter + BuildQMatchCte + BuildFullSql + BuildCountSql 拆分)
   - backend/src/SakuraFilter.Infrastructure/Data/Migrations/20260719165000_AddGinTrgmIndexesForSearch.cs (5 个新 GIN trgm 索引)
@@ -119,7 +137,17 @@ v28-5 多 token INTERSECT 边界压测数据 (2026-07-19, spike_test_v3 50K, 直
   - spike-test/_perf_v28_2_e2e_results.json (v28-2 端到端 raw 数据)
   - spike-test/_perf_v28_5_multi_token_verify.py (v28-5 多 token 1-5 INTERSECT 边界压测脚本)
   - spike-test/_perf_v28_5_multi_token_results.json (v28-5 验证 raw 数据)
-  - .trae/specs/v2-architecture-migration/spec.md chapter 27.8 (v27-3 实施记录) + chapter 28.1 (v28-1 验证记录) + chapter 28.2 (v28-2 实施记录) + chapter 28.5 (v28-5 验证记录)
+  - spike-test/_perf_v28_3_1m_verify.py (v28-3 1M 数据扩容压测脚本: 场景 A baseline vs v28-2 + 场景 B 多 token 1-5 + 场景 C EXPLAIN)
+  - spike-test/_perf_v28_3_1m_results.json (v28-3 验证 raw 数据)
+  - spike-test/_v28_3_perf.log (v28-3 压测执行日志)
+  - spike-test/_check_v28_3_baseline.py (v28-3 数据量 + schema 检查脚本)
+  - spike-test/_check_xref_app_schema.py (v28-3 xref/apps 表结构检查脚本)
+  - spike-test/_gen_v28_3_1m_data.py (v28-3 1M 数据生成主脚本: step1-3 建库 + schema + 950K products)
+  - spike-test/_gen_v28_3_continue.py (v28-3 1M 数据续传脚本: step4 4.75M xrefs)
+  - spike-test/_gen_v28_3_apps_only.py (v28-3 1M 数据 apps 续传脚本: step5-7 4.75M apps + xref_oem_brand + ANALYZE)
+  - spike-test/_v28_3_schema_dump.sql (v28-3 spike_test_v3 schema 导出, 含 10 个 GIN trgm 索引)
+  - spike-test/_v28_3_gen.log (v28-3 数据生成日志)
+  - .trae/specs/v2-architecture-migration/spec.md chapter 27.8 (v27-3 实施记录) + chapter 28.1 (v28-1 验证记录) + chapter 28.2 (v28-2 实施记录) + chapter 28.5 (v28-5 验证记录) + chapter 28.3 (v28-3 1M 扩容压测验证记录)
 
 #6 IObjectStorage.ListAsync 接口扩展决策 (2026-07-19)
 决策: v27-2 扩展 IObjectStorage 接口加 ListAsync 方法, MinioStorage + AliyunOssStorage 双实现
