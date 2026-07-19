@@ -71,7 +71,10 @@ test.describe('P0-E2E-2 功能性 smoke (CI 空库友好)', () => {
 
   test('5. ETL 触发页能加载', async ({ page }) => {
     await injectAdminToken(page)
-    await page.goto(`${BASE}/admin/etl`, { waitUntil: 'networkidle', timeout: 15000 })
+    // V24-F78/F79: ETL 页通过 useEtlProgress 建立 fetch + ReadableStream SSE 长连接
+    //   持续接收进度 → networkidle 永远达不到 (15s 超时失败)
+    //   改用 domcontentloaded: SSE 不影响 DOM 加载完成, 验证页面挂载即可
+    await page.goto(`${BASE}/admin/etl`, { waitUntil: 'domcontentloaded', timeout: 15000 })
     await page.waitForSelector('h1, .el-card, .el-button', { timeout: 10000 })
   })
 

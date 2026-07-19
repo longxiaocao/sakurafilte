@@ -9,7 +9,7 @@ namespace SakuraFilter.Api.Extensions;
 /// 统一中间件管道配置。
 /// 抽出原 Program.cs 中的 UseMiddleware / Use* 调用序列。
 ///
-/// 顺序（与原 Program.cs 保持一致）：
+/// 顺序（与原 Program.cs 保持一致，v30 P0 修复 DevToken 顺序）：
 ///   0) CorrelationIdMiddleware
 ///   1) UseForwardedHeaders
 ///   2) UseExceptionHandler (生产) / UseDeveloperExceptionPage (开发)
@@ -18,10 +18,11 @@ namespace SakuraFilter.Api.Extensions;
 ///   5) SecurityHeadersMiddleware
 ///   6) UseRateLimiter
 ///   7) UseHttpMetrics
-///   8) UseAuthentication / UseAuthorization
-///   9) DevTokenAuthMiddleware
-///  10) ResponseTimeMiddleware
-///  11) UseSwagger / UseSwaggerUI (仅开发)
+///   8) UseAuthentication → DevTokenAuthMiddleware → UseAuthorization
+///      WHY 顺序 (v30 P0 修复, commit cebd2ef): DevToken 必须在 UseAuthorization 之前,
+///      否则 X-Admin-Token 请求被 RequireAuthorization("Admin") 端点直接 401 短路
+///   9) ResponseTimeMiddleware
+///  10) UseSwagger / UseSwaggerUI (仅开发)
 /// </summary>
 public static class MiddlewarePipelineExtensions
 {
