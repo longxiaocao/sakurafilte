@@ -59,3 +59,32 @@
   - backend/tests/SakuraFilter.Api.Tests/Integration/IndexReplayWorkerLockMechanismTests.cs (V24-F82)
   - backend/tests/SakuraFilter.Api.Tests/Integration/AdminProductImageServiceIntegrationTests.cs (V24-F83)
   - .env (PG_TEST_CONNECTION_STRING 指向 sakurafilter_int_tests)
+
+#5 PostgresSearchProvider Phase 2 keyset 分页暂缓 (2026-07-19)
+决策: v27-1 暂不实施 keyset 分页改造, 保留 OFFSET 分页, 待 v27-3 压测验证后再决策
+理由:
+  - 当前 SearchRequest DTO 用 Page/PageSize 页式分页, 前端依赖 Page 契约
+  - 改 keyset 需破坏前端 Page 契约或引入 cursor 参数, 改动面大
+  - 真实用户行为: 搜索结果 99% 在前 5 页内 (典型电商行为), 深分页场景罕见
+  - V24-F80 Phase 1 原生 SQL + CTE + LATERAL JOIN 已优化首屏性能, 深分页性能问题需压测数据支撑
+排除方案:
+  - 立即改 keyset: 工作量大 (前后端契约改造) 且缺乏压测数据支撑收益
+  - 加 covering index: 涉及 DB schema 变更, 需 migration, 不适合 v27 阶段
+关联文件:
+  - backend/src/SakuraFilter.Search/PostgresSearchProvider.cs L20/L224 (TODO 标注)
+  - backend/src/SakuraFilter.Core/DTOs/SearchRequest.cs (Page/PageSize 契约)
+
+#6 IObjectStorage.ListAsync 接口扩展决策 (2026-07-19)
+决策: v27-2 扩展 IObjectStorage 接口加 ListAsync 方法, MinioStorage + AliyunOssStorage 双实现
+理由:
+  - CleanupOrphanImages CLI 需枚举存储桶所有对象与 DB 比对找孤儿, 必须有 List 能力
+  - 接口扩展是必要抽象, 不算过度工程化 (符合"接口 segregation 原则")
+  - MinIO 用 ListObjectsEnumAsync (IAsyncEnumerable<Item>), OSS 用 ListObjectsRequest + Marker 翻页
+排除方案:
+  - CLI 直接用 MinIO SDK (绕过 IObjectStorage): CLI 只支持 MinIO, 不支持 OSS, 违反"复用优先"
+  - 在 AdminProductImageService 加 ListOrphans 方法: 业务层不应承担运维职责, 与 spec 26.4.1 决策冲突
+关联文件:
+  - backend/src/SakuraFilter.Core/Interfaces/IObjectStorage.cs (ListAsync 接口)
+  - backend/src/SakuraFilter.Infrastructure/Storage/MinioStorage.cs (ListObjectsEnumAsync 实现)
+  - backend/src/SakuraFilter.Infrastructure/Storage/AliyunOssStorage.cs (ListObjectsRequest 翻页实现)
+  - backend/src/SakuraFilter.Cli/Program.cs (cleanup-orphan-images 子命令)

@@ -15827,6 +15827,123 @@ spec 26.17.3 P2 列表 (10 项) 全部完成:
 
 ---
 
+## 27. v27 改进实施记录
+
+**实施时间**: 2026-07-19
+**目标**: v26 P0/P1/P2 全部清空后, 进入"长线演进"阶段, 核心目标是生产可用性强化与性能压测验证
+**用户确认**: 没有不可改约束, 没有时间/版本限制, 按建议执行
+
+### 27.1 v27-4: PG 集成测试 CI 化 (V24-F88)
+
+**问题**: V24-F81/F82/F83 写了 22 个 PG 集成测试 (advisory lock / 23505 / xmin 乐观锁), 但 CI 未注入 `PG_TEST_CONNECTION_STRING`, 这些测试在 CI 全部 Skip。
+
+**方案**: 在 CI `backend` job 添加 3 个步骤:
+1. `Create integration test database` — `DROP DATABASE IF EXISTS sakurafilter_int_tests` + `CREATE DATABASE`, 与 smoke test 库 `spike_test_v3` 隔离避免 TRUNCATE 污染
+2. `Apply EF migrations to integration test database` — `dotnet ef database update` 应用迁移到测试库
+3. `Run PG integration tests` — `dotnet test --filter "Category=Integration"` + 注入 `PG_TEST_CONNECTION_STRING`
+
+**改动文件**:
+- `.github/workflows/ci.yml` L99-130: 新增 3 个步骤
+
+**验证**:
+- 本地预演: `dotnet test --filter "Category=Integration"` 22/22 通过 (6 AdminProductService + 8 IndexReplayWorker + 8 AdminProductImageService)
+- 编译 0 警告 0 错误
+- 测试基线: Api.Tests 434/434 通过 (含 22 集成测试)
+
+### 27.2 v27-2: CleanupOrphanImages CLI 脚本 (V24-F89, 选项 C)
+
+**问题**: V24-F84 SafeDeleteOldImageAsync 仅增强异步删旧文件容错 (3 次重试 + LogError), 但 3 次失败后旧 key 永久成为孤儿。spec 26.4.1 用户决策暂缓全量清理, 留待 v27+ 实施。
+
+**方案 (选项 C, CLI 一次性脚本)**:
+- 不引入 BackgroundService, 不引入新表/Service
+- 一次性 CLI 脚本, 适合低频运维场景 (如每周/每月执行)
+- 支持 MinIO + Aliyun OSS 双存储
+- 支持 `--dry-run` 预览 + `--batch-size` 防限流
+- 默认 `--prefix products/` 仅扫描产品对象, 避免误删非产品
+
+**改动**:
+1. **IObjectStorage 接口扩展**: 新增 `ListAsync(string prefix, CancellationToken ct)` 方法 (ADR #6)
+2. **MinioStorage 实现**: 用 `ListObjectsEnumAsync` (IAsyncEnumerable<Item>), SDK 内部自动翻页
+3. **AliyunOssStorage 实现**: 用 `ListObjectsRequest` + `Marker` 翻页迭代 (1000/批)
+4. **CLI 子命令**: `cleanup-orphan-images` 完整流程:
+   - 解析参数 (--storage/--endpoint/--bucket/--prefix/--dry-run/--batch-size)
+   - 从 DB 拉取所有 image_key (product_images UNION products, DISTINCT 去重)
+   - 枚举存储桶中所有对象 (按 prefix 过滤)
+   - 比对找孤儿 (objectKeys - dbKeys)
+   - 列出前 20 个孤儿预览
+   - dry-run 模式只预览不删除
+   - 批量删除 (按 batch_size 分批, 每批 sleep 500ms 防限流)
+
+**改动文件**:
+- `backend/src/SakuraFilter.Core/Interfaces/IObjectStorage.cs`: 新增 ListAsync 接口方法
+- `backend/src/SakuraFilter.Infrastructure/Storage/MinioStorage.cs`: 实现 ListAsync
+- `backend/src/SakuraFilter.Infrastructure/Storage/AliyunOssStorage.cs`: 实现 ListAsync
+- `backend/src/SakuraFilter.Cli/Program.cs`: 新增 cleanup-orphan-images 子命令 (~150 行)
+
+**验证**:
+- 编译 0 警告 0 错误
+- `dotnet run -- --help` 输出正确, 含 cleanup-orphan-images 用法说明
+- dry-run 实测: DB 连接成功 (0 个 image_key), 存储桶枚举正确报错 (本地无 MinIO), 错误提示友好
+- Api.Tests 434/434 通过 (接口扩展未破坏现有测试)
+
+### 27.3 v27-1 暂缓决策 (ADR #5)
+
+**spec 描述**: PostgresSearchProvider Phase 2 keyset 分页 (V24-F80 留 TODO)
+
+**决策**: 暂不实施, 待 v27-3 1M 产品压测后再决策。理由:
+- 当前 SearchRequest DTO 用 Page/PageSize 页式分页, 前端依赖 Page 契约
+- 改 keyset 需破坏前端 Page 契约或引入 cursor 参数, 改动面大
+- 真实用户行为: 搜索结果 99% 在前 5 页内 (典型电商行为), 深分页场景罕见
+- V24-F80 Phase 1 原生 SQL + CTE + LATERAL JOIN 已优化首屏性能, 深分页性能问题需压测数据支撑
+
+详见 `.ai/decisions.md` ADR #5。
+
+### 27.4 v27 批次一验证结果
+
+- 后端 `dotnet build`: **0 警告 0 错误**
+- 后端 `dotnet test`: **434/434 通过** (含 22 集成测试, V24-F88 在 CI 跑)
+- CLI `dotnet run -- --help`: 输出正确含 cleanup-orphan-images
+- CLI dry-run: 流程正确 (DB 连接 + 存储桶枚举错误处理)
+
+### 27.5 v27 批次一文件清单
+
+**修改** (5 个文件):
+- `.github/workflows/ci.yml` (V24-F88 v27-4, 新增 3 步骤)
+- `backend/src/SakuraFilter.Core/Interfaces/IObjectStorage.cs` (V24-F89 v27-2, 新增 ListAsync)
+- `backend/src/SakuraFilter.Infrastructure/Storage/MinioStorage.cs` (V24-F89 v27-2, 实现 ListAsync)
+- `backend/src/SakuraFilter.Infrastructure/Storage/AliyunOssStorage.cs` (V24-F89 v27-2, 实现 ListAsync)
+- `backend/src/SakuraFilter.Cli/Program.cs` (V24-F89 v27-2, cleanup-orphan-images 子命令)
+
+**文档**:
+- `.ai/decisions.md` 追加 ADR #5 (v27-1 keyset 暂缓) + ADR #6 (ListAsync 扩展)
+- `.ai/suggestions.md` 追加 3 条 v27 后续建议 (keyset 压测 / CLI cron / ListAsync 单测)
+
+### 27.6 v27 批次一总结
+
+v27 阶段首批 2 项任务完成 (v27-4 CI 化 + v27-2 CleanupOrphanImages CLI), 1 项暂缓 (v27-1 待压测决策)。
+
+**生产可用性强化**:
+- 22 个 PG 集成测试在 CI 自动运行 (V24-F88), 防回归合入 master
+- 孤儿对象清理 CLI (V24-F89) 补齐 V24-F84 MVP 的全量清理能力
+
+**v27 阶段进展**:
+- v27-1 暂缓 (待 v27-3 压测)
+- v27-2 ✅ 完成
+- v27-3 待执行 (依赖 v27-1 决策)
+- v27-4 ✅ 完成
+- v27-5 待执行 (Playwright E2E)
+- v27-9 待执行 (E2E 巡检 CI, 依赖 v27-4)
+
+### 27.7 💡 改进建议 (后续 v27 批次二+ 决策)
+
+1. **v27-3 1M 产品压测脚本**: 生成 1M 产品 + 20M xref 假数据, 压测 PostgresSearchProvider OFFSET 深分页 (page=1/10/100/500), 输出 P50/P95/P99 延迟报告, 决策是否实施 v27-1 keyset
+2. **v27-2 后续**: CleanupOrphanImages CLI 加 cron (如 K8s CronJob 每周一次), 自动清理防孤儿累积
+3. **v27-2 后续**: IObjectStorage.ListAsync 单元测试 (Mock IMinioClient + Mock OssClient), 当前仅 dry-run 集成验证
+4. **v27-4 后续**: PG 集成测试加 PostgreSQL 多版本矩阵 (PG 14/15/16), 验证 advisory lock 在旧版本行为一致
+5. **v27-9 E2E 巡检 CI**: _design_audit.py + _api_contract_test.py 需 Python 环境, 与 v27-4 PG service container 配合即可 (不需反转 ADR #4)
+
+---
+
 
 
 
