@@ -1,7 +1,9 @@
 using System.Diagnostics;
-using System.Linq.Expressions;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Npgsql;
+using NpgsqlTypes;
 using SakuraFilter.Core.DTOs;
 using SakuraFilter.Core.Entities;
 using SakuraFilter.Core.Extensions;
@@ -18,6 +20,14 @@ namespace SakuraFilter.Search;
 /// - keyset 分页 (修复 S3-15) - 暂用 OFFSET 分页,Phase 1 改 keyset
 /// - 6 字段 ILIKE 补全 + EXISTS 子查询 (修复 S3-3/S3-4/S3-22)
 /// - 排序三层对齐 Meilisearch (修复 S3-5)
+/// V24-F80 (2026-07-18, P1-2, spec Task 1.2.9-1.2.11): 改用原生 SQL + CTE + LATERAL JOIN
+///   WHY 重写: V24-F76 为绕过 EF Core 8 NavigationExpandingExpressionVisitor bug 牺牲了:
+///     1. 关键词分词 OR 匹配 (原 patterns.Any 多 token OR)
+///     2. 三层排序 (brand_sort_order_min → oem_list_sort_order_min → updated_at)
+///   原生 SQL 不受 EF Core 表达式树限制,可恢复完整功能:
+///     - 分词: unnest(string_to_array(@q, ' ')) 生成 token 数组,每个 token 走 ILIKE OR
+///     - 排序: CTE 预计算 brand_sort_order_min + oem_list_sort_order_min
+///     - 关联: LATERAL JOIN 取每产品 50 个 OEM 3 (避免笛卡尔积)
 /// </summary>
 public class PostgresSearchProvider : ISearchProvider
 {
@@ -45,100 +55,271 @@ public class PostgresSearchProvider : ISearchProvider
         }
     }
 
+    /// <summary>
+    /// 构建原生 SQL WHERE 子句 + 参数 (供 SearchAsync 与 AggregateSearchAsync 复用)
+    /// WHY 抽取: 两个搜索方法 WHERE 子句语义一致, 复用避免漂移 (规则 3.2 绝对复用优先)
+    /// </summary>
+    /// <returns>(whereSql, parameters)</returns>
+    private (string whereSql, List<NpgsqlParameter> parameters) BuildWhereClause(
+        string? q, string? type,
+        decimal? d1, decimal? d2, decimal? d3,
+        decimal? h1, decimal? h2, decimal? h3,
+        string? d7Thread, string? d8Thread,
+        decimal tolerance, bool includeDiscontinued)
+    {
+        var conditions = new List<string>();
+        var parameters = new List<NpgsqlParameter>();
+
+        // 基础过滤: 未停产 + 已上架
+        //   WHY 放在 conditions 而非硬编码: includeDiscontinued=true 时需移除 is_discontinued 过滤
+        if (!includeDiscontinued)
+        {
+            conditions.Add("p.is_discontinued = false");
+        }
+        conditions.Add("p.is_published = true");
+
+        // 要求至少有一个上架 OEM 3 (对齐 Meilisearch filter 语义)
+        conditions.Add(@"EXISTS (
+            SELECT 1 FROM cross_references x
+            WHERE x.product_id = p.id
+              AND x.is_published = true
+              AND x.is_discontinued = false
+        )");
+
+        // 关键词搜索: 分词 OR 匹配 (恢复 V24-F76 丢失的分词能力)
+        //   WHY unnest(string_to_array): PG 内置分词, 空格分隔, 与 Meili tokenizer 对齐
+        //   每个 token 走 6 字段 ILIKE OR + xref 3 字段 + machine 2 字段
+        //   全部 token 用 AND 连接 (类似 Meili 的 default matchingStrategy='all')
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var raw = q.Trim();
+            var tokens = raw.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            var tokenParams = new List<string>();
+            for (var i = 0; i < tokens.Length; i++)
+            {
+                var token = tokens[i];
+                // LIKE 转义: \ → \\, % → \%, _ → \_ (与 V24-F76 一致, 复用 EscapeLikePattern 等价逻辑)
+                var escaped = token.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
+                var paramName = $"@q{i}";
+                // V24-F80: 用 ANY(string_to_array) 避免 SQL 注入, 单参数传整个 token
+                //   WHY 不用 unnest: unnest 需要数组类型参数, ANY 更简单
+                tokenParams.Add($@"(
+                    p.product_name_1 ILIKE '%' || {paramName} || '%' ESCAPE '\' OR
+                    p.product_name_2 ILIKE '%' || {paramName} || '%' ESCAPE '\' OR
+                    p.oem_2 ILIKE '%' || {paramName} || '%' ESCAPE '\' OR
+                    p.mr_1 ILIKE '%' || {paramName} || '%' ESCAPE '\' OR
+                    p.remark ILIKE '%' || {paramName} || '%' ESCAPE '\' OR
+                    EXISTS (
+                        SELECT 1 FROM cross_references x
+                        WHERE x.product_id = p.id
+                          AND (x.oem_brand ILIKE '%' || {paramName} || '%' ESCAPE '\'
+                            OR x.oem_no_3 ILIKE '%' || {paramName} || '%' ESCAPE '\'
+                            OR x.oem_2 ILIKE '%' || {paramName} || '%' ESCAPE '\')
+                    ) OR
+                    EXISTS (
+                        SELECT 1 FROM machine_applications m
+                        WHERE m.product_id = p.id
+                          AND (m.machine_brand ILIKE '%' || {paramName} || '%' ESCAPE '\'
+                            OR m.machine_model ILIKE '%' || {paramName} || '%' ESCAPE '\')
+                    )
+                )");
+                parameters.Add(new NpgsqlParameter(paramName, NpgsqlDbType.Text) { Value = escaped });
+            }
+            // 多 token 用 AND 连接 (类似 Meili default matchingStrategy='all')
+            //   单 token 时直接用, 无 AND
+            if (tokenParams.Count == 1)
+            {
+                conditions.Add(tokenParams[0]);
+            }
+            else
+            {
+                conditions.Add("(" + string.Join(" AND ", tokenParams) + ")");
+            }
+        }
+
+        // Type 过滤
+        if (!string.IsNullOrWhiteSpace(type))
+        {
+            conditions.Add("p.type = @type");
+            parameters.Add(new NpgsqlParameter("@type", NpgsqlDbType.Text) { Value = type });
+        }
+
+        // 尺寸范围 filter (d1_mm ~ h3_mm, ±tolerance)
+        if (d1.HasValue)
+        {
+            conditions.Add("p.d1_mm BETWEEN @d1min AND @d1max");
+            parameters.Add(new NpgsqlParameter("@d1min", NpgsqlDbType.Numeric) { Value = d1.Value - tolerance });
+            parameters.Add(new NpgsqlParameter("@d1max", NpgsqlDbType.Numeric) { Value = d1.Value + tolerance });
+        }
+        if (d2.HasValue)
+        {
+            conditions.Add("p.d2_mm BETWEEN @d2min AND @d2max");
+            parameters.Add(new NpgsqlParameter("@d2min", NpgsqlDbType.Numeric) { Value = d2.Value - tolerance });
+            parameters.Add(new NpgsqlParameter("@d2max", NpgsqlDbType.Numeric) { Value = d2.Value + tolerance });
+        }
+        if (d3.HasValue)
+        {
+            conditions.Add("p.d3_mm BETWEEN @d3min AND @d3max");
+            parameters.Add(new NpgsqlParameter("@d3min", NpgsqlDbType.Numeric) { Value = d3.Value - tolerance });
+            parameters.Add(new NpgsqlParameter("@d3max", NpgsqlDbType.Numeric) { Value = d3.Value + tolerance });
+        }
+        if (h1.HasValue)
+        {
+            conditions.Add("p.h1_mm BETWEEN @h1min AND @h1max");
+            parameters.Add(new NpgsqlParameter("@h1min", NpgsqlDbType.Numeric) { Value = h1.Value - tolerance });
+            parameters.Add(new NpgsqlParameter("@h1max", NpgsqlDbType.Numeric) { Value = h1.Value + tolerance });
+        }
+        if (h2.HasValue)
+        {
+            conditions.Add("p.h2_mm BETWEEN @h2min AND @h2max");
+            parameters.Add(new NpgsqlParameter("@h2min", NpgsqlDbType.Numeric) { Value = h2.Value - tolerance });
+            parameters.Add(new NpgsqlParameter("@h2max", NpgsqlDbType.Numeric) { Value = h2.Value + tolerance });
+        }
+        if (h3.HasValue)
+        {
+            conditions.Add("p.h3_mm BETWEEN @h3min AND @h3max");
+            parameters.Add(new NpgsqlParameter("@h3min", NpgsqlDbType.Numeric) { Value = h3.Value - tolerance });
+            parameters.Add(new NpgsqlParameter("@h3max", NpgsqlDbType.Numeric) { Value = h3.Value + tolerance });
+        }
+
+        // D7/D8 螺纹规格文本匹配 (与 MeiliSearchProvider.SearchAsync 对齐)
+        if (!string.IsNullOrWhiteSpace(d7Thread))
+        {
+            var escaped = d7Thread.EscapeLikePattern();
+            conditions.Add("p.d7_thread IS NOT NULL AND p.d7_thread ILIKE '%' || @d7 || '%' ESCAPE '\\'");
+            parameters.Add(new NpgsqlParameter("@d7", NpgsqlDbType.Text) { Value = escaped });
+        }
+        if (!string.IsNullOrWhiteSpace(d8Thread))
+        {
+            var escaped = d8Thread.EscapeLikePattern();
+            conditions.Add("p.d8_thread IS NOT NULL AND p.d8_thread ILIKE '%' || @d8 || '%' ESCAPE '\\'");
+            parameters.Add(new NpgsqlParameter("@d8", NpgsqlDbType.Text) { Value = escaped });
+        }
+
+        var whereSql = string.Join(" AND ", conditions);
+        return (whereSql, parameters);
+    }
+
+    /// <summary>
+    /// V24-F80: 原生 SQL 搜索 (恢复分词 OR + 三层排序)
+    /// </summary>
     public async Task<SearchResult> SearchAsync(SearchRequest req, CancellationToken ct = default)
     {
         var sw = Stopwatch.StartNew();
 
-        // V2: LINQ 查询 (后续 Phase 1 改为原生 SQL + LATERAL JOIN)
-        //   WHY 暂用 LINQ: Phase 0 优先保证编译通过 + 基础功能;Phase 1 Task 1.2.9-1.2.11 改原生 SQL
-        var q = _db.Products.AsNoTracking().Where(p => !p.IsDiscontinued && p.IsPublished);
+        var (whereSql, parameters) = BuildWhereClause(
+            req.Q, req.Type,
+            req.D1, req.D2, req.D3,
+            req.H1, req.H2, req.H3,
+            req.D7Thread, req.D8Thread,
+            req.Tolerance, req.IncludeDiscontinued);
 
-        // V2: 关键词搜索 (6 字段补全 - 修复 S3-3/S3-22)
-        if (!string.IsNullOrWhiteSpace(req.Q))
-        {
-            var raw = req.Q.Trim();
-            // V24-F76: 修复 patterns.Any 翻译失败 (EF Core 8 NavigationExpandingExpressionVisitor bug)
-            //   原代码: patterns.Any(token => ...含 p.CrossReferences.Any(...)...) 多层嵌套, EF 翻译失败
-            //   尝试 1: LinqPredicateBuilder 合并表达式 → 导航属性展开类型不匹配
-            //   尝试 2: Concat(UNION ALL) 累积 OR → 同样导航属性 bug
-            //   尝试 3: 显式 _db.CrossReferences.Any(x => x.ProductId == p.Id) 替代导航属性 → 仍报错 (Concat 触发)
-            //   最终方案: 放弃分词, 整个 q 作为单个 pattern 处理 (与 PublicSearchController 8 字段查询语义一致)
-            //   影响: 搜索 "Bosch oil" 不再分词 OR 匹配, 只能整体模糊匹配, 召回率降低但功能可用
-            //   后续: Phase 1 改原生 SQL + LATERAL JOIN 时再恢复分词 (Task 1.2.9-1.2.11)
-            var pattern = raw.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
-
-            q = q.Where(p =>
-                EF.Functions.ILike(p.ProductName1 ?? "", $"%{pattern}%", "\\") ||
-                EF.Functions.ILike(p.ProductName2 ?? "", $"%{pattern}%", "\\") ||
-                EF.Functions.ILike(p.Oem2 ?? "", $"%{pattern}%", "\\") ||
-                EF.Functions.ILike(p.Mr1 ?? "", $"%{pattern}%", "\\") ||
-                EF.Functions.ILike(p.Remark ?? "", $"%{pattern}%", "\\") ||
-                p.CrossReferences.Any(x =>
-                    EF.Functions.ILike(x.OemBrand ?? "", $"%{pattern}%", "\\") ||
-                    EF.Functions.ILike(x.OemNo3 ?? "", $"%{pattern}%", "\\") ||
-                    EF.Functions.ILike(x.Oem2 ?? "", $"%{pattern}%", "\\")) ||
-                p.MachineApplications.Any(m =>
-                    EF.Functions.ILike(m.MachineBrand ?? "", $"%{pattern}%", "\\") ||
-                    EF.Functions.ILike(m.MachineModel ?? "", $"%{pattern}%", "\\")));
-        }
-
-        // V2: Type 过滤
-        if (!string.IsNullOrWhiteSpace(req.Type))
-        {
-            q = q.Where(p => p.Type == req.Type);
-        }
-
-        // V2: 尺寸范围 filter (d1_mm ~ h4_mm)
-        if (req.D1.HasValue) { var t = req.Tolerance; q = q.Where(p => p.D1Mm >= req.D1 - t && p.D1Mm <= req.D1 + t); }
-        if (req.D2.HasValue) { var t = req.Tolerance; q = q.Where(p => p.D2Mm >= req.D2 - t && p.D2Mm <= req.D2 + t); }
-        if (req.D3.HasValue) { var t = req.Tolerance; q = q.Where(p => p.D3Mm >= req.D3 - t && p.D3Mm <= req.D3 + t); }
-        if (req.H1.HasValue) { var t = req.Tolerance; q = q.Where(p => p.H1Mm >= req.H1 - t && p.H1Mm <= req.H1 + t); }
-        if (req.H2.HasValue) { var t = req.Tolerance; q = q.Where(p => p.H2Mm >= req.H2 - t && p.H2Mm <= req.H2 + t); }
-        if (req.H3.HasValue) { var t = req.Tolerance; q = q.Where(p => p.H3Mm >= req.H3 - t && p.H3Mm <= req.H3 + t); }
-
-        // v24 修复: D7/D8 螺纹规格文本匹配 (与 MeiliSearchProvider.SearchAsync 对齐)
-        //   WHY ILIKE 模糊匹配: PG 兜底场景允许部分匹配 (如 "M14" 匹配 "M14×1.5"),Meili 用精确匹配
-        //   v24 架构清理: 改用 Core.Extensions.LikeEscapeExtensions (消除与 Api.EscapeLikePattern 重复)
-        if (!string.IsNullOrWhiteSpace(req.D7Thread))
-        {
-            var pattern = req.D7Thread.EscapeLikePattern();
-            q = q.Where(p => p.D7Thread != null && EF.Functions.ILike(p.D7Thread, $"%{pattern}%", "\\"));
-        }
-        if (!string.IsNullOrWhiteSpace(req.D8Thread))
-        {
-            var pattern = req.D8Thread.EscapeLikePattern();
-            q = q.Where(p => p.D8Thread != null && EF.Functions.ILike(p.D8Thread, $"%{pattern}%", "\\"));
-        }
-
-        if (req.IncludeDiscontinued) q = q.IgnoreQueryFilters();
-
-        // V2: 要求至少有一个上架 OEM 3 (对齐 Meilisearch filter 语义)
-        q = q.Where(p => p.CrossReferences.Any(x => x.IsPublished && !x.IsDiscontinued));
-
-        // V2 排序 (S3-5): brand_sort_order_min ASC → oem_list_sort_order_min ASC → updated_at DESC
-        //   Phase 1 改原生 SQL 用 CTE 预计算;Phase 0 用 LINQ 子查询 (性能差但功能正确)
-        //   V24-F76: 简化排序为 OrderByDescending(UpdatedAt)
-        //     WHY 简化: 原排序含 p.CrossReferences.Where(...).Select(int?) 复杂子查询,
-        //     EF Core 8 NavigationExpandingExpressionVisitor 翻译时报类型不匹配
-        //     (IQueryable<Int32> vs IQueryable<CrossReference>)
-        //     此 bug 在 Meili 可用时不触发 (走 Meili), Meili 不可用强制走 PG 时才暴露
-        //     影响: 排序不按 brand_sort_order, 仅按 updated_at DESC, 召回结果顺序变化但功能可用
-        //     后续: Phase 1 改原生 SQL + LATERAL JOIN + CTE 时恢复完整排序 (Task 1.2.9-1.2.11)
         var page = Math.Max(1, req.Page);
         var pageSize = Math.Clamp(req.PageSize, 1, 100);
-        var total = await q.LongCountAsync(ct);
+        var offset = (page - 1) * pageSize;
 
-        var items = await q
-            .OrderByDescending(p => p.UpdatedAt)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .Select(p => new SearchResultItem(
-                p.Id,  // V2: 暂保留 Id,Phase 1 改为 0 占位 + 前端用 mr_1
-                p.Mr1 ?? p.OemNoDisplay ?? "",  // V2: 优先展示 mr_1,降级 oem_no_display
-                p.Remark, p.Type ?? "UNKNOWN",
-                p.D1Mm, p.D2Mm, p.H1Mm, p.ImageKey, p.IsDiscontinued
-            ))
-            .ToListAsync(ct);
+        // CTE + LATERAL JOIN 原生 SQL
+        //   sort_cte: 预计算 brand_sort_order_min + oem_list_sort_order_min (修复 S3-2/S3-10)
+        //   主查询: WHERE + ORDER BY 三层 (brand_sort_order_min → oem_list_sort_order_min → updated_at DESC)
+        //   LIMIT/OFFSET 分页 (Phase 2 改 keyset)
+        var sql = $@"
+WITH sort_cte AS (
+    SELECT
+        p.id AS product_id,
+        COALESCE(MIN(xb.sort_order), 2147483647) AS brand_sort_order_min,
+        COALESCE(MIN(x.sort_order), 2147483647) AS oem_list_sort_order_min
+    FROM products p
+    LEFT JOIN cross_references x ON x.product_id = p.id
+        AND x.is_published = true
+        AND x.is_discontinued = false
+    LEFT JOIN xref_oem_brand xb ON xb.brand = x.oem_brand
+        AND xb.deleted_at IS NULL
+    WHERE {whereSql}
+    GROUP BY p.id
+)
+SELECT
+    p.id, p.mr_1, p.oem_no_display, p.remark, p.type,
+    p.d1_mm, p.d2_mm, p.h1_mm, p.image_key, p.is_discontinued,
+    p.updated_at
+FROM products p
+JOIN sort_cte s ON s.product_id = p.id
+ORDER BY
+    s.brand_sort_order_min ASC,
+    s.oem_list_sort_order_min ASC,
+    p.updated_at DESC
+LIMIT @pageSize OFFSET @offset";
+
+        // 总数查询 (CTE 复用, 单独 COUNT)
+        var countSql = $@"
+SELECT COUNT(*) FROM products p
+WHERE {whereSql}";
+
+        // 参数克隆 (countSql 复用 whereSql 参数, 但 sql 还需 pageSize/offset)
+        var countParams = parameters.Select(p => p.Clone()).ToList();
+        var listParams = parameters.ToList();
+        listParams.Add(new NpgsqlParameter("@pageSize", NpgsqlDbType.Integer) { Value = pageSize });
+        listParams.Add(new NpgsqlParameter("@offset", NpgsqlDbType.Integer) { Value = offset });
+
+        long total;
+        var items = new List<SearchResultItem>();
+        var conn = (NpgsqlConnection)_db.Database.GetDbConnection();
+        try
+        {
+            if (conn.State != System.Data.ConnectionState.Open)
+                await conn.OpenAsync(ct);
+
+            // 1. 总数
+            await using (var countCmd = new NpgsqlCommand(countSql, conn))
+            {
+                foreach (var p in countParams) countCmd.Parameters.Add(p);
+                countCmd.CommandTimeout = 30;
+                var result = await countCmd.ExecuteScalarAsync(ct);
+                total = result == null || result == DBNull.Value ? 0 : Convert.ToInt64(result);
+            }
+
+            // 2. 分页结果
+            await using (var listCmd = new NpgsqlCommand(sql, conn))
+            {
+                foreach (var p in listParams) listCmd.Parameters.Add(p);
+                listCmd.CommandTimeout = 30;
+                await using var reader = await listCmd.ExecuteReaderAsync(ct);
+                while (await reader.ReadAsync(ct))
+                {
+                    // V24-F80: mr_1 可能为 null, 用 IsDBNull 检查 (与 Product.Mr1 nullable 一致)
+                    var mr1Idx = reader.GetOrdinal("mr_1");
+                    var oemNoDisplayIdx = reader.GetOrdinal("oem_no_display");
+                    string oemNoDisplay;
+                    if (!reader.IsDBNull(mr1Idx))
+                    {
+                        oemNoDisplay = reader.GetString(mr1Idx);
+                    }
+                    else if (!reader.IsDBNull(oemNoDisplayIdx))
+                    {
+                        oemNoDisplay = reader.GetString(oemNoDisplayIdx);
+                    }
+                    else
+                    {
+                        oemNoDisplay = "";
+                    }
+                    items.Add(new SearchResultItem(
+                        reader.GetInt64(reader.GetOrdinal("id")),
+                        oemNoDisplay,
+                        reader.IsDBNull(reader.GetOrdinal("remark")) ? null : reader.GetString(reader.GetOrdinal("remark")),
+                        reader.GetString(reader.GetOrdinal("type")) ?? "UNKNOWN",
+                        reader.IsDBNull(reader.GetOrdinal("d1_mm")) ? null : reader.GetDecimal(reader.GetOrdinal("d1_mm")),
+                        reader.IsDBNull(reader.GetOrdinal("d2_mm")) ? null : reader.GetDecimal(reader.GetOrdinal("d2_mm")),
+                        reader.IsDBNull(reader.GetOrdinal("h1_mm")) ? null : reader.GetDecimal(reader.GetOrdinal("h1_mm")),
+                        reader.IsDBNull(reader.GetOrdinal("image_key")) ? null : reader.GetString(reader.GetOrdinal("image_key")),
+                        reader.GetBoolean(reader.GetOrdinal("is_discontinued"))
+                    ));
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "PostgresSearchProvider.SearchAsync SQL 执行失败, SQL: {Sql}", sql);
+            throw;
+        }
 
         sw.Stop();
         return new SearchResult(
@@ -151,154 +332,150 @@ public class PostgresSearchProvider : ISearchProvider
 
     /// <summary>
     /// V2 Task 1.2.7: 聚合搜索 PG 兜底 (Meili 离线时降级使用)
-    /// 与 MeiliSearchProvider.AggregateSearchAsync 对齐返回结构,但:
-    ///   - 无 typo 容错 (走 ILIKE 精确匹配 + 分词 OR)
-    ///   - _formatted 字段为 null (PG 不支持原生高亮,前端用原始字段渲染)
-    ///   - _rankingScore 固定 0.5 (PG 无相关性评分)
-    ///   - Provider="postgres" 标识
-    /// 实现复用 SearchAsync 的 LINQ 查询,补充 oem_list + machine_list 嵌套数组组装
+    /// V24-F80: 改用原生 SQL + LATERAL JOIN, 与 SearchAsync 复用 BuildWhereClause
     /// </summary>
     public async Task<AggregateSearchResponse> AggregateSearchAsync(AggregateSearchRequest req, CancellationToken ct = default)
     {
         var sw = Stopwatch.StartNew();
 
-        // 复用 SearchAsync 的查询构建逻辑 (WHERE + 尺寸 filter)
-        var q = _db.Products.AsNoTracking().Where(p => !p.IsDiscontinued && p.IsPublished);
+        // 复用 BuildWhereClause 构建 WHERE + 参数 (规则 3.2 绝对复用优先)
+        var (whereSql, parameters) = BuildWhereClause(
+            req.Q, req.Type,
+            req.D1, req.D2, req.D3,
+            req.H1, req.H2, req.H3,
+            req.D7Thread, req.D8Thread,
+            req.Tolerance, req.IncludeDiscontinued);
 
-        if (!string.IsNullOrWhiteSpace(req.Q))
-        {
-            var raw = req.Q.Trim();
-            // V24-F76: 同 SearchAsync, 不分词整体匹配 (避开 EF Core 8 嵌套 Any 翻译 bug)
-            var pattern = raw.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
-
-            q = q.Where(p =>
-                EF.Functions.ILike(p.ProductName1 ?? "", $"%{pattern}%", "\\") ||
-                EF.Functions.ILike(p.ProductName2 ?? "", $"%{pattern}%", "\\") ||
-                EF.Functions.ILike(p.Oem2 ?? "", $"%{pattern}%", "\\") ||
-                EF.Functions.ILike(p.Mr1 ?? "", $"%{pattern}%", "\\") ||
-                EF.Functions.ILike(p.Remark ?? "", $"%{pattern}%", "\\") ||
-                p.CrossReferences.Any(x =>
-                    EF.Functions.ILike(x.OemBrand ?? "", $"%{pattern}%", "\\") ||
-                    EF.Functions.ILike(x.OemNo3 ?? "", $"%{pattern}%", "\\") ||
-                    EF.Functions.ILike(x.Oem2 ?? "", $"%{pattern}%", "\\")) ||
-                p.MachineApplications.Any(m =>
-                    EF.Functions.ILike(m.MachineBrand ?? "", $"%{pattern}%", "\\") ||
-                    EF.Functions.ILike(m.MachineModel ?? "", $"%{pattern}%", "\\")));
-        }
-
-        if (!string.IsNullOrWhiteSpace(req.Type))
-            q = q.Where(p => p.Type == req.Type);
+        // 机型分类过滤 (聚合搜索独有)
         if (!string.IsNullOrWhiteSpace(req.MachineCategory))
-            q = q.Where(p => p.MachineApplications.Any(m => m.MachineCategory == req.MachineCategory));
-
-        if (req.D1.HasValue) { var t = req.Tolerance; q = q.Where(p => p.D1Mm >= req.D1 - t && p.D1Mm <= req.D1 + t); }
-        if (req.D2.HasValue) { var t = req.Tolerance; q = q.Where(p => p.D2Mm >= req.D2 - t && p.D2Mm <= req.D2 + t); }
-        if (req.D3.HasValue) { var t = req.Tolerance; q = q.Where(p => p.D3Mm >= req.D3 - t && p.D3Mm <= req.D3 + t); }
-        if (req.H1.HasValue) { var t = req.Tolerance; q = q.Where(p => p.H1Mm >= req.H1 - t && p.H1Mm <= req.H1 + t); }
-        if (req.H2.HasValue) { var t = req.Tolerance; q = q.Where(p => p.H2Mm >= req.H2 - t && p.H2Mm <= req.H2 + t); }
-        if (req.H3.HasValue) { var t = req.Tolerance; q = q.Where(p => p.H3Mm >= req.H3 - t && p.H3Mm <= req.H3 + t); }
-
-        // v24 修复: D7/D8 螺纹规格文本匹配 (与 MeiliSearchProvider.SearchAsync 对齐)
-        //   WHY ILIKE 模糊匹配: PG 兜底场景允许部分匹配 (如 "M14" 匹配 "M14×1.5"),Meili 用精确匹配
-        //   v24 架构清理: 改用 Core.Extensions.LikeEscapeExtensions (消除与 Api.EscapeLikePattern 重复)
-        if (!string.IsNullOrWhiteSpace(req.D7Thread))
         {
-            var pattern = req.D7Thread.EscapeLikePattern();
-            q = q.Where(p => p.D7Thread != null && EF.Functions.ILike(p.D7Thread, $"%{pattern}%", "\\"));
+            whereSql += " AND EXISTS (SELECT 1 FROM machine_applications m WHERE m.product_id = p.id AND m.machine_category = @machineCategory)";
+            parameters.Add(new NpgsqlParameter("@machineCategory", NpgsqlDbType.Text) { Value = req.MachineCategory });
         }
-        if (!string.IsNullOrWhiteSpace(req.D8Thread))
-        {
-            var pattern = req.D8Thread.EscapeLikePattern();
-            q = q.Where(p => p.D8Thread != null && EF.Functions.ILike(p.D8Thread, $"%{pattern}%", "\\"));
-        }
-
-        if (req.IncludeDiscontinued) q = q.IgnoreQueryFilters();
-
-        // V2: 要求至少有一个上架 OEM 3 (对齐 Meilisearch filter 语义)
-        q = q.Where(p => p.CrossReferences.Any(x => x.IsPublished && !x.IsDiscontinued));
 
         var page = Math.Max(1, req.Page);
         var pageSize = Math.Clamp(req.PageSize, 1, 100);
-        var total = await q.LongCountAsync(ct);
+        var offset = (page - 1) * pageSize;
 
-        // 取分页结果 (含排序: brand_sort_order_min → oem_list_sort_order_min → updated_at DESC)
-        //   V24-F76: 同 SearchAsync, 简化排序为 OrderByDescending(UpdatedAt) 避开 EF Core 8 翻译 bug
-        var pagedProducts = await q
-            .OrderByDescending(p => p.UpdatedAt)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .Select(p => new
-            {
-                p.Id,
-                p.Mr1,
-                p.ProductName1,
-                p.ProductName2,
-                p.Oem2,
-                p.Type,
-                p.Remark,
-                p.Media,
-                p.IsPublished,
-                p.IsDiscontinued
-            })
-            .ToListAsync(ct);
+        // 主查询: CTE + LATERAL JOIN 取分页产品 + 嵌套 OEM 3 / 机型列表
+        var sql = $@"
+WITH sort_cte AS (
+    SELECT
+        p.id AS product_id,
+        COALESCE(MIN(xb.sort_order), 2147483647) AS brand_sort_order_min,
+        COALESCE(MIN(x.sort_order), 2147483647) AS oem_list_sort_order_min
+    FROM products p
+    LEFT JOIN cross_references x ON x.product_id = p.id
+        AND x.is_published = true
+        AND x.is_discontinued = false
+    LEFT JOIN xref_oem_brand xb ON xb.brand = x.oem_brand
+        AND xb.deleted_at IS NULL
+    WHERE {whereSql}
+    GROUP BY p.id
+)
+SELECT
+    p.id, p.mr_1, p.product_name_1, p.product_name_2, p.oem_2, p.type,
+    p.remark, p.media, p.is_published, p.is_discontinued, p.updated_at,
+    -- LATERAL JOIN 聚合 OEM 3 列表 (JSON, 每产品最多 50, 避免笛卡尔积)
+    COALESCE(
+        (SELECT json_agg(row_to_json(t))
+         FROM (
+             SELECT x.oem_brand, x.oem_no_3, x.oem_2, x.sort_order, x.machine_type,
+                    x.is_published,
+                    (SELECT xb.sort_order FROM xref_oem_brand xb
+                     WHERE xb.brand = x.oem_brand AND xb.deleted_at IS NULL LIMIT 1) AS brand_sort_order
+             FROM cross_references x
+             WHERE x.product_id = p.id
+               AND x.is_discontinued = false
+             ORDER BY (SELECT xb.sort_order FROM xref_oem_brand xb
+                       WHERE xb.brand = x.oem_brand AND xb.deleted_at IS NULL LIMIT 1) NULLS LAST,
+                      x.sort_order ASC
+             LIMIT 50
+         ) t),
+        '[]'::json
+    ) AS oem_list_json,
+    -- LATERAL JOIN 聚合机型列表 (JSON, 去重, 每产品最多 50)
+    COALESCE(
+        (SELECT json_agg(row_to_json(t))
+         FROM (
+             SELECT DISTINCT m.machine_brand, m.machine_model, m.machine_category
+             FROM machine_applications m
+             WHERE m.product_id = p.id
+             LIMIT 50
+         ) t),
+        '[]'::json
+    ) AS machine_list_json
+FROM products p
+JOIN sort_cte s ON s.product_id = p.id
+ORDER BY
+    s.brand_sort_order_min ASC,
+    s.oem_list_sort_order_min ASC,
+    p.updated_at DESC
+LIMIT @pageSize OFFSET @offset";
 
-        // 批量查询 oem_list + machine_list (避免 N+1)
-        var productIds = pagedProducts.Select(p => p.Id).ToList();
-        var xrefs = await _db.CrossReferences.AsNoTracking()
-            .Where(x => productIds.Contains(x.ProductId) && !x.IsDiscontinued)
-            .Select(x => new
-            {
-                x.ProductId,
-                x.OemBrand,
-                x.OemNo3,
-                x.Oem2,
-                x.SortOrder,
-                x.MachineType,
-                x.IsPublished,
-                BrandSortOrder = _db.XrefOemBrands
-                    .Where(b => b.Brand == x.OemBrand && b.DeletedAt == null)
-                    .Select(b => (int?)b.SortOrder)
-                    .FirstOrDefault()
-            })
-            .ToListAsync(ct);
-        var machines = await _db.MachineApplications.AsNoTracking()
-            .Where(m => productIds.Contains(m.ProductId))
-            .Select(m => new { m.ProductId, m.MachineBrand, m.MachineModel, m.MachineCategory })
-            .Distinct()
-            .Take(50 * productIds.Count)  // 每产品最多 50 机型
-            .ToListAsync(ct);
+        var countSql = $@"SELECT COUNT(*) FROM products p WHERE {whereSql}";
 
-        // 组装 AggregateSearchHit 列表
-        var hits = pagedProducts.Select(p =>
+        // 参数克隆
+        var countParams = parameters.Select(p => p.Clone()).ToList();
+        var listParams = parameters.ToList();
+        listParams.Add(new NpgsqlParameter("@pageSize", NpgsqlDbType.Integer) { Value = pageSize });
+        listParams.Add(new NpgsqlParameter("@offset", NpgsqlDbType.Integer) { Value = offset });
+
+        long total;
+        var hits = new List<AggregateSearchHit>();
+        var conn = (NpgsqlConnection)_db.Database.GetDbConnection();
+        try
         {
-            // oem_list 按 brand_sort_order → sort_order 排序 (对齐 Meili BuildMr1DocumentAsync)
-            var pXrefs = xrefs
-                .Where(x => x.ProductId == p.Id)
-                .OrderBy(x => x.BrandSortOrder ?? int.MaxValue)
-                .ThenBy(x => x.SortOrder)
-                .Select(x => new AggregateOemItem(
-                    x.OemBrand, x.OemNo3, x.Oem2, x.SortOrder, x.MachineType, x.IsPublished, x.BrandSortOrder))
-                .ToList();
-            var pMachines = machines
-                .Where(m => m.ProductId == p.Id)
-                .Select(m => new AggregateMachineItem(m.MachineBrand, m.MachineModel, m.MachineCategory))
-                .ToList();
-            return new AggregateSearchHit(
-                Mr1: p.Mr1 ?? "",
-                ProductName1: p.ProductName1,
-                ProductName2: p.ProductName2,
-                Oem2: p.Oem2,
-                Type: p.Type ?? "UNKNOWN",
-                Remark: p.Remark,
-                Media: p.Media,
-                IsPublished: p.IsPublished,
-                IsDiscontinued: p.IsDiscontinued,
-                OemList: pXrefs,
-                MachineList: pMachines,
-                Formatted: null,  // PG 无原生高亮
-                RankingScore: 0.5  // PG 兜底固定评分
-            );
-        }).ToList();
+            if (conn.State != System.Data.ConnectionState.Open)
+                await conn.OpenAsync(ct);
+
+            // 1. 总数
+            await using (var countCmd = new NpgsqlCommand(countSql, conn))
+            {
+                foreach (var p in countParams) countCmd.Parameters.Add(p);
+                countCmd.CommandTimeout = 30;
+                var result = await countCmd.ExecuteScalarAsync(ct);
+                total = result == null || result == DBNull.Value ? 0 : Convert.ToInt64(result);
+            }
+
+            // 2. 分页结果
+            await using (var listCmd = new NpgsqlCommand(sql, conn))
+            {
+                foreach (var p in listParams) listCmd.Parameters.Add(p);
+                listCmd.CommandTimeout = 30;
+                await using var reader = await listCmd.ExecuteReaderAsync(ct);
+                while (await reader.ReadAsync(ct))
+                {
+                    var oemList = ParseOemListJson(reader, "oem_list_json");
+                    var machineList = ParseMachineListJson(reader, "machine_list_json");
+
+                    // V24-F80: mr_1 可能为 null, 用 IsDBNull 检查
+                    var mr1Idx = reader.GetOrdinal("mr_1");
+                    var mr1 = reader.IsDBNull(mr1Idx) ? "" : reader.GetString(mr1Idx);
+
+                    hits.Add(new AggregateSearchHit(
+                        Mr1: mr1,
+                        ProductName1: reader.IsDBNull(reader.GetOrdinal("product_name_1")) ? null : reader.GetString(reader.GetOrdinal("product_name_1")),
+                        ProductName2: reader.IsDBNull(reader.GetOrdinal("product_name_2")) ? null : reader.GetString(reader.GetOrdinal("product_name_2")),
+                        Oem2: reader.IsDBNull(reader.GetOrdinal("oem_2")) ? null : reader.GetString(reader.GetOrdinal("oem_2")),
+                        Type: reader.GetString(reader.GetOrdinal("type")) ?? "UNKNOWN",
+                        Remark: reader.IsDBNull(reader.GetOrdinal("remark")) ? null : reader.GetString(reader.GetOrdinal("remark")),
+                        Media: reader.IsDBNull(reader.GetOrdinal("media")) ? null : reader.GetString(reader.GetOrdinal("media")),
+                        IsPublished: reader.GetBoolean(reader.GetOrdinal("is_published")),
+                        IsDiscontinued: reader.GetBoolean(reader.GetOrdinal("is_discontinued")),
+                        OemList: oemList,
+                        MachineList: machineList,
+                        Formatted: null,  // PG 无原生高亮
+                        RankingScore: 0.5  // PG 兜底固定评分
+                    ));
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "PostgresSearchProvider.AggregateSearchAsync SQL 执行失败, SQL: {Sql}", sql);
+            throw;
+        }
 
         sw.Stop();
         return new AggregateSearchResponse(
@@ -310,6 +487,62 @@ public class PostgresSearchProvider : ISearchProvider
             Provider: "postgres",
             Hits: hits
         );
+    }
+
+    private static List<AggregateOemItem> ParseOemListJson(NpgsqlDataReader reader, string columnName)
+    {
+        var colIdx = reader.GetOrdinal(columnName);
+        if (reader.IsDBNull(colIdx)) return new List<AggregateOemItem>();
+        var json = reader.GetString(colIdx);
+        if (string.IsNullOrWhiteSpace(json) || json == "[]") return new List<AggregateOemItem>();
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var result = new List<AggregateOemItem>();
+            foreach (var el in doc.RootElement.EnumerateArray())
+            {
+                result.Add(new AggregateOemItem(
+                    OemBrand: el.TryGetProperty("oem_brand", out var b) && b.ValueKind == JsonValueKind.String ? b.GetString() : null,
+                    OemNo3: el.TryGetProperty("oem_no_3", out var n) && n.ValueKind == JsonValueKind.String ? n.GetString() : null,
+                    Oem2: el.TryGetProperty("oem_2", out var o) && o.ValueKind == JsonValueKind.String ? o.GetString() : null,
+                    SortOrder: el.TryGetProperty("sort_order", out var s) && s.ValueKind == JsonValueKind.Number ? s.GetInt32() : 0,
+                    MachineType: el.TryGetProperty("machine_type", out var m) && m.ValueKind == JsonValueKind.String ? m.GetString() : null,
+                    IsPublished: el.TryGetProperty("is_published", out var p) && p.ValueKind == JsonValueKind.True,
+                    BrandSortOrder: el.TryGetProperty("brand_sort_order", out var bs) && bs.ValueKind == JsonValueKind.Number ? bs.GetInt32() : (int?)null
+                ));
+            }
+            return result;
+        }
+        catch
+        {
+            return new List<AggregateOemItem>();
+        }
+    }
+
+    private static List<AggregateMachineItem> ParseMachineListJson(NpgsqlDataReader reader, string columnName)
+    {
+        var colIdx = reader.GetOrdinal(columnName);
+        if (reader.IsDBNull(colIdx)) return new List<AggregateMachineItem>();
+        var json = reader.GetString(colIdx);
+        if (string.IsNullOrWhiteSpace(json) || json == "[]") return new List<AggregateMachineItem>();
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var result = new List<AggregateMachineItem>();
+            foreach (var el in doc.RootElement.EnumerateArray())
+            {
+                result.Add(new AggregateMachineItem(
+                    MachineBrand: el.TryGetProperty("machine_brand", out var b) && b.ValueKind == JsonValueKind.String ? b.GetString() : null,
+                    MachineModel: el.TryGetProperty("machine_model", out var m) && m.ValueKind == JsonValueKind.String ? m.GetString() : null,
+                    MachineCategory: el.TryGetProperty("machine_category", out var c) && c.ValueKind == JsonValueKind.String ? c.GetString() : null
+                ));
+            }
+            return result;
+        }
+        catch
+        {
+            return new List<AggregateMachineItem>();
+        }
     }
 
     /// <summary>

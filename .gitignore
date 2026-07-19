@@ -84,6 +84,10 @@ spike-test/_ux_audit_*.html
 # 临时 app 响应快照 (Vite HMR / 调试用)
 spike-test/_app_resp.txt
 spike-test/_app_*.txt
+# V24-F77 E2E 巡检截图 (根目录, 可重建, 不提交)
+# WHY: 21 个前端页面快照, 每次巡检都重新生成, 提交会污染历史
+/_verify_*.png
+/_verify_*.json
 
 ## 操作系统
 .DS_Store
