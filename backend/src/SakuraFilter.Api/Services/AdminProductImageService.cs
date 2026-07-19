@@ -254,14 +254,13 @@ public class AdminProductImageService
         await tx.CommitAsync(ct);
 
         // ===== 4. 异步删旧文件 =====
+        // V24-F84 (spec 26.17.2 P1-5 MVP): 改用 SafeDeleteOldImageAsync 含重试 + 结构化日志
+        //   WHY 增强: 原 fire-and-forget 单次失败仅 LogWarning, 旧 key 永久成为孤儿
+        //   方案 A: 不扩展 IObjectStorage 接口, 不引入新表/Service, 仅增强内部容错
+        //   重试: 3 次 (1s/2s/4s 指数退避); 失败时 LogError 含 context 便于人工排查
         if (!string.IsNullOrEmpty(oldKeyToDelete) && oldKeyToDelete != key)
         {
-            var staleKey = oldKeyToDelete;
-            _ = Task.Run(async () =>
-            {
-                try { await _storage.DeleteAsync(staleKey); }
-                catch (Exception ex) { _logger.LogWarning(ex, "旧图删除失败 key={Key}", staleKey); }
-            });
+            _ = SafeDeleteOldImageAsync(oldKeyToDelete, $"覆盖上传 mr1={mr1} role={imageRole} slot={slot}");
         }
 
         _logger.LogInformation("V2 产品图上传成功 mr1={Mr1} role={Role} oemNo3={OemNo3} slot={Slot} key={Key}",
@@ -301,12 +300,9 @@ public class AdminProductImageService
         }
 
         // 异步删文件
+        // V24-F84 (spec 26.17.2 P1-5 MVP): 同 UploadAsync, 改用 SafeDeleteOldImageAsync 增强容错
         var key = img.ImageKey;
-        _ = Task.Run(async () =>
-        {
-            try { await _storage.DeleteAsync(key); }
-            catch (Exception ex) { _logger.LogWarning(ex, "图文件删除失败 key={Key}", key); }
-        });
+        _ = SafeDeleteOldImageAsync(key, $"DeleteAsync mr1={mr1} role={imageRole} slot={slot}");
         _logger.LogInformation("V2 产品图删除 mr1={Mr1} role={Role} slot={Slot} key={Key}", mr1, imageRole, slot, key);
     }
 
@@ -343,6 +339,57 @@ public class AdminProductImageService
         {
             return "";
         }
+    }
+
+    /// <summary>
+    /// V24-F84 (spec 26.17.2 P1-5 MVP): 异步删除旧图片文件, 含 3 次重试 + 结构化日志
+    ///
+    /// WHY 增强 (替代原 fire-and-forget Task.Run):
+    ///   - 原: 单次失败仅 LogWarning, 旧 key 永久成为孤儿
+    ///   - 新: 3 次重试 (1s/2s/4s 指数退避), 失败时 LogError 含 context 便于人工排查
+    ///
+    /// WHY 不扩展 IObjectStorage 接口 (与 spec 26.3.2 决策一致):
+    ///   - 仅增强内部容错, 不污染所有 IObjectStorage 消费方
+    ///   - 不引入 cleanup_failures 表 / BackgroundService / 状态机 (与 spec 26.4.1 v8 终态区分)
+    ///
+    /// 适用场景:
+    ///   - UploadAsync 覆盖上传后删旧 key (旧 key 已不在 DB, 删失败即孤儿)
+    ///   - DeleteAsync 删 DB 行后删文件 key (DB 已清, 删失败即孤儿)
+    ///
+    /// 注: 仍为 fire-and-forget, 调用方不等待. 重试过程异步执行, 不阻塞业务请求
+    /// </summary>
+    /// <param name="key">S3 key</param>
+    /// <param name="context">业务上下文 (含 mr1/role/slot), 仅用于日志</param>
+    private async Task SafeDeleteOldImageAsync(string key, string context)
+    {
+        // 指数退避: 1s / 2s / 4s (共 3 次重试, 总耗时 ≤ 7s)
+        var delays = new[] { 1000, 2000, 4000 };
+        Exception? lastEx = null;
+
+        for (var attempt = 0; attempt <= delays.Length; attempt++)
+        {
+            try
+            {
+                await _storage.DeleteAsync(key);
+                if (attempt > 0)
+                {
+                    _logger.LogInformation("旧图删除第 {Attempt} 次重试成功 key={Key} context={Context}",
+                        attempt + 1, key, context);
+                }
+                return;  // 成功即退出
+            }
+            catch (Exception ex)
+            {
+                lastEx = ex;
+                if (attempt < delays.Length)
+                {
+                    await Task.Delay(delays[attempt]);
+                }
+            }
+        }
+
+        // 3 次重试均失败: LogError 含 context, 便于运维从日志检索孤儿 key 人工清理
+        _logger.LogError(lastEx, "旧图删除 3 次重试均失败, 已成为孤儿 key={Key} context={Context}", key, context);
     }
 
     private static ProductImageInfo ToInfo(ProductImage i, string url) => new(

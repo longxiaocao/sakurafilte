@@ -762,4 +762,91 @@ public class AdminProductImageServiceTests
         result.Should().HaveCount(1);
         result[0].ImageUrl.Should().Be("");
     }
+
+    // ==================== V24-F84: SafeDeleteOldImageAsync 重试逻辑 ====================
+
+    /// <summary>
+    /// V24-F84 (spec 26.17.2 P1-5 MVP): 覆盖上传后删旧文件, 第 2 次重试成功
+    ///   验证: DeleteAsync 被调用 2 次 (1 初次失败 + 1 重试成功), 不抛异常
+    ///   注: 测试耗时约 1s (Task.Delay(1000) 等待第 1 次重试)
+    /// </summary>
+    [Fact]
+    public async Task UploadAsync_OverwriteDeleteOldFileFailsOnce_RetriesAndSucceeds()
+    {
+        // Arrange: 预插产品 + 详情图 slot=2
+        await using var db = CreateInMemoryDb();
+        db.Products.Add(CreateProduct());
+        const string oldKey = "products/detail/MR000001/MR000001-2.jpg";
+        db.ProductImages.Add(new ProductImage
+        {
+            ProductId = 1, Slot = 2, ImageRole = "detail",
+            ImageKey = oldKey, ContentType = "image/jpeg",
+            FileSize = 1024, UploadedAt = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        // Mock: DeleteAsync 第 1 次抛异常, 第 2 次成功
+        var storageMock = CreateStorageMock();
+        var deleteCallCount = 0;
+        storageMock.Setup(s => s.DeleteAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns(() =>
+            {
+                deleteCallCount++;
+                if (deleteCallCount == 1)
+                    throw new InvalidOperationException("S3 临时不可用");
+                return Task.CompletedTask;
+            });
+        var sut = CreateSut(db, storageMock: storageMock);
+
+        // Act: 覆盖上传 (触发删旧 key)
+        await sut.UploadAsync("MR000001", "detail", null, slot: 2,
+            CreateImageStream(), "image/png", "tester");
+
+        // Assert: 等待 fire-and-forget 完成 (1s Task.Delay + 重试)
+        //   WHY 等待 1.5s: 第 1 次失败后 Task.Delay(1000) + 第 2 次调用
+        await Task.Delay(1500);
+        deleteCallCount.Should().Be(2, "第 1 次失败 + 第 2 次重试成功");
+    }
+
+    /// <summary>
+    /// V24-F84 (spec 26.17.2 P1-5 MVP): 覆盖上传后删旧文件, 3 次重试均失败
+    ///   验证: DeleteAsync 被调用 4 次 (1 初次 + 3 重试), 不抛异常 (fire-and-forget)
+    ///   注: 测试耗时约 7s (Task.Delay 1s + 2s + 4s)
+    /// </summary>
+    [Fact]
+    public async Task UploadAsync_OverwriteDeleteOldFileAlwaysFails_Retries3TimesAndLogsError()
+    {
+        // Arrange: 预插产品 + 详情图 slot=3
+        await using var db = CreateInMemoryDb();
+        db.Products.Add(CreateProduct());
+        const string oldKey = "products/detail/MR000001/MR000001-3.jpg";
+        db.ProductImages.Add(new ProductImage
+        {
+            ProductId = 1, Slot = 3, ImageRole = "detail",
+            ImageKey = oldKey, ContentType = "image/jpeg",
+            FileSize = 1024, UploadedAt = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        // Mock: DeleteAsync 总是抛异常
+        var storageMock = CreateStorageMock();
+        var deleteCallCount = 0;
+        storageMock.Setup(s => s.DeleteAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("S3 永久不可用"))
+            .Callback(() => deleteCallCount++);
+        var sut = CreateSut(db, storageMock: storageMock);
+
+        // Act: 覆盖上传 (触发删旧 key)
+        await sut.UploadAsync("MR000001", "detail", null, slot: 3,
+            CreateImageStream(), "image/png", "tester");
+
+        // Assert: 等待 fire-and-forget 完成 (1s + 2s + 4s + 4 次调用)
+        //   WHY 等待 8s: 第 1 次失败 + Task.Delay(1000) + 第 2 次失败 + Task.Delay(2000)
+        //                + 第 3 次失败 + Task.Delay(4000) + 第 4 次失败 (最终 LogError)
+        await Task.Delay(8000);
+        deleteCallCount.Should().Be(4, "1 初次失败 + 3 次重试均失败 = 共 4 次调用");
+
+        // 注: LogError 的验证需要 ILogger Mock, 此处仅验证调用次数 (核心重试逻辑)
+        //   LogError 调用的间接证据: 4 次 DeleteAsync 调用后方法返回 (不抛异常, fire-and-forget)
+    }
 }
