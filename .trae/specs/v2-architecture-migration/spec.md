@@ -15314,6 +15314,141 @@ P1-6 (CI 覆盖率) ──→ 独立, CI 配置改动
 - **建议中期投入**: P1-3 + P1-4 + P1-7 同批实施 — 共用 Testcontainers PG 基础设施
 - **建议长期演进**: P1-2 (Phase 1 原生 SQL) — 与 spec Task 1.2.9-1.2.11 合并实施
 
+## 26.18 v26 改进实施记录(批次一 — SSE 401 修复 + CI 覆盖率聚合)
+
+**实施时间**: 2026-07-18
+**触发场景**: 用户"持续处理"指令, 推进 26.17.2 中 P1-1 (SSE 401) + P1-6 (CI 覆盖率) 两项独立任务。
+**核心成果**: AdminEtlView SSE 401 修复 (fetch+ReadableStream 替代 EventSource), CI 前后端覆盖率聚合 (reportgenerator 合并)。
+
+### 26.18.1 V24-F78: SSE 401 修复 (P1-1)
+
+**问题**: AdminEtlView 的 [useEtlProgress.ts](file:///d:/projects/sakurafilter/frontend/src/composables/useEtlProgress.ts) 调用 `new EventSource('/api/admin/etl/progress/stream')` 返回 401, ETL 进度无法实时推送 (详见 26.16.5)。
+
+**根因**: 浏览器 `EventSource` API 不支持自定义 Header, 无法携带 JWT `Authorization: Bearer <token>`。
+
+**方案选择** (详见 26.16.5):
+- 方案 A: 改用 `fetch + ReadableStream` 替代 `EventSource` ✅ (选用, 不改后端)
+- 方案 B: 后端 SSE 端点支持 query token (token 泄漏风险)
+- 方案 C: 后端 SSE 端点支持 cookie auth (需后端改动)
+
+**实施细节**:
+- [http.ts](file:///d:/projects/sakurafilter/frontend/src/utils/http.ts) 新增 `buildAuthHeaders()` 导出函数, 复用 axios 拦截器的 JWT/X-Admin-Token 双轨鉴权逻辑 (规则 3.2 复用优先)
+- [useEtlProgress.ts](file:///d:/projects/sakurafilter/frontend/src/composables/useEtlProgress.ts) 重写 SSE 连接逻辑:
+  - `fetch(SSE_ENDPOINT, { headers: buildAuthHeaders() })` 携带 JWT
+  - `ReadableStream.getReader()` + `TextDecoder` 流式读取
+  - `processSseChunk()` 解析 SSE 格式 (`data: {json}\n\n` 业务消息, `: keepalive\n\n` 注释心跳)
+  - `AbortController` 替代 `EventSource.close()` 用于断开
+  - 指数退避自动重连 (1s→2s→4s→8s→16s→30s 封顶, 替代 EventSource 浏览器内建重连)
+  - 401 不重连 (token 失效, 由 http.ts 拦截器处理 refresh/跳登录)
+
+**抽取纯函数供单元测试**:
+- `parseSseChunk<T>(text, lineBuffer): T[]` — SSE chunk 解析, 处理跨 chunk 不完整行
+- `computeReconnectDelay(attempts): number` — 指数退避延迟计算
+
+**单元测试**: [useEtlProgress.test.ts](file:///d:/projects/sakurafilter/frontend/tests/unit/useEtlProgress.test.ts) — 14 测试 (8 parseSseChunk + 6 computeReconnectDelay)
+
+**E2E 验证**: [_verify_sse_fix.py](file:///d:/projects/sakurafilter/spike-test/_e2e_audit/_verify_sse_fix.py)
+- SSE 请求头: `Authorization: Bearer eyJhbGc...` ✅
+- SSE 响应: `200 OK` ✅ (之前 401)
+- 无 console error/warning
+
+### 26.18.2 V24-F79: CI 覆盖率聚合 (P1-6)
+
+**问题**: V24-F70 已在后端 CI 添加 `--collect:"XPlat Code Coverage"` 收集 cobertura, 但前端无覆盖率收集, 且无合并报告 (spec 26.15.7 建议 2 未完成部分)。
+
+**实施细节**:
+1. **前端覆盖率收集**:
+   - [package.json](file:///d:/projects/sakurafilter/frontend/package.json) 添加 `@vitest/coverage-v8` devDependency (V8 引擎原生支持, 比 istanbul 快)
+   - [vitest.config.ts](file:///d:/projects/sakurafilter/frontend/vitest.config.ts) 添加 coverage 配置:
+     - `provider: 'v8'`, `reporter: ['text', 'cobertura', 'html']`
+     - `include: ['src/**/*.{ts,vue}']`
+     - `exclude`: main.ts / i18n / generated-types.ts (无可测逻辑或自动生成)
+
+2. **CI workflow 修改** ([ci.yml](file:///d:/projects/sakurafilter/.github/workflows/ci.yml)):
+   - 前端 job 步骤改为 `npx vitest run tests/unit/ --coverage`
+   - 新增 `Upload frontend coverage` 步骤 (artifact)
+   - 新增 `coverage` job (Job 4, `needs: [backend, frontend]`):
+     - 下载前后端 cobertura artifact
+     - 用 `reportgenerator` 合并为 Cobertura + Html + TextSummary
+     - CI 日志打印 `Summary.txt` 覆盖率摘要
+     - 上传 `merged-coverage` artifact 供下载
+
+3. **.gitignore 排除覆盖率产物**:
+   - `frontend/coverage/`
+   - `backend/tests/**/TestResults/`
+
+**当前覆盖率基线** (本地运行):
+- 前端 All files: 8.01% lines / 5.74% statements / 5.94% functions / 9.17% branches
+- 后端 Service 覆盖率: 24% (11/45 Service 有测试, V24-F65~F68 已提升)
+- **不设硬门禁**: 实际覆盖率远低于 spec 60% 目标, 仅收集报告, 后续逐步提升后再设阈值
+
+### 26.18.3 验证结果
+
+```
+前端类型检查 (vue-tsc --noEmit):
+  通过, 0 错误
+
+前端单元测试:
+  cd frontend && npx vitest run tests/unit/
+  Test Files  16 passed (16)
+       Tests  258 passed (258)  (+14 V24-F78 新增)
+
+前端覆盖率 (本地):
+  cd frontend && npx vitest run tests/unit/ --coverage
+  All files | 8.01% | 5.74% | 5.94% | 9.17%
+  cobertura-coverage.xml: 739KB
+
+E2E SSE 401 验证:
+  python spike-test/_e2e_audit/_verify_sse_fix.py
+  SSE 请求头: Authorization: Bearer eyJhbGc...
+  SSE 响应: 200 OK
+  PASS: SSE 返回 200, 401 已修复
+```
+
+### 26.18.4 v26 改进批次一文件清单
+
+**修改 (7)**:
+- `frontend/src/utils/http.ts` (V24-F78: buildAuthHeaders 导出)
+- `frontend/src/composables/useEtlProgress.ts` (V24-F78: fetch+ReadableStream 替代 EventSource)
+- `frontend/package.json` (V24-F79: @vitest/coverage-v8 devDependency)
+- `frontend/package-lock.json` (V24-F79: npm install 生成)
+- `frontend/vitest.config.ts` (V24-F79: coverage 配置)
+- `.github/workflows/ci.yml` (V24-F79: 前端 --coverage + coverage job)
+- `.gitignore` (V24-F79: 排除 coverage 产物)
+
+**新增 (2)**:
+- `frontend/tests/unit/useEtlProgress.test.ts` (V24-F78: 14 单测)
+- `spike-test/_e2e_audit/_verify_sse_fix.py` (V24-F78: SSE 修复验证脚本)
+
+**Git commit**: `c1dc012` (2026-07-18, 9 files, +709/-72)
+
+### 26.18.5 v26 改进批次一总结 (累计)
+
+| 维度 | 数据 |
+|---|---|
+| 累计 V24-Fx 实施数 | F14 ~ F79 (含本轮 2 项, 已实施 66 项, 废弃 4 项) |
+| 前端单元测试 | 258 / 258 通过 (+14 V24-F78) |
+| 前端覆盖率 | 8.01% lines (基线, 待提升) |
+| 后端覆盖率 | 24% Service (基线, 待提升) |
+| E2E SSE 401 | 已修复 (200 OK) |
+| CI 覆盖率 | 前后端聚合 + reportgenerator 合并 (不设门禁) |
+
+### 26.18.6 💡 改进建议 (后续 v26+ 决策)
+
+1. **覆盖率门禁**: 当前仅收集不门禁, 待核心 Service 覆盖率达 40%+ 后, 在 reportgenerator 添加 `-thresholds` 参数硬门禁 (spec 26.15.7 建议 2 完整实施)。
+
+2. **Codecov/Coveralls 上传**: 需配置 `secrets.CODECOV_TOKEN`, 可视化历史趋势。当前仅 artifact 归档, 无法跨 build 对比。
+
+3. **SSE 长连接稳定性**: V24-F78 用 `fetch+ReadableStream` 替代 `EventSource`, 浏览器对 fetch 流的重连行为与 EventSource 不同 (EventSource 有内建重连, fetch 需手动实现)。已用指数退避覆盖, 但需观察生产环境长跑稳定性 (尤其网络抖动场景)。
+
+4. **SSE 后端 cookie auth (方案 C)**: 当前用前端 fetch+ReadableStream 绕过 EventSource 限制, 但后端 SSE 端点 (`AdminEtlEndpoints.cs` L208) 仍直接挂在 `app.MapGet` 而非 admin group, 缺少 `RequireAuthorization("Admin")` 显式声明。建议后续:
+   - 将 SSE 端点移入 admin group, 显式 `RequireAuthorization`
+   - 或保持现状 (前端已强制携带 JWT, 安全等价)
+
+5. **26.17 任务清单更新**: P1-1 (SSE 401) + P1-6 (CI 覆盖率) 已完成, 26.17.2 P1 列表剩余 5 项 (P1-2/3/4/5/7), 均需 Testcontainers PG 或 Phase 1 原生 SQL, 留待后续批次。
+
+---
+
 
 
 
