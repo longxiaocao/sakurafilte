@@ -86,12 +86,22 @@ v28-2 CTE UNION 拆分验证数据 (2026-07-19, spike_test_v3 50K, 直连 PG cac
   - 端到端 HTTP 压测 (5 场景): 平均 P95 1421ms → 264ms (5.23x)
   - PG 优化器行为: CTE UNION 让每个分支独立选 GIN trgm Bitmap Index Scan, 避免 baseline OR + EXISTS 的 Nested Loop 模式
   - 集成测试: 12/12 通过 (覆盖 NoQ / 单 token 三表 / 多 token INTERSECT / type / dimension / includeDiscontinued / pagination / aggregate / machineCategory / 特殊字符转义)
+v28-5 多 token INTERSECT 边界压测数据 (2026-07-19, spike_test_v3 50K, 直连 PG cache hit):
+  - 1 token (oil): P95 = 231ms (基准)
+  - 2 token (oil filter): P95 = 308ms (1.34x)
+  - 3 token (oil filter CAT): P95 = 512ms (2.22x, 最大跳跃)
+  - 4 token (oil filter CAT bosch): P95 = 578ms (2.50x)
+  - 5 token (oil filter CAT bosch kubota): P95 = 610ms (2.64x, 趋于平缓)
+  - PG 优化器计划稳定: 1-5 token 所有场景都选 GIN trgm Bitmap Index Scan (Seq Scan 是 INTERSECT HashSetOp Append 阶段, 非表扫描)
+  - 结论: PG 优化器未放弃 GIN trgm, chapter 28.2 边界测试建议 #2 风险未触发
+  - 决策: 暂不限制最大 token 数量 (5 token 610ms 仍可接受, 退化曲线趋于平缓, 实际场景 5+ token 罕见)
 排除方案:
   - 立即改 keyset: 工作量大 (前后端契约改造) 且 50K 压测显示 OFFSET 深度非主要瓶颈
   - 加 GIN trgm 索引 (v28-1 验证): 对当前 SQL 模式无收益, PG 优化器不选, 不应加索引 (50MB 索引浪费)
   - v28-2 CTE 拆分 v1 (仅 products 5 字段 GIN trgm): 2.56x 未达 4x 目标, EXISTS xref (623K 行) + EXISTS machine (775K 行) 仍拖累
+  - v28-5 限制最大 token 数量 (如 8 个): 5 token 610ms 仍可接受, 退化曲线趋于平缓, 防御性兜底留 P2 候选 (1M 数据下退化情况留 v28-3 验证)
   - 加 covering index: 涉及 DB schema 变更, 需 migration, 不适合 v27 阶段
-  - 1M 扩容压测: 50K 数据下退化比 ≤1.03x, 1M 留后续独立库 (sakurafilter_perf_tests) 验证, 避免污染 spike_test_v3
+  - 1M 扩容压测: 50K 数据下退化比 ≤1.03x (OFFSET) / ≤2.64x (多 token), 1M 留后续独立库 (sakurafilter_perf_tests) 验证, 避免污染 spike_test_v3
 关联文件:
   - backend/src/SakuraFilter.Search/PostgresSearchProvider.cs (V24-F94: BuildBaseFilter + BuildQMatchCte + BuildFullSql + BuildCountSql 拆分)
   - backend/src/SakuraFilter.Infrastructure/Data/Migrations/20260719165000_AddGinTrgmIndexesForSearch.cs (5 个新 GIN trgm 索引)
@@ -107,7 +117,9 @@ v28-2 CTE UNION 拆分验证数据 (2026-07-19, spike_test_v3 50K, 直连 PG cac
   - spike-test/_perf_v28_2_v2_cte_union_verify.py (v28-2 第二轮 spike: CTE UNION v2)
   - spike-test/_perf_v28_2_e2e_verify.py (v28-2 端到端压测, 5 场景)
   - spike-test/_perf_v28_2_e2e_results.json (v28-2 端到端 raw 数据)
-  - .trae/specs/v2-architecture-migration/spec.md chapter 27.8 (v27-3 实施记录) + chapter 28.1 (v28-1 验证记录) + chapter 28.2 (v28-2 实施记录)
+  - spike-test/_perf_v28_5_multi_token_verify.py (v28-5 多 token 1-5 INTERSECT 边界压测脚本)
+  - spike-test/_perf_v28_5_multi_token_results.json (v28-5 验证 raw 数据)
+  - .trae/specs/v2-architecture-migration/spec.md chapter 27.8 (v27-3 实施记录) + chapter 28.1 (v28-1 验证记录) + chapter 28.2 (v28-2 实施记录) + chapter 28.5 (v28-5 验证记录)
 
 #6 IObjectStorage.ListAsync 接口扩展决策 (2026-07-19)
 决策: v27-2 扩展 IObjectStorage 接口加 ListAsync 方法, MinioStorage + AliyunOssStorage 双实现

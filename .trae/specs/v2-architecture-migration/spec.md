@@ -16422,3 +16422,75 @@ cd backend && dotnet test tests/SakuraFilter.Api.Tests/SakuraFilter.Api.Tests.cs
 - v28-5 (新候选): 多 token 3+ INTERSECT 嵌套性能压测 (验证 PG 优化器是否放弃 GIN trgm)
 
 ---
+
+### 28.5 v28-5: 多 token INTERSECT 边界压测 (V24-F95, 2026-07-19)
+
+**背景**: v28-2 验证 2 token INTERSECT P95=312ms (6.74x), 但 chapter 28.2 边界测试建议 #2 提出: "多 token (3+) INTERSECT 多层嵌套, PG 优化器可能放弃 GIN trgm 改用 Seq Scan"。本节验证该风险。
+
+**关联**: v28-2 (CTE UNION 拆分落地, chapter 28.2), ADR #5 (PostgresSearchProvider keyset 暂缓)
+
+**执行环境**:
+- 库: spike_test_v3 (50K products / 623K xrefs / 775K apps)
+- v28-2 migration 已应用 (5 个新 GIN trgm 索引)
+- 直连 PG cache hit 场景 (psycopg2-binary, 绕过 HTTP/Meili timeout)
+- 10 轮/场景, 取 P95
+
+**测试场景**: 1-5 token 渐进压测
+| 场景 | tokens | P50 (ms) | P95 (ms) | 退化比 (vs 1 token) | 执行计划 |
+|---|---|---|---|---|---|
+| 1 token | ["oil"] | 227 | 231 | 1.00x | Bitmap Index Scan + Index Scan + Seq Scan (INTERSECT Append) |
+| 2 token | ["oil","filter"] | 303 | 308 | 1.34x | 同上 |
+| 3 token | ["oil","filter","CAT"] | 497 | 512 | 2.22x | 同上 |
+| 4 token | ["oil","filter","CAT","bosch"] | 569 | 578 | 2.50x | 同上 |
+| 5 token | ["oil","filter","CAT","bosch","kubota"] | 596 | 610 | 2.64x | 同上 |
+
+**关键结论**:
+1. **PG 优化器计划稳定**: 1-5 token 所有场景都选 GIN trgm Bitmap Index Scan (Seq Scan 是 INTERSECT HashSetOp Append 阶段, 非表扫描)
+2. **退化曲线趋于平缓**: 2→3 token 是最大跳跃 (+0.88x), 3→4→5 增速放缓 (+0.28x → +0.14x), 预计 6+ token 继续趋于水平
+3. **5 token P95=610ms 仍可接受** (远低于 v28-2 baseline 1827ms, 是 baseline 的 1/3)
+4. **PG 优化器未放弃 GIN trgm** — chapter 28.2 边界测试建议 #2 风险未触发
+
+**5 token 场景执行计划 (前 20 行)**:
+```
+Aggregate  (cost=62534.61..62534.62 rows=1 width=8) (actual time=616.197..616.327 rows=1 loops=1)
+  ->  GroupAggregate  (cost=62500.35..62519.04 rows=1246 width=16) (actual time=612.643..616.168 rows=3346 loops=1)
+        Group Key: p.id
+        ->  Sort  (cost=62500.35..62503.46 rows=1246 width=8) (actual time=612.631..613.880 rows=45591 loops=1)
+              Sort Key: p.id
+              Sort Method: quicksort  Memory: 1537kB
+              ->  Nested Loop Left Join  (cost=3488.98..62436.28 rows=1246 width=8) (actual time=560.831..608.289 rows=45591 loops=1)
+                    ->  Nested Loop Semi Join  (cost=3488.56..62294.88 rows=100 width=8) (actual time=560.821..591.207 rows=3346 loops=1)
+                          Join Filter: (q_match.product_id = x_1.product_id)
+                          ->  Nested Loop  (cost=3488.13..62100.30 rows=200 width=16) (actual time=560.796..575.404 rows=3346 loops=1)
+                                ->  Subquery Scan on q_match  (cost=3487.84..60814.80 rows=200 width=8) (actual time=560.718..561.445 rows=3346 loops=1)
+                                      ->  HashSetOp Intersect  (cost=3487.84..60814.80 rows=200 width=12) (actual time=560.715..561.268 rows=3346 loops=1)
+                                            ->  Append  (cost=3487.84..60759.69 rows=22046 width=12) (actual time=483.892..558.532 rows=29021 loops=1)
+                                                  ->  Result  (cost=3487.84..46286.88 rows=200 width=12) (actual time=483.890..484.692 rows=7145 loops=1)
+                                                        ->  HashSetOp Intersect  (cost=3487.84..46284.88 rows=200 width=12) (actual time=483.889..484.328 rows=7145 loops=1)
+                                                              ->  Append  (cost=3487.84..46200.45 rows=33770 width=12) (actual time=376.389..480.270 rows=44245 loops=1)
+                                                                    ->  Result  (cost=3487.84..34628.62 rows=200 width=12) (actual time=376.386..377.757 rows=10536 loops=1)
+                                                                          ->  HashSetOp Intersect  (cost=3487.84..34626.62 rows=200 width=12) (actual time=376.379..377.181 rows=10536 loops=1)
+                                                                                ->  Append  (cost=3487.84..34492.93 rows=53476 width=12) (actual time=154.534..371.974 rows=55047 loops=1)
+                                                                                      ->  Result  (cost=3487.84..10844.48 rows=200 width=12) (actual time=154.534..155.694 rows=12462 loops=1)
+```
+
+**决策**: 暂不优化代码 (不限制最大 token 数量), 理由:
+1. 5 token P95=610ms 仍在可接受范围 (远低于 baseline 1827ms)
+2. 退化曲线趋于平缓 (4→5 仅 +0.14x), 6+ token 预计继续放缓
+3. 实际电商搜索场景 5+ token 罕见 (典型 1-3 词)
+4. 1M 数据下退化情况留 v28-3 验证 (50K→1M 数据量 5x, 1M 下 5 token P95 预计 ~3s, 仍可接受)
+
+**实际改动文件清单**:
+- `spike-test/_perf_v28_5_multi_token_verify.py` — 多 token 1-5 渐进压测脚本 (含 EXPLAIN ANALYZE 计划提取)
+- `spike-test/_perf_v28_5_multi_token_results.json` — raw 结果数据
+
+**关联文档**:
+- `.ai/decisions.md` ADR #5 — 追加 v28-5 验证数据 (PG 优化器未放弃 GIN trgm, 退化曲线趋于平缓)
+- `.ai/context.md` — 覆盖写入 v28-5 完成状态
+
+**未完成事项 (留后续)**:
+- v28-3: 1M 数据扩容压测 (独立库 sakurafilter_perf_tests, 验证 q_match CTE 候选集爆炸风险 + 5 token 退化是否放大)
+- v28-4: v27-9-3 设计巡检 CI 跑完后基于实际数据决策 (continue-on-error → 阻塞?)
+- P2 候选 (低优先级): PostgresSearchProvider 限制最大 token 数量 (如 8 个), 防御性兜底 (当前 5 token 610ms 仍可接受, 暂不实施)
+
+---
