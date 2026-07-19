@@ -60,19 +60,31 @@
   - backend/tests/SakuraFilter.Api.Tests/Integration/AdminProductImageServiceIntegrationTests.cs (V24-F83)
   - .env (PG_TEST_CONNECTION_STRING 指向 sakurafilter_int_tests)
 
-#5 PostgresSearchProvider Phase 2 keyset 分页暂缓 (2026-07-19)
-决策: v27-1 暂不实施 keyset 分页改造, 保留 OFFSET 分页, 待 v27-3 压测验证后再决策
+#5 PostgresSearchProvider Phase 2 keyset 分页暂缓 (2026-07-19, 50K 压测验证 2026-07-19)
+决策: v27-1 暂不实施 keyset 分页改造, 保留 OFFSET 分页; v27-3 50K 压测后维持暂缓决策, 1M 扩容验证留后续
 理由:
   - 当前 SearchRequest DTO 用 Page/PageSize 页式分页, 前端依赖 Page 契约
   - 改 keyset 需破坏前端 Page 契约或引入 cursor 参数, 改动面大
   - 真实用户行为: 搜索结果 99% 在前 5 页内 (典型电商行为), 深分页场景罕见
   - V24-F80 Phase 1 原生 SQL + CTE + LATERAL JOIN 已优化首屏性能, 深分页性能问题需压测数据支撑
+v27-3 50K 压测数据 (2026-07-19, spike_test_v3: 50011 products/623134 xrefs/775053 apps):
+  - OFFSET 深度退化比 (控制变量法, 同场景深档 P95 / 浅档 P95): 最大 1.03x (type_oil), baseline 0.96x, q_filter 1.01x
+  - 结论: 50K 数据下 OFFSET 深度本身不是主要瓶颈 (≤1.5x 暂缓阈值)
+  - 真实瓶颈识别: q_filter ILIKE 全表扫描 1879ms > baseline CTE+LATERAL JOIN 510ms > OFFSET 深度 (1.03x)
+  - keyset 简化版潜力: 17-5932x (baseline 31.6x / type_oil 19.2x / q_filter 5932x / size_d1_100 54.9x), 但真实三层排序 keyset 改造需前后端契约改造
+  - 优先级反转: 加 GIN trgm 索引 (q_filter 1850ms → 预计 50-200ms) 收益大于 keyset 改造, 改动更小
 排除方案:
-  - 立即改 keyset: 工作量大 (前后端契约改造) 且缺乏压测数据支撑收益
+  - 立即改 keyset: 工作量大 (前后端契约改造) 且 50K 压测显示 OFFSET 深度非主要瓶颈
   - 加 covering index: 涉及 DB schema 变更, 需 migration, 不适合 v27 阶段
+  - 1M 扩容压测: 50K 数据下退化比 ≤1.03x, 1M 留后续独立库 (sakurafilter_perf_tests) 验证, 避免污染 spike_test_v3
 关联文件:
   - backend/src/SakuraFilter.Search/PostgresSearchProvider.cs L20/L224 (TODO 标注)
   - backend/src/SakuraFilter.Core/DTOs/SearchRequest.cs (Page/PageSize 契约)
+  - spike-test/perf_offset_config.json (压测参数化配置)
+  - spike-test/_perf_offset_paging.py (压测脚本, derive_advice 控制变量法)
+  - spike-test/_perf_offset_results.json (raw 数据)
+  - spike-test/_perf_offset_report.md (人读报告 + ADR #5 决策建议)
+  - .trae/specs/v2-architecture-migration/spec.md chapter 27.8 (完整实施记录)
 
 #6 IObjectStorage.ListAsync 接口扩展决策 (2026-07-19)
 决策: v27-2 扩展 IObjectStorage 接口加 ListAsync 方法, MinioStorage + AliyunOssStorage 双实现

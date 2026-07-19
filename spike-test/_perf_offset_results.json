@@ -1,0 +1,686 @@
+{
+  "test_time": "2026-07-19T14:33:02.381535+08:00",
+  "config": {
+    "_comment": "v27-3 OFFSET 分页压测参数化配置 (ADR #5 决策依据)",
+    "_usage": "python _perf_offset_paging.py [--scale-up] [--repeats N] [--output-dir .]",
+    "pg": {
+      "host": "localhost",
+      "port": 5432,
+      "database": "spike_test_v3",
+      "user": "postgres",
+      "password": "784533"
+    },
+    "_scale_note": "scale_to_millions 触发时扩容到 1M products + 5M xref + 1M apps (符合 hard constraint)",
+    "scale_to_millions": false,
+    "scale_target": {
+      "products": 1000000,
+      "xrefs_per_product": 5,
+      "apps_per_product": 2
+    },
+    "_offsets_note": "OFFSET 深度档位 (50K 数据下最深 40000, 1M 数据下可加 100000/500000)",
+    "offsets": [
+      0,
+      200,
+      1000,
+      5000,
+      10000,
+      20000,
+      40000
+    ],
+    "page_size": 20,
+    "repeats": 5,
+    "warmup_repeats": 2,
+    "_scenarios_note": "where_extra 加在基础 WHERE (is_published + EXISTS xref) 之后, 模拟不同查询条件",
+    "scenarios": [
+      {
+        "name": "baseline",
+        "desc": "无额外过滤 (仅 is_published + EXISTS xref)",
+        "where_extra": ""
+      },
+      {
+        "name": "type_oil",
+        "desc": "type='OIL FILTER' 分类过滤 (实际 type 值含 FILTER 后缀)",
+        "where_extra": "AND p.type = 'OIL FILTER'"
+      },
+      {
+        "name": "q_filter",
+        "desc": "关键词模糊 (product_name_1 ILIKE '%FILTER%')",
+        "where_extra": "AND p.product_name_1 ILIKE '%FILTER%'"
+      },
+      {
+        "name": "size_d1_100",
+        "desc": "尺寸范围 (d1_mm BETWEEN 95 AND 105, ±5mm 容差)",
+        "where_extra": "AND p.d1_mm BETWEEN 95 AND 105"
+      },
+      {
+        "name": "composite",
+        "desc": "组合查询 (type + 尺寸, 最差场景)",
+        "where_extra": "AND p.type = 'OIL FILTER' AND p.d1_mm BETWEEN 95 AND 105"
+      }
+    ],
+    "_keyset_note": "keyset 简化对比: WHERE p.id > :last_id (id 单调递增, 不模拟三层排序完整 keyset)",
+    "keyset_compare": true,
+    "keyset_last_id_offset": 10000
+  },
+  "data_volume": {
+    "products": 50011,
+    "xrefs": 623134,
+    "apps": 775053
+  },
+  "scenarios": [
+    {
+      "scenario": "baseline",
+      "desc": "无额外过滤 (仅 is_published + EXISTS xref)",
+      "total": 49919,
+      "count_ms": 95.41,
+      "offset_results": [
+        {
+          "offset": 0,
+          "page_size": 20,
+          "rows_returned": 20,
+          "min_ms": 516.63,
+          "max_ms": 555.91,
+          "mean_ms": 531.73,
+          "median_ms": 528.8,
+          "p95_ms": 552.72,
+          "p99_ms": 555.28,
+          "all_ms": [
+            517.35,
+            516.63,
+            528.8,
+            539.95,
+            555.91
+          ]
+        },
+        {
+          "offset": 200,
+          "page_size": 20,
+          "rows_returned": 20,
+          "min_ms": 712.18,
+          "max_ms": 833.02,
+          "mean_ms": 767.43,
+          "median_ms": 765.82,
+          "p95_ms": 825.26,
+          "p99_ms": 831.47,
+          "all_ms": [
+            833.02,
+            731.86,
+            712.18,
+            794.26,
+            765.82
+          ]
+        },
+        {
+          "offset": 1000,
+          "page_size": 20,
+          "rows_returned": 20,
+          "min_ms": 597.62,
+          "max_ms": 718.95,
+          "mean_ms": 647.56,
+          "median_ms": 604.86,
+          "p95_ms": 718.24,
+          "p99_ms": 718.81,
+          "all_ms": [
+            604.86,
+            715.41,
+            600.96,
+            597.62,
+            718.95
+          ]
+        },
+        {
+          "offset": 5000,
+          "page_size": 20,
+          "rows_returned": 20,
+          "min_ms": 517.23,
+          "max_ms": 524.37,
+          "mean_ms": 520.96,
+          "median_ms": 522.62,
+          "p95_ms": 524.04,
+          "p99_ms": 524.3,
+          "all_ms": [
+            522.62,
+            517.82,
+            524.37,
+            522.75,
+            517.23
+          ]
+        },
+        {
+          "offset": 10000,
+          "page_size": 20,
+          "rows_returned": 20,
+          "min_ms": 517.83,
+          "max_ms": 523.5,
+          "mean_ms": 520.86,
+          "median_ms": 521.74,
+          "p95_ms": 523.27,
+          "p99_ms": 523.45,
+          "all_ms": [
+            523.5,
+            518.9,
+            521.74,
+            517.83,
+            522.35
+          ]
+        },
+        {
+          "offset": 20000,
+          "page_size": 20,
+          "rows_returned": 20,
+          "min_ms": 526.67,
+          "max_ms": 536.82,
+          "mean_ms": 531.5,
+          "median_ms": 531.14,
+          "p95_ms": 536.26,
+          "p99_ms": 536.7,
+          "all_ms": [
+            536.82,
+            534.03,
+            526.67,
+            528.85,
+            531.14
+          ]
+        },
+        {
+          "offset": 40000,
+          "page_size": 20,
+          "rows_returned": 20,
+          "min_ms": 520.8,
+          "max_ms": 530.4,
+          "mean_ms": 524.27,
+          "median_ms": 523.54,
+          "p95_ms": 529.43,
+          "p99_ms": 530.21,
+          "all_ms": [
+            530.4,
+            520.8,
+            523.54,
+            521.08,
+            525.55
+          ]
+        }
+      ],
+      "keyset_results": [
+        {
+          "last_id": 10001,
+          "page_size": 20,
+          "rows_returned": 20,
+          "min_ms": 16.1,
+          "max_ms": 16.61,
+          "mean_ms": 16.38,
+          "median_ms": 16.4,
+          "p95_ms": 16.58,
+          "p99_ms": 16.61,
+          "all_ms": [
+            16.4,
+            16.45,
+            16.61,
+            16.1,
+            16.35
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": "type_oil",
+      "desc": "type='OIL FILTER' 分类过滤 (实际 type 值含 FILTER 后缀)",
+      "total": 9435,
+      "count_ms": 17.51,
+      "offset_results": [
+        {
+          "offset": 0,
+          "page_size": 20,
+          "rows_returned": 20,
+          "min_ms": 302.1,
+          "max_ms": 305.31,
+          "mean_ms": 304.0,
+          "median_ms": 305.1,
+          "p95_ms": 305.29,
+          "p99_ms": 305.31,
+          "all_ms": [
+            305.1,
+            302.26,
+            305.31,
+            302.1,
+            305.22
+          ]
+        },
+        {
+          "offset": 200,
+          "page_size": 20,
+          "rows_returned": 20,
+          "min_ms": 299.28,
+          "max_ms": 305.81,
+          "mean_ms": 302.2,
+          "median_ms": 301.82,
+          "p95_ms": 305.18,
+          "p99_ms": 305.69,
+          "all_ms": [
+            302.64,
+            305.81,
+            299.28,
+            301.82,
+            301.47
+          ]
+        },
+        {
+          "offset": 1000,
+          "page_size": 20,
+          "rows_returned": 20,
+          "min_ms": 302.12,
+          "max_ms": 313.65,
+          "mean_ms": 305.35,
+          "median_ms": 302.43,
+          "p95_ms": 312.15,
+          "p99_ms": 313.35,
+          "all_ms": [
+            313.65,
+            302.43,
+            302.38,
+            302.12,
+            306.15
+          ]
+        },
+        {
+          "offset": 5000,
+          "page_size": 20,
+          "rows_returned": 20,
+          "min_ms": 307.42,
+          "max_ms": 316.42,
+          "mean_ms": 311.53,
+          "median_ms": 310.41,
+          "p95_ms": 315.93,
+          "p99_ms": 316.32,
+          "all_ms": [
+            313.99,
+            307.42,
+            316.42,
+            309.42,
+            310.41
+          ]
+        },
+        {
+          "offset": 10000,
+          "skipped": true,
+          "reason": "offset >= total (9435)"
+        },
+        {
+          "offset": 20000,
+          "skipped": true,
+          "reason": "offset >= total (9435)"
+        },
+        {
+          "offset": 40000,
+          "skipped": true,
+          "reason": "offset >= total (9435)"
+        }
+      ],
+      "keyset_results": [
+        {
+          "last_id": 10001,
+          "page_size": 20,
+          "rows_returned": 20,
+          "min_ms": 15.79,
+          "max_ms": 16.28,
+          "mean_ms": 16.05,
+          "median_ms": 16.05,
+          "p95_ms": 16.24,
+          "p99_ms": 16.27,
+          "all_ms": [
+            16.05,
+            16.09,
+            16.28,
+            15.79,
+            16.02
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": "q_filter",
+      "desc": "关键词模糊 (product_name_1 ILIKE '%FILTER%')",
+      "total": 40372,
+      "count_ms": 110.03,
+      "offset_results": [
+        {
+          "offset": 0,
+          "page_size": 20,
+          "rows_returned": 20,
+          "min_ms": 1849.42,
+          "max_ms": 1881.87,
+          "mean_ms": 1863.64,
+          "median_ms": 1866.08,
+          "p95_ms": 1879.09,
+          "p99_ms": 1881.31,
+          "all_ms": [
+            1849.42,
+            1881.87,
+            1852.89,
+            1867.97,
+            1866.08
+          ]
+        },
+        {
+          "offset": 200,
+          "page_size": 20,
+          "rows_returned": 20,
+          "min_ms": 1837.15,
+          "max_ms": 1891.09,
+          "mean_ms": 1860.76,
+          "median_ms": 1858.16,
+          "p95_ms": 1884.75,
+          "p99_ms": 1889.82,
+          "all_ms": [
+            1859.35,
+            1837.15,
+            1891.09,
+            1858.16,
+            1858.03
+          ]
+        },
+        {
+          "offset": 1000,
+          "page_size": 20,
+          "rows_returned": 20,
+          "min_ms": 1828.16,
+          "max_ms": 1859.8,
+          "mean_ms": 1843.99,
+          "median_ms": 1844.91,
+          "p95_ms": 1859.55,
+          "p99_ms": 1859.75,
+          "all_ms": [
+            1859.8,
+            1858.54,
+            1844.91,
+            1828.16,
+            1828.54
+          ]
+        },
+        {
+          "offset": 5000,
+          "page_size": 20,
+          "rows_returned": 20,
+          "min_ms": 1835.07,
+          "max_ms": 1862.38,
+          "mean_ms": 1849.27,
+          "median_ms": 1849.92,
+          "p95_ms": 1862.07,
+          "p99_ms": 1862.32,
+          "all_ms": [
+            1849.92,
+            1838.12,
+            1835.07,
+            1860.86,
+            1862.38
+          ]
+        },
+        {
+          "offset": 10000,
+          "page_size": 20,
+          "rows_returned": 20,
+          "min_ms": 1811.59,
+          "max_ms": 1906.72,
+          "mean_ms": 1854.61,
+          "median_ms": 1860.92,
+          "p95_ms": 1898.34,
+          "p99_ms": 1905.05,
+          "all_ms": [
+            1811.59,
+            1828.98,
+            1860.92,
+            1864.83,
+            1906.72
+          ]
+        },
+        {
+          "offset": 20000,
+          "page_size": 20,
+          "rows_returned": 20,
+          "min_ms": 1882.96,
+          "max_ms": 1898.14,
+          "mean_ms": 1893.22,
+          "median_ms": 1894.94,
+          "p95_ms": 1897.85,
+          "p99_ms": 1898.08,
+          "all_ms": [
+            1894.94,
+            1893.39,
+            1896.7,
+            1898.14,
+            1882.96
+          ]
+        },
+        {
+          "offset": 40000,
+          "page_size": 20,
+          "rows_returned": 20,
+          "min_ms": 1850.08,
+          "max_ms": 1903.98,
+          "mean_ms": 1870.78,
+          "median_ms": 1869.52,
+          "p95_ms": 1897.45,
+          "p99_ms": 1902.67,
+          "all_ms": [
+            1871.35,
+            1850.08,
+            1858.98,
+            1869.52,
+            1903.98
+          ]
+        }
+      ],
+      "keyset_results": [
+        {
+          "last_id": 10001,
+          "page_size": 20,
+          "rows_returned": 20,
+          "min_ms": 0.28,
+          "max_ms": 0.32,
+          "mean_ms": 0.3,
+          "median_ms": 0.3,
+          "p95_ms": 0.32,
+          "p99_ms": 0.32,
+          "all_ms": [
+            0.32,
+            0.31,
+            0.3,
+            0.29,
+            0.28
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": "size_d1_100",
+      "desc": "尺寸范围 (d1_mm BETWEEN 95 AND 105, ±5mm 容差)",
+      "total": 1843,
+      "count_ms": 5.22,
+      "offset_results": [
+        {
+          "offset": 0,
+          "page_size": 20,
+          "rows_returned": 20,
+          "min_ms": 257.49,
+          "max_ms": 265.79,
+          "mean_ms": 261.23,
+          "median_ms": 260.85,
+          "p95_ms": 264.86,
+          "p99_ms": 265.6,
+          "all_ms": [
+            265.79,
+            260.84,
+            257.49,
+            261.15,
+            260.85
+          ]
+        },
+        {
+          "offset": 200,
+          "page_size": 20,
+          "rows_returned": 20,
+          "min_ms": 259.88,
+          "max_ms": 271.09,
+          "mean_ms": 263.99,
+          "median_ms": 263.17,
+          "p95_ms": 269.59,
+          "p99_ms": 270.79,
+          "all_ms": [
+            263.59,
+            259.88,
+            262.23,
+            263.17,
+            271.09
+          ]
+        },
+        {
+          "offset": 1000,
+          "page_size": 20,
+          "rows_returned": 20,
+          "min_ms": 256.44,
+          "max_ms": 270.1,
+          "mean_ms": 260.15,
+          "median_ms": 257.97,
+          "p95_ms": 267.75,
+          "p99_ms": 269.63,
+          "all_ms": [
+            270.1,
+            256.44,
+            257.87,
+            257.97,
+            258.37
+          ]
+        },
+        {
+          "offset": 5000,
+          "skipped": true,
+          "reason": "offset >= total (1843)"
+        },
+        {
+          "offset": 10000,
+          "skipped": true,
+          "reason": "offset >= total (1843)"
+        },
+        {
+          "offset": 20000,
+          "skipped": true,
+          "reason": "offset >= total (1843)"
+        },
+        {
+          "offset": 40000,
+          "skipped": true,
+          "reason": "offset >= total (1843)"
+        }
+      ],
+      "keyset_results": [
+        {
+          "last_id": 10001,
+          "page_size": 20,
+          "rows_returned": 20,
+          "min_ms": 4.4,
+          "max_ms": 4.92,
+          "mean_ms": 4.63,
+          "median_ms": 4.72,
+          "p95_ms": 4.88,
+          "p99_ms": 4.91,
+          "all_ms": [
+            4.4,
+            4.92,
+            4.74,
+            4.72,
+            4.4
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": "composite",
+      "desc": "组合查询 (type + 尺寸, 最差场景)",
+      "total": 345,
+      "count_ms": 1.47,
+      "offset_results": [
+        {
+          "offset": 0,
+          "page_size": 20,
+          "rows_returned": 20,
+          "min_ms": 17.3,
+          "max_ms": 17.56,
+          "mean_ms": 17.43,
+          "median_ms": 17.46,
+          "p95_ms": 17.56,
+          "p99_ms": 17.56,
+          "all_ms": [
+            17.56,
+            17.31,
+            17.3,
+            17.54,
+            17.46
+          ]
+        },
+        {
+          "offset": 200,
+          "page_size": 20,
+          "rows_returned": 20,
+          "min_ms": 17.1,
+          "max_ms": 17.66,
+          "mean_ms": 17.3,
+          "median_ms": 17.28,
+          "p95_ms": 17.59,
+          "p99_ms": 17.65,
+          "all_ms": [
+            17.18,
+            17.28,
+            17.3,
+            17.1,
+            17.66
+          ]
+        },
+        {
+          "offset": 1000,
+          "skipped": true,
+          "reason": "offset >= total (345)"
+        },
+        {
+          "offset": 5000,
+          "skipped": true,
+          "reason": "offset >= total (345)"
+        },
+        {
+          "offset": 10000,
+          "skipped": true,
+          "reason": "offset >= total (345)"
+        },
+        {
+          "offset": 20000,
+          "skipped": true,
+          "reason": "offset >= total (345)"
+        },
+        {
+          "offset": 40000,
+          "skipped": true,
+          "reason": "offset >= total (345)"
+        }
+      ],
+      "keyset_results": [
+        {
+          "last_id": 10001,
+          "page_size": 20,
+          "rows_returned": 20,
+          "min_ms": 0.93,
+          "max_ms": 1.17,
+          "mean_ms": 1.06,
+          "median_ms": 1.08,
+          "p95_ms": 1.17,
+          "p99_ms": 1.17,
+          "all_ms": [
+            1.17,
+            1.16,
+            0.97,
+            0.93,
+            1.08
+          ]
+        }
+      ]
+    }
+  ]
+}

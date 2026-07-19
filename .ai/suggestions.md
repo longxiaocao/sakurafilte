@@ -12,6 +12,8 @@
 - [2026-07-19] [P2] 前端 v-for key 静态规则: 建议在 ESLint vue/require-v-for-key 基础上加自定义规则禁止 :key="i" (V24-F86 仅 3 处手工修复) | 触发文件: frontend/eslint.config.js (待新增规则)
 - [2026-07-19] [P2-3] E2E 巡检 (_design_audit.py + _api_contract_test.py) 纳入 CI 需 Testcontainers PG, 与 ADR #4 冲突, 待用户决策反转 ADR #4 | 触发文件: .github/workflows/ci.yml
 - [2026-07-19] [P2-10] ProductDbContext 拆分 Alert* 实体到 AlertDbContext, 长期重构, v27+ 重新评估 | 触发文件: backend/src/SakuraFilter.Infrastructure/Data/ProductDbContext.cs
-- [2026-07-19] [v27-1] PostgresSearchProvider Phase 2 keyset 分页 — 需先压测 OFFSET 深分页性能 (1M 数据 page>100), 决策是否破坏前端 Page 契约引入 cursor 参数 | 触发文件: backend/src/SakuraFilter.Search/PostgresSearchProvider.cs L224
+- [2026-07-19] [v27-1] PostgresSearchProvider Phase 2 keyset 分页 — 50K 压测已完成 (OFFSET 深度退化比 1.03x, 维持暂缓决策, 见 ADR #5), 1M 扩容验证留后续独立库 sakurafilter_perf_tests | 触发文件: backend/src/SakuraFilter.Search/PostgresSearchProvider.cs L224
+- [2026-07-19] [v27-3 后续] 1M 数据扩容压测: 50K 数据下 OFFSET 深度退化 ≤1.03x, 需在独立库 (sakurafilter_perf_tests) 验证 1M 规模下深分页 (OFFSET > 100000) 是否显著退化, 避免污染 spike_test_v3 | 触发文件: spike-test/_perf_offset_paging.py (--scale-up 参数已就绪)
+- [2026-07-19] [v27-3 后续] GIN trgm 索引验证: q_filter 场景 ILIKE 全表扫描 1879ms 是真实瓶颈, 加 `CREATE INDEX idx_products_pn1_trgm ON products USING gin (product_name_1 gin_trgm_ops)` 预计降到 50-200ms (见 docs/bench-baseline.md §7.2 P1), 收益大于 keyset 改造 | 触发文件: backend/src/SakuraFilter.Search/PostgresSearchProvider.cs (ILIKE 查询路径)
 - [2026-07-19] [v27-2 后续] CleanupOrphanImages CLI 当前需手动执行, 后续可加 cron (如每周一次) 自动清理, 或在 K8s CronJob 中部署 | 触发文件: backend/src/SakuraFilter.Cli/Program.cs
 - [2026-07-19] [v27-2 后续] IObjectStorage.ListAsync 仅用于 CLI, 未对 AdminProductImageService 等业务层暴露, 后续若有 UI 列桶需求需补单元测试 | 触发文件: backend/src/SakuraFilter.Core/Interfaces/IObjectStorage.cs

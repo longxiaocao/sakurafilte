@@ -1,0 +1,60 @@
+{
+  "_comment": "v27-3 OFFSET 分页压测参数化配置 (ADR #5 决策依据)",
+  "_usage": "python _perf_offset_paging.py [--scale-up] [--repeats N] [--output-dir .]",
+
+  "pg": {
+    "host": "localhost",
+    "port": 5432,
+    "database": "spike_test_v3",
+    "user": "postgres",
+    "password": "784533"
+  },
+
+  "_scale_note": "scale_to_millions 触发时扩容到 1M products + 5M xref + 1M apps (符合 hard constraint)",
+  "scale_to_millions": false,
+  "scale_target": {
+    "products": 1000000,
+    "xrefs_per_product": 5,
+    "apps_per_product": 2
+  },
+
+  "_offsets_note": "OFFSET 深度档位 (50K 数据下最深 40000, 1M 数据下可加 100000/500000)",
+  "offsets": [0, 200, 1000, 5000, 10000, 20000, 40000],
+
+  "page_size": 20,
+  "repeats": 5,
+  "warmup_repeats": 2,
+
+  "_scenarios_note": "where_extra 加在基础 WHERE (is_published + EXISTS xref) 之后, 模拟不同查询条件",
+  "scenarios": [
+    {
+      "name": "baseline",
+      "desc": "无额外过滤 (仅 is_published + EXISTS xref)",
+      "where_extra": ""
+    },
+    {
+      "name": "type_oil",
+      "desc": "type='OIL FILTER' 分类过滤 (实际 type 值含 FILTER 后缀)",
+      "where_extra": "AND p.type = 'OIL FILTER'"
+    },
+    {
+      "name": "q_filter",
+      "desc": "关键词模糊 (product_name_1 ILIKE '%FILTER%')",
+      "where_extra": "AND p.product_name_1 ILIKE '%FILTER%'"
+    },
+    {
+      "name": "size_d1_100",
+      "desc": "尺寸范围 (d1_mm BETWEEN 95 AND 105, ±5mm 容差)",
+      "where_extra": "AND p.d1_mm BETWEEN 95 AND 105"
+    },
+    {
+      "name": "composite",
+      "desc": "组合查询 (type + 尺寸, 最差场景)",
+      "where_extra": "AND p.type = 'OIL FILTER' AND p.d1_mm BETWEEN 95 AND 105"
+    }
+  ],
+
+  "_keyset_note": "keyset 简化对比: WHERE p.id > :last_id (id 单调递增, 不模拟三层排序完整 keyset)",
+  "keyset_compare": true,
+  "keyset_last_id_offset": 10000
+}
