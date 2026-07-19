@@ -16170,3 +16170,98 @@ python _e2e_audit/_design_audit.py                  # 需 Python playwright + ch
 - _design_audit.py 的 has_action_button 函数是粗略检查, 未来可改用 Vue devtools 或 axe-core 替代
 
 ---
+
+### 28.1 v28-1: GIN trgm 索引验证 (V24-F93, 2026-07-19, 重要负面结果)
+
+**实施时间**: 2026-07-19
+**目标**: 验证 v27-3 提出的"加 GIN trgm 索引将 q_filter 1879ms → 50-200ms"假设
+**关联**: v27-3 (50K 压测识别 q_filter 真实瓶颈), ADR #5 (PostgresSearchProvider keyset 暂缓)
+
+**预期 vs 实际**:
+- 预期: 加 GIN trgm 索引后 P95 从 197ms → 50-200ms (10-37x 提升)
+- 实际: 加索引后 P95 ≈ 197ms (无收益), PG 优化器不选用 GIN trgm 索引
+
+**验证步骤** (3 轮迭代):
+
+#### V1: 基础对比 (10 个 GIN trgm 索引)
+- baseline (无索引): P95=980ms (Seq Scan)
+- after (有 10 个 GIN trgm 索引): P95=1822ms (Seq Scan, 反而更慢!)
+- 结论: PG 优化器未选 GIN trgm 索引, 加索引反而拖慢 (索引创建耗时 6.2s + ANALYZE 统计信息变化)
+
+#### V2: 强制走索引 (enable_seqscan=off)
+- 5 个 q (oil/filter/CAT/bosch/kubota) 对比 baseline vs force_index
+- 平均 P95: baseline=1361ms | force_idx=1485ms (强制索引反而更慢)
+- 执行计划分析: 即使 enable_seqscan=off, PG 仍用 `idx_products_is_published_true` (B-tree) + Filter ILIKE, 不用 GIN trgm
+- 真实瓶颈定位: Nested Loop + 2 个 EXISTS SubPlan (49989 产品 × 37459 次循环)
+
+#### V3: 3 种 SQL 写法对比 + 简化 SQL 加 GIN trgm
+| SQL 写法 | P95 (5 个 q 平均) | 执行计划 |
+|---|---|---|
+| baseline (OR + EXISTS xref) | 197ms | Index Scan (idx_products_is_published_true) + Seq Scan (xref) |
+| UNION ALL 重写 | 316ms | 多个 Index Scan + HashAggregate (重写后反而更慢) |
+| 简化 (无 EXISTS xref) | 124ms | Seq Scan (products) + Filter ILIKE |
+| 简化 + GIN trgm 索引 | 20ms | **Bitmap Index Scan** (GIN trgm 被选用) |
+
+**关键发现**:
+1. **GIN trgm 索引对简化 SQL 有效**: 5 字段 OR ILIKE + GIN trgm → Bitmap Index Scan, P95 从 124ms → 20ms (6x 提升)
+2. **GIN trgm 索引对当前 baseline SQL 无效**: EXISTS 子查询的 Nested Loop 模式让 PG 优化器优先选 `idx_products_is_published_true` (B-tree), GIN trgm 单字段索引无法在 Nested Loop 内层发挥作用
+3. **真实瓶颈不是 ILIKE 全表扫描, 而是 EXISTS 子查询**: 49989 个产品逐行跑 2 个 EXISTS (xref + machine_applications), 即使每行只用 0.02ms, 累计 2s
+
+**根因分析** (PostgresSearchProvider.cs L106-L137 BuildWhereClause q 块):
+```sql
+-- 当前 SQL 结构 (简化)
+SELECT ... FROM products p
+WHERE p.is_published = true
+  AND EXISTS (SELECT 1 FROM cross_references x WHERE x.product_id = p.id ...)
+  AND (
+      p.product_name_1 ILIKE '%q%' OR
+      ... (5 字段)
+      OR EXISTS (SELECT 1 FROM cross_references x WHERE x.product_id = p.id AND (x.oem_brand ILIKE '%q%' OR ...))
+      OR EXISTS (SELECT 1 FROM machine_applications m WHERE m.product_id = p.id AND (m.machine_brand ILIKE '%q%' OR ...))
+  )
+```
+- 外层 `p.is_published=true` 让 PG 选 `idx_products_is_published_true` 过滤
+- 内层 EXISTS 子查询让 PG 走 Nested Loop (外层每行 → 内层 Index Scan idx_xref_product)
+- GIN trgm 索引在 Nested Loop 内层无法被选 (因为外层已用 B-tree 过滤, 内层是关联子查询)
+
+**决策**: 不加 GIN trgm 索引 (验证显示无收益, 50MB 索引浪费), 不改 PostgresSearchProvider (改造成本高)
+
+**真实优化方向 (留 v28-2)**:
+- **SQL 拆分重写**: 先用 GIN trgm 扫 products 5 字段得到候选 product_id 集合 → 半 JOIN cross_references 走 idx_xref_product B-tree
+- 预期 P95: 197ms → 20-50ms (4-10x)
+- 改动面: PostgresSearchProvider.cs BuildWhereClause + SearchAsync 重写 + 加 GIN trgm migration
+- 风险: 改 SQL 后排序/分页/总数查询都需重写, 测试覆盖率要求高
+
+**文件清单**:
+- `spike-test/_perf_gin_trgm_verify_v3.py` — 3 种 SQL 写法对比验证脚本 (保留, 供 v28-2 参考)
+- `spike-test/_perf_gin_trgm_v3_results.json` — 验证 raw 数据 (保留)
+- `.ai/decisions.md` ADR #5 — 追加 v28-1 验证结论
+- `.ai/suggestions.md` — 标记 v27-3 GIN trgm 建议已弃用, 追加 v28-2 SQL 拆分重写候选
+
+**验证结果**:
+- 50K 数据 (spike_test_v3) 下, baseline P95=197ms (cache hit) / 1879ms (HTTP 端到端, 含 Meili 切换, v27-3 数据)
+- 当前可接受: 197ms 远低于用户感知阈值 (1s)
+- 1M 数据下退化风险: 5x 数据量, 预计 P95 → ~1s (1M 扩容压测留 v28-3)
+
+**关联需求**:
+- spec 26.17.3 P2-3 v27-3 后续 (GIN trgm 验证): ✅ 完成 (验证显示无收益, 弃用此方向)
+- ADR #5 (PostgresSearchProvider keyset 暂缓): 追加 v28-1 验证数据, 维持暂缓决策
+- v28-2 (PostgresSearchProvider SQL 拆分重写): 新候选方向
+
+**🧪 冒烟验证**:
+```bash
+cd spike-test && python _perf_gin_trgm_verify_v3.py
+# 预期: 输出 3 种 SQL 写法的 P95 对比表, 验证 GIN trgm 对简化 SQL 有效但对 baseline SQL 无收益
+```
+
+**⚠️ 边界测试建议**:
+1. 当前 50K cache hit P95=197ms, 生产 1M cache miss 可能 5-10x 退化 → 1s+ 用户感知 | 留 v28-3 1M 扩容压测验证
+2. v28-2 SQL 拆分重写后, 排序/分页/总数查询都需重写, 测试覆盖率要求高 | 留 v28-2 完整测试
+3. PG 优化器选索引策略受统计信息影响, ANALYZE 后可能改变 | 上线前需手动 ANALYZE 验证
+
+**未完成事项 (留后续)**:
+- v28-2: PostgresSearchProvider SQL 拆分重写 (改 BuildWhereClause + SearchAsync + 加 GIN trgm migration)
+- v28-3: 1M 数据扩容压测 (独立库 sakurafilter_perf_tests)
+- v28-4: v27-9-3 设计巡检 CI 跑完后基于实际数据决策 (continue-on-error → 阻塞?)
+
+---

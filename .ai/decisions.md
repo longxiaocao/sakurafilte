@@ -60,8 +60,8 @@
   - backend/tests/SakuraFilter.Api.Tests/Integration/AdminProductImageServiceIntegrationTests.cs (V24-F83)
   - .env (PG_TEST_CONNECTION_STRING 指向 sakurafilter_int_tests)
 
-#5 PostgresSearchProvider Phase 2 keyset 分页暂缓 (2026-07-19, 50K 压测验证 2026-07-19)
-决策: v27-1 暂不实施 keyset 分页改造, 保留 OFFSET 分页; v27-3 50K 压测后维持暂缓决策, 1M 扩容验证留后续
+#5 PostgresSearchProvider Phase 2 keyset 分页暂缓 (2026-07-19, 50K 压测验证 2026-07-19, v28-1 GIN trgm 验证 2026-07-19)
+决策: v27-1 暂不实施 keyset 分页改造, 保留 OFFSET 分页; v27-3 50K 压测后维持暂缓决策; v28-1 GIN trgm 索引验证显示对当前 SQL 模式无收益, 真实优化方向是 SQL 拆分重写, 留 v28-2
 理由:
   - 当前 SearchRequest DTO 用 Page/PageSize 页式分页, 前端依赖 Page 契约
   - 改 keyset 需破坏前端 Page 契约或引入 cursor 参数, 改动面大
@@ -70,11 +70,18 @@
 v27-3 50K 压测数据 (2026-07-19, spike_test_v3: 50011 products/623134 xrefs/775053 apps):
   - OFFSET 深度退化比 (控制变量法, 同场景深档 P95 / 浅档 P95): 最大 1.03x (type_oil), baseline 0.96x, q_filter 1.01x
   - 结论: 50K 数据下 OFFSET 深度本身不是主要瓶颈 (≤1.5x 暂缓阈值)
-  - 真实瓶颈识别: q_filter ILIKE 全表扫描 1879ms > baseline CTE+LATERAL JOIN 510ms > OFFSET 深度 (1.03x)
+  - 真实瓶颈识别: q_filter ILIKE 全表扫描 1879ms (HTTP 端到端, 含 Meili 切换) > baseline CTE+LATERAL JOIN 510ms > OFFSET 深度 (1.03x)
   - keyset 简化版潜力: 17-5932x (baseline 31.6x / type_oil 19.2x / q_filter 5932x / size_d1_100 54.9x), 但真实三层排序 keyset 改造需前后端契约改造
-  - 优先级反转: 加 GIN trgm 索引 (q_filter 1850ms → 预计 50-200ms) 收益大于 keyset 改造, 改动更小
+v28-1 GIN trgm 索引验证数据 (2026-07-19, spike_test_v3 50K, 直连 PG cache hit):
+  - baseline SQL (OR + EXISTS xref): P95 = 197ms (5 个 q 平均)
+  - 简化 SQL (无 EXISTS xref, 5 字段 OR ILIKE): P95 = 124ms
+  - 简化 SQL + GIN trgm 索引: P95 = 20ms (6x 提升, 用 Bitmap Index Scan)
+  - baseline SQL + GIN trgm 索引: P95 ≈ 197ms (无收益, PG 优化器不选 GIN trgm, 仍用 idx_products_is_published_true + Filter ILIKE)
+  - 结论: GIN trgm 索引对当前 OR + EXISTS xref SQL 模式无收益, PG 优化器不选 (原因: EXISTS 子查询的 Nested Loop 模式让单字段 GIN trgm 失效)
+  - 真实优化方向: SQL 拆分重写 (products 5 字段 ILIKE 走 GIN trgm 索引 → 候选 product_id → 半 JOIN cross_references 走 idx_xref_product B-tree), 留 v28-2
 排除方案:
   - 立即改 keyset: 工作量大 (前后端契约改造) 且 50K 压测显示 OFFSET 深度非主要瓶颈
+  - 加 GIN trgm 索引 (v28-1 验证): 对当前 SQL 模式无收益, PG 优化器不选, 不应加索引 (50MB 索引浪费)
   - 加 covering index: 涉及 DB schema 变更, 需 migration, 不适合 v27 阶段
   - 1M 扩容压测: 50K 数据下退化比 ≤1.03x, 1M 留后续独立库 (sakurafilter_perf_tests) 验证, 避免污染 spike_test_v3
 关联文件:
@@ -84,7 +91,9 @@ v27-3 50K 压测数据 (2026-07-19, spike_test_v3: 50011 products/623134 xrefs/7
   - spike-test/_perf_offset_paging.py (压测脚本, derive_advice 控制变量法)
   - spike-test/_perf_offset_results.json (raw 数据)
   - spike-test/_perf_offset_report.md (人读报告 + ADR #5 决策建议)
-  - .trae/specs/v2-architecture-migration/spec.md chapter 27.8 (完整实施记录)
+  - spike-test/_perf_gin_trgm_verify_v3.py (v28-1 GIN trgm 验证脚本, 含 3 种 SQL 对比)
+  - spike-test/_perf_gin_trgm_v3_results.json (v28-1 验证 raw 数据)
+  - .trae/specs/v2-architecture-migration/spec.md chapter 27.8 (v27-3 实施记录) + chapter 28.1 (v28-1 验证记录)
 
 #6 IObjectStorage.ListAsync 接口扩展决策 (2026-07-19)
 决策: v27-2 扩展 IObjectStorage 接口加 ListAsync 方法, MinioStorage + AliyunOssStorage 双实现
