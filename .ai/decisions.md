@@ -248,3 +248,25 @@ v29-2 高频词分布调研 (V24-F98, 2026-07-19, spec 28.7, 候选 2 不实施)
   - .trae/specs/v2-architecture-migration/spec.md chapter 29 (v30 三波修复完整记录)
   - .ai/suggestions.md (P1-1 DictManagerLayout 提取建议, P2-1 空状态文案统一, P2-2 visibilitychange 监听)
 
+#9 DevTokenAuthMiddleware 中间件顺序纠正 (2026-07-19, v30 端到端冒烟验证 P0, commit cebd2ef)
+决策: 调整中间件顺序为 UseAuthentication → DevTokenAuthMiddleware → UseAuthorization
+理由:
+  - 修复前顺序: UseAuthentication → UseAuthorization → DevTokenAuthMiddleware (顺序错误)
+  - 错误后果: .RequireAuthorization("Admin") 端点 (如 /api/admin/dict/_schema) 在 UseAuthorization 阶段
+    评估 ctx.User, 此时 X-Admin-Token 还未被 DevTokenAuthMiddleware 处理, ctx.User 未认证 → 直接 401 短路
+    (WWW-Authenticate: Bearer, DevTokenAuthMiddleware 永远跑不到)
+  - 正确顺序: UseAuthentication 先处理 Authorization: Bearer (JWT), DevTokenAuthMiddleware 中间处理
+    X-Admin-Token (设置 ClaimsPrincipal + admin role), UseAuthorization 最后基于 ctx.User 评估 policy
+  - v30 端到端验证暴露: 12 个 contract/dict-schema.test.ts 401 失败 (之前 ECONNREFUSED 掩盖),
+    Playwright smoke 8 字典页 + admin/products 等也受 X-Admin-Token 阻断
+  - 修复后: vitest 270/270 通过, Playwright smoke 14/15 通过 (1 个 ETL 页 networkidle 超时为 SSE 固有, 非 v30 回归)
+排除方案:
+  - 修改 contract 测试改用 JWT (/api/auth/login 获取 Bearer): 治标不治本, Playwright smoke 仍需另改, 工作量大
+  - 暂跳过 12 个 contract 失败: v30 不算完全闭环, 违反规则 9.1 端到端冒烟强制要求
+  - 在 DevTokenAuthMiddleware 中改用 IAuthorizationFilter: 改动大, 违反最小设计原则
+关联文件:
+  - backend/src/SakuraFilter.Api/Extensions/MiddlewarePipelineExtensions.cs (中间件顺序纠正)
+  - backend/src/SakuraFilter.Api/Services/DevTokenAuthMiddleware.cs (未改动, 验证设置 ClaimsPrincipal 逻辑正确)
+  - frontend/tests/contract/dict-schema.test.ts (12 个 contract 测试, 修复后转绿)
+  - frontend/tests/functional/smoke.spec.ts (Playwright smoke, 修复后 14/15 通过)
+
