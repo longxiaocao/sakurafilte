@@ -594,7 +594,9 @@ jobs:
       - name: Start Vite dev server (background)
         run: |
           cd frontend
-          npm run dev > /tmp/vite5173.log 2>&1 &
+          # v28-4: vite.config.ts port=5175 (本地 dev 用, 5173 被另一项目占用)
+          #   CI 上 5173 空闲, 用 --port 5173 覆盖, 与 e2e.yml FRONTEND_URL/P0-E2E-2 BASE_URL 一致
+          npm run dev -- --port 5173 > /tmp/vite5173.log 2>&1 &
           VITE_PID=$!
           V_READY=0
           for i in $(seq 1 60); do
