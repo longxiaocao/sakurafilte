@@ -7,11 +7,14 @@ import { ref, reactive, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { dictApi, type ProductName1Item, type ProductName1ReorderItem } from '@/api'
+import SkeletonCard from '@/components/SkeletonCard.vue'
 
 const { t } = useI18n()
 
 const items = ref<ProductName1Item[]>([])
 const loading = ref(false)
+// V24-F102 (P2-2, 规则 8): 加 loadError, 加载失败时显示持久 el-alert + 重试按钮
+const loadError = ref<string | null>(null)
 const includeDeleted = ref(false)
 const searchKw = ref('')
 
@@ -27,11 +30,15 @@ const dragOverId = ref<number | null>(null)
 
 async function load() {
   loading.value = true
+  // V24-F102 (P2-2, 规则 8): 进入 load 时清空 loadError, 避免上次失败提示残留
+  loadError.value = null
   try {
     const { items: list } = await dictApi.productName1s.list(searchKw.value || undefined, includeDeleted.value, 500)
     items.value = list
   } catch (e: any) {
     ElMessage.error(t('common.action.load_failed') + (e?.message || ''))
+    // V24-F102 (P2-2, 规则 8): 持久 error UI, 让用户能看到错误并重试
+    loadError.value = e?.response?.data?.detail || e?.message || '字典加载失败'
   } finally {
     loading.value = false
   }
@@ -81,7 +88,7 @@ async function saveDialog() {
 async function softDelete(row: ProductName1Item) {
   try {
     await ElMessageBox.confirm(
-      `确定删除 "${row.productName1}t('common.field.soft_delete_confirm')含已删"模式下恢复)`,
+      `确定删除 "${row.productName1}" 吗? (软删除)`,
       t('common.action.confirm'), { type: 'warning' }
     )
   } catch { return }
@@ -183,6 +190,25 @@ onMounted(load)
       <el-button type="primary" size="small" @click="openCreate">新增产品名 1</el-button>
     </div>
 
+    <!-- V24-F102 (P2-2, 规则 8): 加载失败时显示持久 el-alert + 重试按钮 -->
+    <el-alert
+      v-if="loadError"
+      type="error"
+      show-icon
+      :closable="false"
+      class="mb-2"
+    >
+      <template #default>
+        <div class="flex items-center justify-between">
+          <span>{{ loadError }}</span>
+          <el-button size="small" @click="load" :disabled="loading">
+            {{ loading ? '重试中…' : '重试' }}
+          </el-button>
+        </div>
+      </template>
+    </el-alert>
+    <!-- V24-F102 (P1-2): 首屏骨架屏, 仅首次加载且无数据时显示 -->
+    <SkeletonCard v-if="loading && items.length === 0 && !loadError" variant="table-row" :count="5" />
     <div class="hairline" v-loading="loading">
       <div class="dict-head">
         <div class="cell-drag"></div>

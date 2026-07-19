@@ -8,6 +8,7 @@ const { t } = useI18n()
 //   - 加载失败时回退到内嵌的 openapi.json (开发时一键导出)
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
+import SkeletonCard from '@/components/SkeletonCard.vue'  // V24-F102 (P1-2): 首屏骨架屏
 
 interface Param { name: string; in: string; required: boolean; description: string; schema: any }
 interface Response { code: string; description: string }
@@ -16,12 +17,17 @@ interface Module { name: string; endpoints: Endpoint[] }
 
 const schema = ref<any>(null)
 const loading = ref(false)
+// V24-F102 (P2-2, 规则 8): 加 loadError, 加载失败时显示持久 el-alert + 重试按钮
+//   WHY 不静默吞: 原本仅 ElMessage.error toast, 用户错过 toast 后看到"暂无数据"误以为后端没启动
+const loadError = ref<string | null>(null)
 const search = ref('')
 const filterTag = ref<string>('')
 const expanded = ref<Set<string>>(new Set())
 
 async function fetchSchema() {
   loading.value = true
+  // V24-F102: 清空 loadError (重试场景)
+  loadError.value = null
   try {
     // 优先从后端 Swagger 拉 (实时)
     let r = await fetch('/swagger/v1/swagger.json')
@@ -38,9 +44,13 @@ async function fetchSchema() {
         schema.value = await r2.json()
         ElMessage.warning(t('common.feedback.success_012'))
       } else {
+        // V24-F102 (P2-2, 规则 8): 记录 loadError, 让模板显示持久 el-alert + 重试按钮
+        loadError.value = 'Swagger 不可用, 且本地 openapi.json 也无法访问'
         ElMessage.error(t('common.feedback.error_023'))
       }
-    } catch {
+    } catch (e: any) {
+      // V24-F102: 内层 catch 也记录 loadError
+      loadError.value = e?.message || 'Swagger 与 openapi.json 均加载失败'
       ElMessage.error(t('common.feedback.error_022'))
     }
   } finally {
@@ -242,14 +252,29 @@ onMounted(fetchSchema)
       </span>
     </div>
 
-    <!-- 加载中 -->
-    <div v-if="loading && !schema" class="text-center text-sm text-muted py-8">加载中…</div>
-    <div v-else-if="!schema" class="text-center text-sm text-muted py-8">
-      暂无数据, 请确认后端已启动 (http://localhost:5148)
-    </div>
+    <!-- V24-F102 (P2-2, 规则 8): 加载失败时显示持久 el-alert + 重试按钮 -->
+    <el-alert
+      v-if="loadError"
+      type="error"
+      show-icon
+      :closable="false"
+      class="mb-3"
+    >
+      <template #default>
+        <div class="flex items-center justify-between">
+          <span>{{ loadError }}</span>
+          <el-button size="small" @click="refresh" :disabled="loading">
+            {{ loading ? '重试中…' : '重试' }}
+          </el-button>
+        </div>
+      </template>
+    </el-alert>
+
+    <!-- V24-F102 (P1-2): 首屏骨架屏 (variant=list 模拟模块 section 结构) -->
+    <SkeletonCard v-if="loading && !schema && !loadError" variant="list" :count="3" />
 
     <!-- 模块列表 -->
-    <div v-else class="space-y-3">
+    <div v-else-if="schema" class="space-y-3" v-loading="loading">
       <section v-for="mod in filteredModules" :key="mod.name" class="hairline p-3">
         <h2 class="text-base font-medium mb-2">
           {{ mod.name }}
