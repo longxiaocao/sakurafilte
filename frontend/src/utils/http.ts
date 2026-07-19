@@ -47,6 +47,26 @@ http.interceptors.request.use((cfg: InternalAxiosRequestConfig) => {
   return cfg
 })
 
+// V24-F78: 构建鉴权 Headers (供 fetch / EventSource 替代方案使用, 与 axios 拦截器逻辑一致)
+//   WHY 抽取: EventSource API 不支持自定义 Header, 需用 fetch + ReadableStream 替代;
+//   此函数统一 auth header 构建逻辑, 避免与 axios 拦截器逻辑重复 (规则 3.2 绝对复用优先)
+//   返回: HeadersInit 对象, 调用方直接传给 fetch(..., { headers })
+export function buildAuthHeaders(): Record<string, string> {
+  const auth = useAdminAuthStore()
+  const headers: Record<string, string> = {
+    'X-Client-Version': __API_VERSION__
+  }
+  if (auth.token) {
+    if (isJwtLike(auth.token)) {
+      headers[TOKEN_HEADER_BEARER] = `Bearer ${auth.token}`
+    } else {
+      // 旧 dev token (非 JWT): 后端 DevTokenAuthMiddleware 仍接受 X-Admin-Token
+      headers[TOKEN_HEADER_LEGACY] = auth.token
+    }
+  }
+  return headers
+}
+
 // ProblemDetails 类型
 export interface ProblemDetails {
   type?: string

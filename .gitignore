@@ -97,6 +97,13 @@ frontend/node_modules/
 frontend/dist/
 frontend/tsconfig.tsbuildinfo
 
+## 测试覆盖率产物 (V24-F79, 可重建, 不提交)
+# WHY: frontend/coverage/ 是 vitest --coverage 生成的 cobertura + html 报告
+#      backend/tests/*/TestResults/ 是 dotnet test --collect 生成的 cobertura + trx
+#      CI 通过 upload-artifact 归档, 本地无需提交
+frontend/coverage/
+backend/tests/**/TestResults/
+
 ## Playwright 临时产物 (可重建, 不提交)
 # WHY: test-results/ 是失败时的诊断截图, playwright-report/ 是 HTML 报告
 #      current/ 是本次截图, *.diff.png 是差异图, 都可重建

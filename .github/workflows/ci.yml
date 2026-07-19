@@ -276,9 +276,22 @@ jobs:
       #        添加此步骤后, 每次 push/PR 自动运行 200+ 单元测试 (vitest run 退出码即结果)
       #   依赖: vitest run 不启动 watch 模式, 单次运行后退出, 适合 CI
       #   注: 只运行 tests/unit/, 不运行 tests/contract/ (契约测试需后端运行, 留待 e2e.yml)
-      - name: Run frontend unit tests
+      # V24-F79 (spec 26.15.7 建议 2): 添加 --coverage 收集前端覆盖率
+      #   WHY: vitest.config.ts 已配置 coverage.provider='v8' + reporter='cobertura'
+      #        CI 添加 --coverage 后, 生成 frontend/coverage/cobertura-coverage.xml
+      #        后续 job 用 reportgenerator 合并前后端 cobertura 报告
+      - name: Run frontend unit tests with coverage
         working-directory: frontend
-        run: npx vitest run tests/unit/
+        run: npx vitest run tests/unit/ --coverage
+
+      # V24-F79: 上传前端覆盖率报告 (供 reportgenerator 合并)
+      - name: Upload frontend coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-coverage
+          path: frontend/coverage/cobertura-coverage.xml
+          if-no-files-found: ignore
 
       - name: Build
         working-directory: frontend
@@ -395,4 +408,69 @@ jobs:
         with:
           name: types-drift-diff
           path: /tmp/types-diff.txt
+          if-no-files-found: ignore
+
+  # ============================================================
+  # Job 4: 覆盖率聚合 (V24-F79, spec 26.15.7 建议 2)
+  #   WHY: 前后端各自生成 cobertura.xml, 需合并为统一报告供可视化
+  #   依赖: needs backend + frontend (并行 job, 此 job 等两者完成)
+  #   工具: ReportGenerator (dotnet 全局工具, 合并 cobertura 格式)
+  #   阈值: 当前不设硬门禁 (实际覆盖率 8% 前端 / 24% 后端, 远低于 spec 目标 60%)
+  #         仅输出报告 + 在 CI 日志打印覆盖率摘要, 后续逐步提升后再设阈值
+  # ============================================================
+  coverage:
+    name: Coverage Aggregation
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [backend, frontend]
+    # WHY always(): 即使前端/后端 job 失败也尝试聚合 (覆盖率仍有价值)
+    if: always() && (needs.backend.result == 'success' || needs.frontend.result == 'success')
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download backend coverage
+        if: needs.backend.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-coverage
+          path: coverage/backend
+
+      - name: Download frontend coverage
+        if: needs.frontend.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-coverage
+          path: coverage/frontend
+
+      - name: Install ReportGenerator
+        run: dotnet tool install -g dotnet-reportgenerator-globaltool --version 5.*
+
+      - name: Merge coverage reports
+        # WHY -reporttypes: Cobertura (合并后再次输出 cobertura 供上传) + Html (本地可视化) + TextSummary (CI 日志摘要)
+        # WHY -filefilters: +* 表示包含所有文件, -*/node_modules/* 排除 node_modules
+        run: |
+          mkdir -p coverage/merged
+          # 收集所有 cobertura 文件 (后端可能有多个 TestResults/*/coverage.cobertura.xml)
+          COBERTURA_FILES=$(find coverage -name "coverage.cobertura.xml" -o -name "cobertura-coverage.xml" | tr '\n' ';')
+          if [ -z "$COBERTURA_FILES" ]; then
+            echo "::warning::No cobertura coverage files found, skip merge"
+            exit 0
+          fi
+          echo "Merging: $COBERTURA_FILES"
+          reportgenerator \
+            -reports:"$COBERTURA_FILES" \
+            -targetdir:"coverage/merged" \
+            -reporttypes:"Cobertura;Html;TextSummary" \
+            -filefilters:"+*;-*/node_modules/*"
+          echo "===== Coverage Summary ====="
+          cat coverage/merged/Summary.txt || true
+
+      - name: Upload merged coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: merged-coverage
+          path: coverage/merged/
           if-no-files-found: ignore
