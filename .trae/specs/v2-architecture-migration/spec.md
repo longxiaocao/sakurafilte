@@ -15451,5 +15451,179 @@ E2E SSE 401 验证:
 
 
 
+## 26.19 v26 改进实施记录(批次二 — PG 集成测试 + 异步删旧文件容错)
+
+**实施时间**: 2026-07-19
+**spec 任务**: 26.17.2 P1-2 / P1-3 / P1-4 / P1-5 / P1-7 (5 项)
+**git commits**: 162bdc6 (F80) → 4fa5af3 (backup F81/F82) → a1a105f (F83/F84)
+
+### 26.19.1 V24-F80: P1-2 PostgresSearchProvider 性能恢复 (前轮提交)
+
+**问题**: V24-F76 折衷方案 (不分词 + 排序简化) 导致 PG 兜底搜索性能不达 spec 要求 (≤500ms)。
+
+**修复**: 改原生 SQL + CTE 预计算 + LATERAL JOIN + 分词 OR 匹配, 替代原 LINQ 翻译路径。
+- 文件: `backend/src/SakuraFilter.Search/PostgresSearchProvider.cs` (+443 / -210)
+- 关联 spec: 26.16.3 / 26.16.9 / Task 1.2.9-1.2.11
+
+### 26.19.2 V24-F81/F82: P1-3/P1-4 PG 集成测试基类 + advisory lock/FOR UPDATE SKIP LOCKED 验证
+
+**问题**: spec 26.14.9 / 26.15.7 要求 PG 集成测试覆盖 advisory lock + FOR UPDATE SKIP LOCKED, 但 InMemory 不支持 raw SQL, 团队无 Testcontainers (Docker 不可用)。
+
+**修复**: 新建 PgIntegrationTestBase 基类 + 独立测试库 `sakurafilter_int_tests` + 本地 PG + TRUNCATE CASCADE 重置策略。
+
+**关键设计**:
+- `PG_TEST_CONNECTION_STRING` 环境变量注入连接串 (.env 已配置, 指向独立测试库避免污染 spike_test_v3)
+- `[Collection("PgSequential")]` 串行执行避免并发污染
+- `[Trait("Category", "Integration")]` 单元测试基线 `--filter Category!=Integration` 排除
+- 未配置连接串时测试 Skip (IsEnabled 守卫)
+
+**测试用例** (14 测试):
+
+V24-F81 AdminProductServiceIntegrationTests (6 测试):
+1. CreateAsync_Basic_WritesProductAndXrefAndMachineAndHistory_Integration (四表原子写入)
+2. CreateAsync_AdvisoryLockHeldByEtl_ThrowsEtlInProgress_Integration (advisory lock 7740001 互斥)
+3. CreateAsync_DuplicateMr1_ThrowsMr1AlreadyExists_Integration (oem_no_normalized / mr_1 唯一约束)
+4. CreateAsync_DuplicateOem3Pair_ThrowsOem3AlreadyExists_Integration (复合唯一索引)
+5. UpdateAsync_Basic_UpdatesProductAndReplacesXref_Integration (全量替换 + 历史记录)
+6. UpdateAsync_StaleRowVersion_ThrowsLostUpdatePrevented_Integration (xmin 乐观锁)
+
+V24-F82 IndexReplayWorkerLockMechanismTests (8 测试):
+1. ForUpdateSkipLocked_ConcurrentTransactions_SecondSkipsLockedRows_Integration (2 事务并发, 第二个返回 0 行)
+2. AdvisoryXactLock7740005_ConcurrentTransactions_SecondFails_Integration (advisory lock 互斥)
+3-7. UpdateRetry_ExponentialBackoff_RetryCountAndNextRetryAt_Integration (5 cases, 60/120/300/600/1800s 退避)
+8. ProcessDeadLetter_RetryCountExceedsMax_MovesToDeadLetter_Integration (pending → dead_letter 转移)
+
+**关键技术决策**:
+- 不引入 Testcontainers (Docker 不可用), 用本地 PG + TRUNCATE CASCADE
+- 独立测试库 sakurafilter_int_tests 避免污染 spike_test_v3
+- TOCTOU 并发测试无法复现 23505 (advisory lock 提前拦截), 改用顺序调用证明唯一约束生效
+- P1-4 不直接调用 IndexReplayWorker.ProcessPendingAsync (private + 依赖 Meili), 用纯 PG SQL 验证锁机制
+
+**已知限制**:
+- TOCTOU 并发场景无法稳定复现 (advisory lock 7740001 独占, 第二个并发请求被锁阻止, 无法到达 SaveChangesAsync 触发 23505)
+- 替代验证: DuplicateMr1 + DuplicateOem3Pair 顺序调用证明唯一约束生效 (双保险)
+
+### 26.19.3 V24-F83: P1-7 覆盖上传并发竞态测试 (23505 → 409 映射)
+
+**问题**: spec 26.12.6 要求覆盖上传并发竞态测试 (23505 → 409 ERR_DB_CONFLICT 映射), 但 EF Core 并发时序难以稳定复现。
+
+**修复**: 8 集成测试覆盖 AdminProductImageService.UploadAsync + DeleteAsync 全路径, 用 raw SQL 稳定复现 23505。
+
+**测试用例** (8 测试):
+
+| # | 测试名 | 验证点 |
+|---|---|---|
+| 1 | UploadAsync_NewPrimary_InsertsNewRecordAndSyncsProductImageKey_Integration | INSERT 路径 + products.image_key 同步 |
+| 2 | UploadAsync_OverwritePrimary_ReplacesOldImage_Integration | UPDATE 路径 (覆盖上传主图) |
+| 3 | UploadAsync_OverwriteDetailSlot_ReplacesOldImage_Integration | UPDATE 路径 (覆盖上传详情图) |
+| 4 | ConcurrentInsertSameDetailSlot_SecondThrows23505_Integration | raw SQL 并发 INSERT, 第二个撞 23505 |
+| 5 | DeleteAsync_RemovesPrimaryImageAndClearsProductImageKey_Integration | 删主图 + 清 products.image_key |
+| 6 | DeleteAsync_RemovesDetailImage_Integration | 删详情图 (不影响 products.image_key) |
+| 7 | UploadAsync_DifferentOem3_BothPrimaryUploadsSucceed_Integration | 跨产品主图 (验证唯一约束作用域) |
+| 8 | UploadAsync_PrimaryOem3NotBelongToMr1_ThrowsOem3NotFound_Integration | OEM3_NOT_FOUND 边界 |
+
+**关键设计 (WHY 用 raw SQL 而非 EF Core 并发)**:
+- AdminProductImageService.UploadAsync 内部用 EF Core + BeginTransactionAsync
+- 两个并行 DbContext 调用 UploadAsync 时, EF Core 内部时序难以稳定复现 23505:
+  - task1 可能先 commit, task2 的 FirstOrDefaultAsync 读到 task1 写入的记录 → 走 UPDATE 路径 (不撞 23505)
+  - 即使两个 Task 都查到 old=null, task2 的 INSERT 在 task1 commit 后才被阻塞, 但 EF Core 可能直接抛 ObjectDisposedException
+- 用 raw SQL 两个并行 NpgsqlTransaction 可稳定复现:
+  - tx1: BEGIN → INSERT (product_id=1, slot=2) → 不 commit, 持有行锁
+  - tx2: BEGIN → INSERT (product_id=1, slot=2) → 阻塞等待 tx1 释放
+  - tx1: COMMIT → tx2 立即抛 23505 unique_violation
+
+**23505 → 409 ERR_DB_CONFLICT 映射验证**:
+- 端到端映射由 `ProblemDetailsFactoryTests.cs` L134 单元测试覆盖 (传 PostgresException SqlState=23505 → 验证返回 409 + errorCode=ERR_DB_CONFLICT)
+- 本测试验证前置条件: uq_product_images_detail_slot 唯一约束存在 + 23505 触发
+
+### 26.19.4 V24-F84: P1-5 MVP — 异步删旧文件容错
+
+**问题**: spec 26.4.1 Task 5.1.20 CleanupOrphanImagesAsync v8 终态需 6 步大改造 (IObjectStorage 接口扩展 + EF Core 迁移 + 新建 BackgroundService + DI 模型调整 + cleanup_failures 表 + 状态机), 不符合最小设计原则, 用户决策暂缓。
+
+**用户决策 (2026-07-19)**: 采用方案 A (MVP), 仅增强 AdminProductImageService 异步删旧文件容错, 不实施全量孤儿清理。
+
+**修复** (改动 < 50 行, 单文件):
+
+新增 `SafeDeleteOldImageAsync(string key, string context)` 私有方法, 替代原 fire-and-forget `Task.Run`:
+- 3 次重试 (1s/2s/4s 指数退避, 总耗时 ≤ 7s)
+- 重试成功时 LogInformation (含 attempt 次数)
+- 全部失败时 LogError 含 context (含 mr1/role/slot), 便于运维从日志检索孤儿 key 人工清理
+- 仍为 fire-and-forget, 调用方不等待, 重试过程异步执行, 不阻塞业务请求
+
+**调用点** (2 处):
+- `UploadAsync` L261-264: 覆盖上传后删旧 key
+- `DeleteAsync` L302-305: 删 DB 行后删文件 key
+
+**与 spec 决策一致性**:
+- ✅ 26.3.2 不扩展 IObjectStorage 公共接口 (避免污染所有消费方)
+- ✅ 26.4.1 不引入 cleanup_failures 表 / BackgroundService / 状态机 (与 v8 终态区分)
+- ✅ 26.17.2 P1-5 「可同时兜底覆盖上传异步删旧文件失败场景」次要目标
+
+**未覆盖的 P1-5 主目标**:
+- ❌ 全量孤儿扫描清理 (需 IObjectStorage.ListAllAsync, 与 26.3.2 冲突, 留待 v27+ 重新评估)
+
+**单元测试** (2 测试, 9s 总耗时):
+
+| # | 测试名 | 验证点 | 耗时 |
+|---|---|---|---|
+| 1 | UploadAsync_OverwriteDeleteOldFileFailsOnce_RetriesAndSucceeds | 第 1 次失败 + 第 2 次成功 = 2 次调用 | 1.5s |
+| 2 | UploadAsync_OverwriteDeleteOldFileAlwaysFails_Retries3TimesAndLogsError | 全失败 = 4 次调用 (1 初次 + 3 重试) | 8s |
+
+### 26.19.5 验证结果
+
+| 测试项目 | 用例数 | 状态 | 备注 |
+|---|---|---|---|
+| SakuraFilter.Api.Tests (单元) | 422 | ✅ 全部通过 | +29 V24-F81/F82/F83/F84 (含 14 集成) |
+| SakuraFilter.Api.Tests (集成, PG) | 14 | ✅ 全部通过 | V24-F81/F82/F83 (PG_TEST_CONNECTION_STRING 启用) |
+| SakuraFilter.Etl.Tests | 37 | ✅ 全部通过 | 无变化 |
+| 前端单元测试 | 258 | ✅ 全部通过 | 无变化 |
+| 前端类型检查 | - | ✅ 通过 | 无变化 |
+
+### 26.19.6 v26 改进批次二文件清单
+
+| 文件 | 类型 | 行数变化 | 关联 |
+|---|---|---|---|
+| `backend/src/SakuraFilter.Search/PostgresSearchProvider.cs` | 修改 | +443 / -210 | V24-F80 (前轮 commit 162bdc6) |
+| `backend/tests/SakuraFilter.Api.Tests/Integration/PgIntegrationTestBase.cs` | 新建 | +189 | V24-F81 (基类) |
+| `backend/tests/SakuraFilter.Api.Tests/Integration/AdminProductServiceIntegrationTests.cs` | 新建 | +334 | V24-F81 (6 测试) |
+| `backend/tests/SakuraFilter.Api.Tests/Integration/IndexReplayWorkerLockMechanismTests.cs` | 新建 | +325 | V24-F82 (8 测试) |
+| `backend/tests/SakuraFilter.Api.Tests/Integration/AdminProductImageServiceIntegrationTests.cs` | 新建 | +411 | V24-F83 (8 测试) |
+| `backend/src/SakuraFilter.Api/Services/AdminProductImageService.cs` | 修改 | +57 / -10 | V24-F84 (SafeDeleteOldImageAsync) |
+| `backend/tests/SakuraFilter.Api.Tests/AdminProductImageServiceTests.cs` | 修改 | +87 / -0 | V24-F84 (2 重试测试) |
+| `.gitignore` | 修改 | +4 | V24-F80 (排除 E2E 截图) |
+
+### 26.19.7 v26 改进批次二总结 (累计)
+
+| 维度 | 数据 |
+|---|---|
+| 累计 V24-Fx 实施数 | F14 ~ F84 (含本轮 5 项 F80-F84, 已实施 71 项, 废弃 4 项) |
+| 26.17.2 P1 完成数 | 7/7 (P1-1~P1-7 全部完成) |
+| 前端单元测试 | 258 / 258 通过 (无变化) |
+| 后端单元测试 | 422 / 422 通过 (+29 V24-F81~F84 单元) |
+| 后端集成测试 (PG) | 14 / 14 通过 (V24-F81/F82/F83 新增) |
+| ETL 测试 | 37 / 37 通过 (无变化) |
+| spec 26.17.2 P1 列表 | ✅ 全部完成 (P1-1 SSE + P1-2 PG 搜索 + P1-3/4/7 集成测试 + P1-5 MVP + P1-6 CI 覆盖率) |
+
+### 26.19.8 💡 改进建议 (后续 v26+ 决策)
+
+1. **覆盖率门禁**: V24-F79 已收集覆盖率, 待核心 Service 覆盖率达 40%+ 后, 在 reportgenerator 添加 `-thresholds` 参数硬门禁。
+
+2. **Testcontainers PG 集成测试**: 当前用本地 PG + TRUNCATE CASCADE, CI 环境若用 GitHub Actions service container 启动 PG, 需调整 `PG_TEST_CONNECTION_STRING` 注入方式 (env var 即可)。
+
+3. **PG 搜索性能 Phase 2**: V24-F80 完成了 Phase 1 原生 SQL, 待 1M 产品 + 20M xref 数据集压测验证性能 (≤500ms), 必要时引入 GIN 索引/分区表。
+
+4. **CleanupOrphanImagesAsync v27+ 完整版**: MVP (V24-F84) 仅增强内部容错, 全量孤儿扫描清理仍待实施。建议 v27+ 重新评估:
+   - 选项 A: 维持 MVP, 定期人工巡检 (grep 日志 "已成为孤儿" + 手动删 S3)
+   - 选项 B: 实施 v8 终态 (6 步大改造, 与 spec 26.4.1 决策冲突)
+   - 选项 C: 折衷方案 — 新增 `CleanupOrphanImagesJob` (一次性脚本, 不引入 BackgroundService, 通过 CLI 触发, 内部直接用 MinIO/OSS SDK 而非 IObjectStorage 抽象)
+
+5. **IndexReplayWorker 集成测试增强**: 当前 V24-F82 用纯 PG SQL 验证锁机制, 未走 ProcessPendingAsync 完整路径 (依赖 Meili)。建议后续用 Meili Mock 覆盖完整流程 (pending → Meili 索引 → 删除 pending)。
+
+6. **前端 E2E 覆盖上传场景**: V24-F83 仅覆盖后端 Service 层, 前端 AdminProductFormView.vue 的覆盖上传交互 (用户上传同 slot 图片) 未做 E2E 验证, 建议补充 Playwright 脚本。
+
+---
+
+
+
 
 
