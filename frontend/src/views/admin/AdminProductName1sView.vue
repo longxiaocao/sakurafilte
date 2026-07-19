@@ -8,6 +8,7 @@ import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { dictApi, type ProductName1Item, type ProductName1ReorderItem } from '@/api'
 import SkeletonCard from '@/components/SkeletonCard.vue'
+import { useVisibilityRefresh } from '@/composables/useVisibilityRefresh'
 
 const { t } = useI18n()
 
@@ -174,6 +175,8 @@ function rowClass(row: ProductName1Item): string {
 const total = computed(() => items.value.length)
 const activeCount = computed(() => items.value.filter((x) => !x.deletedAt).length)
 
+// V24-F103 (P2-2): 跨标签页 stale 数据感知, 页面重新可见时自动刷新
+useVisibilityRefresh(load)
 onMounted(load)
 </script>
 
@@ -247,7 +250,8 @@ onMounted(load)
           <el-button v-else size="small" text type="success" @click="restore(row)">恢复</el-button>
         </div>
       </div>
-      <div v-if="!loading && items.length === 0" class="dict-empty">暂无数据, 请先新增产品名 1</div>
+      <!-- V24-F103 (P2-1): 空状态文案与其他 7 个字典页统一 -->
+      <div v-if="!loading && items.length === 0" class="dict-empty">{{ t('common.action.no_data_click_top_right') }}新增产品名 1开始</div>
     </div>
 
     <div class="mt-2 text-xs text-muted">

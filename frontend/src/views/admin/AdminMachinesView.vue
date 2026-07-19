@@ -6,6 +6,7 @@ import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { dictApi, type MachineItem, type MachineReorderItem } from '@/api'
 import SkeletonCard from '@/components/SkeletonCard.vue'
+import { useVisibilityRefresh } from '@/composables/useVisibilityRefresh'
 
 const { t } = useI18n()
 
@@ -140,6 +141,8 @@ function categoryTagType(cat?: string): 'success' | 'warning' | 'info' | 'primar
 }
 const total = computed(() => items.value.length)
 const activeCount = computed(() => items.value.filter((x) => !x.deletedAt).length)
+// V24-F103 (P2-2): 跨标签页 stale 数据感知, 页面重新可见时自动刷新
+useVisibilityRefresh(load)
 onMounted(load)
 </script>
 

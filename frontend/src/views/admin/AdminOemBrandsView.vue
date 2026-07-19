@@ -12,6 +12,7 @@ import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { dictApi, type OemBrandItem, type OemBrandReorderItem } from '@/api'
 import SkeletonCard from '@/components/SkeletonCard.vue'
+import { useVisibilityRefresh } from '@/composables/useVisibilityRefresh'
 
 const { t } = useI18n()
 
@@ -207,6 +208,8 @@ function rowClass(row: OemBrandItem): string {
 const total = computed(() => items.value.length)
 const activeCount = computed(() => items.value.filter((x) => !x.deletedAt).length)
 
+// V24-F103 (P2-2): 跨标签页 stale 数据感知, 页面重新可见时自动刷新
+useVisibilityRefresh(load)
 onMounted(load)
 </script>
 
@@ -304,9 +307,9 @@ onMounted(load)
           >恢复</el-button>
         </div>
       </div>
-      <!-- 空状态 -->
+      <!-- V24-F103 (P2-1): 空状态文案与其他 7 个字典页统一, 修复 i18n key 字面量 BUG -->
       <div v-if="!loading && items.length === 0" class="dict-empty">
-        暂无数据, 点击右上t('admin.oembrandsview.string.add_brand')开始
+        {{ t('common.action.no_data_click_top_right') }}新增品牌开始
       </div>
     </div>
 
