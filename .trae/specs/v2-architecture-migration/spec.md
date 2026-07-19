@@ -16748,3 +16748,103 @@ Aggregate  (cost=511634.92..511634.93 rows=1 width=8) (actual time=6524.562..652
 - `.ai/decisions.md` ADR #5 — 追加 V24-F98 候选 2 不实施决策
 
 ---
+
+### 28.8 v29-3: 后端日志脱敏审计与修复 (V24-F99, 2026-07-19)
+
+**背景**: 规则 6.3 "严禁在日志中打印密码、Token、完整手机号/身份证等敏感信息", 需审计后端生产代码 (`backend/src/**/*.cs`) 中的 `_logger.Log*` 调用, 修复所有敏感信息泄漏点
+
+**关联**: 规则 6.3 (后端安全铁律), v27-9 (E2E 巡检 CI), ADR #7 (新增)
+
+**审计范围**:
+- 全部 `backend/src/**/*.cs` 文件 (排除 tests/)
+- 重点关注: Token (X-Admin-Token, Bearer, JWT), 密码, 手机号, 身份证, API Key/Secret
+
+**审计结果**:
+
+| 风险等级 | 数量 | 文件数 | 说明 |
+|---|---|---|---|
+| 高 (HIGH) | 1 | AuthTokenBroadcaster.cs | 日志完整 PG NOTIFY payload (含 current/previous token 明文) |
+| 中 (MEDIUM) | 1 | EtlAlertService.cs | 日志 webhook 错误响应 body (可能 echo 签名 URL) |
+| 低 (LOW) | 3 | DefaultSettingsEnsurer.cs, AdminProductService.cs, EtlImportService.cs | 潜在风险或非 PII 数据预览 |
+
+**修复实施**:
+
+#### H1 (高风险) — AuthTokenBroadcaster.cs L86
+- **问题**: `_logger.LogInformation("[AuthTokenBroadcaster] 收到广播: {Payload}", e.Payload);` 直接日志 PG NOTIFY payload
+- **payload 内容**: AuthTokenStore.RotateAsync 序列化的 JSON 含 `current`/`previous` token 完整明文
+- **影响**: 任何能读日志的人 (运维/SRE/日志聚合系统) 获取 admin token 绕过鉴权
+- **修复**: 删除该日志行 (下一行已解析 JSON 仅记录 `rotatedBy` 审计字段, 不需完整 payload)
+- **修改**: `backend/src/SakuraFilter.Api/Services/AuthTokenBroadcaster.cs` L83-96
+
+#### M1 (中风险) — EtlAlertService.cs L197-198
+- **问题**: `_logger.LogWarning("... body={Body}", body.Length > 200 ? body[..200] : body);` 日志 webhook 错误响应 body 前 200 字符
+- **影响**: 第三方 webhook (钉钉/飞书/Generic) 在错误响应中可能 echo 请求 URL (含签名 secret 参数) 或 echo 出完整请求 payload
+- **修复**: 移除 body 内容记录, 仅保留状态码 + body 长度
+- **修改**: `backend/src/SakuraFilter.Api/Services/EtlAlertService.cs` L194-206
+
+#### L1 (低风险, 加固) — DefaultSettingsEnsurer.cs L67
+- **问题**: `logger.LogInformation("插入 {Service} 默认配置: {Key} = {Value}", ...)` 直接日志配置 value
+- **当前状态**: EtlAlertService Defaults 中 `webhook_url*` 为空字符串, 不泄漏
+- **未来风险**: 若添加非空默认值 (如默认 webhook URL 含 secret), 会被日志记录
+- **修复**: 新增 `IsSensitiveKey(key)` 方法, 含 `webhook_url`/`secret`/`token`/`password`/`api_key` 关键字的 key, value 脱敏为 `***`
+- **修改**: `backend/src/SakuraFilter.Api/Services/DefaultSettingsEnsurer.cs` L66-86
+
+#### L2 (低风险) — AdminProductService.cs L485
+- **问题**: `_logger.LogWarning("... cursor={Cursor}", cursor);` 日志完整 cursor 原文
+- **当前状态**: cursor 是 HMAC 签名的分页令牌 (V2 格式 `v2:<expUnixTs>|<tsB64>|<mr1B64>|<pageNum>|<sig16>`), 不含用户凭据
+- **风险**: cursor 属于签名令牌, 不应大量暴露原文 (防御性)
+- **修复**: 仅记录 cursor 长度 + 前 8 字符前缀 (V2 cursor 格式 `v2:` 开头)
+- **修改**: `backend/src/SakuraFilter.Api/Services/AdminProductService.cs` L483-491
+
+#### L3 (低风险, 保留+注释) — EtlImportService.cs L927/1989
+- **问题**: `_logger.LogError("... content={Preview}", preview);` 日志 JSONL 行内容预览 (前 200 字符)
+- **当前状态**: 产品域数据无 PII (oem_no/oem_brand/machine_brand 等), preview 用于数据问题定位
+- **决策**: 保留 preview 用于数据问题定位, 加注释说明安全考量
+- **未来风险**: 若 ETL 接入含 PII 的数据源 (如用户上传带手机号/身份证的产品), 需重新评估
+- **修改**: `backend/src/SakuraFilter.Etl/EtlImportService.cs` L924-929, L1988-1993 (仅加注释, 不改逻辑)
+
+**安全实践良好的代码 (供参考)**:
+
+| 文件 | 处理方式 |
+|---|---|
+| AuthTokenStore.cs L123-124, L189-190 | 仅日志 token 长度 (`current.Length`, `previous?.Length`) |
+| CursorHmac.cs L87-88, L93 | 仅日志 key 长度 (`_currentKey.Length`, `_previousKey.Length`) |
+| DevTokenAuthMiddleware.cs L157, L171 | 鉴权失败仅日志 path/ip/ua, 不记录 token |
+| UserService.cs L88-89, L172, L190, L207, L232 | 仅日志 userId/username/role/计数, 从不日志密码 |
+| AuthController.cs / JwtTokenService.cs | 无任何 `_logger` 调用, 无敏感信息泄漏风险 |
+| DingTalkChannel.cs / WeChatChannel.cs / GenericWebhookChannel.cs | 仅日志 type/severity, 不记录 webhook URL 或 secret |
+| ServiceCollectionExtensions.cs L260-261, L281 | 启动日志仅记录 endpoint/bucket, 不记录 AccessKey/SecretKey |
+| ProblemDetailsFactory.cs L75, L81 | 仅日志 path/method, 5xx 不返回 ex.Message 给客户端 |
+| Cli/Program.cs L107-114, L188-189, L334 | `Mask(token)` 仅显示前 4 后 4 字符, `Mask(pgConn)` 也脱敏 |
+
+**未发现的敏感信息类型 (已确认审计)**:
+- 密码 (password/pwd): AuthController/UserService/UsersController 中均无密码日志
+- 手机号 (mobile/phone/手机): 整个 backend 无相关日志
+- 身份证 (id_card/idcard/身份证): 整个 backend 无相关日志
+- 完整邮箱 (email): 仅作为 JWT claim 和 API 响应字段, 未出现在日志中
+- Bearer/Authorization Header: 未日志
+- JWT 签名密钥 (SigningKey): 仅启动时校验长度, 不日志值
+- 连接字符串 (ConnectionString/pgConn): 未日志值 (CLI 的 `Mask(pgConn)` 已正确脱敏)
+- AccessKey/SecretKey (MinIO/OSS): 未日志值
+
+**验证**:
+- 后端 build: 0 警告 0 错误
+- 后端 Api.Tests 全量测试: 448 通过 (无新增测试, 日志脱敏为非核心业务逻辑, 代码 review 验证, 规则 9.1 豁免)
+- 无回归 (原 448 测试全部通过)
+
+**边界测试建议**:
+- ⚠️ 边界 1: AuthTokenBroadcaster 在 PG NOTIFY payload 异常 (非 JSON 格式) 时, 日志是否泄漏 raw payload — 当前实现 try-catch 包裹, catch 中日志 `Payload 解析失败` 不记录 raw payload, 安全
+- ⚠️ 边界 2: DefaultSettingsEnsurer.IsSensitiveKey 关键字匹配区分大小写 — 当前用 `StringComparison.OrdinalIgnoreCase`, 安全
+- ⚠️ 边界 3: EtlAlertService webhook body 长度异常 (如 body.Length > 1MB) 时, bodyLen 字段是否会撑爆日志 — 当前仅记录 int 长度, 不会撑爆, 安全
+
+**实际改动文件清单**:
+- `backend/src/SakuraFilter.Api/Services/AuthTokenBroadcaster.cs` — H1 修复 (删除完整 payload 日志, 合并到下一行 rotatedBy 日志)
+- `backend/src/SakuraFilter.Api/Services/EtlAlertService.cs` — M1 修复 (移除 body 内容, 仅记录状态码 + bodyLen)
+- `backend/src/SakuraFilter.Api/Services/DefaultSettingsEnsurer.cs` — L1 加固 (新增 IsSensitiveKey 方法, 敏感 key value 脱敏为 ***)
+- `backend/src/SakuraFilter.Api/Services/AdminProductService.cs` — L2 修复 (cursor 仅记录长度 + 前 8 字符前缀)
+- `backend/src/SakuraFilter.Etl/EtlImportService.cs` — L3 保留 (2 处加注释说明安全考量, 不改逻辑)
+
+**关联文档**:
+- `.ai/decisions.md` ADR #7 — 新增: V24-F99 后端日志脱敏审计与修复决策
+
+---

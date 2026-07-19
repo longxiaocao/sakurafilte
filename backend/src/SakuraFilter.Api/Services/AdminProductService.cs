@@ -482,7 +482,11 @@ public class AdminProductService
             }
             catch (ArgumentException ex)
             {
-                _logger.LogWarning("DecodeCursor 验签失败: {Ex} cursor={Cursor}", ex.Message, cursor);
+                // V24-F99 (P2-3, 规则 6.3): cursor 是签名令牌, 不应大量暴露原文
+                //   仅记录长度 + 前 8 字符前缀 (V2 cursor 格式 "v2:" 开头, 不含敏感数据但属于签名令牌)
+                var cursorPreview = cursor.Length > 8 ? cursor[..8] : cursor;
+                _logger.LogWarning("DecodeCursor 验签失败: cursorPrefix={Prefix} len={Len} err={Err}",
+                    cursorPreview, cursor.Length, ex.Message);
                 return null;
             }
             // 还原 DateTime (Kind=Unspecified, 与 Npgsql 读出时一致; Query 内 EF 会正确处理)

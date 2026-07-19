@@ -83,14 +83,17 @@ public class AuthTokenBroadcaster : IHostedService, IAsyncDisposable
                 _listenConn.Notification += async (sender, e) =>
                 {
                     if (e.Payload is null) return;
-                    _logger.LogInformation("[AuthTokenBroadcaster] 收到广播: {Payload}", e.Payload);
+                    // V24-F99 (P2-3, 规则 6.3): 禁止日志完整 PG NOTIFY payload
+                    //   WHY: AuthTokenStore.RotateAsync 的 payload 含 current/previous token 完整明文
+                    //     日志该 payload 会让任何能读日志的人 (运维/SRE/日志聚合系统) 获取 admin token 绕过鉴权
+                    //   审计字段 (rotatedBy/rotatedAt) 在下方独立日志, 不需完整 payload
                     try
                     {
                         // 解析 payload 用于审计
                         using var doc = JsonDocument.Parse(e.Payload);
                         var root = doc.RootElement;
                         var rotatedBy = root.TryGetProperty("rotatedBy", out var by) ? by.GetString() : null;
-                        _logger.LogInformation("[AuthTokenBroadcaster] 触发 ReloadFromDb (by={By})", rotatedBy);
+                        _logger.LogInformation("[AuthTokenBroadcaster] 收到 auth_token_rotated 广播, 触发 ReloadFromDb (by={By})", rotatedBy);
                         using var scope = _services.CreateScope();
                         var store = scope.ServiceProvider.GetRequiredService<IAuthTokenStore>();
                         await store.ReloadFromDbAsync(ct);

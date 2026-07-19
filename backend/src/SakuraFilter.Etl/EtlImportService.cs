@@ -922,6 +922,8 @@ public class EtlImportService
                     catch (Exception ex)
                     {
                         // P2-9.2: 错误行日志含原始内容预览 (截断 200 字符), 便于定位数据问题
+                        // V24-F99 (P2-3, 规则 6.3): 产品域数据无 PII (oem_no/oem_brand/machine_brand 等), 保留 preview 用于数据问题定位
+                        //   若未来 ETL 接入含 PII 的数据源 (如用户上传带手机号/身份证的产品), 需重新评估
                         var preview = line.Length > 200 ? line[..200] : line;
                         Progress.IncrErrorsWith($"products 行 {lineNo}: {ex.Message}");  // Day 7.6
                         _logger.LogError(ex, "products 行 {LineNo} 解析失败: {Msg} | content={Preview}", lineNo, ex.Message, preview);
@@ -1984,6 +1986,8 @@ public class EtlImportService
                     catch (Exception ex)
                     {
                         // P2-9.2: 错误行日志含原始内容预览 (截断 200 字符), 便于定位数据问题
+                        // V24-F99 (P2-3, 规则 6.3): 机型适配数据无 PII (machine_brand/machine_model 等), 保留 preview 用于数据问题定位
+                        //   若未来 ETL 接入含 PII 的数据源, 需重新评估
                         var preview = line.Length > 200 ? line[..200] : line;
                         Progress.IncrErrorsWith($"apps 行 {lineNo}: {ex.Message}");  // Day 7.6
                         _logger.LogError(ex, "apps 行 {LineNo} 解析失败: {Msg} | content={Preview}", lineNo, ex.Message, preview);

@@ -64,8 +64,24 @@ public static class DefaultSettingsEnsurer
                 UpdatedAt = DateTime.UtcNow
             });
             existingSet.Add(key);  // 标记本次已添加, 防御 defaults 数组内重复 key
-            logger.LogInformation("插入 {Service} 默认配置: {Key} = {Value}", serviceName, key, value);
+            // V24-F99 (P2-3, 规则 6.3): 敏感 key (webhook_url/secret/token/password) 的 value 脱敏为 ***
+            //   WHY: 当前 EtlAlertService Defaults 中 webhook_url* 为空字符串, 不泄漏
+            //     但未来若添加非空默认值 (如配置默认 webhook URL 含 secret), 会被日志记录
+            //     防御性脱敏, 防止未来回归风险
+            var displayValue = IsSensitiveKey(key) ? "***" : value;
+            logger.LogInformation("插入 {Service} 默认配置: {Key} = {Value}", serviceName, key, displayValue);
         }
         await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>判断 system_setting key 是否为敏感配置 (需脱敏)</summary>
+    private static bool IsSensitiveKey(string key)
+    {
+        // WHY 关键字匹配: 覆盖 webhook_url (含签名 secret), secret, token, password 等常见敏感配置
+        return key.Contains("webhook_url", StringComparison.OrdinalIgnoreCase)
+            || key.Contains("secret", StringComparison.OrdinalIgnoreCase)
+            || key.Contains("token", StringComparison.OrdinalIgnoreCase)
+            || key.Contains("password", StringComparison.OrdinalIgnoreCase)
+            || key.Contains("api_key", StringComparison.OrdinalIgnoreCase);
     }
 }

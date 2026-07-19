@@ -194,8 +194,12 @@ public class EtlAlertService : BackgroundService
                 else
                 {
                     var body = await resp.Content.ReadAsStringAsync(ct);
-                    _logger.LogWarning("webhook 推送失败: id={Id} severity={Sev} status={Status} body={Body}",
-                        item.Id, severity, (int)resp.StatusCode, body.Length > 200 ? body[..200] : body);
+                    // V24-F99 (P2-3, 规则 6.3): 禁止日志 webhook 错误响应 body
+                    //   WHY: 第三方 webhook (钉钉/飞书/Generic) 在错误响应中可能 echo 请求 URL (含签名 secret 参数)
+                    //     或 echo 出完整请求 payload, 泄漏 webhook 配置信息
+                    //   仅记录状态码 + body 长度, 不记录 body 内容
+                    _logger.LogWarning("webhook 推送失败: id={Id} severity={Sev} status={Status} bodyLen={BodyLen}",
+                        item.Id, severity, (int)resp.StatusCode, body.Length);
                     failed_push++;
                     _consecutiveFailures++;
                     // 不置 alert_sent,下次轮询重试

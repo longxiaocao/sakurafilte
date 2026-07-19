@@ -180,3 +180,30 @@ v29-2 高频词分布调研 (V24-F98, 2026-07-19, spec 28.7, 候选 2 不实施)
   - backend/src/SakuraFilter.Infrastructure/Storage/MinioStorage.cs (ListObjectsEnumAsync 实现)
   - backend/src/SakuraFilter.Infrastructure/Storage/AliyunOssStorage.cs (ListObjectsRequest 翻页实现)
   - backend/src/SakuraFilter.Cli/Program.cs (cleanup-orphan-images 子命令)
+
+#7 后端日志脱敏审计与修复 (2026-07-19, V24-F99 v29-3, spec 28.8)
+决策: 审计 backend/src/**/*.cs 全部 _logger.Log* 调用, 修复 1 高风险 + 1 中风险 + 2 低风险, 1 低风险保留+注释; 新增 IsSensitiveKey 关键字过滤防御未来回归
+理由:
+  - 规则 6.3 强制要求: 严禁在日志中打印密码、Token、完整手机号/身份证等敏感信息
+  - H1 AuthTokenBroadcaster 日志 PG NOTIFY payload 含完整 admin token 明文, 任何能读日志的人可绕过鉴权, 必须立即修复
+  - M1 EtlAlertService 日志 webhook 错误响应 body 可能 echo 签名 URL, 中风险
+  - L1 DefaultSettingsEnsurer 当前 webhook_url* 为空, 但未来若添加非空默认值会回归, 加 IsSensitiveKey 防御
+  - L2 AdminProductService cursor 是签名令牌, 不应大量暴露原文 (防御性)
+  - L3 EtlImportService 产品域数据无 PII, 保留 preview 用于数据问题定位, 加注释说明未来 PII 数据源需重新评估
+修复方案:
+  - H1: 删除 AuthTokenBroadcaster L86 完整 payload 日志, 合并到下一行 rotatedBy 日志 (审计字段)
+  - M1: EtlAlertService L197-198 移除 body 内容, 仅记录状态码 + bodyLen
+  - L1: DefaultSettingsEnsurer 新增 IsSensitiveKey(key) 方法, 含 webhook_url/secret/token/password/api_key 关键字的 key, value 脱敏为 ***
+  - L2: AdminProductService L485 仅记录 cursor 长度 + 前 8 字符前缀 (V2 cursor "v2:" 开头)
+  - L3: EtlImportService L927/1989 保留 preview (产品域无 PII), 加 V24-F99 注释说明安全考量
+排除方案:
+  - 全部日志加 ILogger 中间件统一脱敏: 改动面大, ROI 低, 当前 80+ 处日志绝大多数已正确处理
+  - L3 移除 preview: 损失数据问题定位能力, 当前产品域无 PII, 不必移除
+  - L1 IsSensitiveKey 改用正则: 关键字匹配已足够, 正则增加复杂度
+关联文件:
+  - backend/src/SakuraFilter.Api/Services/AuthTokenBroadcaster.cs (H1 修复)
+  - backend/src/SakuraFilter.Api/Services/EtlAlertService.cs (M1 修复)
+  - backend/src/SakuraFilter.Api/Services/DefaultSettingsEnsurer.cs (L1 加固 + IsSensitiveKey)
+  - backend/src/SakuraFilter.Api/Services/AdminProductService.cs (L2 修复)
+  - backend/src/SakuraFilter.Etl/EtlImportService.cs (L3 保留+注释, 2 处)
+  - .trae/specs/v2-architecture-migration/spec.md chapter 28.8 (v29-3 完整审计与修复记录)
