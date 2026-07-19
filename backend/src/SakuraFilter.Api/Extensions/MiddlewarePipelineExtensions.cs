@@ -82,13 +82,19 @@ public static class MiddlewarePipelineExtensions
         app.UseHttpMetrics();
 
         // 8) 认证 / 授权
+        // WHY 顺序: UseAuthentication → DevTokenAuthMiddleware → UseAuthorization
+        //   - UseAuthentication 先跑: 处理 Authorization: Bearer (JWT), 设置 ctx.User
+        //   - DevTokenAuthMiddleware 中间: 若无 Bearer, 用 X-Admin-Token 设置 ClaimsPrincipal (admin role)
+        //   - UseAuthorization 最后跑: 基于 ctx.User 评估 .RequireAuthorization("Admin") policy
+        //   修复 (v30 P0): 之前 DevTokenAuthMiddleware 在 UseAuthorization 之后, 导致
+        //     X-Admin-Token 请求被 RequireAuthorization("Admin") 端点直接 401 短路
+        //     (DevTokenAuthMiddleware 永远跑不到). 12 个 contract 测试 + Playwright smoke 受阻
+        //   根因: abefd2d (Day7.8) 拆分 Program.cs 时顺序写反, v30 端到端验证暴露
         app.UseAuthentication();
+        app.UseMiddleware<DevTokenAuthMiddleware>();
         app.UseAuthorization();
 
-        // 9) DevToken
-        app.UseMiddleware<DevTokenAuthMiddleware>();
-
-        // 10) 响应时间埋点
+        // 9) 响应时间埋点
         app.UseMiddleware<ResponseTimeMiddleware>();
 
         // 11) Swagger（仅开发）
