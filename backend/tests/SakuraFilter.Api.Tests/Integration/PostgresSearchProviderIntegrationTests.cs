@@ -321,6 +321,77 @@ public class PostgresSearchProviderIntegrationTests : PgIntegrationTestBase
         Assert.Equal(0, result.Total);
     }
 
+    [Fact]
+    public async Task SearchAsync_QExceedingMaxTokens_TruncatesToEightTokens()
+    {
+        // 覆盖 (V24-F97 v29-1, spec 28.3 P2 候选 1): q token 数量超过 8 上限时, 截断为前 8 个
+        //   WHY 防御性兜底: v28-5/v28-3 验证 1-5 token 退化可控, 但 6+ token 缺乏压测数据
+        //     极端场景 (20+ token 恶意搜索) 可能触发 INTERSECT HashSetOp Append 退化
+        //   验证点:
+        //     1. 10 个相同 token "Alpha" 截断为 8 个, 等价于 1 token "Alpha" 的 INTERSECT
+        //     2. SQL 不报错, 返回 Product1 (product_name_1='Alpha Filter' 命中)
+        //     3. 与 1 token "Alpha" 结果一致 (INTERSECT 相同集合 = 单个集合)
+        if (!IsEnabled) return;
+
+        await using var db = CreateDbContext();
+        await SeedTestDataAsync(db);
+        var provider = new PostgresSearchProvider(db, NullLogger<PostgresSearchProvider>.Instance);
+
+        // 10 个 token (超出 8 上限), 全部为 "Alpha" → 截断为 8 个 "Alpha"
+        var q10 = "Alpha Alpha Alpha Alpha Alpha Alpha Alpha Alpha Alpha Alpha";
+        var req10 = new SearchRequest(
+            Q: q10, Type: null,
+            D1: null, D2: null, D3: null,
+            H1: null, H2: null, H3: null,
+            D7Thread: null, D8Thread: null,
+            Tolerance: 5m, IncludeDiscontinued: false,
+            Page: 1, PageSize: 100);
+        var result10 = await provider.SearchAsync(req10);
+
+        // 期望: Product1 命中 (与单 token "Alpha" 等价)
+        Assert.Equal(1, result10.Total);
+        Assert.Contains(result10.Items, i => i.OemNoDisplay == "MR10001");
+
+        // 对照组: 单 token "Alpha" 结果
+        var req1 = new SearchRequest(
+            Q: "Alpha", Type: null,
+            D1: null, D2: null, D3: null,
+            H1: null, H2: null, H3: null,
+            D7Thread: null, D8Thread: null,
+            Tolerance: 5m, IncludeDiscontinued: false,
+            Page: 1, PageSize: 100);
+        var result1 = await provider.SearchAsync(req1);
+
+        // 截断后 10 token 与 1 token 结果一致 (INTERSECT 相同集合 = 单个集合)
+        Assert.Equal(result1.Total, result10.Total);
+    }
+
+    [Fact]
+    public async Task SearchAsync_QWithExactlyEightTokens_DoesNotTruncate()
+    {
+        // 覆盖 (V24-F97 v29-1): 边界值 8 token 不截断, 正常 INTERSECT
+        //   8 个 token 全部 "Alpha" → INTERSECT 8 个相同集合 = 单个集合 → Product1 命中
+        if (!IsEnabled) return;
+
+        await using var db = CreateDbContext();
+        await SeedTestDataAsync(db);
+        var provider = new PostgresSearchProvider(db, NullLogger<PostgresSearchProvider>.Instance);
+
+        var q8 = "Alpha Alpha Alpha Alpha Alpha Alpha Alpha Alpha";
+        var req = new SearchRequest(
+            Q: q8, Type: null,
+            D1: null, D2: null, D3: null,
+            H1: null, H2: null, H3: null,
+            D7Thread: null, D8Thread: null,
+            Tolerance: 5m, IncludeDiscontinued: false,
+            Page: 1, PageSize: 100);
+        var result = await provider.SearchAsync(req);
+
+        // 8 token (恰好上限, 不截断), INTERSECT 8 个相同集合 = 单个集合
+        Assert.Equal(1, result.Total);
+        Assert.Contains(result.Items, i => i.OemNoDisplay == "MR10001");
+    }
+
     /// <summary>
     /// 种子测试数据: 4 个产品 (3 上架 + 1 下架), 每产品配 1 个 xref + 1 个 machine
     ///   Product1 (MR10001): bearing, Alpha Filter, xref Bosch, machine Caterpillar (construction)

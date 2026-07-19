@@ -16626,3 +16626,125 @@ Aggregate  (cost=511634.92..511634.93 rows=1 width=8) (actual time=6524.562..652
 - v29+ 候选: 见上述 P2 候选改进 1-4
 
 ---
+
+### 28.6 v29-1: PostgresSearchProvider token 数量限制 (V24-F97, 2026-07-19)
+
+**背景**: spec 28.3 P2 候选 1, 防御性兜底防止极端场景 (20+ token 恶意搜索) 触发 INTERSECT HashSetOp Append 退化
+
+**关联**: v28-5 (50K 多 token 边界压测), v28-3 (1M 数据扩容压测), ADR #5
+
+**实施内容**:
+- `backend/src/SakuraFilter.Search/PostgresSearchProvider.cs` BuildQMatchCte 方法新增 V24-F97 token 截断逻辑
+- 限制最大 token 数量为 8 (保守上限, 超出 v28-5/v28-3 验证的 5 token 边界)
+- 超出时截断为前 8 个 token + LogWarning (记录原始 q + 实际 token 数)
+- WHY 8: v28-5 (50K) 验证 1-5 token P95 610ms (2.64x), v28-3 (1M) 验证 1-5 token P95 6s (1.49x), 6-8 token 缺乏压测数据但应在 PG 优化器 INTERSECT HashSetOp Append 稳定范围内, 9+ token 风险不明
+
+**集成测试**:
+- `backend/tests/SakuraFilter.Api.Tests/Integration/PostgresSearchProviderIntegrationTests.cs` 新增 2 个测试:
+  - `SearchAsync_QExceedingMaxTokens_TruncatesToEightTokens`: 10 token "Alpha" 截断为 8, 等价于 1 token "Alpha" 的 INTERSECT
+  - `SearchAsync_QWithExactlyEightTokens_DoesNotTruncate`: 边界值 8 token 不截断, 正常 INTERSECT
+- 全量后端测试 448 通过 (原 446 + 新增 2), 含 14 个 PostgresSearchProvider 集成测试
+
+**决策依据**:
+- v28-5 (50K) 多 token 1-5 退化曲线: 1 token 231ms (基准) → 5 token 610ms (2.64x, 趋于平缓)
+- v28-3 (1M) 多 token 1-5 退化曲线: 1 token 4053ms (基准) → 5 token 6024ms (1.49x, 反而更稳定)
+- PG 优化器在 1-5 token 所有场景都选 GIN trgm Bitmap Index Scan
+- 6-8 token 缺乏压测数据, 但 PG 优化器 INTERSECT HashSetOp Append 应在 8 token 内保持稳定
+- 9+ token 风险不明, 截断为 8 是保守防御
+
+**实际改动文件清单**:
+- `backend/src/SakuraFilter.Search/PostgresSearchProvider.cs` — BuildQMatchCte 新增 V24-F97 token 截断逻辑 (const maxTokens=8, LogWarning)
+- `backend/tests/SakuraFilter.Api.Tests/Integration/PostgresSearchProviderIntegrationTests.cs` — 新增 2 个集成测试
+
+**关联文档**:
+- `.ai/decisions.md` ADR #5 — 追加 V24-F97 token 数量限制决策
+
+---
+
+### 28.7 v29-2: 高频词分布调研与候选 2 决策 (V24-F98, 2026-07-19)
+
+**背景**: spec 28.3 P2 候选 2, v28-3 发现高频词 "filter" 在 1M 数据下仅 1.53x 加速 (候选集爆炸), 需调研高频词分布决策实施方式
+
+**关联**: v28-3 (1M 数据扩容压测), ADR #5
+
+**调研脚本**:
+- `spike-test/_perf_v29_2_high_freq_survey.py` — 高频词分布调研 (50K + 1M 双库对比)
+- `spike-test/_perf_v29_2_high_freq_survey.json` — raw 调研数据
+
+**调研结果**:
+
+#### 1M 数据 (sakurafilter_perf_tests 948K products) 高频词命中分布
+
+| token | 命中 products | pct | type 完全匹配 | 是否高频 (>50%) |
+|---|---|---|---|---|
+| **filter** | 948,328 | **99.95%** | 475 | ⚠️ 高频 |
+| air | 329,821 | 34.76% | 无 | 正常 |
+| bosch | 294,579 | 31.05% | 无 | 正常 |
+| CAT | 277,568 | 29.25% | 无 | 正常 |
+| oil | 236,778 | 24.96% | 无 | 正常 |
+| kubota | 214,525 | 22.61% | 无 | 正常 |
+| fuel | 120,365 | 12.69% | 无 | 正常 |
+| cabin | 65,873 | 6.94% | 无 | 正常 |
+| hydraulic | 65,094 | 6.86% | 无 | 正常 |
+| industrial | 59,565 | 6.28% | 无 | 正常 |
+
+#### 50K 数据 (spike_test_v3 49K products) 高频词命中分布 (对比)
+
+| token | 命中 products | pct | 是否高频 (>50%) |
+|---|---|---|---|
+| **filter** | 49,912 | **99.95%** | ⚠️ 高频 |
+| **CAT** | 42,585 | **85.28%** | ⚠️ 高频 (50K 独有) |
+| **bosch** | 33,709 | **67.50%** | ⚠️ 高频 (50K 独有) |
+| kubota | 21,876 | 43.81% | 正常 |
+| air | 17,359 | 34.76% | 正常 |
+| oil | 12,462 | 24.96% | 正常 |
+
+#### 关键发现
+
+1. **真正高频词只有 1 个 "filter"** (1M 数据 99.95% 命中)
+   - 原因: type 字段值都含 "FILTER" 后缀 (AIR FILTER / OIL FILTER / FUEL FILTER / CABIN AIR FILTER / HYDRAULIC FILTER / PETROL FILTER / AIR/OIL SEPARATOR / ACTIVATED CARBON FILTER / WATER SEPARATOR / SPIN-ON FILTER 等共 25 个 type)
+   - 这是工业滤芯行业的结构性特征, 非数据问题
+
+2. **50K 数据的 "CAT"/"bosch" 高频** 在 1M 数据下变成中频 (29%/31%)
+   - 原因: 1M 数据生成时 machine_applications 用 random.sample 均匀化品牌分布, 50K 数据集中度高
+
+3. **filter 命中来源全是 products 表** (xref/machine 命中 0)
+   - 因为 type 字段在 products 表, xref/machine 表不含 "filter" 词
+
+4. **type 分布 Top 10** (1M 数据):
+   - AIR FILTER 21.81%, OIL FILTER 18.90%, FUEL FILTER 12.69%, CABIN AIR FILTER 6.94%, HYDRAULIC FILTER 6.86%, PETROL FILTER 5.16%, AIR/OIL SEPARATOR 4.32%, ACTIVATED CARBON FILTER 3.46%, WATER SEPARATOR 2.64%, SPIN-ON FILTER 1.79%
+   - 所有 type 都含 "FILTER" 后缀 (除 WATER SEPARATOR / AIR/OIL SEPARATOR), 故 "filter" 命中 99.95%
+
+**方案评估**:
+
+| 方案 | 描述 | 优点 | 缺点 | 决策 |
+|---|---|---|---|---|
+| A: type 等值过滤 | q 命中 type distinct 值时改用 `WHERE p.type = @q` (B-tree) | 性能最优 (B-tree) | 仅 475 个 type 完全匹配, 严重改变搜索语义 (用户期望 99.95% 命中) | ❌ 不可行 |
+| B: 高频词黑名单 | 命中黑名单时跳过 q_match CTE | 简单, 直接消除候选集爆炸 | 改变搜索语义 (q="filter" 等价于 q=""), 用户体验差 | ❌ 不可行 |
+| C: q_match LIMIT | CTE 添加 LIMIT 50000 防爆炸 | 防 INTERSECT HashSetOp Append 退化 | LIMIT 后 INTERSECT 结果不确定, 可能漏数据 | ❌ 风险高 |
+| G: 动态高频词识别 | 运行时查询 token 命中数, > 阈值时跳过 | 自适应数据变化 | 每次请求 +1 次查询, 只解决 1 个词, ROI 低 | ❌ ROI 低 |
+| H: 静态黑名单 | 启动时加载静态黑名单 ["filter"] | 零运行时开销 | 黑名单需手动维护, 数据变化时不自适应 | ❌ 维护成本 |
+
+**最终决策**: 候选 2 不实施
+
+理由:
+1. 真正高频词只有 1 个 "filter" (99.95% 命中), 是 type 字段通用后缀的结构性问题, 非 bug
+2. 方案 A (type 等值过滤) 不可行 — 仅 475 个 type 完全匹配会严重改变搜索语义
+3. 方案 G (动态高频词识别) 增加运行时开销, 只解决 1 个词, ROI 低
+4. v28-3 已证明 v28-2 在 1M 数据下加速 6.82x, filter 的 1.53x 是异常值但绝对延迟 5.3s 仍在可接受范围
+5. 生产环境有 Meili 主路径, PG 是兜底, filter 在 Meili 中走默认匹配也能解决
+6. 用户搜 "filter" 期望返回所有 filter 类产品 (99.95% = 全部), 当前行为符合预期
+
+**风险提示**:
+- 如未来 PG 兜底成为主路径 (Meili 故障), filter 搜索 P95 5.3s 体验较差, 届时需重新评估
+- 如数据规模继续增长 (5M+ products), filter 候选集爆炸可能进一步恶化, 届时需考虑方案 G
+
+**实际改动文件清单**:
+- `spike-test/_perf_v29_2_high_freq_survey.py` — 高频词分布调研脚本 (50K + 1M 双库对比)
+- `spike-test/_perf_v29_2_high_freq_survey.json` — raw 调研数据
+- 无后端代码改动 (候选 2 不实施)
+
+**关联文档**:
+- `.ai/decisions.md` ADR #5 — 追加 V24-F98 候选 2 不实施决策
+
+---

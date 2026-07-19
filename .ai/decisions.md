@@ -60,8 +60,8 @@
   - backend/tests/SakuraFilter.Api.Tests/Integration/AdminProductImageServiceIntegrationTests.cs (V24-F83)
   - .env (PG_TEST_CONNECTION_STRING 指向 sakurafilter_int_tests)
 
-#5 PostgresSearchProvider Phase 2 keyset 分页暂缓 (2026-07-19, 50K 压测验证 2026-07-19, v28-1 GIN trgm 验证 2026-07-19, v28-2 CTE UNION 拆分验证 2026-07-19, v28-3 1M 扩容压测验证 2026-07-19)
-决策: v27-1 暂不实施 keyset 分页改造, 保留 OFFSET 分页; v27-3 50K 压测后维持暂缓决策; v28-1 GIN trgm 索引对 baseline SQL 无收益; v28-2 CTE UNION 拆分 + 三表 GIN trgm 索引 P95 1827ms → 305ms (6.0x), 达 4x 目标, 已落地; v28-3 1M 扩容压测 v28-2 加速比保持 6.82x, 多 token 退化 1.49x, 维持当前实现
+#5 PostgresSearchProvider Phase 2 keyset 分页暂缓 (2026-07-19, 50K 压测验证 2026-07-19, v28-1 GIN trgm 验证 2026-07-19, v28-2 CTE UNION 拆分验证 2026-07-19, v28-3 1M 扩容压测验证 2026-07-19, v29-1 token 数量限制 2026-07-19, v29-2 高频词分布调研 2026-07-19)
+决策: v27-1 暂不实施 keyset 分页改造, 保留 OFFSET 分页; v27-3 50K 压测后维持暂缓决策; v28-1 GIN trgm 索引对 baseline SQL 无收益; v28-2 CTE UNION 拆分 + 三表 GIN trgm 索引 P95 1827ms → 305ms (6.0x), 达 4x 目标, 已落地; v28-3 1M 扩容压测 v28-2 加速比保持 6.82x, 多 token 退化 1.49x, 维持当前实现; v29-1 token 数量限制为 8 (防御性兜底, 防止极端场景 INTERSECT HashSetOp Append 退化); v29-2 高频词分布调研后候选 2 不实施 (真正高频词仅 "filter" 1 个, 是 type 字段结构性特征非 bug, ROI 低)
 理由:
   - 当前 SearchRequest DTO 用 Page/PageSize 页式分页, 前端依赖 Page 契约
   - 改 keyset 需破坏前端 Page 契约或引入 cursor 参数, 改动面大
@@ -112,6 +112,19 @@ v28-3 1M 数据扩容压测验证数据 (2026-07-19, sakurafilter_perf_tests 950
   - PG 优化器行为: 1-5 token 所有场景都选 GIN trgm Bitmap Index Scan, chapter 28.2 边界测试建议 #2 风险未触发
   - 结论: v28-2 CTE UNION 方案在 1M 数据下保持有效性, 维持当前实现, 无需启用 v27-1 q_match 候选集爆炸防御
   - 风险提示: 1M 数据下 v28-2 单 token P95 1.8-5.3s (绝对延迟显著放大 17.5x), 高频词 filter 仅 1.53x 加速 (候选集爆炸), 生产环境需配合 Meili 主路径
+v29-1 token 数量限制 (V24-F97, 2026-07-19, spec 28.6):
+  - 决策: PostgresSearchProvider.BuildQMatchCte 限制最大 token 数量为 8, 超出截断 + LogWarning
+  - WHY 8: v28-5 (50K) 验证 1-5 token P95 610ms (2.64x, 趋于平缓), v28-3 (1M) 验证 1-5 token P95 6s (1.49x, 反而更稳定), PG 优化器仍选 GIN trgm Bitmap Index Scan
+  - 6-8 token 缺乏压测数据, 但 PG 优化器 INTERSECT HashSetOp Append 应在 8 token 内保持稳定, 9+ token 风险不明
+  - 防御性兜底: 防止极端场景 (20+ token 恶意搜索) 触发 INTERSECT HashSetOp Append 退化
+  - 集成测试: 2 个新增 (10 token 截断为 8 / 边界值 8 token 不截断), 全量后端测试 448 通过 (原 446 + 新增 2)
+v29-2 高频词分布调研 (V24-F98, 2026-07-19, spec 28.7, 候选 2 不实施):
+  - 调研对象: spike_test_v3 (50K) + sakurafilter_perf_tests (1M), 21 个高频词候选
+  - 1M 数据高频词 (>50% 命中): 仅 "filter" 1 个 (99.95% 命中), 50K 数据高频词 3 个 (filter/CAT/bosch)
+  - 真正高频词只有 "filter" (1M 99.95%): 原因是 type 字段值都含 "FILTER" 后缀 (AIR FILTER / OIL FILTER 等共 25 个 type), 工业滤芯行业结构性特征
+  - "CAT"/"bosch" 在 1M 数据下变成中频 (29%/31%): 1M 数据生成时 machine_applications 用 random.sample 均匀化品牌分布
+  - 方案评估: A (type 等值过滤) 不可行 - 仅 475 个 type 完全匹配会严重改变搜索语义; B (静态黑名单) 改变搜索语义; C (q_match LIMIT) 漏数据风险高; G (动态识别) ROI 低 (只解决 1 个词); H (静态黑名单) 维护成本高
+  - 最终决策: 候选 2 不实施, 真正高频词只有 1 个 "filter" 是 type 字段结构性特征非 bug, v28-3 已证明 filter 的 1.53x 加速是异常值但绝对延迟 5.3s 可接受, 生产环境有 Meili 主路径兜底
 排除方案:
   - 立即改 keyset: 工作量大 (前后端契约改造) 且 50K 压测显示 OFFSET 深度非主要瓶颈
   - 加 GIN trgm 索引 (v28-1 验证): 对当前 SQL 模式无收益, PG 优化器不选, 不应加索引 (50MB 索引浪费)
@@ -147,7 +160,11 @@ v28-3 1M 数据扩容压测验证数据 (2026-07-19, sakurafilter_perf_tests 950
   - spike-test/_gen_v28_3_apps_only.py (v28-3 1M 数据 apps 续传脚本: step5-7 4.75M apps + xref_oem_brand + ANALYZE)
   - spike-test/_v28_3_schema_dump.sql (v28-3 spike_test_v3 schema 导出, 含 10 个 GIN trgm 索引)
   - spike-test/_v28_3_gen.log (v28-3 数据生成日志)
-  - .trae/specs/v2-architecture-migration/spec.md chapter 27.8 (v27-3 实施记录) + chapter 28.1 (v28-1 验证记录) + chapter 28.2 (v28-2 实施记录) + chapter 28.5 (v28-5 验证记录) + chapter 28.3 (v28-3 1M 扩容压测验证记录)
+  - backend/src/SakuraFilter.Search/PostgresSearchProvider.cs (V24-F97 v29-1 BuildQMatchCte token 截断逻辑)
+  - backend/tests/SakuraFilter.Api.Tests/Integration/PostgresSearchProviderIntegrationTests.cs (V24-F97 v29-1 新增 2 个 token 截断测试)
+  - spike-test/_perf_v29_2_high_freq_survey.py (V24-F98 v29-2 高频词分布调研脚本)
+  - spike-test/_perf_v29_2_high_freq_survey.json (V24-F98 v29-2 调研 raw 数据)
+  - .trae/specs/v2-architecture-migration/spec.md chapter 27.8 (v27-3 实施记录) + chapter 28.1 (v28-1 验证记录) + chapter 28.2 (v28-2 实施记录) + chapter 28.5 (v28-5 验证记录) + chapter 28.3 (v28-3 1M 扩容压测验证记录) + chapter 28.6 (v29-1 token 数量限制) + chapter 28.7 (v29-2 高频词分布调研与候选 2 不实施决策)
 
 #6 IObjectStorage.ListAsync 接口扩展决策 (2026-07-19)
 决策: v27-2 扩展 IObjectStorage 接口加 ListAsync 方法, MinioStorage + AliyunOssStorage 双实现

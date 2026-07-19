@@ -166,6 +166,10 @@ public class PostgresSearchProvider : ISearchProvider
     ///   每个分支独立走 GIN trgm Bitmap Index Scan, P95 从 1827ms → 305ms (6x)
     /// 多 token 处理: 每个 token 独立 CTE (q_match_0, q_match_1, ...), 最终 INTERSECT 取交集
     ///   语义对齐 Meili default matchingStrategy='all'
+    /// V24-F97 (v29-1, spec 28.3 P2 候选 1): 限制最大 token 数量为 8 (防御性兜底)
+    ///   WHY: v28-5 (50K) + v28-3 (1M) 验证 1-5 token 退化可控 (50K 2.64x / 1M 1.49x), PG 优化器仍选 GIN trgm
+    ///     但 6+ token 缺乏压测数据, 极端场景 (如 20+ token 恶意搜索) 可能触发 INTERSECT HashSetOp Append 退化
+    ///     8 作为保守上限, 超出时截断 + LogWarning (实际电商搜索 5+ token 罕见)
     /// </summary>
     /// <returns>(ctePrefixSql, qParams) ctePrefixSql = null 当无 q</returns>
     private (string? ctePrefixSql, List<NpgsqlParameter> qParams) BuildQMatchCte(string? q)
@@ -175,8 +179,17 @@ public class PostgresSearchProvider : ISearchProvider
             return (null, new List<NpgsqlParameter>());
         }
 
+        // V24-F97 (v29-1): 限制最大 token 数量为 8, 超出截断 (防御性兜底, 见 spec 28.3 P2 候选 1)
+        const int maxTokens = 8;
         var raw = q.Trim();
-        var tokens = raw.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var allTokens = raw.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (allTokens.Length > maxTokens)
+        {
+            _logger.LogWarning("PostgresSearchProvider.BuildQMatchCte: q token 数量 {ActualCount} 超过上限 {MaxTokens}, 截断为前 {MaxTokens} 个 (q={RawQ})",
+                allTokens.Length, maxTokens, maxTokens, raw);
+            allTokens = allTokens.Take(maxTokens).ToArray();
+        }
+        var tokens = allTokens;
         var qParams = new List<NpgsqlParameter>();
 
         // 单 token: 单个 q_match CTE
