@@ -104,6 +104,10 @@ frontend/tsconfig.tsbuildinfo
 frontend/coverage/
 backend/tests/**/TestResults/
 
+## .ai/ 个人会话状态 (V24-F80 规则 v2.4 要求)
+# WHY: context.md 是个人会话状态, 不共享; decisions.md + suggestions.md 团队共享, 纳入版本控制
+.ai/context.md
+
 ## Playwright 临时产物 (可重建, 不提交)
 # WHY: test-results/ 是失败时的诊断截图, playwright-report/ 是 HTML 报告
 #      current/ 是本次截图, *.diff.png 是差异图, 都可重建
