@@ -9,6 +9,10 @@ V24-F77: 前端设计审查 - 全页面巡检
   6. A11y: aria-label / aria-labelledby 检查
   7. 响应式: 桌面 (1280) + 平板 (768) + 手机 (375) 截图
   8. 配色对比度 (亮色/暗色主题切换)
+
+V24-F92 (v27-9): 支持 FRONTEND_URL/BACKEND_URL 环境变量, 适配 CI
+  - CI: Vite 跑 5173, BACKEND_URL=http://localhost:5148
+  - 本地: Vite 跑 5175 (5173 被另一项目占用), 默认值保留本地行为
 """
 import json
 import os
@@ -16,8 +20,8 @@ import time
 from pathlib import Path
 from playwright.sync_api import sync_playwright
 
-FRONTEND = "http://localhost:5175"
-BACKEND = "http://localhost:5148"
+FRONTEND = os.environ.get("FRONTEND_URL", "http://localhost:5175")
+BACKEND = os.environ.get("BACKEND_URL", "http://localhost:5148")
 SHOTS = Path("spike-test/_e2e_audit/screenshots_design")
 SHOTS.mkdir(parents=True, exist_ok=True)
 

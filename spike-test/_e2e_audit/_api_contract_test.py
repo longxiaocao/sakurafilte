@@ -1,10 +1,12 @@
 # V24-F74: 前后端联动验证 - API 契约测试 v2 (修正路径)
+# V24-F92 (v27-9): 支持 BACKEND_URL 环境变量, 适配 CI (CI 用默认 5148, 本地可覆盖)
 import urllib.request
 import urllib.error
 import json
 import urllib.parse
+import os
 
-BASE = "http://localhost:5148"
+BASE = os.environ.get("BACKEND_URL", "http://localhost:5148")
 
 def test_api(method, path, headers=None, body=None, desc=""):
     url = f"{BASE}{path}"
@@ -30,24 +32,41 @@ def test_api(method, path, headers=None, body=None, desc=""):
         return {"status": 0, "ok": False, "error": msg}
 
 # 先登录获取 JWT
-print("=" * 70)
-print("0. JWT 登录 (获取 accessToken)")
-print("=" * 70)
-login_body = json.dumps({"username": "admin", "password": "Admin@2026"})
-login_r = test_api("POST", "/api/auth/login", {"Content-Type": "application/json"}, login_body, "JWT 登录")
+# V24-F92 (v27-9): 支持 USE_DEV_TOKEN 模式, CI 用 X-Admin-Token 绕过 JWT 登录
+#   - 本地默认: JWT 登录 (admin / Admin@2026)
+#   - CI 模式 (USE_DEV_TOKEN=1): 用 ADMIN_TOKEN 环境变量作 X-Admin-Token, 适配空库 CI
+USE_DEV_TOKEN = os.environ.get("USE_DEV_TOKEN", "0") == "1"
+ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN", "")
 jwt = None
-if login_r.get("ok"):
-    try:
-        data = json.loads(login_r["body"])
-        jwt = data.get("accessToken") or data.get("access_token")
-        if jwt:
-            print(f"  [OK] JWT 获取成功 ({len(jwt)} 字符)")
-        else:
-            print(f"  [WARN] 登录响应无 accessToken: keys={list(data.keys())}")
-    except Exception as e:
-        print(f"  [FAIL] JWT 解析失败: {e}")
+jwt_h = {}
 
-jwt_h = {"Authorization": f"Bearer {jwt}"} if jwt else {}
+if USE_DEV_TOKEN:
+    print("=" * 70)
+    print("0. CI 模式: 使用 X-Admin-Token (跳过 JWT 登录, 适配空库)")
+    print("=" * 70)
+    if not ADMIN_TOKEN:
+        print("[FAIL] USE_DEV_TOKEN=1 但 ADMIN_TOKEN 环境变量未设置")
+    else:
+        jwt_h = {"X-Admin-Token": ADMIN_TOKEN}
+        print(f"[OK] X-Admin-Token 已设置 ({len(ADMIN_TOKEN)} 字符)")
+else:
+    print("=" * 70)
+    print("0. JWT 登录 (获取 accessToken)")
+    print("=" * 70)
+    login_body = json.dumps({"username": "admin", "password": "Admin@2026"})
+    login_r = test_api("POST", "/api/auth/login", {"Content-Type": "application/json"}, login_body, "JWT 登录")
+    if login_r.get("ok"):
+        try:
+            data = json.loads(login_r["body"])
+            jwt = data.get("accessToken") or data.get("access_token")
+            if jwt:
+                print(f"  [OK] JWT 获取成功 ({len(jwt)} 字符)")
+            else:
+                print(f"  [WARN] 登录响应无 accessToken: keys={list(data.keys())}")
+        except Exception as e:
+            print(f"  [FAIL] JWT 解析失败: {e}")
+
+    jwt_h = {"Authorization": f"Bearer {jwt}"} if jwt else {}
 
 print()
 print("=" * 70)

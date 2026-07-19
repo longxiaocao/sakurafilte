@@ -16078,3 +16078,95 @@ cd frontend && npx playwright test tests/e2e/admin-product-image-upload.spec.ts 
 3. 多 slot 并发上传 (同时上传 slot 2-6) | 当前测试串行, 未验证并发场景下的 images ref 状态一致性
 
 ---
+
+### 27.10 v27-9: E2E 巡检 CI 化 (V24-F92, 2026-07-19)
+
+**实施时间**: 2026-07-19
+**目标**: 把 spike-test/_e2e_audit/ 下的两个本地手动脚本纳入 CI, 实现防回归
+**关联**: V24-F88 (PG 集成测试 CI 化基础设施), spec 26.17.3 P2-3
+
+**实施方案**:
+- 复用 frontend-contract job 已有的 PG service container + API 5148 + Vite 5173 + Python 环境
+- 不依赖 Testcontainers (与 ADR #4 一致)
+- 新增依赖: Python `playwright` 包 + chromium 浏览器 (仅 design audit 需要, ~30s 安装)
+- API contract test 用 urllib 标准库, 无新依赖
+
+**3 个 CI Step**:
+
+| Step | 名称 | 阻塞? | 依赖 |
+|---|---|---|---|
+| V27-9-1 | API 契约测试 (urllib, 20+ 端点) | ✅ 阻塞 (grep `[FAIL]`) | 无新依赖 |
+| V27-9-2 | 安装 Python Playwright + chromium | — | pip + playwright install |
+| V27-9-3 | 设计巡检 (21 页面 × 3 视口) | ⚠️ continue-on-error | V27-9-2 + Vite 5173 |
+
+**脚本改造** (最小改动):
+
+1. **_api_contract_test.py**:
+   - 加 `BACKEND_URL` 环境变量 (默认 `http://localhost:5148`, 本地行为不变)
+   - 加 `USE_DEV_TOKEN` 模式: CI 空库无 admin 用户, 用 `X-Admin-Token` header 绕过 JWT 登录
+   - 加 `ADMIN_TOKEN` 环境变量 (CI 已有, 复用 e2e.yml env.ADMIN_TOKEN)
+
+2. **_design_audit.py**:
+   - 加 `FRONTEND_URL` 环境变量 (默认 `http://localhost:5175`, 本地行为不变; CI 用 5173)
+   - 加 `BACKEND_URL` 环境变量 (同上)
+
+**关键技术决策**:
+
+1. **CI 模式用 X-Admin-Token 而非 JWT 登录**:
+   - WHY: CI spike_test_v3 数据库为空, 后端 seed admin 用户需要 `INITIAL_ADMIN_PASSWORD` 环境变量, 但 e2e.yml 未设置
+   - 修复: `_api_contract_test.py` 加 `USE_DEV_TOKEN=1` 模式, 直接用 `X-Admin-Token` header (后端 dev token 模式已支持)
+   - 本地默认仍走 JWT 登录 (USE_DEV_TOKEN=0), 保持原有行为
+
+2. **V27-9-1 阻塞, V27-9-3 非阻塞**:
+   - V27-9-1 (API 契约): grep `[FAIL]` 关键字判断, 网络错误/解析失败即阻塞
+   - V27-9-3 (设计巡检): continue-on-error=true, console error 可能是 favicon 404 等无害错误, 首次接入怕误判
+   - 截图上传: push/schedule 事件触发, 30 天保留, 供人工排查
+
+3. **V27-9-2 单独 step 而非合并到 V27-9-3**:
+   - WHY: pip install + playwright install 是独立操作, 单独 step 便于在 GitHub Actions UI 区分安装 vs 测试
+   - 安装失败立即阻塞, 不进入测试 step
+
+4. **Python Playwright 与 Node Playwright 独立**:
+   - Node Playwright (P0-E2E-2) 已装 chromium, 但 Python Playwright 不共享 Node 浏览器二进制
+   - 需独立执行 `python -m playwright install chromium --with-deps` (~30s)
+
+**文件清单**:
+- `spike-test/_e2e_audit/_api_contract_test.py` — 加 BACKEND_URL + USE_DEV_TOKEN + ADMIN_TOKEN 环境变量 (改造, +18 行)
+- `spike-test/_e2e_audit/_design_audit.py` — 加 FRONTEND_URL + BACKEND_URL 环境变量 (改造, +4 行)
+- `.github/workflows/e2e.yml` — 追加 V27-9-1/V27-9-2/V27-9-3 + screenshot upload 4 个 step (改造, +63 行)
+
+**验证结果**:
+- Python 脚本语法: `python -m py_compile` 两个脚本均通过
+- YAML 语法: `python -c "import yaml; yaml.safe_load(...)"` 通过
+- 本地实测: 后端 5148 未启动, 跳过 (CI 上会自动启动)
+- CI 实测: 留下次 master push 触发
+
+**关联需求**:
+- spec 26.17.3 P2-3 (E2E 巡检 CI): ✅ 完成
+- spec 26.17.3 P2 列表: 全部完成
+- ADR #4 (本地 PG + 独立测试库, 不用 Testcontainers): 无冲突
+- V24-F88 (PG 集成测试 CI 化): 复用其 PG service container 基础设施
+
+**🧪 冒烟验证**:
+```bash
+# 本地 (需先启动 backend 5148 + frontend 5175)
+cd spike-test
+python _e2e_audit/_api_contract_test.py            # JWT 模式 (需 admin 用户)
+USE_DEV_TOKEN=1 ADMIN_TOKEN=dev-admin-token-rotate-in-prod-MZK4R9P3X6V2N7Q1L5F0B8H3C python _e2e_audit/_api_contract_test.py  # dev token 模式
+python _e2e_audit/_design_audit.py                  # 需 Python playwright + chromium
+
+# CI (master push 自动触发)
+# V27-9-1 阻塞, V27-9-3 非阻塞 (截图上传供人工排查)
+```
+
+**⚠️ 边界测试建议**:
+1. CI 上 V27-9-3 设计巡检首次跑可能有 console error (如 favicon 404, axios 401) | continue-on-error=true 已设, 不阻塞 PR, 但需人工看截图确认
+2. V27-9-1 在 CI 空库跑 /api/admin/products 返回 0 条 | 不是 [FAIL], 不阻塞, 但说明测试覆盖不深 (无法验证数据完整性)
+3. V27-9-3 涉及 21 个页面 × 3 视口 = 63 张截图, 单次约 3-5 分钟 | 若 CI 时间过长可考虑拆分为多个 job 并行
+
+**未完成事项 (留后续)**:
+- V27-9-3 设计巡检首次 CI 跑完后, 根据实际 console error 列表决定是否从 continue-on-error 改为阻塞
+- 考虑加 INITIAL_ADMIN_PASSWORD 环境变量到 e2e.yml, 让 _api_contract_test.py 在 CI 也能走 JWT 登录路径 (目前 CI 用 dev token 模式)
+- _design_audit.py 的 has_action_button 函数是粗略检查, 未来可改用 Vue devtools 或 axe-core 替代
+
+---

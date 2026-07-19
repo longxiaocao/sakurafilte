@@ -659,3 +659,68 @@ jobs:
             echo "::warning::P2.7-2 极端场景失败 (rc=$RC), 需人工排查"
             exit 0  # 不阻塞 PR, 仅警告
           fi
+
+      # ===== V24-F92 (v27-9): API 契约 + 设计巡检 CI 化 =====
+      # WHY: 之前 _api_contract_test.py 和 _design_audit.py 只能本地手动跑,
+      #      无 CI 防回归, 改 API 路径/响应结构后无法及时发现问题
+      # 复用 frontend-contract job 已有的 PG + API 5148 + Vite 5173 + Python 环境
+      # 新增依赖: Python playwright + chromium (仅 design audit 需要)
+
+      # V27-9-1: API 契约测试 (urllib 标准库, 无新依赖)
+      #   覆盖: 公开 API + 后台 API + 错误处理 + 前后端联动 (4 section, 20+ 端点)
+      #   CI 模式 (USE_DEV_TOKEN=1): 用 X-Admin-Token 绕过 JWT 登录, 适配空库
+      - name: V27-9-1 API contract test (urllib, 20+ endpoints)
+        working-directory: spike-test
+        env:
+          BACKEND_URL: ${{ env.BACKEND_URL }}
+          ADMIN_TOKEN: ${{ env.ADMIN_TOKEN }}
+          USE_DEV_TOKEN: "1"
+        run: |
+          echo "===== V27-9-1 API 契约测试 ====="
+          OUTPUT=$(python _e2e_audit/_api_contract_test.py 2>&1)
+          echo "$OUTPUT"
+          # 检查真正的失败 ([FAIL] 是网络/解析错误, [ERR] 是 HTTP 4xx/5xx 含预期)
+          if echo "$OUTPUT" | grep -q '\[FAIL\]'; then
+            echo "::error::V27-9-1 API 契约测试存在 [FAIL] 行, 需排查"
+            exit 1
+          fi
+          echo "[PASS] V27-9-1 API 契约测试通过"
+
+      # V27-9-2: 安装 Python Playwright + Chromium (design audit 需要)
+      #   ~30s, 与 Node Playwright 独立 (Python 包不共享 Node 浏览器二进制)
+      - name: V27-9-2 Install Python Playwright + chromium
+        run: |
+          echo "===== V27-9-2 安装 Python Playwright + Chromium ====="
+          pip install playwright
+          python -m playwright install chromium --with-deps
+          echo "[PASS] Python Playwright + Chromium 已安装"
+
+      # V27-9-3: 设计巡检 (21 页面 × 3 视口 × 多检查项)
+      #   覆盖: 页面加载 + console error + 4xx/5xx + H1 语义 + 按钮 + A11y + 响应式截图
+      #   continue-on-error: 首次接入怕有 console error 误判 (如 favicon 404), 设为非阻塞
+      - name: V27-9-3 Design audit (21 pages, 3 viewports)
+        working-directory: spike-test
+        env:
+          FRONTEND_URL: http://localhost:5173
+          BACKEND_URL: ${{ env.BACKEND_URL }}
+          ADMIN_TOKEN: ${{ env.ADMIN_TOKEN }}
+        continue-on-error: true
+        run: |
+          echo "===== V27-9-3 设计巡检 (21 页面) ====="
+          if python _e2e_audit/_design_audit.py; then
+            echo "[PASS] V27-9-3 设计巡检通过"
+          else
+            RC=$?
+            echo "::warning::V27-9-3 设计巡检发现问题 (rc=$RC), 上传截图供人工排查"
+            exit 0  # 非阻塞, 仅警告 (console error 可能是 favicon 404 等无害)
+          fi
+
+      - name: Upload design audit screenshots (always)
+        if: always() && github.event_name == 'push' || github.event_name == 'schedule'
+        uses: actions/upload-artifact@v4
+        with:
+          name: design-audit-screenshots-${{ github.run_id }}
+          path: spike-test/_e2e_audit/screenshots_design/
+          retention-days: 30
+          if-no-files-found: ignore
+
