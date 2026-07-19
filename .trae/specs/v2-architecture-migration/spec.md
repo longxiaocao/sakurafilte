@@ -15936,15 +15936,145 @@ v27 阶段首批 2 项任务完成 (v27-4 CI 化 + v27-2 CleanupOrphanImages CLI
 
 ### 27.7 💡 改进建议 (后续 v27 批次二+ 决策)
 
-1. **v27-3 1M 产品压测脚本**: 生成 1M 产品 + 20M xref 假数据, 压测 PostgresSearchProvider OFFSET 深分页 (page=1/10/100/500), 输出 P50/P95/P99 延迟报告, 决策是否实施 v27-1 keyset
+1. ~~**v27-3 1M 产品压测脚本**: 生成 1M 产品 + 20M xref 假数据, 压测 PostgresSearchProvider OFFSET 深分页 (page=1/10/100/500), 输出 P50/P95/P99 延迟报告, 决策是否实施 v27-1 keyset~~ → 已在 27.8 完成 50K 基线压测, 1M 扩容留后续
 2. **v27-2 后续**: CleanupOrphanImages CLI 加 cron (如 K8s CronJob 每周一次), 自动清理防孤儿累积
 3. **v27-2 后续**: IObjectStorage.ListAsync 单元测试 (Mock IMinioClient + Mock OssClient), 当前仅 dry-run 集成验证
 4. **v27-4 后续**: PG 集成测试加 PostgreSQL 多版本矩阵 (PG 14/15/16), 验证 advisory lock 在旧版本行为一致
 5. **v27-9 E2E 巡检 CI**: _design_audit.py + _api_contract_test.py 需 Python 环境, 与 v27-4 PG service container 配合即可 (不需反转 ADR #4)
 
+### 27.8 v27-3: PostgresSearchProvider OFFSET 分页压测 (50K 基线, 2026-07-19)
+
+**实施时间**: 2026-07-19
+**目标**: 为 ADR #5 (PostgresSearchProvider keyset 分页暂缓) 提供量化决策依据
+**实施方案**: 直连 PG (psycopg2) 跑 PostgresSearchProvider.SearchAsync 等价 SQL, 测不同 OFFSET 深度性能曲线, 对比 keyset 简化版
+
+**测试矩阵**:
+- 数据规模: 50,011 products + 623,134 xrefs + 775,053 apps (spike_test_v3 现有数据)
+- OFFSET 深度档: 0 / 200 / 1000 / 5000 / 10000 / 20000 / 40000
+- 查询场景: baseline / type_oil / q_filter (ILIKE) / size_d1_100 / composite
+- 重复次数: 5 (warmup 2)
+- keyset 对比: 简化版 `WHERE p.id > :last_id` (id 单调递增, 不模拟三层排序)
+
+**关键发现**:
+
+1. **OFFSET 深度退化比 1.03x** (50K 数据下):
+   | 场景 | 浅档 P95 (OFFSET=0) | 最深档 P95 | 深浅比 | 主要瓶颈 |
+   |---|---:|---:|---:|---|
+   | baseline | 552.7ms | 529.4ms | 0.96x | CTE + LATERAL JOIN + EXISTS |
+   | type_oil | 305.3ms | 315.9ms | 1.03x | CTE + LATERAL JOIN + EXISTS |
+   | q_filter | 1879.1ms | 1897.5ms | 1.01x | ILIKE 全表扫描 (与 OFFSET 无关) |
+   | size_d1_100 | 264.9ms | 267.8ms | 1.01x | 结果集小, 性能良好 |
+   | composite | 17.6ms | 17.6ms | 1.00x | 结果集小, 性能良好 |
+
+2. **keyset 改造潜力 (OFFSET=10000 等价深度)**:
+   | 场景 | OFFSET P95 | keyset P95 | 性能提升 |
+   |---|---:|---:|---:|
+   | baseline | 523.3ms | 16.6ms | 31.6x |
+   | type_oil | 312.1ms | 16.2ms | 19.2x |
+   | q_filter | 1898.3ms | 0.3ms | 5932.3x |
+   | size_d1_100 | 267.8ms | 4.9ms | 54.9x |
+
+3. **真实瓶颈识别**:
+   - q_filter (ILIKE '%FILTER%') 1879ms — ILIKE 全表扫描主导, 与 OFFSET 深度无关
+   - baseline 510ms — CTE + LATERAL JOIN + EXISTS 架构性开销
+   - size_d1_100 265ms — 范围查询走索引, 性能可接受
+   - composite 17ms — 结果集小 (345 行), 性能良好
+
+**ADR #5 决策结论**:
+- ✅ **维持 ADR #5 暂缓决策** (OFFSET 深度退化比 ≤ 1.5x, 仅 1.03x)
+- 50K 数据下 OFFSET 深度本身不是主要瓶颈, 浅档/深档性能差异不显著
+- 真实瓶颈是 ILIKE 全表扫描和 CTE + LATERAL JOIN 架构开销
+- **优先级**: 加 GIN trgm 索引 > keyset 改造 (前者收益更大, 改动更小)
+- 真实用户行为: 99% 在前 5 页内, 深分页场景罕见
+- 1M 数据下需重测验证 (建议用独立库 sakurafilter_perf_tests 隔离)
+
+**后续验证建议**:
+- 1M 数据扩容压测 (独立库 sakurafilter_perf_tests, 避免污染 spike_test_v3 开发库)
+- GIN trgm 索引验证: `CREATE INDEX idx_products_pn1_trgm ON products USING gin (product_name_1 gin_trgm_ops)` 预计 q_filter 降到 50-200ms
+- keyset 真实改造工作量评估 (三层排序 keyset 需前后端契约改造)
+
+**文件清单**:
+- `spike-test/perf_offset_config.json` — 参数化配置 (PG 连接 + 深度档 + 场景 + keyset 对比)
+- `spike-test/_perf_offset_paging.py` — 主压测脚本 (复用 PostgresSearchProvider.SearchAsync 等价 SQL)
+- `spike-test/_perf_offset_results.json` — 原始结果 (raw data)
+- `spike-test/_perf_offset_report.md` — 人读报告 (含 ADR #5 决策建议)
+
+**ADR 关联**:
+- ADR #5 (PostgresSearchProvider keyset 暂缓): 维持决策, 增加 50K 压测数据支撑
+- ADR #6 (IObjectStorage.ListAsync): 无影响
+
 ---
 
+### 27.9 v27-5: 管理员产品图片上传 E2E (V24-F91, 2026-07-19)
 
+**实施时间**: 2026-07-19
+**目标**: 补全 V24-F83 (AdminProductImageServiceIntegrationTests 23505 → 409 映射) 的前端路径验证, 用 Playwright mock 模式覆盖 6 个核心交互场景
+**关联**: V24-F83 (后端 raw SQL 触发 23505 → 409 ERR_DB_CONFLICT 映射), spec 26.17.2 P1-5
 
+**实施方案**:
+- 用 `page.route` mock 所有后端 API (GET/POST/DELETE), 不依赖真实后端 23505 触发
+- WHY mock: 真实 23505 触发需两个并发请求撞 unique 约束, 时序难以稳定复现; 后端 V24-F83 已用 raw SQL 验证 23505 → 409 映射, 前端 E2E 只需验证前端层 (axios 拦截器 + ElMessage)
+- 复用 admin-products-flow.spec.ts 的 token 注入模式, 但增加 i18n 强制中文 (避免 Playwright Chromium 默认 en-US 导致折叠区标题变英文)
 
+**6 个测试用例**:
 
+| # | 场景 | mock 响应 | 验证点 |
+|---|---|---|---|
+| 1 | 编辑模式表单加载 | GET /api/admin/products/123 → 200 (MOCK_PRODUCT) | h1 + 图片折叠区 header 可见 (默认折叠) |
+| 2 | 上传主图成功 | POST /images/primary → 200 (MOCK_PRIMARY_UPLOAD_RESP) | ElMessage "主图上传成功" + img 渲染 |
+| 3 | 上传主图 409 ERR_DB_CONFLICT | POST /images/primary → 409 (ProblemDetails) | ElMessage "数据冲突 (可能被其他用户修改),请刷新重试" (V24-F83 前端路径) |
+| 4 | 上传详情图 409 IMAGE_DETAIL_SLOT_DUPLICATE | POST /images/detail → 409 (ProblemDetails) | ElMessage "图片详情槽位重复" |
+| 5 | 删除主图成功 | DELETE /images/primary/1 → 200 ({}) | ElMessage "主图已删除" |
+| 6 | 新建模式 (/admin/products/new) | 无 mock | 图片折叠区不显示 (v-if="isEdit" 为 false) |
+
+**关键技术决策**:
+
+1. **mock DELETE 路由用通配符 `*/images/primary/1`**:
+   - WHY: 用具体字符串 `MR1-TEST/images/primary/1` 时, 实际请求 URL 因 encodeURIComponent 或 baseURL 拼接差异导致路由不匹配
+   - 修复: 改为 `**/api/admin/products/*/images/primary/1`, 通配符匹配任意 mr1
+
+2. **injectAdminToken 同时设置 3 个 localStorage key**:
+   - `sakura_admin_token` (legacy, axios 拦截器兜底读)
+   - `sakura_admin_auth` (新 JSON 结构, useAdminAuth.ts 优先读)
+   - `sakura_locale=zh-CN` (强制中文, 避免 Playwright Chromium 默认 en-US 导致 i18n 切到英文, 折叠区标题变 "Image" 而非 "图片")
+
+3. **BASE 默认值改为 5175**:
+   - WHY: vite.config.ts 配置 port: 5175, 但 5173 端口被另一个 React 项目占用 (main.tsx + ant-modal)
+   - 之前测试默认 5173 → 打到 React 项目 → 显示 "页面不存在
+抱歉，您访问的页面不存在或已被移除
+返回首页"
+   - 修复: BASE 默认值改为 5175, 与 vite.config.ts 一致
+
+**验证结果**:
+```
+Running 6 tests using 1 worker
+  ok 1 [chromium] › 1. 编辑模式表单加载 + 图片折叠区可见 (默认折叠) (1.5s)
+  ok 2 [chromium] › 2. 上传主图成功 → ElMessage 提示 + 图片显示 (1.5s)
+  ok 3 [chromium] › 3. 上传主图 409 ERR_DB_CONFLICT → ElMessage 数据冲突提示 (V24-F83 前端路径) (1.5s)
+  ok 4 [chromium] › 4. 上传详情图 409 IMAGE_DETAIL_SLOT_DUPLICATE → ElMessage 槽位重复提示 (1.5s)
+  ok 5 [chromium] › 5. 删除主图成功 → ElMessage 已删除提示 (1.5s)
+  ok 6 [chromium] › 6. 新建模式 (/admin/products/new) 图片折叠区不显示 (isEdit=false) (1.2s)
+  6 passed (9.7s)
+```
+
+**文件清单**:
+- `frontend/tests/e2e/admin-product-image-upload.spec.ts` — 6 个测试用例 (新建, 256 行)
+
+**关联需求**:
+- spec 26.17.2 P1-5 (V24-F83 前端路径补全): ✅ 完成
+- spec 26.17.3 P2 列表 (v27-5 E2E): ✅ 完成
+- ADR #5 (PostgresSearchProvider keyset 暂缓): 无影响
+- ADR #6 (IObjectStorage.ListAsync): 无影响
+
+**🧪 冒烟验证**:
+```bash
+cd frontend && npx playwright test tests/e2e/admin-product-image-upload.spec.ts --reporter=list
+```
+预期结果: 6 passed (约 10s)
+
+**⚠️ 边界测试建议**:
+1. 大文件上传 (如 10MB 图片) | 当前 mock 直接返回 200, 未验证前端进度条 + 超时处理
+2. 网络中断重试 | 当前 mock 一次性返回, 未验证 axios 拦截器的 retry 逻辑
+3. 多 slot 并发上传 (同时上传 slot 2-6) | 当前测试串行, 未验证并发场景下的 images ref 状态一致性
+
+---
