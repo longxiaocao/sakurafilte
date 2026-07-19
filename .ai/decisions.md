@@ -270,3 +270,24 @@ v29-2 高频词分布调研 (V24-F98, 2026-07-19, spec 28.7, 候选 2 不实施)
   - frontend/tests/contract/dict-schema.test.ts (12 个 contract 测试, 修复后转绿)
   - frontend/tests/functional/smoke.spec.ts (Playwright smoke, 修复后 14/15 通过)
 
+#10 V27-9-3 设计巡检保留非阻塞模式 (2026-07-19, v28-4 V27-9-3 CI 解锁, commits 0f035f5 + 6a6b76b + 0f76779)
+决策: V27-9-3 设计巡检 step 保留 continue-on-error: true + if: always() + 失败时 exit 0 (非阻塞)
+理由:
+  - V27-9-3 巡检目的: 发现设计问题 (console errors / network 4xx/5xx / 缺失 aria 等), 上传截图供人工排查
+  - 巡检结果 (CI run 29693549347): 21 页面 / 18 OK / 3 ISSUE
+    * /admin + /admin/products: 500 (admin/products/search 端点, 待 v28-4 P0 migration 修复后复测)
+    * /admin/etl: page.goto Timeout 15000ms (SSE 长连接, V24-F78/F79 引入, 待 _design_audit.py 改 domcontentloaded)
+  - 3 个 ISSUE 都是已知模式, 应独立归档处理, 不应阻断 CI 主流程
+  - V24-F92 v27-9 设计意图: 设计巡检非阻塞, 仅上传截图供人工排查 (而非强制修复)
+  - v28-4 已通过 if: always() 让 V27-9-3 在 Day 9.6 失败后仍能跑, 通过 continue-on-error + exit 0 让巡检发现问题不阻断 push
+排除方案:
+  - 改 continue-on-error: false 阻断: 需先修 3 个 ISSUE 才能 push, 巡检失去"发现"意义变成"强制修复"
+  - 删除 V27-9-3 step: 失去设计巡检能力, 与 V24-F92 v27-9 设计目标冲突
+  - 把 3 个 ISSUE 改成 warning 级别 (在 _design_audit.py 中过滤): 掩盖真实问题, 失去巡检价值
+关联文件:
+  - .github/workflows/e2e.yml (V27-9-2/V27-9-3 加 if: always() + Vite 加 --port 5173 + 顶层 env 补齐 11 个环境变量)
+  - frontend/src/components/EtlKpiCards.vue (aria-busy P0 回归修复, commit 6a6b76b)
+  - spike-test/_e2e_audit/_design_audit.py (V27-9-3 巡检脚本, 21 页面 × 3 视口)
+  - backend/migrations/019_v2_etl_progress_log_add_skipped_missing_mr1.sql (CI 未执行, v28-4 P0 待修)
+  - .ai/suggestions.md (4 个 v28-4 P0/P1 归档)
+
