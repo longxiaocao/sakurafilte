@@ -1,0 +1,48 @@
+{
+  "timestamp": "2026-07-19T17:00:15.110587",
+  "scenarios": [
+    {
+      "scenario": "baseline (无 q)",
+      "q": null,
+      "type": null,
+      "baseline_p95_ms": 210.6474000029266,
+      "v28_2_p95_ms": 292.5814000045648,
+      "speedup": 0.7199616927106102
+    },
+    {
+      "scenario": "q_single (q='oil')",
+      "q": "oil",
+      "type": null,
+      "baseline_p95_ms": 2281.3365000038175,
+      "v28_2_p95_ms": 207.26750000903849,
+      "speedup": 11.006725607750049
+    },
+    {
+      "scenario": "q_multi (q='oil filter')",
+      "q": "oil filter",
+      "type": null,
+      "baseline_p95_ms": 2980.581900003017,
+      "v28_2_p95_ms": 276.72929999243934,
+      "speedup": 10.770749248758447
+    },
+    {
+      "scenario": "q_filter_type (q='oil', type='bearing')",
+      "q": "oil",
+      "type": "bearing",
+      "baseline_p95_ms": 1.7621000006329268,
+      "v28_2_p95_ms": 2.7535999979590997,
+      "speedup": 0.639925915869753
+    },
+    {
+      "scenario": "q_xref_match (q='CAT')",
+      "q": "CAT",
+      "type": null,
+      "baseline_p95_ms": 1632.3479999991832,
+      "v28_2_p95_ms": 538.5479999968084,
+      "speedup": 3.0310167339008913
+    }
+  ],
+  "avg_baseline_p95_ms": 1421.3351800019154,
+  "avg_v28_2_p95_ms": 263.575960000162,
+  "avg_speedup": 5.23367583979795
+}

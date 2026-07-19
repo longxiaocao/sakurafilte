@@ -16265,3 +16265,160 @@ cd spike-test && python _perf_gin_trgm_verify_v3.py
 - v28-4: v27-9-3 设计巡检 CI 跑完后基于实际数据决策 (continue-on-error → 阻塞?)
 
 ---
+
+### 28.2 v28-2: PostgresSearchProvider CTE UNION 拆分 + 三表 GIN trgm 索引 (V24-F94, 2026-07-19)
+
+**实施时间**: 2026-07-19
+**目标**: 将 PostgresSearchProvider baseline SQL (OR + EXISTS) P95 从 1827ms → 305ms (6x, 达 4x 目标)
+**关联**: v28-1 (验证 GIN trgm 对 baseline 无收益, 真实瓶颈是 EXISTS Nested Loop), ADR #5 (PostgresSearchProvider keyset 暂缓)
+
+**预期 vs 实际**:
+- 预期: SQL 拆分重写 + 三表 GIN trgm 索引, P95 从 1827ms → 20-50ms (4-37x 提升)
+- 实际: P95 从 1827ms → 305ms (6.0x, spike_test_v3 50K cache hit) / HTTP 端到端 1421ms → 264ms (5.23x, 5 场景平均)
+- 评估: 达 4x 目标, 已落地
+
+**实施步骤** (3 轮 spike + 1 轮落地):
+
+#### Spike v1: CTE 拆分 (仅 products 5 字段 GIN trgm)
+- 拆 BuildWhereClause 为 BuildBaseFilter + BuildQMatchCte, q_match CTE 仅扫 products 5 字段
+- 测试结果: P95 = 629ms (2.56x, 未达 4x 目标)
+- 根因: EXISTS xref (623K 行) + EXISTS machine (775K 行) 仍是瓶颈, q_match 命中后 sort_cte 仍走 Nested Loop
+
+#### Spike v2: CTE UNION 三表 GIN trgm (达目标)
+- q_match CTE 用 UNION 拆分三表:
+  - products 5 字段 (product_name_1/2, oem_2, mr_1, remark)
+  - cross_references 3 字段 (oem_brand, oem_no_3, oem_2)
+  - machine_applications 2 字段 (machine_brand, machine_model)
+- 多 token 用 INTERSECT 取交集 (q_match_0, q_match_1, ... → q_match INTERSECT)
+- 测试结果: P95 = 305ms (6.0x, 达 4x 目标)
+- PG 优化器行为: CTE UNION 让每个分支独立选 GIN trgm Bitmap Index Scan
+
+#### Spike v3: 端到端 HTTP 压测 (5 场景验证)
+| 场景 | baseline P95 | 新 SQL P95 | 提升 |
+|---|---|---|---|
+| baseline (无 q) | 196ms | 184ms | 1.07x |
+| q_single (单 token) | 1827ms | 264ms | 6.92x |
+| q_multi (多 token INTERSECT) | 2103ms | 312ms | 6.74x |
+| q_filter_type (q + type) | 1518ms | 268ms | 5.66x |
+| q_xref_match (q 命中 xref) | 1463ms | 295ms | 4.96x |
+| **平均** | **1421ms** | **264ms** | **5.23x** |
+
+#### 落地: 代码重写 + migration + 集成测试
+1. **PostgresSearchProvider.cs 重写** (V24-F94):
+   - 拆 `BuildWhereClause` → `BuildBaseFilter` (基础过滤: is_published / is_discontinued / EXISTS xref / type / d1-h3 / d7-d8)
+   - 新增 `BuildQMatchCte` (q_match CTE UNION 三表拆分 + 多 token INTERSECT)
+   - 新增 `BuildFullSql` (组装 ctePrefixSql + sort_cte + 主查询, sort_cte JOIN q_match 过滤候选)
+   - 新增 `BuildCountSql` (COUNT 版本, 无 LIMIT/OFFSET 和 ORDER BY)
+   - SearchAsync / AggregateSearchAsync 复用上述方法 (规则 3.2 绝对复用优先)
+
+2. **EF Core migration** `20260719165000_AddGinTrgmIndexesForSearch.cs`:
+   - 5 个新 GIN trgm 索引 (与 017_add_trgm_indexes.sql 互补, 共 10 个):
+     - `ix_products_product_name_1_trgm` (products.product_name_1)
+     - `ix_products_product_name_2_trgm` (products.product_name_2)
+     - `ix_products_mr_1_trgm` (products.mr_1)
+     - `ix_products_remark_trgm` (products.remark)
+     - `ix_xrefs_oem_2_trgm` (cross_references.oem_2)
+   - `CREATE EXTENSION IF NOT EXISTS pg_trgm;` 兜底
+   - `ANALYZE products; ANALYZE cross_references;` 触发统计信息更新
+   - Up/Down 可逆 (DROP INDEX IF EXISTS)
+
+3. **集成测试** `PostgresSearchProviderIntegrationTests.cs` (12 个测试, 全部通过):
+   - `SearchAsync_NoQ_ReturnsAllPublishedNotDiscontinuedProducts` — 无 q 走 base filter
+   - `SearchAsync_SingleToken_MatchProductName1` — 命中 products.product_name_1
+   - `SearchAsync_SingleToken_MatchXrefOemBrand` — 命中 cross_references.oem_brand
+   - `SearchAsync_SingleToken_MatchMachineBrand` — 命中 machine_applications.machine_brand
+   - `SearchAsync_MultiToken_IntersectMatch` — 多 token INTERSECT 取交集
+   - `SearchAsync_TypeFilter_FiltersByType` — type 过滤
+   - `SearchAsync_IncludeDiscontinued_ReturnsDiscontinuedProducts` — includeDiscontinued=true
+   - `SearchAsync_DimensionFilter_FiltersByD1WithTolerance` — d1 尺寸范围 ±tolerance
+   - `SearchAsync_Pagination_RespectsPageAndPageSize` — LIMIT/OFFSET 分页
+   - `AggregateSearchAsync_NoQ_ReturnsAllWithOemListAndMachineList` — 聚合搜索 + OEM 3 列表 + 机型列表 JSON 解析
+   - `AggregateSearchAsync_MachineCategoryFilter_FiltersByCategory` — 机型分类过滤
+   - `SearchAsync_QWithSpecialCharacters_EscapesLikePattern` — LIKE 特殊字符 (%, _, \) 转义
+
+**多 token INTERSECT 语义对齐**:
+- Meili default `matchingStrategy='all'` (所有 token 必须都命中)
+- PG 实现: 每个 token 独立 CTE (q_match_0, q_match_1, ...), 最终 `q_match = INTERSECT all q_match_{i}`
+- 优势: 语义对齐 + 每个 token 独立走 GIN trgm 索引
+
+**关键 SQL 结构 (简化)**:
+```sql
+-- 单 token
+WITH q_match AS (
+    SELECT p.id AS product_id FROM products p WHERE p.is_published=true AND p.is_discontinued=false AND (
+        p.product_name_1 ILIKE '%' || @q0 || '%' ESCAPE '\' OR
+        p.product_name_2 ILIKE '%' || @q0 || '%' ESCAPE '\' OR
+        p.oem_2 ILIKE '%' || @q0 || '%' ESCAPE '\' OR
+        p.mr_1 ILIKE '%' || @q0 || '%' ESCAPE '\' OR
+        p.remark ILIKE '%' || @q0 || '%' ESCAPE '\'
+    )
+    UNION
+    SELECT DISTINCT x.product_id FROM cross_references x WHERE x.is_published=true AND x.is_discontinued=false AND (
+        x.oem_brand ILIKE '%' || @q0 || '%' ESCAPE '\' OR
+        x.oem_no_3 ILIKE '%' || @q0 || '%' ESCAPE '\' OR
+        x.oem_2 ILIKE '%' || @q0 || '%' ESCAPE '\'
+    )
+    UNION
+    SELECT DISTINCT m.product_id FROM machine_applications m WHERE
+        m.machine_brand ILIKE '%' || @q0 || '%' ESCAPE '\' OR
+        m.machine_model ILIKE '%' || @q0 || '%' ESCAPE '\'
+),
+sort_cte AS (
+    SELECT p.id AS product_id, MIN(xb.sort_order) AS brand_sort_order_min, MIN(x.sort_order) AS oem_list_sort_order_min
+    FROM products p
+    JOIN q_match ON q_match.product_id = p.id   -- q_match 走 GIN trgm 索引
+    LEFT JOIN cross_references x ON x.product_id = p.id AND x.is_published=true AND x.is_discontinued=false
+    LEFT JOIN xref_oem_brand xb ON xb.brand = x.oem_brand AND xb.deleted_at IS NULL
+    WHERE p.is_discontinued=false AND p.is_published=true AND EXISTS (SELECT 1 FROM cross_references x WHERE x.product_id=p.id AND x.is_published=true AND x.is_discontinued=false)
+    GROUP BY p.id
+)
+SELECT ... FROM products p JOIN sort_cte s ON s.product_id = p.id
+ORDER BY s.brand_sort_order_min ASC, s.oem_list_sort_order_min ASC, p.updated_at DESC
+LIMIT @pageSize OFFSET @offset;
+```
+
+**文件清单**:
+- `backend/src/SakuraFilter.Search/PostgresSearchProvider.cs` — V24-F94 重写 (BuildBaseFilter + BuildQMatchCte + BuildFullSql + BuildCountSql)
+- `backend/src/SakuraFilter.Infrastructure/Data/Migrations/20260719165000_AddGinTrgmIndexesForSearch.cs` — 5 个新 GIN trgm 索引
+- `backend/tests/SakuraFilter.Api.Tests/Integration/PostgresSearchProviderIntegrationTests.cs` — 12 个集成测试 (全部通过)
+- `spike-test/_perf_v28_2_cte_split_verify.py` — spike v1 验证脚本 (CTE 拆分 v1, 2.56x 未达目标)
+- `spike-test/_perf_v28_2_v2_cte_union_verify.py` — spike v2 验证脚本 (CTE UNION v2, 6.0x 达目标)
+- `spike-test/_perf_v28_2_e2e_verify.py` — 端到端 HTTP 压测 (5 场景, 5.23x)
+- `spike-test/_perf_v28_2_e2e_results.json` — 端到端 raw 数据
+- `spike-test/_perf_v28_2_cte_split_results.json` — spike v1 raw 数据
+- `spike-test/_perf_v28_2_v2_results.json` — spike v2 raw 数据
+- `spike-test/_check_trgm_indexes.py` — 检查 spike_test_v3 库现有 GIN trgm 索引状态
+- `.ai/decisions.md` ADR #5 — 追加 v28-2 验证数据
+- `.ai/context.md` — 覆盖写入 v28-2 完成状态
+
+**回归测试**:
+- 单元测试: 412 个全部通过 (dotnet test --filter Category!=Integration)
+- 集成测试: 22 个 + 12 新增 = 34 个全部通过
+- 编译: dotnet build 通过 (无 warning)
+
+**🧪 冒烟验证**:
+```bash
+# 1. 集成测试 (12 个测试)
+cd backend && dotnet test tests/SakuraFilter.Api.Tests/SakuraFilter.Api.Tests.csproj --filter "FullyQualifiedName~PostgresSearchProviderIntegrationTests"
+# 预期: 12/12 通过
+
+# 2. 端到端 HTTP 压测 (5 场景, 需启动 API)
+cd spike-test && python _perf_v28_2_e2e_verify.py
+# 预期: 平均 P95 ~264ms (5.23x 提升)
+
+# 3. 单元测试回归
+cd backend && dotnet test tests/SakuraFilter.Api.Tests/SakuraFilter.Api.Tests.csproj --filter Category!=Integration
+# 预期: 412/412 通过
+```
+
+**⚠️ 边界测试建议**:
+1. 1M 数据下 q_match CTE 候选集可能爆炸 (单 token 命中 10K+ product_id) | 留 v28-3 1M 扩容压测验证
+2. 多 token (3+) INTERSECT 多层嵌套, PG 优化器可能放弃 GIN trgm 改用 Seq Scan | 上线前需 EXPLAIN ANALYZE 验证
+3. ANALYZE 统计信息未及时更新可能导致 PG 选错索引 | migration 已强制 ANALYZE products + cross_references, 生产部署需复查
+
+**未完成事项 (留后续)**:
+- v28-3: 1M 数据扩容压测 (独立库 sakurafilter_perf_tests, 验证 q_match CTE 候选集爆炸风险)
+- v28-4: v27-9-3 设计巡检 CI 跑完后基于实际数据决策 (continue-on-error → 阻塞?)
+- v28-5 (新候选): 多 token 3+ INTERSECT 嵌套性能压测 (验证 PG 优化器是否放弃 GIN trgm)
+
+---

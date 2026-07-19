@@ -1,0 +1,94 @@
+{
+  "timestamp": "2026-07-19T16:53:23.880666",
+  "test_qs": [
+    "oil",
+    "filter",
+    "CAT",
+    "bosch",
+    "kubota"
+  ],
+  "phase1_no_gin_trgm": [
+    {
+      "q": "oil",
+      "baseline_p95_ms": 2293.817700003274,
+      "cte_v1_p95_ms": 851.8191000039224,
+      "cte_union_v2_p95_ms": 1065.7284000044456,
+      "cte_union_v2_strict_p95_ms": 1120.4605999955675
+    },
+    {
+      "q": "filter",
+      "baseline_p95_ms": 317.70959999994375,
+      "cte_v1_p95_ms": 2630.619600007776,
+      "cte_union_v2_p95_ms": 1257.5663000025088,
+      "cte_union_v2_strict_p95_ms": 1311.5455000079237
+    },
+    {
+      "q": "CAT",
+      "baseline_p95_ms": 1699.3669999937993,
+      "cte_v1_p95_ms": 145.78740000433754,
+      "cte_union_v2_p95_ms": 1656.6821000014897,
+      "cte_union_v2_strict_p95_ms": 1711.8846000084886
+    },
+    {
+      "q": "bosch",
+      "baseline_p95_ms": 1416.3984000042547,
+      "cte_v1_p95_ms": 151.56759999808855,
+      "cte_union_v2_p95_ms": 1700.4028000083053,
+      "cte_union_v2_strict_p95_ms": 1251.4400999934878
+    },
+    {
+      "q": "kubota",
+      "baseline_p95_ms": 2869.5279999956256,
+      "cte_v1_p95_ms": 152.82599999045487,
+      "cte_union_v2_p95_ms": 1228.1300999893574,
+      "cte_union_v2_strict_p95_ms": 1155.7657000084873
+    }
+  ],
+  "phase2_with_gin_trgm": [
+    {
+      "q": "oil",
+      "baseline_p95_ms": 2253.3282000076724,
+      "cte_v1_p95_ms": 725.0780999893323,
+      "cte_union_v2_p95_ms": 216.78570000221953,
+      "cte_union_v2_strict_p95_ms": 216.81479999097064
+    },
+    {
+      "q": "filter",
+      "baseline_p95_ms": 316.8256999924779,
+      "cte_v1_p95_ms": 2619.613400005619,
+      "cte_union_v2_p95_ms": 321.1026000062702,
+      "cte_union_v2_strict_p95_ms": 304.3535000033444
+    },
+    {
+      "q": "CAT",
+      "baseline_p95_ms": 1635.2597999939462,
+      "cte_v1_p95_ms": 2.2360000002663583,
+      "cte_union_v2_p95_ms": 461.50370000395924,
+      "cte_union_v2_strict_p95_ms": 532.1188000089023
+    },
+    {
+      "q": "bosch",
+      "baseline_p95_ms": 1486.9023999926867,
+      "cte_v1_p95_ms": 2.017199993133545,
+      "cte_union_v2_p95_ms": 308.2423000014387,
+      "cte_union_v2_strict_p95_ms": 439.15340000239667
+    },
+    {
+      "q": "kubota",
+      "baseline_p95_ms": 3441.633800001,
+      "cte_v1_p95_ms": 2.75129999499768,
+      "cte_union_v2_p95_ms": 217.89310000895057,
+      "cte_union_v2_strict_p95_ms": 226.99310000461992
+    }
+  ],
+  "avg_p95": {
+    "phase1_baseline": 1719.3641399993794,
+    "phase1_cte_v1": 786.5239400009159,
+    "phase1_cte_union_v2": 1381.7019400012214,
+    "phase1_cte_union_v2_strict": 1310.219300002791,
+    "phase2_baseline": 1826.7899799975567,
+    "phase2_cte_v1": 670.3391999966698,
+    "phase2_cte_union_v2": 305.10548000456765,
+    "phase2_cte_union_v2_strict": 343.8867200020468
+  }
+}

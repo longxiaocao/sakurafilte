@@ -60,8 +60,8 @@
   - backend/tests/SakuraFilter.Api.Tests/Integration/AdminProductImageServiceIntegrationTests.cs (V24-F83)
   - .env (PG_TEST_CONNECTION_STRING 指向 sakurafilter_int_tests)
 
-#5 PostgresSearchProvider Phase 2 keyset 分页暂缓 (2026-07-19, 50K 压测验证 2026-07-19, v28-1 GIN trgm 验证 2026-07-19)
-决策: v27-1 暂不实施 keyset 分页改造, 保留 OFFSET 分页; v27-3 50K 压测后维持暂缓决策; v28-1 GIN trgm 索引验证显示对当前 SQL 模式无收益, 真实优化方向是 SQL 拆分重写, 留 v28-2
+#5 PostgresSearchProvider Phase 2 keyset 分页暂缓 (2026-07-19, 50K 压测验证 2026-07-19, v28-1 GIN trgm 验证 2026-07-19, v28-2 CTE UNION 拆分验证 2026-07-19)
+决策: v27-1 暂不实施 keyset 分页改造, 保留 OFFSET 分页; v27-3 50K 压测后维持暂缓决策; v28-1 GIN trgm 索引对 baseline SQL 无收益; v28-2 CTE UNION 拆分 + 三表 GIN trgm 索引 P95 1827ms → 305ms (6.0x), 达 4x 目标, 已落地
 理由:
   - 当前 SearchRequest DTO 用 Page/PageSize 页式分页, 前端依赖 Page 契约
   - 改 keyset 需破坏前端 Page 契约或引入 cursor 参数, 改动面大
@@ -79,13 +79,23 @@ v28-1 GIN trgm 索引验证数据 (2026-07-19, spike_test_v3 50K, 直连 PG cach
   - baseline SQL + GIN trgm 索引: P95 ≈ 197ms (无收益, PG 优化器不选 GIN trgm, 仍用 idx_products_is_published_true + Filter ILIKE)
   - 结论: GIN trgm 索引对当前 OR + EXISTS xref SQL 模式无收益, PG 优化器不选 (原因: EXISTS 子查询的 Nested Loop 模式让单字段 GIN trgm 失效)
   - 真实优化方向: SQL 拆分重写 (products 5 字段 ILIKE 走 GIN trgm 索引 → 候选 product_id → 半 JOIN cross_references 走 idx_xref_product B-tree), 留 v28-2
+v28-2 CTE UNION 拆分验证数据 (2026-07-19, spike_test_v3 50K, 直连 PG cache hit):
+  - baseline SQL (OR + 2 EXISTS): P95 = 1827ms (5 个 q 平均, 49989 产品 × 37459 次循环)
+  - CTE 拆分 v1 (q_match CTE + products 5 字段 GIN trgm): P95 = 629ms (2.56x, 未达 4x 目标, EXISTS xref/machine 仍拖累)
+  - CTE UNION v2 (三表 GIN trgm: products 5 字段 + xref 3 字段 + machine 2 字段): P95 = 305ms (6.0x, 达 4x 目标)
+  - 端到端 HTTP 压测 (5 场景): 平均 P95 1421ms → 264ms (5.23x)
+  - PG 优化器行为: CTE UNION 让每个分支独立选 GIN trgm Bitmap Index Scan, 避免 baseline OR + EXISTS 的 Nested Loop 模式
+  - 集成测试: 12/12 通过 (覆盖 NoQ / 单 token 三表 / 多 token INTERSECT / type / dimension / includeDiscontinued / pagination / aggregate / machineCategory / 特殊字符转义)
 排除方案:
   - 立即改 keyset: 工作量大 (前后端契约改造) 且 50K 压测显示 OFFSET 深度非主要瓶颈
   - 加 GIN trgm 索引 (v28-1 验证): 对当前 SQL 模式无收益, PG 优化器不选, 不应加索引 (50MB 索引浪费)
+  - v28-2 CTE 拆分 v1 (仅 products 5 字段 GIN trgm): 2.56x 未达 4x 目标, EXISTS xref (623K 行) + EXISTS machine (775K 行) 仍拖累
   - 加 covering index: 涉及 DB schema 变更, 需 migration, 不适合 v27 阶段
   - 1M 扩容压测: 50K 数据下退化比 ≤1.03x, 1M 留后续独立库 (sakurafilter_perf_tests) 验证, 避免污染 spike_test_v3
 关联文件:
-  - backend/src/SakuraFilter.Search/PostgresSearchProvider.cs L20/L224 (TODO 标注)
+  - backend/src/SakuraFilter.Search/PostgresSearchProvider.cs (V24-F94: BuildBaseFilter + BuildQMatchCte + BuildFullSql + BuildCountSql 拆分)
+  - backend/src/SakuraFilter.Infrastructure/Data/Migrations/20260719165000_AddGinTrgmIndexesForSearch.cs (5 个新 GIN trgm 索引)
+  - backend/tests/SakuraFilter.Api.Tests/Integration/PostgresSearchProviderIntegrationTests.cs (12 个集成测试)
   - backend/src/SakuraFilter.Core/DTOs/SearchRequest.cs (Page/PageSize 契约)
   - spike-test/perf_offset_config.json (压测参数化配置)
   - spike-test/_perf_offset_paging.py (压测脚本, derive_advice 控制变量法)
@@ -93,7 +103,11 @@ v28-1 GIN trgm 索引验证数据 (2026-07-19, spike_test_v3 50K, 直连 PG cach
   - spike-test/_perf_offset_report.md (人读报告 + ADR #5 决策建议)
   - spike-test/_perf_gin_trgm_verify_v3.py (v28-1 GIN trgm 验证脚本, 含 3 种 SQL 对比)
   - spike-test/_perf_gin_trgm_v3_results.json (v28-1 验证 raw 数据)
-  - .trae/specs/v2-architecture-migration/spec.md chapter 27.8 (v27-3 实施记录) + chapter 28.1 (v28-1 验证记录)
+  - spike-test/_perf_v28_2_cte_split_verify.py (v28-2 第一轮 spike: CTE 拆分 v1)
+  - spike-test/_perf_v28_2_v2_cte_union_verify.py (v28-2 第二轮 spike: CTE UNION v2)
+  - spike-test/_perf_v28_2_e2e_verify.py (v28-2 端到端压测, 5 场景)
+  - spike-test/_perf_v28_2_e2e_results.json (v28-2 端到端 raw 数据)
+  - .trae/specs/v2-architecture-migration/spec.md chapter 27.8 (v27-3 实施记录) + chapter 28.1 (v28-1 验证记录) + chapter 28.2 (v28-2 实施记录)
 
 #6 IObjectStorage.ListAsync 接口扩展决策 (2026-07-19)
 决策: v27-2 扩展 IObjectStorage 接口加 ListAsync 方法, MinioStorage + AliyunOssStorage 双实现

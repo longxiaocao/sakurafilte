@@ -24,10 +24,17 @@ namespace SakuraFilter.Search;
 ///   WHY 重写: V24-F76 为绕过 EF Core 8 NavigationExpandingExpressionVisitor bug 牺牲了:
 ///     1. 关键词分词 OR 匹配 (原 patterns.Any 多 token OR)
 ///     2. 三层排序 (brand_sort_order_min → oem_list_sort_order_min → updated_at)
-///   原生 SQL 不受 EF Core 表达式树限制,可恢复完整功能:
-///     - 分词: unnest(string_to_array(@q, ' ')) 生成 token 数组,每个 token 走 ILIKE OR
-///     - 排序: CTE 预计算 brand_sort_order_min + oem_list_sort_order_min
-///     - 关联: LATERAL JOIN 取每产品 50 个 OEM 3 (避免笛卡尔积)
+///   原生 SQL 不受 EF Core 表达式树限制,可恢复完整功能
+/// V24-F94 (2026-07-19, v28-2, spec 28.2): CTE UNION 拆分 + 三表 GIN trgm 索引
+///   WHY 重写: v28-1 验证显示 baseline SQL (OR + EXISTS xref/machine) 让 PG 优化器不选 GIN trgm 索引
+///     baseline P95=1827ms (含 2 个 EXISTS 子查询, 49989 产品 × 37459 次循环)
+///   v28-2 改造:
+///     - q_match CTE 用 UNION 拆分: products 5 字段 + cross_references 3 字段 + machine_applications 2 字段
+///     - 三表都加 GIN trgm 索引 (见 migration AddGinTrgmIndexesForSearch + 017_add_trgm_indexes.sql)
+///     - PG 优化器对每个 UNION 分支独立选 GIN trgm Bitmap Index Scan
+///     - P95 从 1827ms → 305ms (6x, spike_test_v3 50K 验证)
+///   多 token 处理: 每个 token 独立 CTE (q_match_0, q_match_1, ...), 最终 INTERSECT 取交集
+///     语义对齐 Meili default matchingStrategy='all'
 /// </summary>
 public class PostgresSearchProvider : ISearchProvider
 {
@@ -56,12 +63,17 @@ public class PostgresSearchProvider : ISearchProvider
     }
 
     /// <summary>
-    /// 构建原生 SQL WHERE 子句 + 参数 (供 SearchAsync 与 AggregateSearchAsync 复用)
-    /// WHY 抽取: 两个搜索方法 WHERE 子句语义一致, 复用避免漂移 (规则 3.2 绝对复用优先)
+    /// V24-F94 (v28-2): 构建基础过滤 WHERE 子句 + 参数 (供 SearchAsync 与 AggregateSearchAsync 复用)
+    /// WHY 拆分: v28-2 把关键词 q 的 ILIKE 匹配从 WHERE 子句剥离到独立 CTE (BuildQMatchCte),
+    ///   让 PG 优化器能对三表 ILIKE 选 GIN trgm Bitmap Index Scan
+    /// 基础过滤包含:
+    ///   - is_published / is_discontinued
+    ///   - EXISTS 上架 OEM 3 (对齐 Meilisearch filter 语义)
+    ///   - type / d1-h3 尺寸范围 / d7-d8 螺纹规格
     /// </summary>
-    /// <returns>(whereSql, parameters)</returns>
-    private (string whereSql, List<NpgsqlParameter> parameters) BuildWhereClause(
-        string? q, string? type,
+    /// <returns>(baseWhereSql, baseParams)</returns>
+    private (string baseWhereSql, List<NpgsqlParameter> baseParams) BuildBaseFilter(
+        string? type,
         decimal? d1, decimal? d2, decimal? d3,
         decimal? h1, decimal? h2, decimal? h3,
         string? d7Thread, string? d8Thread,
@@ -71,7 +83,6 @@ public class PostgresSearchProvider : ISearchProvider
         var parameters = new List<NpgsqlParameter>();
 
         // 基础过滤: 未停产 + 已上架
-        //   WHY 放在 conditions 而非硬编码: includeDiscontinued=true 时需移除 is_discontinued 过滤
         if (!includeDiscontinued)
         {
             conditions.Add("p.is_discontinued = false");
@@ -85,57 +96,6 @@ public class PostgresSearchProvider : ISearchProvider
               AND x.is_published = true
               AND x.is_discontinued = false
         )");
-
-        // 关键词搜索: 分词 OR 匹配 (恢复 V24-F76 丢失的分词能力)
-        //   WHY unnest(string_to_array): PG 内置分词, 空格分隔, 与 Meili tokenizer 对齐
-        //   每个 token 走 6 字段 ILIKE OR + xref 3 字段 + machine 2 字段
-        //   全部 token 用 AND 连接 (类似 Meili 的 default matchingStrategy='all')
-        if (!string.IsNullOrWhiteSpace(q))
-        {
-            var raw = q.Trim();
-            var tokens = raw.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            var tokenParams = new List<string>();
-            for (var i = 0; i < tokens.Length; i++)
-            {
-                var token = tokens[i];
-                // LIKE 转义: \ → \\, % → \%, _ → \_ (与 V24-F76 一致, 复用 EscapeLikePattern 等价逻辑)
-                var escaped = token.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
-                var paramName = $"@q{i}";
-                // V24-F80: 用 ANY(string_to_array) 避免 SQL 注入, 单参数传整个 token
-                //   WHY 不用 unnest: unnest 需要数组类型参数, ANY 更简单
-                tokenParams.Add($@"(
-                    p.product_name_1 ILIKE '%' || {paramName} || '%' ESCAPE '\' OR
-                    p.product_name_2 ILIKE '%' || {paramName} || '%' ESCAPE '\' OR
-                    p.oem_2 ILIKE '%' || {paramName} || '%' ESCAPE '\' OR
-                    p.mr_1 ILIKE '%' || {paramName} || '%' ESCAPE '\' OR
-                    p.remark ILIKE '%' || {paramName} || '%' ESCAPE '\' OR
-                    EXISTS (
-                        SELECT 1 FROM cross_references x
-                        WHERE x.product_id = p.id
-                          AND (x.oem_brand ILIKE '%' || {paramName} || '%' ESCAPE '\'
-                            OR x.oem_no_3 ILIKE '%' || {paramName} || '%' ESCAPE '\'
-                            OR x.oem_2 ILIKE '%' || {paramName} || '%' ESCAPE '\')
-                    ) OR
-                    EXISTS (
-                        SELECT 1 FROM machine_applications m
-                        WHERE m.product_id = p.id
-                          AND (m.machine_brand ILIKE '%' || {paramName} || '%' ESCAPE '\'
-                            OR m.machine_model ILIKE '%' || {paramName} || '%' ESCAPE '\')
-                    )
-                )");
-                parameters.Add(new NpgsqlParameter(paramName, NpgsqlDbType.Text) { Value = escaped });
-            }
-            // 多 token 用 AND 连接 (类似 Meili default matchingStrategy='all')
-            //   单 token 时直接用, 无 AND
-            if (tokenParams.Count == 1)
-            {
-                conditions.Add(tokenParams[0]);
-            }
-            else
-            {
-                conditions.Add("(" + string.Join(" AND ", tokenParams) + ")");
-            }
-        }
 
         // Type 过滤
         if (!string.IsNullOrWhiteSpace(type))
@@ -196,67 +156,185 @@ public class PostgresSearchProvider : ISearchProvider
             parameters.Add(new NpgsqlParameter("@d8", NpgsqlDbType.Text) { Value = escaped });
         }
 
-        var whereSql = string.Join(" AND ", conditions);
-        return (whereSql, parameters);
+        return (string.Join(" AND ", conditions), parameters);
     }
 
     /// <summary>
-    /// V24-F80: 原生 SQL 搜索 (恢复分词 OR + 三层排序)
+    /// V24-F94 (v28-2): 构建关键词 q 的 CTE UNION SQL (三表 GIN trgm 索引加速)
+    /// WHY CTE UNION: v28-1 验证显示 baseline SQL (OR + EXISTS xref/machine) 让 PG 优化器不选 GIN trgm
+    ///   改用 UNION 拆分: products 5 字段 + cross_references 3 字段 + machine_applications 2 字段
+    ///   每个分支独立走 GIN trgm Bitmap Index Scan, P95 从 1827ms → 305ms (6x)
+    /// 多 token 处理: 每个 token 独立 CTE (q_match_0, q_match_1, ...), 最终 INTERSECT 取交集
+    ///   语义对齐 Meili default matchingStrategy='all'
     /// </summary>
-    public async Task<SearchResult> SearchAsync(SearchRequest req, CancellationToken ct = default)
+    /// <returns>(ctePrefixSql, qParams) ctePrefixSql = null 当无 q</returns>
+    private (string? ctePrefixSql, List<NpgsqlParameter> qParams) BuildQMatchCte(string? q)
     {
-        var sw = Stopwatch.StartNew();
+        if (string.IsNullOrWhiteSpace(q))
+        {
+            return (null, new List<NpgsqlParameter>());
+        }
 
-        var (whereSql, parameters) = BuildWhereClause(
-            req.Q, req.Type,
-            req.D1, req.D2, req.D3,
-            req.H1, req.H2, req.H3,
-            req.D7Thread, req.D8Thread,
-            req.Tolerance, req.IncludeDiscontinued);
+        var raw = q.Trim();
+        var tokens = raw.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var qParams = new List<NpgsqlParameter>();
 
-        var page = Math.Max(1, req.Page);
-        var pageSize = Math.Clamp(req.PageSize, 1, 100);
-        var offset = (page - 1) * pageSize;
+        // 单 token: 单个 q_match CTE
+        // 多 token: 多个 q_match_{i} CTE, 最终 q_match = INTERSECT
+        var cteParts = new List<string>();
+        for (var i = 0; i < tokens.Length; i++)
+        {
+            var token = tokens[i];
+            // LIKE 转义: \ → \\, % → \%, _ → \_ (与 V24-F76 一致, 复用 EscapeLikePattern 等价逻辑)
+            var escaped = token.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
+            var paramName = $"@q{i}";
+            qParams.Add(new NpgsqlParameter(paramName, NpgsqlDbType.Text) { Value = escaped });
 
-        // CTE + LATERAL JOIN 原生 SQL
-        //   sort_cte: 预计算 brand_sort_order_min + oem_list_sort_order_min (修复 S3-2/S3-10)
-        //   主查询: WHERE + ORDER BY 三层 (brand_sort_order_min → oem_list_sort_order_min → updated_at DESC)
-        //   LIMIT/OFFSET 分页 (Phase 2 改 keyset)
-        var sql = $@"
-WITH sort_cte AS (
+            var cteName = tokens.Length == 1 ? "q_match" : $"q_match_{i}";
+            // 单 token 用 q_match, 多 token 用 q_match_{i} (最终 INTERSECT 到 q_match)
+            cteParts.Add($@"{cteName} AS (
+    SELECT p.id AS product_id
+    FROM products p
+    WHERE p.is_discontinued = false AND p.is_published = true AND (
+        p.product_name_1 ILIKE '%' || {paramName} || '%' ESCAPE '\' OR
+        p.product_name_2 ILIKE '%' || {paramName} || '%' ESCAPE '\' OR
+        p.oem_2 ILIKE '%' || {paramName} || '%' ESCAPE '\' OR
+        p.mr_1 ILIKE '%' || {paramName} || '%' ESCAPE '\' OR
+        p.remark ILIKE '%' || {paramName} || '%' ESCAPE '\'
+    )
+    UNION
+    SELECT DISTINCT x.product_id
+    FROM cross_references x
+    WHERE x.is_published = true AND x.is_discontinued = false AND (
+        x.oem_brand ILIKE '%' || {paramName} || '%' ESCAPE '\' OR
+        x.oem_no_3 ILIKE '%' || {paramName} || '%' ESCAPE '\' OR
+        x.oem_2 ILIKE '%' || {paramName} || '%' ESCAPE '\'
+    )
+    UNION
+    SELECT DISTINCT m.product_id
+    FROM machine_applications m
+    WHERE m.machine_brand ILIKE '%' || {paramName} || '%' ESCAPE '\' OR
+          m.machine_model ILIKE '%' || {paramName} || '%' ESCAPE '\'
+)");
+        }
+
+        // 多 token: 最终 q_match = INTERSECT 所有 q_match_{i} (类似 Meili matchingStrategy='all')
+        if (tokens.Length > 1)
+        {
+            var intersectParts = new List<string>();
+            for (var i = 0; i < tokens.Length; i++)
+            {
+                intersectParts.Add($"SELECT product_id FROM q_match_{i}");
+            }
+            cteParts.Add($@"q_match AS ({string.Join(" INTERSECT ", intersectParts)})");
+        }
+
+        var ctePrefixSql = "WITH " + string.Join(", ", cteParts);
+        return (ctePrefixSql, qParams);
+    }
+
+    /// <summary>
+    /// V24-F94 (v28-2): 组装完整 SQL (q_match CTE + sort_cte + 主查询)
+    /// WHY 抽取: SearchAsync 与 AggregateSearchAsync 复用 SQL 组装逻辑
+    /// 无 q 时: 直接用 base filter, 无 q_match CTE
+    /// 有 q 时: q_match CTE 走 GIN trgm 索引, sort_cte JOIN q_match 过滤候选
+    /// </summary>
+    private string BuildFullSql(
+        string? ctePrefixSql,
+        string baseWhereSql,
+        string selectColumns,
+        string orderBySql,
+        bool hasQ)
+    {
+        // sort_cte: 预计算 brand_sort_order_min + oem_list_sort_order_min (修复 S3-2/S3-10)
+        // 有 q 时: JOIN q_match 过滤候选 (走 GIN trgm 索引)
+        // 无 q 时: 仅 base filter
+        var sortCteJoin = hasQ ? "JOIN q_match ON q_match.product_id = p.id" : "";
+        var cteSeparator = ctePrefixSql != null ? ", " : "WITH ";
+
+        var sql = $@"{(ctePrefixSql ?? "")}{(ctePrefixSql != null ? cteSeparator : cteSeparator)}sort_cte AS (
     SELECT
         p.id AS product_id,
         COALESCE(MIN(xb.sort_order), 2147483647) AS brand_sort_order_min,
         COALESCE(MIN(x.sort_order), 2147483647) AS oem_list_sort_order_min
     FROM products p
+    {sortCteJoin}
     LEFT JOIN cross_references x ON x.product_id = p.id
         AND x.is_published = true
         AND x.is_discontinued = false
     LEFT JOIN xref_oem_brand xb ON xb.brand = x.oem_brand
         AND xb.deleted_at IS NULL
-    WHERE {whereSql}
+    WHERE {baseWhereSql}
     GROUP BY p.id
 )
 SELECT
-    p.id, p.mr_1, p.oem_no_display, p.remark, p.type,
-    p.d1_mm, p.d2_mm, p.h1_mm, p.image_key, p.is_discontinued,
-    p.updated_at
+    {selectColumns}
 FROM products p
 JOIN sort_cte s ON s.product_id = p.id
 ORDER BY
-    s.brand_sort_order_min ASC,
-    s.oem_list_sort_order_min ASC,
-    p.updated_at DESC
+    {orderBySql}
 LIMIT @pageSize OFFSET @offset";
+        return sql;
+    }
 
-        // 总数查询 (CTE 复用, 单独 COUNT)
-        var countSql = $@"
-SELECT COUNT(*) FROM products p
-WHERE {whereSql}";
+    /// <summary>
+    /// V24-F94 (v28-2): 组装 COUNT SQL (与 BuildFullSql 对应, 但无 LIMIT/OFFSET 和 ORDER BY)
+    /// </summary>
+    private string BuildCountSql(string? ctePrefixSql, string baseWhereSql, bool hasQ)
+    {
+        var sortCteJoin = hasQ ? "JOIN q_match ON q_match.product_id = p.id" : "";
+        var cteSeparator = ctePrefixSql != null ? ", " : "WITH ";
 
-        // 参数克隆 (countSql 复用 whereSql 参数, 但 sql 还需 pageSize/offset)
-        var countParams = parameters.Select(p => p.Clone()).ToList();
-        var listParams = parameters.ToList();
+        var sql = $@"{(ctePrefixSql ?? "")}{(ctePrefixSql != null ? cteSeparator : cteSeparator)}sort_cte AS (
+    SELECT p.id AS product_id
+    FROM products p
+    {sortCteJoin}
+    LEFT JOIN cross_references x ON x.product_id = p.id
+        AND x.is_published = true
+        AND x.is_discontinued = false
+    LEFT JOIN xref_oem_brand xb ON xb.brand = x.oem_brand
+        AND xb.deleted_at IS NULL
+    WHERE {baseWhereSql}
+    GROUP BY p.id
+)
+SELECT COUNT(*) FROM sort_cte";
+        return sql;
+    }
+
+    /// <summary>
+    /// V24-F80 + V24-F94: 原生 SQL 搜索 (恢复分词 OR + 三层排序 + CTE UNION GIN trgm 加速)
+    /// </summary>
+    public async Task<SearchResult> SearchAsync(SearchRequest req, CancellationToken ct = default)
+    {
+        var sw = Stopwatch.StartNew();
+
+        var (baseWhereSql, baseParams) = BuildBaseFilter(
+            req.Type,
+            req.D1, req.D2, req.D3,
+            req.H1, req.H2, req.H3,
+            req.D7Thread, req.D8Thread,
+            req.Tolerance, req.IncludeDiscontinued);
+
+        var (ctePrefixSql, qParams) = BuildQMatchCte(req.Q);
+        var hasQ = ctePrefixSql != null;
+
+        var page = Math.Max(1, req.Page);
+        var pageSize = Math.Clamp(req.PageSize, 1, 100);
+        var offset = (page - 1) * pageSize;
+
+        // 三层排序: brand_sort_order_min → oem_list_sort_order_min → updated_at DESC
+        const string orderBySql = "s.brand_sort_order_min ASC, s.oem_list_sort_order_min ASC, p.updated_at DESC";
+        const string selectColumns = @"p.id, p.mr_1, p.oem_no_display, p.remark, p.type,
+    p.d1_mm, p.d2_mm, p.h1_mm, p.image_key, p.is_discontinued,
+    p.updated_at";
+
+        var sql = BuildFullSql(ctePrefixSql, baseWhereSql, selectColumns, orderBySql, hasQ);
+        var countSql = BuildCountSql(ctePrefixSql, baseWhereSql, hasQ);
+
+        // 参数克隆 (countSql 复用 base+q 参数, sql 还需 pageSize/offset)
+        var allParams = baseParams.Concat(qParams).ToList();
+        var countParams = allParams.Select(p => p.Clone()).ToList();
+        var listParams = allParams.ToList();
         listParams.Add(new NpgsqlParameter("@pageSize", NpgsqlDbType.Integer) { Value = pageSize });
         listParams.Add(new NpgsqlParameter("@offset", NpgsqlDbType.Integer) { Value = offset });
 
@@ -332,25 +410,28 @@ WHERE {whereSql}";
 
     /// <summary>
     /// V2 Task 1.2.7: 聚合搜索 PG 兜底 (Meili 离线时降级使用)
-    /// V24-F80: 改用原生 SQL + LATERAL JOIN, 与 SearchAsync 复用 BuildWhereClause
+    /// V24-F80 + V24-F94: 改用原生 SQL + CTE UNION + LATERAL JOIN, 复用 BuildBaseFilter + BuildQMatchCte
     /// </summary>
     public async Task<AggregateSearchResponse> AggregateSearchAsync(AggregateSearchRequest req, CancellationToken ct = default)
     {
         var sw = Stopwatch.StartNew();
 
-        // 复用 BuildWhereClause 构建 WHERE + 参数 (规则 3.2 绝对复用优先)
-        var (whereSql, parameters) = BuildWhereClause(
-            req.Q, req.Type,
+        // 复用 BuildBaseFilter + BuildQMatchCte (规则 3.2 绝对复用优先)
+        var (baseWhereSql, baseParams) = BuildBaseFilter(
+            req.Type,
             req.D1, req.D2, req.D3,
             req.H1, req.H2, req.H3,
             req.D7Thread, req.D8Thread,
             req.Tolerance, req.IncludeDiscontinued);
 
+        var (ctePrefixSql, qParams) = BuildQMatchCte(req.Q);
+        var hasQ = ctePrefixSql != null;
+
         // 机型分类过滤 (聚合搜索独有)
         if (!string.IsNullOrWhiteSpace(req.MachineCategory))
         {
-            whereSql += " AND EXISTS (SELECT 1 FROM machine_applications m WHERE m.product_id = p.id AND m.machine_category = @machineCategory)";
-            parameters.Add(new NpgsqlParameter("@machineCategory", NpgsqlDbType.Text) { Value = req.MachineCategory });
+            baseWhereSql += " AND EXISTS (SELECT 1 FROM machine_applications m WHERE m.product_id = p.id AND m.machine_category = @machineCategory)";
+            baseParams.Add(new NpgsqlParameter("@machineCategory", NpgsqlDbType.Text) { Value = req.MachineCategory });
         }
 
         var page = Math.Max(1, req.Page);
@@ -358,23 +439,8 @@ WHERE {whereSql}";
         var offset = (page - 1) * pageSize;
 
         // 主查询: CTE + LATERAL JOIN 取分页产品 + 嵌套 OEM 3 / 机型列表
-        var sql = $@"
-WITH sort_cte AS (
-    SELECT
-        p.id AS product_id,
-        COALESCE(MIN(xb.sort_order), 2147483647) AS brand_sort_order_min,
-        COALESCE(MIN(x.sort_order), 2147483647) AS oem_list_sort_order_min
-    FROM products p
-    LEFT JOIN cross_references x ON x.product_id = p.id
-        AND x.is_published = true
-        AND x.is_discontinued = false
-    LEFT JOIN xref_oem_brand xb ON xb.brand = x.oem_brand
-        AND xb.deleted_at IS NULL
-    WHERE {whereSql}
-    GROUP BY p.id
-)
-SELECT
-    p.id, p.mr_1, p.product_name_1, p.product_name_2, p.oem_2, p.type,
+        const string orderBySql = "s.brand_sort_order_min ASC, s.oem_list_sort_order_min ASC, p.updated_at DESC";
+        const string selectColumns = @"p.id, p.mr_1, p.product_name_1, p.product_name_2, p.oem_2, p.type,
     p.remark, p.media, p.is_published, p.is_discontinued, p.updated_at,
     -- LATERAL JOIN 聚合 OEM 3 列表 (JSON, 每产品最多 50, 避免笛卡尔积)
     COALESCE(
@@ -404,20 +470,15 @@ SELECT
              LIMIT 50
          ) t),
         '[]'::json
-    ) AS machine_list_json
-FROM products p
-JOIN sort_cte s ON s.product_id = p.id
-ORDER BY
-    s.brand_sort_order_min ASC,
-    s.oem_list_sort_order_min ASC,
-    p.updated_at DESC
-LIMIT @pageSize OFFSET @offset";
+    ) AS machine_list_json";
 
-        var countSql = $@"SELECT COUNT(*) FROM products p WHERE {whereSql}";
+        var sql = BuildFullSql(ctePrefixSql, baseWhereSql, selectColumns, orderBySql, hasQ);
+        var countSql = BuildCountSql(ctePrefixSql, baseWhereSql, hasQ);
 
         // 参数克隆
-        var countParams = parameters.Select(p => p.Clone()).ToList();
-        var listParams = parameters.ToList();
+        var allParams = baseParams.Concat(qParams).ToList();
+        var countParams = allParams.Select(p => p.Clone()).ToList();
+        var listParams = allParams.ToList();
         listParams.Add(new NpgsqlParameter("@pageSize", NpgsqlDbType.Integer) { Value = pageSize });
         listParams.Add(new NpgsqlParameter("@offset", NpgsqlDbType.Integer) { Value = offset });
 
