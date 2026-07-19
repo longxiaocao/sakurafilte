@@ -136,11 +136,15 @@ public class AuthTokenBroadcaster : IHostedService, IAsyncDisposable
             catch (Exception ex)
             {
                 IsListening = false;
-                // 指数退避: 5s -> 10s -> 20s -> 40s -> 60s 封顶
-                //   WHY: PG 长时间不可用时固定 5s 重连会产生大量失败日志, 退避减少无效重试
-                var delaySec = Math.Min(60, 5 * (int)Math.Pow(2, _consecutiveFailures));
+                // 指数退避 + jitter: 5s -> 10s -> 20s -> 40s -> 60s 封顶, 加 0~25% jitter 防多实例同步重连
+                //   V24-F87 (P2-8): 加 jitter 防 PG 长时间不可用恢复后多实例同步重连产生连接风暴 (thundering herd)
+                //   WHY: 纯指数退避在固定失败次数后所有实例同步重试, 加 jitter 分散重连时间
+                var baseDelaySec = Math.Min(60, 5 * (int)Math.Pow(2, _consecutiveFailures));
+                var jitterSec = (int)(baseDelaySec * 0.25 * Random.Shared.NextDouble());
+                var delaySec = baseDelaySec + jitterSec;
                 _consecutiveFailures++;
-                _logger.LogWarning(ex, "[AuthTokenBroadcaster] 连接失败, {Delay}s 后重试 (第 {N} 次)", delaySec, _consecutiveFailures);
+                _logger.LogWarning(ex, "[AuthTokenBroadcaster] 连接失败, {Delay}s 后重试 (第 {N} 次, base={Base} jitter={Jitter})",
+                    delaySec, _consecutiveFailures, baseDelaySec, jitterSec);
                 try { _listenConn?.Dispose(); } catch { }
                 // P2-5 修复: Dispose 后置 null, 防止外部访问已 Dispose 对象 (ObjectDisposedException)
                 _listenConn = null;

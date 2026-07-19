@@ -71,7 +71,12 @@ public class PerfAlertService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await EnsureDefaultSettingsAsync(stoppingToken);
+        // V24-F87 (P2-2): 启动时确保默认配置存在 (内联, 原 EnsureDefaultSettingsAsync 仅一处调用)
+        using (var scope = _sp.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ProductDbContext>();
+            await DefaultSettingsEnsurer.EnsureAsync(db, Defaults, _logger, nameof(PerfAlertService), stoppingToken);
+        }
 
         int pollSec = 60;
         while (!stoppingToken.IsCancellationRequested)
@@ -87,14 +92,6 @@ public class PerfAlertService : BackgroundService
             }
             await Task.Delay(TimeSpan.FromSeconds(pollSec), stoppingToken);
         }
-    }
-
-    private async Task EnsureDefaultSettingsAsync(CancellationToken ct)
-    {
-        using var scope = _sp.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<ProductDbContext>();
-        // V24-F60: 批量预拉消除 N+1 (原 foreach 内 AnyAsync, N 条 Defaults 触发 N 次 SQL)
-        await DefaultSettingsEnsurer.EnsureAsync(db, Defaults, _logger, nameof(PerfAlertService), ct);
     }
 
     private async Task<int> RunOnceAsync(CancellationToken ct)

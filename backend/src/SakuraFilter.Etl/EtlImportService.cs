@@ -1471,32 +1471,6 @@ public class EtlImportService
     }
 
     /// <summary>
-    /// V2 Task 5.1.26.1: 加载指定产品集合的 oem_2 列表 map (检测多值情况)
-    ///   WHY: oem_2 多值表示同一 product 有多个 OEM 二级编号, 是数据质量问题 (D5-5/D6-3)
-    ///   独立方法, 不影响现有 LoadExistingOemMapAsync (查 mr_1)
-    ///   spec Task 5.1.26.2: 调用方检测多值占比 > 1% 记录告警 (不阻断)
-    ///   spec Task 5.1.26.3: 单元测试 Etl_Oem2MultiValue_Detection
-    ///   注: spec 伪代码用 IReadOnlyCollection&lt;Guid&gt; 是类型错误 (CrossReference.ProductId 是 long)
-    /// </summary>
-    /// <param name="db">ProductDbContext (EF Core)</param>
-    /// <param name="productIds">待检测的产品 ID 集合 (避免全表扫描)</param>
-    /// <param name="ct">取消令牌</param>
-    /// <returns>ProductId → Oem2 distinct 列表 (仅包含有 oem_2 的产品)</returns>
-    private static async Task<Dictionary<long, List<string>>> LoadExistingOem2MapAsync(
-        ProductDbContext db, IReadOnlyCollection<long> productIds, CancellationToken ct)
-    {
-        if (productIds.Count == 0) return new Dictionary<long, List<string>>();
-
-        var rows = await db.CrossReferences
-            .AsNoTracking()
-            .Where(x => productIds.Contains(x.ProductId) && x.Oem2 != null)
-            .GroupBy(x => x.ProductId)
-            .Select(g => new { ProductId = g.Key, Oem2List = g.Select(x => x.Oem2!).Distinct().OrderBy(s => s).ToList() })
-            .ToListAsync(ct);
-        return rows.ToDictionary(r => r.ProductId, r => r.Oem2List);
-    }
-
-    /// <summary>
     /// 获取 PostgreSQL 事务级 advisory lock,防止多实例并发 ETL
     /// 锁 key = 固定 bigint (每个 ETL 类型不同)
     /// WHY: pg_try_advisory_xact_lock 在事务 commit/rollback 时自动释放,无需手动 unlock

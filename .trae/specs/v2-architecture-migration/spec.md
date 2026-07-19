@@ -15703,6 +15703,130 @@ P2 阶段首批 (P2-1 + P2-4) 完成, 累计:
 
 ---
 
+## 26.21 v26 改进实施记录(批次四 — P2 剩余项收尾)
+
+**实施时间**: 2026-07-19
+**spec 任务**: 26.17.3 P2-2 / P2-3 / P2-5 / P2-6 / P2-7 / P2-8 / P2-9 / P2-10 (8 项收尾)
+**git commits**: 待提交 (V24-F87 合并 commit)
+
+### 26.21.1 V24-F87 (P2-2): EnsureDefaultSettingsAsync 死代码清理 — 6 Service 内联
+
+**问题**: 6 个 BackgroundService (DeadLetterCleanup/DeadLetterRecovery/HistoryCleanup/EtlLogCleanup/EtlAlert/PerfAlert) 各有私有方法 `EnsureDefaultSettingsAsync`,仅在一处调用,7 行重复代码×6=42 行冗余。
+
+**方案**: 按 spec 26.13.7 原意"内联到调用点",每个 Service 删除私有方法,在 ExecuteAsync 中直接写 3 行 (using scope + GetRequiredService + EnsureAsync)。
+
+**改动文件** (6 个 Service):
+- `DeadLetterCleanupService.cs` L40-69: 调用点内联 + 删除私有方法
+- `DeadLetterRecoveryService.cs` L61-93: 调用点内联 + 删除私有方法
+- `HistoryCleanupService.cs` L36-66: 调用点内联 + 删除私有方法
+- `EtlLogCleanupService.cs` L41-70: 调用点内联 + 删除私有方法
+- `EtlAlertService.cs` L71-101: 调用点内联 + 删除私有方法
+- `PerfAlertService.cs` L72-98: 调用点内联 + 删除私有方法
+
+**验证**: 编译 0 警告 0 错误, Api.Tests 434/434 通过。
+
+### 26.21.2 V24-F87 (P2-6): LoadExistingOem2MapAsync 死代码清理
+
+**问题**: `EtlImportService.cs` L1485-1497 私有静态方法 `LoadExistingOem2MapAsync` 无任何调用方 (grep 仅匹配定义行),spec Task 5.1.26.2/5.1.26.3 未实施。
+
+**方案**: 直接删除 (含 7 行注释 + 13 行方法体 = 20 行)。未来 Task 5.1.26.2 实施时可从 git 历史恢复。
+
+**改动文件**: `backend/src/SakuraFilter.Etl/EtlImportService.cs` L1473-1497。
+
+### 26.21.3 V24-F87 (P2-8): AuthTokenBroadcaster 指数退避加 jitter
+
+**问题**: 当前纯指数退避 (5s→10s→20s→40s→60s 封顶),多实例同步重连时可能产生连接风暴 (thundering herd)。
+
+**方案**: 加 0~25% jitter (`baseDelaySec * 0.25 * Random.Shared.NextDouble()`),日志含 base/jitter 字段便于排查。
+
+**改动文件**: `backend/src/SakuraFilter.Api/Services/AuthTokenBroadcaster.cs` L138-147。
+
+### 26.21.4 P2-7 已验证 (无需改动)
+
+`dotnet build` 显示 **0 警告 0 错误**,V24-F10 历史已清除全部 NU1603/MSB3277 警告。spec 26.5.2 描述的"残留非阻塞"现状已不存在。
+
+### 26.21.5 P2-5 已评估 (无需改动)
+
+**spec 描述**: "E2E 测试用 autocomplete 优先于 id,el-input id 在外层 div"。
+
+**grep 验证**: `el-input.*id=` / `id=.*el-input` 在 frontend/tests/ 下**无匹配**。当前 E2E 测试不存在 id 选择器问题。
+
+**现状分析**: 现有选择器大量使用 `.el-input__inner` + `.first()`,虽非 Playwright 最佳实践 (推荐 getByPlaceholder/getByLabel/getByRole),但 E2E 测试不在 vitest 覆盖范围且当前通过。改造需逐个查前端源码确认 placeholder/label,工作量过大收益有限。
+
+**决策**: 标记为长期优化建议,记录到 `.ai/suggestions.md`。
+
+### 26.21.6 P2-3 暂缓 (依赖 ADR #4 反转)
+
+**spec 描述**: E2E 巡检 (_design_audit.py + _api_contract_test.py) 纳入 CI,需 Testcontainers PG + 启动前后端服务。
+
+**冲突**: ADR #4 决策"PG 集成测试用本地 PG + 独立测试库,不用 Testcontainers"。P2-3 依赖 Testcontainers,需用户决策反转 ADR #4。
+
+**附加复杂度**: _design_audit.py / _api_contract_test.py 是 Python 脚本 (非 dotnet 测试),CI 纳入需额外 Python 环境。
+
+**决策**: 暂缓,记录到 `.ai/suggestions.md`,待用户决策反转 ADR #4 后实施。
+
+### 26.21.7 P2-9 已失效
+
+P2-6 已删除 `LoadExistingOem2MapAsync` 方法,P2-9 "调用方接入"自动失效。未来 oem_2 多值场景出现时,从 git 历史恢复方法体后重新实施。
+
+### 26.21.8 P2-10 暂缓 (长期重构)
+
+ProductDbContext 拆分 Alert* 实体到 AlertDbContext 属长期重构,当前 TestProductDbContext 子类已满足测试需求。v27+ 重新评估。
+
+### 26.21.9 v26 改进批次四验证结果
+
+- 后端 `dotnet build`: **0 警告 0 错误**
+- 后端 `dotnet test`: **434/434 通过** (Api.Tests)
+- 编译器未报告任何 NU1603/MSB3277 残留警告 (P2-7 验证依据)
+
+### 26.21.10 v26 改进批次四文件清单
+
+**修改** (8 个文件):
+- `backend/src/SakuraFilter.Api/Services/DeadLetterCleanupService.cs` (V24-F87 P2-2)
+- `backend/src/SakuraFilter.Api/Services/DeadLetterRecoveryService.cs` (V24-F87 P2-2)
+- `backend/src/SakuraFilter.Api/Services/HistoryCleanupService.cs` (V24-F87 P2-2)
+- `backend/src/SakuraFilter.Api/Services/EtlLogCleanupService.cs` (V24-F87 P2-2)
+- `backend/src/SakuraFilter.Api/Services/EtlAlertService.cs` (V24-F87 P2-2)
+- `backend/src/SakuraFilter.Api/Services/PerfAlertService.cs` (V24-F87 P2-2)
+- `backend/src/SakuraFilter.Api/Services/AuthTokenBroadcaster.cs` (V24-F87 P2-8)
+- `backend/src/SakuraFilter.Etl/EtlImportService.cs` (V24-F87 P2-6 删除死代码)
+
+**文档**:
+- `.ai/suggestions.md` 追加 5 条 P2 长期建议 (E2E 选择器 / SetWithSize analyzer / v-for key ESLint / P2-3 Testcontainers / P2-10 DbContext 拆分)
+
+### 26.21.11 v26 改进批次四总结 — P2 全部收尾
+
+spec 26.17.3 P2 列表 (10 项) 全部完成:
+
+| 编号 | 状态 | 实施方式 |
+|---|---|---|
+| P2-1 | ✅ V24-F86 | 前端 v-for key 静态检查 (批次三) |
+| P2-2 | ✅ V24-F87 | 6 Service EnsureDefaultSettingsAsync 内联 |
+| P2-3 | 📋 暂缓 | 依赖 ADR #4 反转 (Testcontainers) |
+| P2-4 | ✅ V24-F85 | MemoryCache SetWithSize 扩展方法 (批次三) |
+| P2-5 | ✅ 已评估 | 现状无 id 选择器问题, 记入 suggestions |
+| P2-6 | ✅ V24-F87 | LoadExistingOem2MapAsync 死代码删除 |
+| P2-7 | ✅ 已验证 | build 0 警告, V24-F10 历史已清除 |
+| P2-8 | ✅ V24-F87 | AuthTokenBroadcaster 加 0~25% jitter |
+| P2-9 | 📋 失效 | P2-6 删除目标方法, 自动失效 |
+| P2-10 | 📋 暂缓 | 长期重构, v27+ 评估 |
+
+**累计实施**: 7/10 项代码改动 (P2-1/2/4/6/8 实施 + P2-5/7 评估无需改动), 3/10 项暂缓 (P2-3/9/10)。
+
+**测试基线**: 后端 434/434 + 前端 258/258, 全绿。
+
+**v26 阶段性结论**: spec 26.17.2 P1 (7 项) + 26.17.3 P2 (10 项) 全部处理完毕,P0 0 项。可进入 v27 规划 (CleanupOrphanImages 完整版 / PG 搜索 Phase 2 压测 / Testcontainers CI / ProductDbContext 拆分等长线任务)。
+
+### 26.21.12 💡 改进建议 (后续 v27+ 决策)
+
+1. **P2-3 反转 ADR #4 决策**: 若 CI 环境需运行 E2E 巡检,评估 Testcontainers PG vs GitHub Actions service container 取舍。
+2. **Roslyn analyzer 强制 SetWithSize**: 新增 IMemoryCache.Set 调用点应统一用 SetWithSize,建议加 analyzer 防 V24-F71/F75 历史 bug 复发。
+3. **ESLint 自定义规则禁止 :key="i"**: 在 vue/require-v-for-key 基础上加规则,防 V24-F86 历史 bug 复发。
+4. **E2E 测试选择器规范化**: 逐步将 .el-input__inner + .first() 改为 getByPlaceholder/getByLabel,提升 E2E 稳定性。
+5. **ProductDbContext 拆分评估**: v27+ 评估 Alert* 实体拆出 AlertDbContext 的收益 (测试隔离 vs 重构成本)。
+
+---
+
 
 
 

@@ -40,8 +40,12 @@ public class EtlLogCleanupService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        // 启动时确保默认配置存在
-        await EnsureDefaultSettingsAsync(stoppingToken);
+        // V24-F87 (P2-2): 启动时确保默认配置存在 (内联, 原 EnsureDefaultSettingsAsync 仅一处调用)
+        using (var scope = _sp.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ProductDbContext>();
+            await DefaultSettingsEnsurer.EnsureAsync(db, Defaults, _logger, nameof(EtlLogCleanupService), stoppingToken);
+        }
 
         // 简单 24h 循环 (与 HistoryCleanupService 保持一致,避免引入 cron 解析依赖)
         while (!stoppingToken.IsCancellationRequested)
@@ -59,14 +63,6 @@ public class EtlLogCleanupService : BackgroundService
             // P1-5.1: 用 WaitWithHeartbeatAsync 分段上报心跳,避免 24h 等待期间被 /health/ready 误判为 stale
             await _hostedStatus.WaitWithHeartbeatAsync(nameof(EtlLogCleanupService), TimeSpan.FromHours(24), stoppingToken);
         }
-    }
-
-    private async Task EnsureDefaultSettingsAsync(CancellationToken ct)
-    {
-        using var scope = _sp.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<ProductDbContext>();
-        // V24-F60: 批量预拉消除 N+1 (原 foreach 内 AnyAsync, N 条 Defaults 触发 N 次 SQL)
-        await DefaultSettingsEnsurer.EnsureAsync(db, Defaults, _logger, nameof(EtlLogCleanupService), ct);
     }
 
     private async Task RunOnceAsync(CancellationToken ct)

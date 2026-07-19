@@ -60,8 +60,12 @@ public class DeadLetterRecoveryService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        // 启动时确保默认配置存在
-        await EnsureDefaultSettingsAsync(stoppingToken);
+        // V24-F87 (P2-2): 启动时确保默认配置存在 (内联, 原 EnsureDefaultSettingsAsync 仅一处调用)
+        using (var scope = _sp.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ProductDbContext>();
+            await DefaultSettingsEnsurer.EnsureAsync(db, Defaults, _logger, nameof(DeadLetterRecoveryService), stoppingToken);
+        }
 
         // 初始 delay: 等应用其它 worker (IndexReplayWorker / EtlAlertService) 起来
         //   避免启动瞬间多个 worker 并发改 dead_letter
@@ -82,14 +86,6 @@ public class DeadLetterRecoveryService : BackgroundService
 
             await Task.Delay(TimeSpan.FromMinutes(pollMinutes), stoppingToken);
         }
-    }
-
-    private async Task EnsureDefaultSettingsAsync(CancellationToken ct)
-    {
-        using var scope = _sp.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<ProductDbContext>();
-        // V24-F60: 批量预拉消除 N+1 (原 foreach 内 AnyAsync, N 条 Defaults 触发 N 次 SQL)
-        await DefaultSettingsEnsurer.EnsureAsync(db, Defaults, _logger, nameof(DeadLetterRecoveryService), ct);
     }
 
     /// <summary>
