@@ -26,6 +26,22 @@ env:
   ADMIN_TOKEN: 'dev-admin-token-rotate-in-prod-MZK4R9P3X6V2N7Q1L5F0B8H3C'
   PG_PASSWORD: '784533'
   BACKEND_URL: 'http://localhost:5148'
+  # v28-4 P0 修复: 后端启动所需环境变量 (appsettings.json 中均为空, 必须由 CI 注入)
+  #   根因: e2e.yml 顶层 env 之前只配了 PG_PASSWORD, 后端 dotnet run 时 Npgsql 抛
+  #         "Host can't be null" / "ConnectionString property has not been initialized"
+  #         → 120s 启动超时 → V27-9-3 设计巡检等后续步骤全被 skipped
+  #   修复: 补齐 4 个必填环境变量 (与 .env 本地开发值一致, dev 用途非生产凭证)
+  ConnectionStrings__Postgres: 'Host=localhost;Port=5432;Database=spike_test_v3;Username=postgres;Password=784533'
+  Jwt__SigningKey: 'dev-jwt-signing-key-not-for-prod-X7K9M2P5Q8R3T6V1W4Y7Z0A3B6C9D2E5F8'
+  Jwt__Issuer: 'SakuraFilter'
+  Jwt__Audience: 'SakuraFilter.Web'
+  Jwt__ExpireMinutes: '30'
+  Jwt__RefreshExpireDays: '7'
+  Auth__DevStaticToken: 'dev-admin-token-rotate-in-prod-MZK4R9P3X6V2N7Q1L5F0B8H3C'
+  Search__CursorHmacKey: 'dev-cursor-hmac-key-not-for-prod-X7K9M2P5Q8R3T6V1W4Y7Z0'
+  Etl__AllowedImportDirs: '["/tmp/etl-test"]'
+  INITIAL_ADMIN_PASSWORD: 'Admin@2026'
+  INITIAL_OPERATOR_PASSWORD: 'Operator@2026'
 
 jobs:
   # ===== 共享 build job =====
