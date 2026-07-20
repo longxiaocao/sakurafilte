@@ -225,7 +225,10 @@ def test_new_cancel_recorded():
                     #         会 IncrSkippedNullField + continue 跳过该行
                     #   结果: 100K 行全部跳过 → stage=0 → L944 校验 stageCount+Errors != Read 失败
                     #   修复: 补 mr_1 字段, ETL 正常写入 staging 表, stage_count=read, 校验通过
-                    "mr_1": f"MR1-DAY98-{i:06d}",
+                    # v28-4 P0 修复 2: mr_1 长度限制 10 字符 (ProductDbContext Mr1 HasMaxLength(10))
+                    #   之前用 f"MR1-DAY98-{i:06d}" (15 字符) → PG 22001 value too long for varying(10)
+                    #   修复: 改成 f"M{i:06d}" (7 字符), 全部 ≤ 10 字符
+                    "mr_1": f"M{i:06d}",
                     "type": "Hydraulic",
                     "product_name_3": f"Day 9.8 Audit {i}",
                     "media": "Synthetic",
