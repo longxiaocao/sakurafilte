@@ -282,6 +282,10 @@ def test_etl_real_trigger():
     # Day 9.12: 路径跨平台 (SCRIPT_DIR/output/) + 字段用 oem_no_normalized/oem_no_display
     #   WHY 字段必须正确: EtlImportService 读 oem_no_normalized/oem_no_display/type
     #     用错字段名 (oem_no) 会导致每行 'key not present', 5K 行 1s 内跑完, SSE 只有 1 帧
+    # v30-6 P0 修复: 加 mr_1 字段 (V2 Task 5.1.2 引入 mr_1 必填校验, 缺失会 IncrSkippedNullField+continue)
+    #   WHY: 之前无 mr_1 → 5000 行全部跳过 → read=5000 stage=0 errors=0
+    #        → 数据完整性校验失败 (stage+errors != read) → ETL failed → Case 4 缺 completed 终态
+    #   修复: 加 mr_1=f"MR1-{i:05d}" (1-10 位字母数字, 满足 Mr1Validator 格式)
     out_dir = os.path.join(SCRIPT_DIR, "output")
     os.makedirs(out_dir, exist_ok=True)
     jsonl_path = os.path.join(out_dir, "products_5k.jsonl")
@@ -291,6 +295,7 @@ def test_etl_real_trigger():
                 f.write(json.dumps({
                     "oem_no_normalized": f"DAY97-OEM-5K-{i}",
                     "oem_no_display": f"DAY97-OEM-5K-{i}",
+                    "mr_1": f"MR1-{i:05d}",
                     "product_name_1": f"Day 9.7 5K Test {i}",
                     "type": "Hydraulic",
                     "media": "Synthetic",

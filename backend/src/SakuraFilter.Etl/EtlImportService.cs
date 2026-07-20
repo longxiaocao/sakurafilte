@@ -940,10 +940,13 @@ public class EtlImportService
             long stageCount;
             await using (var countCmd = new NpgsqlCommand("SELECT count(*) FROM products_stage", conn))
                 stageCount = (long)(await countCmd.ExecuteScalarAsync(ct))!;
-            _logger.LogInformation("[AUDIT] products_stage: read={Read} stage={Stage} errors={Errors}", Progress.Read, stageCount, Progress.Errors);
-            if (stageCount + Progress.Errors != Progress.Read)
+            _logger.LogInformation("[AUDIT] products_stage: read={Read} stage={Stage} errors={Errors} skippedNullField={SkippedNullField}", Progress.Read, stageCount, Progress.Errors, Progress.SkippedNullField);
+            // v30-6 P1 修复: 校验加 SkippedNullField (与 apps L2006 一致)
+            //   WHY: V2 Task 5.1.2 mr_1 必填校验 → IncrSkippedNullField + continue (行不进 stage 表)
+            //   之前校验 stageCount + Errors != Read 漏算 SkippedNullField, 真实数据 mr_1 空时会误报失败
+            if (stageCount + Progress.Errors + Progress.SkippedNullField != Progress.Read)
             {
-                var msg = $"数据完整性校验失败: read={Progress.Read} stage={stageCount} errors={Progress.Errors} (期望 stage+errors=read)";
+                var msg = $"数据完整性校验失败: read={Progress.Read} stage={stageCount} errors={Progress.Errors} skippedNullField={Progress.SkippedNullField} (期望 stage+errors+skippedNullField=read)";
                 _logger.LogError(msg);
                 Progress.Fail(msg);
                 _ = Progress.PersistLogAsync("products", mode);
@@ -2002,10 +2005,13 @@ public class EtlImportService
             long appStageCount;
             await using (var appCountCmd = new NpgsqlCommand("SELECT count(*) FROM apps_stage", conn))
                 appStageCount = (long)(await appCountCmd.ExecuteScalarAsync(ct))!;
-            _logger.LogInformation("[AUDIT] apps_stage: read={Read} stage={Stage} errors={Errors} missingMr1={Missing}", Progress.Read, appStageCount, Progress.Errors, Progress.SkippedMissingMr1);
-            if (appStageCount + Progress.Errors + Progress.SkippedMissingMr1 != Progress.Read)
+            _logger.LogInformation("[AUDIT] apps_stage: read={Read} stage={Stage} errors={Errors} missingMr1={Missing} skippedNullField={SkippedNullField}", Progress.Read, appStageCount, Progress.Errors, Progress.SkippedMissingMr1, Progress.SkippedNullField);
+            // v30-6 P1 修复: 校验加 SkippedNullField (COPY 阶段 brand/model 空跳过用 IncrSkippedNullField)
+            //   WHY: apps ETL L1958-1962 brand/model 空时 IncrSkippedNullField + continue, 行不进 stage 表
+            //   之前校验 stageCount + Errors + SkippedMissingMr1 != Read 漏算 SkippedNullField
+            if (appStageCount + Progress.Errors + Progress.SkippedMissingMr1 + Progress.SkippedNullField != Progress.Read)
             {
-                var msg = $"数据完整性校验失败: read={Progress.Read} stage={appStageCount} errors={Progress.Errors} missingMr1={Progress.SkippedMissingMr1} (期望 stage+errors+missingMr1=read)";
+                var msg = $"数据完整性校验失败: read={Progress.Read} stage={appStageCount} errors={Progress.Errors} missingMr1={Progress.SkippedMissingMr1} skippedNullField={Progress.SkippedNullField} (期望 stage+errors+missingMr1+skippedNullField=read)";
                 _logger.LogError(msg);
                 Progress.Fail(msg);
                 _ = Progress.PersistLogAsync("apps", mode);
