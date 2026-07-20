@@ -136,7 +136,10 @@ def main():
         print(f"  [FAIL] 文件不存在: {file_path}")
         fail_cnt += 1
     else:
-        m = re.search(r"public\s+async\s+Task<\w+>\s+ListAsync\s*\(", content_text)
+        # v28-4 P0 修复: 正则 Task<\w+> 不匹配嵌套泛型 Task<List<ProductImageInfo>>
+        #   \w+ 只匹配单个词 (不含 < >), 嵌套泛型返回类型 ListAsync FAIL
+        #   修复: 用 .*? 非贪婪匹配返回类型, 同一行内到 ListAsync(
+        m = re.search(r"public\s+async\s+Task.*?ListAsync\s*\(", content_text)
         if not m:
             print(f"  [FAIL] 未找到 ListAsync 方法定义")
             fail_cnt += 1
