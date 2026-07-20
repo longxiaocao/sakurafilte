@@ -13,9 +13,14 @@ CREATE TABLE IF NOT EXISTS system_settings (
 );
 
 -- 种子数据
-INSERT INTO system_settings (key, value, description) VALUES
-    ('history.retention_enabled', 'true', '历史清理全局开关'),
-    ('history.retention_days', '0', '保留天数 (0=永久)'),
-    ('history.cleanup_batch_size', '10000', '单批删除上限'),
-    ('history.cleanup_cron', '0 3 * * *', '执行时间 (Cron)')
+-- v28-4 P0 修复: 显式传 updated_at=now()
+--   根因: 后端 dotnet run 启动时 EF Core 已创建 system_settings 表 (含 updated_at TIMESTAMPTZ DEFAULT now()),
+--         但部分 PG 版本/配置下 DEFAULT 不补 NOT NULL 列的缺失值 (CI ubuntu-latest PG 16 严格模式)
+--   CI 失败日志: null value in column "updated_at" of relation "system_settings" violates not-null constraint
+--   修复: INSERT 显式传 now(), 保留 ON CONFLICT DO NOTHING 保证幂等 (后端 seed 后再跑也不冲突)
+INSERT INTO system_settings (key, value, description, updated_at) VALUES
+    ('history.retention_enabled', 'true', '历史清理全局开关', now()),
+    ('history.retention_days', '0', '保留天数 (0=永久)', now()),
+    ('history.cleanup_batch_size', '10000', '单批删除上限', now()),
+    ('history.cleanup_cron', '0 3 * * *', '执行时间 (Cron)', now())
 ON CONFLICT (key) DO NOTHING;
