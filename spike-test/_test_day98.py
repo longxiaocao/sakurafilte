@@ -193,17 +193,19 @@ def test_new_cancel_recorded():
 
     # Day 9.8 v3: 文件存在也校验内容, 防止历史错误格式文件被复用
     # WHY: 30K 文件生成时字段名错 (oem_no) 写入磁盘, 后续测试若只检查 exists 就会用错文件
+    # v28-4 P0 修复: 校验集补 mr_1 (V2 主键), 旧文件无 mr_1 会触发 ETL 校验失败
+    required_keys = {"oem_no_normalized", "oem_no_display", "type", "mr_1"}
     need_regen = True
     if os.path.exists(jsonl_path):
         try:
             with open(jsonl_path, "r", encoding="utf-8") as f:
                 first_line = f.readline()
             sample = json.loads(first_line)
-            if "oem_no_normalized" in sample and "oem_no_display" in sample and "type" in sample:
+            if required_keys.issubset(sample.keys()):
                 need_regen = False
                 print(f"  [INFO] 复用现有 100K 文件 (字段已正确): {jsonl_path}")
             else:
-                print(f"  [WARN] 现有 100K 文件字段错, 删除重建: missing keys = {set(['oem_no_normalized','oem_no_display','type']) - set(sample.keys())}")
+                print(f"  [WARN] 现有 100K 文件字段错, 删除重建: missing keys = {required_keys - set(sample.keys())}")
                 os.remove(jsonl_path)
         except Exception as e:
             print(f"  [WARN] 现有 100K 文件解析失败 ({e}), 删除重建")
@@ -218,6 +220,12 @@ def test_new_cancel_recorded():
                 f.write(json.dumps({
                     "oem_no_normalized": f"DAY98-AUDIT-{i:06d}",
                     "oem_no_display": f"DAY98-AUDIT-{i:06d}",
+                    # v28-4 P0 修复: 补 mr_1 字段 (V2 主键, 必填)
+                    #   根因: 之前测试数据缺 mr_1, ETL ImportProductsAsync L869-875 检测到 mr_1 为空
+                    #         会 IncrSkippedNullField + continue 跳过该行
+                    #   结果: 100K 行全部跳过 → stage=0 → L944 校验 stageCount+Errors != Read 失败
+                    #   修复: 补 mr_1 字段, ETL 正常写入 staging 表, stage_count=read, 校验通过
+                    "mr_1": f"MR1-DAY98-{i:06d}",
                     "type": "Hydraulic",
                     "product_name_3": f"Day 9.8 Audit {i}",
                     "media": "Synthetic",
