@@ -336,3 +336,34 @@ v29-2 高频词分布调研 (V24-F98, 2026-07-19, spec 28.7, 候选 2 不实施)
   - spike-test/_test_day97.py (L290-305 测试数据加 mr_1=MR1{i:05d})
   - backend/tests/SakuraFilter.Api.Tests/Integration/PostgresSearchProviderIntegrationTests.cs (L407 mr_1 纯字母数字注释参考)
 
+#13 P1-1 DictManagerLayout 提取 (推翻 ADR #8 不提取决策) (2026-07-20, commit 99a9c03 + fe31b48 + 0b7344e)
+决策: 提取 useDictManager<T extends DictItem, R extends DictReorderItem> composable + DictManagerLayout 公共布局组件, 8 个字典页全部迁移
+理由:
+  - ADR #8 决策暂缓提取 (用户决策暂缓 1-2 周, 当时不实施), 后续维护成本暴露
+  - 用户提前启动 P1-1, 实测 8 页 2058 行 ~80% 代码逐字重复 (state + CRUD + 拖拽 5 函数 + 辅助 + 模板 + style)
+  - 单点维护需求: 新增/修改一个字典页时, 不再需要在 8 个文件里复制粘贴
+  - 类型安全: 用 Vue 3 composable 泛型模式 useDictManager<T extends DictItem, R extends DictReorderItem> 保留各字典页的 Item 类型
+  - 可演进: 未来新增 P2.4 字典页只需写 ~50 行配置, 不再写 220 行模板代码
+  - 3 slot 设计承接差异: #toolbar-extra (预留) / #row-cells (复杂数据列, 如 AdminMachinesView category el-tag) / #dialog-form (表单字段)
+  - CSS 变量传 grid 列宽: --dict-grid CSS 变量由 computed 根据 columns 推导, 支持复杂页用 gridTemplate prop 显式覆盖
+  - 底部文案统一: AdminOemBrandsView/AdminProductName1sView 历史遗留硬编码文案统一为 i18n key common.dictviewcommon.total_drag
+  - 行数削减: 8 页合计 2058 → 646 行 (净减 1412 行, -69%)
+排除方案:
+  - 维持 ADR #8 不提取: 8 页重复 2058 行, 新增字典页需复制 220 行模板, 单点维护需求未满足
+  - 用 HOC (higher-order component) 模式: Vue 3 HOC 不自然 (Vue 3 推荐 composable), 不如 composable + slot 直观
+  - 用 mixins (Vue 2 风格): Vue 3 已弃用 mixins, 类型推断差, 不推荐
+  - 用 render function 替代 slot: 可读性差, 维护成本高, 与 Vue SFC 模板风格不一致
+  - 提取为 useDictManager composable 但不提取 DictManagerLayout 组件: 8 页模板仍重复, 单点维护只解决一半
+关联文件:
+  - frontend/src/composables/useDictManager.ts (新增 ~250 行, 封装 state + CRUD + 拖拽 + 辅助)
+  - frontend/src/components/DictManagerLayout.vue (新增 ~320 行, 3 slot + 公共 style)
+  - frontend/src/views/admin/AdminTypesView.vue (222 → 72, -68%, 1 字段 + 固定 5 值 softDelete 警告)
+  - frontend/src/views/admin/AdminOemBrandsView.vue (399 → 70, -82%, 1 字段 + 底部文案 i18n 统一)
+  - frontend/src/views/admin/AdminProductName1sView.vue (300 → 66, -78%, 1 字段 + 底部文案 i18n 统一)
+  - frontend/src/views/admin/AdminProductName2sView.vue (197 → 63, -68%, 1 字段)
+  - frontend/src/views/admin/AdminOemNo3sView.vue (210 → 63, -70%, 1 字段)
+  - frontend/src/views/admin/AdminMediasView.vue (223 → 87, -61%, 2 字段 mediaName + mediaModel)
+  - frontend/src/views/admin/AdminEnginesView.vue (222 → 87, -61%, 2 字段 engineBrand + engineType)
+  - frontend/src/views/admin/AdminMachinesView.vue (272 → 166, -39%, 4 字段 + category el-tag + el-select, 用 #row-cells slot)
+  - .trae/specs/v2-architecture-migration/design-dict-manager-layout.md (设计文档, 1141 行)
+
