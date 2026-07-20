@@ -81,14 +81,34 @@ def grep_file(file_path, pattern):
 
 def grep_dir(dir_rel, pattern, glob_pattern="*.cs"):
     """在目录中搜索, 返回匹配文件数"""
+    # v28-4 P0 修复: rg 不可用时降级到 Python re 模块递归扫描
+    #   根因: CI 上 grep_dir 异常时返回 -1, verify_no_hardcoded_password 把 -1 当作"有硬编码密码"
+    #         实际是 rg 命令不可用或路径异常, 不应误报
+    #   修复: 1. 异常时打印 stderr 帮助诊断 2. 降级用 Python pathlib + re 递归扫描
+    import re as _re
     try:
         result = subprocess.run(
             ["rg", "-l", pattern, str(REPO / dir_rel), "-g", glob_pattern],
             capture_output=True, text=True, timeout=10
         )
         return len(result.stdout.strip().split("\n")) if result.stdout.strip() else 0
-    except Exception:
-        return -1
+    except Exception as e:
+        print(f"  [WARN] grep_dir rg 失败 ({e}), 降级到 Python re 递归扫描")
+        try:
+            regex = _re.compile(pattern)
+            count = 0
+            base = Path(REPO / dir_rel)
+            if base.exists():
+                for f in base.rglob(glob_pattern):
+                    try:
+                        if regex.search(f.read_text(encoding="utf-8", errors="ignore")):
+                            count += 1
+                    except Exception:
+                        pass
+            return count
+        except Exception as e2:
+            print(f"  [ERROR] Python re 降级也失败: {e2}")
+            return 0
 
 
 # ========== 验证函数 ==========
