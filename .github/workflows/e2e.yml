@@ -128,23 +128,6 @@ jobs:
         #   修复: 给 SakuraFilter.Api 主程序加可执行位
         run: chmod +x backend/src/SakuraFilter.Api/bin/Release/net8.0/SakuraFilter.Api
 
-      # v28-4 P0 修复: 执行 SQL migrations (修复 etl_progress_log.skipped_missing_mr1 列缺失)
-      #   根因: e2e.yml 仅启动 PG 容器 + 后端 dotnet run (EF Core EnsureCreated 创建基础表),
-      #         未执行 backend/migrations/*.sql 文件型 migration
-      #   影响: PG 日志持续报 "column e.skipped_missing_mr1 does not exist",
-      #         etl_progress_log 查询全失败 (EtlKpiCards / ETL history / Day 9.8 等依赖)
-      #   修复: 在后端启动前 psql 顺序执行所有 SQL migration (全部 idempotent)
-      #   018 注: 一次性脚本 (阶段 1 TRUNCATE 业务表), 但 CI 空库场景安全 (TRUNCATE 空表 + 阶段 2 system_settings ON CONFLICT 幂等)
-      - name: Run SQL migrations
-        env:
-          PGPASSWORD: ${{ env.PG_PASSWORD }}
-        run: |
-          for sql in backend/migrations/*.sql; do
-            echo "===== Executing $sql ====="
-            psql -h localhost -p 5432 -U postgres -d spike_test_v3 -v ON_ERROR_STOP=1 -f "$sql"
-          done
-          echo "===== All migrations applied ====="
-
       # 启动 API server (120s 超时, 失败时输出日志诊断)
       - name: Run API server (background)
         id: api-server
@@ -171,6 +154,25 @@ jobs:
             done
             exit 1
           fi
+
+      # v28-4 P0 修复: 执行 SQL migrations (修复 etl_progress_log.skipped_missing_mr1 列缺失)
+      #   根因: e2e.yml 仅启动 PG 容器 + 后端 dotnet run (EF Core EnsureCreated 创建基础表),
+      #         未执行 backend/migrations/*.sql 文件型 migration
+      #   影响: PG 日志持续报 "column e.skipped_missing_mr1 does not exist",
+      #         etl_progress_log 查询全失败 (EtlKpiCards / ETL history / Day 9.8 等依赖)
+      #   修复: 在 API server 就绪后 psql 顺序执行所有 SQL migration (全部 idempotent)
+      #   顺序: 必须在 API server 就绪后, 因 EF Core EnsureCreated 在 dotnet run 时才创建 products 等基础表,
+      #         008_dedup_and_add_unique_constraint.sql 依赖 products 表已存在
+      #   018 注: 一次性脚本 (阶段 1 TRUNCATE 业务表), 但 CI 空库场景安全 (TRUNCATE 空表 + 阶段 2 system_settings ON CONFLICT 幂等)
+      - name: Run SQL migrations
+        env:
+          PGPASSWORD: ${{ env.PG_PASSWORD }}
+        run: |
+          for sql in backend/migrations/*.sql; do
+            echo "===== Executing $sql ====="
+            psql -h localhost -p 5432 -U postgres -d spike_test_v3 -v ON_ERROR_STOP=1 -f "$sql"
+          done
+          echo "===== All migrations applied ====="
 
       - name: Upload API log on failure
         if: failure()
