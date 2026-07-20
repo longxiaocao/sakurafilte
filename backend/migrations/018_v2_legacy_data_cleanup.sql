@@ -20,6 +20,11 @@
 BEGIN;
 
 -- ===== 阶段 1: 业务表 TRUNCATE (保留字典/用户/系统配置/历史) =====
+-- v28-4 P0 修复: 全部加 IF EXISTS, CI 空库场景下 EF migrations 未创建的表 (etl_progress/etl_alert_history/cleanup_failures) 跳过
+--   根因: EF migrations 创建的是 etl_progress_log (不是 etl_progress), 018 原 TRUNCATE TABLE etl_progress 会报
+--         "relation etl_progress does not exist" → CI Run SQL migrations step 失败 exit 3
+--   修复: TRUNCATE TABLE → TRUNCATE TABLE IF EXISTS (PG 14+ 支持), 不存在的表跳过
+--   幂等性: 本脚本是"一次性脚本", 但加 IF EXISTS 后 CI 空库可重跑 (TRUNCATE 空表 + 跳过不存在表)
 
 -- 1.1 清空 product_images (FK CASCADE 依赖 products, 必须先清)
 TRUNCATE TABLE product_images RESTART IDENTITY CASCADE;
@@ -39,14 +44,14 @@ TRUNCATE TABLE search_index_pending RESTART IDENTITY CASCADE;
 -- 1.6 清空 search_index_dead_letter (旧死信任务)
 TRUNCATE TABLE search_index_dead_letter RESTART IDENTITY CASCADE;
 
--- 1.7 清空 etl_alert_history (旧告警)
-TRUNCATE TABLE etl_alert_history RESTART IDENTITY CASCADE;
+-- 1.7 清空 etl_alert_history (旧告警) — EF migrations 未创建此表, IF EXISTS 跳过
+TRUNCATE TABLE IF EXISTS etl_alert_history RESTART IDENTITY CASCADE;
 
--- 1.8 清空 etl_progress (旧进度快照)
-TRUNCATE TABLE etl_progress RESTART IDENTITY CASCADE;
+-- 1.8 清空 etl_progress (旧进度快照) — EF migrations 创建的是 etl_progress_log, IF EXISTS 跳过
+TRUNCATE TABLE IF EXISTS etl_progress RESTART IDENTITY CASCADE;
 
--- 1.9 清空 cleanup_failures (旧清理失败记录)
-TRUNCATE TABLE cleanup_failures RESTART IDENTITY CASCADE;
+-- 1.9 清空 cleanup_failures (旧清理失败记录) — EF migrations 未创建此表, IF EXISTS 跳过
+TRUNCATE TABLE IF EXISTS cleanup_failures RESTART IDENTITY CASCADE;
 
 -- 1.10 清空 partition6_placeholder (分区 6 占位表)
 TRUNCATE TABLE partition6_placeholder RESTART IDENTITY CASCADE;
