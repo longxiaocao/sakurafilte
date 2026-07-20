@@ -1,4 +1,4 @@
--- V2 改进 1: etl_progress_log 加 skipped_missing_mr1 列
+-- idempotent 可重跑 (V2 改进 1: etl_progress_log 加 skipped_missing_mr1 列)
 -- 文件: 019_v2_etl_progress_log_add_skipped_missing_mr1.sql
 -- 用途: V2 主键迁移后, xrefs/apps 关联 mr_1 失败的跳过计数需要持久化到历史日志
 --   - V2 Task 5.1: IncrSkippedMissingMr1 在运行时 Progress 对象中已实现

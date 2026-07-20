@@ -46,8 +46,8 @@ def main():
     fail_cnt = 0
     warn_cnt = 0
 
-    # ===== 用例 1: backend/migrations/ 下 SQL 文件头含 "一次性脚本,不可重跑" =====
-    print("\n[用例 1] backend/migrations/ 下 SQL 文件头含 '一次性脚本,不可重跑' 注释")
+    # ===== 用例 1: backend/migrations/ 下 SQL 文件头含 "一次性脚本,不可重跑" 注释 =====
+    print("\n[用例 1] backend/migrations/ 下 SQL 文件头含 '一次性脚本,不可重跑' 或 idempotent 标注")
     sql_files = list_sql_files("backend/migrations")
     if not sql_files:
         print(f"  [FAIL] 未找到任何 .sql 文件 (目录 backend/migrations 不存在或为空)")
@@ -56,12 +56,17 @@ def main():
         missing = []
         for rel in sql_files:
             content = read_file(rel)
-            # 检查文件头前 200 字符内是否含 "一次性脚本" 和 "不可重跑"
+            # v28-4 P0 修复: 019 是 idempotent 可重跑脚本, 不是"一次性脚本,不可重跑"
+            #   接受两种标注之一:
+            #   1. "一次性脚本" + "不可重跑" (一次性脚本, 如 002/008/009/010/015/016/017/018)
+            #   2. "idempotent" + ("可重跑" 或 "可重复执行") (幂等脚本, 如 019)
             head = content[:200]
-            if "一次性脚本" not in head or "不可重跑" not in head:
+            is_one_shot = "一次性脚本" in head and "不可重跑" in head
+            is_idempotent = "idempotent" in head.lower() and ("可重跑" in head or "可重复执行" in head)
+            if not (is_one_shot or is_idempotent):
                 missing.append(rel)
         if not missing:
-            print(f"  [PASS] {len(sql_files)} 个 SQL 文件头均含 '一次性脚本,不可重跑' 注释")
+            print(f"  [PASS] {len(sql_files)} 个 SQL 文件头均含 '一次性脚本,不可重跑' 或 idempotent 标注")
             pass_cnt += 1
         else:
             print(f"  [FAIL] {len(missing)} 个 SQL 文件头缺少注释:")
@@ -70,8 +75,10 @@ def main():
             fail_cnt += 1
 
     # ===== 用例 2: Program.cs 含 EnsureEfmigrationsHistorySeededAsync =====
-    print("\n[用例 2] Program.cs 含 EnsureEfmigrationsHistorySeededAsync (EF 迁移历史兜底)")
-    content = read_file("backend/src/SakuraFilter.Api/Program.cs")
+    print("\n[用例 2] WebApplicationExtensions.cs 含 EnsureEfmigrationsHistorySeededAsync (EF 迁移历史兜底)")
+    # v28-4 P0 修复: 迁移代码实际在 WebApplicationExtensions.cs (Program.cs L30 调用 app.InitializeDatabaseAsync 扩展方法)
+    #   之前路径写死 Program.cs, CI 报 '未找到 EnsureEfmigrationsHistorySeededAsync'
+    content = read_file("backend/src/SakuraFilter.Api/Extensions/WebApplicationExtensions.cs")
     if "EnsureEfmigrationsHistorySeededAsync" in content:
         print(f"  [PASS] 找到 EnsureEfmigrationsHistorySeededAsync 调用/定义")
         pass_cnt += 1
@@ -101,8 +108,9 @@ def main():
         fail_cnt += 1
 
     # ===== 用例 5: Program.cs 含 SetCommandTimeout(60) 和 MigrateAsync =====
-    print("\n[用例 5] Program.cs 含 SetCommandTimeout(60) 和 MigrateAsync")
-    content = read_file("backend/src/SakuraFilter.Api/Program.cs")
+    print("\n[用例 5] WebApplicationExtensions.cs 含 SetCommandTimeout(60) 和 MigrateAsync")
+    # v28-4 P0 修复: 迁移代码实际在 WebApplicationExtensions.cs (Program.cs L30 调用 app.InitializeDatabaseAsync 扩展方法)
+    content = read_file("backend/src/SakuraFilter.Api/Extensions/WebApplicationExtensions.cs")
     has_timeout = bool(re.search(r"SetCommandTimeout\s*\(\s*60\s*\)", content))
     has_migrate = "MigrateAsync" in content
     if has_timeout and has_migrate:
