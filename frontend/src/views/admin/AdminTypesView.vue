@@ -2,221 +2,71 @@
 // Day 10+ P2.2: Type 字典管理页 (固定 5 值: oil/fuel/air/cabin/others)
 //   - 默认按 sortOrder 排 (P2.3 联动: 拖动后前台产品页按 sortOrder 展示)
 //   - 5 个固定值不允许硬删 (兜底 others)
-import { ref, reactive, onMounted, computed } from 'vue'
+// P1-1 DictManagerLayout 提取: 用 useDictManager + DictManagerLayout 替代手写 state + CRUD + 拖拽 + 模板
+//   行数: 222 → ~55 (减少 75%)
 import { useI18n } from 'vue-i18n'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { useDictManager } from '@/composables/useDictManager'
+import DictManagerLayout from '@/components/DictManagerLayout.vue'
 import { dictApi, type TypeItem, type TypeReorderItem } from '@/api'
-import SkeletonCard from '@/components/SkeletonCard.vue'
-import { useVisibilityRefresh } from '@/composables/useVisibilityRefresh'
 
 const { t } = useI18n()
 
-const items = ref<TypeItem[]>([])
-const loading = ref(false)
-// V24-F102 (P2-2, 规则 8): 加 loadError, 加载失败时显示持久 el-alert + 重试按钮
-const loadError = ref<string | null>(null)
-const includeDeleted = ref(false)
-const searchKw = ref('')
+// 固定 5 值: oil/fuel/air/cabin/others (软删时额外警告)
+const FIXED_TYPES = ['oil', 'fuel', 'air', 'cabin', 'others']
 
-const dialogOpen = ref(false)
-const dialogMode = ref<'create' | 'edit'>('create')
-const dialogForm = reactive<{ id?: number; type: string; sortOrder: number }>({
-  type: '', sortOrder: 0
+const mgr = useDictManager<TypeItem, TypeReorderItem>({
+  api: dictApi.types,
+  emptyForm: () => ({ type: '', sortOrder: 0 }),
+  rowToForm: (row) => ({ id: row.id, type: row.type, sortOrder: row.sortOrder }),
+  validate: (form) => {
+    const v = (form.type as string).trim()
+    if (!v) return { ok: false, errMsg: t('admin.typesview.warning.type_cannot_be_empty') }
+    if (v.length > 50) return { ok: false, errMsg: t('admin.typesview.warning.type_length') }
+    return { ok: true }
+  },
+  formToCreatePayload: (form) => [(form.type as string).trim(), form.sortOrder],
+  formToUpdatePayload: (form) => ({ type: (form.type as string).trim(), sortOrder: form.sortOrder }),
+  // V24-F102 P0-1 修复后的硬编码模式 + 固定 5 值警告
+  softDeleteMessage: (row) =>
+    FIXED_TYPES.includes(row.type)
+      ? `确定删除固定 Type "${row.type}" 吗? 建议保留 (作为 P2.3 兜底), 但仍支持软删恢复.`
+      : `确定删除 "${row.type}" 吗? (软删除)`,
+  // AdminTypesView 用专属 i18n key (与 common.action.sort_order_saved 略不同)
+  reorderSuccessKey: 'admin.typesview.success.sort_order_saved_frontend',
 })
 
-const draggingId = ref<number | null>(null)
-const dragOverId = ref<number | null>(null)
-
-async function load() {
-  loading.value = true
-  // V24-F102 (P2-2, 规则 8): 进入 load 时清空 loadError, 避免上次失败提示残留
-  loadError.value = null
-  try {
-    const { items: list } = await dictApi.types.list(searchKw.value || undefined, includeDeleted.value, 500)
-    items.value = list
-  } catch (e: any) {
-    ElMessage.error(t('common.action.load_failed') + (e?.message || ''))
-    // V24-F102 (P2-2, 规则 8): 持久 error UI, 让用户能看到错误并重试
-    loadError.value = e?.response?.data?.detail || e?.message || '字典加载失败'
-  }
-  finally { loading.value = false }
-}
-function onSearch() { load() }
-
-function openCreate() {
-  dialogMode.value = 'create'; dialogForm.id = undefined; dialogForm.type = ''
-  const maxSort = items.value.filter((x) => !x.deletedAt).reduce((m, x) => Math.max(m, x.sortOrder), 0)
-  dialogForm.sortOrder = maxSort + 10
-  dialogOpen.value = true
-}
-function openEdit(row: TypeItem) {
-  dialogMode.value = 'edit'; dialogForm.id = row.id; dialogForm.type = row.type; dialogForm.sortOrder = row.sortOrder
-  dialogOpen.value = true
-}
-async function saveDialog() {
-  const v = dialogForm.type.trim()
-  if (!v) { ElMessage.warning(t('admin.typesview.warning.type_cannot_be_empty')); return }
-  if (v.length > 50) { ElMessage.warning(t('admin.typesview.warning.type_length')); return }
-  try {
-    if (dialogMode.value === 'create') {
-      await dictApi.types.create(v, dialogForm.sortOrder); ElMessage.success(t('common.action.created'))
-    } else if (dialogForm.id != null) {
-      await dictApi.types.update(dialogForm.id, { type: v, sortOrder: dialogForm.sortOrder })
-      ElMessage.success(t('common.action.updated'))
-    }
-    dialogOpen.value = false; await load()
-  } catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || t('common.action.operation_failed')) }
-}
-async function softDelete(row: TypeItem) {
-  // 固定 5 值: oil/fuel/air/cabin/others 不允许硬删 (即使软删也警告, 避免误操作)
-  const FIXED = ['oil', 'fuel', 'air', 'cabin', 'others']
-  try {
-    await ElMessageBox.confirm(
-      FIXED.includes(row.type)
-        ? `确定删除固定 Type "${row.type}" 吗? 建议保留 (作为 P2.3 兜底), 但仍支持软删恢复.`
-        : `确定删除 "${row.type}" 吗? (软删除)`, t('common.action.confirm'), { type: 'warning' }
-    )
-  } catch { return }
-  try { await dictApi.types.delete(row.id); ElMessage.success(t('common.action.deleted')); await load() }
-  catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || t('common.action.delete_failed')) }
-}
-async function restore(row: TypeItem) {
-  try { await dictApi.types.restore(row.id); ElMessage.success(t('common.action.restored')); await load() }
-  catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || t('common.action.restore_failed')) }
-}
-
-function onDragStart(e: DragEvent, id: number) { draggingId.value = id; if (e.dataTransfer) { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(id)) } }
-function onDragOver(e: DragEvent, id: number) { e.preventDefault(); if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'; if (draggingId.value !== id) dragOverId.value = id }
-function onDragLeave(_e: DragEvent, id: number) { if (dragOverId.value === id) dragOverId.value = null }
-async function onDrop(e: DragEvent, targetId: number) {
-  e.preventDefault()
-  const sourceId = draggingId.value; dragOverId.value = null; draggingId.value = null
-  if (sourceId == null || sourceId === targetId) return
-  const sourceIdx = items.value.findIndex((x) => x.id === sourceId)
-  const targetIdx = items.value.findIndex((x) => x.id === targetId)
-  if (sourceIdx < 0 || targetIdx < 0) return
-  const moved = items.value.splice(sourceIdx, 1)[0]; items.value.splice(targetIdx, 0, moved)
-  const updates: TypeReorderItem[] = items.value.map((it, idx) => ({ id: it.id, sortOrder: (idx + 1) * 10 }))
-  items.value.forEach((it, idx) => { it.sortOrder = (idx + 1) * 10 })
-  try { await dictApi.types.reorder(updates); ElMessage.success(t('admin.typesview.success.sort_order_saved_frontend')) }
-  catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || t('common.action.sort_failed')); await load() }
-}
-function onDragEnd() { draggingId.value = null; dragOverId.value = null }
-
-function fmtDate(iso?: string) { return iso ? iso.substring(0, 16).replace('T', ' ') : '' }
-function isDraggable(row: TypeItem) { return !row.deletedAt }
-function rowClass(row: TypeItem): string {
-  const c: string[] = []
-  if (row.deletedAt) c.push('dict-row--deleted')
-  if (draggingId.value === row.id) c.push('dict-row--dragging')
-  if (dragOverId.value === row.id) c.push('dict-row--dragover')
-  return c.join(' ')
-}
-const total = computed(() => items.value.length)
-const activeCount = computed(() => items.value.filter((x) => !x.deletedAt).length)
-// V24-F103 (P2-2): 跨标签页 stale 数据感知, 页面重新可见时自动刷新
-useVisibilityRefresh(load)
-onMounted(load)
+// 列定义 (1 字段: type)
+const columns = [
+  { label: 'Type', width: '1fr', render: (row: TypeItem) => row.type },
+]
 </script>
 
 <template>
-  <!-- P-Admin-UX: 改 max-w-screen-xl mx-auto → w-full px-3, 让 el-table 撑满容器
-       WHY: 原 1280px 限制下表格只占左侧 ~700px, 右侧 290px 留白; 改为全宽后表格列宽自适应扩展 -->
-  <div class="p-3 w-full">
-    <div class="flex items-center gap-2 mb-3 flex-wrap">
-      <h1 class="text-lg font-medium">类型字典 (Type)</h1>
-      <span class="text-xs text-muted">P2.2 后台管理 · 固定 5 值: oil / fuel / air / cabin / others · P2.3 拖动排序后前台立即生效</span>
-      <div class="flex-1" />
-      <el-input v-model="searchKw" :placeholder="t('admin.typesview.placeholder.search_type')" clearable size="small" style="width: 200px" @keyup.enter="onSearch" />
-      <el-button size="small" @click="onSearch">搜索</el-button>
-      <el-checkbox v-model="includeDeleted" @change="load" size="small">含已删</el-checkbox>
-      <el-button type="primary" size="small" @click="openCreate">新增 Type</el-button>
-    </div>
-
-    <!-- V24-F102 (P2-2, 规则 8): 加载失败时显示持久 el-alert + 重试按钮 -->
-    <el-alert
-      v-if="loadError"
-      type="error"
-      show-icon
-      :closable="false"
-      class="mb-2"
-    >
-      <template #default>
-        <div class="flex items-center justify-between">
-          <span>{{ loadError }}</span>
-          <el-button size="small" @click="load" :disabled="loading">
-            {{ loading ? '重试中…' : '重试' }}
-          </el-button>
-        </div>
-      </template>
-    </el-alert>
-    <!-- V24-F102 (P1-2): 首屏骨架屏, 仅首次加载且无数据时显示 -->
-    <SkeletonCard v-if="loading && items.length === 0 && !loadError" variant="table-row" :count="5" />
-    <div class="hairline" v-loading="loading">
-      <div class="dict-head">
-        <div class="cell-drag"></div>
-        <div class="cell-id">ID</div>
-        <div class="cell-name">Type</div>
-        <div class="cell-sort">排序</div>
-        <div class="cell-xref">引用</div>
-        <div class="cell-updated">更新</div>
-        <div class="cell-status">状态</div>
-        <div class="cell-action">操作</div>
-      </div>
-      <div v-for="row in items" :key="row.id"
-        :class="['dict-row', rowClass(row)]" :draggable="isDraggable(row)"
-        @dragstart="onDragStart($event, row.id)" @dragover="onDragOver($event, row.id)"
-        @dragleave="onDragLeave($event, row.id)" @drop="onDrop($event, row.id)" @dragend="onDragEnd">
-        <div class="cell-drag"><span v-if="isDraggable(row)" class="drag-handle">≡</span></div>
-        <div class="cell-id">{{ row.id }}</div>
-        <div class="cell-name">{{ row.type }}</div>
-        <div class="cell-sort">{{ row.sortOrder }}</div>
-        <div class="cell-xref">{{ row.xrefCount }}</div>
-        <div class="cell-updated">{{ fmtDate(row.updatedAt) }}</div>
-        <div class="cell-status">
-          <el-tag v-if="row.deletedAt" type="info" size="small">已删</el-tag>
-          <el-tag v-else type="success" size="small">启用</el-tag>
-        </div>
-        <div class="cell-action">
-          <el-button size="small" text @click="openEdit(row)" :disabled="!!row.deletedAt">编辑</el-button>
-          <el-button v-if="!row.deletedAt" size="small" text type="warning" @click="softDelete(row)">删除</el-button>
-          <el-button v-else size="small" text type="success" @click="restore(row)">恢复</el-button>
-        </div>
-      </div>
-      <div v-if="!loading && items.length === 0" class="dict-empty" > {{ t('common.action.no_data_click_top_right') }}新增 Type开始</div>
-    </div>
-
-    <div class="mt-2 text-xs text-muted">{{ t("common.dictviewcommon.total_drag", { total, active: activeCount, soft: total - activeCount }) }}</div>
-
-    <el-dialog v-model="dialogOpen" :title="dialogMode === 'create' ? t('admin.typesview.title.add_type') : t('admin.typesview.title.edit_type')" width="480px">
-      <el-form :model="dialogForm" label-width="100px" size="small">
-        <el-form-item label="Type" required>
-          <el-input v-model="dialogForm.type" :placeholder="t('admin.typesview.placeholder.e_g_oil_fuel')" maxlength="50" show-word-limit />
-        </el-form-item>
-        <el-form-item :label="t('common.action.sort_order')">
-          <el-input-number v-model="dialogForm.sortOrder" :min="0" :step="10" style="width: 100%" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="dialogOpen = false">取消</el-button>
-        <el-button type="primary" @click="saveDialog">保存</el-button>
-      </template>
-    </el-dialog>
-  </div>
+  <DictManagerLayout
+    :mgr="mgr"
+    :columns="columns"
+    title="类型字典 (Type)"
+    subtitle="P2.2 后台管理 · 固定 5 值: oil / fuel / air / cabin / others · P2.3 拖动排序后前台立即生效"
+    dialog-title-create-key="admin.typesview.title.add_type"
+    dialog-title-edit-key="admin.typesview.title.edit_type"
+    dialog-width="480px"
+    dialog-label-width="100px"
+    empty-text="新增 Type开始"
+    :search-placeholder="t('admin.typesview.placeholder.search_type')"
+    create-button-text="新增 Type"
+  >
+    <template #dialog-form="{ form }">
+      <el-form-item label="Type" required>
+        <el-input
+          v-model="form.type"
+          :placeholder="t('admin.typesview.placeholder.e_g_oil_fuel')"
+          maxlength="50"
+          show-word-limit
+        />
+      </el-form-item>
+      <el-form-item :label="t('common.action.sort_order')">
+        <el-input-number v-model="form.sortOrder" :min="0" :step="10" style="width: 100%" />
+      </el-form-item>
+    </template>
+  </DictManagerLayout>
 </template>
-
-<style scoped>
-.dict-head, .dict-row { display: grid; grid-template-columns: 32px 60px 1fr 80px 100px 140px 80px 200px; align-items: center; font-size: 12px; border-bottom: 1px solid var(--color-border); }
-.dict-head { font-weight: 500; color: var(--color-text-muted); background: var(--color-bg-hover); height: 32px; }
-.dict-row { height: 36px; background: var(--color-bg-elevated); transition: background-color 0.15s, border-top 0.1s; }
-.dict-head > div, .dict-row > div { padding: 0 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cell-drag { text-align: center; }
-.drag-handle { cursor: move; color: var(--color-text-muted); font-size: 16px; user-select: none; display: inline-block; padding: 0 4px; }
-.drag-handle:hover { color: var(--color-accent); }
-.cell-id, .cell-sort, .cell-xref { text-align: right; }
-.dict-row:hover { background: var(--color-bg-hover); }
-.dict-row--dragging { opacity: 0.4; }
-.dict-row--dragover { border-top: 2px solid var(--color-accent) !important; background: var(--color-bg-hover); }
-.dict-row--deleted { color: var(--color-text-muted); background: var(--color-bg-hover); }
-.dict-empty { padding: 24px 0; text-align: center; color: var(--color-text-muted); font-size: 12px; }
-</style>
