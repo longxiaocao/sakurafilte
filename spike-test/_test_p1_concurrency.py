@@ -127,15 +127,25 @@ def main():
     # 找所有 _activeCancelReason 的读取位置 (排除赋值 _activeCancelReason = ...)
     read_positions = []
     for m in re.finditer(r"_activeCancelReason(?!\s*=)", content):
-        # 排除 "private string? _activeCancelReason;" 字段声明
-        # 检查前缀是否是字段声明
+        # v28-4 P0 修复: 正则 bug - 之前 line_prefix 是匹配位置前的文本,
+        #   不含 _activeCancelReason 本身, re.match 永远不匹配,
+        #   导致字段声明行 (line 370) + 注释行 (line 535) 被误判为"lock 块外读取"
+        # 修复: 取完整行内容, 排除注释行 + 字段声明行
         line_start = content.rfind("\n", 0, m.start()) + 1
-        line_prefix = content[line_start:m.start()]
-        if re.match(r"\s*(private|public|protected|internal)?\s*(readonly\s+)?(string\??)\s*_activeCancelReason\s*;", line_prefix):
+        line_end = content.find("\n", m.end())
+        if line_end == -1:
+            line_end = len(content)
+        full_line = content[line_start:line_end]
+        stripped = full_line.lstrip()
+        # 排除注释行 (/// 或 //)
+        if stripped.startswith("///") or stripped.startswith("//"):
             continue
         # 排除 _activeCancelReasonCode (相邻字段)
         tail = content[m.end():m.end() + 10]
         if tail.startswith("Code"):
+            continue
+        # 排除字段声明行: private string? _activeCancelReason;
+        if re.match(r"\s*(private|public|protected|internal)\s+(readonly\s+)?(string\??)\s+_activeCancelReason\s*;", full_line):
             continue
         read_positions.append(m.start())
 
