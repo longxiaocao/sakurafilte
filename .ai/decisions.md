@@ -291,3 +291,26 @@ v29-2 高频词分布调研 (V24-F98, 2026-07-19, spec 28.7, 候选 2 不实施)
   - backend/migrations/019_v2_etl_progress_log_add_skipped_missing_mr1.sql (CI 未执行, v28-4 P0 待修)
   - .ai/suggestions.md (4 个 v28-4 P0/P1 归档)
 
+#11 v28-4 测试脚本路径跟随代码重构同步更新 (2026-07-20, v28-4 V27-9-3 CI 解锁闭环, commit 7421dab → CI run 29718056565 success)
+决策: 测试脚本 (spike-test/*.py) 中硬编码的代码路径必须跟随被测代码重构同步更新, 不能写死 Program.cs
+理由:
+  - v28-4 CI 解锁过程中发现 8 处测试脚本路径 bug (P1-3/P1-5/P1-6/P3-2/P3 可用性用例 2/P2 migration 用例 2+5/V2-VL-1/V2-VL-2)
+  - 根因模式: 早期测试脚本硬编码 Program.cs 路径检查关键字 (UseForwardedHeaders/UseExceptionHandler/UseSwagger/Initialize/MigrateAsync 等)
+  - 代码后续重构到 Extensions/ 目录 (MiddlewarePipelineExtensions.cs / WebApplicationExtensions.cs / IProductDetailService.cs / Mr1Validator.cs)
+  - Program.cs 仅调用扩展方法 (app.InitializeDatabaseAsync / app.UseSakuraFilterMiddleware / app.InitializeSearchAsync)
+  - 测试脚本未同步更新, CI 跑时找不到关键字报 FAIL
+  - 修复方式: 测试脚本路径改为扩展方法实际所在的 Extensions/ 目录文件
+排除方案:
+  - 在 Program.cs 中保留关键调用的 alias (重复代码): 违反 DRY, 重构失去意义
+  - 测试脚本改为全项目 grep 搜索关键字 (不限文件): 误匹配率高, 失去精确定位能力
+  - 强制要求所有重构不拆分 Program.cs: 与 ASP.NET Core 最佳实践冲突 (Program.cs 应精简, 扩展方法拆分到 Extensions/)
+关联文件:
+  - spike-test/_test_p2_migration.py (用例 2/5 路径改 WebApplicationExtensions.cs)
+  - spike-test/_test_p3_observability.py (用例 6 路径改 MiddlewarePipelineExtensions.cs)
+  - spike-test/_test_p3_availability.py (用例 2 路径改 WebApplicationExtensions.cs)
+  - spike-test/_test_regression.py (P1-3/P1-5/P1-6/P3-2/V2-VL-1/V2-VL-2 6 处路径修复)
+  - backend/src/SakuraFilter.Api/Extensions/MiddlewarePipelineExtensions.cs (中间件管道扩展方法)
+  - backend/src/SakuraFilter.Api/Extensions/WebApplicationExtensions.cs (数据库迁移 + 搜索探活扩展方法)
+  - backend/src/SakuraFilter.Api/Services/IProductDetailService.cs (P3-2 fallback 合并实际位置)
+  - backend/src/SakuraFilter.Core/Validation/Mr1Validator.cs (V2 MR1 校验实际位置)
+
