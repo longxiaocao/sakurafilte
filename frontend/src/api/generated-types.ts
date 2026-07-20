@@ -5,8 +5,99 @@
 // 用途: 与手工 types.ts 对照, 发现字段漂移
 // ============================================
 
+export interface AggregateMachineItem {
+  machineBrand?: string | null
+  machineModel?: string | null
+  machineCategory?: string | null
+}
+
+export interface AggregateOemItem {
+  oemBrand?: string | null
+  oemNo3?: string | null
+  oem2?: string | null
+  sortOrder?: number | null
+  machineType?: string | null
+  isPublished?: boolean | null
+  brandSortOrder?: number | null
+}
+
+export interface AggregateSearchHit {
+  mr1?: string | null
+  productName1?: string | null
+  productName2?: string | null
+  oem2?: string | null
+  type?: string | null
+  remark?: string | null
+  media?: string | null
+  isPublished?: boolean | null
+  isDiscontinued?: boolean | null
+  oemList?: AggregateOemItem[] | null
+  machineList?: AggregateMachineItem[] | null
+  formatted?: any
+  rankingScore?: number | null
+}
+
+export interface AggregateSearchRequest {
+  q?: string | null
+  page?: number | null
+  pageSize?: number | null
+  tolerance?: number | null
+  includeDiscontinued?: boolean | null
+  machineCategory?: string | null
+  type?: string | null
+  d1?: number | null
+  d2?: number | null
+  d3?: number | null
+  h1?: number | null
+  h2?: number | null
+  h3?: number | null
+  d7Thread?: string | null
+  d8Thread?: string | null
+}
+
+export interface AggregateSearchResponse {
+  total?: number | null
+  page?: number | null
+  pageSize?: number | null
+  totalPages?: number | null
+  processingTimeMs?: number | null
+  provider?: string | null
+  hits?: AggregateSearchHit[] | null
+}
+
+export interface AlertRuleUpdateRequest {
+  enabled?: boolean | null
+  severity?: string | null
+  channels?: string[] | null
+  recipients?: string[] | null
+  description?: string | null
+}
+
+export interface AlertTestRequest {
+  type?: string | null
+  severity?: string | null
+  title?: string | null
+  markdown?: string | null
+}
+
 export interface BatchOemRequest {
   oems?: string[] | null
+}
+
+export interface BatchOemResponse {
+  total?: number | null
+  hits?: number | null
+  miss?: number | null
+  results?: BatchOemResult[] | null
+}
+
+export interface BatchOemResult {
+  oem?: string | null
+  hit?: boolean | null
+  productId?: number | null
+  oemBrand?: string | null
+  productName1?: string | null
+  oem2?: string | null
 }
 
 export interface CancelRequest {
@@ -14,8 +105,21 @@ export interface CancelRequest {
   reasonCode?: string | null
 }
 
+export interface ChangePasswordRequest {
+  oldPassword?: string | null
+  newPassword?: string | null
+}
+
 export interface CompareRequest {
   ids?: number[] | null
+}
+
+export interface CreateUserRequest {
+  username?: string | null
+  password?: string | null
+  role?: string | null
+  email?: string | null
+  fullName?: string | null
 }
 
 export interface EngineCreateRequest {
@@ -64,6 +168,11 @@ export interface ImportRequest {
   mode?: string | null
   entityType?: string | null
   cascade?: boolean | null
+}
+
+export interface LoginRequest {
+  username?: string | null
+  password?: string | null
 }
 
 export interface MachineAppInput {
@@ -186,7 +295,6 @@ export interface ProductFormDto {
   mr1?: string | null
   isPublished?: boolean | null
   remark?: string | null
-  // E2E BD.3 修复 v2: 乐观锁并发令牌 (PG xmin), PUT 时带回
   rowVersion?: number | null
   d1Mm?: number | null
   d2Mm?: number | null
@@ -262,6 +370,39 @@ export interface ProductName2UpdateRequest {
   sortOrder?: number | null
 }
 
+export interface PublicEightResponse {
+  total?: number | null
+  page?: number | null
+  pageSize?: number | null
+  totalPages?: number | null
+  elapsedMs?: number | null
+  countMode?: string | null
+  items?: PublicSearchHit[] | null
+}
+
+export interface PublicFeaturedResponse {
+  total?: number | null
+  items?: PublicSearchHit[] | null
+}
+
+export interface PublicSearchHit {
+  id?: number | null
+  oemNoDisplay?: string | null
+  oem2?: string | null
+  productName1?: string | null
+  type?: string | null
+  d1Mm?: string | null
+  h1Mm?: string | null
+}
+
+export interface RefreshRequest {
+  refreshToken?: string | null
+}
+
+export interface ResetPasswordRequest {
+  newPassword?: string | null
+}
+
 export interface SearchRequest {
   q?: string | null
   type?: string | null
@@ -271,7 +412,6 @@ export interface SearchRequest {
   h1?: number | null
   h2?: number | null
   h3?: number | null
-  // v24 修复: D7/D8 螺纹规格改为文本字段
   d7Thread?: string | null
   d8Thread?: string | null
   tolerance?: number | null
@@ -299,9 +439,31 @@ export interface TypeUpdateRequest {
   sortOrder?: number | null
 }
 
+export interface UpdateUserRequest {
+  role?: string | null
+  email?: string | null
+  fullName?: string | null
+  isActive?: boolean | null
+}
+
 export interface XrefInput {
   productName1?: string | null
   oemBrand?: string | null
   oemNo3?: string | null
+  oem2?: string | null
+  sortOrder?: number | null
+  machineType?: string | null
+  isPublished?: boolean | null
 }
-// 共生成 43 个 interface (跳过 0 个框架内置 schema)
+
+export interface XrefReorderItem {
+  oemNo3?: string | null
+  sortOrder?: number | null
+  rowVersion?: number | null
+}
+
+export interface XrefReorderRequest {
+  oemBrand?: string | null
+  items?: XrefReorderItem[] | null
+}
+// 共生成 63 个 interface (跳过 1 个框架内置 schema)
