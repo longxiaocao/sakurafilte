@@ -42,6 +42,14 @@ env:
   Etl__AllowedImportDirs: '["/tmp/etl-test"]'
   INITIAL_ADMIN_PASSWORD: 'Admin@2026'
   INITIAL_OPERATOR_PASSWORD: 'Operator@2026'
+  # v28-4 P1 修复: MinIO dev 占位凭证 (CI 不连真实 MinIO, 仅让 IObjectStorage factory 不 throw)
+  #   根因: SearchAsync 构造函数注入 IObjectStorage?, DI 解析时调用 AddStorageServices factory,
+  #         Minio__AccessKey 未配置 → factory throw InvalidOperationException → /api/admin/products/search 500
+  #   修复: 提供 dev 占位凭证, MinioClient.Build() 接受任意非空字符串, 不实际连接 MinIO 服务
+  Minio__AccessKey: 'dev-minio-access-key-not-for-prod'
+  Minio__SecretKey: 'dev-minio-secret-key-not-for-prod'
+  Minio__Endpoint: 'localhost:9000'
+  Minio__BucketName: 'sakurafilter-dev'
 
 jobs:
   # ===== 共享 build job =====
