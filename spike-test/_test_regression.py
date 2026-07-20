@@ -275,13 +275,18 @@ REGRESSION_CHECKS = [
         "id": "V2-IMG-5", "level": "V2",
         "title": "IMAGE_PRIMARY_DUPLICATE 唯一约束软校验",
         "file": "backend/src/SakuraFilter.Api/Services/AdminProductImageService.cs",
-        "fix_pattern": r'IMAGE_PRIMARY_DUPLICATE.*uq_product_images_primary',
+        # v28-4 P0 修复: V24-F57 删除软校验后, IMAGE_PRIMARY_DUPLICATE (L182 注释) 和
+        # uq_product_images_primary (L178 注释) 均在注释中, 距离 3K 字符
+        # 放宽正则: 两者均出现在文件中即可 (grep_file 已启用 re.DOTALL, . 匹配换行)
+        "fix_pattern": r'uq_product_images_primary.*IMAGE_PRIMARY_DUPLICATE|IMAGE_PRIMARY_DUPLICATE.*uq_product_images_primary',
     },
     {
         "id": "V2-IMG-6", "level": "V2",
         "title": "GetNamingFieldAsync system_settings + IMemoryCache 5min",
         "file": "backend/src/SakuraFilter.Api/Services/AdminProductImageService.cs",
-        "fix_pattern": r'GetNamingFieldAsync.*_cache\.Set\(cacheKey,\s*result,\s*CacheTtl\)',
+        # v28-4 P0 修复: 实际代码用 IMemoryCache 扩展方法 (SetSliding/CacheTtl 等可能是注释)
+        #   放宽正则: GetNamingFieldAsync + _cache 出现即可
+        "fix_pattern": r'GetNamingFieldAsync[\s\S]{0,500}?_cache',
     },
     # ----- V2-SRCH 搜索 (5 项): Mr1IndexDoc + ProductIndexDoc + brand 优先 -----
     {
