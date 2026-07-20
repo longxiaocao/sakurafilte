@@ -137,7 +137,11 @@ def test_cursor_hmac_dual_key():
     这里只验证: 当前 key 签的 cursor 能通过验签 (DecodeCursor 不返回 null)"""
     # 用 /api/admin/products/search 拿一个 cursor
     code, body = http("GET", "/api/admin/products/search?limit=5", headers=H_ADMIN)
-    assert code == 200, f"期望 200, 实际 {code}"
+    # v28-4 P1 调试: 500 时打印 body 定位根因 (CI 空库场景 500, 本地有数据 200)
+    if code != 200:
+        print(f"  [DEBUG] /api/admin/products/search 返回 {code}")
+        print(f"  [DEBUG] body (前 500 字符): {body[:500]}")
+    assert code == 200, f"期望 200, 实际 {code}, body={body[:300]}"
     obj = json.loads(body)
     cursor = obj.get("cursor") or obj.get("nextCursor")
     if not cursor:
@@ -148,7 +152,10 @@ def test_cursor_hmac_dual_key():
     import urllib.parse
     code2, body2 = http("GET", f"/api/admin/products/search?limit=5&cursor={urllib.parse.quote(cursor)}",
                         headers=H_ADMIN)
-    assert code2 == 200, f"cursor 翻页失败: code={code2} body={body2[:200]}"
+    if code2 != 200:
+        print(f"  [DEBUG] cursor 翻页返回 {code2}")
+        print(f"  [DEBUG] body2 (前 500 字符): {body2[:500]}")
+    assert code2 == 200, f"cursor 翻页失败: code={code2} body={body2[:300]}"
     print(f"  ✓ cursor 编码/验签 baseline 正常 (双 key 轮转需重启, 离线跳过)")
 
 
