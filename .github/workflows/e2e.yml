@@ -529,6 +529,22 @@ jobs:
             exit 1
           fi
 
+      # v30-9 修复: frontend-contract job 缺 SQL migration step 导致 /api/admin/etl/history 500
+      #   WHY: frontend-contract job 有独立 PG 实例 (L452-465), 但此前只在 setup job 跑 SQL migration
+      #     frontend-contract job 的 PG 是空库 (仅 EF Core EnsureCreated 基础表),
+      #     缺 etl_progress_log.skipped_missing_mr1 列 → /api/admin/etl/history 报 42703: column does not exist
+      #   修复: 复用 setup job L175-183 逻辑, 在 API server 就绪后顺序执行 backend/migrations/*.sql (全部 idempotent)
+      #   顺序: 必须在 API server 就绪后, 因 EF Core EnsureCreated 在 dotnet run 时才创建 products 等基础表
+      - name: Run SQL migrations (frontend-contract job)
+        env:
+          PGPASSWORD: ${{ env.PG_PASSWORD }}
+        run: |
+          for sql in backend/migrations/*.sql; do
+            echo "===== Executing $sql ====="
+            psql -h localhost -p 5432 -U postgres -d spike_test_v3 -v ON_ERROR_STOP=1 -f "$sql"
+          done
+          echo "===== All migrations applied (frontend-contract) ====="
+
       # P4.2 契约测试 (vitest + zod) — 字典 schema 端点 → 8 个 zod 校验
       - name: Run P4.2 contract test (vitest)
         working-directory: frontend
