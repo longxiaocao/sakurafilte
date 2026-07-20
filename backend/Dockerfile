@@ -12,7 +12,12 @@ COPY src/ .
 
 # restore + build
 RUN dotnet restore SakuraFilter.Api/SakuraFilter.Api.csproj
-RUN dotnet build SakuraFilter.Api/SakuraFilter.Api.csproj -c Release --no-restore -o /app/build
+# P1 修复 (v30-8): 去掉 -o /app/build, 让 build 用默认路径 bin/Release/net8.0/
+#   WHY: 原写法 dotnet build -o /app/build + dotnet publish --no-build -o /app/publish 路径不一致,
+#     docker 多架构构建 (amd64/arm64) 时 publish --no-build 找不到依赖 DLL (SakuraFilter.Core.dll),
+#     报 "Could not copy the file SakuraFilter.Core.dll because it was not found"
+#     改为默认路径后, publish --no-build 能从 bin/Release/net8.0/ 正确读取 build 产物
+RUN dotnet build SakuraFilter.Api/SakuraFilter.Api.csproj -c Release --no-restore
 
 # ===== Stage 2: publish =====
 FROM build AS publish

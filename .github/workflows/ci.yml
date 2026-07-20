@@ -34,6 +34,14 @@ env:
   # WHY: 与 docker-compose.yml / appsettings.json 对齐, 后端 auth 中间件校验
   ADMIN_TOKEN: dev-admin-token-rotate-in-prod-MZK4R9P3X6V2N7Q1L5F0B8H3C
   CURSOR_HMAC_KEY: dev-cursor-hmac-key-rotate-in-prod-XYZ7K3P9Q2M5V8N1B4D6F0G2H
+  # P1 修复 (v30-8): Jwt 配置缺失导致 backend job Start backend + types-drift job 启动崩溃
+  #   WHY: JwtTokenService 启动期校验 SigningKey >= 32 字符, 缺失直接抛 InvalidOperationException
+  #   与 e2e.yml L35-39 保持一致, 两 job (backend + types-drift) 共用
+  Jwt__SigningKey: 'dev-jwt-signing-key-not-for-prod-X7K9M2P5Q8R3T6V1W4Y7Z0A3B6C9D2E5F8'
+  Jwt__Issuer: 'SakuraFilter'
+  Jwt__Audience: 'SakuraFilter.Web'
+  Jwt__ExpireMinutes: '30'
+  Jwt__RefreshExpireDays: '7'
   # 后端服务内部端口 (与 ASPNETCORE_URLS 一致)
   BACKEND_PORT: 5148
   DOTNET_VERSION: 8.0.x
@@ -113,6 +121,13 @@ jobs:
           psql -h localhost -U postgres -c "DROP DATABASE IF EXISTS sakurafilter_int_tests;" || true
           psql -h localhost -U postgres -c "CREATE DATABASE sakurafilter_int_tests;"
 
+      # P2-7.1 配套: 提前安装 dotnet-ef 工具, 供后续 Apply EF migrations + Detect EF Core migration conflicts 使用
+      #   WHY 修复 P1 bug: 原顺序 L116 Apply EF migrations 在 L144 Install dotnet-ef tool 之前,
+      #     导致 dotnet ef database update 命令不存在, CI 集成测试 job 直接失败
+      #   提前到 Apply EF migrations 之前, 两个 step 共用此工具
+      - name: Install dotnet-ef tool
+        run: dotnet tool install --global dotnet-ef --version 8.* || dotnet tool update --global dotnet-ef --version 8.*
+
       - name: Apply EF migrations to integration test database
         working-directory: backend/src/SakuraFilter.Api
         env:
@@ -141,9 +156,7 @@ jobs:
       # P2-7.1: EF Core 迁移冲突检测 — 验证 idempotent SQL 可生成 + 一次性 SQL 脚本头注释完整
       #   WHY: EF 迁移链与 backend/migrations/*.sql 共存, 迁移语法错误/手动脚本误标会导致生产启动失败
       #   容错策略: continue-on-error=true, 失败仅警告不阻塞构建 (避免环境/工具问题误伤)
-      - name: Install dotnet-ef tool
-        run: dotnet tool install --global dotnet-ef --version 8.* || dotnet tool update --global dotnet-ef --version 8.*
-
+      #   注: dotnet-ef 工具已在 Apply EF migrations 之前安装 (见上方 Install dotnet-ef tool step)
       - name: Detect EF Core migration conflicts
         working-directory: backend/src/SakuraFilter.Api
         continue-on-error: true
