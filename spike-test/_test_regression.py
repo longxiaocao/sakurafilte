@@ -57,7 +57,8 @@ REGRESSION_CHECKS = [
     {
         "id": "P1-3", "level": "P1",
         "title": "限流 ForwardedHeaders 中间件",
-        "file": "backend/src/SakuraFilter.Api/Program.cs",
+        # v28-4 P0 修复: 中间件管道代码实际在 MiddlewarePipelineExtensions.cs (Program.cs L38 调用扩展方法)
+        "file": "backend/src/SakuraFilter.Api/Extensions/MiddlewarePipelineExtensions.cs",
         "fix_pattern": r"app\.UseForwardedHeaders",
     },
     {
@@ -69,14 +70,17 @@ REGRESSION_CHECKS = [
     {
         "id": "P1-5", "level": "P1",
         "title": "生产环境 UseExceptionHandler",
-        "file": "backend/src/SakuraFilter.Api/Program.cs",
+        # v28-4 P0 修复: 中间件管道代码实际在 MiddlewarePipelineExtensions.cs
+        "file": "backend/src/SakuraFilter.Api/Extensions/MiddlewarePipelineExtensions.cs",
         "fix_pattern": r"app\.UseExceptionHandler",
     },
     {
         "id": "P1-6", "level": "P1",
         "title": "Swagger 仅 Development 暴露",
-        "file": "backend/src/SakuraFilter.Api/Program.cs",
-        "fix_pattern": r"if \(app\.Environment\.IsDevelopment\(\)\)\s*\{[^}]*UseSwagger",
+        # v28-4 P0 修复: 中间件管道代码实际在 MiddlewarePipelineExtensions.cs
+        #   正则放宽: 接受 env.IsDevelopment() 或 app.Environment.IsDevelopment() 两种写法
+        "file": "backend/src/SakuraFilter.Api/Extensions/MiddlewarePipelineExtensions.cs",
+        "fix_pattern": r"if\s*\((env|app\.Environment)\.IsDevelopment\(\)\)\s*\{[^}]*UseSwagger",
     },
     # ===== P2 中等级 (6 项) =====
     {
@@ -125,7 +129,8 @@ REGRESSION_CHECKS = [
     {
         "id": "P3-2", "level": "P3",
         "title": "GetBySlug 3 次 fallback 合并为 1 次 OR 查询",
-        "file": "backend/src/SakuraFilter.Api/Controllers/PublicProductController.cs",
+        # v28-4 P0 修复: P3-2 修复实际在 IProductDetailService.cs L78 (PublicProductController 调用 IProductDetailService.GetByOemAsync)
+        "file": "backend/src/SakuraFilter.Api/Services/IProductDetailService.cs",
         "fix_pattern": r"3 次 fallback 合并为 1 次 OR 查询",
     },
     # ===== V2 架构迁移 (47 项) — 8 个子类别 =====
@@ -194,13 +199,15 @@ REGRESSION_CHECKS = [
     {
         "id": "V2-VL-1", "level": "V2",
         "title": "MR1_REQUIRED 必填校验",
-        "file": "backend/src/SakuraFilter.Api/Services/AdminProductService.cs",
+        # v28-4 P0 修复: MR1 校验实际在 SakuraFilter.Core/Validation/Mr1Validator.cs (AdminProductService L1200 调用 Mr1Validator.Normalize)
+        "file": "backend/src/SakuraFilter.Core/Validation/Mr1Validator.cs",
         "fix_pattern": r'MR1_REQUIRED:\s*MR\.1\s*必填',
     },
     {
         "id": "V2-VL-2", "level": "V2",
         "title": "MR1_FORMAT_INVALID 格式校验 (1-10 位字母数字)",
-        "file": "backend/src/SakuraFilter.Api/Services/AdminProductService.cs",
+        # v28-4 P0 修复: MR1 校验实际在 SakuraFilter.Core/Validation/Mr1Validator.cs
+        "file": "backend/src/SakuraFilter.Core/Validation/Mr1Validator.cs",
         "fix_pattern": r'MR1_FORMAT_INVALID.*1-10\s*位字母数字',
     },
     {
