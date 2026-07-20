@@ -90,7 +90,8 @@ def audit_page(page, path, name, requires_login):
     page.on("response", on_response)
 
     try:
-        page.goto(f"{FRONTEND}{path}", wait_until="networkidle", timeout=15000)
+        # v30-5 修复: wait_until 改 domcontentloaded (/admin/etl SSE 长连接致 networkidle 永不达成, 与 smoke.spec.ts L74 一致, commit 9bd0d68)
+        page.goto(f"{FRONTEND}{path}", wait_until="domcontentloaded", timeout=15000)
         page.wait_for_timeout(800)  # 等待异步渲染
     except Exception as e:
         result["ok"] = False
