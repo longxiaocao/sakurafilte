@@ -114,8 +114,10 @@ def main():
         fail_cnt += 1
 
     # ===== 用例 6: grep 验证 Program.cs 含 UseMiddleware<CorrelationIdMiddleware>() =====
-    print("\n[用例 6] Program.cs 含 UseMiddleware<CorrelationIdMiddleware>()")
-    content = read_file("backend/src/SakuraFilter.Api/Program.cs")
+    print("\n[用例 6] MiddlewarePipelineExtensions.cs 含 UseMiddleware<CorrelationIdMiddleware>()")
+    # v28-4 P0 修复: 中间件管道代码实际在 MiddlewarePipelineExtensions.cs
+    #   (Program.cs L38 调用 app.UseSakuraFilterMiddleware 扩展方法)
+    content = read_file("backend/src/SakuraFilter.Api/Extensions/MiddlewarePipelineExtensions.cs")
     if re.search(r"UseMiddleware\s*<\s*CorrelationIdMiddleware\s*>", content):
         print(f"  [PASS] 找到 UseMiddleware<CorrelationIdMiddleware>()")
         pass_cnt += 1
