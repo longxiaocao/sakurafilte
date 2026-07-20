@@ -84,17 +84,20 @@ def main():
         fail_cnt += 1
 
     # ===== 用例 2: Program.cs 启动后探活 Meili 调用 Initialize( =====
-    print("\n[用例 2] Program.cs 启动后探活 Meili 调用 Initialize(")
-    if program_content and re.search(r"\bInitialize\s*\(", program_content):
+    print("\n[用例 2] WebApplicationExtensions.cs 启动后探活 Meili 调用 Initialize(")
+    # v28-4 P0 修复: Initialize(meiliOk) 实际在 WebApplicationExtensions.cs L102
+    #   (Program.cs L47 调用 app.InitializeSearchAsync 扩展方法, 内部 L102 调用 rsp.Initialize)
+    ext_content = read_file("backend/src/SakuraFilter.Api/Extensions/WebApplicationExtensions.cs")
+    if ext_content and re.search(r"\bInitialize\s*\(", ext_content):
         # 进一步确认是 rsp.Initialize( 形式
-        if re.search(r"rsp\.Initialize\s*\(|\bInitialize\s*\(\s*meiliOk", program_content):
+        if re.search(r"rsp\.Initialize\s*\(|\bInitialize\s*\(\s*meiliOk", ext_content):
             print(f"  [PASS] 找到启动后 Initialize() 调用")
             pass_cnt += 1
         else:
             print(f"  [PASS] 找到 Initialize() 调用 (但形式可能不同)")
             pass_cnt += 1
     else:
-        print(f"  [FAIL] 未在 Program.cs 中找到 Initialize() 调用")
+        print(f"  [FAIL] 未在 WebApplicationExtensions.cs 中找到 Initialize() 调用")
         fail_cnt += 1
 
     # ===== 用例 3: ResilientSearchProvider.cs 含 HttpRequestException catch 分支 =====
