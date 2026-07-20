@@ -666,10 +666,24 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
-      # P2.7-1: 跨端审计 (Chromium + Firefox × 3 视口 × 5 路由 = 30 组合)
-      #   WHY: 之前 E2E 只跑 Chromium 1440x900, 50% 移动 + 30% Firefox 用户零覆盖
-      #        月度 cron 触发, 防止 mobile/Firefox 兼容回归
-      - name: Run P2.7-1 cross-browser audit (2 browsers × 3 viewports × 5 routes)
+      # P2.7-0: 安装 Python Playwright + 3 浏览器 (chromium/firefox/webkit)
+      #   WHY: P2.7-1 跨端审计 (3 浏览器) + P2.7-2 极端场景 (chromium) 都用 Python playwright
+      #        之前 V27-9-2 step 在 P2.7-1/P2.7-2 之后才装, 导致 ModuleNotFoundError: No module named 'playwright'
+      #        修复: 把 Python playwright 安装提前到 P2.7-1 之前
+      #   注: 与 V27-9-2 (design audit 用 chromium) 重复装一次 pip install playwright, 但 python -m playwright install
+      #        会复用已下载的浏览器二进制, 第二次接近 no-op (~2s)
+      - name: P2.7-0 Install Python Playwright + 3 browsers (chromium/firefox/webkit)
+        run: |
+          echo "===== P2.7-0 安装 Python Playwright + 3 浏览器 ====="
+          pip install playwright
+          python -m playwright install chromium firefox webkit --with-deps
+          echo "[PASS] Python Playwright + 3 浏览器已安装"
+
+      # P2.7-1: 跨端审计 (Chromium + Firefox + WebKit × 3 视口 × 5 路由 = 45 组合)
+      #   WHY: 之前 E2E 只跑 Chromium 1440x900, 50% 移动 + 30% Firefox/WebKit 用户零覆盖
+      #        月度 cron 触发, 防止 mobile/Firefox/WebKit 兼容回归
+      #   注: e2e.yml 之前注释 "2 browsers" 有误, 实际 _cross_browser_audit.py L31 是 3 浏览器
+      - name: Run P2.7-1 cross-browser audit (3 browsers × 3 viewports × 5 routes)
         working-directory: spike-test
         run: |
           echo "===== P2.7-1 跨端审计 ====="
