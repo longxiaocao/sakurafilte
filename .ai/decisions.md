@@ -314,3 +314,25 @@ v29-2 高频词分布调研 (V24-F98, 2026-07-19, spec 28.7, 候选 2 不实施)
   - backend/src/SakuraFilter.Api/Services/IProductDetailService.cs (P3-2 fallback 合并实际位置)
   - backend/src/SakuraFilter.Core/Validation/Mr1Validator.cs (V2 MR1 校验实际位置)
 
+#12 v30-6 ETL 数据完整性校验加 SkippedNullField (2026-07-20, v30-6 Day 9.7 Case 4 修复, commit 1cbca15 + a45285b → CI run 29721720744 success)
+决策: EtlImportService products/apps 数据完整性校验公式加 SkippedNullField, 与 IncrSkippedNullField+continue 跳过逻辑对齐
+理由:
+  - v30-5 CI 暴露 Day 9.7 Case 4 ETL failed, 根因 _test_day97.py 测试数据缺 mr_1 字段
+  - V2 Task 5.1.2 引入 mr_1 必填校验 (EtlImportService L866-875): mr_1 空 → IncrSkippedNullField + continue (行不进 stage 表)
+  - 旧校验公式 (L944): stageCount + Progress.Errors != Progress.Read — 漏算 SkippedNullField
+  - 真实数据若有 mr_1 空行 (或 apps brand/model 空行), 旧公式会误报"数据完整性校验失败", ETL failed
+  - apps ETL L1958-1962 brand/model 空同样用 IncrSkippedNullField + continue, L2006 旧公式也漏算
+  - 修复: products L947 加 SkippedNullField; apps L2012 加 SkippedNullField (与 SkippedMissingMr1 并列)
+  - 测试数据同步修复: _test_day97.py L299 加 mr_1=f"MR1{i:05d}" (纯字母数字 7 位, 满足 chk_mr_1_format '^[A-Za-z0-9]{1,10}$', 不允许连字符)
+排除方案:
+  - 仅修测试数据不修生产代码: 真实数据 mr_1/brand/model 空时仍会误报, P1 生产代码 bug 必须一起修
+  - 移除 mr_1 必填校验: 与 V2 Task 5.1.2 决策冲突, mr_1 是 V2 主键必填
+  - 改 IncrSkippedNullField 为 IncrErrors: 改变错误语义 (skipped 非 error), 影响 Progress.Display 和前端展示
+  - mr_1 格式用连字符 (MR1-00001): 违反 chk_mr_1_format 约束 (^[A-Za-z0-9]{1,10}$), 参考 PostgresSearchProviderIntegrationTests.cs L407 注释
+关联文件:
+  - backend/src/SakuraFilter.Etl/EtlImportService.cs (L943-954 products 校验 + L2008-2019 apps 校验)
+  - backend/src/SakuraFilter.Infrastructure/Data/ProductDbContext.cs (L66 chk_mr_1_format 约束定义)
+  - backend/src/SakuraFilter.Core/Validation/Mr1Validator.cs (V2 MR1 格式校验, ^[A-Za-z0-9]{1,10}$)
+  - spike-test/_test_day97.py (L290-305 测试数据加 mr_1=MR1{i:05d})
+  - backend/tests/SakuraFilter.Api.Tests/Integration/PostgresSearchProviderIntegrationTests.cs (L407 mr_1 纯字母数字注释参考)
+
