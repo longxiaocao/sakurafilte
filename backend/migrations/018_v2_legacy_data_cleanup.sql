@@ -44,14 +44,39 @@ TRUNCATE TABLE search_index_pending RESTART IDENTITY CASCADE;
 -- 1.6 清空 search_index_dead_letter (旧死信任务)
 TRUNCATE TABLE search_index_dead_letter RESTART IDENTITY CASCADE;
 
--- 1.7 清空 etl_alert_history (旧告警) — EF migrations 未创建此表, IF EXISTS 跳过
-TRUNCATE TABLE IF EXISTS etl_alert_history RESTART IDENTITY CASCADE;
+-- 1.7 清空 etl_alert_history (旧告警) — EF migrations 未创建此表, 用 DO 块检查存在性
+--   v28-4 P0 修复: PG 不支持 TRUNCATE TABLE IF EXISTS, 改用 DO $$ + information_schema 检查
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'etl_alert_history') THEN
+        EXECUTE 'TRUNCATE TABLE etl_alert_history RESTART IDENTITY CASCADE';
+        RAISE NOTICE '已清空: etl_alert_history';
+    ELSE
+        RAISE NOTICE '表不存在, 跳过: etl_alert_history';
+    END IF;
+END $$;
 
--- 1.8 清空 etl_progress (旧进度快照) — EF migrations 创建的是 etl_progress_log, IF EXISTS 跳过
-TRUNCATE TABLE IF EXISTS etl_progress RESTART IDENTITY CASCADE;
+-- 1.8 清空 etl_progress (旧进度快照) — EF migrations 创建的是 etl_progress_log, 用 DO 块检查
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'etl_progress') THEN
+        EXECUTE 'TRUNCATE TABLE etl_progress RESTART IDENTITY CASCADE';
+        RAISE NOTICE '已清空: etl_progress';
+    ELSE
+        RAISE NOTICE '表不存在, 跳过: etl_progress';
+    END IF;
+END $$;
 
--- 1.9 清空 cleanup_failures (旧清理失败记录) — EF migrations 未创建此表, IF EXISTS 跳过
-TRUNCATE TABLE IF EXISTS cleanup_failures RESTART IDENTITY CASCADE;
+-- 1.9 清空 cleanup_failures (旧清理失败记录) — EF migrations 未创建此表, 用 DO 块检查
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'cleanup_failures') THEN
+        EXECUTE 'TRUNCATE TABLE cleanup_failures RESTART IDENTITY CASCADE';
+        RAISE NOTICE '已清空: cleanup_failures';
+    ELSE
+        RAISE NOTICE '表不存在, 跳过: cleanup_failures';
+    END IF;
+END $$;
 
 -- 1.10 清空 partition6_placeholder (分区 6 占位表)
 TRUNCATE TABLE partition6_placeholder RESTART IDENTITY CASCADE;
