@@ -134,10 +134,11 @@ jobs:
           ConnectionStrings__Postgres: "Host=localhost;Port=5432;Database=sakurafilter_int_tests;Username=postgres;Password=784533"
         run: |
           export PATH="$HOME/.dotnet/tools:$PATH"
-          # P1 修复 (v30-8): 加 -c Release, 让 ef 用 Release 配置找 deps.json
+          # P1 修复 (v30-8): 加 --configuration Release, 让 ef 用 Release 配置找 deps.json
           #   WHY: 上一步 dotnet build -c Release, 但 dotnet ef 默认 Debug 配置,
           #     报 "bin/Debug/net8.0/SakuraFilter.Api.deps.json does not exist"
-          dotnet ef database update --no-build -c Release \
+          #   注: dotnet ef 的 -c 是 --context (DbContext), --configuration 才是配置
+          dotnet ef database update --no-build --configuration Release \
             --project ../SakuraFilter.Infrastructure/SakuraFilter.Infrastructure.csproj \
             --startup-project .
 
@@ -170,10 +171,10 @@ jobs:
           # 1) 生成 idempotent SQL — 验证迁移链无语法错误
           #   WHY: --idempotent 生成可重复执行的 SQL, 迁移链有语法错误会直接失败
           #   --no-build: 上一步已 build, 避免重复编译
-          #   -c Release: 与 Apply EF migrations 一致, 让 ef 用 Release 配置找 deps.json
+          #   --configuration Release: 与 Apply EF migrations 一致, 让 ef 用 Release 配置找 deps.json
           #   --project: DbContext 所在项目 (SakuraFilter.Infrastructure)
           #   --startup-project: 含 Program.cs / appsettings.json 的项目 (SakuraFilter.Api)
-          if dotnet ef migrations script --idempotent --no-build -c Release \
+          if dotnet ef migrations script --idempotent --no-build --configuration Release \
               --project ../SakuraFilter.Infrastructure/SakuraFilter.Infrastructure.csproj \
               --startup-project . \
               --output /tmp/migration_idempotent.sql 2>/tmp/ef_err.log; then
