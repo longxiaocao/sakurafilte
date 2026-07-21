@@ -450,3 +450,28 @@ v30-14 1M OFFSET 深分页专项压测验证数据 (2026-07-21, sakurafilter_per
   - backend/src/SakuraFilter.Api/Services/BusinessMetrics.cs (加 9 个 Meili Gauge + RefreshWorker 加 Meili 刷新 block)
   - backend/src/SakuraFilter.Search/MeiliSearchMetrics.cs (未改动, 数据源)
 
+#16 v30-23 Meili 索引字段命名对齐 (JsonPropertyName snake_case) + BCrypt.Verify 崩溃修复 (2026-07-22, commit 62749e1)
+决策: 所有 Meili 索引文档 record (Mr1IndexDoc / OemListItem / MachineListItem) 共 38 个字段全部显式加 [property: JsonPropertyName("snake_case")] 特性; MeiliSearchProvider.IndexAsync 加空主键过滤 (validBatch); UserService.AuthenticateAsync 的 BCrypt.Verify 调用包 try-catch 降级 SaltParseException → passwordValid=false
+理由:
+  - 真实浏览器验证发现搜索功能完全不可用 (Meili /indexes/products/stats 显示 0 文档), 排查发现 58 个 indexing task 全部 failed, 错误信息 "Document doesn't have a 'mr_1' attribute: {\"mr1\":\"\",\"productName1\":\"AIR FILTER\",...}"
+  - 根因 1: Mr1IndexDoc record C# PascalCase 命名 (mr1 / isPublished / d1Mm / productName1 等) 与 MeiliSearchProvider 期望的 snake_case (mr_1 / is_published / d1_mm / product_name_1) 不一致, Meili .NET SDK 0.15.4 AddDocumentsAsync<T> 不做 PascalCase → snake_case 转换
+  - 根因 2: 49988 条产品 mr_1 字段为空 (测试数据), BuildMr1DocumentAsync L543 `Mr1: p.Mr1 ?? ""` fallback 为空字符串, Meili 主键不能为空字符串 (Document identifier "" is invalid), 整批 1000 条被拒绝 (不是跳过单条)
+  - 根因 3: pgcrypto gen_salt('bf', 12) 生成的 hash 与 BCrypt.Net 不完全兼容 (前缀差异 $2a$ vs $2b$), BCrypt.Verify 抛 SaltParseException 未被 catch, 导致登录接口 500 错误
+  - 关键学习: MeiliSearchProvider L681 注释 "字段命名: snake_case (与 Mr1IndexDoc 的 JSON 序列化默认一致)" 是错误的, .NET 默认 JsonSerializer 序列化为 camelCase 而非 snake_case, 此注释误导了之前的开发者
+  - 修复后验证: build 0 错误 + 574 单测通过 + Meili /indexes/products/stats 显示 49990 文档 + 搜索 "air" 返回 17351 条结果
+  - 数据修复: SQL `UPDATE products SET mr_1 = id::text WHERE mr_1 IS NULL OR mr_1 = '';` (49988 条, id 是 bigint 转 string 不超过 10 位满足 varchar(10) 限制)
+排除方案:
+  - 全局 JsonSerializerOptions(PropertyNamingPolicy=JsonNamingPolicy.SnakeCaseLower): Meili .NET SDK 0.15.4 AddDocumentsAsync<T> 内部用自有的 JsonSerializerOptions, 不接受外部传入的 options, 无法全局配置
+  - 改 record 字段名为 snake_case (如 string mr_1): 违反 C# 命名规范 (PascalCase 是 C# 公共字段约定), 且会破坏所有调用方的 .Mr1 / .IsPublished 等属性访问
+  - 不修复 49988 条空 mr_1 数据, 仅在代码层过滤空主键: 治标不治本, 49988 条产品 (占总数据 99.99%) 永远无法被搜索到, 搜索功能形同虚设
+  - BCrypt.Verify 不 catch SaltParseException 让其抛 500: 用户体验差 (无法登录), 且日志中 SaltParseException 噪声大; 改为 try-catch 降级 + LogWarning 是更合理的容错策略
+  - 改用 BCrypt.Net 的 EnhancedVerify: EnhancedVerify 内部仍调 HashPassword 抛 SaltParseException, 不解决根本问题
+关联文件:
+  - backend/src/SakuraFilter.Search/ISearchProvider.cs (Mr1IndexDoc + OemListItem + MachineListItem 3 个 record 38 个字段全部加 [property: JsonPropertyName])
+  - backend/src/SakuraFilter.Search/MeiliSearchProvider.cs (IndexAsync L405-418 加 validBatch 空主键过滤逻辑 + L426/L428 把 batch 替换为 validBatch)
+  - backend/src/SakuraFilter.Api/Services/UserService.cs (L80-92 AuthenticateAsync BCrypt.Verify 包 try-catch 降级 SaltParseException)
+  - backend/src/SakuraFilter.Core/Entities/Product.cs (L23 [Column("mr_1")] string? Mr1, 空字段来源)
+  - .ai/_reset_admin.sql (修复 admin 密码 hash, PowerShell 转义破坏 BCrypt hash 用 SQL 文件绕过)
+  - .ai/context.md (v30-23 完整记录)
+  - .ai/_v30_23_commit_msg.txt (commit 消息文件)
+

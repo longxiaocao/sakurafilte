@@ -125,13 +125,12 @@ test.describe('v30-22 深度 E2E: JWT 登录流程', () => {
 test.describe('v30-22 深度 E2E: 搜索流程', () => {
   test('2.1 搜索页加载 + 输入框 + 搜索按钮存在', async ({ page }) => {
     await page.goto(`${BASE}/search`, { waitUntil: 'domcontentloaded', timeout: 20000 })
-    // 等待搜索输入框 (data-testid)
-    await page.waitForSelector('[data-testid="search-input"], input[type="text"]', { timeout: 10000 })
+    // 等待搜索输入框 (data-testid) — 用 toBeVisible 替代 count() 以获得 auto-wait (修复时序 flaky)
     const searchInput = page.locator('[data-testid="search-input"]').first()
-    expect(await searchInput.count()).toBeGreaterThanOrEqual(1)
+    await expect(searchInput).toBeVisible({ timeout: 10000 })
     // 验证搜索按钮 (用 type=primary 或文案)
     const searchBtn = page.locator('button:has-text("搜索"), button[type="primary"]').first()
-    expect(await searchBtn.count()).toBeGreaterThanOrEqual(1)
+    await expect(searchBtn).toBeVisible({ timeout: 10000 })
     await page.screenshot({ path: 'test-results/deep-search-page.png' })
   })
 
@@ -287,6 +286,8 @@ test.describe('v30-22 深度 E2E: 产品管理', () => {
     await injectAdminToken(page)
     await page.goto(`${BASE}/admin/products/new`, { waitUntil: 'domcontentloaded', timeout: 20000 })
     await page.waitForSelector('.el-form, form, .el-input', { timeout: 10000 })
+    // 等待表单异步渲染完成 (字典数据加载后 MR.1/OEM2 等 el-input 才挂载), 避免 count 太快读到 0
+    await page.waitForTimeout(1500)
     // 验证表单字段存在 (至少有 OEM 2 / MR.1 等核心字段)
     const inputCount = await page.locator('.el-input, input').count()
     expect(inputCount).toBeGreaterThanOrEqual(3)
