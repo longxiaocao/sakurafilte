@@ -142,6 +142,9 @@ export Storage__Provider="aliyun-oss"
 | `perf.alert.p95_error_ms` | `3000` | P95 ERROR 阈值 |
 | `perf.alert.error_rate_pct` | `5` | 错误率 ERROR 阈值 |
 | `perf.alert.max_ms` | `10000` | 单请求最大耗时 ERROR 阈值 |
+| `perf.alert.meili_p99_warn_ms` | `500` | v30-20: Meili P99 WARN 阈值 (P1 告警) |
+| `perf.alert.meili_p99_error_ms` | `1500` | v30-20: Meili P99 ERROR 阈值 (P0 告警) |
+| `perf.alert.meili_fallback_rate_pct` | `20` | v30-20: Meili 降级率 ERROR 阈值 (P0 告警, %) |
 | `retention.*` | - | 各类历史数据保留期 |
 
 **修改示例**：
@@ -179,8 +182,9 @@ WHERE key = 'perf.alert.p95_warn_ms';
 
 | 端点 | 鉴权 | 用途 |
 |---|---|---|
-| `GET /api/perf` | 无 | P50/P95/P99/错误率快照（最近 1000 条请求） |
-| `GET /api/admin/perf/alerts?limit=50` | X-Admin-Token | 最近性能告警列表 |
+| `GET /api/perf` | X-Admin-Token (v30-19) | 全局 HTTP P50/P95/P99/错误率快照（最近 1000 条请求） |
+| `GET /api/admin/perf/alerts?limit=50` | X-Admin-Token | 最近性能告警列表 (含 Meili 告警) |
+| `GET /api/admin/perf/meili/snapshot` | X-Admin-Token (v30-20) | Meili 主路径 P50/P95/P99/FallbackRate 快照 |
 | `POST /api/perf/ingest` | 无（豁免） | 前端性能埋点批量上报 |
 
 **`/api/perf` 响应**：
@@ -197,6 +201,59 @@ WHERE key = 'perf.alert.p95_warn_ms';
   "maxMs": 2341.5,
   "generatedAt": "2026-07-04T16:30:00Z"
 }
+```
+
+**`/api/admin/perf/meili/snapshot` 响应** (v30-20)：
+
+```json
+{
+  "sampleCount": 1000,
+  "primarySuccessCount": 950,
+  "fallbackCount": 45,
+  "primaryErrorCount": 5,
+  "totalSearchCount": 1000,
+  "fallbackRate": 4.5,
+  "primaryErrorRate": 0.5,
+  "p50Ms": 50.0,
+  "p95Ms": 200.0,
+  "p99Ms": 500.0,
+  "maxMs": 2000.0,
+  "generatedAt": "2026-07-22T06:30:00Z"
+}
+```
+
+**说明**：
+- `p50Ms/p95Ms/p99Ms` 仅基于 `PrimarySuccessCount` 样本（Fallback 混入会掩盖 Meili 真实问题）
+- `maxMs` 含所有样本（含 Fallback），用于发现极端慢请求
+- 样本数 < 10 时 PerfAlertService 不评估 Meili 告警规则（避免启动初期噪声）
+
+### Prometheus 指标 (v30-21)
+
+`GET /metrics` 暴露的 Meili 相关指标（Grafana 可查询）：
+
+| 指标 | 类型 | 说明 |
+|---|---|---|
+| `sakura_meili_p50_ms` | Gauge | Meili P50 延迟 (ms, 仅 PrimarySuccess) |
+| `sakura_meili_p95_ms` | Gauge | Meili P95 延迟 |
+| `sakura_meili_p99_ms` | Gauge | Meili P99 延迟（核心 SLO） |
+| `sakura_meili_max_ms` | Gauge | Meili 最大延迟 (含 Fallback) |
+| `sakura_meili_fallback_rate_pct` | Gauge | 降级率 (%) |
+| `sakura_meili_primary_error_rate_pct` | Gauge | 主路径错误率 (%) |
+| `sakura_meili_fallback_count` | Gauge | 降级次数 (最近 1000 条窗口) |
+| `sakura_meili_primary_success_count` | Gauge | 主路径成功次数 |
+| `sakura_meili_sample_count` | Gauge | 样本数 (0-1000, ring buffer 容量) |
+
+**PromQL 查询示例**：
+
+```promql
+# Meili P99 近 1 小时趋势
+sakura_meili_p99_ms[1h]
+
+# 降级率超阈值告警 (AlertManager 规则)
+avg_over_time(sakura_meili_fallback_rate_pct[5m]) > 20
+
+# Meili 可用性 (1 - 降级率/100)
+1 - sakura_meili_fallback_rate_pct / 100
 ```
 
 ## 5. 告警响应
@@ -233,6 +290,48 @@ WHERE key = 'perf.alert.p95_warn_ms';
    - DB 慢查询：加索引 / 优化 SQL
    - Meili 慢：检查 Meili 任务队列，必要时重建索引
    - 网络抖动：检查 PG/Meili 连接延迟
+
+### Meili 主路径告警（v30-20, 走 AlertCenter）
+
+**告警规则**：
+
+| 规则 | 级别 | 阈值 | 触发条件 |
+|---|---|---|---|
+| `meili_p99_warn` | P1 | 500ms | Meili P99 ≥ 500ms 且 < 1500ms (仅 PrimarySuccess 样本) |
+| `meili_p99_error` | P0 | 1500ms | Meili P99 ≥ 1500ms (主路径严重慢) |
+| `meili_fallback_rate_error` | P0 | 20% | 降级率 ≥ 20% (Meili 频繁不可用) |
+
+**样本门槛**：SampleCount ≥ 10 才评估规则 (Meili 搜索频率低，避免启动初期噪声)
+
+**抑制**：AlertCenter 内部 5min 窗口内同 `type|suppressKey` (`perf.meili|<rule>`) 不重发，持久化到 `alert_history` 表
+
+**响应流程**：
+
+1. **发现告警**：
+   - 日志：`[MEILI-ALERT] meili_p99_error: P99=1800ms FallbackRate=5% N=1000 (result=sent)`
+   - API：`curl -H "X-Admin-Token: <token>" http://<api>/api/admin/perf/meili/snapshot`
+   - Grafana：SakuraFilter Meili 主路径监控面板 (uid: `sakurafilter-meili-v30-21`)
+   - AlertCenter 历史表：`SELECT severity, title, markdown, created_at FROM alert_history WHERE type='perf.meili' ORDER BY created_at DESC LIMIT 20;`
+
+2. **判断 Meili 健康度**：
+   - 看 `fallback_rate_pct`：> 20% = Meili 频繁不可用
+   - 看 `primary_error_rate_pct`：> 0% = Meili 调用本身抛异常 (非降级)
+   - 看 `sample_count`：< 10 = 流量低，可能样本不足误判
+
+3. **定位 Meili 故障**：
+   - 查 Meili 任务队列：`curl http://<meili>/health` + `/tasks`
+   - 查 ResilientSearchProvider 熔断状态：`grep "BrokenCircuitException" /var/log/sakurafilter/api.log | tail -20`
+   - 查 Meili 资源：CPU/内存/磁盘 (Meili 数据通常 < 1GB, 内存 > 2GB 即够)
+
+4. **临时缓解**：
+   - 调整阈值（避免误报）：`UPDATE system_settings SET value='2000' WHERE key='perf.alert.meili_p99_error_ms';`
+   - 关闭 Meili 告警（不影响全局 HTTP 告警）：3 个 meili 阈值都设到极大值
+   - 强制走 PG fallback (紧急)：在 ResilientSearchProvider 配置中临时禁用 Meili (需重启)
+
+5. **根因修复**：
+   - Meili P99 持续高：检查索引大小，必要时重建 (`/api/admin/search/reindex`)
+   - Meili 频繁降级：检查 Meili 进程是否重启 (OOM?)，网络抖动，或 Polly 熔断配置过严
+   - PrimaryErrorRate > 0%：查 Meili 错误日志，可能是 schema 不匹配或数据格式异常
 
 ### ETL 告警（EtlAlertService）
 
