@@ -433,3 +433,20 @@ v30-14 1M OFFSET 深分页专项压测验证数据 (2026-07-21, sakurafilter_per
   - backend/tests/SakuraFilter.Api.Tests/MeiliSearchMetricsTests.cs (新建, 11 用例)
   - backend/tests/SakuraFilter.Api.Tests/PerfAlertClassifierTests.cs (加 9 用例 meili 规则)
 
+#15 v30-21 Prometheus 暴露 Meili 指标 (2026-07-22)
+决策: 在 BusinessMetrics 加 9 个 sakura_meili_* Gauge (P50/P95/P99/MaxMs/FallbackRate/PrimaryErrorRate/FallbackCount/PrimarySuccessCount/SampleCount), 由 BusinessMetricsRefreshWorker 周期 (30s) 刷新, 通过 /metrics 端点暴露给 Prometheus/Grafana
+理由:
+  - v30-20 完成后, Meili P99/FallbackRate 仅通过 /api/admin/perf/meili/snapshot (JSON, Admin 鉴权) 可查, Grafana 无法对接
+  - 暴露到 /metrics 让 Grafana 可视化趋势 (P99 历史曲线), AlertManager 可配置告警规则 (如 P99 > 1500ms 持续 5min)
+  - 与现有 sakura_etl_* / sakura_dead_letter_* 风格一致, 复用 BusinessMetricsRefreshWorker 30s 周期刷新机制
+  - /metrics 无鉴权 (与现有 sakura_ 指标同模式), 通过 nginx 内部网络隔离 (ADR #1 排除方案已决策: Prometheus 抓取需无鉴权)
+  - SampleCount > 0 才刷新 P50/P95/P99 等 (避免启动初期 ring buffer 空时刷新 0 值干扰)
+排除方案:
+  - 加 /api/admin/perf/meili/prometheus 独立端点: 多一个端点多一份维护, 复用 /metrics 更合理
+  - 在 MeiliSearchMetrics 内部直接调 Prometheus.Metrics.CreateGauge: 破坏关注点分离 (Search 项目不依赖 Prometheus, Api 项目才依赖)
+  - 用 Histogram 而非 Gauge: Histogram 是累计分布, ring buffer 已是滑动窗口 (最近 1000 条), 用 Gauge 反映窗口快照更合适
+  - 暴露完整 MeiliSearchSnapshot JSON 到 /metrics: /metrics 是 Prometheus 文本格式, 不能塞 JSON
+关联文件:
+  - backend/src/SakuraFilter.Api/Services/BusinessMetrics.cs (加 9 个 Meili Gauge + RefreshWorker 加 Meili 刷新 block)
+  - backend/src/SakuraFilter.Search/MeiliSearchMetrics.cs (未改动, 数据源)
+

@@ -100,6 +100,58 @@ public class BusinessMetrics
     public readonly Gauge DeadLetterDepthLegacy = Prometheus.Metrics.CreateGauge(
         "sakurafilter_dead_letter_depth",
         "死信队列当前深度 (status=active 行数, 等待人工/worker 处理)");
+
+    // ===== v30-21: Meili 主路径性能指标 (从 MeiliSearchMetrics 周期刷新) =====
+    //   WHY 暴露到 Prometheus: 让 Grafana 可视化 Meili P50/P95/P99 趋势, AlertManager 可配置告警规则
+    //   与 v30-20 的 /api/admin/perf/meili/snapshot (JSON, Admin 鉴权) 互补:
+    //     - /metrics 是 Prometheus scrape 标准接口, 无鉴权 (通过 nginx 内部网络隔离, 与其他 sakura_ 指标同模式)
+    //     - /api/admin/perf/meili/snapshot 是人工排查用, 含详细 FallbackCount/PrimarySuccessCount 等
+    //   指标命名: sakura_meili_* 与现有 sakura_etl_* / sakura_dead_letter_* 风格一致
+
+    /// <summary>Meili P50 延迟 (ms, 仅 PrimarySuccess 样本)</summary>
+    public readonly Gauge MeiliP50Ms = Prometheus.Metrics.CreateGauge(
+        "sakura_meili_p50_ms",
+        "Meili 主路径 P50 延迟 (ms, 仅 PrimarySuccess 样本, 最近 1000 条)");
+
+    /// <summary>Meili P95 延迟 (ms, 仅 PrimarySuccess 样本)</summary>
+    public readonly Gauge MeiliP95Ms = Prometheus.Metrics.CreateGauge(
+        "sakura_meili_p95_ms",
+        "Meili 主路径 P95 延迟 (ms, 仅 PrimarySuccess 样本, 最近 1000 条)");
+
+    /// <summary>Meili P99 延迟 (ms, 仅 PrimarySuccess 样本)</summary>
+    public readonly Gauge MeiliP99Ms = Prometheus.Metrics.CreateGauge(
+        "sakura_meili_p99_ms",
+        "Meili 主路径 P99 延迟 (ms, 仅 PrimarySuccess 样本, 最近 1000 条)");
+
+    /// <summary>Meili 最大延迟 (ms, 含 Fallback 样本, 用于发现极端慢请求)</summary>
+    public readonly Gauge MeiliMaxMs = Prometheus.Metrics.CreateGauge(
+        "sakura_meili_max_ms",
+        "Meili 主路径最大延迟 (ms, 含 Fallback 样本, 用于发现极端慢请求)");
+
+    /// <summary>Meili 降级率 (% = FallbackCount / TotalSearchCount × 100)</summary>
+    public readonly Gauge MeiliFallbackRatePct = Prometheus.Metrics.CreateGauge(
+        "sakura_meili_fallback_rate_pct",
+        "Meili 主路径降级率 (%, FallbackCount/TotalSearchCount×100, 最近 1000 条样本)");
+
+    /// <summary>Meili 主路径错误率 (% = PrimaryErrorCount / TotalSearchCount × 100)</summary>
+    public readonly Gauge MeiliPrimaryErrorRatePct = Prometheus.Metrics.CreateGauge(
+        "sakura_meili_primary_error_rate_pct",
+        "Meili 主路径错误率 (%, PrimaryErrorCount/TotalSearchCount×100, 最近 1000 条样本)");
+
+    /// <summary>Meili 降级次数 (counter-like gauge, 最近 1000 条样本窗口内的 FallbackCount)</summary>
+    public readonly Gauge MeiliFallbackCount = Prometheus.Metrics.CreateGauge(
+        "sakura_meili_fallback_count",
+        "Meili 主路径降级次数 (最近 1000 条样本窗口内)");
+
+    /// <summary>Meili 主路径成功次数 (counter-like gauge, 最近 1000 条样本窗口内的 PrimarySuccessCount)</summary>
+    public readonly Gauge MeiliPrimarySuccessCount = Prometheus.Metrics.CreateGauge(
+        "sakura_meili_primary_success_count",
+        "Meili 主路径成功次数 (最近 1000 条样本窗口内)");
+
+    /// <summary>Meili 样本数 (gauge, 反映 ring buffer 当前容量, 0-1000)</summary>
+    public readonly Gauge MeiliSampleCount = Prometheus.Metrics.CreateGauge(
+        "sakura_meili_sample_count",
+        "Meili 主路径指标样本数 (0-1000, 反映 ring buffer 当前容量, 启动后逐步累积)");
 }
 
 /// <summary>
@@ -183,6 +235,34 @@ public class BusinessMetricsRefreshWorker : BackgroundService
                 catch (Exception ex)
                 {
                     _logger.LogDebug(ex, "[BusinessMetrics] ETL 进度读取失败 (非致命)");
+                }
+
+                // 5. v30-21: Meili 主路径性能指标 (从 MeiliSearchMetrics.GetSnapshot() 读内存)
+                //   WHY: 暴露 P50/P95/P99/FallbackRate 到 Prometheus, 让 Grafana 可视化趋势
+                //   样本数 < 10 时不刷新 (与 PerfAlertService 的 SampleCount>=10 门槛一致, 避免启动初期噪声)
+                try
+                {
+                    var meiliMetrics = _sp.GetService<MeiliSearchMetrics>();
+                    if (meiliMetrics != null)
+                    {
+                        var snapshot = meiliMetrics.GetSnapshot();
+                        _metrics.MeiliSampleCount.Set(snapshot.SampleCount);
+                        if (snapshot.SampleCount > 0)
+                        {
+                            _metrics.MeiliP50Ms.Set(snapshot.P50Ms);
+                            _metrics.MeiliP95Ms.Set(snapshot.P95Ms);
+                            _metrics.MeiliP99Ms.Set(snapshot.P99Ms);
+                            _metrics.MeiliMaxMs.Set(snapshot.MaxMs);
+                            _metrics.MeiliFallbackRatePct.Set(snapshot.FallbackRate);
+                            _metrics.MeiliPrimaryErrorRatePct.Set(snapshot.PrimaryErrorRate);
+                            _metrics.MeiliFallbackCount.Set(snapshot.FallbackCount);
+                            _metrics.MeiliPrimarySuccessCount.Set(snapshot.PrimarySuccessCount);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "[BusinessMetrics] Meili 指标读取失败 (非致命)");
                 }
             }
             catch (Exception ex)
