@@ -141,10 +141,12 @@ public class DeadLetterRecoveryService : BackgroundService
             .ToDictionaryAsync(s => s.Key, s => s.Value, ct);
 
         var enabled = settings.GetValueOrDefault("dead_letter.auto_recovery_enabled") == "true";
-        var pollMinutes = int.TryParse(settings.GetValueOrDefault("dead_letter.recovery_poll_minutes"), out var pm) && pm > 0 ? pm : 5;
-        var coolingMinutes = int.TryParse(settings.GetValueOrDefault("dead_letter.recovery_cooling_minutes"), out var cm) && cm > 0 ? cm : 10;
-        var maxCount = int.TryParse(settings.GetValueOrDefault("dead_letter.recovery_max_count"), out var mc) && mc > 0 ? mc : 3;
-        var batchSize = int.TryParse(settings.GetValueOrDefault("dead_letter.recovery_batch_size"), out var bs) && bs > 0 ? bs : 50;
+        // v30-15: 配置解析提取到 DeadLetterRecoveryClassifier.ParseSettings (纯函数, 可单测)
+        var s = DeadLetterRecoveryClassifier.ParseSettings(settings);
+        var pollMinutes = s.PollMinutes;
+        var coolingMinutes = s.CoolingMinutes;
+        var maxCount = s.MaxCount;
+        var batchSize = s.BatchSize;
 
         if (!enabled)
         {
@@ -193,6 +195,9 @@ public class DeadLetterRecoveryService : BackgroundService
         var coolingCutoff = now.AddMinutes(-coolingMinutes);
 
         // Day 7.10.1: 加 status='active' 过滤, 排除已恢复的历史条目
+        // v30-15: 12 个瞬时错误关键词与 DeadLetterRecoveryClassifier.IsTransientError 保持一致
+        //   WHY 保持 IQueryable Where 表达式树: EF Core 翻译成 SQL, 不能直接调 C# 方法
+        //   关键词列表变更需同步 IsTransientError (单测覆盖)
         var candidates = await db.SearchIndexDeadLetters
             .Where(d => d.Status == "active")
             .Where(d => d.RecoveryCount < maxCount)
