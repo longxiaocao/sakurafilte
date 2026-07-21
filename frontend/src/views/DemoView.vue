@@ -270,7 +270,7 @@ const planComparison = [
               { title: '尺寸', content: `D1=${demoProduct.d1Mm} D2=${demoProduct.d2Mm}` },
               { title: '性能', content: `${demoProduct.media} ${demoProduct.efficiency1}` },
               { title: '包装', content: `${demoProduct.qtyPerCarton} 件/箱` }
-            ]" :key="idx" class="flex gap-3 hairline-b py-3">
+            ]" :key="stage.title" class="flex gap-3 hairline-b py-3">
               <div class="flex flex-col items-center">
                 <div class="w-6 h-6 rounded-full hairline flex items-center justify-center text-xs font-medium">
                   {{ idx + 1 }}

@@ -249,7 +249,7 @@ function fmtTime(ts: string | null): string {
       <ul class="text-xs space-y-1">
         <li
           v-for="(a, i) in alerts"
-          :key="i"
+          :key="`${a.level}-${i}`"
           :class="a.level === 'critical' ? 'text-red-700' : 'text-yellow-700'"
         >
           • {{ a.msg }}

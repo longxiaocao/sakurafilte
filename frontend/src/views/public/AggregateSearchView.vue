@@ -341,7 +341,7 @@ onBeforeUnmount(() => {
             <tbody>
               <tr
                 v-for="(oem, idx) in hit.oemList"
-                :key="idx"
+                :key="`${oem.oemBrand}-${oem.oemNo3}-${idx}`"
                 class="border-b border-gray-100 hover:bg-gray-50"
               >
                 <td class="py-1 px-2">{{ oem.oemBrand || '-' }}</td>
@@ -363,7 +363,7 @@ onBeforeUnmount(() => {
             <div class="flex flex-wrap gap-1">
               <el-tag
                 v-for="(m, idx) in hit.machineList.slice(0, 20)"
-                :key="idx"
+                :key="`${m.machineBrand}-${m.machineModel}-${idx}`"
                 size="small"
                 type="info"
               >
