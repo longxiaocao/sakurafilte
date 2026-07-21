@@ -2,13 +2,22 @@
 //   覆盖核心用户路径: 打开搜索页 → 输入关键词 → 点击搜索 → 查看结果 → 点击产品详情
 //   依赖: 本地数据库有产品数据 (CI 空库会跳过搜索结果验证, 只验证流程不白屏)
 //   注意: 只读操作, 不写入/修改数据
-import { test, expect } from '@playwright/test'
+import { test, expect, type Page } from '@playwright/test'
 
 const BASE = process.env.BASE_URL || 'http://localhost:5173'
 
+// v30-22 修复: 强制 zh-CN locale (Playwright chromium 默认 en-US, 按钮文案变 Search 导致 getByRole 找不到)
+async function injectZhLocale(page: Page) {
+  await page.addInitScript(() => {
+    localStorage.setItem('sakura_locale', 'zh-CN')
+  })
+}
+
 test.describe('P1-E2E-3 公开搜索流程 (用户视角)', () => {
   test('1. 搜索页加载 + 输入关键词 + 触发搜索', async ({ page }) => {
-    await page.goto(`${BASE}/search`, { waitUntil: 'networkidle', timeout: 15000 })
+    await injectZhLocale(page)
+    // v30-22 修复: SSE 持续连接导致 networkidle 永远不触发, 改用 domcontentloaded
+    await page.goto(`${BASE}/search`, { waitUntil: 'domcontentloaded', timeout: 20000 })
     // 等待搜索 tab 加载
     await page.waitForSelector('.el-tabs', { timeout: 10000 })
     // 等待搜索输入框 (data-testid 精准定位, 避免 .first() 选错元素)
@@ -16,7 +25,7 @@ test.describe('P1-E2E-3 公开搜索流程 (用户视角)', () => {
     await searchInput.waitFor({ timeout: 10000 })
     // 输入关键词
     await searchInput.fill('air')
-    // 点击搜索按钮 (用 exact 匹配, 避免匹配到"产品搜索"导航按钮)
+    // v30-22 修复: i18n 注入 zh-CN 后按钮文案是"搜索", 用 exact 匹配避免匹配"产品搜索"导航按钮
     const searchBtn = page.getByRole('button', { name: '搜索', exact: true })
     await searchBtn.click()
     // 等待结果渲染 (有结果 或 空状态 或 加载完成)

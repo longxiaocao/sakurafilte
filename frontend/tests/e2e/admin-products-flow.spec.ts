@@ -54,7 +54,8 @@ test.describe('P1-E2E-3 管理员产品管理流程 (用户视角)', () => {
 
   test('4. ETL 触发页加载 + 进度区域', async ({ page }) => {
     await injectAdminToken(page)
-    await page.goto(`${BASE}/admin/etl`, { waitUntil: 'networkidle', timeout: 15000 })
+    // v30-22 修复: SSE 持续连接导致 networkidle 永远不触发, 改用 domcontentloaded (与 deep-flow.spec.ts 一致)
+    await page.goto(`${BASE}/admin/etl`, { waitUntil: 'domcontentloaded', timeout: 20000 })
     await page.waitForSelector('h1, .el-card, .el-button', { timeout: 10000 })
     // 验证 ETL 触发按钮存在
     const btnCount = await page.locator('.el-button').count()
