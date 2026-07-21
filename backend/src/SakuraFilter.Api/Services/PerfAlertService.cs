@@ -113,10 +113,10 @@ public class PerfAlertService : BackgroundService
         int pollSec = settings.TryGetValue("perf.alert.poll_seconds", out var psStr) &&
                       int.TryParse(psStr, out var ps) && ps >= 30 ? ps : 60;
 
-        double p95WarnMs = ParseDouble(settings, "perf.alert.p95_warn_ms", 1000);
-        double p95ErrorMs = ParseDouble(settings, "perf.alert.p95_error_ms", 3000);
-        double errorRatePct = ParseDouble(settings, "perf.alert.error_rate_pct", 5);
-        double maxMs = ParseDouble(settings, "perf.alert.max_ms", 10000);
+        double p95WarnMs = PerfAlertClassifier.ParseDouble(settings, "perf.alert.p95_warn_ms", 1000);
+        double p95ErrorMs = PerfAlertClassifier.ParseDouble(settings, "perf.alert.p95_error_ms", 3000);
+        double errorRatePct = PerfAlertClassifier.ParseDouble(settings, "perf.alert.error_rate_pct", 5);
+        double maxMs = PerfAlertClassifier.ParseDouble(settings, "perf.alert.max_ms", 10000);
 
         // 2) 取 PerfMetrics 快照
         var snapshot = _metrics.GetSnapshot();
@@ -154,22 +154,16 @@ public class PerfAlertService : BackgroundService
         return pollSec;
     }
 
-    private static double ParseDouble(Dictionary<string, string?> settings, string key, double defaultValue)
-    {
-        return settings.TryGetValue(key, out var s) && double.TryParse(s, out var v) ? v : defaultValue;
-    }
-
     private void TryEmit(string rule, string level, string message, DateTime at, PerfSnapshot snapshot)
     {
-        var suppressKey = $"{level}|{rule}";
+        // v30-13: 抑制判断逻辑提取到 PerfAlertClassifier.IsSuppressed (可单测)
         lock (_suppressedKeys)
         {
-            if (_suppressedKeys.TryGetValue(suppressKey, out var lastTime) &&
-                at - lastTime < SuppressionWindow)
+            if (PerfAlertClassifier.IsSuppressed(_suppressedKeys, level, rule, at, SuppressionWindow))
             {
                 return;  // 抑制窗口内, 不重发
             }
-            _suppressedKeys[suppressKey] = at;
+            PerfAlertClassifier.UpdateSuppression(_suppressedKeys, level, rule, at);
         }
 
         var alert = new PerfAlert(at, level, rule, message, snapshot.P50Ms, snapshot.P95Ms,
