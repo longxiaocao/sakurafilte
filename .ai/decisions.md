@@ -12,16 +12,17 @@
 
 ---
 
-#1 SSE 401 修复方案选择 (2026-07-18)
-决策: 前端改用 fetch + ReadableStream 替代 EventSource, 不改后端
-理由: EventSource API 不支持自定义 Header, 无法携带 JWT。fetch + ReadableStream 可携带 Authorization Bearer, 与现有 axios 拦截器逻辑一致 (复用 buildAuthHeaders), 无需后端改动
+#1 SSE 401 修复方案选择 (2026-07-18, v30-17 后端鉴权修复 2026-07-21)
+决策: 前端改用 fetch + ReadableStream 替代 EventSource, 不改后端 (V24-F78); v30-17 后端 SSE 端点加 RequireAuthorization("Admin") 修复 P0 安全漏洞 (未认证可访问 ETL 进度)
+理由: EventSource API 不支持自定义 Header, 无法携带 JWT。fetch + ReadableStream 可携带 Authorization Bearer, 与现有 axios 拦截器逻辑一致 (复用 buildAuthHeaders), 无需后端改动。v30-17 后端鉴权修复: V24-F78 时期 SSE 端点脱离 group 鉴权 (为兼容 EventSource 不能带 header), ADR #1 已改用 fetch + Bearer, 后端鉴权可恢复; 前端 useEtlProgress.ts L201-209 已带 Bearer, 修复不破坏前端
 排除方案:
   - 后端 SSE 支持 query token (?token=xxx): token 会泄漏到访问日志/Referer/nginx 日志, 安全风险高
   - 后端 SSE 支持 cookie auth: 需后端改动 + 与 JWT 无状态架构冲突, 改动面大
+  - SSE 端点加 RequireRateLimiting("etl"): SSE 长连接限流策略需单独评估 (QPS vs 并发连接), 留 P2
 关联文件:
   - frontend/src/composables/useEtlProgress.ts
   - frontend/src/utils/http.ts (新增 buildAuthHeaders 导出)
-  - backend/src/SakuraFilter.Api/Endpoints/AdminEtlEndpoints.cs (未改动)
+  - backend/src/SakuraFilter.Api/Endpoints/AdminEtlEndpoints.cs (v30-17: L212 app.MapGet 末尾加 .RequireAuthorization("Admin"))
 
 #2 V24-F83 23505 唯一约束并发测试方案 (2026-07-19)
 决策: 用 raw SQL 两个并行 NpgsqlTransaction 触发 23505, 不用 EF Core 并发

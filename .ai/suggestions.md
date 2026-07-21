@@ -4,7 +4,7 @@
 
 ---
 
-- [2026-07-18] [P2] SSE 后端 cookie auth 方案 (V24-F78 采用前端 fetch 替代, 后端端点未显式 RequireAuthorization) | 触发文件: backend/src/SakuraFilter.Api/Endpoints/AdminEtlEndpoints.cs L208
+- [2026-07-18] [P2 → P0] ✅ 已修复 (v30-17): SSE 后端 cookie auth 方案 (V24-F78 采用前端 fetch 替代, 后端端点未显式 RequireAuthorization). v30-17 排查发现 SSE 端点脱离 group 鉴权, 未认证用户可获取 ETL 进度 (P0 安全漏洞). 修复: AdminEtlEndpoints.cs L212 app.MapGet 末尾加 .RequireAuthorization("Admin"), 前端 useEtlProgress.ts L201-209 已用 fetch + buildAuthHeaders() 带 Bearer (ADR #1 落地), 修复不破坏前端. 限流暂不加 (SSE 长连接限流策略需单独评估, 留 P2). 后端测试 610/610 通过 (0 回归) | 触发文件: backend/src/SakuraFilter.Api/Endpoints/AdminEtlEndpoints.cs L207-267
 - [2026-07-18] [P2] Codecov/Coveralls 上传需 secrets.CODECOV_TOKEN 配置 | 触发文件: .github/workflows/ci.yml
 - [2026-07-18] [P2] 覆盖率门禁待核心 Service 覆盖率达 40%+ 后启用 reportgenerator -thresholds | 触发文件: .github/workflows/ci.yml coverage job
 - [2026-07-19] [P2] ✅ 已实施 (v30-11 commit 待填, data-testid 方案): E2E 测试选择器规范化: 现有 .el-input__inner + .first() 不稳定, 应改用 getByPlaceholder/getByLabel/getByRole (需逐个查前端源码确认 placeholder/label)。实施: 选 data-testid 方案 (Playwright 官方推荐, 与 UI/文案解耦), 给 3 个搜索输入框加 testid (SearchView search-input + PublicSearchView public-search-${f.key} + AdminProductsView admin-search-oem2), 2 个测试文件 3 处选择器改用 getByTestId。未走 getByPlaceholder 因 placeholder 多为 i18n 动态绑定, 跨语言失效; 未走 getByLabel 因 PublicSearchView 用 label 标签关联 + AdminProductsView 多个输入框 aria-label 相近 | 触发文件: frontend/src/views/SearchView.vue L253, frontend/src/views/public/PublicSearchView.vue L382, frontend/src/views/admin/AdminProductsView.vue L308, frontend/tests/e2e/public-search-flow.spec.ts L15/L51, frontend/tests/e2e/admin-products-flow.spec.ts L33

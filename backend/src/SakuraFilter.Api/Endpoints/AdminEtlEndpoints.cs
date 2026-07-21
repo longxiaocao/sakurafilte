@@ -205,6 +205,10 @@ public static class AdminEtlEndpoints
         .WithName("AdminReindexAll");
 
         // 进度 SSE 流
+        // v30-17 P0 安全修复: SSE 端点脱离 group 鉴权, 未认证用户可获取 ETL 进度
+        //   WHY 脱离 group: V24-F78 时期为兼容 EventSource (不能带 header) 故意脱离, ADR #1 已改用 fetch + Bearer, 后端鉴权可恢复
+        //   修复: 加 RequireAuthorization("Admin"), 前端 useEtlProgress.ts L201-209 已用 fetch + buildAuthHeaders() 带 Bearer
+        //   限流暂不加: SSE 长连接限流策略需单独评估 (QPS vs 并发连接), 留 P2
         app.MapGet("/api/admin/etl/progress/stream", async (HttpContext ctx, EtlImportService etl, IEtlProgressBroadcaster broadcaster) =>
         {
             ctx.Response.ContentType = "text/event-stream";
@@ -260,7 +264,7 @@ public static class AdminEtlEndpoints
                 subscription?.Dispose();
             }
             return Results.Empty;
-        });
+        }).RequireAuthorization("Admin");  // v30-17 P0: SSE 端点鉴权 (原脱离 group, 未认证可访问)
 
         // 历史查询
         group.MapGet("/history", async (
