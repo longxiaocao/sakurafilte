@@ -44,9 +44,15 @@ public static class CommonEndpoints
             .WithOpenApi();
 
         // 性能告警列表
+        // v30-18 P0: 加 RequireAuthorization("Admin"), 原脱离 group 无鉴权
+        //   WHY: /api/admin/perf/alerts 在 DevTokenAuthMiddleware AdminPaths 内,
+        //     但 Bearer 请求会跳过 DevToken 校验放行 (DevTokenAuthMiddleware.cs L122-127),
+        //     端点无 RequireAuthorization 时 Bearer 攻击可绕过 (任意 Bearer token 即可访问)
+        //   数据敏感性: 性能告警含 P95/P99 数据 + rule_name, 泄漏运维内部信息
         app.MapGet("/api/admin/perf/alerts", (PerfAlertService alerts, int? limit) =>
             Results.Ok(alerts.GetRecentAlerts(limit ?? 50)))
             .WithSummary("性能告警列表 (按时间倒序, 运维面板用)").WithName("PerfAlerts")
+            .RequireAuthorization("Admin")
             .WithOpenApi();
 
         // 前端性能埋点批量上报
@@ -132,6 +138,12 @@ public static class CommonEndpoints
 
     private static IEndpointRouteBuilder MapAdminAuthStatusEndpoint(this IEndpointRouteBuilder app)
     {
+        // v30-18 P0: 加 RequireAuthorization("Admin"), 原脱离 group 无鉴权
+        //   WHY: /api/admin/auth/status 在 DevTokenAuthMiddleware AdminPaths 内,
+        //     但 Bearer 请求会跳过 DevToken 校验放行 (DevTokenAuthMiddleware.cs L122-127),
+        //     端点无 RequireAuthorization 时 Bearer 攻击可绕过
+        //   数据敏感性: token 轮转信息 (current/previous prefix + 轮转时间), 虽不暴露完整 token,
+        //     但 prefix 泄漏 + 轮转时间可辅助攻击者推测 token 模式
         app.MapGet("/api/admin/auth/status", (IAuthTokenStore store) =>
         {
             var current = store.Current;
@@ -149,6 +161,7 @@ public static class CommonEndpoints
             });
         })
         .WithSummary("Auth Token 轮转状态查询 (current/previous 长度 + 轮转时间, 不暴露完整 token)").WithName("AdminAuthStatus")
+        .RequireAuthorization("Admin")
         .RequireRateLimiting("global");
         return app;
     }

@@ -7,6 +7,13 @@ namespace SakuraFilter.Api.Endpoints;
 /// <summary>
 /// 公开 ETL 端点：/api/etl/import 触发导入、/api/etl/status 进度查询、
 /// 旧入口 /import-xrefs /import-apps 保留（向后兼容）。
+///
+/// v30-18 P0 安全修复: 4 个端点全部加 RequireAuthorization("Admin").
+///   WHY: /api/etl/* 在 DevTokenAuthMiddleware AdminPaths 内, 但 Bearer 请求会跳过 DevToken
+///     校验放行 (DevTokenAuthMiddleware.cs L122-127), 端点无 RequireAuthorization 时 Bearer
+///     攻击可绕过 (任意 Bearer token 即可触发 ETL 导入, 数据破坏风险).
+///   历史成因: ETL 端点原设计为脚本触发无鉴权, V24-F19 后改用 DevTokenAuthMiddleware 兜底,
+///     但 Bearer 双轨期漏洞未修复, v30-18 统一加 RequireAuthorization.
 /// </summary>
 public static class EtlEndpoints
 {
@@ -37,12 +44,14 @@ public static class EtlEndpoints
             return Results.Accepted(value: etl.Progress.ToJson());
         })
         .WithSummary("ETL 导入触发 (products/xrefs/apps, 统一入口, 路径白名单校验)").WithName("EtlImport")
+        .RequireAuthorization("Admin")  // v30-18 P0
         .WithOpenApi();
 
         // 进度查询
         app.MapGet("/api/etl/status", (EtlImportService etl) =>
             Results.Ok(etl.Progress.ToJson()))
         .WithSummary("ETL 导入进度查询 (实时 JSON, 含 current/total/elapsed/eta)").WithName("EtlStatus")
+        .RequireAuthorization("Admin")  // v30-18 P0
         .WithOpenApi();
 
         // 旧入口: xrefs
@@ -60,6 +69,7 @@ public static class EtlEndpoints
             return Results.Accepted(value: etl.Progress.ToJson());
         })
         .WithSummary("ETL 导入 xrefs (兼容旧入口, 新调用走 /api/etl/import + entityType)").WithName("EtlImportXrefs")
+        .RequireAuthorization("Admin")  // v30-18 P0
         .WithOpenApi();
 
         // 旧入口: apps
@@ -77,6 +87,7 @@ public static class EtlEndpoints
             return Results.Accepted(value: etl.Progress.ToJson());
         })
         .WithSummary("ETL 导入 apps (兼容旧入口, 新调用走 /api/etl/import + entityType)").WithName("EtlImportApps")
+        .RequireAuthorization("Admin")  // v30-18 P0
         .WithOpenApi();
 
         return app;
