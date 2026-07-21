@@ -1,4 +1,5 @@
 using SakuraFilter.Core.DTOs;
+using System.Text.Json.Serialization;
 
 namespace SakuraFilter.Search;
 
@@ -53,40 +54,46 @@ public interface ISearchProvider
 /// </summary>
 public record Mr1IndexDoc(
     // ===== 主键 + 顶层字段 =====
-    string Mr1,                              // V2 主键 (1-10 位字母数字)
-    string? ProductName1,
-    string? ProductName2,
-    string? Oem2,
-    string Type,
-    string? Remark,
-    string? Media,
+    [property: JsonPropertyName("mr_1")] string Mr1,                              // V2 主键 (1-10 位字母数字)
+    [property: JsonPropertyName("product_name_1")] string? ProductName1,
+    [property: JsonPropertyName("product_name_2")] string? ProductName2,
+    [property: JsonPropertyName("oem_2")] string? Oem2,
+    [property: JsonPropertyName("type")] string Type,
+    [property: JsonPropertyName("remark")] string? Remark,
+    [property: JsonPropertyName("media")] string? Media,
 
     // ===== 尺寸字段 (filterable) =====
-    decimal? D1Mm, decimal? D2Mm, decimal? D3Mm, decimal? D4Mm,
-    decimal? H1Mm, decimal? H2Mm, decimal? H3Mm, decimal? H4Mm,
+    [property: JsonPropertyName("d1_mm")] decimal? D1Mm,
+    [property: JsonPropertyName("d2_mm")] decimal? D2Mm,
+    [property: JsonPropertyName("d3_mm")] decimal? D3Mm,
+    [property: JsonPropertyName("d4_mm")] decimal? D4Mm,
+    [property: JsonPropertyName("h1_mm")] decimal? H1Mm,
+    [property: JsonPropertyName("h2_mm")] decimal? H2Mm,
+    [property: JsonPropertyName("h3_mm")] decimal? H3Mm,
+    [property: JsonPropertyName("h4_mm")] decimal? H4Mm,
 
     // v24 修复: 螺纹规格 (filterable, 文本精确匹配)
-    string? D7Thread,
-    string? D8Thread,
+    [property: JsonPropertyName("d7_thread")] string? D7Thread,
+    [property: JsonPropertyName("d8_thread")] string? D8Thread,
 
     // ===== 状态字段 (filterable) =====
-    bool IsPublished,                        // 顶层 MR.1 上架
-    bool IsDiscontinued,                     // 顶层 MR.1 下架
+    [property: JsonPropertyName("is_published")] bool IsPublished,                        // 顶层 MR.1 上架
+    [property: JsonPropertyName("is_discontinued")] bool IsDiscontinued,                     // 顶层 MR.1 下架
 
     // ===== 嵌套数组 =====
-    List<OemListItem> OemList,               // OEM 3 列表 (含已下架,但不含已删除 brand)
-    List<MachineListItem> MachineList,       // 机型列表
+    [property: JsonPropertyName("oem_list")] List<OemListItem> OemList,               // OEM 3 列表 (含已下架,但不含已删除 brand)
+    [property: JsonPropertyName("machine_list")] List<MachineListItem> MachineList,       // 机型列表
 
     // ===== 扁平化冗余字段 (修复 S3-7/S3-8/S3-21/S4-16) =====
-    List<string> OemListPublishedBrands,     // 仅上架 OEM 3 的 brand 去重列表
-    List<string> OemListPublishedNo3s,       // 仅上架 OEM 3 的 oem_no_3 去重列表
-    string OemBrandsStr,                     // "BOSCH MANN NTN" 空格拼接 (S4-13: 分隔符改空格)
-    string OemNo3sStr,                       // "F000000001 F000000002" 空格拼接
-    int? BrandSortOrderMin,                  // 未软删除 brand 的 sort_order MIN (S4-25: 改 long? NULL)
-    int? OemListSortOrderMin,                // 上架 OEM 3 的 sort_order MIN
+    [property: JsonPropertyName("oem_list_published_brands")] List<string> OemListPublishedBrands,     // 仅上架 OEM 3 的 brand 去重列表
+    [property: JsonPropertyName("oem_list_published_no3s")] List<string> OemListPublishedNo3s,       // 仅上架 OEM 3 的 oem_no_3 去重列表
+    [property: JsonPropertyName("oem_brands_str")] string OemBrandsStr,                     // "BOSCH MANN NTN" 空格拼接 (S4-13: 分隔符改空格)
+    [property: JsonPropertyName("oem_no3s_str")] string OemNo3sStr,                       // "F000000001 F000000002" 空格拼接
+    [property: JsonPropertyName("brand_sort_order_min")] int? BrandSortOrderMin,                  // 未软删除 brand 的 sort_order MIN (S4-25: 改 long? NULL)
+    [property: JsonPropertyName("oem_list_sort_order_min")] int? OemListSortOrderMin,                // 上架 OEM 3 的 sort_order MIN
 
     // ===== 时间戳 =====
-    long UpdatedAtUnix
+    [property: JsonPropertyName("updated_at_unix")] long UpdatedAtUnix
 );
 
 /// <summary>
@@ -94,20 +101,20 @@ public record Mr1IndexDoc(
 /// WHY 保留软删除 brand 的 OEM 3 (S4-11): D21 决策"cross_references.oem_brand 不加外键,字典软删除后历史数据保留"
 /// </summary>
 public record OemListItem(
-    string? OemBrand,
-    string? OemNo3,
-    string? Oem2,
-    int SortOrder,
-    string? MachineType,
-    bool IsPublished,
-    int? BrandSortOrder                     // 软删除 brand 时为 null (S4-11: CASE WHEN 语义)
+    [property: JsonPropertyName("oem_brand")] string? OemBrand,
+    [property: JsonPropertyName("oem_no_3")] string? OemNo3,
+    [property: JsonPropertyName("oem_2")] string? Oem2,
+    [property: JsonPropertyName("sort_order")] int SortOrder,
+    [property: JsonPropertyName("machine_type")] string? MachineType,
+    [property: JsonPropertyName("is_published")] bool IsPublished,
+    [property: JsonPropertyName("brand_sort_order")] int? BrandSortOrder                     // 软删除 brand 时为 null (S4-11: CASE WHEN 语义)
 );
 
 /// <summary>
 /// 机型列表项 (嵌套数组元素)
 /// </summary>
 public record MachineListItem(
-    string? MachineBrand,
-    string? MachineModel,
-    string? MachineCategory
+    [property: JsonPropertyName("machine_brand")] string? MachineBrand,
+    [property: JsonPropertyName("machine_model")] string? MachineModel,
+    [property: JsonPropertyName("machine_category")] string? MachineCategory
 );

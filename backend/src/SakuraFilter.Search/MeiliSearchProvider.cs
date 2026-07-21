@@ -407,15 +407,25 @@ public class MeiliSearchProvider : ISearchProvider
         var batch = docs.ToList();
         if (batch.Count == 0) return;
 
+        // v30-23 P0 修复: 过滤空主键文档, 避免 Meili 拒绝整个批次 (Document identifier "" is invalid)
+        //   根因: 测试数据或旧数据中 mr_1 可能为空, 导致整个 1000 条批次被 Meili 拒绝
+        var validBatch = batch.Where(d => !string.IsNullOrWhiteSpace(d.Mr1)).ToList();
+        if (validBatch.Count < batch.Count)
+        {
+            _logger.LogWarning("过滤空主键文档: 输入={Total}, 有效={Valid}, 跳过={Skipped}",
+                batch.Count, validBatch.Count, batch.Count - validBatch.Count);
+        }
+        if (validBatch.Count == 0) return;
+
         // V2 (S4-21): 遍历所有 WriteTargets 双写 (灰度期间同时写 products + products_v2)
         foreach (var target in _writeTargets)
         {
             try
             {
                 // V2: 主键改为 mr_1 (字符串)
-                var task = await target.AddDocumentsAsync(batch, primaryKey: "mr_1", cancellationToken: ct);
+                var task = await target.AddDocumentsAsync(validBatch, primaryKey: "mr_1", cancellationToken: ct);
                 _logger.LogInformation("Meili 索引已提交: target={Target}, count={Count}, taskUid={TaskUid}",
-                    target.Uid, batch.Count, task.TaskUid);
+                    target.Uid, validBatch.Count, task.TaskUid);
             }
             catch (Exception ex)
             {

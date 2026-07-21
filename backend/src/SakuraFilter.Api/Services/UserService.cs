@@ -78,7 +78,18 @@ public class UserService
         }
 
         // BCrypt.Verify 验证密码 (BCrypt 内部已防时序攻击)
-        if (!BCrypt.Net.BCrypt.Verify(password, user.PasswordHash))
+        // v30-23 P1 修复: hash 格式不兼容时 BCrypt.Verify 抛 SaltParseException 导致 500, 改为 try-catch 降级为密码不匹配
+        bool passwordValid;
+        try
+        {
+            passwordValid = BCrypt.Net.BCrypt.Verify(password, user.PasswordHash);
+        }
+        catch (BCrypt.Net.SaltParseException ex)
+        {
+            _logger.LogWarning(ex, "用户 {Username} 的 password_hash 格式不兼容, 视为密码不匹配", username);
+            passwordValid = false;
+        }
+        if (!passwordValid)
         {
             // 失败: FailedLoginCount++, 达阈值则锁定
             user.FailedLoginCount++;
