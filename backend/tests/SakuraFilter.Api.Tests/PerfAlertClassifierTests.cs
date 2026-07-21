@@ -1,5 +1,6 @@
 using FluentAssertions;
 using SakuraFilter.Api.Services;
+using SakuraFilter.Search;
 using Xunit;
 
 namespace SakuraFilter.Api.Tests;
@@ -196,5 +197,176 @@ public class PerfAlertClassifierTests
         suppressedKeys.Should().ContainKey("ERROR|p95_error");
         suppressedKeys.Should().ContainKey("WARN|p95_warn");
         suppressedKeys.Should().ContainKey("ERROR|max_ms");
+    }
+
+    // ===== v30-20: Meili 主路径告警纯函数 =====
+
+    [Fact]
+    public void ClassifyMeiliSeverity_P99Error_Returns_P0()
+    {
+        // 覆盖: meili_p99_error → P0 (Meili 主路径严重慢)
+        PerfAlertClassifier.ClassifyMeiliSeverity(PerfAlertClassifier.MeiliRules.P99Error)
+            .Should().Be("P0");
+    }
+
+    [Fact]
+    public void ClassifyMeiliSeverity_P99Warn_Returns_P1()
+    {
+        // 覆盖: meili_p99_warn → P1 (提前预警)
+        PerfAlertClassifier.ClassifyMeiliSeverity(PerfAlertClassifier.MeiliRules.P99Warn)
+            .Should().Be("P1");
+    }
+
+    [Fact]
+    public void ClassifyMeiliSeverity_FallbackRateError_Returns_P0()
+    {
+        // 覆盖: meili_fallback_rate_error → P0 (Meili 频繁不可用)
+        PerfAlertClassifier.ClassifyMeiliSeverity(PerfAlertClassifier.MeiliRules.FallbackRateError)
+            .Should().Be("P0");
+    }
+
+    [Fact]
+    public void ClassifyMeiliSeverity_Unknown_Rule_Returns_P2_Fallback()
+    {
+        // 覆盖: 未知规则降级 P2 (兜底)
+        PerfAlertClassifier.ClassifyMeiliSeverity("meili_unknown_rule")
+            .Should().Be("P2");
+    }
+
+    [Fact]
+    public void BuildMeiliAlertContext_Contains_All_Fields()
+    {
+        // 覆盖: 上下文包含所有 P99/P95/P50/FallbackRate 等关键字段, 供运维排查
+        var snapshot = new MeiliSearchSnapshot(
+            SampleCount: 1000,
+            PrimarySuccessCount: 950,
+            FallbackCount: 45,
+            PrimaryErrorCount: 5,
+            TotalSearchCount: 1000,
+            FallbackRate: 4.5,
+            PrimaryErrorRate: 0.5,
+            P50Ms: 50.0,
+            P95Ms: 200.0,
+            P99Ms: 500.0,
+            MaxMs: 2000.0,
+            GeneratedAt: new DateTime(2026, 7, 22, 10, 30, 0, DateTimeKind.Utc)
+        );
+
+        var ctx = PerfAlertClassifier.BuildMeiliAlertContext(
+            PerfAlertClassifier.MeiliRules.P99Error, snapshot, threshold: 1500);
+
+        ctx.Should().ContainKey("rule");
+        ctx["rule"].Should().Be(PerfAlertClassifier.MeiliRules.P99Error);
+        ctx.Should().ContainKey("severity");
+        ctx["severity"].Should().Be("P0");
+        ctx.Should().ContainKey("threshold");
+        ctx["threshold"].Should().Be(1500.0);
+        ctx.Should().ContainKey("p99_ms");
+        ctx["p99_ms"].Should().Be(500.0);
+        ctx.Should().ContainKey("p95_ms");
+        ctx["p95_ms"].Should().Be(200.0);
+        ctx.Should().ContainKey("p50_ms");
+        ctx["p50_ms"].Should().Be(50.0);
+        ctx.Should().ContainKey("max_ms");
+        ctx["max_ms"].Should().Be(2000.0);
+        ctx.Should().ContainKey("fallback_rate_pct");
+        ctx["fallback_rate_pct"].Should().Be(4.5);
+        ctx.Should().ContainKey("primary_error_rate_pct");
+        ctx["primary_error_rate_pct"].Should().Be(0.5);
+        ctx.Should().ContainKey("sample_count");
+        ctx["sample_count"].Should().Be(1000);
+        ctx.Should().ContainKey("primary_success_count");
+        ctx["primary_success_count"].Should().Be(950L);
+        ctx.Should().ContainKey("fallback_count");
+        ctx["fallback_count"].Should().Be(45L);
+        ctx.Should().ContainKey("total_search_count");
+        ctx["total_search_count"].Should().Be(1000L);
+        ctx.Should().ContainKey("generated_at_utc");
+        ctx["generated_at_utc"].Should().Be(snapshot.GeneratedAt);
+    }
+
+    [Fact]
+    public void BuildMeiliAlertContext_Severity_Matches_Rule()
+    {
+        // 覆盖: 上下文中的 severity 与 ClassifyMeiliSeverity 一致
+        var snapshot = new MeiliSearchSnapshot(
+            SampleCount: 100, PrimarySuccessCount: 100, FallbackCount: 0, PrimaryErrorCount: 0,
+            TotalSearchCount: 100, FallbackRate: 0, PrimaryErrorRate: 0,
+            P50Ms: 50, P95Ms: 100, P99Ms: 150, MaxMs: 200,
+            GeneratedAt: DateTime.UtcNow);
+
+        var ctxWarn = PerfAlertClassifier.BuildMeiliAlertContext(
+            PerfAlertClassifier.MeiliRules.P99Warn, snapshot, threshold: 100);
+        ctxWarn["severity"].Should().Be("P1");
+
+        var ctxFallback = PerfAlertClassifier.BuildMeiliAlertContext(
+            PerfAlertClassifier.MeiliRules.FallbackRateError, snapshot, threshold: 20);
+        ctxFallback["severity"].Should().Be("P0");
+    }
+
+    [Fact]
+    public void BuildMeiliAlertMarkdown_Contains_Severity_And_Rule()
+    {
+        // 覆盖: Markdown 正文包含 severity 标记 + rule + 关键指标
+        var snapshot = new MeiliSearchSnapshot(
+            SampleCount: 500, PrimarySuccessCount: 450, FallbackCount: 50, PrimaryErrorCount: 0,
+            TotalSearchCount: 500, FallbackRate: 10.0, PrimaryErrorRate: 0,
+            P50Ms: 50, P95Ms: 300, P99Ms: 800, MaxMs: 1500,
+            GeneratedAt: new DateTime(2026, 7, 22, 10, 30, 0, DateTimeKind.Utc));
+
+        var md = PerfAlertClassifier.BuildMeiliAlertMarkdown(
+            PerfAlertClassifier.MeiliRules.P99Error, snapshot, threshold: 1500);
+
+        md.Should().Contain("[P0]");
+        md.Should().Contain(PerfAlertClassifier.MeiliRules.P99Error);
+        md.Should().Contain("P99=800");
+        md.Should().Contain("P95=300");
+        md.Should().Contain("P50=50");
+        md.Should().Contain("降级率");
+        md.Should().Contain("10");
+        md.Should().Contain("样本数");
+    }
+
+    [Fact]
+    public void BuildMeiliAlertMarkdown_P99Warn_Title_Contains_Warn()
+    {
+        // 覆盖: P99Warn 规则的 Markdown 标题含 WARN 标识
+        var snapshot = new MeiliSearchSnapshot(
+            SampleCount: 100, PrimarySuccessCount: 100, FallbackCount: 0, PrimaryErrorCount: 0,
+            TotalSearchCount: 100, FallbackRate: 0, PrimaryErrorRate: 0,
+            P50Ms: 50, P95Ms: 100, P99Ms: 600, MaxMs: 800,
+            GeneratedAt: DateTime.UtcNow);
+
+        var md = PerfAlertClassifier.BuildMeiliAlertMarkdown(
+            PerfAlertClassifier.MeiliRules.P99Warn, snapshot, threshold: 500);
+
+        md.Should().Contain("[P1]");
+        md.Should().Contain("WARN");
+    }
+
+    [Fact]
+    public void BuildMeiliAlertMarkdown_FallbackRate_Title_Contains_降级()
+    {
+        // 覆盖: FallbackRate 规则的 Markdown 标题含"频繁降级"
+        var snapshot = new MeiliSearchSnapshot(
+            SampleCount: 100, PrimarySuccessCount: 70, FallbackCount: 30, PrimaryErrorCount: 0,
+            TotalSearchCount: 100, FallbackRate: 30.0, PrimaryErrorRate: 0,
+            P50Ms: 50, P95Ms: 100, P99Ms: 200, MaxMs: 500,
+            GeneratedAt: DateTime.UtcNow);
+
+        var md = PerfAlertClassifier.BuildMeiliAlertMarkdown(
+            PerfAlertClassifier.MeiliRules.FallbackRateError, snapshot, threshold: 20);
+
+        md.Should().Contain("[P0]");
+        md.Should().Contain("频繁降级");
+    }
+
+    [Fact]
+    public void MeiliRules_Constants_Are_Stable()
+    {
+        // 覆盖: 规则名常量稳定 (用于 AlertCenter suppressKey 持久化, 不能随意改名)
+        PerfAlertClassifier.MeiliRules.P99Error.Should().Be("meili_p99_error");
+        PerfAlertClassifier.MeiliRules.P99Warn.Should().Be("meili_p99_warn");
+        PerfAlertClassifier.MeiliRules.FallbackRateError.Should().Be("meili_fallback_rate_error");
     }
 }

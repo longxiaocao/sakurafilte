@@ -406,3 +406,30 @@ v30-14 1M OFFSET 深分页专项压测验证数据 (2026-07-21, sakurafilter_per
   - frontend/src/views/admin/AdminMachinesView.vue (272 → 166, -39%, 4 字段 + category el-tag + el-select, 用 #row-cells slot)
   - .trae/specs/v2-architecture-migration/design-dict-manager-layout.md (设计文档, 1141 行)
 
+#14 v30-20 Meili 主路径 P99 监控告警 (2026-07-22)
+决策: 新增 MeiliSearchMetrics (独立 ring buffer, 1000 样本) 采集 Meili 主路径性能指标, 在 ResilientSearchProvider.SearchAsync 4 个分支埋点 (PrimarySuccess/Fallback/PrimaryError), 复用 AlertCenter 推送 3 条告警规则 (meili_p99_error P0 / meili_p99_warn P1 / meili_fallback_rate_error P0), 通过 /api/admin/perf/meili/snapshot 暴露快照查询端点
+理由:
+  - 原架构缺陷: PerfMetrics 是全局 HTTP 指标, 不区分 Meili vs PG fallback, Meili 真实性能无监控, P99 异常或频繁降级时无告警
+  - 复用 AlertCenter (P2-1 基础设施): AlertCenter 已是完整告警基础设施 (统一路由 + 5min 抑制 + 持久化 alert_history), 与 EtlAlertService 走老 webhook URL 相比更上层
+  - P99 计算仅基于 PrimarySuccess 样本: Fallback 混入会掩盖 Meili 真实问题 (Fallback 走 PG 慢是预期行为, 不是 Meili 故障)
+  - MaxMs 含所有样本: 用于发现极端慢请求 (无论 PrimarySuccess 还是 Fallback)
+  - 严重度映射: meili_p99_error→P0 (主路径严重慢, 影响所有搜索) / meili_p99_warn→P1 (提前预警) / meili_fallback_rate_error→P0 (频繁降级=Meili 不可用)
+  - 样本数门槛: Meili 搜索频率低, 用 10 (PerfMetrics 用 30)
+  - 鉴权安全: /api/admin/perf/meili/snapshot 加 RequireAuthorization("Admin") (与 v30-19 同模式, 防泄漏 P50/P95/P99 运维数据)
+  - 测试覆盖: 45 个新单测全过 (11 个 MeiliSearchMetricsTests + 9 个 PerfAlertClassifierTests 加 meili 规则 + 既有测试无回归), 总测试 610 → 635
+排除方案:
+  - 在 PerfMetrics 内联 Meili 指标: PerfMetrics 是全局 HTTP 指标, 混入 Meili 会让 P95/P99 含义不清 (不区分主备)
+  - 走 EtlAlertService 老路径 (webhook URL): EtlAlertService 走 system_settings 中的 webhook_url, 需自己实现抑制 + 持久化, AlertCenter 已封装这些
+  - 限制 ring buffer 容量到 100: 100 样本不足以反映 P99 (nearest-rank 算法在 100 样本时 P99 取第 99 个, 噪声大), 1000 是 P99 准确性与内存占用的平衡点 (8 bytes/sample × 1000 = 8KB)
+  - 改 ResilientSearchProvider 构造函数为必填参数: 破坏既有 ResilientSearchProviderTests (无 metrics), 用可空参数兼容
+  - MaxMs 仅基于 PrimarySuccess: 会丢失 Fallback 极端慢请求信息 (虽然 Fallback 走 PG 是预期, 但若 PG 也慢需告警)
+关联文件:
+  - backend/src/SakuraFilter.Search/MeiliSearchMetrics.cs (新建, 采集 + 聚合, Singleton)
+  - backend/src/SakuraFilter.Search/ResilientSearchProvider.cs (注入 MeiliSearchMetrics + 4 分支埋点)
+  - backend/src/SakuraFilter.Api/Services/PerfAlertClassifier.cs (加 MeiliRules 嵌套类 + ClassifyMeiliSeverity + BuildMeiliAlertContext + BuildMeiliAlertMarkdown)
+  - backend/src/SakuraFilter.Api/Services/PerfAlertService.cs (注入 MeiliSearchMetrics + AlertCenter, 加 EvaluateMeiliRulesAsync + EmitMeiliViaAlertCenterAsync)
+  - backend/src/SakuraFilter.Api/Endpoints/CommonEndpoints.cs (加 /api/admin/perf/meili/snapshot, RequireAuthorization Admin)
+  - backend/src/SakuraFilter.Api/Extensions/ServiceCollectionExtensions.cs (注册 MeiliSearchMetrics Singleton)
+  - backend/tests/SakuraFilter.Api.Tests/MeiliSearchMetricsTests.cs (新建, 11 用例)
+  - backend/tests/SakuraFilter.Api.Tests/PerfAlertClassifierTests.cs (加 9 用例 meili 规则)
+

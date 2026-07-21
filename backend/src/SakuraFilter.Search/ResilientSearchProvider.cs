@@ -19,17 +19,22 @@ public class ResilientSearchProvider : ISearchProvider
     private readonly ILogger<ResilientSearchProvider> _logger;
     private readonly ResiliencePipeline _pipeline;
     private volatile bool _primaryAvailable = true;
+    // v30-20: Meili 主路径性能指标采集 (Singleton, 通过 DI 注入)
+    //   WHY 可空: 测试场景 (ResilientSearchProviderTests) 不需要 metrics, 用 null 兜底
+    private readonly MeiliSearchMetrics? _metrics;
 
     public string Name => "resilient(meili→pg)";
 
     public ResilientSearchProvider(
         MeiliSearchProvider primary,
         PostgresSearchProvider fallback,
-        ILogger<ResilientSearchProvider> logger)
+        ILogger<ResilientSearchProvider> logger,
+        MeiliSearchMetrics? metrics = null)
     {
         _primary = primary;
         _fallback = fallback;
         _logger = logger;
+        _metrics = metrics;
 
         // Polly v8 弹性管道: timeout + retry + circuit breaker
         _pipeline = new ResiliencePipelineBuilder()
@@ -126,10 +131,16 @@ public class ResilientSearchProvider : ISearchProvider
 
     public async Task<SearchResult> SearchAsync(SearchRequest req, CancellationToken ct = default)
     {
+        // v30-20: 统一 Stopwatch 度量 ResilientSearchProvider.SearchAsync 总耗时
+        //   含 Meili 调用 + 降级切换时间, 用于 MeiliSearchMetrics 采集
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         if (!_primaryAvailable)
         {
             // 熔断中,直接走 PG
-            return await _fallback.SearchAsync(req, ct);
+            var result = await _fallback.SearchAsync(req, ct);
+            sw.Stop();
+            _metrics?.Record(MeiliSearchOutcome.Fallback, sw.Elapsed.TotalMilliseconds);
+            return result;
         }
 
         try
@@ -138,13 +149,18 @@ public class ResilientSearchProvider : ISearchProvider
                 async token => await _primary.SearchAsync(req, token),
                 ct);
 
-            // 成功时记录延迟 (生产可加 metric)
+            // v30-20: Meili 主路径成功,记录 PrimarySuccess 样本
+            sw.Stop();
+            _metrics?.Record(MeiliSearchOutcome.PrimarySuccess, sw.Elapsed.TotalMilliseconds);
             return result;
         }
         catch (Exception ex) when (ex is BrokenCircuitException or TimeoutException or OperationCanceledException)
         {
             _logger.LogWarning(ex, "Meili 搜索失败,降级到 PG 兜底");
-            return await _fallback.SearchAsync(req, ct);
+            var result = await _fallback.SearchAsync(req, ct);
+            sw.Stop();
+            _metrics?.Record(MeiliSearchOutcome.Fallback, sw.Elapsed.TotalMilliseconds);
+            return result;
         }
         catch (HttpRequestException ex) when (ex.InnerException is System.Net.Sockets.SocketException)
         {
@@ -153,12 +169,18 @@ public class ResilientSearchProvider : ISearchProvider
             //        重试无意义,直接标记降级让后续请求走 PG,避免每次都等 1s 超时
             _primaryAvailable = false;
             _logger.LogWarning(ex, "Meili 连接拒绝 (SocketException),立即降级到 PG 兜底");
-            return await _fallback.SearchAsync(req, ct);
+            var result = await _fallback.SearchAsync(req, ct);
+            sw.Stop();
+            _metrics?.Record(MeiliSearchOutcome.Fallback, sw.Elapsed.TotalMilliseconds);
+            return result;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Meili 搜索异常,降级到 PG 兜底");
-            return await _fallback.SearchAsync(req, ct);
+            var result = await _fallback.SearchAsync(req, ct);
+            sw.Stop();
+            _metrics?.Record(MeiliSearchOutcome.Fallback, sw.Elapsed.TotalMilliseconds);
+            return result;
         }
     }
 

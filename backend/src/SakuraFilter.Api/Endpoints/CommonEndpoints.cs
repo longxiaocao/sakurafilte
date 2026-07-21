@@ -61,6 +61,17 @@ public static class CommonEndpoints
             .RequireAuthorization("Admin")
             .WithOpenApi();
 
+        // v30-20: Meili 主路径性能快照 (P50/P95/P99 + FallbackRate)
+        //   WHY 独立端点: PerfMetrics 是全局 HTTP 指标, 不区分 Meili vs PG fallback,
+        //     MeiliSearchMetrics 独立采集搜索调用, 反映 Meili 真实性能
+        //   数据敏感性: 与 /api/perf 同类 (P50/P95/P99 运维数据), 必须 RequireAuthorization("Admin")
+        //   攻击场景: 攻击者读取 Meili P99 推断搜索服务负载, 选择最佳攻击时机
+        app.MapGet("/api/admin/perf/meili/snapshot", (MeiliSearchMetrics metrics) =>
+            Results.Ok(metrics.GetSnapshot()))
+            .WithSummary("Meili 主路径性能快照 (P50/P95/P99 + FallbackRate, 最近 1000 条样本)").WithName("PerfMeiliSnapshot")
+            .RequireAuthorization("Admin")
+            .WithOpenApi();
+
         // 前端性能埋点批量上报
         app.MapPost("/api/perf/ingest", (
             FrontendPerfBatch body,
