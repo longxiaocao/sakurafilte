@@ -1,0 +1,242 @@
+{
+  "test_time": "2026-07-21T20:47:59.902661+08:00",
+  "database": "sakurafilter_perf_tests",
+  "data_volume": {
+    "products": 950209,
+    "xrefs": 4751045,
+    "apps": 4751045
+  },
+  "config": {
+    "offsets": [
+      0,
+      10000,
+      100000,
+      500000,
+      900000
+    ],
+    "page_size": 20,
+    "rounds": 5,
+    "warmup": 2,
+    "keyset_last_id_offset": 500000,
+    "scenarios": [
+      {
+        "name": "baseline",
+        "desc": "无关键词过滤 (仅 is_published + EXISTS xref), 测纯 OFFSET 深度影响",
+        "q_tokens": []
+      },
+      {
+        "name": "q_oil",
+        "desc": "q='oil' (高频词, 1M 数据 25% 命中, v28-3 验证), 测有 q_match CTE 时 OFFSET 深度影响",
+        "q_tokens": [
+          "oil"
+        ]
+      }
+    ]
+  },
+  "scenarios": [
+    {
+      "scenario": "baseline",
+      "desc": "无关键词过滤 (仅 is_published + EXISTS xref), 测纯 OFFSET 深度影响",
+      "q_tokens": [],
+      "total": 948803,
+      "count_ms": 2408.5,
+      "offset_results": [
+        {
+          "rounds": 5,
+          "rows_returned": 20,
+          "min_ms": 4893.11,
+          "max_ms": 5091.43,
+          "mean_ms": 5028.48,
+          "median_ms": 5067.12,
+          "p95_ms": 5087.02,
+          "p99_ms": 5090.54,
+          "all_ms": [
+            4893.11,
+            5091.43,
+            5069.38,
+            5067.12,
+            5021.37
+          ],
+          "offset": 0,
+          "page_size": 20
+        },
+        {
+          "rounds": 5,
+          "rows_returned": 20,
+          "min_ms": 4889.9,
+          "max_ms": 5024.84,
+          "mean_ms": 4925.42,
+          "median_ms": 4897.3,
+          "p95_ms": 5004.26,
+          "p99_ms": 5020.72,
+          "all_ms": [
+            5024.84,
+            4921.94,
+            4893.1,
+            4897.3,
+            4889.9
+          ],
+          "offset": 10000,
+          "page_size": 20
+        },
+        {
+          "rounds": 5,
+          "rows_returned": 20,
+          "min_ms": 4885.41,
+          "max_ms": 5188.28,
+          "mean_ms": 5036.57,
+          "median_ms": 5044.11,
+          "p95_ms": 5162.06,
+          "p99_ms": 5183.04,
+          "all_ms": [
+            5007.89,
+            4885.41,
+            5044.11,
+            5057.16,
+            5188.28
+          ],
+          "offset": 100000,
+          "page_size": 20
+        },
+        {
+          "rounds": 5,
+          "rows_returned": 20,
+          "min_ms": 5130.18,
+          "max_ms": 5257.93,
+          "mean_ms": 5204.17,
+          "median_ms": 5243.54,
+          "p95_ms": 5255.24,
+          "p99_ms": 5257.39,
+          "all_ms": [
+            5257.93,
+            5130.18,
+            5144.7,
+            5244.48,
+            5243.54
+          ],
+          "offset": 500000,
+          "page_size": 20
+        },
+        {
+          "rounds": 5,
+          "rows_returned": 20,
+          "min_ms": 4953.56,
+          "max_ms": 5202.87,
+          "mean_ms": 5078.04,
+          "median_ms": 5054.57,
+          "p95_ms": 5190.1,
+          "p99_ms": 5200.32,
+          "all_ms": [
+            4953.56,
+            5040.2,
+            5054.57,
+            5202.87,
+            5139.01
+          ],
+          "offset": 900000,
+          "page_size": 20
+        }
+      ],
+      "keyset_results": [
+        {
+          "rounds": 5,
+          "rows_returned": 20,
+          "min_ms": 564.02,
+          "max_ms": 591.8,
+          "mean_ms": 577.52,
+          "median_ms": 570.36,
+          "p95_ms": 591.79,
+          "p99_ms": 591.8,
+          "all_ms": [
+            569.66,
+            591.75,
+            591.8,
+            570.36,
+            564.02
+          ],
+          "last_id": 500001,
+          "page_size": 20
+        }
+      ]
+    },
+    {
+      "scenario": "q_oil",
+      "desc": "q='oil' (高频词, 1M 数据 25% 命中, v28-3 验证), 测有 q_match CTE 时 OFFSET 深度影响",
+      "q_tokens": [
+        "oil"
+      ],
+      "total": 236778,
+      "count_ms": 4561.93,
+      "offset_results": [
+        {
+          "rounds": 5,
+          "rows_returned": 20,
+          "min_ms": 2357.54,
+          "max_ms": 2547.28,
+          "mean_ms": 2425.14,
+          "median_ms": 2421.68,
+          "p95_ms": 2522.35,
+          "p99_ms": 2542.29,
+          "all_ms": [
+            2547.28,
+            2422.63,
+            2421.68,
+            2376.6,
+            2357.54
+          ],
+          "offset": 0,
+          "page_size": 20
+        },
+        {
+          "rounds": 5,
+          "rows_returned": 20,
+          "min_ms": 2344.96,
+          "max_ms": 2383.37,
+          "mean_ms": 2367.32,
+          "median_ms": 2371.09,
+          "p95_ms": 2381.71,
+          "p99_ms": 2383.04,
+          "all_ms": [
+            2362.09,
+            2344.96,
+            2375.1,
+            2383.37,
+            2371.09
+          ],
+          "offset": 10000,
+          "page_size": 20
+        },
+        {
+          "rounds": 5,
+          "rows_returned": 20,
+          "min_ms": 2412.6,
+          "max_ms": 2488.26,
+          "mean_ms": 2443.39,
+          "median_ms": 2437.56,
+          "p95_ms": 2479.7,
+          "p99_ms": 2486.55,
+          "all_ms": [
+            2488.26,
+            2412.6,
+            2433.09,
+            2437.56,
+            2445.44
+          ],
+          "offset": 100000,
+          "page_size": 20
+        },
+        {
+          "offset": 500000,
+          "skipped": true,
+          "reason": "offset >= total (236778)"
+        },
+        {
+          "offset": 900000,
+          "skipped": true,
+          "reason": "offset >= total (236778)"
+        }
+      ],
+      "keyset_results": []
+    }
+  ]
+}

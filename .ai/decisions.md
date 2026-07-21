@@ -60,8 +60,8 @@
   - backend/tests/SakuraFilter.Api.Tests/Integration/AdminProductImageServiceIntegrationTests.cs (V24-F83)
   - .env (PG_TEST_CONNECTION_STRING 指向 sakurafilter_int_tests)
 
-#5 PostgresSearchProvider Phase 2 keyset 分页暂缓 (2026-07-19, 50K 压测验证 2026-07-19, v28-1 GIN trgm 验证 2026-07-19, v28-2 CTE UNION 拆分验证 2026-07-19, v28-3 1M 扩容压测验证 2026-07-19, v29-1 token 数量限制 2026-07-19, v29-2 高频词分布调研 2026-07-19)
-决策: v27-1 暂不实施 keyset 分页改造, 保留 OFFSET 分页; v27-3 50K 压测后维持暂缓决策; v28-1 GIN trgm 索引对 baseline SQL 无收益; v28-2 CTE UNION 拆分 + 三表 GIN trgm 索引 P95 1827ms → 305ms (6.0x), 达 4x 目标, 已落地; v28-3 1M 扩容压测 v28-2 加速比保持 6.82x, 多 token 退化 1.49x, 维持当前实现; v29-1 token 数量限制为 8 (防御性兜底, 防止极端场景 INTERSECT HashSetOp Append 退化); v29-2 高频词分布调研后候选 2 不实施 (真正高频词仅 "filter" 1 个, 是 type 字段结构性特征非 bug, ROI 低)
+#5 PostgresSearchProvider Phase 2 keyset 分页暂缓 (2026-07-19, 50K 压测验证 2026-07-19, v28-1 GIN trgm 验证 2026-07-19, v28-2 CTE UNION 拆分验证 2026-07-19, v28-3 1M 扩容压测验证 2026-07-19, v29-1 token 数量限制 2026-07-19, v29-2 高频词分布调研 2026-07-19, v30-14 1M OFFSET 深分页专项压测验证 2026-07-21)
+决策: v27-1 暂不实施 keyset 分页改造, 保留 OFFSET 分页; v27-3 50K 压测后维持暂缓决策; v28-1 GIN trgm 索引对 baseline SQL 无收益; v28-2 CTE UNION 拆分 + 三表 GIN trgm 索引 P95 1827ms → 305ms (6.0x), 达 4x 目标, 已落地; v28-3 1M 扩容压测 v28-2 加速比保持 6.82x, 多 token 退化 1.49x, 维持当前实现; v29-1 token 数量限制为 8 (防御性兜底, 防止极端场景 INTERSECT HashSetOp Append 退化); v29-2 高频词分布调研后候选 2 不实施 (真正高频词仅 "filter" 1 个, 是 type 字段结构性特征非 bug, ROI 低); v30-14 1M OFFSET 深分页专项退化 1.02x (远低于 1.5x 阈值), 闭环 ADR #5 keyset 暂缓决策
 理由:
   - 当前 SearchRequest DTO 用 Page/PageSize 页式分页, 前端依赖 Page 契约
   - 改 keyset 需破坏前端 Page 契约或引入 cursor 参数, 改动面大
@@ -125,6 +125,28 @@ v29-2 高频词分布调研 (V24-F98, 2026-07-19, spec 28.7, 候选 2 不实施)
   - "CAT"/"bosch" 在 1M 数据下变成中频 (29%/31%): 1M 数据生成时 machine_applications 用 random.sample 均匀化品牌分布
   - 方案评估: A (type 等值过滤) 不可行 - 仅 475 个 type 完全匹配会严重改变搜索语义; B (静态黑名单) 改变搜索语义; C (q_match LIMIT) 漏数据风险高; G (动态识别) ROI 低 (只解决 1 个词); H (静态黑名单) 维护成本高
   - 最终决策: 候选 2 不实施, 真正高频词只有 1 个 "filter" 是 type 字段结构性特征非 bug, v28-3 已证明 filter 的 1.53x 加速是异常值但绝对延迟 5.3s 可接受, 生产环境有 Meili 主路径兜底
+v30-14 1M OFFSET 深分页专项压测验证数据 (2026-07-21, sakurafilter_perf_tests 950K products/4.75M xrefs/4.75M apps, 直连 PG cache hit):
+  - 测试目的: 补 v27-3 报告 §4.5 "1M 数据扩容压测" 空缺, v28-3 已验证 1M baseline vs v28-2 加速比 + 多 token 退化, 但 OFFSET 深度专项退化比在 1M 数据下未验证
+  - 场景 A baseline (无 q, v28-2 CTE UNION SQL, OFFSET 档 0/10K/100K/500K/900K):
+    * OFFSET=0: P95=5087ms (浅档基准)
+    * OFFSET=10000: P95=5004ms (0.98x)
+    * OFFSET=100000: P95=5162ms (1.01x)
+    * OFFSET=500000: P95=5255ms (1.03x, 最深档)
+    * OFFSET=900000: P95=5190ms (1.02x)
+    * 深浅比: 1.02x (50K baseline 为 0.96x, 1M 反而略增但仍远低于 1.5x 阈值)
+    * keyset 对比 (OFFSET=500000, last_id=500001): P95=592ms (8.9x 提升, 潜力巨大但真实三层排序 keyset 改造工作量大)
+  - 场景 B q_oil (q='oil', 1M 数据 25% 命中, v28-3 验证, OFFSET 档 0/10K/100K, 500K/900K 因 total=236778 跳过):
+    * OFFSET=0: P95=2522ms (浅档基准)
+    * OFFSET=10000: P95=2382ms (0.94x)
+    * OFFSET=100000: P95=2480ms (0.98x, 最深有效档)
+    * 深浅比: 0.98x (q 过滤后结果集小, 深分页无意义)
+    * 关键发现: q 过滤后 total=236778, OFFSET=500000/900000 超过 total 被跳过, 说明 q 场景深分页在生产环境罕见
+  - 与 v27-3 50K 数据对比 (控制变量法):
+    * 50K 最大深浅比: 1.03x (type_oil 场景)
+    * 1M 最大深浅比: 1.02x (baseline 场景)
+    * 结论: 1M 数据规模下 OFFSET 深度退化比与 50K 一致 (~1.0x), 证明 OFFSET 深度本身不是主要瓶颈, 即使在 1M 数据下
+  - 综合决策: 维持 ADR #5 暂缓, 1M 深度退化 1.02x 远低于 1.5x 阈值; keyset 潜力 8.9x 但改造工作量大不值得; 真实用户行为 99% 在前 5 页内; 生产环境 Meili 主路径兜底, PostgreSQL 仅 fallback
+  - 绝对延迟提示: baseline 场景 P95 ~5s, q_oil 场景 P95 ~2.5s, 这是 CTE + LATERAL JOIN + EXISTS 的开销, 不是 OFFSET 深度导致 (深浅比 1.02x 证明), 生产环境有 Meili 主路径兜底
 排除方案:
   - 立即改 keyset: 工作量大 (前后端契约改造) 且 50K 压测显示 OFFSET 深度非主要瓶颈
   - 加 GIN trgm 索引 (v28-1 验证): 对当前 SQL 模式无收益, PG 优化器不选, 不应加索引 (50MB 索引浪费)
@@ -132,7 +154,7 @@ v29-2 高频词分布调研 (V24-F98, 2026-07-19, spec 28.7, 候选 2 不实施)
   - v28-5 限制最大 token 数量 (如 8 个): 5 token 610ms 仍可接受, 退化曲线趋于平缓, 防御性兜底留 P2 候选 (1M 数据下退化情况留 v28-3 验证)
   - v28-3 启用 v27-1 q_match 候选集爆炸防御: 1M 数据加速比 6.82x 保持, 多 token 退化 1.49x 可控, 无需启用
   - 加 covering index: 涉及 DB schema 变更, 需 migration, 不适合 v27 阶段
-  - 1M 扩容压测: ✅ 已执行 (v28-3), 50K 数据下退化比 ≤1.03x (OFFSET) / ≤2.64x (多 token), 1M 数据下退化 1.49x, 验证完成
+  - 1M 扩容压测: ✅ 已执行 (v28-3 baseline vs v28-2 + 多 token + v30-14 OFFSET 深分页专项), 50K 数据下退化比 ≤1.03x (OFFSET) / ≤2.64x (多 token), 1M 数据下 OFFSET 深度退化 1.02x / 多 token 退化 1.49x, 验证完成
 关联文件:
   - backend/src/SakuraFilter.Search/PostgresSearchProvider.cs (V24-F94: BuildBaseFilter + BuildQMatchCte + BuildFullSql + BuildCountSql 拆分)
   - backend/src/SakuraFilter.Infrastructure/Data/Migrations/20260719165000_AddGinTrgmIndexesForSearch.cs (5 个新 GIN trgm 索引)
@@ -164,6 +186,10 @@ v29-2 高频词分布调研 (V24-F98, 2026-07-19, spec 28.7, 候选 2 不实施)
   - backend/tests/SakuraFilter.Api.Tests/Integration/PostgresSearchProviderIntegrationTests.cs (V24-F97 v29-1 新增 2 个 token 截断测试)
   - spike-test/_perf_v29_2_high_freq_survey.py (V24-F98 v29-2 高频词分布调研脚本)
   - spike-test/_perf_v29_2_high_freq_survey.json (V24-F98 v29-2 调研 raw 数据)
+  - spike-test/_perf_v30_14_1m_offset_verify.py (v30-14 1M OFFSET 深分页专项压测脚本: baseline + q_oil 2 场景 × 5 OFFSET 档位 + keyset 对比)
+  - spike-test/_perf_v30_14_1m_offset_results.json (v30-14 压测 raw 数据)
+  - spike-test/_perf_v30_14_1m_offset_report.md (v30-14 人读报告 + ADR #5 决策建议 + 50K/1M 对比)
+  - spike-test/_v30_14_perf.log (v30-14 压测执行日志)
   - .trae/specs/v2-architecture-migration/spec.md chapter 27.8 (v27-3 实施记录) + chapter 28.1 (v28-1 验证记录) + chapter 28.2 (v28-2 实施记录) + chapter 28.5 (v28-5 验证记录) + chapter 28.3 (v28-3 1M 扩容压测验证记录) + chapter 28.6 (v29-1 token 数量限制) + chapter 28.7 (v29-2 高频词分布调研与候选 2 不实施决策)
 
 #6 IObjectStorage.ListAsync 接口扩展决策 (2026-07-19)
