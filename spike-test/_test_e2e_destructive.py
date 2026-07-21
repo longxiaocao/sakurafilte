@@ -1295,8 +1295,9 @@ def test_backend_deep_water(token, login_resp):
             record("后端深水区", "健康检查-ready", "FAIL",
                    "200 OK", f"status={resp2.status_code}")
 
-        # 11.3 /api/perf (性能指标)
-        resp3 = requests.get(f"{BACKEND}/api/perf", timeout=10)
+        # 11.3 /api/perf (性能指标) v30-19: 加 RequireAuthorization, 需 X-Admin-Token
+        resp3 = requests.get(f"{BACKEND}/api/perf", timeout=10,
+                             headers={"X-Admin-Token": "dev-admin-token-rotate-in-prod-MZK4R9P3X6V2N7Q1L5F0B8H3C"})
         if resp3.status_code == 200:
             data3 = resp3.json()
             has_p50 = "p50Ms" in data3

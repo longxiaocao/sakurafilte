@@ -95,8 +95,10 @@ def _norm_keys(data):
 
 
 def test_p55_perf_snapshot_endpoint():
-    """P5.5.1: GET /api/perf 返回 PerfSnapshot (P50/P95/P99/ErrorRate)"""
-    code, body = http("GET", "/api/perf")
+    """P5.5.1: GET /api/perf 返回 PerfSnapshot (P50/P95/P99/ErrorRate)
+    v30-19: /api/perf 加 RequireAuthorization("Admin"), 需带 X-Admin-Token
+    """
+    code, body = http("GET", "/api/perf", headers={"X-Admin-Token": ADMIN_TOKEN})
     assert code == 200, f"期望 200, 实际 {code}: {body}"
     data = _norm_keys(json.loads(body))
     for f in ("sampleCount", "totalRequests", "errorRequests", "errorRate",
@@ -186,8 +188,10 @@ def test_p55_middleware_excludes_perf():
 
 # ========== P5.5.8 跑请求后 P95 > 0 ==========
 def test_p55_p95_increases_after_traffic():
-    """P5.5.8: 跑 20+ 请求后, /api/perf 的 SampleCount 增加"""
-    code, body0 = http("GET", "/api/perf")
+    """P5.5.8: 跑 20+ 请求后, /api/perf 的 SampleCount 增加
+    v30-19: /api/perf 加 RequireAuthorization("Admin"), 需带 X-Admin-Token
+    """
+    code, body0 = http("GET", "/api/perf", headers={"X-Admin-Token": ADMIN_TOKEN})
     assert code == 200, f"首次 /api/perf 失败: {code}"
     snap0 = _norm_keys(json.loads(body0))
     # 跑 20 次搜索请求 (admin 端点, 不需 token 因为 /api/search 不在 admin 前缀)
@@ -197,7 +201,7 @@ def test_p55_p95_increases_after_traffic():
         # 用 /api/products/{fake} 触发 404 路径, 计入 perf 统计
         http("GET", "/api/products/__nonexistent_oem__")
     time.sleep(0.5)
-    code, body1 = http("GET", "/api/perf")
+    code, body1 = http("GET", "/api/perf", headers={"X-Admin-Token": ADMIN_TOKEN})
     assert code == 200, f"末次 /api/perf 失败: {code}"
     snap1 = _norm_keys(json.loads(body1))
     assert snap1["totalRequests"] > snap0["totalRequests"], (

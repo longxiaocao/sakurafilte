@@ -82,7 +82,7 @@ test "ETL 历史" GET "/api/admin/etl/history?limit=5" "" "-H \"X-Admin-Token: d
 # 11. Auth Status
 test "Auth Token 状态" GET "/api/admin/auth/status" "" "-H \"X-Admin-Token: dev-admin-token-rotate-in-prod-MZK4R9P3X6V2N7Q1L5F0B8H3C\""
 
-# 12. 性能快照
-test "性能快照" GET "/api/perf" "" ""
+# 12. 性能快照 (v30-19: /api/perf 加 RequireAuthorization, 需 X-Admin-Token)
+test "性能快照" GET "/api/perf" "" "-H \"X-Admin-Token: dev-admin-token-rotate-in-prod-MZK4R9P3X6V2N7Q1L5F0B8H3C\""
 
 cat $REPORT

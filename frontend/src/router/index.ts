@@ -200,7 +200,7 @@ const routes: RouteRecordRaw[] = [
   },
   // ===== P5.5+: 后端性能监控面板 =====
   //   P50/P95/P99/ErrorRate + 健康探针 + Token 轮转状态
-  //   调 /api/perf (公开) + /api/admin/auth/status (需 token) + /health/* (公开)
+  //   调 /api/perf (v30-19 改需 token) + /api/admin/auth/status (需 token) + /health/* (公开)
   {
     path: '/admin/perf',
     name: 'AdminPerf',

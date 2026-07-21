@@ -104,8 +104,8 @@ $r = Test-Endpoint "ETL dry-run (no file, expect 404)" "POST" "/api/admin/etl/tr
 $r = Test-Endpoint "ETL history" "GET" "/api/admin/etl/history?limit=3" "" @{ "X-Admin-Token" = $adminToken }
 $r = Test-Endpoint "ETL history aggregate" "GET" "/api/admin/etl/history/aggregate" "" @{ "X-Admin-Token" = $adminToken }
 
-# 10. Perf
-$r = Test-Endpoint "Perf snapshot" "GET" "/api/perf" "" @{}
+# 10. Perf (v30-19: /api/perf 加 RequireAuthorization, 需 X-Admin-Token)
+$r = Test-Endpoint "Perf snapshot" "GET" "/api/perf" "" @{ "X-Admin-Token" = $adminToken }
 
 $reportLines -join "`n" | Out-File -FilePath "d:\projects\sakurafilter\spike-test\smoke-test-report.md" -Encoding utf8
 Write-Host "=== DONE ==="

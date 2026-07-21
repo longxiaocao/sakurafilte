@@ -12,21 +12,29 @@
 
 ---
 
-#1 SSE 401 修复方案选择 (2026-07-18, v30-17 SSE 鉴权修复 2026-07-21, v30-18 多端点鉴权批量修复 2026-07-22)
-决策: 前端改用 fetch + ReadableStream 替代 EventSource, 不改后端 (V24-F78); v30-17 后端 SSE 端点加 RequireAuthorization("Admin") 修复 P0 安全漏洞 (未认证可访问 ETL 进度); v30-18 批量修复 6 个同类漏洞端点 (/api/admin/perf/alerts + /api/admin/auth/status + /api/etl/import + /api/etl/status + /api/etl/import-xrefs + /api/etl/import-apps)
-理由: EventSource API 不支持自定义 Header, 无法携带 JWT。fetch + ReadableStream 可携带 Authorization Bearer, 与现有 axios 拦截器逻辑一致 (复用 buildAuthHeaders), 无需后端改动。v30-17/v30-18 后端鉴权修复: V24-F78 时期多个端点脱离 group 鉴权 (为兼容 EventSource 或脚本触发无鉴权), ADR #1 已改用 fetch + Bearer, 后端鉴权可恢复; 前端 useEtlProgress.ts L201-209 已带 Bearer, 修复不破坏前端
+#1 SSE 401 修复方案选择 (2026-07-18, v30-17 SSE 鉴权修复 2026-07-21, v30-18 多端点鉴权批量修复 2026-07-22, v30-19 /api/perf 鉴权修复 2026-07-22)
+决策: 前端改用 fetch + ReadableStream 替代 EventSource, 不改后端 (V24-F78); v30-17 后端 SSE 端点加 RequireAuthorization("Admin") 修复 P0 安全漏洞 (未认证可访问 ETL 进度); v30-18 批量修复 6 个同类漏洞端点 (/api/admin/perf/alerts + /api/admin/auth/status + /api/etl/import + /api/etl/status + /api/etl/import-xrefs + /api/etl/import-apps); v30-19 修复 /api/perf 公开访问泄漏 P50/P95/P99 运维数据 (与 /api/admin/perf/alerts 同类敏感数据)
+理由: EventSource API 不支持自定义 Header, 无法携带 JWT。fetch + ReadableStream 可携带 Authorization Bearer, 与现有 axios 拦截器逻辑一致 (复用 buildAuthHeaders), 无需后端改动。v30-17/v30-18/v30-19 后端鉴权修复: V24-F78 时期多个端点脱离 group 鉴权 (为兼容 EventSource 或脚本触发无鉴权), ADR #1 已改用 fetch + Bearer, 后端鉴权可恢复; 前端 useEtlProgress.ts L201-209 + AdminPerfView.vue L49 已带 Bearer, 修复不破坏前端
 排除方案:
   - 后端 SSE 支持 query token (?token=xxx): token 会泄漏到访问日志/Referer/nginx 日志, 安全风险高
   - 后端 SSE 支持 cookie auth: 需后端改动 + 与 JWT 无状态架构冲突, 改动面大
   - SSE 端点加 RequireRateLimiting("etl"): SSE 长连接限流策略需单独评估 (QPS vs 并发连接), 留 P2
   - /api/perf/ingest 加 RequireAuthorization: P5.5 设计 sendBeacon 无法带 token, 保持无鉴权 + 限流 + 大小限制 (100 条/批) 防滥用
+  - /metrics 加 RequireAuthorization: Prometheus 抓取需无鉴权, 通过 nginx 内部网络隔离 (部署侧决策)
+  - RequireHttpsMetadata=true: 生产环境 nginx 做 TLS 终结, 应用层 false 是合理设计, 不修复
+  - /api/info 版本号脱敏: 版本号公开是常见做法 (package.json 也有), 不修复
   - FallbackPolicy 全局默认鉴权: 改动面大, 需逐个标注公开端点, 留 P2
 关联文件:
   - frontend/src/composables/useEtlProgress.ts
   - frontend/src/utils/http.ts (新增 buildAuthHeaders 导出)
+  - frontend/src/router/index.ts (v30-19: L203 注释更新 /api/perf 改需 token)
   - backend/src/SakuraFilter.Api/Endpoints/AdminEtlEndpoints.cs (v30-17: L212 app.MapGet 末尾加 .RequireAuthorization("Admin"))
-  - backend/src/SakuraFilter.Api/Endpoints/CommonEndpoints.cs (v30-18: L52 /api/admin/perf/alerts + L147 /api/admin/auth/status 加 .RequireAuthorization("Admin"))
+  - backend/src/SakuraFilter.Api/Endpoints/CommonEndpoints.cs (v30-18: L52 /api/admin/perf/alerts + L147 /api/admin/auth/status 加 .RequireAuthorization("Admin"); v30-19: L49 /api/perf 加 .RequireAuthorization("Admin"))
   - backend/src/SakuraFilter.Api/Endpoints/EtlEndpoints.cs (v30-18: 4 个 /api/etl/* 端点全部加 .RequireAuthorization("Admin"))
+  - spike-test/_test_p55_p71_e2e.py (v30-19: L101/L194/L204 调 /api/perf 加 X-Admin-Token)
+  - spike-test/smoke-test.sh (v30-19: L86 调 /api/perf 加 X-Admin-Token)
+  - spike-test/smoke-test.ps1 (v30-19: L108 调 /api/perf 加 X-Admin-Token)
+  - spike-test/_test_e2e_destructive.py (v30-19: L1299 调 /api/perf 加 X-Admin-Token)
 
 #2 V24-F83 23505 唯一约束并发测试方案 (2026-07-19)
 决策: 用 raw SQL 两个并行 NpgsqlTransaction 触发 23505, 不用 EF Core 并发

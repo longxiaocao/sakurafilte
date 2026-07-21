@@ -38,9 +38,15 @@ public static class CommonEndpoints
     private static IEndpointRouteBuilder MapPerfEndpoints(this IEndpointRouteBuilder app)
     {
         // 性能埋点快照
+        // v30-19 P0: 加 RequireAuthorization("Admin"), 原公开访问泄漏 P50/P95/P99 运维数据
+        //   WHY: /api/perf 返回 PerfMetrics.GetSnapshot() 含 P50/P95/P99 + 样本数,
+        //     与 v30-18 修复的 /api/admin/perf/alerts 同类敏感数据 (性能告警也基于这些指标)
+        //   攻击场景: 攻击者读取性能快照推断系统负载, 选择最佳攻击时机 (DDoS/QPS 压测)
+        //   前端兼容: AdminPerfView.vue L49 用 http.get('/perf') 带 Bearer (axios 拦截器自动注入), 不破坏
         app.MapGet("/api/perf", (PerfMetrics metrics) =>
             Results.Ok(metrics.GetSnapshot()))
             .WithSummary("性能埋点快照 (P50/P95/P99, 最近 1000 条样本)").WithName("PerfSnapshot")
+            .RequireAuthorization("Admin")
             .WithOpenApi();
 
         // 性能告警列表
