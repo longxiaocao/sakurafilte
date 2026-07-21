@@ -38,7 +38,7 @@ test.describe('P1-E2E-3 公开搜索流程 (用户视角)', () => {
 
   test('2. 公开产品详情页加载 (已知 OEM)', async ({ page }) => {
     // P0505921 是 spike-test 库中的公开产品 (Air filter)
-    await page.goto(`${BASE}/product/P0505921`, { waitUntil: 'networkidle', timeout: 15000 })
+    await page.goto(`${BASE}/product/P0505921`, { waitUntil: 'domcontentloaded', timeout: 15000 })
     await page.waitForTimeout(1500)
     // 验证不白屏
     const bodyText = await page.locator('body').innerText()
@@ -49,7 +49,7 @@ test.describe('P1-E2E-3 公开搜索流程 (用户视角)', () => {
   })
 
   test('3. 公开搜索页 8 字段多框 (PublicSearch)', async ({ page }) => {
-    await page.goto(`${BASE}/public/search`, { waitUntil: 'networkidle', timeout: 15000 })
+    await page.goto(`${BASE}/public/search`, { waitUntil: 'domcontentloaded', timeout: 15000 })
     // 等待 8 字段表单加载
     await page.waitForSelector('h1', { timeout: 10000 })
     await page.waitForSelector('.el-input', { timeout: 10000 })
@@ -65,7 +65,7 @@ test.describe('P1-E2E-3 公开搜索流程 (用户视角)', () => {
   })
 
   test('4. 主题切换功能 (浅色/深色)', async ({ page }) => {
-    await page.goto(`${BASE}/search`, { waitUntil: 'networkidle', timeout: 15000 })
+    await page.goto(`${BASE}/search`, { waitUntil: 'domcontentloaded', timeout: 15000 })
     // 等待主题切换按钮
     const themeBtn = page.locator('button:has-text("主题切换"), button[title*="主题"]')
     await themeBtn.waitFor({ timeout: 5000 }).catch(() => null)
@@ -81,7 +81,7 @@ test.describe('P1-E2E-3 公开搜索流程 (用户视角)', () => {
   })
 
   test('5. 导航栏跳转 (搜索 ↔ 后台)', async ({ page }) => {
-    await page.goto(`${BASE}/search`, { waitUntil: 'networkidle', timeout: 15000 })
+    await page.goto(`${BASE}/search`, { waitUntil: 'domcontentloaded', timeout: 15000 })
     // 等待导航栏
     await page.waitForSelector('nav, header', { timeout: 10000 })
     // 点击"产品搜索"导航

@@ -96,7 +96,7 @@ test.describe('V2 Task 5.3.5: V2 视觉回归基线', () => {
 
   test('1. V2 聚合搜索页视觉基线', async ({ page }) => {
     // WHY 聚合搜索: V2 新增页面, 需建立视觉基线
-    await page.goto(`${BASE}/aggregate-search`, { waitUntil: 'networkidle', timeout: 15000 })
+    await page.goto(`${BASE}/aggregate-search`, { waitUntil: 'domcontentloaded', timeout: 15000 })
     await page.waitForSelector('.el-input, .el-empty, body', { timeout: 10000 }).catch(() => null)
     await page.waitForTimeout(500)
     await compareVisual(page, 'v2-aggregate-search.png')
@@ -105,7 +105,7 @@ test.describe('V2 Task 5.3.5: V2 视觉回归基线', () => {
   test('2. V2 OEM 3 排序管理页视觉基线', async ({ page }) => {
     // WHY XrefReorder: V2 Task 2.2 新增页面, 需建立视觉基线
     await injectAdminToken(page)
-    await page.goto(`${BASE}/admin/xrefs/reorder`, { waitUntil: 'networkidle', timeout: 15000 })
+    await page.goto(`${BASE}/admin/xrefs/reorder`, { waitUntil: 'domcontentloaded', timeout: 15000 })
     await page.waitForSelector('.el-table, .el-list, ul, body', { timeout: 10000 }).catch(() => null)
     await page.waitForTimeout(500)
     await compareVisual(page, 'v2-admin-xref-reorder.png')
@@ -117,7 +117,7 @@ test.describe('V2 Task 5.3.5: V2 视觉回归基线', () => {
     //   - 主图/详情图分层 (slot=1 主图按 OEM 3 命名, slot=2-6 详情图按 MR.1)
     //   - 需建立新视觉基线 (旧 AdminProductForm 截图已失效)
     await injectAdminToken(page)
-    await page.goto(`${BASE}/admin/products/new`, { waitUntil: 'networkidle', timeout: 15000 })
+    await page.goto(`${BASE}/admin/products/new`, { waitUntil: 'domcontentloaded', timeout: 15000 })
     await page.waitForSelector('.el-form, form, body', { timeout: 10000 }).catch(() => null)
     await page.waitForTimeout(500)
     await compareVisual(page, 'v2-admin-product-form.png')
@@ -129,7 +129,7 @@ test.describe('V2 Task 5.3.5: V2 视觉回归基线', () => {
     //   - 此测试为 V2 Razor SSR 渲染的产品详情页建立新基线
     //   注: 访问旧 URL /product/{oem} 会 301 到新 SEO URL, 这里直接访问新 URL
     const seoUrl = `${BASE}/products/air-filter-000001/premium/bosch/f0001`
-    await page.goto(seoUrl, { waitUntil: 'networkidle', timeout: 15000 })
+    await page.goto(seoUrl, { waitUntil: 'domcontentloaded', timeout: 15000 })
     await page.waitForSelector('.el-collapse-item, .el-empty, body', { timeout: 10000 }).catch(() => null)
     await page.waitForTimeout(500)
     await compareVisual(page, 'v2-public-product-seo.png')

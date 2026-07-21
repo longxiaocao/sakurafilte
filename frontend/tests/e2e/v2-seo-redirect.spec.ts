@@ -152,7 +152,7 @@ test.describe('V2 Task 5.3.4: SEO URL 重定向 + Razor SSR + Vue mount', () => 
   test('7. 聚合搜索页加载 + Vue mount (AggregateSearchView)', async ({ page }) => {
     // WHY 聚合搜索: V2 Task 5.3.4 要求验证 AggregateSearchView 的 Vue mount
     //   聚合搜索是 V2 新增页面, 支持多维度筛选 + 高亮显示
-    await page.goto(`${BASE}/aggregate-search`, { waitUntil: 'networkidle', timeout: 15000 })
+    await page.goto(`${BASE}/aggregate-search`, { waitUntil: 'domcontentloaded', timeout: 15000 })
 
     // 验证不白屏
     const bodyText = await page.locator('body').innerText()
@@ -176,7 +176,7 @@ test.describe('V2 Task 5.3.4: SEO URL 重定向 + Razor SSR + Vue mount', () => 
       localStorage.setItem('sakura_admin_token', token)
     }, ADMIN_TOKEN)
 
-    await page.goto(`${BASE}/admin/products/new`, { waitUntil: 'networkidle', timeout: 15000 })
+    await page.goto(`${BASE}/admin/products/new`, { waitUntil: 'domcontentloaded', timeout: 15000 })
     await page.waitForSelector('.el-form, form', { timeout: 10000 })
 
     // 查找 MR.1 输入框 (V2 Task 1.1 新增)
@@ -212,7 +212,7 @@ test.describe('V2 Task 5.3.4: SEO URL 重定向 + Razor SSR + Vue mount', () => 
       localStorage.setItem('sakura_admin_token', token)
     }, ADMIN_TOKEN)
 
-    await page.goto(`${BASE}/admin/xrefs/reorder`, { waitUntil: 'networkidle', timeout: 15000 })
+    await page.goto(`${BASE}/admin/xrefs/reorder`, { waitUntil: 'domcontentloaded', timeout: 15000 })
 
     // 验证不白屏
     const bodyText = await page.locator('body').innerText()

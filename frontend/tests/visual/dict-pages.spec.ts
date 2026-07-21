@@ -55,7 +55,7 @@ for (const dict of DICTS) {
     }, ADMIN_TOKEN)
 
     // 2. 打开页面
-    await page.goto(`${BASE}${dict.path}`, { waitUntil: 'networkidle', timeout: 15000 })
+    await page.goto(`${BASE}${dict.path}`, { waitUntil: 'domcontentloaded', timeout: 15000 })
 
     // 3. 等自定义表格渲染 (.dict-head 表头 + .dict-row 数据行)
     //   P0-E2E-1 修复: 前端用自定义 div grid 而非 el-table, 选择器改为 .dict-row

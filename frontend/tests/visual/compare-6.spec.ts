@@ -26,7 +26,7 @@ test('P4.3 产品对比页 (P3.5) 视觉回归', async ({ page }) => {
   }, ADMIN_TOKEN)
 
   // 6 个产品 ID (需后端已导入 ≥ 6 个产品)
-  await page.goto(`${BASE}/admin/compare?ids=1,2,3,4,5,6`, { waitUntil: 'networkidle', timeout: 15000 })
+  await page.goto(`${BASE}/admin/compare?ids=1,2,3,4,5,6`, { waitUntil: 'domcontentloaded', timeout: 15000 })
   await page.waitForSelector('.compare-grid', { timeout: 10000 })
   await page.waitForTimeout(500)
 

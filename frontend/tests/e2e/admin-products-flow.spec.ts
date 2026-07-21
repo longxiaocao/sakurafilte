@@ -16,7 +16,7 @@ async function injectAdminToken(page: import('@playwright/test').Page) {
 test.describe('P1-E2E-3 管理员产品管理流程 (用户视角)', () => {
   test('1. 后台产品列表加载 + 分页控件存在', async ({ page }) => {
     await injectAdminToken(page)
-    await page.goto(`${BASE}/admin/products`, { waitUntil: 'networkidle', timeout: 15000 })
+    await page.goto(`${BASE}/admin/products`, { waitUntil: 'domcontentloaded', timeout: 15000 })
     // 等待页面加载
     await page.waitForSelector('h1, .el-input, .admin-products', { timeout: 10000 })
     // 验证搜索/筛选区域存在
@@ -27,7 +27,7 @@ test.describe('P1-E2E-3 管理员产品管理流程 (用户视角)', () => {
 
   test('2. 产品筛选表单交互', async ({ page }) => {
     await injectAdminToken(page)
-    await page.goto(`${BASE}/admin/products`, { waitUntil: 'networkidle', timeout: 15000 })
+    await page.goto(`${BASE}/admin/products`, { waitUntil: 'domcontentloaded', timeout: 15000 })
     await page.waitForSelector('.el-input', { timeout: 10000 })
     // 在搜索框输入关键词 (data-testid 精准定位 OEM 2 字段, 避免 .first() 选错)
     const searchInput = page.getByTestId('admin-search-oem2')
@@ -42,7 +42,7 @@ test.describe('P1-E2E-3 管理员产品管理流程 (用户视角)', () => {
 
   test('3. 新增产品表单加载', async ({ page }) => {
     await injectAdminToken(page)
-    await page.goto(`${BASE}/admin/products/new`, { waitUntil: 'networkidle', timeout: 15000 })
+    await page.goto(`${BASE}/admin/products/new`, { waitUntil: 'domcontentloaded', timeout: 15000 })
     // 等待表单加载
     await page.waitForSelector('h1, .el-form, .el-input', { timeout: 10000 })
     // 验证表单存在
@@ -66,7 +66,7 @@ test.describe('P1-E2E-3 管理员产品管理流程 (用户视角)', () => {
 
   test('5. 性能监控页加载 + 指标卡片', async ({ page }) => {
     await injectAdminToken(page)
-    await page.goto(`${BASE}/admin/perf`, { waitUntil: 'networkidle', timeout: 15000 })
+    await page.goto(`${BASE}/admin/perf`, { waitUntil: 'domcontentloaded', timeout: 15000 })
     await page.waitForSelector('h1, .el-card, .perf-card', { timeout: 10000 })
     // 验证性能指标区域存在
     const cardCount = await page.locator('.el-card, .perf-card').count()
@@ -77,7 +77,7 @@ test.describe('P1-E2E-3 管理员产品管理流程 (用户视角)', () => {
 
   test('6. 字典管理导航 (8 字典切换)', async ({ page }) => {
     await injectAdminToken(page)
-    await page.goto(`${BASE}/admin/dict/oem-brands`, { waitUntil: 'networkidle', timeout: 15000 })
+    await page.goto(`${BASE}/admin/dict/oem-brands`, { waitUntil: 'domcontentloaded', timeout: 15000 })
     await page.waitForSelector('.dict-head', { timeout: 10000 })
     // 验证字典表格存在
     const dictHead = await page.locator('.dict-head').count()
@@ -88,7 +88,7 @@ test.describe('P1-E2E-3 管理员产品管理流程 (用户视角)', () => {
 
   test('7. 帮助页加载 + 5 模块', async ({ page }) => {
     await injectAdminToken(page)
-    await page.goto(`${BASE}/admin/help`, { waitUntil: 'networkidle', timeout: 15000 })
+    await page.goto(`${BASE}/admin/help`, { waitUntil: 'domcontentloaded', timeout: 15000 })
     await page.waitForSelector('h1, .el-card, .help-section', { timeout: 10000 })
     // 验证帮助内容存在
     const bodyText = await page.locator('body').innerText()
@@ -97,7 +97,7 @@ test.describe('P1-E2E-3 管理员产品管理流程 (用户视角)', () => {
 
   test('8. 对比页空状态提示', async ({ page }) => {
     await injectAdminToken(page)
-    await page.goto(`${BASE}/admin/compare`, { waitUntil: 'networkidle', timeout: 15000 })
+    await page.goto(`${BASE}/admin/compare`, { waitUntil: 'domcontentloaded', timeout: 15000 })
     await page.waitForSelector('.compare-root, .compare-toolbar', { timeout: 10000 })
     // 验证空状态提示存在 (无产品时应有引导文案)
     const bodyText = await page.locator('body').innerText()

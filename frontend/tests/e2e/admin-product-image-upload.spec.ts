@@ -127,7 +127,7 @@ test.describe('v27-5 管理员产品图片上传 E2E (V24-F83 前端路径补全
     await injectAdminToken(page)
     await mockProductGet(page)
     // 路由: /admin/products/:id/edit (router.ts L100), 不是 /admin/products/:id
-    await page.goto(`${BASE}/admin/products/123/edit`, { waitUntil: 'networkidle', timeout: 15000 })
+    await page.goto(`${BASE}/admin/products/123/edit`, { waitUntil: 'domcontentloaded', timeout: 15000 })
     // 验证表单标题 (编辑模式含 id)
     await page.waitForSelector('h1', { timeout: 10000 })
     // 验证图片折叠区 header 存在 (isEdit=true 时 v-if 显示)
@@ -147,7 +147,7 @@ test.describe('v27-5 管理员产品图片上传 E2E (V24-F83 前端路径补全
         body: JSON.stringify(MOCK_PRIMARY_UPLOAD_RESP)
       })
     })
-    await page.goto(`${BASE}/admin/products/123/edit`, { waitUntil: 'networkidle', timeout: 15000 })
+    await page.goto(`${BASE}/admin/products/123/edit`, { waitUntil: 'domcontentloaded', timeout: 15000 })
     await expandImageSection(page)
     // 选 OEM 3 (默认 selectedOemNo3ForPrimary 在 load 时自动选中第一个有 oemNo3 的 xref, 这里验证)
     // 上传主图: input[type="file"] 是裸 input, 用 setInputFiles
@@ -173,7 +173,7 @@ test.describe('v27-5 管理员产品图片上传 E2E (V24-F83 前端路径补全
         body: JSON.stringify(problemDetails(409, 'ERR_DB_CONFLICT', 'DB Conflict'))
       })
     })
-    await page.goto(`${BASE}/admin/products/123/edit`, { waitUntil: 'networkidle', timeout: 15000 })
+    await page.goto(`${BASE}/admin/products/123/edit`, { waitUntil: 'domcontentloaded', timeout: 15000 })
     await expandImageSection(page)
     const fileInput = page.locator('input[type="file"]').first()
     await fileInput.setInputFiles({ name: 'test.png', mimeType: 'image/png', buffer: PIXEL_PNG })
@@ -196,7 +196,7 @@ test.describe('v27-5 管理员产品图片上传 E2E (V24-F83 前端路径补全
         body: JSON.stringify(problemDetails(409, 'IMAGE_DETAIL_SLOT_DUPLICATE', 'Detail slot duplicate'))
       })
     })
-    await page.goto(`${BASE}/admin/products/123/edit`, { waitUntil: 'networkidle', timeout: 15000 })
+    await page.goto(`${BASE}/admin/products/123/edit`, { waitUntil: 'domcontentloaded', timeout: 15000 })
     await expandImageSection(page)
     // 详情图 input 是第 2 个 input[type="file"] (主图第 1, 详情图第 2-6)
     const detailFileInput = page.locator('input[type="file"]').nth(1)
@@ -232,7 +232,7 @@ test.describe('v27-5 管理员产品图片上传 E2E (V24-F83 前端路径补全
         await route.continue()
       }
     })
-    await page.goto(`${BASE}/admin/products/123/edit`, { waitUntil: 'networkidle', timeout: 15000 })
+    await page.goto(`${BASE}/admin/products/123/edit`, { waitUntil: 'domcontentloaded', timeout: 15000 })
     await expandImageSection(page)
     // 验证主图已渲染 (有删除按钮)
     const deleteBtn = page.locator('button').filter({ hasText: '删除主图' })
@@ -246,7 +246,7 @@ test.describe('v27-5 管理员产品图片上传 E2E (V24-F83 前端路径补全
 
   test('6. 新建模式 (/admin/products/new) 图片折叠区不显示 (isEdit=false)', async ({ page }) => {
     await injectAdminToken(page)
-    await page.goto(`${BASE}/admin/products/new`, { waitUntil: 'networkidle', timeout: 15000 })
+    await page.goto(`${BASE}/admin/products/new`, { waitUntil: 'domcontentloaded', timeout: 15000 })
     await page.waitForSelector('h1', { timeout: 10000 })
     // 验证图片折叠区 header 不存在 (v-if="isEdit" 为 false)
     const imgHeader = page.locator('.el-collapse-item__header').filter({ hasText: '图片' })

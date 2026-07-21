@@ -42,7 +42,7 @@ test('P4.3 前台产品详情页 (P3.3) 视觉回归', async ({ page }) => {
   if (!fs.existsSync(CURRENT_DIR)) fs.mkdirSync(CURRENT_DIR, { recursive: true })
 
   // 公开页无需 token
-  await page.goto(`${BASE}/product/${PRODUCT_OEM}`, { waitUntil: 'networkidle', timeout: 15000 })
+  await page.goto(`${BASE}/product/${PRODUCT_OEM}`, { waitUntil: 'domcontentloaded', timeout: 15000 })
   await page.waitForSelector('.el-collapse-item', { timeout: 10000 }).catch(() => null)
   await page.waitForTimeout(500)
 

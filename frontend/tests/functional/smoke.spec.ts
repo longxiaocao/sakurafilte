@@ -24,7 +24,7 @@ async function injectAdminToken(page: import('@playwright/test').Page) {
 
 test.describe('P0-E2E-2 功能性 smoke (CI 空库友好)', () => {
   test('1. 公开搜索页 /search 能加载', async ({ page }) => {
-    await page.goto(`${BASE}/search`, { waitUntil: 'networkidle', timeout: 15000 })
+    await page.goto(`${BASE}/search`, { waitUntil: 'domcontentloaded', timeout: 15000 })
     // 等待 AppHeader 出现 (说明 Vue 应用已挂载)
     await page.waitForSelector('nav, header, .app-header', { timeout: 10000 })
     // 截图存档 (不对比, 仅诊断)
@@ -33,7 +33,7 @@ test.describe('P0-E2E-2 功能性 smoke (CI 空库友好)', () => {
 
   test('2. 公开产品详情页路由能匹配 (404 也算 PASS, 只验证不白屏)', async ({ page }) => {
     // 用一个不存在的 OEM, 期望 404 提示而非白屏
-    await page.goto(`${BASE}/product/nonexistent-oem-12345`, { waitUntil: 'networkidle', timeout: 15000 })
+    await page.goto(`${BASE}/product/nonexistent-oem-12345`, { waitUntil: 'domcontentloaded', timeout: 15000 })
     await page.waitForTimeout(1000)
     // 页面应有内容 (不是空白)
     const bodyText = await page.locator('body').innerText()
@@ -42,7 +42,7 @@ test.describe('P0-E2E-2 功能性 smoke (CI 空库友好)', () => {
 
   test('3. admin token 注入后后台产品页能加载', async ({ page }) => {
     await injectAdminToken(page)
-    await page.goto(`${BASE}/admin/products`, { waitUntil: 'networkidle', timeout: 15000 })
+    await page.goto(`${BASE}/admin/products`, { waitUntil: 'domcontentloaded', timeout: 15000 })
     // 等待页面标题或表格容器出现
     await page.waitForSelector('h1, .el-input, .admin-products', { timeout: 10000 })
     await page.screenshot({ path: 'test-results/smoke-admin-products.png' })
@@ -62,7 +62,7 @@ test.describe('P0-E2E-2 功能性 smoke (CI 空库友好)', () => {
     for (const dict of dicts) {
       test(`字典页 ${dict.name} 能加载 (.dict-head 出现)`, async ({ page }) => {
         await injectAdminToken(page)
-        await page.goto(`${BASE}${dict.path}`, { waitUntil: 'networkidle', timeout: 15000 })
+        await page.goto(`${BASE}${dict.path}`, { waitUntil: 'domcontentloaded', timeout: 15000 })
         // 等表头出现 (说明组件已渲染, 不依赖数据)
         await page.waitForSelector('.dict-head', { timeout: 10000 })
       })
@@ -80,19 +80,19 @@ test.describe('P0-E2E-2 功能性 smoke (CI 空库友好)', () => {
 
   test('6. 性能监控页能加载', async ({ page }) => {
     await injectAdminToken(page)
-    await page.goto(`${BASE}/admin/perf`, { waitUntil: 'networkidle', timeout: 15000 })
+    await page.goto(`${BASE}/admin/perf`, { waitUntil: 'domcontentloaded', timeout: 15000 })
     await page.waitForSelector('h1, .el-card, .perf-card', { timeout: 10000 })
   })
 
   test('7. 帮助页能加载', async ({ page }) => {
     await injectAdminToken(page)
-    await page.goto(`${BASE}/admin/help`, { waitUntil: 'networkidle', timeout: 15000 })
+    await page.goto(`${BASE}/admin/help`, { waitUntil: 'domcontentloaded', timeout: 15000 })
     await page.waitForSelector('h1, .el-card, .help-section', { timeout: 10000 })
   })
 
   test('8. 对比页能加载 (空状态)', async ({ page }) => {
     await injectAdminToken(page)
-    await page.goto(`${BASE}/admin/compare`, { waitUntil: 'networkidle', timeout: 15000 })
+    await page.goto(`${BASE}/admin/compare`, { waitUntil: 'domcontentloaded', timeout: 15000 })
     // 对比页用 .compare-root 容器, 空状态用 .text-muted 提示
     await page.waitForSelector('.compare-root, .compare-toolbar', { timeout: 10000 })
   })
