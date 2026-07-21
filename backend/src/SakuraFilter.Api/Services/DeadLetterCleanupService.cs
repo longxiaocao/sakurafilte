@@ -82,8 +82,11 @@ public class DeadLetterCleanupService : BackgroundService
             return;
         }
 
-        var retentionDays = int.Parse(settings.GetValueOrDefault("dead_letter.retention_days") ?? "7");
-        var batchSize = int.Parse(settings.GetValueOrDefault("dead_letter.cleanup_batch_size") ?? "2000");
+        // v30-16: 配置解析提取到 DeadLetterCleanupClassifier.ParseSettings (纯函数, 可单测)
+        //   顺手修复 P1: int.Parse (无效配置崩溃) → TryParse + 默认值 (无效配置降级)
+        var s = DeadLetterCleanupClassifier.ParseSettings(settings);
+        var retentionDays = s.RetentionDays;
+        var batchSize = s.BatchSize;
 
         if (retentionDays <= 0)
         {

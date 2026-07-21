@@ -83,8 +83,11 @@ public class EtlLogCleanupService : BackgroundService
             return;
         }
 
-        var retentionDays = int.Parse(settings.GetValueOrDefault("etl_log.retention_days") ?? "0");
-        var batchSize = int.Parse(settings.GetValueOrDefault("etl_log.cleanup_batch_size") ?? "5000");
+        // v30-16: 配置解析提取到 EtlLogCleanupClassifier.ParseSettings (纯函数, 可单测)
+        //   顺手修复 P1: int.Parse (无效配置崩溃) → TryParse + 默认值 (无效配置降级)
+        var s = EtlLogCleanupClassifier.ParseSettings(settings);
+        var retentionDays = s.RetentionDays;
+        var batchSize = s.BatchSize;
 
         if (retentionDays <= 0)
         {
