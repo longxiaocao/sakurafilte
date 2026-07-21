@@ -29,8 +29,8 @@ test.describe('P1-E2E-3 管理员产品管理流程 (用户视角)', () => {
     await injectAdminToken(page)
     await page.goto(`${BASE}/admin/products`, { waitUntil: 'networkidle', timeout: 15000 })
     await page.waitForSelector('.el-input', { timeout: 10000 })
-    // 在搜索框输入关键词
-    const searchInput = page.locator('.el-input__inner').first()
+    // 在搜索框输入关键词 (data-testid 精准定位 OEM 2 字段, 避免 .first() 选错)
+    const searchInput = page.getByTestId('admin-search-oem2')
     await searchInput.fill('Bosch')
     await page.waitForTimeout(500)
     // 验证输入成功

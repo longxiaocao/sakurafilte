@@ -250,6 +250,7 @@ onBeforeUnmount(() => {
             style="max-width: 480px"
             :aria-label="t('common.search')"
             role="searchbox"
+            data-testid="search-input"
             @keyup.enter="doSearch"
           >
             <template #prefix>

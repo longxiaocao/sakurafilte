@@ -11,10 +11,10 @@ test.describe('P1-E2E-3 公开搜索流程 (用户视角)', () => {
     await page.goto(`${BASE}/search`, { waitUntil: 'networkidle', timeout: 15000 })
     // 等待搜索 tab 加载
     await page.waitForSelector('.el-tabs', { timeout: 10000 })
-    // 等待搜索输入框 (第一个 el-input 在搜索 tab 内)
-    await page.waitForSelector('.el-input__inner', { timeout: 10000 })
+    // 等待搜索输入框 (data-testid 精准定位, 避免 .first() 选错元素)
+    const searchInput = page.getByTestId('search-input')
+    await searchInput.waitFor({ timeout: 10000 })
     // 输入关键词
-    const searchInput = page.locator('.el-input__inner').first()
     await searchInput.fill('air')
     // 点击搜索按钮 (用 exact 匹配, 避免匹配到"产品搜索"导航按钮)
     const searchBtn = page.getByRole('button', { name: '搜索', exact: true })
@@ -47,8 +47,8 @@ test.describe('P1-E2E-3 公开搜索流程 (用户视角)', () => {
     // 验证 8 个字段输入框存在
     const inputCount = await page.locator('.el-input').count()
     expect(inputCount).toBeGreaterThanOrEqual(8)  // 至少 8 个字段
-    // 输入 OEM Brand
-    const oemBrandInput = page.locator('.el-input__inner').first()
+    // 输入 OEM Brand (data-testid 精准定位第一个字段, 避免 .first() 选错)
+    const oemBrandInput = page.getByTestId('public-search-oemBrand')
     await oemBrandInput.fill('Bosch')
     await page.waitForTimeout(500)
     // 截图存档

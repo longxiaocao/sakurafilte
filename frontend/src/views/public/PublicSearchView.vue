@@ -379,6 +379,7 @@ onUnmounted(() => {
             clearable
             size="default"
             class="w-full"
+            :data-testid="`public-search-${f.key}`"
             @select="() => doSearch()"
             @keyup.enter="doSearch"
           />

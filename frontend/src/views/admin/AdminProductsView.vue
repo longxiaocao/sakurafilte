@@ -305,7 +305,7 @@ onBeforeUnmount(() => {
     <!-- 顶部工具条 -->
     <!-- P1-4 修复: 工具条移动端折叠 - 次要控件 (countMode 标签, t('common.field.all')列 switch) 在 sm 以下隐藏 -->
     <div class="flex items-center gap-2 mb-3 flex-wrap">
-      <el-input v-model="filter.oem2" placeholder="OEM 2" clearable size="small" style="width: 160px" :aria-label="t('admin.productsview.aria.oem_search')" @keyup.enter="quickSearch" />
+      <el-input v-model="filter.oem2" placeholder="OEM 2" clearable size="small" style="width: 160px" :aria-label="t('admin.productsview.aria.oem_search')" data-testid="admin-search-oem2" @keyup.enter="quickSearch" />
       <el-input v-model="filter.mr1" placeholder="MR.1" clearable size="small" style="width: 120px" :aria-label="t('admin.productsview.aria.mr_search')" @keyup.enter="quickSearch" />
       <el-input v-model="filter.productName1" :placeholder="t('common.field.product_name')" clearable size="small" style="width: 160px" :aria-label="t('admin.productsview.aria.product_name_search')" @keyup.enter="quickSearch" />
       <el-select v-model="filter.type" :placeholder="t('common.action.type')" clearable size="small" style="width: 100px" :aria-label="t('admin.productsview.aria.filter_by_type')">
