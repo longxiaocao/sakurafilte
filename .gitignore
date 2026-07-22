@@ -29,6 +29,22 @@ docker/*.env
 spike-test/_check_*.sql
 spike-test/_login.json
 spike-test/_*.tmp
+# v30-26: 扩展临时 commit msg 规则 (覆盖 _v30_*_commit_msg.txt 等所有版本)
+spike-test/_*_commit_msg.txt
+spike-test/_*_commit*.txt
+
+## .ai/ 临时调试产物 (commit msg / ci log / api log 快照, 不应提交)
+#   WHY: decisions.md + suggestions.md 团队共享 (已纳入版本控制), 其余 _*.txt/_*.json/_*.zip 是临时调试产物
+#   context.md 已在下方单独忽略 (个人会话状态)
+.ai/_*.txt
+.ai/_*.json
+.ai/_*.zip
+.ai/api-log.*
+.ai/ci-*.txt
+
+## 根目录临时产物 (可重建, 不提交)
+/test-results/
+/metrics-dump.txt
 
 ## E2E / 主题测试截图 (可重建, 不提交)
 #   WHY: 每次 E2E 跑都会重新生成, 提交会污染历史
