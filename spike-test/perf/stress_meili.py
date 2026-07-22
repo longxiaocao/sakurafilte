@@ -1,7 +1,7 @@
-"""v30-27: Meili 压测脚本 (69000 文档)
+"""v30-27: Meili 压测脚本 (65 万文档)
    目标 1: 单次搜索 P95 < 200ms (20 查询词 × 串行)
    目标 2: 50/100 并发搜索 P95
-   目标 3: Offset 深分页性能 (offset=0/1000/5000/10000)
+   目标 3: Offset 深分页性能 (offset=0/1000/5000/10000/50000)
 
    运行: python spike-test/perf/stress_meili.py [base_url]
 """
@@ -143,7 +143,7 @@ def _report(label, latencies, totals, elapsed, count, errors=0, concurrency=1):
 
 
 async def main():
-    print(f"=== SakuraFilter Meili 压测 (69000 文档) ===")
+    print(f"=== SakuraFilter Meili 压测 (65 万文档) ===")
     print(f"目标: {BASE}")
     print(f"时间: {time.strftime('%Y-%m-%d %H:%M:%S')}")
 
@@ -167,10 +167,10 @@ async def main():
     results.append(await bench_concurrent("压测2b: 100并发 (1000次)", payloads_c100, 100, 1000))
 
     # ========== 压测 3: Offset 深分页 ==========
-    # 69000 文档, offset=0/1000/5000/10000 (limit=20)
+    # 65 万文档, offset=0/1000/5000/10000/50000 (limit=20)
     print(f"\n=== 压测3: Offset 深分页 ===")
     offset_results = []
-    for offset in [0, 1000, 5000, 10000]:
+    for offset in [0, 1000, 5000, 10000, 50000]:
         # 每个 offset 跑 10 次
         payloads_off = [{"q": "", "limit": 20, "page": offset // 20 + 1}] * 10
         r = await bench_serial(f"  offset={offset} (page={offset // 20 + 1})", payloads_off, rounds=1)

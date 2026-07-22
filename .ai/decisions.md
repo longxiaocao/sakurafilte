@@ -501,6 +501,12 @@ v30-14 1M OFFSET 深分页专项压测验证数据 (2026-07-21, sakurafilter_per
     * 50 并发 P95=98.6ms ✅, 100 并发 P95=184.1ms ✅ (各 1000 次, 0 错误, RPS~640)
     * Offset 深分页: offset=0 P95=36.6ms ✅, offset≥1000 P95~290ms ⚠️ (空查询全表 69000 文档的深分页, 实际带关键词搜索匹配数远少于此, 性能会更好)
   - 压测中发现: 搜索端点限流 SearchPermitsPerMinute=300, 压测时用环境变量 RateLimit__SearchPermitsPerMinute=100000 临时调高
+  - 1M 全量索引验证 (2026-07-22, 压测库 sakurafilter_perf_tests 950K products):
+    * 索引成功 654209 文档 (约 69%, 剩余 31% 为 mr_1 空主键被 IndexAsync 过滤, 符合预期)
+    * 单次搜索 P95=53.6ms ✅ (< 200ms 目标)
+    * 50 并发 P95=83.3ms ✅, 100 并发 P95=152.9ms ✅ (各 1000 次, 0 错误, RPS~740)
+    * Offset 深分页: offset=0 P95=34.9ms ✅, offset≥1000 P95~290-332ms ⚠️ (空查询全表 65 万文档深分页, 实际带关键词搜索匹配数远少于此)
+    * 结论: Meili 单实例支撑 65 万文档搜索性能达标, 100 并发 P95=152.9ms 远低于 200ms 目标
 排除方案:
   - reindex-all 用 AcquireActiveCts 的 linked CTS: CreateLinkedTokenSource(externalCt) 即使外部传 CancellationToken.None, 内部仍创建 linked CTS, 不解决超时问题
   - SanitizeToken 改用 JsonDocument 不可变模型: 改动面大, 需重写整个 _formatted 处理逻辑, 且 JsonNode 的 DOM 可变性正是此处需要的
