@@ -173,8 +173,9 @@ public class MeiliSearchProvider : ISearchProvider
             HighlightPreTag = MarkOpen,
             HighlightPostTag = MarkClose,
             ShowRankingScore = true,
-            // 品牌优先 > 相关性: 按 brand_sort_order_min 升序, null 排末尾 (Meili asc 默认行为)
-            Sort = new[] { "brand_sort_order_min:asc" },
+            // 两层排序: 品牌优先级 (brand_sort_order_min) > 品牌内 OEM 3 优先级 (oem_list_sort_order_min)
+            //   两者 null 都排末尾 (Meili asc 默认行为)
+            Sort = new[] { "brand_sort_order_min:asc", "oem_list_sort_order_min:asc" },
         };
 
         var query = req.Q?.Trim() ?? "";
@@ -273,8 +274,9 @@ public class MeiliSearchProvider : ISearchProvider
             HighlightPreTag = MarkOpen,
             HighlightPostTag = MarkClose,
             ShowRankingScore = true,
-            // 品牌优先 > 相关性: 按 brand_sort_order_min 升序, null 排末尾 (Meili asc 默认行为)
-            Sort = new[] { "brand_sort_order_min:asc" },
+            // 两层排序: 品牌优先级 (brand_sort_order_min) > 品牌内 OEM 3 优先级 (oem_list_sort_order_min)
+            //   两者 null 都排末尾 (Meili asc 默认行为)
+            Sort = new[] { "brand_sort_order_min:asc", "oem_list_sort_order_min:asc" },
         };
 
         var query = req.Q?.Trim() ?? "";
@@ -546,10 +548,11 @@ public class MeiliSearchProvider : ISearchProvider
             .Min();
 
         // S4-16: oem_list_sort_order_min 取上架 OEM 3 的 sort_order MIN
+        // 修复: sort_order=0 是数据库默认值 (未通过 /admin/xrefs/reorder 维护), 视为 null 排末尾
+        //   仅 sort_order > 0 的 OEM 3 (管理员手动维护过优先级) 参与排序
         int? oemListSortOrderMin = publishedOemList
+            .Where(x => x.SortOrder > 0)
             .Select(x => (int?)x.SortOrder)
-            .DefaultIfEmpty()
-            .Cast<int?>()
             .Min();
 
         return new Mr1IndexDoc(
