@@ -69,7 +69,8 @@ public record AggregateOemItem(
 public record AggregateMachineItem(
     string? MachineBrand,
     string? MachineModel,
-    string? MachineCategory
+    string? MachineCategory,
+    string? EngineBrand
 );
 
 /// <summary>

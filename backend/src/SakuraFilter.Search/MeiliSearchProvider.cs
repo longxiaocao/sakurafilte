@@ -342,7 +342,8 @@ public class MeiliSearchProvider : ISearchProvider
                         machineList.Add(new AggregateMachineItem(
                             MachineBrand: mlObj.TryGetPropertyValue("machine_brand", out var mb) ? mb?.GetValue<string>() : null,
                             MachineModel: mlObj.TryGetPropertyValue("machine_model", out var mm) ? mm?.GetValue<string>() : null,
-                            MachineCategory: mlObj.TryGetPropertyValue("machine_category", out var mc) ? mc?.GetValue<string>() : null
+                            MachineCategory: mlObj.TryGetPropertyValue("machine_category", out var mc) ? mc?.GetValue<string>() : null,
+                            EngineBrand: mlObj.TryGetPropertyValue("engine_brand", out var eb) ? eb?.GetValue<string>() : null
                         ));
                     }
                 }
@@ -517,12 +518,12 @@ public class MeiliSearchProvider : ISearchProvider
         var machineList = await _db.MachineApplications
             .AsNoTracking()
             .Where(m => m.ProductId == p.Id)
-            .Select(m => new { m.MachineBrand, m.MachineModel, m.MachineCategory })
+            .Select(m => new { m.MachineBrand, m.MachineModel, m.MachineCategory, m.EngineBrand })
             .Distinct()
             .OrderBy(m => m.MachineBrand)
             .ThenBy(m => m.MachineModel)
             .Take(50)
-            .Select(m => new MachineListItem(m.MachineBrand, m.MachineModel, m.MachineCategory))
+            .Select(m => new MachineListItem(m.MachineBrand, m.MachineModel, m.MachineCategory, m.EngineBrand))
             .ToListAsync(ct);
 
         // ===== 扁平化冗余字段计算 =====
@@ -781,34 +782,34 @@ public class MeiliSearchProvider : ISearchProvider
                     "oem_brands_str", "oem_no3s_str",
                     // 嵌套数组字段 (支持 OEM 3 / 机型搜索)
                     "oem_list.oem_brand", "oem_list.oem_no_3", "oem_list.oem_2",
-                    "machine_list.machine_brand", "machine_list.machine_model"
+                    "machine_list.machine_brand", "machine_list.machine_model", "machine_list.engine_brand"
                 };
                 var searchTask = await target.UpdateSearchableAttributesAsync(searchable, ct);
                 await target.WaitForTaskAsync(searchTask.TaskUid, 30000);
 
-                // S6: stopWords (移除 of/for/and, 防止型号 OF-100 误删词; 只保留 the/a/an)
-                //   WHY: spec L1533 要求, of/for/and 是型号常见组成 (OF-100, FOR-K, AND-3), 误删导致搜索召回失败
-                var stopWords = new[] { "the", "a", "an" };
+                // S6/S3-19: stopWords (移除 of/for/and/a, 防止型号 OF-100 误删 + "A Brand" 首词误删)
+                //   WHY: spec L1533 + L1881 要求, "a" 会导致 "A Brand"/"A Filter" 品牌名首词被删
+                var stopWords = new[] { "the", "an" };
                 var stopTask = await target.UpdateStopWordsAsync(stopWords, ct);
                 await target.WaitForTaskAsync(stopTask.TaskUid, 30000);
 
-                // S4/S5: typoTolerance (minWordSizeForTypos=4, 防止短型号误纠错)
-                //   WHY: spec L924 要求, 默认 oneTypo=5/twoTypos=9, 改为 oneTypo=4/twoTypos=8 提高容错
+                // S4 修复: typoTolerance (OneTypo=3/TwoTypos=5, 3 字品牌缩写容错)
+                //   WHY: spec L1526 + L1685 要求, 默认 5/9, 先改 4/8, 再改为 3/5 让 "BOS" 匹配 "BOSCH"
                 var typoTolerance = new TypoTolerance
                 {
                     Enabled = true,
                     MinWordSizeForTypos = new TypoTolerance.TypoSize
                     {
-                        OneTypo = 4,
-                        TwoTypos = 8
+                        OneTypo = 3,
+                        TwoTypos = 5
                     }
                 };
                 var typoTask = await target.UpdateTypoToleranceAsync(typoTolerance, ct);
                 await target.WaitForTaskAsync(typoTask.TaskUid, 30000);
 
-                // S5: separatorTokens (空格/连字符/斜杠/逗号/句号, 支持型号分词)
-                //   WHY: spec L928 要求, M24-36 应分词为 M24 和 36, Donaldson/P558512 应分词为 Donaldson 和 P558512
-                var separatorTokens = new[] { " ", "-", "/", ",", "." };
+                // S5/S3-20: separatorTokens (移除 "-", 防 OEM 号 F-000000001 被错误分割)
+                //   WHY: spec L1527 + L1882 要求, "-" 是 OEM 号常见组成部分, 作为分隔符会破坏号码完整性
+                var separatorTokens = new[] { " ", "/", ",", "." };
                 var sepTask = await target.UpdateSeparatorTokensAsync(separatorTokens, ct);
                 await target.WaitForTaskAsync(sepTask.TaskUid, 30000);
 

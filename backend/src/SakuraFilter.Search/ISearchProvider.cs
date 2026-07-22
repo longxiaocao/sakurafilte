@@ -120,5 +120,6 @@ public record OemListItem(
 public record MachineListItem(
     [property: JsonPropertyName("machine_brand")] string? MachineBrand,
     [property: JsonPropertyName("machine_model")] string? MachineModel,
-    [property: JsonPropertyName("machine_category")] string? MachineCategory
+    [property: JsonPropertyName("machine_category")] string? MachineCategory,
+    [property: JsonPropertyName("engine_brand")] string? EngineBrand       // S3 修复: 支持按发动机品牌搜索
 );

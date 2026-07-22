@@ -730,7 +730,8 @@ SELECT COUNT(*) FROM sort_cte";
                 result.Add(new AggregateMachineItem(
                     MachineBrand: el.TryGetProperty("machine_brand", out var b) && b.ValueKind == JsonValueKind.String ? b.GetString() : null,
                     MachineModel: el.TryGetProperty("machine_model", out var m) && m.ValueKind == JsonValueKind.String ? m.GetString() : null,
-                    MachineCategory: el.TryGetProperty("machine_category", out var c) && c.ValueKind == JsonValueKind.String ? c.GetString() : null
+                    MachineCategory: el.TryGetProperty("machine_category", out var c) && c.ValueKind == JsonValueKind.String ? c.GetString() : null,
+                    EngineBrand: el.TryGetProperty("engine_brand", out var eb) && eb.ValueKind == JsonValueKind.String ? eb.GetString() : null
                 ));
             }
             return result;
