@@ -354,10 +354,14 @@ SELECT COUNT(*) FROM sort_cte";
         long total;
         var items = new List<SearchResultItem>();
         var conn = (NpgsqlConnection)_db.Database.GetDbConnection();
+        var wasOpened = false;
         try
         {
             if (conn.State != System.Data.ConnectionState.Open)
+            {
                 await conn.OpenAsync(ct);
+                wasOpened = true;
+            }
 
             // 1. 总数
             await using (var countCmd = new NpgsqlCommand(countSql, conn))
@@ -410,6 +414,14 @@ SELECT COUNT(*) FROM sort_cte";
         {
             _logger.LogError(ex, "PostgresSearchProvider.SearchAsync SQL 执行失败, SQL: {Sql}", sql);
             throw;
+        }
+        finally
+        {
+            // v30-25 P0 修复: 主动 Close 手动 Open 的连接, 不依赖 DbContext Dispose 延迟归还
+            if (wasOpened && conn.State == System.Data.ConnectionState.Open)
+            {
+                try { await conn.CloseAsync(); } catch { }
+            }
         }
 
         sw.Stop();
@@ -498,10 +510,14 @@ SELECT COUNT(*) FROM sort_cte";
         long total;
         var hits = new List<AggregateSearchHit>();
         var conn = (NpgsqlConnection)_db.Database.GetDbConnection();
+        var wasOpened = false;
         try
         {
             if (conn.State != System.Data.ConnectionState.Open)
+            {
                 await conn.OpenAsync(ct);
+                wasOpened = true;
+            }
 
             // 1. 总数
             await using (var countCmd = new NpgsqlCommand(countSql, conn))
@@ -549,6 +565,14 @@ SELECT COUNT(*) FROM sort_cte";
         {
             _logger.LogError(ex, "PostgresSearchProvider.AggregateSearchAsync SQL 执行失败, SQL: {Sql}", sql);
             throw;
+        }
+        finally
+        {
+            // v30-25 P0 修复: 主动 Close 手动 Open 的连接, 不依赖 DbContext Dispose 延迟归还
+            if (wasOpened && conn.State == System.Data.ConnectionState.Open)
+            {
+                try { await conn.CloseAsync(); } catch { }
+            }
         }
 
         sw.Stop();

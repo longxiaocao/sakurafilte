@@ -6,6 +6,7 @@ using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Minio;
 using Aliyun.OSS;
+using Npgsql;
 using System.Text;
 using System.Threading.RateLimiting;
 using FluentValidation;
@@ -200,7 +201,16 @@ public static class ServiceCollectionExtensions
 
         var pgConn = configuration.GetConnectionString("Postgres")
             ?? throw new InvalidOperationException("ConnectionStrings:Postgres 未配置 (检查 appsettings.json 或环境变量 ConnectionStrings__Postgres)");
-        services.AddDbContext<ProductDbContext>(opt => opt.UseNpgsql(pgConn));
+
+        // v30-25 P0 修复: 注册全局 NpgsqlDataSource 单例, 消除进程内多连接池
+        //   根因: EtlProgressBroadcaster 自建 NpgsqlDataSource.Create() 独立池 (100 槽位)
+        //         + AddDbContext 默认池 (100 槽位) = 200 条连接上限, PG max_connections=100 时主池借连接被拒
+        //   修复: 统一 DataSource, AddDbContext + EtlProgressBroadcaster + AuthTokenStore 等全部复用
+        //   WHY AddNpgsqlDataSource: 单例注册, AddDbContext(opt => opt.UseNpgsql(dataSource)) 复用同一池
+        var dataSource = new NpgsqlDataSourceBuilder(pgConn).Build();
+        services.AddSingleton(dataSource);
+
+        services.AddDbContext<ProductDbContext>(opt => opt.UseNpgsql(dataSource));
         return services;
     }
 

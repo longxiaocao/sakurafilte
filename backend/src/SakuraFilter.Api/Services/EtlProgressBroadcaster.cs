@@ -14,7 +14,7 @@ public class EtlProgressBroadcaster : IEtlProgressBroadcaster, IAsyncDisposable
     public const string Channel = "etl_progress";
     private readonly string _connectionString;
     private readonly ILogger<EtlProgressBroadcaster> _logger;
-    private readonly NpgsqlDataSource _dataSource;  // Day 9.7: 进程级连接池,Publish 复用
+    private readonly NpgsqlDataSource _dataSource;  // v30-25: 注入全局单例 (原 Day 9.7 自建独立池已移除)
     private NpgsqlConnection? _listenConn;
     private CancellationTokenSource? _listenCts;
     private Task? _listenTask;
@@ -24,14 +24,16 @@ public class EtlProgressBroadcaster : IEtlProgressBroadcaster, IAsyncDisposable
 
     public bool IsListening => _listenConn?.State == System.Data.ConnectionState.Open && _listenTask?.IsCompleted == false;
 
-    public EtlProgressBroadcaster(IConfiguration config, ILogger<EtlProgressBroadcaster> logger)
+    // v30-25 P0 修复: 注入全局 NpgsqlDataSource 单例 (由 AddDatabaseServices 注册)
+    //   根因: 原 NpgsqlDataSource.Create() 自建独立池 (100 槽位) 与 AddDbContext 主池隔离,
+    //         进程内总连接上限 200, PG max_connections=100 时主池借连接被拒 → 500 pool exhausted
+    //   修复: 改为注入共享 DataSource, 与 AddDbContext + AuthTokenStore 等复用同一池
+    public EtlProgressBroadcaster(IConfiguration config, NpgsqlDataSource dataSource, ILogger<EtlProgressBroadcaster> logger)
     {
         _connectionString = config.GetConnectionString("Postgres")
             ?? throw new InvalidOperationException("Postgres 连接串未配置");
         _logger = logger;
-        // Day 9.7: 进程级连接池,避免每次 Publish 开新 TCP 连接
-        //   实测 100 NOTIFY 从 7s 降到 0.4s (17 倍提速)
-        _dataSource = NpgsqlDataSource.Create(_connectionString);
+        _dataSource = dataSource;
     }
 
     /// <summary>
@@ -181,7 +183,6 @@ public class EtlProgressBroadcaster : IEtlProgressBroadcaster, IAsyncDisposable
         {
             try { await _listenTask; } catch { }
         }
-        // Day 9.7: 释放 dataSource 连接池
-        try { await _dataSource.DisposeAsync(); } catch { }
+        // v30-25: 不再释放 _dataSource (全局单例由 DI 容器管理, 应用退出时统一释放)
     }
 }

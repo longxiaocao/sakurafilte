@@ -106,28 +106,43 @@ public class DeadLetterRecoveryService : BackgroundService
         // 显式事务 — lock 跟随事务生命周期
         await using var tx = await db.Database.BeginTransactionAsync(ct);
         var conn = (NpgsqlConnection)db.Database.GetDbConnection();
+        var wasOpened = false;
         if (conn.State != System.Data.ConnectionState.Open)
+        {
             await conn.OpenAsync(ct);
+            wasOpened = true;
+        }
 
-        bool got = false;
-        using (var cmd = conn.CreateCommand())
+        try
         {
-            cmd.Transaction = (NpgsqlTransaction)tx.GetDbTransaction();
-            cmd.CommandText = "SELECT pg_try_advisory_xact_lock(@key)";
-            cmd.Parameters.Add(new NpgsqlParameter("key", AdvisoryLockKey));
-            var result = await cmd.ExecuteScalarAsync(ct);
-            got = result is bool b && b;
+            bool got = false;
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.Transaction = (NpgsqlTransaction)tx.GetDbTransaction();
+                cmd.CommandText = "SELECT pg_try_advisory_xact_lock(@key)";
+                cmd.Parameters.Add(new NpgsqlParameter("key", AdvisoryLockKey));
+                var result = await cmd.ExecuteScalarAsync(ct);
+                got = result is bool b && b;
+            }
+            if (!got)
+            {
+                // 锁被占用, 回滚事务 (释放 BEGIN 资源)
+                await tx.RollbackAsync(ct);
+                return false;
+            }
+            // 拿锁: 在事务内执行 work + SaveChanges
+            await work();
+            await tx.CommitAsync(ct);
+            return true;
         }
-        if (!got)
+        finally
         {
-            // 锁被占用, 回滚事务 (释放 BEGIN 资源)
-            await tx.RollbackAsync(ct);
-            return false;
+            // v30-25 P0 修复: 主动 Close 手动 Open 的连接, 不依赖 DbContext Dispose 延迟归还
+            if (wasOpened && conn.State == System.Data.ConnectionState.Open)
+            {
+                try { await conn.CloseAsync(); } catch { }
+            }
         }
-        // 拿锁: 在事务内执行 work + SaveChanges
-        await work();
-        await tx.CommitAsync(ct);
-        return true;
     }
 
     private async Task<int> RunOnceAsync(CancellationToken ct)
