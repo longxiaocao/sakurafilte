@@ -218,7 +218,9 @@ public class ProductDbContext : DbContext
             e.HasKey(s => s.Key);
             e.Property(s => s.Key).HasMaxLength(100);
             // WHY: 改用 TEXT 而非 JSONB,允许存任意字符串 (cron 表达式、纯数字、布尔语义)
-            e.Property(s => s.Value).HasColumnType("text");
+            // P2-6: spec 要求 NOT NULL + timestamptz DEFAULT now()
+            e.Property(s => s.Value).HasColumnType("text").IsRequired();
+            e.Property(s => s.UpdatedAt).HasColumnType("timestamptz").HasDefaultValueSql("now()");
         });
 
         // SearchIndexPending (Day 5: Meili 写入补偿队列)

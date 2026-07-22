@@ -71,7 +71,8 @@ public record ProductFormDto
     public List<MachineAppInput> MachineApplications { get; init; } = new();
 }
 
-/// <summary>交叉引用输入项 (V2: 分区 2,加 Oem2/SortOrder/MachineType/IsPublished)</summary>
+/// <summary>交叉引用输入项 (V2: 分区 2,加 Oem2/SortOrder/MachineType/IsPublished)
+/// D3-21 修复: 加 Id + RowVersion 字段, 支持 xref 级 xmin 乐观锁 (增量更新而非全量替换)</summary>
 public record XrefInput(
     string? ProductName1,
     string? OemBrand,
@@ -79,7 +80,9 @@ public record XrefInput(
     string? Oem2,           // V2: OEM 2 全量收纳
     int SortOrder,          // V2: OEM 3 排序(默认 0)
     string? MachineType,    // V2: 机型类型(agriculture/commercial/construction/industrial/others)
-    bool IsPublished        // V2: 是否发布
+    bool IsPublished,       // V2: 是否发布
+    long? Id,               // D3-21: 已有 xref 的 Id (新增项为 null)
+    uint? RowVersion        // D3-21: 已有 xref 的 RowVersion (xmin, 来自 GET /api/admin/products/{id}, 用于乐观锁)
 );
 
 /// <summary>机型适配输入项 (Day 8.1: 分区 7 全部字段)</summary>

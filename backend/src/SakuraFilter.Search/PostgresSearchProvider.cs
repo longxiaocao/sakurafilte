@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Npgsql;
@@ -257,7 +258,9 @@ public class PostgresSearchProvider : ISearchProvider
         string baseWhereSql,
         string selectColumns,
         string orderBySql,
-        bool hasQ)
+        bool hasQ,
+        bool useKeyset = false,
+        string? keysetWhereClause = null)
     {
         // sort_cte: 预计算 brand_sort_order_min + oem_list_sort_order_min (修复 S3-2/S3-10)
         // 有 q 时: JOIN q_match 过滤候选 (走 GIN trgm 索引)
@@ -265,6 +268,13 @@ public class PostgresSearchProvider : ISearchProvider
         // sort_order=0 视为未维护 (spec L181-182 修订), 不参与 oem_list_sort_order_min 计算
         var sortCteJoin = hasQ ? "JOIN q_match ON q_match.product_id = p.id" : "";
         var cteSeparator = ctePrefixSql != null ? ", " : "WITH ";
+
+        // P2-1 S3-15: keyset 分页 (page>1 且 cursor 可用时替代 OFFSET)
+        // useKeyset=true 且 keysetWhereClause 非空 → WHERE cursor 条件 + LIMIT, 无 OFFSET
+        // 否则回退原 OFFSET 分页 (page 1 或 cursor 不可用)
+        var paginationSql = useKeyset && !string.IsNullOrEmpty(keysetWhereClause)
+            ? $"WHERE {keysetWhereClause}\nLIMIT @pageSize"
+            : "LIMIT @pageSize OFFSET @offset";
 
         var sql = $@"{(ctePrefixSql ?? "")}{(ctePrefixSql != null ? cteSeparator : cteSeparator)}sort_cte AS (
     SELECT
@@ -287,7 +297,7 @@ FROM products p
 JOIN sort_cte s ON s.product_id = p.id
 ORDER BY
     {orderBySql}
-LIMIT @pageSize OFFSET @offset";
+{paginationSql}";
         return sql;
     }
 
@@ -317,8 +327,25 @@ SELECT COUNT(*) FROM sort_cte";
 
     /// <summary>
     /// V24-F80 + V24-F94: 原生 SQL 搜索 (恢复分词 OR + 三层排序 + CTE UNION GIN trgm 加速)
+    /// 接口实现: 无 cursor, 走 OFFSET 分页 (P2-1 S3-15: cursor 全 null 时回退 OFFSET)
     /// </summary>
-    public async Task<SearchResult> SearchAsync(SearchRequest req, CancellationToken ct = default)
+    public Task<SearchResult> SearchAsync(SearchRequest req, CancellationToken ct = default)
+    {
+        return SearchAsync(req, null, null, null, ct);
+    }
+
+    /// <summary>
+    /// P2-1 S3-15: keyset 分页重载 (非接口方法, 供需要 cursor 分页的调用方使用)
+    /// WHY: OFFSET 在深分页时性能退化 (PG 需扫描 offset+pageSize 行), keyset 用 WHERE cursor 条件恒定扫描 pageSize 行
+    /// cursor 全为 null 时回退到 OFFSET 分页, 不破坏原接口语义
+    /// cursor 取值: 上一页最后一条记录的 (brand_sort_order_min, oem_list_sort_order_min, updated_at)
+    /// </summary>
+    public async Task<SearchResult> SearchAsync(
+        SearchRequest req,
+        int? cursorBrandSort,
+        int? cursorOemSort,
+        DateTime? cursorUpdatedAt,
+        CancellationToken ct = default)
     {
         var sw = Stopwatch.StartNew();
 
@@ -336,21 +363,61 @@ SELECT COUNT(*) FROM sort_cte";
         var pageSize = Math.Clamp(req.PageSize, 1, 100);
         var offset = (page - 1) * pageSize;
 
-        // 三层排序: brand_sort_order_min → oem_list_sort_order_min → updated_at DESC
-        const string orderBySql = "s.brand_sort_order_min ASC, s.oem_list_sort_order_min ASC, p.updated_at DESC";
+        // P1-3 S3-5: PG ORDER BY 第 3 字段改为 CASE WHEN 相关性评分 (有 q 时生效, 无 q 回退 updated_at)
+        // WHY: PG 兜底无原生相关性评分, 用粗略 CASE WHEN (product_name_1=100, oem_2=50) 模拟, 对齐 Meilisearch 语义
+        NpgsqlParameter? kwHighlightParam = null;
+        string orderBySql;
+        if (hasQ)
+        {
+            // @kwHighlight: %关键词% 格式, 关键词先 EscapeLikePattern (转义 ILIKE 特殊字符), 加 ESCAPE '\\' 保证字面量匹配
+            var kwEscaped = req.Q!.Trim().EscapeLikePattern();
+            kwHighlightParam = new NpgsqlParameter("@kwHighlight", NpgsqlDbType.Text) { Value = $"%{kwEscaped}%" };
+            orderBySql = "s.brand_sort_order_min ASC, s.oem_list_sort_order_min ASC, " +
+                         "CASE WHEN p.product_name_1 ILIKE @kwHighlight ESCAPE '\\' THEN 100 " +
+                         "WHEN p.oem_2 ILIKE @kwHighlight ESCAPE '\\' THEN 50 " +
+                         "ELSE 0 END DESC, p.updated_at DESC";
+        }
+        else
+        {
+            orderBySql = "s.brand_sort_order_min ASC, s.oem_list_sort_order_min ASC, p.updated_at DESC";
+        }
+
+        // P2-1 S3-15: keyset 分页 (cursor 三个值全有值时启用, 否则回退 OFFSET)
+        // WHY: row-wise > 不支持混合排序方向 (brand ASC, oem ASC, updated_at DESC), 用 OR 链显式表达
+        //   updated_at DESC → cursor 之后用 < (更新时间更晚的排更前)
+        var useKeyset = cursorBrandSort.HasValue && cursorOemSort.HasValue && cursorUpdatedAt.HasValue;
+        string? keysetWhereClause = null;
+        if (useKeyset)
+        {
+            keysetWhereClause =
+                "(s.brand_sort_order_min > @cursor_brand_sort OR " +
+                "(s.brand_sort_order_min = @cursor_brand_sort AND s.oem_list_sort_order_min > @cursor_oem_sort) OR " +
+                "(s.brand_sort_order_min = @cursor_brand_sort AND s.oem_list_sort_order_min = @cursor_oem_sort AND p.updated_at < @cursor_updated_at))";
+        }
+
         const string selectColumns = @"p.id, p.mr_1, p.oem_no_display, p.remark, p.type,
     p.d1_mm, p.d2_mm, p.h1_mm, p.image_key, p.is_discontinued,
     p.updated_at";
 
-        var sql = BuildFullSql(ctePrefixSql, baseWhereSql, selectColumns, orderBySql, hasQ);
+        var sql = BuildFullSql(ctePrefixSql, baseWhereSql, selectColumns, orderBySql, hasQ, useKeyset, keysetWhereClause);
         var countSql = BuildCountSql(ctePrefixSql, baseWhereSql, hasQ);
 
-        // 参数克隆 (countSql 复用 base+q 参数, sql 还需 pageSize/offset)
+        // 参数克隆 (countSql 复用 base+q 参数, sql 还需 pageSize/offset 或 cursor/kwHighlight)
         var allParams = baseParams.Concat(qParams).ToList();
         var countParams = allParams.Select(p => p.Clone()).ToList();
         var listParams = allParams.ToList();
+        if (kwHighlightParam != null) listParams.Add(kwHighlightParam);
+        if (useKeyset)
+        {
+            listParams.Add(new NpgsqlParameter("@cursor_brand_sort", NpgsqlDbType.Integer) { Value = cursorBrandSort!.Value });
+            listParams.Add(new NpgsqlParameter("@cursor_oem_sort", NpgsqlDbType.Integer) { Value = cursorOemSort!.Value });
+            listParams.Add(new NpgsqlParameter("@cursor_updated_at", NpgsqlDbType.TimestampTz) { Value = cursorUpdatedAt!.Value });
+        }
         listParams.Add(new NpgsqlParameter("@pageSize", NpgsqlDbType.Integer) { Value = pageSize });
-        listParams.Add(new NpgsqlParameter("@offset", NpgsqlDbType.Integer) { Value = offset });
+        if (!useKeyset)
+        {
+            listParams.Add(new NpgsqlParameter("@offset", NpgsqlDbType.Integer) { Value = offset });
+        }
 
         long total;
         var items = new List<SearchResultItem>();
@@ -465,7 +532,22 @@ SELECT COUNT(*) FROM sort_cte";
         var offset = (page - 1) * pageSize;
 
         // 主查询: CTE + LATERAL JOIN 取分页产品 + 嵌套 OEM 3 / 机型列表
-        const string orderBySql = "s.brand_sort_order_min ASC, s.oem_list_sort_order_min ASC, p.updated_at DESC";
+        // P1-3 S3-5: PG ORDER BY 第 3 字段改为 CASE WHEN 相关性评分 (有 q 时生效, 无 q 回退 updated_at)
+        NpgsqlParameter? kwHighlightParam = null;
+        string orderBySql;
+        if (hasQ)
+        {
+            var kwEscaped = req.Q!.Trim().EscapeLikePattern();
+            kwHighlightParam = new NpgsqlParameter("@kwHighlight", NpgsqlDbType.Text) { Value = $"%{kwEscaped}%" };
+            orderBySql = "s.brand_sort_order_min ASC, s.oem_list_sort_order_min ASC, " +
+                         "CASE WHEN p.product_name_1 ILIKE @kwHighlight ESCAPE '\\' THEN 100 " +
+                         "WHEN p.oem_2 ILIKE @kwHighlight ESCAPE '\\' THEN 50 " +
+                         "ELSE 0 END DESC, p.updated_at DESC";
+        }
+        else
+        {
+            orderBySql = "s.brand_sort_order_min ASC, s.oem_list_sort_order_min ASC, p.updated_at DESC";
+        }
         const string selectColumns = @"p.id, p.mr_1, p.product_name_1, p.product_name_2, p.oem_2, p.type,
     p.remark, p.media, p.is_published, p.is_discontinued, p.updated_at,
     -- LATERAL JOIN 聚合 OEM 3 列表 (JSON, 每产品最多 50, 避免笛卡尔积)
@@ -505,6 +587,7 @@ SELECT COUNT(*) FROM sort_cte";
         var allParams = baseParams.Concat(qParams).ToList();
         var countParams = allParams.Select(p => p.Clone()).ToList();
         var listParams = allParams.ToList();
+        if (kwHighlightParam != null) listParams.Add(kwHighlightParam);
         listParams.Add(new NpgsqlParameter("@pageSize", NpgsqlDbType.Integer) { Value = pageSize });
         listParams.Add(new NpgsqlParameter("@offset", NpgsqlDbType.Integer) { Value = offset });
 
@@ -544,19 +627,33 @@ SELECT COUNT(*) FROM sort_cte";
                     var mr1Idx = reader.GetOrdinal("mr_1");
                     var mr1 = reader.IsDBNull(mr1Idx) ? "" : reader.GetString(mr1Idx);
 
+                    // 提取字段值 (供高亮和构造 hit 复用)
+                    var productName1 = reader.IsDBNull(reader.GetOrdinal("product_name_1")) ? null : reader.GetString(reader.GetOrdinal("product_name_1"));
+                    var productName2 = reader.IsDBNull(reader.GetOrdinal("product_name_2")) ? null : reader.GetString(reader.GetOrdinal("product_name_2"));
+                    var oem2 = reader.IsDBNull(reader.GetOrdinal("oem_2")) ? null : reader.GetString(reader.GetOrdinal("oem_2"));
+                    var type = reader.GetString(reader.GetOrdinal("type")) ?? "UNKNOWN";
+
+                    // P1-4 S9: PG 兜底手动高亮 (Regex + <mark> 包裹关键词, 对齐 Meilisearch _formatted 语义)
+                    // hasQ=false 时 formatted=null (无关键词不高亮)
+                    Dictionary<string, object?>? formatted = null;
+                    if (hasQ)
+                    {
+                        formatted = BuildHighlightedFields(req.Q, productName1, productName2, oem2, type);
+                    }
+
                     hits.Add(new AggregateSearchHit(
                         Mr1: mr1,
-                        ProductName1: reader.IsDBNull(reader.GetOrdinal("product_name_1")) ? null : reader.GetString(reader.GetOrdinal("product_name_1")),
-                        ProductName2: reader.IsDBNull(reader.GetOrdinal("product_name_2")) ? null : reader.GetString(reader.GetOrdinal("product_name_2")),
-                        Oem2: reader.IsDBNull(reader.GetOrdinal("oem_2")) ? null : reader.GetString(reader.GetOrdinal("oem_2")),
-                        Type: reader.GetString(reader.GetOrdinal("type")) ?? "UNKNOWN",
+                        ProductName1: productName1,
+                        ProductName2: productName2,
+                        Oem2: oem2,
+                        Type: type,
                         Remark: reader.IsDBNull(reader.GetOrdinal("remark")) ? null : reader.GetString(reader.GetOrdinal("remark")),
                         Media: reader.IsDBNull(reader.GetOrdinal("media")) ? null : reader.GetString(reader.GetOrdinal("media")),
                         IsPublished: reader.GetBoolean(reader.GetOrdinal("is_published")),
                         IsDiscontinued: reader.GetBoolean(reader.GetOrdinal("is_discontinued")),
                         OemList: oemList,
                         MachineList: machineList,
-                        Formatted: null,  // PG 无原生高亮
+                        Formatted: formatted,
                         RankingScore: 0.5  // PG 兜底固定评分
                     ));
                 }
@@ -642,6 +739,43 @@ SELECT COUNT(*) FROM sort_cte";
         {
             return new List<AggregateMachineItem>();
         }
+    }
+
+    /// <summary>
+    /// P1-4 S9: PG 兜底手动高亮 (Regex.Replace + &lt;mark&gt; 包裹关键词)
+    /// WHY: PG 无原生高亮 (Meilisearch 有 _formatted), 兜底路径需手动实现以对齐前端展示契约
+    /// 转义策略: 关键词先 EscapeLikePattern (转义 ILIKE 特殊字符 % _ \), 再 Regex.Escape (转义正则特殊字符)
+    /// 安全性: &lt;mark&gt; 是前端白名单标签, 关键词本身已转义不会注入正则; 产品名原文输出 (前端负责 XSS 过滤)
+    /// </summary>
+    /// <param name="q">搜索关键词 (原始)</param>
+    /// <param name="productName1">产品名 1 (可为 null)</param>
+    /// <param name="productName2">产品名 2 (可为 null)</param>
+    /// <param name="oem2">OEM 2 (可为 null)</param>
+    /// <param name="type">分类 (非 null)</param>
+    /// <returns>高亮后的字段字典, key 为字段名, value 为高亮后字符串; 无匹配项时仍包含该字段 (原值)</returns>
+    private static Dictionary<string, object?> BuildHighlightedFields(
+        string? q,
+        string? productName1,
+        string? productName2,
+        string? oem2,
+        string? type)
+    {
+        var result = new Dictionary<string, object?>();
+        if (string.IsNullOrWhiteSpace(q))
+        {
+            return result;
+        }
+
+        // 关键词先 EscapeLikePattern (转义 ILIKE 特殊字符 % _ \), 再 Regex.Escape (转义正则特殊字符)
+        // 注意: EscapeLikePattern 引入的 \ 会被 Regex.Escape 再次转义为 \\, 极端输入 (含 % _) 时可能匹配字面量 \%, 属已知限制
+        var pattern = Regex.Escape(q.Trim().EscapeLikePattern() ?? "");
+        var regex = new Regex(pattern, RegexOptions.IgnoreCase);
+
+        if (productName1 != null) result["product_name_1"] = regex.Replace(productName1, "<mark>$0</mark>");
+        if (productName2 != null) result["product_name_2"] = regex.Replace(productName2, "<mark>$0</mark>");
+        if (oem2 != null) result["oem_2"] = regex.Replace(oem2, "<mark>$0</mark>");
+        if (type != null) result["type"] = regex.Replace(type, "<mark>$0</mark>");
+        return result;
     }
 
     /// <summary>

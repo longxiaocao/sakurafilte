@@ -52,6 +52,8 @@ public static class ProblemDetailsFactory
     private const string V2ImageDetailSlotDuplicate = "IMAGE_DETAIL_SLOT_DUPLICATE";
     private const string V2Mr1NotFound = "MR1_NOT_FOUND";
     private const string V2Oem3NotFound = "OEM3_NOT_FOUND";
+    // P1-6: SEO URL slug 错误码 (public 供其他模块引用)
+    public const string SEO_URL_SLUG_EMPTY = "SEO_URL_SLUG_EMPTY";
 
     /// <summary>
     /// 把异常类型映射为 HTTP 状态码 (Day 8.4 MVP 范围)
@@ -213,6 +215,7 @@ public static class ProblemDetailsFactory
         if (message.Contains("IMAGE_DETAIL_SLOT_DUPLICATE")) return V2ImageDetailSlotDuplicate;
         if (message.Contains("MR1_NOT_FOUND")) return V2Mr1NotFound;
         if (message.Contains("OEM3_NOT_FOUND")) return V2Oem3NotFound;
+        if (message.Contains("SEO_URL_SLUG_EMPTY")) return SEO_URL_SLUG_EMPTY;
         // 向后兼容: 未匹配 V2 错误码时,根据 HTTP 语义返回旧错误码
         return ErrValidationFailed;
     }

@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Polly;
 using Polly.CircuitBreaker;
@@ -22,6 +23,8 @@ public class ResilientSearchProvider : ISearchProvider
     // v30-20: Meili 主路径性能指标采集 (Singleton, 通过 DI 注入)
     //   WHY 可空: 测试场景 (ResilientSearchProviderTests) 不需要 metrics, 用 null 兜底
     private readonly MeiliSearchMetrics? _metrics;
+    // P2-2 (spec S3-22): IndexAsync 5 秒去重缓存 (可空, 测试场景不注入)
+    private readonly IMemoryCache? _cache;
 
     public string Name => "resilient(meili→pg)";
 
@@ -29,12 +32,14 @@ public class ResilientSearchProvider : ISearchProvider
         MeiliSearchProvider primary,
         PostgresSearchProvider fallback,
         ILogger<ResilientSearchProvider> logger,
-        MeiliSearchMetrics? metrics = null)
+        MeiliSearchMetrics? metrics = null,
+        IMemoryCache? cache = null)
     {
         _primary = primary;
         _fallback = fallback;
         _logger = logger;
         _metrics = metrics;
+        _cache = cache;
 
         // Polly v8 弹性管道: timeout + retry + circuit breaker
         _pipeline = new ResiliencePipelineBuilder()
@@ -186,10 +191,51 @@ public class ResilientSearchProvider : ISearchProvider
 
     public async Task IndexAsync(IEnumerable<Mr1IndexDoc> docs, CancellationToken ct = default)
     {
+        // P2-2 (spec S3-22 修订): 5 秒内同 MR.1 去重 (IMemoryCache + TTL 5 秒)
+        //   WHY: 后台 worker 可能短时间内重复触发同一 MR.1 的索引, 5 秒去重避免无谓的双写
+        //   降级: IMemoryCache 不可用或缓存操作失败时, 不影响正常流程 (跳过去重)
+        List<Mr1IndexDoc> docsToIndex;
+        if (_cache == null)
+        {
+            // IMemoryCache 未注入 (测试场景), 跳过去重
+            docsToIndex = docs.ToList();
+        }
+        else
+        {
+            docsToIndex = new List<Mr1IndexDoc>();
+            foreach (var doc in docs)
+            {
+                var cacheKey = $"index_dedup_{doc.Mr1}";
+                try
+                {
+                    if (_cache.TryGetValue(cacheKey, out _))
+                    {
+                        // 5 秒内已索引过该 mr1, 跳过
+                        continue;
+                    }
+                    // 标记为已索引, TTL 5 秒
+                    //   WHY 显式指定 Size: SizeLimit=10000 已设置, 缺失 Size 会抛 InvalidOperationException
+                    _cache.Set(cacheKey, true, new MemoryCacheEntryOptions
+                    {
+                        AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(5),
+                        Size = 1
+                    });
+                }
+                catch
+                {
+                    // 缓存异常不影响正常流程 (降级为不去重, 该 doc 照常索引)
+                }
+                docsToIndex.Add(doc);
+            }
+        }
+
+        if (docsToIndex.Count == 0)
+            return;
+
         // 双写: 主备都写,主失败不阻塞备 (后台 worker 会补偿)
         // V2: 文档类型从 ProductIndexDoc 改为 Mr1IndexDoc (嵌套结构)
-        var primaryTask = SafeIndexAsync(_primary, docs, ct);
-        var fallbackTask = SafeIndexAsync(_fallback, docs, ct);
+        var primaryTask = SafeIndexAsync(_primary, docsToIndex, ct);
+        var fallbackTask = SafeIndexAsync(_fallback, docsToIndex, ct);
         await Task.WhenAll(primaryTask, fallbackTask);
     }
 

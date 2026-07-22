@@ -43,14 +43,14 @@ public static class SitemapEndpoints
             .WithSummary("sitemap 索引 (列出所有分片, 供搜索引擎发现)")
             .WithName("SitemapIndex")
             .WithOpenApi()
-            .RequireRateLimiting("public");
+            .RequireRateLimiting("sitemap");
 
         // GET /sitemaps/products-{shard}.xml — 单分片 urlset
         app.MapGet("/sitemaps/products-{shard:int}.xml", MapSitemapShardAsync)
             .WithSummary("sitemap 分片 urlset (每分片 ≤ 50000 URL)")
             .WithName("SitemapShard")
             .WithOpenApi()
-            .RequireRateLimiting("public");
+            .RequireRateLimiting("sitemap");
 
         return app;
     }

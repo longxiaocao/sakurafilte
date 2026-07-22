@@ -560,6 +560,21 @@ public class MeiliSearchProvider : ISearchProvider
             .Select(x => (int?)x.SortOrder)
             .Min();
 
+        // P2-3: 图片 key 列表 (主图按 OEM 3 命名, 详情图按 MR.1 命名)
+        //   主图: image_role='primary' AND oem_no_3 IS NOT NULL (与 uq_product_images_primary 索引口径一致)
+        //   详情图: image_role='detail'
+        //   默认空列表: 无图片数据时 ToListAsync 返回空 List
+        var imagePrimaryKeys = await _db.ProductImages
+            .AsNoTracking()
+            .Where(i => i.ProductId == p.Id && i.ImageRole == "primary" && i.OemNo3 != null)
+            .Select(i => i.ImageKey)
+            .ToListAsync(ct);
+        var imageDetailKeys = await _db.ProductImages
+            .AsNoTracking()
+            .Where(i => i.ProductId == p.Id && i.ImageRole == "detail")
+            .Select(i => i.ImageKey)
+            .ToListAsync(ct);
+
         return new Mr1IndexDoc(
             Mr1: p.Mr1 ?? "",
             ProductName1: p.ProductName1,
@@ -583,6 +598,8 @@ public class MeiliSearchProvider : ISearchProvider
             OemNo3sStr: oemNo3sStr,
             BrandSortOrderMin: brandSortOrderMin,
             OemListSortOrderMin: oemListSortOrderMin,
+            ImagePrimaryKeys: imagePrimaryKeys,
+            ImageDetailKeys: imageDetailKeys,
             UpdatedAtUnix: new DateTimeOffset(DateTime.SpecifyKind(p.UpdatedAt, DateTimeKind.Utc), TimeSpan.Zero).ToUnixTimeSeconds()
         );
     }
@@ -763,11 +780,37 @@ public class MeiliSearchProvider : ISearchProvider
                     // 扁平化冗余字段 (S4-13: 空格分隔,可被分词器切分)
                     "oem_brands_str", "oem_no3s_str",
                     // 嵌套数组字段 (支持 OEM 3 / 机型搜索)
-                    "oem_list.oem_brand", "oem_list.oem_no_3",
+                    "oem_list.oem_brand", "oem_list.oem_no_3", "oem_list.oem_2",
                     "machine_list.machine_brand", "machine_list.machine_model"
                 };
                 var searchTask = await target.UpdateSearchableAttributesAsync(searchable, ct);
                 await target.WaitForTaskAsync(searchTask.TaskUid, 30000);
+
+                // S6: stopWords (移除 of/for/and, 防止型号 OF-100 误删词; 只保留 the/a/an)
+                //   WHY: spec L1533 要求, of/for/and 是型号常见组成 (OF-100, FOR-K, AND-3), 误删导致搜索召回失败
+                var stopWords = new[] { "the", "a", "an" };
+                var stopTask = await target.UpdateStopWordsAsync(stopWords, ct);
+                await target.WaitForTaskAsync(stopTask.TaskUid, 30000);
+
+                // S4/S5: typoTolerance (minWordSizeForTypos=4, 防止短型号误纠错)
+                //   WHY: spec L924 要求, 默认 oneTypo=5/twoTypos=9, 改为 oneTypo=4/twoTypos=8 提高容错
+                var typoTolerance = new TypoTolerance
+                {
+                    Enabled = true,
+                    MinWordSizeForTypos = new TypoTolerance.TypoSize
+                    {
+                        OneTypo = 4,
+                        TwoTypos = 8
+                    }
+                };
+                var typoTask = await target.UpdateTypoToleranceAsync(typoTolerance, ct);
+                await target.WaitForTaskAsync(typoTask.TaskUid, 30000);
+
+                // S5: separatorTokens (空格/连字符/斜杠/逗号/句号, 支持型号分词)
+                //   WHY: spec L928 要求, M24-36 应分词为 M24 和 36, Donaldson/P558512 应分词为 Donaldson 和 P558512
+                var separatorTokens = new[] { " ", "-", "/", ",", "." };
+                var sepTask = await target.UpdateSeparatorTokensAsync(separatorTokens, ct);
+                await target.WaitForTaskAsync(sepTask.TaskUid, 30000);
 
                 _logger.LogInformation("Meili schema 已配置: target={Target}, filterable={FilterCount}, sortable={SortCount}, searchable={SearchCount}",
                     target.Uid, filterable.Length, sortable.Length, searchable.Length);

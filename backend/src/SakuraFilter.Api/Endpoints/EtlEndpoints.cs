@@ -45,6 +45,7 @@ public static class EtlEndpoints
         })
         .WithSummary("ETL 导入触发 (products/xrefs/apps, 统一入口, 路径白名单校验)").WithName("EtlImport")
         .RequireAuthorization("Admin")  // v30-18 P0
+        .RequireRateLimiting("etl")    // spec RateLimit: 30/min
         .WithOpenApi();
 
         // 进度查询
@@ -52,6 +53,7 @@ public static class EtlEndpoints
             Results.Ok(etl.Progress.ToJson()))
         .WithSummary("ETL 导入进度查询 (实时 JSON, 含 current/total/elapsed/eta)").WithName("EtlStatus")
         .RequireAuthorization("Admin")  // v30-18 P0
+        .RequireRateLimiting("etl")    // spec RateLimit: 30/min
         .WithOpenApi();
 
         // 旧入口: xrefs
@@ -70,6 +72,7 @@ public static class EtlEndpoints
         })
         .WithSummary("ETL 导入 xrefs (兼容旧入口, 新调用走 /api/etl/import + entityType)").WithName("EtlImportXrefs")
         .RequireAuthorization("Admin")  // v30-18 P0
+        .RequireRateLimiting("etl")    // spec RateLimit: 30/min
         .WithOpenApi();
 
         // 旧入口: apps
@@ -88,6 +91,7 @@ public static class EtlEndpoints
         })
         .WithSummary("ETL 导入 apps (兼容旧入口, 新调用走 /api/etl/import + entityType)").WithName("EtlImportApps")
         .RequireAuthorization("Admin")  // v30-18 P0
+        .RequireRateLimiting("etl")    // spec RateLimit: 30/min
         .WithOpenApi();
 
         return app;

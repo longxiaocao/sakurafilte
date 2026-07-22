@@ -19,4 +19,8 @@ public class RateLimitOptions
     public int SearchPermitsPerMinute { get; set; } = 300;
     public int EtlPermitsPerMinute { get; set; } = 30;
     public int AuthPermitsPerMinute { get; set; } = 5;
+    /// <summary>P1-2 F6: 公开路径 (sitemap 索引页等) 120/min per IP</summary>
+    public int PublicPermitsPerMinute { get; set; } = 120;
+    /// <summary>P1-2 F6: sitemap 分片页 600/min per IP (搜索引擎爬虫高频抓取)</summary>
+    public int SitemapPermitsPerMinute { get; set; } = 600;
 }

@@ -35,7 +35,7 @@ public static class AdminXrefReorderEndpoints
         {
             const string cacheKey = "xref.brands.list";
             if (cache.TryGetValue(cacheKey, out List<object>? cached) && cached != null)
-                return Results.Ok(new { total = cached.Count, items = cached });
+                return Results.Ok(new { brands = cached });
 
             // 取 XrefOemBrand 字典 (仅未软删除),LEFT JOIN cross_references 统计 oem3 数量
             // WHY LEFT JOIN: 即使 brand 下 OEM 3 全部下架, 字典仍展示 (count=0),便于管理员清理
@@ -58,7 +58,7 @@ public static class AdminXrefReorderEndpoints
             var result = brands.Cast<object>().ToList();
             // V24-F85: 用 SetWithSize 替代手写 MemoryCacheEntryOptions (避免再次遗漏 Size 声明)
             cache.SetWithSize(cacheKey, result, TimeSpan.FromMinutes(5));
-            return Results.Ok(new { total = result.Count, items = result });
+            return Results.Ok(new { brands = result });
         })
         .WithSummary("获取 OEM 品牌列表 (含 sortOrder + oem3Count, 按 sortOrder 排序)")
         .WithName("AdminXrefReorder_ListBrands");
@@ -77,6 +77,14 @@ public static class AdminXrefReorderEndpoints
                     Detail = "oemBrand 参数必填"
                 });
 
+            // P1-5: 查询 xref_oem_brand 表获取 brandSortOrder (spec L729-770 要求顶层返回)
+            //   WHY 顶层暴露: 前端拖拽排序时需显示该 brand 在字典中的排序位次
+            var brandSortOrder = await db.XrefOemBrands
+                .AsNoTracking()
+                .Where(b => b.Brand == oemBrand && b.DeletedAt == null)
+                .Select(b => (int?)b.SortOrder)
+                .FirstOrDefaultAsync(ct);
+
             var items = await (
                 from x in db.CrossReferences.AsNoTracking()
                 where x.OemBrand == oemBrand && !x.IsDiscontinued
@@ -91,7 +99,7 @@ public static class AdminXrefReorderEndpoints
                     rowVersion = x.RowVersion  // xmin 乐观锁令牌, 透传给前端
                 }).ToListAsync(ct);
 
-            return Results.Ok(new { total = items.Count, items });
+            return Results.Ok(new { oemBrand, brandSortOrder, items });
         })
         .WithSummary("获取指定 Brand 下 OEM 3 列表 (按 sortOrder 排序, 含 rowVersion 乐观锁令牌)")
         .WithName("AdminXrefReorder_ListByBrand");
@@ -150,7 +158,7 @@ public static class AdminXrefReorderEndpoints
                 // 改进 2.1: 排序更新成功后清 brand 列表缓存 (oem3Count 可能变化)
                 cache.Remove("xref.brands.list");
                 logger.LogInformation("OEM 3 批量排序更新成功: brand={Brand} count={Count}", req.OemBrand, req.Items.Count);
-                return Results.Ok(new { updated = req.Items.Count });
+                return Results.Ok(new { updated = req.Items.Count, oemBrand = req.OemBrand });
             }
             catch (InvalidOperationException ex) when (ex.Message.Contains("XREF_CONFLICT"))
             {

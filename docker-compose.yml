@@ -68,6 +68,8 @@ services:
 
   meilisearch:
     image: getmeili/meilisearch:v1.12
+    # P1-1 S15: 限制索引内存 8GB, 防止全量重建时 OOM (生产环境容器内存通常 16GB, 留 8GB 给查询/系统)
+    command: ["--max-indexing-memory", "8192"]
     environment:
       MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-}
       MEILI_NO_ANALYTICS: "true"

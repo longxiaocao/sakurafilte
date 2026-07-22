@@ -314,31 +314,59 @@ public class AdminProductService
             product.UpdatedAt = DateTime.UtcNow;
             await _db.SaveChangesAsync(ct);
 
-            // xref: 全量替换 (后台表单语义 = 全量编辑)
+            // xref: 增量更新 (修复 D3-21, 按 (oem_brand, oem_no_3) 匹配 + xref 级 xmin 乐观锁)
+            //   WHY 全量替换: 两个管理员并发编辑同一产品的不同 OEM 3 时, 后提交者静默覆盖前者, 不触发 409
+            //   方案: 按 (oem_brand, oem_no_3) 业务键匹配, 计算 新增/更新/删除 三类; 更新类设 OriginalValues["RowVersion"] 触发乐观锁
             if (form.CrossReferences != null)
             {
                 // V24-F21: xref 写入前加 advisory_xact_lock(7740002) 防止与 ETL DELETE+INSERT 冲突 (spec Task 0.3.19)
                 if (form.CrossReferences.Count > 0 && !await TryAcquireAdvisoryLockAsync(7740002L, ct))
                     throw new InvalidOperationException("ETL_IN_PROGRESS: ETL xrefs 导入进行中, 请稍后重试");
 
-                var oldXref = await _db.CrossReferences.Where(x => x.ProductId == id).ToListAsync(ct);
-                if (oldXref.Count > 0) _db.CrossReferences.RemoveRange(oldXref);
-                // V24-F22: 补全 V2 字段 Oem2/SortOrder/MachineType/IsPublished (spec Task 0.3.11, 与 CreateAsync 对称)
+                var oldXrefs = await _db.CrossReferences.Where(x => x.ProductId == id).ToListAsync(ct);
+                var oldXrefMap = oldXrefs.ToDictionary(x => $"{(x.OemBrand ?? "").Trim()}|{(x.OemNo3 ?? "").Trim()}");
+                var formKeys = new HashSet<string>();
+
                 foreach (var x in form.CrossReferences)
                 {
-                    _db.CrossReferences.Add(new CrossReference
+                    var key = $"{(x.OemBrand ?? "").Trim()}|{(x.OemNo3 ?? "").Trim()}";
+                    formKeys.Add(key);
+
+                    if (oldXrefMap.TryGetValue(key, out var existing))
                     {
-                        ProductId = id,
-                        ProductName1 = x.ProductName1?.Trim(),
-                        OemBrand = x.OemBrand?.Trim(),
-                        OemNo3 = x.OemNo3?.Trim(),
-                        Oem2 = x.Oem2?.Trim(),               // V2
-                        SortOrder = x.SortOrder,               // V2
-                        MachineType = string.IsNullOrEmpty(x.MachineType) ? "others" : x.MachineType,  // V2
-                        IsPublished = x.IsPublished,           // V2
-                        CreatedAt = DateTime.UtcNow
-                    });
+                        // 更新: 用前端带回的 RowVersion (xmin) 覆盖 OriginalValues, 触发乐观锁
+                        //   WHY: 与产品级乐观锁同机制 (L235-238), xmin 不匹配时 SaveChangesAsync 抛 DbUpdateConcurrencyException
+                        if (x.RowVersion.HasValue)
+                        {
+                            _db.Entry(existing).OriginalValues["RowVersion"] = x.RowVersion.Value;
+                        }
+                        existing.ProductName1 = x.ProductName1?.Trim();
+                        existing.Oem2 = x.Oem2?.Trim();
+                        existing.SortOrder = x.SortOrder;
+                        existing.MachineType = string.IsNullOrEmpty(x.MachineType) ? "others" : x.MachineType;
+                        existing.IsPublished = x.IsPublished;
+                    }
+                    else
+                    {
+                        // 新增
+                        _db.CrossReferences.Add(new CrossReference
+                        {
+                            ProductId = id,
+                            ProductName1 = x.ProductName1?.Trim(),
+                            OemBrand = x.OemBrand?.Trim(),
+                            OemNo3 = x.OemNo3?.Trim(),
+                            Oem2 = x.Oem2?.Trim(),               // V2
+                            SortOrder = x.SortOrder,               // V2
+                            MachineType = string.IsNullOrEmpty(x.MachineType) ? "others" : x.MachineType,  // V2
+                            IsPublished = x.IsPublished,           // V2
+                            CreatedAt = DateTime.UtcNow
+                        });
+                    }
                 }
+
+                // 删除: form 中不存在的旧 xref
+                var toRemove = oldXrefs.Where(o => !formKeys.Contains($"{(o.OemBrand ?? "").Trim()}|{(o.OemNo3 ?? "").Trim()}")).ToList();
+                if (toRemove.Count > 0) _db.CrossReferences.RemoveRange(toRemove);
             }
             // machine_application: 全量替换
             if (form.MachineApplications != null)

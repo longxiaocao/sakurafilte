@@ -92,6 +92,10 @@ public record Mr1IndexDoc(
     [property: JsonPropertyName("brand_sort_order_min")] int? BrandSortOrderMin,                  // 未软删除 brand 的 sort_order MIN (S4-25: 改 long? NULL)
     [property: JsonPropertyName("oem_list_sort_order_min")] int? OemListSortOrderMin,                // 上架 OEM 3 的 sort_order MIN
 
+    // ===== 图片字段 (P2-3) =====
+    [property: JsonPropertyName("image_primary_keys")] List<string> ImagePrimaryKeys,   // 主图 key 列表 (按 OEM 3 命名, image_role='primary' AND oem_no_3 IS NOT NULL)
+    [property: JsonPropertyName("image_detail_keys")] List<string> ImageDetailKeys,     // 详情图 key 列表 (按 MR.1 命名, image_role='detail')
+
     // ===== 时间戳 =====
     [property: JsonPropertyName("updated_at_unix")] long UpdatedAtUnix
 );

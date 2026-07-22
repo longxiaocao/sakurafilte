@@ -222,9 +222,9 @@ public class ProductHistory
 public class SystemSetting
 {
     public string Key { get; set; } = "";
-    public string? Value { get; set; }
+    public string Value { get; set; } = "";  // P2-6: spec 要求 NOT NULL
     public string? Description { get; set; }
-    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;  // P2-6: spec 要求 timestamptz DEFAULT now()
 }
 
 /// <summary>
