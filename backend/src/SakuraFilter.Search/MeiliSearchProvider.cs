@@ -173,8 +173,12 @@ public class MeiliSearchProvider : ISearchProvider
             HighlightPreTag = MarkOpen,
             HighlightPostTag = MarkClose,
             ShowRankingScore = true,
-            // 两层排序: 品牌优先级 (brand_sort_order_min) > 品牌内 OEM 3 优先级 (oem_list_sort_order_min)
-            //   两者 null 都排末尾 (Meili asc 默认行为)
+            // 三层排序 (spec L953):
+            //   1. brand_sort_order_min ASC (品牌优先级, null 排末尾)
+            //   2. oem_list_sort_order_min ASC (品牌内 OEM 3 优先级, null 排末尾, sort_order=0 视为未维护=null)
+            //   3. _ranking_score DESC (MeiliSearch 默认 ranking rules, sort 值相同时自动按相关性排序)
+            // WHY: Sort 参数只放前两层, 第三层 _ranking_score 是搜索时计算值非文档属性,
+            //      MeiliSearch 在 sort 值相同时自动回退到默认 ranking rules (words/typo/proximity...) 排序
             Sort = new[] { "brand_sort_order_min:asc", "oem_list_sort_order_min:asc" },
         };
 
@@ -274,8 +278,9 @@ public class MeiliSearchProvider : ISearchProvider
             HighlightPreTag = MarkOpen,
             HighlightPostTag = MarkClose,
             ShowRankingScore = true,
-            // 两层排序: 品牌优先级 (brand_sort_order_min) > 品牌内 OEM 3 优先级 (oem_list_sort_order_min)
-            //   两者 null 都排末尾 (Meili asc 默认行为)
+            // 三层排序 (spec L953): 同 SearchAsync, brand → oem3 → _ranking_score
+            // WHY: Sort 参数只放前两层, 第三层 _ranking_score 是搜索时计算值非文档属性,
+            //      MeiliSearch 在 sort 值相同时自动回退到默认 ranking rules (words/typo/proximity...) 排序
             Sort = new[] { "brand_sort_order_min:asc", "oem_list_sort_order_min:asc" },
         };
 

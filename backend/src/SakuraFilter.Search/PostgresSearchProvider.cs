@@ -262,6 +262,7 @@ public class PostgresSearchProvider : ISearchProvider
         // sort_cte: 预计算 brand_sort_order_min + oem_list_sort_order_min (修复 S3-2/S3-10)
         // 有 q 时: JOIN q_match 过滤候选 (走 GIN trgm 索引)
         // 无 q 时: 仅 base filter
+        // sort_order=0 视为未维护 (spec L181-182 修订), 不参与 oem_list_sort_order_min 计算
         var sortCteJoin = hasQ ? "JOIN q_match ON q_match.product_id = p.id" : "";
         var cteSeparator = ctePrefixSql != null ? ", " : "WITH ";
 
@@ -269,7 +270,7 @@ public class PostgresSearchProvider : ISearchProvider
     SELECT
         p.id AS product_id,
         COALESCE(MIN(xb.sort_order), 2147483647) AS brand_sort_order_min,
-        COALESCE(MIN(x.sort_order), 2147483647) AS oem_list_sort_order_min
+        COALESCE(MIN(CASE WHEN x.sort_order > 0 THEN x.sort_order ELSE NULL END), 2147483647) AS oem_list_sort_order_min
     FROM products p
     {sortCteJoin}
     LEFT JOIN cross_references x ON x.product_id = p.id

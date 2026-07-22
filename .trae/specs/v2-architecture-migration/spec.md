@@ -179,7 +179,8 @@
 
 #### Scenario: 排序值默认值(边界)
 - **WHEN** 新增 OEM 3 未设置 sort_order
-- **THEN** 默认 sort_order=0,前台展示时 sort_order=0 的项排在最前(管理员可后续调整)
+- **THEN** 默认 sort_order=0,前台展示时 sort_order=0 的项排在末尾(管理员可通过 /admin/xrefs/reorder 维护优先级,设置 sort_order > 0 后排前面)
+- **修订**: 原文 "sort_order=0 的项排在最前" 与用户实际业务需求冲突 (用户需求: 维护过的排前面, 未维护的排后面), 2026-07-22 修订为排末尾
 
 ### Requirement: SEO 友好 URL 与 SSR 渲染
 
@@ -948,9 +949,12 @@ stopWords: ["the", "a", "an", "of", "for", "and"]  (英文停止词)
 - 组合过滤: `is_published = true AND is_discontinued = false AND oem_list.is_published = true`
 
 **嵌套字段排序语义(修复漏洞: 排序语义未明)**:
-- `oem_list.sort_order` 升序排序时,Meilisearch 取数组中**最小值**(MIN 语义)
-- `brand_sort_order_min` 是文档级冗余字段,在 `BuildMr1DocumentAsync` 中预计算,值为该 MR.1 下所有 OEM 3 对应 Brand 的最小 sort_order
-- 文档排序策略: `brand_sort_order_min ASC → oem_list.sort_order ASC(MIN) → _ranking_score DESC`
+- `oem_list_sort_order_min` 是文档级冗余字段,在 `BuildMr1DocumentAsync` 中预计算,值为该 MR.1 下上架 OEM 3 中 `sort_order > 0` 的最小值 (sort_order=0 视为未维护, 不参与计算, 详见 L181-182 修订)
+- `brand_sort_order_min` 是文档级冗余字段,在 `BuildMr1DocumentAsync` 中预计算,值为该 MR.1 下所有未软删除 Brand 的最小 sort_order
+- 文档排序策略 (三层): `brand_sort_order_min ASC NULLS LAST → oem_list_sort_order_min ASC NULLS LAST → _ranking_score DESC`
+  - 第一/二层通过 MeiliSearch `Sort` 参数实现, `null` 自动排末尾 (Meili asc 默认行为)
+  - 第三层 `_ranking_score` 是搜索时计算值非文档属性, MeiliSearch 在 sort 值相同时自动回退到默认 ranking rules (words/typo/proximity...) 排序
+- PG 兜底排序 (S11): `brand_sort_order_min ASC → oem_list_sort_order_min ASC → updated_at DESC` (第三层用 updated_at 而非 _ranking_score, 因 PG 无相关性评分)
 
 ### 聚合搜索查询流程(修正 XSS 防御)
 
@@ -1349,7 +1353,7 @@ public async Task<string> BuildKeyAsync(string namingValue, short slot, string r
 | 并发编辑 MR.1 主键冲突 | 低 | 中 | 复用现有 xmin 乐观锁,409 提示刷新重试 |
 | ETL 适配改造可能引入新 bug | 中 | 高 | 旧数据清空后重新导入,ETL 失败有死信队列兜底 |
 | Vue client mount 时序问题 | 低 | 低 | defer 加载,挂载失败不影响 SEO 内容(渐进增强) |
-| OEM 3 sort_order 默认值 0 导致无序 | 中 | 低 | 后台排序管理页强制设置,前端默认按 oem_no_3 字典序兜底 |
+| OEM 3 sort_order 默认值 0 导致无序 | 中 | 低 | sort_order=0 视为未维护排末尾 (BuildMr1DocumentAsync 中 .Where(x => x.SortOrder > 0) 过滤), 管理员通过 /admin/xrefs/reorder 维护优先级 |
 | nginx 路由配置错误导致 SSR 失效 | 中 | 高 | 部署后用 curl 验证 `/products/...` 返回 HTML(非 SPA index.html) |
 | ProblemDetailsFactory 错误码改造影响旧客户端 | 低 | 中 | 旧 `ERR_*` 错误码保留映射,新错误码用新格式,过渡期双兼容 |
 | 聚合搜索 XSS 防御绕过 | 低 | 高 | 后端 HTML escape + 前端 DOMPurify 双保险 |
