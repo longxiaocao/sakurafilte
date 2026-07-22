@@ -93,7 +93,7 @@ VALUES
 
     -- 需求 2: OEM 3 优先展示
     ('oem3.sort_order_default', '0', 'OEM 3 默认排序值 (越小越靠前)', now()),
-    ('oem3.brand_priority_enabled', 'true', '是否启用 Brand 优先级排序', now()),
+    -- ('oem3.brand_priority_enabled', 'true', '是否启用 Brand 优先级排序', now()),  -- P2 死配置: 代码无读取逻辑, 品牌优先级通过 xref_oem_brand 表硬编码管理
 
     -- 需求 4: 图片命名规则
     ('image.primary_naming_field', 'oem_no_3', '主图命名字段 (V2: 按 OEM 3)', now()),
