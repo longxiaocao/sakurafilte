@@ -1,28 +1,13 @@
 using SakuraFilter.Api.Extensions;
-using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // 服务注册（按职责拆分到 ServiceCollectionExtensions）
+//   RateLimit 策略 (global/search/etl/auth/public/sitemap) 已在 AddSakuraFilterServices 内统一注册
 builder.Services.AddSakuraFilterServices(builder.Configuration, builder.Environment);
 
 // Task 0.7.1: 注册 Razor Pages 服务（与 AddControllers 协同, 支持 P3.2 等 MVC/Razor 页面路由）
 builder.Services.AddRazorPages();
-
-// Task 0.7.3: 限流 "public" 策略 - 公开接口 120/min, 基于 RemoteIpAddress 分区
-// 说明: 与 AddSakuraFilterServices 中已注册的 global/search/etl/auth policy 共存
-//       (AddRateLimiter 多次调用安全追加 policy, OnRejected 处理器沿用首次注册的全局行为)
-builder.Services.AddRateLimiter(options =>
-{
-    options.AddPolicy("public", context =>
-        RateLimitPartition.GetFixedWindowLimiter(
-            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-            _ => new FixedWindowRateLimiterOptions
-            {
-                PermitLimit = 120,
-                Window = TimeSpan.FromMinutes(1)
-            }));
-});
 
 var app = builder.Build();
 

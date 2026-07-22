@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -122,12 +122,11 @@ namespace SakuraFilter.Infrastructure.Data.Migrations
                 oldType: "numeric",
                 oldNullable: true);
 
-            migrationBuilder.AddColumn<long>(
-                name: "skipped_missing_mr1",
-                table: "etl_progress_log",
-                type: "bigint",
-                nullable: false,
-                defaultValue: 0L);
+            // P0-2 修复: skipped_missing_mr1 列可能已通过之前手动 ALTER 添加
+            //   使用 IF NOT EXISTS 幂等 SQL 避免冲突 (EF Core AddColumn 不支持 IF NOT EXISTS)
+            migrationBuilder.Sql(@"
+                ALTER TABLE etl_progress_log ADD COLUMN IF NOT EXISTS skipped_missing_mr1 bigint NOT NULL DEFAULT 0;
+            ");
 
             migrationBuilder.AlterColumn<bool>(
                 name: "is_discontinued",
@@ -142,9 +141,8 @@ namespace SakuraFilter.Infrastructure.Data.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropColumn(
-                name: "skipped_missing_mr1",
-                table: "etl_progress_log");
+            // P0-2 修复: 幂等 DROP COLUMN IF EXISTS
+            migrationBuilder.Sql(@"ALTER TABLE etl_progress_log DROP COLUMN IF EXISTS skipped_missing_mr1;");
 
             migrationBuilder.AlterColumn<string>(
                 name: "value",
