@@ -600,7 +600,14 @@ public class MeiliSearchProvider : ISearchProvider
         {
             foreach (var prop in obj.ToList())
             {
-                obj[prop.Key] = SanitizeToken(prop.Value);
+                var sanitized = SanitizeToken(prop.Value);
+                // v30-27 P0 修复: 节点已有 parent 时重新赋值会抛 InvalidOperationException
+                //   根因: SanitizeToken 递归返回原节点时, obj[key] = node 会尝试重新设置 parent
+                //   修复: 只在值变化时赋值
+                if (sanitized != prop.Value)
+                {
+                    obj[prop.Key] = sanitized;
+                }
             }
             return obj;
         }
@@ -608,13 +615,19 @@ public class MeiliSearchProvider : ISearchProvider
         {
             for (int i = 0; i < arr.Count; i++)
             {
-                arr[i] = SanitizeToken(arr[i]);
+                var sanitized = SanitizeToken(arr[i]);
+                if (sanitized != arr[i])
+                {
+                    arr[i] = sanitized;
+                }
             }
             return arr;
         }
         if (node is JsonValue val && val.TryGetValue<string>(out var s))
         {
-            return JsonValue.Create(SanitizeString(s));
+            var sanitized = SanitizeString(s);
+            // 只在字符串变化时创建新 JsonValue (避免不必要的新对象 + parent 问题)
+            return sanitized != s ? JsonValue.Create(sanitized) : node;
         }
         return node;
     }

@@ -1,0 +1,105 @@
+{
+  "results": [
+    {
+      "label": "压测1: 单次搜索 (20词×3轮=60次)",
+      "count": 60,
+      "errors": 0,
+      "elapsed_s": 1.51,
+      "rps": 39.7,
+      "p50": 29.1,
+      "p95": 32.1,
+      "p99": 34.6,
+      "avg": 24.7,
+      "max": 34.6,
+      "concurrency": 1,
+      "pass": true
+    },
+    {
+      "label": "压测2a: 50并发 (1000次)",
+      "count": 1000,
+      "errors": 0,
+      "elapsed_s": 1.56,
+      "rps": 641.2,
+      "p50": 68.5,
+      "p95": 98.6,
+      "p99": 111.0,
+      "avg": 68.4,
+      "max": 133.6,
+      "concurrency": 50,
+      "pass": true
+    },
+    {
+      "label": "压测2b: 100并发 (1000次)",
+      "count": 1000,
+      "errors": 0,
+      "elapsed_s": 1.57,
+      "rps": 637.1,
+      "p50": 142.0,
+      "p95": 184.1,
+      "p99": 197.8,
+      "avg": 136.5,
+      "max": 220.2,
+      "concurrency": 100,
+      "pass": true
+    }
+  ],
+  "offset": [
+    {
+      "label": "  offset=0 (page=1)",
+      "count": 10,
+      "errors": 0,
+      "elapsed_s": 0.22,
+      "rps": 44.7,
+      "p50": 29.7,
+      "p95": 36.6,
+      "p99": 36.6,
+      "avg": 22.0,
+      "max": 36.6,
+      "concurrency": 1,
+      "pass": true
+    },
+    {
+      "label": "  offset=1000 (page=51)",
+      "count": 10,
+      "errors": 0,
+      "elapsed_s": 2.92,
+      "rps": 3.4,
+      "p50": 290.8,
+      "p95": 319.0,
+      "p99": 319.0,
+      "avg": 291.6,
+      "max": 319.0,
+      "concurrency": 1,
+      "pass": false
+    },
+    {
+      "label": "  offset=5000 (page=251)",
+      "count": 10,
+      "errors": 0,
+      "elapsed_s": 2.83,
+      "rps": 3.5,
+      "p50": 287.9,
+      "p95": 291.1,
+      "p99": 291.1,
+      "avg": 282.4,
+      "max": 291.1,
+      "concurrency": 1,
+      "pass": false
+    },
+    {
+      "label": "  offset=10000 (page=501)",
+      "count": 10,
+      "errors": 0,
+      "elapsed_s": 2.79,
+      "rps": 3.6,
+      "p50": 280.6,
+      "p95": 283.9,
+      "p99": 283.9,
+      "avg": 278.1,
+      "max": 283.9,
+      "concurrency": 1,
+      "pass": false
+    }
+  ],
+  "timestamp": "2026-07-22 08:48:47"
+}

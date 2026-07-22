@@ -475,3 +475,39 @@ v30-14 1M OFFSET 深分页专项压测验证数据 (2026-07-21, sakurafilter_per
   - .ai/context.md (v30-23 完整记录)
   - .ai/_v30_23_commit_msg.txt (commit 消息文件)
 
+#17 v30-25 NpgsqlDataSource 全局单例统一 + 手动 Open 连接归还修复 (2026-07-22, commit da1436c)
+决策: 注册全局 NpgsqlDataSource 单例, AddDbContext 复用该 DataSource; EtlProgressBroadcaster 改为注入单例 DataSource (不再自建独立池); PostgresSearchProvider.SearchAsync/AggregateSearchAsync + DeadLetterRecoveryService.TryWithAdvisoryLockAsync 中手动 OpenAsync 的连接在 finally 块显式 CloseAsync 归还
+理由:
+  - E2E 测试中发现 compare API 返回 500, 排查根因: EtlProgressBroadcaster 构造函数自建 NpgsqlDataSource.Create(_connectionString) 独立连接池 (100 槽位), 与 AddDbContext 主池 (100 槽位) 隔离, 进程内总连接上限 200, 超过 PostgreSQL max_connections=100 时主池借连接被拒, 抛 "连接池耗尽" 异常
+  - PostgresSearchProvider 2 处 (_db.Database.GetDbConnection() + conn.OpenAsync()) 后无 finally Close, 连接归还依赖 Scoped DbContext Dispose 延迟归还, 高并发时连接滞留加剧池耗尽
+  - 修复后: 全局单例 DataSource 统一连接池, 总连接上限 = max_connections=100; 手动 Open 的连接在 finally 主动 Close, 即时归还
+排除方案:
+  - 调高 PostgreSQL max_connections 到 200: 治标不治本, 独立池问题仍存在, 且每个连接消耗 ~10MB 内存, 200 连接 = 2GB 仅 PG 就占
+  - 用 PgBouncer 中间件: 开发环境引入额外组件过重, MVP 阶段单例 DataSource 足够; 生产大规模 (>500 并发) 再引入
+  - 不修复手动 Open 不 Close, 改用 using var conn: _db.Database.GetDbConnection() 返回的是 DbContext 管理的连接, using 会 Dispose 掉 DbContext 的连接导致后续 DbContext 操作失败
+关联文件:
+  - backend/src/SakuraFilter.Api/Extensions/ServiceCollectionExtensions.cs (L196-214 注册单例 NpgsqlDataSource)
+  - backend/src/SakuraFilter.Api/Services/EtlProgressBroadcaster.cs (构造函数注入 DataSource, DisposeAsync 不释放单例)
+  - backend/src/SakuraFilter.Search/PostgresSearchProvider.cs (SearchAsync + AggregateSearchAsync 加 wasOpened + finally Close)
+  - backend/src/SakuraFilter.Api/Services/DeadLetterRecoveryService.cs (TryWithAdvisoryLockAsync 加 try-finally)
+
+#18 v30-27 Meili 压测验证 + reindex-all 后台化 + SanitizeToken parent 修复 (2026-07-22)
+决策: reindex-all 端点改为 Task.Run + CancellationToken.None 后台触发 (与 /resume 同模式); MeiliSearchProvider.SanitizeToken 方法只在值变化时赋值 (避免 JsonNode 重复设置 parent 抛 InvalidOperationException); 69000 文档压测验证 Meili 性能达标
+理由:
+  - reindex-all 1M 文档重建耗时 30+ 分钟, 原 await etl.ReindexAllAsync(ct) 的 ct 来自 HTTP 请求, 请求 30s 超时后 ct 被取消导致索引写入中断; 改为 Task.Run + CancellationToken.None 后台执行, 返回立即响应, 进度通过 /progress/stream 查询
+  - SanitizeToken 递归处理 _formatted 高亮字段时, arr[i] = SanitizeToken(arr[i]) 当递归返回同一节点 (字符串未变化), JsonArray.SetItem 尝试重新设置 parent 抛 "The node already has a parent"; 修复为 if (sanitized != arr[i]) arr[i] = sanitized 只在值变化时赋值
+  - 压测结果 (69000 文档, Meili 单实例, 本地开发机):
+    * 单次搜索 P95=32.1ms ✅ (< 200ms 目标)
+    * 50 并发 P95=98.6ms ✅, 100 并发 P95=184.1ms ✅ (各 1000 次, 0 错误, RPS~640)
+    * Offset 深分页: offset=0 P95=36.6ms ✅, offset≥1000 P95~290ms ⚠️ (空查询全表 69000 文档的深分页, 实际带关键词搜索匹配数远少于此, 性能会更好)
+  - 压测中发现: 搜索端点限流 SearchPermitsPerMinute=300, 压测时用环境变量 RateLimit__SearchPermitsPerMinute=100000 临时调高
+排除方案:
+  - reindex-all 用 AcquireActiveCts 的 linked CTS: CreateLinkedTokenSource(externalCt) 即使外部传 CancellationToken.None, 内部仍创建 linked CTS, 不解决超时问题
+  - SanitizeToken 改用 JsonDocument 不可变模型: 改动面大, 需重写整个 _formatted 处理逻辑, 且 JsonNode 的 DOM 可变性正是此处需要的
+  - Offset 深分页用 keyset 分页 (cursor): Meili 0.15.4 不支持 cursor 分页, 只支持 offset/limit; 后台管理深分页 ~290ms 可接受, 前台用户搜索带关键词不会触发
+关联文件:
+  - backend/src/SakuraFilter.Api/Endpoints/AdminEtlEndpoints.cs (L188-213 reindex-all 改 Task.Run + CancellationToken.None)
+  - backend/src/SakuraFilter.Search/MeiliSearchProvider.cs (L597-633 SanitizeToken if-changed 守卫)
+  - spike-test/perf/stress_meili.py (压测脚本: 串行/并发/Offset 三场景)
+  - spike-test/perf/_stress_results.json (压测结果 JSON)
+

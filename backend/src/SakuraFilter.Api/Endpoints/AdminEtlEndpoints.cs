@@ -193,8 +193,16 @@ public static class AdminEtlEndpoints
             logger.LogInformation("手动触发 Meilisearch 全量重建");
             try
             {
-                var result = await etl.ReindexAllAsync(ct);
-                return Results.Ok(result);
+                // v30-27 P0 修复: 1M 文档重建耗时 30+ 分钟, HTTP 请求 30s 超时会取消 CancellationToken
+                //   根因: ReindexAllAsync(ct) 的 ct 来自 HTTP 请求, 请求超时后 ct 被取消, 索引写入中断
+                //   修复: 用 Task.Run + CancellationToken.None 触发后台任务 (与 /resume 端点 L158 同模式)
+                //   返回立即响应, 进度通过 /progress/stream 或 /history 查询
+                _ = Task.Run(async () =>
+                {
+                    try { await etl.ReindexAllAsync(CancellationToken.None); }
+                    catch (Exception ex) { logger.LogError(ex, "后台 ReindexAllAsync 失败"); }
+                });
+                return Results.Ok(new { message = "Meilisearch 全量重建已触发 (后台执行)", hint = "通过 /api/admin/etl/progress/stream 或 /api/admin/etl/history 查询进度" });
             }
             catch (InvalidOperationException ex)
             {
