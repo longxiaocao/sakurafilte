@@ -517,3 +517,16 @@ v30-14 1M OFFSET 深分页专项压测验证数据 (2026-07-21, sakurafilter_per
   - spike-test/perf/stress_meili.py (压测脚本: 串行/并发/Offset 三场景)
   - spike-test/perf/_stress_results.json (压测结果 JSON)
 
+#19 Meili 品牌优先级排序修复 (2026-07-22)
+决策: MeiliSearch SearchQuery 加 Sort="brand_sort_order_min:asc" (品牌优先 > 相关性); BuildMr1DocumentAsync 中 brand_sort_order_min 的 DefaultIfEmpty() bug 修复 (返回 0 → 返回 null)
+理由:
+  - 调查发现 Meili 主搜索路径未应用品牌优先级排序 (SortableAttributes 配置了 brand_sort_order_min 但 SearchQuery 未传 Sort 参数), 导致 95%+ 的搜索请求按相关性排序, 品牌优先级不生效; 仅 PG 兜底路径 (< 5%) 按 brand_sort_order_min ASC 排序
+  - 用户需求 "品牌白名单优先显示" 明确要求品牌优先 > 相关性, 因此在 SearchQuery 中加 Sort = new[] { "brand_sort_order_min:asc" } 完全替换默认 ranking rules 排序
+  - 修复 DefaultIfEmpty() bug: 原 .Select(x => x.BrandSortOrder!.Value).DefaultIfEmpty().Cast<int?>().Min() 对空集合返回 0 (int 默认值), 导致无品牌产品 brand_sort_order_min=0 排在 Donaldson (sort_order=10) 之前; 修复为 .Select(x => (int?)x.BrandSortOrder!.Value).Min() 对空集合返回 null, Meili asc 排序将 null 排末尾
+  - 验证 (spike_test_v3 库, 49990 文档): 搜索 "filter" 返回的前 10 条全部 brand_sort_order_min=10 (Donaldson), 品牌优先级最高的产品排在最前面 ✅
+排除方案:
+  - Ranking Rules 方案 (brand_sort_order_min 加入 ranking rules 的 sort 位置): 先按相关性匹配再按品牌排序, 但用户明确要求品牌优先 > 相关性, 不符合需求
+  - 品牌分组 + 组内相关性方案: Meili ranking rules 配置更复杂, 且用户明确选择品牌优先 > 相关性
+关联文件:
+  - backend/src/SakuraFilter.Search/MeiliSearchProvider.cs (L166-178 SearchAsync 加 Sort; L266-278 AggregateSearchAsync 加 Sort; L541-546 brand_sort_order_min DefaultIfEmpty 修复)
+

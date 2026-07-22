@@ -173,6 +173,8 @@ public class MeiliSearchProvider : ISearchProvider
             HighlightPreTag = MarkOpen,
             HighlightPostTag = MarkClose,
             ShowRankingScore = true,
+            // 品牌优先 > 相关性: 按 brand_sort_order_min 升序, null 排末尾 (Meili asc 默认行为)
+            Sort = new[] { "brand_sort_order_min:asc" },
         };
 
         var query = req.Q?.Trim() ?? "";
@@ -271,6 +273,8 @@ public class MeiliSearchProvider : ISearchProvider
             HighlightPreTag = MarkOpen,
             HighlightPostTag = MarkClose,
             ShowRankingScore = true,
+            // 品牌优先 > 相关性: 按 brand_sort_order_min 升序, null 排末尾 (Meili asc 默认行为)
+            Sort = new[] { "brand_sort_order_min:asc" },
         };
 
         var query = req.Q?.Trim() ?? "";
@@ -534,12 +538,11 @@ public class MeiliSearchProvider : ISearchProvider
         var oemBrandsStr = string.Join(" ", oemList.Select(x => x.OemBrand).Where(b => !string.IsNullOrEmpty(b)).Distinct());
         var oemNo3sStr = string.Join(" ", oemList.Select(x => x.OemNo3).Where(n => !string.IsNullOrEmpty(n)).Distinct());
 
-        // S3-8/S4-25: brand_sort_order_min 只取未软删除 brand 的 sort_order MIN,全软删除时为 null
+        // S3-8/S4-25: brand_sort_order_min 只取未软删除 brand 的 sort_order MIN,无品牌时为 null (排末尾)
+        // 修复: 原 DefaultIfEmpty() 对 IEnumerable<int> 返回 0,导致无品牌产品排在最前 (违背品牌优先设计)
         int? brandSortOrderMin = oemListRaw
             .Where(x => x.BrandDeletedAt == null && x.BrandSortOrder.HasValue)
-            .Select(x => x.BrandSortOrder!.Value)
-            .DefaultIfEmpty()
-            .Cast<int?>()
+            .Select(x => (int?)x.BrandSortOrder!.Value)
             .Min();
 
         // S4-16: oem_list_sort_order_min 取上架 OEM 3 的 sort_order MIN
