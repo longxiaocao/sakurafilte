@@ -380,8 +380,12 @@ export const publicCompareApi = {
 // ===== P3.4 (Task 11.5): 公开搜索 (8 字段多框, 无需 token) =====
 //   GET /api/public/search?oemBrand=...&oemNo2=...&oemNo3=...&machineBrand=...&machineModel=...&modelName=...&engineBrand=...&engineType=...
 //   返: { total, page, pageSize, totalPages, elapsedMs, countMode, items: [{id, oemNoDisplay, oem2, productName1, type, d1Mm, h1Mm}] }
-import type { PublicEightRequest, PublicEightResponse } from './types'
+import type { MachineCatalogResponse, PublicEightRequest, PublicEightResponse } from './types'
 export const publicSearchApi = {
+  machineCatalog(): Promise<MachineCatalogResponse> {
+    return http.get('/public/machine-brands/catalog').then((r) => r.data)
+  },
+
   eightField(req: PublicEightRequest): Promise<PublicEightResponse> {
     // 过滤 undefined / 空字符串, axios 不会把空串当未传, 显式构造 params
     const params: Record<string, string | number> = {}

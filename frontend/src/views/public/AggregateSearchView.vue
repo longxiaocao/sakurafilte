@@ -12,8 +12,8 @@ import { ElMessage } from 'element-plus'
 // V24-F38: 改用 searchWithFallback (封装聚合 API 404 降级逻辑)
 //   保留 publicSearchApi 导入: clearSearch 等其他函数可能用到 (此处仅类型兼容)
 // V24-F40: shouldShowLegacyFallbackWarn 5 秒去重, 避免连续搜索刷屏
-import { searchWithFallback, wasLastSearchLegacyFallback, shouldShowLegacyFallbackWarn } from '@/api'
-import type { AggregateSearchHit, AggregateSearchResponse } from '@/api/types'
+import { publicSearchApi, searchWithFallback, wasLastSearchLegacyFallback, shouldShowLegacyFallbackWarn } from '@/api'
+import type { AggregateSearchHit, AggregateSearchResponse, MachineCatalogResponse } from '@/api/types'
 import { sanitizeFormatted } from '@/utils/html-sanitizer'
 import { buildProductUrl } from '@/utils/build-product-url'
 
@@ -48,6 +48,7 @@ const expandedMr1 = ref<Set<string>>(new Set())
 //   - false: 聚合 API 正常, 完整渲染
 //   - 渲染时检查: 降级时隐藏 "展开 OEM" 按钮 + 机型列表区域
 const isLegacyFallback = ref(false)
+const machineCatalog = ref<MachineCatalogResponse>({ categories: [] })
 
 // ===== 防抖 + AbortController (Task 1.3.5) =====
 let debounceTimer: number | null = null
@@ -176,6 +177,27 @@ function clearSearch() {
   syncUrl()
 }
 
+async function loadMachineCatalog() {
+  try {
+    machineCatalog.value = await publicSearchApi.machineCatalog()
+  } catch (error) {
+    // 目录加载失败不阻断公开搜索，避免辅助导航影响主流程。
+    console.warn('[AggregateSearchView] 机型目录加载失败', error)
+  }
+}
+
+function selectMachine(category: string, brand?: string, model?: string) {
+  const categoryMap: Record<string, string> = {
+    Agriculture: 'agriculture', Commercial: 'commercial', Construction: 'construction',
+    Industrial: 'industrial', others: 'others'
+  }
+  advancedForm.machineCategory = categoryMap[category] || 'others'
+  q.value = [brand, model].filter(Boolean).join(' ')
+  page.value = 1
+  syncUrl()
+  doSearch()
+}
+
 // 取 _formatted 字段值 (后端高亮版本, 前端 sanitizeFormatted 双保险)
 function getHighlighted(hit: AggregateSearchHit, field: string): string {
   const formatted = hit.formatted as Record<string, unknown> | null
@@ -187,6 +209,7 @@ function getHighlighted(hit: AggregateSearchHit, field: string): string {
 }
 
 onMounted(() => {
+  loadMachineCatalog()
   if (q.value.trim()) doSearch()
 })
 
@@ -252,6 +275,35 @@ onBeforeUnmount(() => {
         </div>
       </div>
     </div>
+
+    <el-collapse v-if="machineCatalog.categories.some(category => category.brands.length > 0)" class="mb-4">
+      <el-collapse-item title="机型目录" name="machine-catalog">
+        <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <section v-for="category in machineCatalog.categories" :key="category.category" class="min-w-0">
+            <el-button text size="small" class="!px-0 !font-medium" @click="selectMachine(category.category)">
+              {{ category.category }}
+            </el-button>
+            <div v-for="brand in category.brands" :key="brand.brand" class="mt-1 text-xs">
+              <el-button text size="small" class="!h-auto !px-0" @click="selectMachine(category.category, brand.brand)">
+                {{ brand.brand }}
+              </el-button>
+              <div v-if="brand.models.length" class="ml-2 flex flex-wrap gap-x-2">
+                <el-button
+                  v-for="model in brand.models.slice(0, 8)"
+                  :key="model"
+                  text
+                  size="small"
+                  class="!h-auto !px-0 text-gray-500"
+                  @click="selectMachine(category.category, brand.brand, model)"
+                >
+                  {{ model }}
+                </el-button>
+              </div>
+            </div>
+          </section>
+        </div>
+      </el-collapse-item>
+    </el-collapse>
 
     <!-- 错误提示 -->
     <div v-if="lastError" class="p-3 mb-3 border border-red-300 bg-red-50 text-red-700 text-sm">

@@ -605,6 +605,21 @@ export interface PublicEightResponse {
   items: PublicSearchHit[]
 }
 
+// ===== 项目规划V2: 公开三级机型目录 =====
+export interface MachineCatalogBrand {
+  brand: string
+  models: string[]
+}
+
+export interface MachineCatalogCategory {
+  category: string
+  brands: MachineCatalogBrand[]
+}
+
+export interface MachineCatalogResponse {
+  categories: MachineCatalogCategory[]
+}
+
 // ===== V2 Task 1.3: 聚合搜索 (POST /api/public/search/aggregate) =====
 //   文档级返回: mr1 + oemList 嵌套数组 + _formatted 高亮 + _rankingScore
 //   与后端 AggregateSearchDto.cs 一一对应 (PascalCase 序列化)
