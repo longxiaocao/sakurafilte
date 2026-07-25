@@ -81,8 +81,8 @@ public record XrefInput(
     int SortOrder,          // V2: OEM 3 排序(默认 0)
     string? MachineType,    // V2: 机型类型(agriculture/commercial/construction/industrial/others)
     bool IsPublished,       // V2: 是否发布
-    long? Id,               // D3-21: 已有 xref 的 Id (新增项为 null)
-    uint? RowVersion        // D3-21: 已有 xref 的 RowVersion (xmin, 来自 GET /api/admin/products/{id}, 用于乐观锁)
+    long? Id = null,        // D3-21: 已有 xref 的 Id (新增项为 null)
+    uint? RowVersion = null // D3-21: 已有 xref 的 RowVersion (xmin, 来自 GET /api/admin/products/{id}, 用于乐观锁)
 );
 
 /// <summary>机型适配输入项 (Day 8.1: 分区 7 全部字段)</summary>
