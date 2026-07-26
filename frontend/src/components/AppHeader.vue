@@ -47,9 +47,12 @@ const dictItems = [
 const allNavItems = computed(() => {
   const items: Array<{ key: string; label: string; icon: string; path?: string; action?: string; dropdown?: string; priority: number }> = [
     // 公共区 (始终在池子里, 不论路径不论登录)
-    { key: 'search', label: '产品搜索', path: '/search', icon: 'Search', priority: 1 },
-    { key: 'oem', label: 'OEM 查询', action: 'oemLookup', icon: 'Document', priority: 2 },
-    { key: 'compare', label: '产品对比', path: '/compare', icon: 'DataLine', priority: 3 }
+    { key: 'about', label: 'About us', path: '/about', icon: 'OfficeBuilding', priority: 1 },
+    { key: 'product', label: 'Product', path: '/search', icon: 'Search', priority: 2 },
+    { key: 'news', label: 'News', path: '/news', icon: 'Document', priority: 3 },
+    { key: 'contact', label: 'Contact us', path: '/contact', icon: 'Message', priority: 4 },
+    { key: 'oem', label: 'OEM 查询', action: 'oemLookup', icon: 'Document', priority: 5 },
+    { key: 'compare', label: '产品对比', path: '/compare', icon: 'DataLine', priority: 6 }
   ]
   // 已登录用户: 在任何路径都看到 admin 入口, 解决 v3 跳公开页丢 admin 体验问题
   if (user.value) {

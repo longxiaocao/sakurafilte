@@ -109,7 +109,12 @@ const imageUrls = computed(() => {
 })
 
 // 工业极简融合风: 主图 + 灯箱预览列表
-const mainImage = computed(() => imageUrls.value[0]?.url ?? '/logo.png')
+const placeholderImage = '/images/product-placeholder.svg'
+const mainImage = computed(() => imageUrls.value[0]?.url ?? placeholderImage)
+function usePlaceholder(event: Event): void {
+  const image = event.currentTarget as HTMLImageElement | null
+  if (image && !image.src.endsWith(placeholderImage)) image.src = placeholderImage
+}
 const previewSrcList = computed(() => imageUrls.value.map(i => i.url))
 const activeImageIdx = ref(0)
 const activeImage = computed(() => imageUrls.value[activeImageIdx.value]?.url ?? mainImage.value)
@@ -264,7 +269,7 @@ function numOrDash(v?: number | string) {
               activeImageIdx === idx ? 'ring-1 ring-[var(--color-accent)]' : ''
             ]"
           >
-            <img :src="img.url" :alt="`Slot ${img.slot}`" class="w-full h-full object-cover" loading="lazy" />
+            <img :src="img.url" :alt="`Slot ${img.slot}`" class="w-full h-full object-cover" loading="lazy" @error="usePlaceholder" />
           </button>
         </div>
       </div>

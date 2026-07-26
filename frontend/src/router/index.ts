@@ -24,6 +24,27 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/SearchView.vue'),
     meta: { title: '产品搜索' }
   },
+  {
+    path: '/about',
+    name: 'About',
+    component: () => import('@/views/public/PublicInfoView.vue'),
+    props: { page: 'about' },
+    meta: { title: 'About us' }
+  },
+  {
+    path: '/news',
+    name: 'News',
+    component: () => import('@/views/public/PublicInfoView.vue'),
+    props: { page: 'news' },
+    meta: { title: 'News' }
+  },
+  {
+    path: '/contact',
+    name: 'Contact',
+    component: () => import('@/views/public/PublicInfoView.vue'),
+    props: { page: 'contact' },
+    meta: { title: 'Contact us' }
+  },
   // ===== P3.4 (Task 11.5): 公开搜索页 8 字段多框 (公开, 无需 token) =====
   {
     path: '/public/search',
