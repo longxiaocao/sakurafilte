@@ -32,6 +32,11 @@ const advancedForm = reactive({
   tolerance: 5,
   includeDiscontinued: false
 })
+const quickProductTypes = ['Air Filter', 'Oil Filter', 'Fuel Filter', 'Hydraulic Filter'] as const
+
+function toggleQuickProductType(type: string) {
+  advancedForm.type = advancedForm.type === type ? '' : type
+}
 
 // ===== 搜索结果状态 =====
 const loading = ref(false)
@@ -247,6 +252,17 @@ onBeforeUnmount(() => {
         </el-button>
         <el-button size="large" @click="clearSearch">清空</el-button>
       </div>
+      <div class="flex flex-wrap gap-2 mt-3" aria-label="产品类型快捷筛选">
+        <el-button
+          v-for="type in quickProductTypes"
+          :key="type"
+          size="small"
+          :type="advancedForm.type === type ? 'primary' : 'default'"
+          @click="toggleQuickProductType(type)"
+        >
+          {{ type }}
+        </el-button>
+      </div>
       <!-- 高级筛选 (折叠展开) -->
       <div class="mt-2">
         <el-button text size="small" @click="showAdvanced = !showAdvanced">
@@ -255,11 +271,7 @@ onBeforeUnmount(() => {
         <div v-if="showAdvanced" class="flex flex-wrap gap-3 mt-2 p-3 border border-gray-200 rounded">
           <el-form-item label="分类" class="!mb-0">
             <el-select v-model="advancedForm.type" placeholder="全部" clearable size="small" style="width: 120px">
-              <el-option label="机油滤" value="oil" />
-              <el-option label="燃油滤" value="fuel" />
-              <el-option label="空气滤" value="air" />
-              <el-option label="空调滤" value="cabin" />
-              <el-option label="其他" value="others" />
+              <el-option v-for="type in quickProductTypes" :key="type" :label="type" :value="type" />
             </el-select>
           </el-form-item>
           <el-form-item label="机型分类" class="!mb-0">
