@@ -20,9 +20,9 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/search',
-    name: 'Search',
-    component: () => import('@/views/SearchView.vue'),
-    meta: { title: '产品搜索' }
+    // 公开入口统一走 MR.1 聚合后的 OEM3 列表，保留既有链接携带的查询参数。
+    // 旧 SearchView 仅保留为内部历史实现，不再作为游客可访问的产品目录。
+    redirect: (to) => ({ path: '/search/aggregate', query: to.query })
   },
   {
     path: '/about',
