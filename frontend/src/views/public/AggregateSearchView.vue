@@ -353,7 +353,7 @@ onBeforeUnmount(() => {
     </div>
 
     <!-- 搜索结果列表 (内部按 MR.1 聚合，对外展示 OEM 3) -->
-    <div v-else class="space-y-2">
+    <div v-else class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
       <div
         v-for="hit in results"
         :key="hit.mr1"
