@@ -444,6 +444,11 @@ public class EtlImportService
                 throw new ArgumentException($"jsonlPath 不在允许目录内: {jsonlPath}");
         }
 
+        // 项目规划V2: XLSX 仅在入口转换，后续继续走已验证的 JSONL 分批导入链路。
+        // 白名单校验已针对原始文件完成，转换文件由本服务写入系统临时目录。
+        if (Path.GetExtension(jsonlPath).Equals(".xlsx", StringComparison.OrdinalIgnoreCase))
+            jsonlPath = await EtlSpreadsheetAdapter.ConvertAsync(jsonlPath, entityType, ct);
+
         var normalizedMode = NormalizeMode(mode);
         var normalizedEntity = entityType?.Trim().ToLowerInvariant() ?? "";
 
