@@ -50,6 +50,8 @@ public class Product
     // ========== Day 8.1: 分区 3 (No. Check / Bypass Valves) ==========
     [Column("no_check_valves")]  public int? NoCheckValves { get; set; }
     [Column("no_bypass_valves")] public int? NoBypassValves { get; set; }
+    [Column("no_check_valves_raw")] public string? NoCheckValvesRaw { get; set; }
+    [Column("no_bypass_valves_raw")] public string? NoBypassValvesRaw { get; set; }
 
     // ========== Day 8.1: 分区 5 (Media Model, Bypass Valve HR, Efficiency 2, Bypass Pressure) ==========
     [Column("media_model")]     public string? MediaModel { get; set; }
@@ -60,6 +62,10 @@ public class Product
     [Column("bypass_valve_hr")] public decimal? BypassValveHr { get; set; }  // Day 8.1
     [Column("bypass_pressure")] public decimal? BypassPressure { get; set; }  // Day 8.1 (列早存在, 类型 NUMERIC)
     [Column("collapse_pressure_bar")] public decimal? CollapsePressureBar { get; set; }
+    [Column("bypass_valve_lr_raw")] public string? BypassValveLrRaw { get; set; }
+    [Column("bypass_valve_hr_raw")] public string? BypassValveHrRaw { get; set; }
+    [Column("bypass_pressure_raw")] public string? BypassPressureRaw { get; set; }
+    [Column("collapse_pressure_bar_raw")] public string? CollapsePressureBarRaw { get; set; }
     [Column("temp_range")]      public string? TempRange { get; set; }
 
     // 包装 (Carton)

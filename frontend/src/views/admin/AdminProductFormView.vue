@@ -49,6 +49,8 @@ const form = reactive<any>({
   d8Thread: '',
   noCheckValves: null,
   noBypassValves: null,
+  noCheckValvesRaw: '',
+  noBypassValvesRaw: '',
   media: '',
   mediaModel: '',
   bypassValveLr: null,
@@ -57,6 +59,10 @@ const form = reactive<any>({
   efficiency2: '',
   bypassPressure: null,
   collapsePressureBar: null,
+  bypassValveLrRaw: '',
+  bypassValveHrRaw: '',
+  bypassPressureRaw: '',
+  collapsePressureBarRaw: '',
   sealingMaterial: '',
   tempRange: '',
   qtyPerCarton: null,
@@ -212,10 +218,13 @@ async function load() {
       h1Mm: p.h1Mm, h2Mm: p.h2Mm, h3Mm: p.h3Mm, h4Mm: p.h4Mm,
       d7Thread: p.d7Thread, d8Thread: p.d8Thread,
       noCheckValves: p.noCheckValves, noBypassValves: p.noBypassValves,
+      noCheckValvesRaw: p.noCheckValvesRaw, noBypassValvesRaw: p.noBypassValvesRaw,
       media: p.media, mediaModel: p.mediaModel,
       bypassValveLr: p.bypassValveLr, bypassValveHr: p.bypassValveHr,
       efficiency1: p.efficiency1, efficiency2: p.efficiency2,
       bypassPressure: p.bypassPressure, collapsePressureBar: p.collapsePressureBar,
+      bypassValveLrRaw: p.bypassValveLrRaw, bypassValveHrRaw: p.bypassValveHrRaw,
+      bypassPressureRaw: p.bypassPressureRaw, collapsePressureBarRaw: p.collapsePressureBarRaw,
       sealingMaterial: p.sealingMaterial, tempRange: p.tempRange,
       qtyPerCarton: p.qtyPerCarton, weightKgs: p.weightKgs,
       cartonLengthMm: p.cartonLengthMm, cartonWidthMm: p.cartonWidthMm, cartonHeightMm: p.cartonHeightMm,
@@ -662,8 +671,8 @@ onBeforeUnmount(() => {
             <el-form-item label="H4"><el-input-number v-model="form.h4Mm" :min="0" :precision="2" /></el-form-item>
             <el-form-item :label="t('common.field.d7_thread')"><el-input v-model="form.d7Thread" /></el-form-item>
             <el-form-item :label="t('common.field.d8_thread')"><el-input v-model="form.d8Thread" /></el-form-item>
-            <el-form-item :label="t('common.field.check_valve_count')"><el-input-number v-model="form.noCheckValves" :min="0" /></el-form-item>
-            <el-form-item :label="t('common.field.bypass_valve_count')"><el-input-number v-model="form.noBypassValves" :min="0" /></el-form-item>
+            <el-form-item :label="t('common.field.check_valve_count')"><el-input v-model="form.noCheckValvesRaw" placeholder="原始值，如 1/2" /></el-form-item>
+            <el-form-item :label="t('common.field.bypass_valve_count')"><el-input v-model="form.noBypassValvesRaw" placeholder="原始值，如 N/A" /></el-form-item>
           </div>
         </el-collapse-item>
 
@@ -679,10 +688,10 @@ onBeforeUnmount(() => {
             <el-form-item label="MediaModel"><el-input v-model="form.mediaModel" /></el-form-item>
             <el-form-item :label="t('common.field.efficiency_1')"><el-input v-model="form.efficiency1" /></el-form-item>
             <el-form-item :label="t('common.field.efficiency_2')"><el-input v-model="form.efficiency2" /></el-form-item>
-            <el-form-item :label="t('admin.productformview.label.bypass_valve_lr')"><el-input-number v-model="form.bypassValveLr" :min="0" :precision="2" /></el-form-item>
-            <el-form-item :label="t('admin.productformview.label.bypass_valve_hr')"><el-input-number v-model="form.bypassValveHr" :min="0" :precision="2" /></el-form-item>
-            <el-form-item :label="t('common.field.bypass_pressure')"><el-input-number v-model="form.bypassPressure" :min="0" :precision="2" /></el-form-item>
-            <el-form-item :label="t('admin.productformview.label.collapse_pressure_bar')"><el-input-number v-model="form.collapsePressureBar" :min="0" :precision="2" /></el-form-item>
+            <el-form-item :label="t('admin.productformview.label.bypass_valve_lr')"><el-input v-model="form.bypassValveLrRaw" placeholder="原始值，如 1.2 bar" /></el-form-item>
+            <el-form-item :label="t('admin.productformview.label.bypass_valve_hr')"><el-input v-model="form.bypassValveHrRaw" placeholder="原始值，如 1.2 bar" /></el-form-item>
+            <el-form-item :label="t('common.field.bypass_pressure')"><el-input v-model="form.bypassPressureRaw" placeholder="原始值，如 1.2 bar" /></el-form-item>
+            <el-form-item :label="t('admin.productformview.label.collapse_pressure_bar')"><el-input v-model="form.collapsePressureBarRaw" placeholder="原始值，如 1.2 bar" /></el-form-item>
             <el-form-item :label="t('common.action.seal_material')"><el-input v-model="form.sealingMaterial" /></el-form-item>
             <el-form-item :label="t('common.field.temperature_range')"><el-input v-model="form.tempRange" /></el-form-item>
           </div>

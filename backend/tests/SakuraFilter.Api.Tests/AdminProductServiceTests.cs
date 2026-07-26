@@ -8,6 +8,7 @@ using SakuraFilter.Core.DTOs;
 using SakuraFilter.Core.Entities;
 using SakuraFilter.Core.Interfaces;
 using SakuraFilter.Infrastructure.Data;
+using System.Reflection;
 using Xunit;
 
 namespace SakuraFilter.Api.Tests;
@@ -220,6 +221,45 @@ public class AdminProductServiceTests
         result.CrossReferences.Should().HaveCount(2);
         result.MachineApplications.Should().HaveCount(1);
         result.MachineApplications[0].MachineBrand.Should().Be("TOYOTA");
+    }
+
+    /// <summary>
+    /// 覆盖: 项目规划V2 分区3/5 - 原始参数展示值必须由详情接口完整返回。
+    /// </summary>
+    [Fact]
+    public async Task GetByIdAsync_ReturnsRawParameterValues()
+    {
+        await using var db = CreateInMemoryDb();
+        var product = CreateProduct();
+        product.NoCheckValves = null;
+        product.NoCheckValvesRaw = "1/2";
+        product.BypassPressure = 1.2m;
+        product.BypassPressureRaw = "1.2 bar";
+        db.Products.Add(product);
+        await db.SaveChangesAsync();
+
+        var result = await CreateSut(db).GetByIdAsync(product.Id, default);
+
+        result.NoCheckValvesRaw.Should().Be("1/2");
+        result.NoCheckValves.Should().BeNull();
+        result.BypassPressureRaw.Should().Be("1.2 bar");
+        result.BypassPressure.Should().Be(1.2m);
+    }
+
+    /// <summary>
+    /// 覆盖: 项目规划V2 特殊字符双存储 - 仅单一数值(可带单位)派生检索值，复合表达式不作猜测。
+    /// </summary>
+    [Theory]
+    [InlineData("1.2 bar", "1.2")]
+    [InlineData("1/2", null)]
+    [InlineData("N/A", null)]
+    public void NormalizeRawDecimal_PreservesRawAndOnlyParsesUnambiguousValue(string raw, string? expected)
+    {
+        var method = typeof(AdminProductService).GetMethod("NormalizeRawDecimal", BindingFlags.Static | BindingFlags.NonPublic)!;
+        var result = ((string? Raw, decimal? Value))method.Invoke(null, new object?[] { raw, null })!;
+
+        result.Raw.Should().Be(raw);
+        result.Value?.ToString(System.Globalization.CultureInfo.InvariantCulture).Should().Be(expected);
     }
 
     [Fact]

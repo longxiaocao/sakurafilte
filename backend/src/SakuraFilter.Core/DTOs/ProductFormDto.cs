@@ -39,6 +39,8 @@ public record ProductFormDto
     public string? D8Thread { get; init; }
     public int? NoCheckValves { get; init; }
     public int? NoBypassValves { get; init; }
+    public string? NoCheckValvesRaw { get; init; }
+    public string? NoBypassValvesRaw { get; init; }
 
     // ============ 分区 5: 技术参数 ============
     public string? Media { get; init; }
@@ -49,6 +51,10 @@ public record ProductFormDto
     public string? Efficiency2 { get; init; }
     public decimal? BypassPressure { get; init; }  // NUMERIC 列, 用 decimal 而非 string
     public decimal? CollapsePressureBar { get; init; }
+    public string? BypassValveLrRaw { get; init; }
+    public string? BypassValveHrRaw { get; init; }
+    public string? BypassPressureRaw { get; init; }
+    public string? CollapsePressureBarRaw { get; init; }
     public string? SealingMaterial { get; init; }
     public string? TempRange { get; init; }
 
@@ -167,10 +173,13 @@ public record ProductDetailDto(
     decimal? H1Mm, decimal? H2Mm, decimal? H3Mm, decimal? H4Mm,
     string? D7Thread, string? D8Thread,
     int? NoCheckValves, int? NoBypassValves,
+    string? NoCheckValvesRaw, string? NoBypassValvesRaw,
     string? Media, string? MediaModel,
     decimal? BypassValveLr, decimal? BypassValveHr,
     string? Efficiency1, string? Efficiency2, decimal? BypassPressure,
     decimal? CollapsePressureBar,
+    string? BypassValveLrRaw, string? BypassValveHrRaw,
+    string? BypassPressureRaw, string? CollapsePressureBarRaw,
     string? SealingMaterial, string? TempRange,
     int? QtyPerCarton, decimal? WeightKgs,
     decimal? CartonLengthMm, decimal? CartonWidthMm, decimal? CartonHeightMm,

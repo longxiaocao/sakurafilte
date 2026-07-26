@@ -308,6 +308,8 @@ export interface ProductFormDto {
   d8Thread?: string | null
   noCheckValves?: number | null
   noBypassValves?: number | null
+  noCheckValvesRaw?: string | null
+  noBypassValvesRaw?: string | null
   media?: string | null
   mediaModel?: string | null
   bypassValveLr?: number | null
@@ -316,6 +318,10 @@ export interface ProductFormDto {
   efficiency2?: string | null
   bypassPressure?: number | null
   collapsePressureBar?: number | null
+  bypassValveLrRaw?: string | null
+  bypassValveHrRaw?: string | null
+  bypassPressureRaw?: string | null
+  collapsePressureBarRaw?: string | null
   sealingMaterial?: string | null
   tempRange?: string | null
   qtyPerCarton?: number | null

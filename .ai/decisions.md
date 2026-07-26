@@ -534,3 +534,19 @@ v30-14 1M OFFSET 深分页专项压测验证数据 (2026-07-21, sakurafilter_per
 关联文件:
   - backend/src/SakuraFilter.Search/MeiliSearchProvider.cs (L166-178 SearchAsync 加两层 Sort; L266-278 AggregateSearchAsync 加两层 Sort; L541-546 brand_sort_order_min DefaultIfEmpty 修复; L548-554 oem_list_sort_order_min DefaultIfEmpty + sort_order=0 过滤)
 
+#20 规划V2特殊参数双存储方案 (2026-07-26)
+决策: 对 No. Check Valves、No. Bypass Valves、Bypass Valve LR/HR、Bypass Pressure、Collapse Pressure 新增 `*_raw` 原始文本列；保留现有整数/数值列作为检索值。原始值为单一数值且可带单位时自动派生检索值，分数或复合表达式不做猜测。
+理由:
+  - 规划V2要求尺寸与技术参数可包含特殊字符，同时要支持数值检索；直接把字段改为字符串会破坏既有筛选、索引和 API 契约。
+  - 与已存在的 d1-h4 `*_raw` 实现一致，原值用于展示和追溯，数值用于范围查询。
+  - `1/2`、`N/A` 这类表达式不存在唯一数值语义，错误派生会产生误匹配；`1.2 bar` 则可无歧义保留为 1.2。
+排除方案:
+  - 将既有数值列直接改为 text: 会破坏现有搜索和索引，且迁移风险高。
+  - 使用单一正则提取第一个数字: 会把分数、区间和复合参数误判为精确值。
+关联文件:
+  - backend/src/SakuraFilter.Core/Entities/Product.cs
+  - backend/src/SakuraFilter.Core/DTOs/ProductFormDto.cs
+  - backend/src/SakuraFilter.Api/Services/AdminProductService.cs
+  - backend/src/SakuraFilter.Etl/EtlImportService.cs
+  - backend/src/SakuraFilter.Infrastructure/Data/Migrations/20260726014656_AddRawParameterValues.cs
+

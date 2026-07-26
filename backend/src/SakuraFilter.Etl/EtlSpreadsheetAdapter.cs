@@ -33,6 +33,9 @@ public static class EtlSpreadsheetAdapter
             ["dimension1d1"] = "d1_mm", ["dimension2d2"] = "d2_mm", ["dimension3d3"] = "d3_mm", ["dimension4d4"] = "d4_mm",
             ["height1h1"] = "h1_mm", ["height2h2"] = "h2_mm", ["height3h3"] = "h3_mm", ["height4h4"] = "h4_mm",
             ["thread1d7"] = "d7_thread", ["thread2d8"] = "d8_thread"
+            , ["nocheckvalves"] = "no_check_valves", ["nobypassvalves"] = "no_bypass_valves"
+            , ["bypassvalvesettinglr"] = "bypass_valve_lr", ["bypassvalvesettinghr"] = "bypass_valve_hr"
+            , ["bypasspressure"] = "bypass_pressure", ["collapsepressure"] = "collapse_pressure_bar"
         };
 
     public static async Task<string> ConvertAsync(string sourcePath, string entityType, CancellationToken ct)
@@ -95,6 +98,18 @@ public static class EtlSpreadsheetAdapter
             record.TryAdd("oem_no_normalized", record.GetValueOrDefault("mr_1") ?? record.GetValueOrDefault("oem_2"));
             record.TryAdd("oem_no_display", record.GetValueOrDefault("oem_2") ?? record.GetValueOrDefault("mr_1"));
             record.TryAdd("type", "others");
+            PreserveRawValue(record, "no_check_valves");
+            PreserveRawValue(record, "no_bypass_valves");
+            PreserveRawValue(record, "bypass_valve_lr");
+            PreserveRawValue(record, "bypass_valve_hr");
+            PreserveRawValue(record, "bypass_pressure");
+            PreserveRawValue(record, "collapse_pressure_bar");
         }
+    }
+
+    private static void PreserveRawValue(Dictionary<string, string?> record, string numericField)
+    {
+        if (record.TryGetValue(numericField, out var value) && !string.IsNullOrWhiteSpace(value))
+            record.TryAdd($"{numericField}_raw", value);
     }
 }

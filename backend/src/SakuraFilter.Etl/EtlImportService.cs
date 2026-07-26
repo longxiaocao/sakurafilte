@@ -852,9 +852,11 @@ public class EtlImportService
                     remark, d1_mm, d2_mm, d3_mm, d4_mm, h1_mm, h2_mm, h3_mm, h4_mm,
                     d1_mm_raw, d2_mm_raw, d3_mm_raw, d4_mm_raw,
                     h1_mm_raw, h2_mm_raw, h3_mm_raw, h4_mm_raw,
-                    d7_thread, d8_thread, media, sealing_material,
+                    d7_thread, d8_thread, no_check_valves, no_bypass_valves,
+                    no_check_valves_raw, no_bypass_valves_raw, media, sealing_material,
                     efficiency_1, efficiency_2, bypass_valve_lr, bypass_valve_hr,
-                    collapse_pressure_bar, temp_range, bypass_pressure)
+                    collapse_pressure_bar, temp_range, bypass_pressure,
+                    bypass_valve_lr_raw, bypass_valve_hr_raw, bypass_pressure_raw, collapse_pressure_bar_raw)
                 FROM STDIN (FORMAT BINARY)
             ", ct))
             {
@@ -913,6 +915,10 @@ public class EtlImportService
                         await WriteNullableStringAsync(writer, GetStringOrNull(doc, "h4_mm_raw"), ct);
                         await WriteNullableStringAsync(writer, GetStringOrNull(doc, "d7_thread"), ct);
                         await WriteNullableStringAsync(writer, GetStringOrNull(doc, "d8_thread"), ct);
+                        await WriteNullableIntAsync(writer, GetIntOrNull(doc, "no_check_valves"), ct);
+                        await WriteNullableIntAsync(writer, GetIntOrNull(doc, "no_bypass_valves"), ct);
+                        await WriteNullableStringAsync(writer, GetRawStringOrNull(doc, "no_check_valves_raw", "no_check_valves"), ct);
+                        await WriteNullableStringAsync(writer, GetRawStringOrNull(doc, "no_bypass_valves_raw", "no_bypass_valves"), ct);
                         await WriteNullableStringAsync(writer, GetStringOrNull(doc, "media"), ct);
                         await WriteNullableStringAsync(writer, GetStringOrNull(doc, "sealing_material"), ct);
                         await WriteNullableStringAsync(writer, GetStringOrNull(doc, "efficiency_1"), ct);
@@ -922,6 +928,10 @@ public class EtlImportService
                         await WriteNullableDecimalAsync(writer, GetDecimalOrNull(doc, "collapse_pressure_bar"), ct);
                         await WriteNullableStringAsync(writer, GetStringOrNull(doc, "temp_range"), ct);
                         await WriteNullableDecimalAsync(writer, GetDecimalOrNull(doc, "bypass_pressure"), ct);
+                        await WriteNullableStringAsync(writer, GetRawStringOrNull(doc, "bypass_valve_lr_raw", "bypass_valve_lr"), ct);
+                        await WriteNullableStringAsync(writer, GetRawStringOrNull(doc, "bypass_valve_hr_raw", "bypass_valve_hr"), ct);
+                        await WriteNullableStringAsync(writer, GetRawStringOrNull(doc, "bypass_pressure_raw", "bypass_pressure"), ct);
+                        await WriteNullableStringAsync(writer, GetRawStringOrNull(doc, "collapse_pressure_bar_raw", "collapse_pressure_bar"), ct);
                         // inserted/updated 改在 UPSERT 后通过 RETURNING (xmax=0) 统计
                     }
                     catch (Exception ex)
@@ -1001,9 +1011,11 @@ public class EtlImportService
                         remark, d1_mm, d2_mm, d3_mm, d4_mm, h1_mm, h2_mm, h3_mm, h4_mm,
                         d1_mm_raw, d2_mm_raw, d3_mm_raw, d4_mm_raw,
                         h1_mm_raw, h2_mm_raw, h3_mm_raw, h4_mm_raw,
-                        d7_thread, d8_thread, media, sealing_material,
+                        d7_thread, d8_thread, no_check_valves, no_bypass_valves,
+                        no_check_valves_raw, no_bypass_valves_raw, media, sealing_material,
                         efficiency_1, efficiency_2, bypass_valve_lr, bypass_valve_hr,
-                        collapse_pressure_bar, temp_range, bypass_pressure, updated_at)
+                        collapse_pressure_bar, temp_range, bypass_pressure,
+                        bypass_valve_lr_raw, bypass_valve_hr_raw, bypass_pressure_raw, collapse_pressure_bar_raw, updated_at)
                     SELECT DISTINCT ON (mr_1)
                         oem_no_normalized, oem_no_display, type,
                         product_name_1, product_name_2, product_name_3,
@@ -1011,9 +1023,11 @@ public class EtlImportService
                         remark, d1_mm, d2_mm, d3_mm, d4_mm, h1_mm, h2_mm, h3_mm, h4_mm,
                         d1_mm_raw, d2_mm_raw, d3_mm_raw, d4_mm_raw,
                         h1_mm_raw, h2_mm_raw, h3_mm_raw, h4_mm_raw,
-                        d7_thread, d8_thread, media, sealing_material,
+                        d7_thread, d8_thread, no_check_valves, no_bypass_valves,
+                        no_check_valves_raw, no_bypass_valves_raw, media, sealing_material,
                         efficiency_1, efficiency_2, bypass_valve_lr, bypass_valve_hr,
-                        collapse_pressure_bar, temp_range, bypass_pressure, now()
+                        collapse_pressure_bar, temp_range, bypass_pressure,
+                        bypass_valve_lr_raw, bypass_valve_hr_raw, bypass_pressure_raw, collapse_pressure_bar_raw, now()
                     FROM products_stage
                     ORDER BY mr_1, ctid DESC;",
                 "insert-only" => @"
@@ -1023,9 +1037,11 @@ public class EtlImportService
                         remark, d1_mm, d2_mm, d3_mm, d4_mm, h1_mm, h2_mm, h3_mm, h4_mm,
                         d1_mm_raw, d2_mm_raw, d3_mm_raw, d4_mm_raw,
                         h1_mm_raw, h2_mm_raw, h3_mm_raw, h4_mm_raw,
-                        d7_thread, d8_thread, media, sealing_material,
+                        d7_thread, d8_thread, no_check_valves, no_bypass_valves,
+                        no_check_valves_raw, no_bypass_valves_raw, media, sealing_material,
                         efficiency_1, efficiency_2, bypass_valve_lr, bypass_valve_hr,
-                        collapse_pressure_bar, temp_range, bypass_pressure, updated_at)
+                        collapse_pressure_bar, temp_range, bypass_pressure,
+                        bypass_valve_lr_raw, bypass_valve_hr_raw, bypass_pressure_raw, collapse_pressure_bar_raw, updated_at)
                     SELECT DISTINCT ON (mr_1)
                         oem_no_normalized, oem_no_display, type,
                         product_name_1, product_name_2, product_name_3,
@@ -1033,9 +1049,11 @@ public class EtlImportService
                         remark, d1_mm, d2_mm, d3_mm, d4_mm, h1_mm, h2_mm, h3_mm, h4_mm,
                         d1_mm_raw, d2_mm_raw, d3_mm_raw, d4_mm_raw,
                         h1_mm_raw, h2_mm_raw, h3_mm_raw, h4_mm_raw,
-                        d7_thread, d8_thread, media, sealing_material,
+                        d7_thread, d8_thread, no_check_valves, no_bypass_valves,
+                        no_check_valves_raw, no_bypass_valves_raw, media, sealing_material,
                         efficiency_1, efficiency_2, bypass_valve_lr, bypass_valve_hr,
-                        collapse_pressure_bar, temp_range, bypass_pressure, now()
+                        collapse_pressure_bar, temp_range, bypass_pressure,
+                        bypass_valve_lr_raw, bypass_valve_hr_raw, bypass_pressure_raw, collapse_pressure_bar_raw, now()
                     FROM products_stage
                     ORDER BY mr_1, ctid DESC
                     ON CONFLICT (mr_1) WHERE mr_1 IS NOT NULL DO NOTHING;",
@@ -1046,9 +1064,11 @@ public class EtlImportService
                         remark, d1_mm, d2_mm, d3_mm, d4_mm, h1_mm, h2_mm, h3_mm, h4_mm,
                         d1_mm_raw, d2_mm_raw, d3_mm_raw, d4_mm_raw,
                         h1_mm_raw, h2_mm_raw, h3_mm_raw, h4_mm_raw,
-                        d7_thread, d8_thread, media, sealing_material,
+                        d7_thread, d8_thread, no_check_valves, no_bypass_valves,
+                        no_check_valves_raw, no_bypass_valves_raw, media, sealing_material,
                         efficiency_1, efficiency_2, bypass_valve_lr, bypass_valve_hr,
-                        collapse_pressure_bar, temp_range, bypass_pressure, updated_at)
+                        collapse_pressure_bar, temp_range, bypass_pressure,
+                        bypass_valve_lr_raw, bypass_valve_hr_raw, bypass_pressure_raw, collapse_pressure_bar_raw, updated_at)
                     SELECT DISTINCT ON (mr_1)
                         oem_no_normalized, oem_no_display, type,
                         product_name_1, product_name_2, product_name_3,
@@ -1056,9 +1076,11 @@ public class EtlImportService
                         remark, d1_mm, d2_mm, d3_mm, d4_mm, h1_mm, h2_mm, h3_mm, h4_mm,
                         d1_mm_raw, d2_mm_raw, d3_mm_raw, d4_mm_raw,
                         h1_mm_raw, h2_mm_raw, h3_mm_raw, h4_mm_raw,
-                        d7_thread, d8_thread, media, sealing_material,
+                        d7_thread, d8_thread, no_check_valves, no_bypass_valves,
+                        no_check_valves_raw, no_bypass_valves_raw, media, sealing_material,
                         efficiency_1, efficiency_2, bypass_valve_lr, bypass_valve_hr,
-                        collapse_pressure_bar, temp_range, bypass_pressure, now()
+                        collapse_pressure_bar, temp_range, bypass_pressure,
+                        bypass_valve_lr_raw, bypass_valve_hr_raw, bypass_pressure_raw, collapse_pressure_bar_raw, now()
                     FROM products_stage
                     ORDER BY mr_1, ctid DESC
                     ON CONFLICT (mr_1) WHERE mr_1 IS NOT NULL DO UPDATE SET
@@ -1089,6 +1111,10 @@ public class EtlImportService
                         h4_mm_raw = EXCLUDED.h4_mm_raw,
                         d7_thread = EXCLUDED.d7_thread,
                         d8_thread = EXCLUDED.d8_thread,
+                        no_check_valves = EXCLUDED.no_check_valves,
+                        no_bypass_valves = EXCLUDED.no_bypass_valves,
+                        no_check_valves_raw = EXCLUDED.no_check_valves_raw,
+                        no_bypass_valves_raw = EXCLUDED.no_bypass_valves_raw,
                         media = EXCLUDED.media,
                         sealing_material = EXCLUDED.sealing_material,
                         efficiency_1 = EXCLUDED.efficiency_1,
@@ -1098,6 +1124,10 @@ public class EtlImportService
                         collapse_pressure_bar = EXCLUDED.collapse_pressure_bar,
                         temp_range = EXCLUDED.temp_range,
                         bypass_pressure = EXCLUDED.bypass_pressure,
+                        bypass_valve_lr_raw = EXCLUDED.bypass_valve_lr_raw,
+                        bypass_valve_hr_raw = EXCLUDED.bypass_valve_hr_raw,
+                        bypass_pressure_raw = EXCLUDED.bypass_pressure_raw,
+                        collapse_pressure_bar_raw = EXCLUDED.collapse_pressure_bar_raw,
                         updated_at = now();"
             };
 
@@ -2159,11 +2189,15 @@ public class EtlImportService
                 d1_mm_raw VARCHAR(50), d2_mm_raw VARCHAR(50), d3_mm_raw VARCHAR(50), d4_mm_raw VARCHAR(50),
                 h1_mm_raw VARCHAR(50), h2_mm_raw VARCHAR(50), h3_mm_raw VARCHAR(50), h4_mm_raw VARCHAR(50),
                 d7_thread VARCHAR(50), d8_thread VARCHAR(50),
+                no_check_valves INTEGER, no_bypass_valves INTEGER,
+                no_check_valves_raw VARCHAR(100), no_bypass_valves_raw VARCHAR(100),
                 media VARCHAR(100), sealing_material VARCHAR(100),
                 efficiency_1 VARCHAR(100), efficiency_2 VARCHAR(100),
                 bypass_valve_lr NUMERIC, bypass_valve_hr NUMERIC,
                 collapse_pressure_bar NUMERIC, temp_range VARCHAR(50),
-                bypass_pressure NUMERIC
+                bypass_pressure NUMERIC,
+                bypass_valve_lr_raw VARCHAR(100), bypass_valve_hr_raw VARCHAR(100),
+                bypass_pressure_raw VARCHAR(100), collapse_pressure_bar_raw VARCHAR(100)
             ) ON COMMIT DROP;
         ", conn);
         await create.ExecuteNonQueryAsync(ct);
@@ -2197,20 +2231,42 @@ public class EtlImportService
             ? SakuraFilter.Core.Validation.StringSanitizer.StripControlChars(v.GetString())
             : null;
 
+    private static string? GetRawStringOrNull(JsonElement e, string rawProp, string numericProp)
+    {
+        if (e.TryGetProperty(rawProp, out var raw) && raw.ValueKind is JsonValueKind.String or JsonValueKind.Number)
+            return SakuraFilter.Core.Validation.StringSanitizer.StripControlChars(raw.ToString())?.Trim();
+        if (e.TryGetProperty(numericProp, out var value) && value.ValueKind is JsonValueKind.String or JsonValueKind.Number)
+            return SakuraFilter.Core.Validation.StringSanitizer.StripControlChars(value.ToString())?.Trim();
+        return null;
+    }
+
     // P2-9.3: 改为实例方法以访问 Progress/_logger; prop 兼作 fieldName 用于日志
     private decimal? GetDecimalOrNull(JsonElement e, string prop, string? fieldName = null)
     {
         if (!e.TryGetProperty(prop, out var v) || v.ValueKind == JsonValueKind.Null) return null;
         if (v.ValueKind == JsonValueKind.Number) return v.GetDecimal();
         // P2-9.3: 字符串类型尝试解析为 decimal (业务数据常见: "3.14" 而非 JSON number)
-        if (v.ValueKind == JsonValueKind.String &&
-            decimal.TryParse(v.GetString(), out var result))
-            return result;
+        if (v.ValueKind == JsonValueKind.String)
+        {
+            var text = v.GetString();
+            if (decimal.TryParse(text, out var result)) return result;
+            var match = System.Text.RegularExpressions.Regex.Match(text ?? "", @"^\s*([+-]?\d+(?:[\.,]\d+)?)\s*(?:[a-zA-Z°%]+)?\s*$");
+            if (match.Success && decimal.TryParse(match.Groups[1].Value.Replace(',', '.'), System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out result))
+                return result;
+        }
         // P2-9.3: 类型不匹配计数 (非 Number/可解析 String), 只计数不抛异常保持 ETL 容错
         Progress.IncrTypeMismatch();
         _logger.LogDebug("字段 {Field} 类型不匹配,期望 decimal 实际 {Kind}={Value}",
             fieldName ?? prop, v.ValueKind, v.ToString());
         return null;
+    }
+
+    private int? GetIntOrNull(JsonElement e, string prop, string? fieldName = null)
+    {
+        var value = GetDecimalOrNull(e, prop, fieldName);
+        return value is >= int.MinValue and <= int.MaxValue && value == decimal.Truncate(value.Value)
+            ? decimal.ToInt32(value.Value)
+            : null;
     }
 
     private static DateTime? GetDateOrNull(JsonElement e, string prop)
@@ -2254,6 +2310,12 @@ public class EtlImportService
     {
         if (d is null) await w.WriteNullAsync(ct);
         else await w.WriteAsync(d.Value, NpgsqlDbType.Numeric, ct);
+    }
+
+    private static async Task WriteNullableIntAsync(NpgsqlBinaryImporter w, int? value, CancellationToken ct)
+    {
+        if (value is null) await w.WriteNullAsync(ct);
+        else await w.WriteAsync(value.Value, NpgsqlDbType.Integer, ct);
     }
 
     private static async Task WriteNullableDateAsync(NpgsqlBinaryImporter w, DateTime? d, CancellationToken ct)

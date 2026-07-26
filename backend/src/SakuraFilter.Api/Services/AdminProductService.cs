@@ -5,7 +5,9 @@ using SakuraFilter.Core.Extensions;
 using SakuraFilter.Core.Interfaces;
 using SakuraFilter.Core.Validation;
 using SakuraFilter.Infrastructure.Data;
+using System.Globalization;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace SakuraFilter.Api.Services;
 
@@ -104,6 +106,13 @@ public class AdminProductService
                 }
             }
 
+            var noCheckValves = NormalizeRawInt(form.NoCheckValvesRaw, form.NoCheckValves);
+            var noBypassValves = NormalizeRawInt(form.NoBypassValvesRaw, form.NoBypassValves);
+            var bypassValveLr = NormalizeRawDecimal(form.BypassValveLrRaw, form.BypassValveLr);
+            var bypassValveHr = NormalizeRawDecimal(form.BypassValveHrRaw, form.BypassValveHr);
+            var bypassPressure = NormalizeRawDecimal(form.BypassPressureRaw, form.BypassPressure);
+            var collapsePressure = NormalizeRawDecimal(form.CollapsePressureBarRaw, form.CollapsePressureBar);
+
             var product = new Product
             {
                 OemNoDisplay = oemDisplay,
@@ -120,13 +129,15 @@ public class AdminProductService
                 D1Mm = form.D1Mm, D2Mm = form.D2Mm, D3Mm = form.D3Mm, D4Mm = form.D4Mm,
                 H1Mm = form.H1Mm, H2Mm = form.H2Mm, H3Mm = form.H3Mm, H4Mm = form.H4Mm,
                 D7Thread = form.D7Thread?.Trim(), D8Thread = form.D8Thread?.Trim(),
-                NoCheckValves = form.NoCheckValves, NoBypassValves = form.NoBypassValves,
+                NoCheckValves = noCheckValves.Value, NoBypassValves = noBypassValves.Value,
+                NoCheckValvesRaw = noCheckValves.Raw, NoBypassValvesRaw = noBypassValves.Raw,
                 // 分区 5
                 Media = form.Media?.Trim(), MediaModel = form.MediaModel?.Trim(),
-                BypassValveLr = form.BypassValveLr, BypassValveHr = form.BypassValveHr,
+                BypassValveLr = bypassValveLr.Value, BypassValveHr = bypassValveHr.Value,
                 Efficiency1 = form.Efficiency1?.Trim(), Efficiency2 = form.Efficiency2?.Trim(),
-                BypassPressure = form.BypassPressure,
-                CollapsePressureBar = form.CollapsePressureBar,
+                BypassPressure = bypassPressure.Value, CollapsePressureBar = collapsePressure.Value,
+                BypassValveLrRaw = bypassValveLr.Raw, BypassValveHrRaw = bypassValveHr.Raw,
+                BypassPressureRaw = bypassPressure.Raw, CollapsePressureBarRaw = collapsePressure.Raw,
                 SealingMaterial = form.SealingMaterial?.Trim(), TempRange = form.TempRange?.Trim(),
                 // 分区 6
                 QtyPerCarton = form.QtyPerCarton, WeightKgs = form.WeightKgs,
@@ -281,18 +292,30 @@ public class AdminProductService
             Track(nameof(product.H4Mm), product.H4Mm, form.H4Mm); product.H4Mm = form.H4Mm;
             Track(nameof(product.D7Thread), product.D7Thread, form.D7Thread?.Trim()); product.D7Thread = form.D7Thread?.Trim();
             Track(nameof(product.D8Thread), product.D8Thread, form.D8Thread?.Trim()); product.D8Thread = form.D8Thread?.Trim();
-            Track(nameof(product.NoCheckValves), product.NoCheckValves, form.NoCheckValves); product.NoCheckValves = form.NoCheckValves;
-            Track(nameof(product.NoBypassValves), product.NoBypassValves, form.NoBypassValves); product.NoBypassValves = form.NoBypassValves;
+            var noCheckValves = NormalizeRawInt(form.NoCheckValvesRaw, form.NoCheckValves);
+            var noBypassValves = NormalizeRawInt(form.NoBypassValvesRaw, form.NoBypassValves);
+            Track(nameof(product.NoCheckValves), product.NoCheckValves, noCheckValves.Value); product.NoCheckValves = noCheckValves.Value;
+            Track(nameof(product.NoBypassValves), product.NoBypassValves, noBypassValves.Value); product.NoBypassValves = noBypassValves.Value;
+            Track(nameof(product.NoCheckValvesRaw), product.NoCheckValvesRaw, noCheckValves.Raw); product.NoCheckValvesRaw = noCheckValves.Raw;
+            Track(nameof(product.NoBypassValvesRaw), product.NoBypassValvesRaw, noBypassValves.Raw); product.NoBypassValvesRaw = noBypassValves.Raw;
 
             // 分区 5
             Track(nameof(product.Media), product.Media, form.Media?.Trim()); product.Media = form.Media?.Trim();
             Track(nameof(product.MediaModel), product.MediaModel, form.MediaModel?.Trim()); product.MediaModel = form.MediaModel?.Trim();
-            Track(nameof(product.BypassValveLr), product.BypassValveLr, form.BypassValveLr); product.BypassValveLr = form.BypassValveLr;
-            Track(nameof(product.BypassValveHr), product.BypassValveHr, form.BypassValveHr); product.BypassValveHr = form.BypassValveHr;
+            var bypassValveLr = NormalizeRawDecimal(form.BypassValveLrRaw, form.BypassValveLr);
+            var bypassValveHr = NormalizeRawDecimal(form.BypassValveHrRaw, form.BypassValveHr);
+            var bypassPressure = NormalizeRawDecimal(form.BypassPressureRaw, form.BypassPressure);
+            var collapsePressure = NormalizeRawDecimal(form.CollapsePressureBarRaw, form.CollapsePressureBar);
+            Track(nameof(product.BypassValveLr), product.BypassValveLr, bypassValveLr.Value); product.BypassValveLr = bypassValveLr.Value;
+            Track(nameof(product.BypassValveHr), product.BypassValveHr, bypassValveHr.Value); product.BypassValveHr = bypassValveHr.Value;
             Track(nameof(product.Efficiency1), product.Efficiency1, form.Efficiency1?.Trim()); product.Efficiency1 = form.Efficiency1?.Trim();
             Track(nameof(product.Efficiency2), product.Efficiency2, form.Efficiency2?.Trim()); product.Efficiency2 = form.Efficiency2?.Trim();
-            Track(nameof(product.BypassPressure), product.BypassPressure, form.BypassPressure); product.BypassPressure = form.BypassPressure;
-            Track(nameof(product.CollapsePressureBar), product.CollapsePressureBar, form.CollapsePressureBar); product.CollapsePressureBar = form.CollapsePressureBar;
+            Track(nameof(product.BypassPressure), product.BypassPressure, bypassPressure.Value); product.BypassPressure = bypassPressure.Value;
+            Track(nameof(product.CollapsePressureBar), product.CollapsePressureBar, collapsePressure.Value); product.CollapsePressureBar = collapsePressure.Value;
+            Track(nameof(product.BypassValveLrRaw), product.BypassValveLrRaw, bypassValveLr.Raw); product.BypassValveLrRaw = bypassValveLr.Raw;
+            Track(nameof(product.BypassValveHrRaw), product.BypassValveHrRaw, bypassValveHr.Raw); product.BypassValveHrRaw = bypassValveHr.Raw;
+            Track(nameof(product.BypassPressureRaw), product.BypassPressureRaw, bypassPressure.Raw); product.BypassPressureRaw = bypassPressure.Raw;
+            Track(nameof(product.CollapsePressureBarRaw), product.CollapsePressureBarRaw, collapsePressure.Raw); product.CollapsePressureBarRaw = collapsePressure.Raw;
             Track(nameof(product.SealingMaterial), product.SealingMaterial, form.SealingMaterial?.Trim()); product.SealingMaterial = form.SealingMaterial?.Trim();
             Track(nameof(product.TempRange), product.TempRange, form.TempRange?.Trim()); product.TempRange = form.TempRange?.Trim();
 
@@ -668,10 +691,13 @@ public class AdminProductService
             p.D1Mm, p.D2Mm, p.D3Mm, p.D4Mm,
             p.H1Mm, p.H2Mm, p.H3Mm, p.H4Mm,
             p.D7Thread, p.D8Thread, p.NoCheckValves, p.NoBypassValves,
+            p.NoCheckValvesRaw, p.NoBypassValvesRaw,
             p.Media, p.MediaModel,
             p.BypassValveLr, p.BypassValveHr,
             p.Efficiency1, p.Efficiency2, p.BypassPressure,
-            p.CollapsePressureBar, p.SealingMaterial, p.TempRange,
+            p.CollapsePressureBar,
+            p.BypassValveLrRaw, p.BypassValveHrRaw, p.BypassPressureRaw, p.CollapsePressureBarRaw,
+            p.SealingMaterial, p.TempRange,
             p.QtyPerCarton, p.WeightKgs,
             p.CartonLengthMm, p.CartonWidthMm, p.CartonHeightMm,
             p.MasterBoxQty, p.MasterBoxWeightKgs,
@@ -1169,10 +1195,13 @@ public class AdminProductService
                 p.D1Mm, p.D2Mm, p.D3Mm, p.D4Mm,
                 p.H1Mm, p.H2Mm, p.H3Mm, p.H4Mm,
                 p.D7Thread, p.D8Thread, p.NoCheckValves, p.NoBypassValves,
+                p.NoCheckValvesRaw, p.NoBypassValvesRaw,
                 p.Media, p.MediaModel,
                 p.BypassValveLr, p.BypassValveHr,
                 p.Efficiency1, p.Efficiency2, p.BypassPressure,
-                p.CollapsePressureBar, p.SealingMaterial, p.TempRange,
+                p.CollapsePressureBar,
+                p.BypassValveLrRaw, p.BypassValveHrRaw, p.BypassPressureRaw, p.CollapsePressureBarRaw,
+                p.SealingMaterial, p.TempRange,
                 p.QtyPerCarton, p.WeightKgs,
                 p.CartonLengthMm, p.CartonWidthMm, p.CartonHeightMm,
                 p.MasterBoxQty, p.MasterBoxWeightKgs,
@@ -1210,6 +1239,12 @@ public class AdminProductService
         ValidateNoControlChars(form.Efficiency2, nameof(form.Efficiency2));
         ValidateNoControlChars(form.SealingMaterial, nameof(form.SealingMaterial));
         ValidateNoControlChars(form.TempRange, nameof(form.TempRange));
+        ValidateNoControlChars(form.NoCheckValvesRaw, nameof(form.NoCheckValvesRaw));
+        ValidateNoControlChars(form.NoBypassValvesRaw, nameof(form.NoBypassValvesRaw));
+        ValidateNoControlChars(form.BypassValveLrRaw, nameof(form.BypassValveLrRaw));
+        ValidateNoControlChars(form.BypassValveHrRaw, nameof(form.BypassValveHrRaw));
+        ValidateNoControlChars(form.BypassPressureRaw, nameof(form.BypassPressureRaw));
+        ValidateNoControlChars(form.CollapsePressureBarRaw, nameof(form.CollapsePressureBarRaw));
         foreach (var x in form.CrossReferences)
         {
             ValidateNoControlChars(x.ProductName1, "CrossReferences.ProductName1");
@@ -1248,6 +1283,12 @@ public class AdminProductService
             ("Efficiency2", form.Efficiency2, 100),
             ("SealingMaterial", form.SealingMaterial, 100),
             ("TempRange", form.TempRange, 100),
+            ("NoCheckValvesRaw", form.NoCheckValvesRaw, 100),
+            ("NoBypassValvesRaw", form.NoBypassValvesRaw, 100),
+            ("BypassValveLrRaw", form.BypassValveLrRaw, 100),
+            ("BypassValveHrRaw", form.BypassValveHrRaw, 100),
+            ("BypassPressureRaw", form.BypassPressureRaw, 100),
+            ("CollapsePressureBarRaw", form.CollapsePressureBarRaw, 100),
         };
         foreach (var (label, value, max) in checks)
         {
@@ -1279,6 +1320,33 @@ public class AdminProductService
         if (cleaned!.Length != value.Length)
             throw new ArgumentException(
                 $"CONTROL_CHAR_DETECTED: {fieldName} 含非法控制字符/私用区字符 (原长度 {value.Length}, 清理后 {cleaned.Length})");
+    }
+
+    // 规划 V2: 原值用于展示，只有单一数值（可附单位）才派生检索数值，避免把 "1/2" 等复合表达式误判为 1。
+    private static readonly Regex ScalarWithOptionalUnit = new(
+        @"^\s*([+-]?\d+(?:[\.,]\d+)?)\s*(?:[a-zA-Z°%]+)?\s*$",
+        RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
+    private static (string? Raw, decimal? Value) NormalizeRawDecimal(string? rawInput, decimal? numericInput)
+    {
+        var raw = string.IsNullOrWhiteSpace(rawInput) ? null : rawInput.Trim();
+        if (numericInput.HasValue || raw is null) return (raw, numericInput);
+
+        var match = ScalarWithOptionalUnit.Match(raw);
+        if (!match.Success) return (raw, null);
+        var candidate = match.Groups[1].Value.Replace(',', '.');
+        return decimal.TryParse(candidate, NumberStyles.Number, CultureInfo.InvariantCulture, out var value)
+            ? (raw, value)
+            : (raw, null);
+    }
+
+    private static (string? Raw, int? Value) NormalizeRawInt(string? rawInput, int? numericInput)
+    {
+        var (raw, parsed) = NormalizeRawDecimal(rawInput, numericInput);
+        if (numericInput.HasValue || parsed is null || parsed != decimal.Truncate(parsed.Value) ||
+            parsed < int.MinValue || parsed > int.MaxValue)
+            return (raw, numericInput);
+        return (raw, decimal.ToInt32(parsed.Value));
     }
 
     // V24-F21: pg_try_advisory_xact_lock 辅助方法 (spec Task 0.3.18/0.3.19)

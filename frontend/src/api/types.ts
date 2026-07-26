@@ -218,6 +218,8 @@ export interface ProductDetail {
   d8Thread?: string
   noCheckValves?: number
   noBypassValves?: number
+  noCheckValvesRaw?: string
+  noBypassValvesRaw?: string
   media?: string
   mediaModel?: string
   bypassValveLr?: number
@@ -226,6 +228,10 @@ export interface ProductDetail {
   efficiency2?: string
   bypassPressure?: number
   collapsePressureBar?: number
+  bypassValveLrRaw?: string
+  bypassValveHrRaw?: string
+  bypassPressureRaw?: string
+  collapsePressureBarRaw?: string
   sealingMaterial?: string
   tempRange?: string
   qtyPerCarton?: number
