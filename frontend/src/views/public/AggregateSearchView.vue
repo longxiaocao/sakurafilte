@@ -163,6 +163,20 @@ function getPublicOemLabel(hit: AggregateSearchHit): string {
   return getPrimaryOem(hit)?.oemNo3 || hit.oem2 || 'OEM -'
 }
 
+const placeholderImage = '/images/product-placeholder.svg'
+
+function getPrimaryImageUrl(hit: AggregateSearchHit): string {
+  const oemNo3 = getPrimaryOem(hit)?.oemNo3
+  return oemNo3 ? `/oem2/${encodeURIComponent(oemNo3)}.jpg` : placeholderImage
+}
+
+function usePlaceholder(event: Event): void {
+  const image = event.currentTarget as HTMLImageElement | null
+  if (image && image.src !== new URL(placeholderImage, window.location.origin).href) {
+    image.src = placeholderImage
+  }
+}
+
 // V2 Task 4.4: 跳转产品详情 SEO URL
 //   AggregateSearchHit 含完整字段 (mr1/pn1/pn2/oemList[0].brand&oemNo3), 可拼完整 SEO URL
 function viewDetail(hit: AggregateSearchHit) {
@@ -358,8 +372,15 @@ onBeforeUnmount(() => {
         class="border border-gray-200 rounded p-3 hover:border-gray-400 transition-colors cursor-pointer"
         @click="viewDetail(hit)"
       >
-        <!-- OEM 3 主信息行 -->
         <div class="flex items-start gap-3">
+          <img
+            :src="getPrimaryImageUrl(hit)"
+            :alt="`${getPublicOemLabel(hit)} 产品主图`"
+            class="h-20 w-20 shrink-0 border border-gray-100 object-contain bg-white"
+            loading="lazy"
+            @error="usePlaceholder"
+          />
+          <!-- OEM 3 主信息行 -->
           <div class="flex-1 min-w-0">
             <div class="flex items-baseline gap-2 flex-wrap">
               <span class="font-mono text-sm text-gray-900 font-medium">{{ getPublicOemLabel(hit) }}</span>

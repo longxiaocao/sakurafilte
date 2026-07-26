@@ -13,7 +13,7 @@
 | 分区 6 | 不纳入主链路 | 无业务字段；未新增前端入口 | 已实现 |
 | 分区 7 | 机型三级树与适配反查 | `MachineApplication`、公开目录 `/api/public/machine-brands/catalog`、`AggregateSearchView.vue` | 已实现 |
 | 前端框架 | About/Product/News/Contact、全局搜索与实时下拉联想 | `AppHeader.vue`、`PublicInfoView.vue`、`/search/aggregate` | 已实现 |
-| 产品列表 | 机型与类型交叉筛选、Air/Oil/Fuel/Hydraulic 快捷筛选、OEM 展示、MR.1 内部聚合不对外显示；`/search` 统一进入公开聚合页 | `AggregateSearchView.vue`、`router/index.ts`、`PublicMachineBrandsController` | 已实现 |
+| 产品列表 | 机型与类型交叉筛选、Air/Oil/Fuel/Hydraulic 快捷筛选、OEM3 主图回退、OEM 展示、MR.1 内部聚合不对外显示；`/search` 统一进入公开聚合页 | `AggregateSearchView.vue`、`router/index.ts`、`PublicMachineBrandsController` | 已实现 |
 | 产品详情 | 主图/详情图、参数、适配、同 MR.1 推荐、询盘；公开界面不显示 MR.1 | `PublicProductView.vue`、Razor Detail、`GalleryApp.vue`、`InquiryApp.vue` | 已实现 |
 | 检索规则 | Meilisearch 模糊命中、OEM 双向、范围检索 | `MeiliSearchProvider`、`AggregateSearch`、`IProductDetailService` | 已实现 |
 | 批量导入 | XLSX 产品/OEM/机型、校验、进度 | `EtlSpreadsheetAdapter`、`EtlImportService`、`EtlSpreadsheetAdapterTests` | 已实现 |
