@@ -24,9 +24,11 @@
 - 后端：`dotnet test SakuraFilter.sln --no-restore --verbosity minimal`，677 项通过（API 639、ETL 38）。
 - 前端：`npm run type-check` 与 `npm run build` 通过。
 - 浏览器：本地 Vite 服务验证 `/about`、`/news`、`/contact` 与 `/images/product-placeholder.svg` 可达；导航可见 About us / Product / News / Contact us。
+- 搜索运行态：本地 Windows Meilisearch v1.12.0 已完成全量重建，`products` 索引 49,990 条文档；筛选、排序、全文、停用词、容错与分词符配置均已完成，`POST /api/public/search/aggregate` 实测返回 `provider=meilisearch`。
 
 ## 运行态前置条件
 
 - 后端需注入 `ConnectionStrings__Postgres` 与 `Jwt__SigningKey`；数据库迁移会在启动时检查并应用。
+- 本地搜索服务需以 `localhost:7700` 提供 Meilisearch；生产环境应配置 API Key 并通过服务管理器托管进程。
 - 当前本地后台 ETL 广播连接处于等待状态，导致第二次进程退出；需在干净进程环境中复跑完整 API 冒烟。
 - 新闻内容、公司介绍和联系信息目前为可用的信息页骨架，正式业务文案和联系方式仍需业务方提供后替换。
