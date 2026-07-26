@@ -29,8 +29,7 @@ const showAdvanced = ref(false)
 const advancedForm = reactive({
   type: '',
   machineCategory: '',
-  tolerance: 5,
-  includeDiscontinued: false
+  tolerance: 5
 })
 const quickProductTypes = ['Air Filter', 'Oil Filter', 'Fuel Filter', 'Hydraulic Filter'] as const
 
@@ -43,8 +42,6 @@ const loading = ref(false)
 const results = ref<AggregateSearchHit[]>([])
 const total = ref(0)
 const totalPages = ref(0)
-const processingTimeMs = ref(0)
-const provider = ref<string>('')
 const lastError = ref('')
 // 展开的聚合卡片 (内部以 MR.1 作为稳定键，页面不展示该编号)
 const expandedMr1 = ref<Set<string>>(new Set())
@@ -83,7 +80,6 @@ async function doSearch() {
         page: page.value,
         pageSize: pageSize.value,
         tolerance: advancedForm.tolerance,
-        includeDiscontinued: advancedForm.includeDiscontinued,
         type: advancedForm.type || undefined,
         machineCategory: advancedForm.machineCategory || undefined
       },
@@ -102,8 +98,6 @@ async function doSearch() {
     results.value = resp.hits || []
     total.value = resp.total
     totalPages.value = resp.totalPages
-    processingTimeMs.value = resp.processingTimeMs
-    provider.value = resp.provider
   } catch (e: any) {
     // AbortError 静默 (用户快速输入时正常取消)
     if (e?.name === 'CanceledError' || e?.code === 'ERR_CANCELED') return
@@ -198,7 +192,6 @@ function clearSearch() {
   advancedForm.type = ''
   advancedForm.machineCategory = ''
   advancedForm.tolerance = 5
-  advancedForm.includeDiscontinued = false
   page.value = 1
   results.value = []
   total.value = 0
@@ -304,9 +297,6 @@ onBeforeUnmount(() => {
               <el-option label="±10mm" :value="10" />
             </el-select>
           </el-form-item>
-          <el-form-item label="含下架" class="!mb-0">
-            <el-switch v-model="advancedForm.includeDiscontinued" />
-          </el-form-item>
         </div>
       </div>
     </div>
@@ -345,11 +335,9 @@ onBeforeUnmount(() => {
       {{ lastError }}
     </div>
 
-    <!-- 元信息 (总数 / 耗时 / provider) -->
-    <div v-if="total > 0" class="text-sm text-gray-600 mb-3 flex gap-4">
+    <!-- 元信息 -->
+    <div v-if="total > 0" class="text-sm text-gray-600 mb-3">
       <span>共 {{ total }} 条</span>
-      <span>耗时 {{ processingTimeMs }}ms</span>
-      <span>来源: {{ provider === 'meilisearch' ? 'Meilisearch' : 'PostgreSQL (兜底)' }}</span>
     </div>
 
     <!-- 加载中 -->
@@ -392,8 +380,6 @@ onBeforeUnmount(() => {
               ></span>
               <span v-if="hit.productName2" class="text-xs text-gray-500">{{ hit.productName2 }}</span>
               <el-tag size="small" type="info">{{ hit.type }}</el-tag>
-              <el-tag v-if="!hit.isPublished" size="small" type="warning">未上架</el-tag>
-              <el-tag v-if="hit.isDiscontinued" size="small" type="danger">已下架</el-tag>
             </div>
             <div v-if="hit.oem2" class="text-xs text-gray-500 mt-1">OEM 2: {{ hit.oem2 }}</div>
           </div>
@@ -427,9 +413,7 @@ onBeforeUnmount(() => {
                 <th class="text-left py-1 px-2 font-normal">OEM Brand</th>
                 <th class="text-left py-1 px-2 font-normal">OEM 3</th>
                 <th class="text-left py-1 px-2 font-normal">OEM 2</th>
-                <th class="text-left py-1 px-2 font-normal">Sort</th>
                 <th class="text-left py-1 px-2 font-normal">机型类型</th>
-                <th class="text-left py-1 px-2 font-normal">上架</th>
               </tr>
             </thead>
             <tbody>
@@ -441,12 +425,7 @@ onBeforeUnmount(() => {
                 <td class="py-1 px-2">{{ oem.oemBrand || '-' }}</td>
                 <td class="py-1 px-2 font-mono">{{ oem.oemNo3 || '-' }}</td>
                 <td class="py-1 px-2 font-mono">{{ oem.oem2 || '-' }}</td>
-                <td class="py-1 px-2">{{ oem.sortOrder }}</td>
                 <td class="py-1 px-2">{{ oem.machineType || '-' }}</td>
-                <td class="py-1 px-2">
-                  <el-tag v-if="oem.isPublished" size="small" type="success">上架</el-tag>
-                  <el-tag v-else size="small" type="info">下架</el-tag>
-                </td>
               </tr>
             </tbody>
           </table>
