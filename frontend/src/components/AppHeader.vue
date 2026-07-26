@@ -318,7 +318,7 @@ function doGlobalSearch() {
     <!--   Musk 风格: 1px 细线 + 240px 窄宽度 + Search 前缀图标 -->
     <el-input
       v-model="globalSearchQ"
-      placeholder="搜索 MR.1 / OEM / 机型"
+      placeholder="搜索产品 / OEM / 机型"
       size="small"
       class="hidden md:block w-60 ml-3"
       @keyup.enter="doGlobalSearch"
@@ -505,7 +505,7 @@ function doGlobalSearch() {
       <!-- 改进 1.1: 移动端 drawer 内全局搜索框 (与桌面端保持一致体验) -->
       <el-input
         v-model="globalSearchQ"
-        placeholder="搜索 MR.1 / OEM / 机型"
+        placeholder="搜索产品 / OEM / 机型"
         size="default"
         class="mb-4"
         @keyup.enter="doGlobalSearch"

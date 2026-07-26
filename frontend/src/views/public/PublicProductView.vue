@@ -284,7 +284,7 @@ function numOrDash(v?: number | string) {
           </h1>
           <!-- 副标题 -->
           <div class="text-sm text-muted mt-2 font-mono tabular-nums">
-            {{ data.oem2 || '—' }} · {{ data.mr1 || '—' }} · {{ data.oemNoDisplay }}
+            {{ data.oem2 || '—' }} · {{ data.oemNoDisplay }}
           </div>
 
           <!-- 关键规格 4 卡片 -->
@@ -329,7 +329,6 @@ function numOrDash(v?: number | string) {
             <div class="text-muted">Product Name 1</div><div class="font-mono">{{ data.productName1 || '—' }}</div>
             <div class="text-muted">Product Name 2</div><div class="font-mono">{{ data.productName2 || '—' }}</div>
             <div class="text-muted">Type</div><div class="font-mono">{{ data.type || '—' }}</div>
-            <div class="text-muted">MR.1</div><div class="font-mono">{{ data.mr1 || '—' }}</div>
             <div class="text-muted">OEM 2</div><div class="font-mono">{{ data.oem2 || '—' }}</div>
             <div class="text-muted">OEM 1 (Display)</div><div class="font-mono text-[var(--color-accent)]">{{ data.oemNoDisplay || '—' }}</div>
             <div class="text-muted">上架</div>

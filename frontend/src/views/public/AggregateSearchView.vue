@@ -2,7 +2,7 @@
 // V2 Task 1.3.2: 聚合搜索页 (需求 5)
 //   URL: /search/aggregate?q=CAT 320D&page=1
 //   - 调 POST /api/public/search/aggregate (Meili 主 + PG 兜底)
-//   - 文档级展示: MR.1 卡片 + 可展开 oemList (每个 OEM 3 一行)
+//   - 文档级聚合、OEM 3 对外展示 + 可展开 oemList (每个 OEM 3 一行)
 //   - _formatted 高亮渲染 (sanitizeFormatted 双保险, 只允许 <mark> 标签)
 //   - 500ms 防抖 + AbortController 取消前序请求 (复用 PublicSearchView 模式)
 //   - Musk 风格极简: 纯黑白 + 1px 细线 + 8px 网格 + 无阴影
@@ -41,7 +41,7 @@ const totalPages = ref(0)
 const processingTimeMs = ref(0)
 const provider = ref<string>('')
 const lastError = ref('')
-// 展开的 MR.1 卡片 (展示完整 oemList)
+// 展开的聚合卡片 (内部以 MR.1 作为稳定键，页面不展示该编号)
 const expandedMr1 = ref<Set<string>>(new Set())
 // V24-F38 (spec 改进建议): 标记本次搜索是否降级到旧 API
 //   - true: 聚合 API 404, 降级到 searchApi.search, 无 oemList/machineList 嵌套
@@ -141,7 +141,7 @@ function syncUrl() {
   router.replace({ path: '/search/aggregate', query })
 }
 
-// 展开/收起 MR.1 卡片的 oemList
+// 展开/收起聚合卡片的 oemList
 function toggleExpand(mr1: string) {
   const next = new Set(expandedMr1.value)
   if (next.has(mr1)) next.delete(mr1)
@@ -149,16 +149,25 @@ function toggleExpand(mr1: string) {
   expandedMr1.value = next
 }
 
+function getPrimaryOem(hit: AggregateSearchHit) {
+  return hit.oemList?.find((item) => item.isPublished && item.oemNo3)
+    ?? hit.oemList?.find((item) => item.oemNo3)
+}
+
+function getPublicOemLabel(hit: AggregateSearchHit): string {
+  return getPrimaryOem(hit)?.oemNo3 || hit.oem2 || 'OEM -'
+}
+
 // V2 Task 4.4: 跳转产品详情 SEO URL
 //   AggregateSearchHit 含完整字段 (mr1/pn1/pn2/oemList[0].brand&oemNo3), 可拼完整 SEO URL
 function viewDetail(hit: AggregateSearchHit) {
-  const firstOem = hit.oemList?.[0]
+  const firstOem = getPrimaryOem(hit)
   const url = buildProductUrl({
     productName1: hit.productName1,
     productName2: hit.productName2,
     oemBrand: firstOem?.oemBrand,
     oemNo3: firstOem?.oemNo3,
-    oemNoDisplay: hit.oem2 || hit.mr1,
+    oemNoDisplay: firstOem?.oemNo3 || hit.oem2,
     mr1: hit.mr1
   })
   window.location.href = url
@@ -329,7 +338,7 @@ onBeforeUnmount(() => {
       <p class="text-xs mt-1">尝试更换关键词或调整筛选条件</p>
     </div>
 
-    <!-- 搜索结果列表 (MR.1 文档级卡片) -->
+    <!-- 搜索结果列表 (内部按 MR.1 聚合，对外展示 OEM 3) -->
     <div v-else class="space-y-2">
       <div
         v-for="hit in results"
@@ -337,11 +346,11 @@ onBeforeUnmount(() => {
         class="border border-gray-200 rounded p-3 hover:border-gray-400 transition-colors cursor-pointer"
         @click="viewDetail(hit)"
       >
-        <!-- MR.1 主信息行 -->
+        <!-- OEM 3 主信息行 -->
         <div class="flex items-start gap-3">
           <div class="flex-1 min-w-0">
             <div class="flex items-baseline gap-2 flex-wrap">
-              <span class="font-mono text-sm text-gray-900 font-medium">{{ hit.mr1 }}</span>
+              <span class="font-mono text-sm text-gray-900 font-medium">{{ getPublicOemLabel(hit) }}</span>
               <!-- V2 Task 1.3.3: v-html 渲染 _formatted 高亮 (sanitizeFormatted 双保险) -->
               <span
                 v-if="getHighlighted(hit, 'product_name_1')"

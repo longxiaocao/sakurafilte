@@ -58,7 +58,6 @@ const fieldGroups: FieldGroup[] = [
     fields: [
       { key: 'oemNoDisplay', label: 'OEM 编号', get: (p) => p.oemNoDisplay ?? '' },
       { key: 'oem2', label: 'OEM 2', get: (p) => p.oem2 ?? '' },
-      { key: 'mr1', label: 'MR.1', get: (p) => p.mr1 ?? '' },
       { key: 'productName1', label: '产品名 1', get: (p) => p.productName1 ?? '' },
       { key: 'productName2', label: '产品名 2', get: (p) => p.productName2 ?? '' },
       { key: 'type', label: '类型', get: (p) => p.type ?? '' }
