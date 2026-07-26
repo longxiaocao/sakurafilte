@@ -319,6 +319,70 @@ public class AdminProductImageService
         return result;
     }
 
+    /// <summary>
+    /// 项目规划V2批量图片导入：`OEM3-1.*` 为主图，`MR1-2..6.*` 为共享详情图。
+    /// 目录必须位于 Etl:AllowedImportDirs，逐文件复用 UploadAsync 的归属、大小、类型与事务校验。
+    /// </summary>
+    public async Task<ImageFolderImportResult> ImportFolderAsync(string folderPath, string? uploadedBy, CancellationToken ct = default)
+    {
+        if (_config.ValidateJsonlPath(folderPath) is { } pathError)
+            throw new ArgumentException(pathError);
+        if (!Directory.Exists(folderPath))
+            throw new DirectoryNotFoundException($"图片目录不存在: {folderPath}");
+
+        var imported = 0;
+        var skipped = 0;
+        var errors = new List<string>();
+        foreach (var file in Directory.EnumerateFiles(folderPath, "*", SearchOption.TopDirectoryOnly))
+        {
+            ct.ThrowIfCancellationRequested();
+            var extension = Path.GetExtension(file).ToLowerInvariant();
+            var contentType = extension switch { ".jpg" or ".jpeg" => "image/jpeg", ".png" => "image/png", ".webp" => "image/webp", _ => null };
+            if (contentType == null) { skipped++; continue; }
+
+            var stem = Path.GetFileNameWithoutExtension(file);
+            var separator = stem.LastIndexOf('-');
+            if (separator <= 0 || !short.TryParse(stem[(separator + 1)..], out var slot) || slot is < 1 or > 6)
+            {
+                skipped++;
+                continue;
+            }
+
+            try
+            {
+                var code = stem[..separator];
+                string mr1;
+                string? oemNo3 = null;
+                string role;
+                if (slot == 1)
+                {
+                    var target = await _db.CrossReferences.AsNoTracking()
+                        .Where(x => x.OemNo3 == code && !x.IsDiscontinued && x.Product!.Mr1 != null)
+                        .Select(x => new { x.Product!.Mr1, x.OemNo3 })
+                        .FirstOrDefaultAsync(ct) ?? throw new KeyNotFoundException($"未找到 OEM3 主图归属: {code}");
+                    mr1 = target.Mr1!;
+                    oemNo3 = target.OemNo3;
+                    role = "primary";
+                }
+                else
+                {
+                    mr1 = code;
+                    role = "detail";
+                }
+
+                await using var stream = File.OpenRead(file);
+                await UploadAsync(mr1, role, oemNo3, slot, stream, contentType, uploadedBy, ct);
+                imported++;
+            }
+            catch (Exception ex)
+            {
+                skipped++;
+                if (errors.Count < 50) errors.Add($"{Path.GetFileName(file)}: {ex.Message}");
+            }
+        }
+        return new ImageFolderImportResult(imported, skipped, errors);
+    }
+
     // ========== 辅助 ==========
     // V2: 保留旧 BuildKey (static) 兼容性, 内部不再使用, 标记 Obsolete
     [Obsolete("V2: 改用 BuildKeyAsync (支持 image_role 分层 + system_settings 配置)")]
@@ -394,3 +458,5 @@ public class AdminProductImageService
         i.UploadedAt, i.UploadedBy, i.OemNo3, i.ImageRole
     );
 }
+
+public record ImageFolderImportResult(int Imported, int Skipped, List<string> Errors);

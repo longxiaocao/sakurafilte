@@ -279,6 +279,22 @@ public static class AdminProductEndpoints
             Results.Ok(await svc.ListAsync(mr1, ct)))
         .WithName("AdminListProductImages");
 
+        group.MapPost("/images/import-folder", async (
+            ImageFolderImportRequest body, AdminProductImageService svc, HttpContext ctx, CancellationToken ct) =>
+        {
+            if (string.IsNullOrWhiteSpace(body.FolderPath))
+                return Results.BadRequest(new { error = "folderPath 不能为空" });
+            try
+            {
+                var result = await svc.ImportFolderAsync(body.FolderPath, ResolveUser(ctx), ct);
+                return Results.Ok(result);
+            }
+            catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+            catch (DirectoryNotFoundException ex) { return Results.NotFound(new { error = ex.Message }); }
+        })
+        .WithSummary("按 OEM3-1 与 MR1-2..6 文件名批量导入图片")
+        .WithName("AdminImportProductImages");
+
         // 变更历史
         group.MapGet("/{id:long}/history", async (
             long id,
