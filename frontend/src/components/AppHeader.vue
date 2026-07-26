@@ -4,7 +4,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, ElLoading } from 'element-plus'
 import { useAdminAuth } from '@/composables/useAdminAuth'
 import { useThemeStore } from '@/stores/theme'  // P5.3
-import { authApi } from '@/api'
+import { authApi, publicSearchApi } from '@/api'
+import type { AggregateSearchHit } from '@/api/types'
 import { useI18n } from 'vue-i18n'  // P2.6
 import { setLocale } from '@/i18n'  // P2.6
 import { buildProductUrl } from '@/utils/build-product-url'  // V2 Task 4.4
@@ -184,6 +185,7 @@ onBeforeUnmount(() => {
     window.clearTimeout(resizeDebounceTimer)
     resizeDebounceTimer = null
   }
+  globalSuggestionAbortCtrl?.abort()
 })
 // 路由变化 → 重新计算
 watch(() => route.path, () => {
@@ -286,6 +288,62 @@ function toggleLocale() {
 //   设计: 输入 → 回车 → router.push({ path: '/search/aggregate', query: { q } })
 //   边界: 空输入不跳转, 避免空查询触发后端聚合
 const globalSearchQ = ref('')
+let globalSuggestionAbortCtrl: AbortController | null = null
+
+interface GlobalSearchSuggestion {
+  value: string
+  query: string
+}
+
+function getSuggestionOem(hit: AggregateSearchHit): string {
+  return hit.oemList?.find((item) => item.isPublished && item.oemNo3)?.oemNo3
+    ?? hit.oemList?.find((item) => item.oemNo3)?.oemNo3
+    ?? hit.oem2
+    ?? ''
+}
+
+async function queryGlobalSuggestions(
+  queryString: string,
+  cb: (items: GlobalSearchSuggestion[]) => void
+) {
+  const query = queryString.trim()
+  if (globalSuggestionAbortCtrl) globalSuggestionAbortCtrl.abort()
+  if (!query) {
+    cb([])
+    return
+  }
+
+  globalSuggestionAbortCtrl = new AbortController()
+  try {
+    const response = await publicSearchApi.aggregate(
+      { q: query, page: 1, pageSize: 6 },
+      { signal: globalSuggestionAbortCtrl.signal }
+    )
+    const seen = new Set<string>()
+    const suggestions = response.hits.reduce<GlobalSearchSuggestion[]>((items, hit) => {
+      const oem = getSuggestionOem(hit)
+      const label = [oem, hit.productName1, hit.productName2]
+        .filter((part): part is string => Boolean(part?.trim()))
+        .join(' - ')
+      if (label && !seen.has(label)) {
+        seen.add(label)
+        items.push({ value: label, query })
+      }
+      return items
+    }, [])
+    cb(suggestions)
+  } catch (error: any) {
+    if (error?.name !== 'CanceledError' && error?.code !== 'ERR_CANCELED') {
+      console.warn('[AppHeader] 全局搜索联想失败', error)
+    }
+    cb([])
+  }
+}
+
+function selectGlobalSuggestion(item: GlobalSearchSuggestion) {
+  globalSearchQ.value = item.query
+  doGlobalSearch()
+}
 
 function doGlobalSearch() {
   const q = globalSearchQ.value.trim()
@@ -316,19 +374,26 @@ function doGlobalSearch() {
     <div class="font-medium text-base tracking-tight">SakuraFilter</div>
     <!-- 改进 1.1: 全局搜索框 (桌面端 md 以上显示, 移动端由 drawer 接管) -->
     <!--   Musk 风格: 1px 细线 + 240px 窄宽度 + Search 前缀图标 -->
-    <el-input
+    <el-autocomplete
       v-model="globalSearchQ"
+      :fetch-suggestions="queryGlobalSuggestions"
+      :trigger-on-focus="false"
+      :debounce="300"
       placeholder="搜索产品 / OEM / 机型"
       size="small"
       class="hidden md:block w-60 ml-3"
       @keyup.enter="doGlobalSearch"
+      @select="selectGlobalSuggestion"
       clearable
-      aria-label="全局搜索框, 回车跳转聚合搜索页"
+      aria-label="全局搜索框, 输入时显示联想建议, 回车跳转聚合搜索页"
     >
       <template #prefix>
         <el-icon aria-hidden="true"><Search /></el-icon>
       </template>
-    </el-input>
+      <template #default="{ item }">
+        <span class="font-mono text-xs">{{ item.value }}</span>
+      </template>
+    </el-autocomplete>
     <!-- UX P0-1: 桌面端 nav (sm 以上显示, 移动端隐藏) -->
     <!-- P-Admin-UX v3.1: flex-1 + min-w-0 让 nav 占据 logo 和工具按钮之间的所有可用空间, -->
     <!--   这样 clientWidth 才是真实的"可用宽度"而非"内容宽度", 避免 v3 死循环 (nav 收窄 → 更多塞入 → nav 收窄) -->
@@ -503,19 +568,26 @@ function doGlobalSearch() {
     >
       <div class="font-medium text-base tracking-tight mb-4">SakuraFilter</div>
       <!-- 改进 1.1: 移动端 drawer 内全局搜索框 (与桌面端保持一致体验) -->
-      <el-input
+      <el-autocomplete
         v-model="globalSearchQ"
+        :fetch-suggestions="queryGlobalSuggestions"
+        :trigger-on-focus="false"
+        :debounce="300"
         placeholder="搜索产品 / OEM / 机型"
         size="default"
         class="mb-4"
         @keyup.enter="doGlobalSearch"
+        @select="selectGlobalSuggestion"
         clearable
-        aria-label="全局搜索框, 回车跳转聚合搜索页"
+        aria-label="全局搜索框, 输入时显示联想建议, 回车跳转聚合搜索页"
       >
         <template #prefix>
           <el-icon aria-hidden="true"><Search /></el-icon>
         </template>
-      </el-input>
+        <template #default="{ item }">
+          <span class="font-mono text-xs">{{ item.value }}</span>
+        </template>
+      </el-autocomplete>
       <nav class="flex flex-col gap-1 flex-1" aria-label="移动端主导航">
         <!-- P-Admin-UX v3: 移动端 drawer 展示全部按钮 (无视 overflow), 简化交互 -->
         <template v-for="item in allNavItems" :key="'m-' + item.key">
