@@ -58,7 +58,6 @@ function submit(): void {
     `电话: ${form.phone}\n` +
     `邮箱: ${form.email}\n` +
     `产品 OEM: ${props.oemNo3}\n` +
-    `MR.1: ${props.mr1 ?? '-'}\n` +
     `品牌: ${props.brand ?? '-'}\n\n` +
     `留言:\n${form.message}`
   )
@@ -70,6 +69,7 @@ function submit(): void {
 
 <template>
   <div class="inquiry-app">
+    <p class="inquiry-hint">可咨询质量要求、目标价格、MOQ 与交期。</p>
     <button type="button" class="inquiry-btn" @click="openDialog">
       立即询盘
     </button>
@@ -113,6 +113,11 @@ function submit(): void {
 }
 .inquiry-btn:hover {
   background: #f5f5f5;
+}
+.inquiry-hint {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: #666;
 }
 .product-info {
   font-size: 13px;
