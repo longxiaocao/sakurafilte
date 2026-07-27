@@ -243,7 +243,39 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="p-4 max-w-7xl mx-auto">
+  <div class="p-4 max-w-screen-2xl mx-auto">
+    <div class="lg:grid lg:grid-cols-[220px_minmax(0,1fr)] lg:gap-6">
+      <aside
+        v-if="machineCatalog.categories.some(category => category.brands.length > 0)"
+        class="hidden lg:block self-start sticky top-4 max-h-[calc(100vh-5rem)] overflow-y-auto border border-gray-200 p-3"
+        aria-label="机型分类目录"
+      >
+        <div class="text-sm font-medium pb-2 mb-2 border-b border-gray-200">机型目录</div>
+        <section v-for="category in machineCatalog.categories" :key="category.category" class="py-2 border-b border-gray-100 last:border-b-0">
+          <el-button text size="small" class="!px-0 !font-medium" @click="selectMachine(category.category)">
+            {{ category.category }}
+          </el-button>
+          <div v-for="brand in category.brands" :key="brand.brand" class="mt-1 text-xs">
+            <el-button text size="small" class="!h-auto !px-0" @click="selectMachine(category.category, brand.brand)">
+              {{ brand.brand }}
+            </el-button>
+            <div v-if="brand.models.length" class="ml-2 mt-1 space-y-1">
+              <el-button
+                v-for="model in brand.models.slice(0, 8)"
+                :key="model"
+                text
+                size="small"
+                class="!h-auto !px-0 block text-left text-gray-500"
+                @click="selectMachine(category.category, brand.brand, model)"
+              >
+                {{ model }}
+              </el-button>
+            </div>
+          </div>
+        </section>
+      </aside>
+
+      <div class="min-w-0">
     <!-- 标题 + 搜索框 -->
     <div class="border-b border-gray-200 pb-3 mb-4">
       <h1 class="text-xl font-medium mb-3">聚合搜索</h1>
@@ -303,7 +335,7 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <el-collapse v-if="machineCatalog.categories.some(category => category.brands.length > 0)" class="mb-4">
+    <el-collapse v-if="machineCatalog.categories.some(category => category.brands.length > 0)" class="mb-4 lg:hidden">
       <el-collapse-item title="机型目录" name="machine-catalog">
         <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
           <section v-for="category in machineCatalog.categories" :key="category.category" class="min-w-0">
@@ -381,7 +413,7 @@ onBeforeUnmount(() => {
                 v-html="getHighlighted(hit, 'product_name_1')"
               ></span>
               <span v-if="hit.productName2" class="text-xs text-gray-500">{{ hit.productName2 }}</span>
-              <el-tag size="small" type="info">{{ hit.type }}</el-tag>
+              <el-tag size="small" type="info">{{ stripSearchHighlight(hit.type) }}</el-tag>
             </div>
             <div v-if="hit.oem2" class="text-xs text-gray-500 mt-1">OEM 2: {{ hit.oem2 }}</div>
           </div>
@@ -462,6 +494,8 @@ onBeforeUnmount(() => {
         layout="prev, pager, next, total"
         background
       />
+    </div>
+      </div>
     </div>
   </div>
 </template>
