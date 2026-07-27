@@ -202,12 +202,13 @@ public class ProductDetailService : IProductDetailService
         // pn1/pn2/brand 段走 BuildSlug 小写化 (SEO 友好, 不参与 DB 反查)。
         var pn1Slug = BuildSlug(p.ProductName1);
         var pn2Slug = BuildSlug(p.ProductName2);
-        // brand: 取第一个 crossReference 的 OemBrand (V2 OEM 3 主图命名同口径)
-        var brand = p.CrossReferences?.FirstOrDefault()?.OemBrand;
+        // 公开 URL 必须与详情页展示的主 OEM3 保持一致，不能优先使用主表内部展示编号。
+        var primaryXref = p.CrossReferences.FirstOrDefault(x => x.IsPublished && !string.IsNullOrWhiteSpace(x.OemNo3))
+            ?? p.CrossReferences.FirstOrDefault(x => !string.IsNullOrWhiteSpace(x.OemNo3));
+        var brand = primaryXref?.OemBrand;
         var brandSlug = BuildSlug(brand);
-        // oem3: 取 OemNoDisplay (兼容老 OEM) 或第一个 crossReference 的 OemNo3
-        var oem3 = !string.IsNullOrEmpty(p.OemNoDisplay) ? p.OemNoDisplay
-                  : (p.CrossReferences?.FirstOrDefault()?.OemNo3 ?? "");
+        // 无 OEM3 数据时才兼容回退主表编号。
+        var oem3 = primaryXref?.OemNo3 ?? p.OemNoDisplay;
         // V24-F42 (spec F5-1): oem3 段保留大小写, 不走 BuildSlug
         //   WHY: 后端 GetByOemAsync 用 == 大小写敏感查询 (p.OemNoDisplay == oem),
         //        BuildSlug 会 ToLowerInvariant 小写化, 若 DB 中 OEM 含大写字母 (如 "F0001"),
