@@ -17,6 +17,7 @@ interface InquiryProps {
 const props = defineProps<InquiryProps>()
 
 const dialogVisible = ref(false)
+const inquiryEmail = import.meta.env.VITE_INQUIRY_EMAIL?.trim() ?? ''
 
 interface InquiryForm {
   contact: string
@@ -49,8 +50,11 @@ function submit(): void {
     ElMessage.warning('请填写联系人, 并至少提供电话或邮箱')
     return
   }
-  // TODO Phase 5: POST /api/public/inquiry (后端 API 待实现)
-  // 当前: 用 mailto: 兜底, 让用户用邮件客户端发送
+  if (!inquiryEmail) {
+    ElMessage.info('询盘邮箱尚未配置, 请通过联系页获取销售联系方式')
+    return
+  }
+  // 当前交付口径: 使用部署配置的收件邮箱打开邮件客户端，不落库存储客户信息。
   const subject = encodeURIComponent(`[询盘] ${props.oemNo3} - ${props.productName1 ?? ''}`)
   const body = encodeURIComponent(
     `联系人: ${form.contact}\n` +
@@ -60,7 +64,7 @@ function submit(): void {
     `品牌: ${props.brand ?? '-'}\n\n` +
     `留言:\n${form.message}`
   )
-  window.location.href = `mailto:sales@sakurafilter.com?subject=${subject}&body=${body}`
+  window.location.href = `mailto:${encodeURIComponent(inquiryEmail)}?subject=${subject}&body=${body}`
   dialogVisible.value = false
   ElMessage.success('已打开邮件客户端, 请发送询盘邮件')
 }
