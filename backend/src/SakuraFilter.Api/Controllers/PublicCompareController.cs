@@ -79,9 +79,16 @@ public class PublicCompareController : ControllerBase
         // 单次查 xref + apps (公开对比是表格视图, 不需要图片)
         //   WHY 复用 AdminProductService.CompareAsync 模式, 不引入图片预签名复杂度
         //   用户需要看图可点击任一列进入 /product/{oem} 详情页 (该页面会查图)
-        var xrefs = await _db.CrossReferences.AsNoTracking()
-            .Where(x => matchedIds.Contains(x.ProductId))
-            .Select(x => new { x.ProductId, x.Id, x.ProductName1, x.OemBrand, x.OemNo3, x.Oem2, x.SortOrder, x.MachineType, x.IsPublished, x.RowVersion })
+        var xrefs = await (
+            from x in _db.CrossReferences.AsNoTracking()
+            where matchedIds.Contains(x.ProductId)
+            orderby (_db.XrefOemBrands
+                        .Where(b => b.Brand == x.OemBrand && b.DeletedAt == null)
+                        .Select(b => (int?)b.SortOrder)
+                        .FirstOrDefault() ?? int.MaxValue),
+                    x.SortOrder,
+                    x.OemNo3
+            select new { x.ProductId, x.Id, x.ProductName1, x.OemBrand, x.OemNo3, x.Oem2, x.SortOrder, x.MachineType, x.IsPublished, x.RowVersion })
             .ToListAsync(ct);
         var apps = await _db.MachineApplications.AsNoTracking()
             .Where(m => matchedIds.Contains(m.ProductId))
