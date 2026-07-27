@@ -253,6 +253,12 @@ export interface ProductDetail {
   images: ProductImageInfo[]
 }
 
+/** 客户公开详情契约：内部聚合和后台运营字段不向浏览器传递。 */
+export type PublicProductDetail = Omit<
+  ProductDetail,
+  'mr1' | 'isPublished' | 'rowVersion' | 'isDiscontinued' | 'createdAt' | 'updatedAt'
+>
+
 export interface XrefInfo {
   id: number
   productName1?: string
@@ -627,7 +633,7 @@ export interface MachineCatalogResponse {
 }
 
 // ===== V2 Task 1.3: 聚合搜索 (POST /api/public/search/aggregate) =====
-//   文档级返回: mr1 + oemList 嵌套数组 + _formatted 高亮 + _rankingScore
+//   文档级返回: 公开键 + OEM3 嵌套数组 + _formatted 高亮
 //   与后端 AggregateSearchDto.cs 一一对应 (PascalCase 序列化)
 export interface AggregateSearchRequest {
   q?: string
@@ -662,15 +668,13 @@ export interface AggregateMachineItem {
 }
 
 export interface AggregateSearchHit {
-  mr1: string
+  key: string
   productName1?: string | null
   productName2?: string | null
   oem2?: string | null
   type: string
   remark?: string | null
   media?: string | null
-  isPublished: boolean
-  isDiscontinued: boolean
   oemList: AggregateOemItem[]
   machineList: AggregateMachineItem[]
   // _formatted 高亮字段 (后端已做 XSS 防御, 前端 sanitizeFormatted 双保险)
@@ -683,8 +687,6 @@ export interface AggregateSearchResponse {
   page: number
   pageSize: number
   totalPages: number
-  processingTimeMs: number
-  provider: string  // "meilisearch" | "postgres"
   hits: AggregateSearchHit[]
 }
 

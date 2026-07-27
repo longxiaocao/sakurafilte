@@ -7,7 +7,6 @@
 import { ref, onMounted } from 'vue'
 
 interface CompareProps {
-  mr1: string | null
   oemNo3: string
   productId: number | null
 }

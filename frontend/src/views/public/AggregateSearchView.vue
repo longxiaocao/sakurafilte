@@ -43,8 +43,8 @@ const results = ref<AggregateSearchHit[]>([])
 const total = ref(0)
 const totalPages = ref(0)
 const lastError = ref('')
-// 展开的聚合卡片 (内部以 MR.1 作为稳定键，页面不展示该编号)
-const expandedMr1 = ref<Set<string>>(new Set())
+// 展开的聚合卡片使用服务端提供的公开键。
+const expandedKeys = ref<Set<string>>(new Set())
 // V24-F38 (spec 改进建议): 标记本次搜索是否降级到旧 API
 //   - true: 聚合 API 404, 降级到 searchApi.search, 无 oemList/machineList 嵌套
 //   - false: 聚合 API 正常, 完整渲染
@@ -141,16 +141,15 @@ function syncUrl() {
 }
 
 // 展开/收起聚合卡片的 oemList
-function toggleExpand(mr1: string) {
-  const next = new Set(expandedMr1.value)
-  if (next.has(mr1)) next.delete(mr1)
-  else next.add(mr1)
-  expandedMr1.value = next
+function toggleExpand(key: string) {
+  const next = new Set(expandedKeys.value)
+  if (next.has(key)) next.delete(key)
+  else next.add(key)
+  expandedKeys.value = next
 }
 
 function getPrimaryOem(hit: AggregateSearchHit) {
-  return hit.oemList?.find((item) => item.isPublished && item.oemNo3)
-    ?? hit.oemList?.find((item) => item.oemNo3)
+  return hit.oemList?.find((item) => item.oemNo3)
 }
 
 function getPublicOemLabel(hit: AggregateSearchHit): string {
@@ -172,7 +171,7 @@ function usePlaceholder(event: Event): void {
 }
 
 // V2 Task 4.4: 跳转产品详情 SEO URL
-//   AggregateSearchHit 含完整字段 (mr1/pn1/pn2/oemList[0].brand&oemNo3), 可拼完整 SEO URL
+//   AggregateSearchHit 含产品名和 OEM3，可拼完整 SEO URL。
 function viewDetail(hit: AggregateSearchHit) {
   const firstOem = getPrimaryOem(hit)
   const url = buildProductUrl({
@@ -180,8 +179,7 @@ function viewDetail(hit: AggregateSearchHit) {
     productName2: hit.productName2,
     oemBrand: firstOem?.oemBrand,
     oemNo3: firstOem?.oemNo3,
-    oemNoDisplay: firstOem?.oemNo3 || hit.oem2,
-    mr1: hit.mr1
+    oemNoDisplay: firstOem?.oemNo3 || hit.oem2
   })
   window.location.href = url
 }
@@ -356,7 +354,7 @@ onBeforeUnmount(() => {
     <div v-else class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
       <div
         v-for="hit in results"
-        :key="hit.mr1"
+        :key="hit.key"
         class="border border-gray-200 rounded p-3 hover:border-gray-400 transition-colors cursor-pointer"
         @click="viewDetail(hit)"
       >
@@ -393,9 +391,9 @@ onBeforeUnmount(() => {
               v-if="!isLegacyFallback"
               text
               size="small"
-              @click.stop="toggleExpand(hit.mr1)"
+              @click.stop="toggleExpand(hit.key)"
             >
-              {{ expandedMr1.has(hit.mr1) ? '收起' : `展开 OEM (${hit.oemList.length})` }}
+              {{ expandedKeys.has(hit.key) ? '收起' : `展开 OEM (${hit.oemList.length})` }}
             </el-button>
             <!-- V24-F38: 降级模式显示 "基础模式" 标记, 告知用户无 OEM 嵌套详情 -->
             <el-tag v-if="isLegacyFallback" size="small" type="info">基础模式</el-tag>
@@ -405,7 +403,7 @@ onBeforeUnmount(() => {
         <!-- OEM 3 列表 (展开时显示) -->
         <!-- V24-F38: 降级模式 (isLegacyFallback=true) 不渲染 oemList 区域 -->
         <!--   WHY: 旧 API 返回空 oemList, 渲染空表格无意义且误导用户 -->
-        <div v-if="!isLegacyFallback && expandedMr1.has(hit.mr1)" class="mt-3 pt-3 border-t border-gray-100">
+        <div v-if="!isLegacyFallback && expandedKeys.has(hit.key)" class="mt-3 pt-3 border-t border-gray-100">
           <div class="text-xs text-gray-500 mb-2">交叉引用 (OEM 3 列表,按品牌优先级排序)</div>
           <table class="w-full text-xs">
             <thead class="text-gray-500 border-b border-gray-200">

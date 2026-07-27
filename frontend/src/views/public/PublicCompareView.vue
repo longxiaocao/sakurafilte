@@ -390,8 +390,7 @@ function doPrint() {
                     productName2: p.productName2,
                     oemBrand: p.crossReferences?.[0]?.oemBrand,
                     oemNo3: p.crossReferences?.[0]?.oemNo3,
-                    oemNoDisplay: p.oemNoDisplay,
-                    mr1: p.mr1
+                    oemNoDisplay: p.oemNoDisplay
                   })"
                   class="hover:underline"
                 >{{ p.oemNoDisplay }}</a>

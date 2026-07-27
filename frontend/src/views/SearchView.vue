@@ -124,8 +124,7 @@ function viewDetail(row: SearchHit) {
   const oem = row.oemNoDisplay ?? row.oem_no_display ?? ''
   const url = buildProductUrl({
     oemNoDisplay: oem,
-    productName1: row.product_name_1,
-    mr1: row.mr_1
+    productName1: row.product_name_1
   })
   window.location.href = url
 }

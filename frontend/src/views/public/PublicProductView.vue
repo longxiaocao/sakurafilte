@@ -14,7 +14,7 @@ import { ref, onMounted, computed, watch, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { productApi } from '@/api'
-import type { ProductDetail } from '@/api/types'
+import type { PublicProductDetail } from '@/api/types'
 import SkeletonCard from '@/components/SkeletonCard.vue'
 import { buildProductUrl } from '@/utils/build-product-url'
 
@@ -22,7 +22,7 @@ const route = useRoute()
 const router = useRouter()
 
 const slug = computed(() => String(route.params.oem || ''))  // param name still 'oem' (backward compat)
-const data = ref<ProductDetail | null>(null)
+const data = ref<PublicProductDetail | null>(null)
 const loading = ref(false)
 const err = ref('')
 
@@ -62,8 +62,7 @@ function applySeo() {
     productName2: d.productName2,
     oemBrand: d.crossReferences?.[0]?.oemBrand,
     oemNo3: d.crossReferences?.[0]?.oemNo3,
-    oemNoDisplay: d.oemNoDisplay,
-    mr1: d.mr1
+    oemNoDisplay: d.oemNoDisplay
   })
   ensureLinkTag('canonical', `${location.origin}${seoPath}`)
 }
@@ -203,8 +202,6 @@ function numOrDash(v?: number | string) {
       <template v-if="data">
         <span class="text-[var(--color-border)]" aria-hidden="true">·</span>
         <span>{{ data.type }}</span>
-        <span v-if="data.isPublished" class="hairline px-2 py-0.5 text-[10px] uppercase tracking-wider">已发布</span>
-        <span v-if="data.isDiscontinued" class="hairline px-2 py-0.5 text-[10px] uppercase tracking-wider text-muted">已停售</span>
       </template>
     </div>
 
@@ -330,12 +327,7 @@ function numOrDash(v?: number | string) {
             <div class="text-muted">Product Name 2</div><div class="font-mono">{{ data.productName2 || '—' }}</div>
             <div class="text-muted">Type</div><div class="font-mono">{{ data.type || '—' }}</div>
             <div class="text-muted">OEM 2</div><div class="font-mono">{{ data.oem2 || '—' }}</div>
-            <div class="text-muted">OEM 1 (Display)</div><div class="font-mono text-[var(--color-accent)]">{{ data.oemNoDisplay || '—' }}</div>
-            <div class="text-muted">上架</div>
-            <div>
-              <span v-if="data.isPublished" class="text-xs">✓ 是</span>
-              <span v-else class="text-xs text-muted">✗ 否</span>
-            </div>
+            <div class="text-muted">OEM 3</div><div class="font-mono text-[var(--color-accent)]">{{ data.oemNoDisplay || '—' }}</div>
           </div>
         </div>
 

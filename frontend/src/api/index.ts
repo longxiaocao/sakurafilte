@@ -6,6 +6,7 @@ import type {
   SearchRequest,
   SearchResult,
   ProductDetail,
+  PublicProductDetail,
   ProductHistoryItem,
   AdminSearchRequest,
   PageResp,
@@ -330,13 +331,9 @@ export async function searchWithFallback(
         page: req.page ?? 1,
         pageSize: req.pageSize ?? 20,
         totalPages: Math.ceil(legacyResp.result.total / (req.pageSize ?? 20)),
-        processingTimeMs: legacyResp.result.elapsedMs,
-        provider: legacyResp.provider,
-        hits: (legacyResp.result.items || []).map((item) => ({
-          mr1: '',  // 旧 API 无 mr1 字段, 留空
+        hits: (legacyResp.result.items || []).map((item, index) => ({
+          key: item.oemNoDisplay ?? `legacy-${index}`,
           type: item.type || '',
-          isPublished: !item.isDiscontinued,
-          isDiscontinued: item.isDiscontinued,
           oemList: [],
           machineList: []
         }))
@@ -352,15 +349,15 @@ export async function searchWithFallback(
 //   URL 格式 (R1 规格): {name1}-{name2}-{oemBrand}-{oemNo}
 //   后端 GetBySlug 内部解析 slug 末段为 oem
 export const productApi = {
-  getByOem(slug: string): Promise<ProductDetail> {
+  getByOem(slug: string): Promise<PublicProductDetail> {
     // 注意: 走 http 拦截器, 即使已登录后台 (有 token) 也可访问公开端点 (后端 [AllowAnonymous])
     return http.get(`/public/product/${encodeURIComponent(slug)}`).then((r) => r.data)
   },
-  // V2 Task 2.3.5: 同 MR.1 其他 OEM 3 列表 (详情页推荐区块, 后端已排序)
-  //   GET /api/public/products/{mr1}/sibling-oem3
+  // 同组其他 OEM 3 列表，参数使用公开 OEM3，服务端内部按 MR1 聚合。
+  //   GET /api/public/products/{oem3}/sibling-oem3
   //   返回排序后列表 (brand_sort_order → sort_order), 前端不再二次排序
-  siblingOem3(mr1: string): Promise<{ total: number; items: import('./types').SiblingOem3Item[] }> {
-    return http.get(`/public/products/${encodeURIComponent(mr1)}/sibling-oem3`).then((r) => r.data)
+  siblingOem3(oem3: string): Promise<{ total: number; items: import('./types').SiblingOem3Item[] }> {
+    return http.get(`/public/products/${encodeURIComponent(oem3)}/sibling-oem3`).then((r) => r.data)
   }
 }
 
@@ -424,7 +421,7 @@ export const publicSearchApi = {
   },
 
   // V2 Task 1.3.6: 聚合搜索 (POST /api/public/search/aggregate)
-  //   文档级返回: mr1 + oemList 嵌套数组 + _formatted 高亮 + _rankingScore
+  //   文档级返回: 公开键 + OEM3 嵌套数组 + _formatted 高亮
   //   支持 AbortSignal: 500ms 防抖 + 取消前序请求
   //   provider 字段: "meilisearch" / "postgres" (Meili 离线时降级)
   aggregate(

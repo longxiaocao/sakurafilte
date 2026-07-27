@@ -19,7 +19,6 @@ interface GalleryImage {
 interface GalleryProps {
   images: GalleryImage[]
   oemNo3: string
-  mr1: string | null
 }
 
 const props = defineProps<GalleryProps>()

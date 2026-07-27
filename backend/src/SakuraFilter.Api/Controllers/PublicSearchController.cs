@@ -376,7 +376,6 @@ public class PublicSearchController : ControllerBase
     ///     }
     /// </remarks>
     [HttpPost("aggregate")]
-    [ProducesResponseType(typeof(AggregateSearchResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Aggregate(
         [FromBody] AggregateSearchRequest? req,
@@ -416,7 +415,38 @@ public class PublicSearchController : ControllerBase
         _logger.LogInformation("aggregate search: q={Q} page={Page} pageSize={PageSize} → total={Total} provider={Provider} elapsed={Elapsed}ms",
             req.Q, page, pageSize, response.Total, response.Provider, response.ProcessingTimeMs);
 
-        return Ok(response);
+        // 聚合查询内部以 MR1 分组，但公开响应只能交付客户字段。
+        // key 用于前端展开状态，优先取公开 OEM3，不得回退或序列化 MR1。
+        var publicHits = response.Hits.Select((hit, index) => new
+        {
+            key = hit.OemList.FirstOrDefault(x => x.IsPublished && !string.IsNullOrWhiteSpace(x.OemNo3))?.OemNo3
+                  ?? hit.OemList.FirstOrDefault(x => !string.IsNullOrWhiteSpace(x.OemNo3))?.OemNo3
+                  ?? hit.Oem2
+                  ?? $"result-{index}",
+            hit.ProductName1,
+            hit.ProductName2,
+            hit.Oem2,
+            hit.Type,
+            hit.Remark,
+            hit.Media,
+            OemList = hit.OemList
+                .Where(x => x.IsPublished)
+                .Select(x => new { x.OemBrand, x.OemNo3, x.Oem2, x.MachineType })
+                .ToList(),
+            hit.MachineList,
+            Formatted = hit.Formatted?.Where(x => x.Key == "product_name_1")
+                .ToDictionary(x => x.Key, x => x.Value),
+            hit.RankingScore
+        });
+
+        return Ok(new
+        {
+            response.Total,
+            response.Page,
+            response.PageSize,
+            response.TotalPages,
+            Hits = publicHits
+        });
     }
 
     /// <summary>

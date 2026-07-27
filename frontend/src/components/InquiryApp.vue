@@ -9,7 +9,6 @@ import { ref, reactive, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 
 interface InquiryProps {
-  mr1: string | null
   oemNo3: string
   brand?: string | null
   productName1?: string | null

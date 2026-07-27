@@ -194,6 +194,58 @@ public record ProductDetailDto(
     List<ProductImageInfo> Images
 );
 
+/// <summary>
+/// 客户端公开产品详情契约。
+/// MR1、发布状态、并发令牌与审计时间仅供内部管理，不能通过公开接口或 SSR 数据岛输出。
+/// </summary>
+public record PublicProductDetailDto(
+    long Id,
+    string OemNoDisplay,
+    string? Oem2,
+    string? ProductName1,
+    string? ProductName2,
+    string Type,
+    string? Remark,
+    decimal? D1Mm, decimal? D2Mm, decimal? D3Mm, decimal? D4Mm,
+    decimal? H1Mm, decimal? H2Mm, decimal? H3Mm, decimal? H4Mm,
+    string? D7Thread, string? D8Thread,
+    int? NoCheckValves, int? NoBypassValves,
+    string? NoCheckValvesRaw, string? NoBypassValvesRaw,
+    string? Media, string? MediaModel,
+    decimal? BypassValveLr, decimal? BypassValveHr,
+    string? Efficiency1, string? Efficiency2, decimal? BypassPressure,
+    decimal? CollapsePressureBar,
+    string? BypassValveLrRaw, string? BypassValveHrRaw,
+    string? BypassPressureRaw, string? CollapsePressureBarRaw,
+    string? SealingMaterial, string? TempRange,
+    int? QtyPerCarton, decimal? WeightKgs,
+    decimal? CartonLengthMm, decimal? CartonWidthMm, decimal? CartonHeightMm,
+    decimal? VolumePerCartonM3,
+    List<XrefInfo> CrossReferences,
+    List<MachineAppInfo> MachineApplications,
+    List<ProductImageInfo> Images)
+{
+    public static PublicProductDetailDto From(ProductDetailDto source) => new(
+        source.Id, source.OemNoDisplay, source.Oem2,
+        source.ProductName1, source.ProductName2, source.Type, source.Remark,
+        source.D1Mm, source.D2Mm, source.D3Mm, source.D4Mm,
+        source.H1Mm, source.H2Mm, source.H3Mm, source.H4Mm,
+        source.D7Thread, source.D8Thread,
+        source.NoCheckValves, source.NoBypassValves,
+        source.NoCheckValvesRaw, source.NoBypassValvesRaw,
+        source.Media, source.MediaModel,
+        source.BypassValveLr, source.BypassValveHr,
+        source.Efficiency1, source.Efficiency2, source.BypassPressure,
+        source.CollapsePressureBar,
+        source.BypassValveLrRaw, source.BypassValveHrRaw,
+        source.BypassPressureRaw, source.CollapsePressureBarRaw,
+        source.SealingMaterial, source.TempRange,
+        source.QtyPerCarton, source.WeightKgs,
+        source.CartonLengthMm, source.CartonWidthMm, source.CartonHeightMm,
+        source.VolumePerCartonM3,
+        source.CrossReferences, source.MachineApplications, source.Images);
+}
+
 public record XrefInfo(long Id, string? ProductName1, string? OemBrand, string? OemNo3, string? Oem2, int SortOrder, string? MachineType, bool IsPublished, uint RowVersion);
 
 public record MachineAppInfo(

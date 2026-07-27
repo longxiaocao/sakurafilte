@@ -6,7 +6,7 @@
 //   - 单字段输入时降级为 /product/{oem} (走后端 301 重定向到 SEO URL)
 //
 // 用法:
-//   1. 完整数据: window.location.href = buildProductUrl({ productName1, productName2, oemBrand, oemNo3, mr1 })
+//   1. 完整数据: window.location.href = buildProductUrl({ productName1, productName2, oemBrand, oemNo3 })
 //   2. 仅 OEM:   window.location.href = buildProductUrl({ oemNoDisplay: 'F000000001' })
 //                  → /product/F000000001 (走后端 301)
 
@@ -21,8 +21,6 @@ interface ProductUrlInput {
   oemNo3?: string | null
   /** OEM 显示编号 (oem3 段, oemNo3 缺失时用) */
   oemNoDisplay?: string | null
-  /** MR.1 (用于末 6 位防 slug 冲突) */
-  mr1?: string | null
 }
 
 /**
@@ -45,12 +43,11 @@ function buildSlug(input: string | null | undefined): string {
 
 /**
  * V2 Task 4.4 / 4.5.3: 拼 SEO URL
- *   格式: /products/{pn1Slug}-{mr1Suffix6}/{pn2Slug}/{brandSlug}/{oem3Slug}
+ *   格式: /products/{pn1Slug}/{pn2Slug}/{brandSlug}/{oem3Slug}
  *
  * 降级策略 (与后端 BuildProductUrl 一致):
- *   - oem3 优先取 oemNo3, 缺失时用 oemNoDisplay, 都缺失时用 mr1
+ *   - oem3 优先取 oemNo3, 缺失时用 oemNoDisplay
  *   - brand 缺失 → "untitled" (与后端一致)
- *   - mr1Suffix: mr1 长度 > 6 取末 6 位, 否则取原值, 都缺失 → "nomr1"
  *
  * V24-F42 (spec F5-1): oem3 段保留大小写, 不走 buildSlug
  *   - 后端 GetByOemAsync 用 === 大小写敏感查询, BuildSlug 小写化会导致 OEM 含大写字母时反查失败
@@ -72,15 +69,10 @@ export function buildProductUrl(product: ProductUrlInput): string {
   const pn1Slug = buildSlug(product.productName1)
   const pn2Slug = buildSlug(product.productName2)
   const brandSlug = buildSlug(product.oemBrand)
-  const oem3 = product.oemNo3 ?? product.oemNoDisplay ?? product.mr1 ?? ''
+  const oem3 = product.oemNo3 ?? product.oemNoDisplay ?? ''
   // V24-F42 (spec F5-1): oem3 段保留大小写, 仅 URL 编码 (不走 buildSlug)
   //   WHY: 后端 GetByOemAsync 用 === 大小写敏感查询, buildSlug 会 toLowerCase 导致反查失败
   const oem3Slug = oem3 ? encodeURIComponent(oem3) : 'untitled'
 
-  // mr1 末 6 位 (与后端 BuildProductUrl 一致, 仅用于 URL 唯一性, 可小写化)
-  const mr1Val = product.mr1 ?? ''
-  const mr1Suffix = mr1Val.length > 6 ? mr1Val.slice(-6).toLowerCase() : (mr1Val.toLowerCase() || 'nomr1')
-
-  // V24-F42: 不再整体 toLowerCase (oem3Slug 已保留大小写)
-  return `/products/${pn1Slug}-${mr1Suffix}/${pn2Slug}/${brandSlug}/${oem3Slug}`
+  return `/products/${pn1Slug}/${pn2Slug}/${brandSlug}/${oem3Slug}`
 }
