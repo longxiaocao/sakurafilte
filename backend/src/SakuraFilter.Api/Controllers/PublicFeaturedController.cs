@@ -54,7 +54,7 @@ public class PublicFeaturedController : ControllerBase
         limit = Math.Clamp(limit, 1, 50);
 
         var items = await _db.Products.AsNoTracking()
-            .Where(p => !p.IsDiscontinued)
+            .Where(p => p.IsPublished && !p.IsDiscontinued)
             .OrderByDescending(p => p.Id)
             .Take(limit)
             .Select(p => new PublicSearchHit(

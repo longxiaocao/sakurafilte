@@ -158,7 +158,7 @@ public class PublicProductController : ControllerBase
         var typeNames = types.Select(t => t.Type).ToList();
         // 单次 SQL 拉所有 type 的 active product 摘要, 内存分组, 避免 N+1
         var productRows = await _db.Products.AsNoTracking()
-            .Where(p => !p.IsDiscontinued && p.Type != null && typeNames.Contains(p.Type))
+            .Where(p => p.IsPublished && !p.IsDiscontinued && p.Type != null && typeNames.Contains(p.Type))
             .OrderBy(p => p.Id)
             .Select(p => new
             {

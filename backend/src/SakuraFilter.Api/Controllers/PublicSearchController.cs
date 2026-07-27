@@ -96,7 +96,8 @@ public class PublicSearchController : ControllerBase
         //   EF Core 翻译 distinctOems.Contains(p.Oem2) 为 p.oem_2 = ANY(...)
         //   排除 Oem2=null 行, 避免 "Contains('')" 误匹配
         var candidates = await _db.Products.AsNoTracking()
-            .Where(p => p.Oem2 != null && distinctOems.Contains(p.Oem2))
+            .Where(p => p.IsPublished && !p.IsDiscontinued
+                && p.Oem2 != null && distinctOems.Contains(p.Oem2))
             .Select(p => new
             {
                 p.Id,
@@ -215,7 +216,7 @@ public class PublicSearchController : ControllerBase
         var sw = System.Diagnostics.Stopwatch.StartNew();
 
         // 起手: active products
-        var query = _db.Products.AsNoTracking().Where(p => !p.IsDiscontinued);
+        var query = _db.Products.AsNoTracking().Where(p => p.IsPublished && !p.IsDiscontinued);
 
         // 文本字段: 单值 ILIKE (走 P0.1 EscapeLikePattern + 3 参重载)
         //   1) oem_no_2: 产品自身 OEM 2 字段

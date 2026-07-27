@@ -78,7 +78,7 @@ public class ProductDetailService : IProductDetailService
         // 公开入口优先匹配已上架 OEM3；随后兼容产品主表 OEM、OEM2 与内部 MR1。
         //   DB 往返 3→1, fallback 命中场景 ~6ms → ~2ms
         var matched = await _db.Products.AsNoTracking()
-            .Where(p => !p.IsDiscontinued &&
+            .Where(p => p.IsPublished && !p.IsDiscontinued &&
                         (p.CrossReferences.Any(x => x.OemNo3 == oem && x.IsPublished && !x.IsDiscontinued)
                          || p.OemNoDisplay == oem || p.Oem2 == oem || p.Mr1 == oem))
             .Select(p => new

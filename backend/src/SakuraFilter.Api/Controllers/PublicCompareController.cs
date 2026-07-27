@@ -63,7 +63,7 @@ public class PublicCompareController : ControllerBase
 
         // 公开版排除下架产品
         var products = await _db.Products.AsNoTracking()
-            .Where(p => idList.Contains(p.Id) && !p.IsDiscontinued)
+            .Where(p => idList.Contains(p.Id) && p.IsPublished && !p.IsDiscontinued)
             .ToListAsync(ct);
         var ordered = idList
             .Select(id => products.FirstOrDefault(p => p.Id == id))
