@@ -372,7 +372,7 @@ function doPrint() {
     <div v-if="products.length > 0" class="compare-grid-wrap hairline">
       <div
         class="compare-grid"
-        :style="{ gridTemplateColumns: `200px repeat(${products.length}, minmax(0, 1fr))` }"
+        :style="{ gridTemplateColumns: `160px repeat(${products.length}, minmax(180px, 1fr))` }"
       >
         <div class="compare-header-cell field-name-cell sticky-left">字段</div>
         <div

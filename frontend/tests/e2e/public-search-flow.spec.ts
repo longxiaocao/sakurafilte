@@ -18,21 +18,17 @@ test.describe('P1-E2E-3 公开搜索流程 (用户视角)', () => {
     await injectZhLocale(page)
     // v30-22 修复: SSE 持续连接导致 networkidle 永远不触发, 改用 domcontentloaded
     await page.goto(`${BASE}/search`, { waitUntil: 'domcontentloaded', timeout: 20000 })
-    // 等待搜索 tab 加载
-    await page.waitForSelector('.el-tabs', { timeout: 10000 })
-    // 等待搜索输入框 (data-testid 精准定位, 避免 .first() 选错元素)
-    const searchInput = page.getByTestId('search-input')
+    // /search 已重定向到聚合搜索页，使用实际可访问的标题与输入框定位。
+    await page.getByRole('heading', { name: '聚合搜索', exact: true }).waitFor({ timeout: 10000 })
+    const searchInput = page.getByPlaceholder('输入关键词 (产品名 / OEM / 机型 / 品牌)')
     await searchInput.waitFor({ timeout: 10000 })
     // 输入关键词
     await searchInput.fill('air')
     // v30-22 修复: i18n 注入 zh-CN 后按钮文案是"搜索", 用 exact 匹配避免匹配"产品搜索"导航按钮
     const searchBtn = page.getByRole('button', { name: '搜索', exact: true })
     await searchBtn.click()
-    // 等待结果渲染 (有结果 或 空状态 或 加载完成)
-    await page.waitForTimeout(2000)
-    // 验证不白屏: 页面应有内容
-    const bodyText = await page.locator('body').innerText()
-    expect(bodyText.length).toBeGreaterThan(10)
+    // 覆盖: 聚合搜索返回客户可见 OEM3 结果卡片。
+    await page.locator('img[alt$="产品主图"]').first().waitFor({ timeout: 10000 })
     await page.screenshot({ path: 'test-results/e2e-search-result.png' })
   })
 
@@ -90,6 +86,33 @@ test.describe('P1-E2E-3 公开搜索流程 (用户视角)', () => {
       await searchNav.first().click()
       await page.waitForTimeout(1000)
       expect(page.url()).toContain('/search')
+    }
+  })
+
+  test('6. 移动端公开搜索、详情与对比页无页面级横向溢出', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 })
+    const pages = [
+      { name: 'search', url: `${BASE}/search/aggregate?q=air`, ready: 'img[alt$="产品主图"]' },
+      { name: 'detail', url: `${BASE}/products/air-filter/untitled/donaldson/DON-08332`, ready: 'h1' },
+      { name: 'compare', url: `${BASE}/compare?ids=19`, ready: '.compare-grid' }
+    ]
+
+    for (const target of pages) {
+      await page.goto(target.url, { waitUntil: 'domcontentloaded', timeout: 20000 })
+      await page.locator(target.ready).first().waitFor({ timeout: 15000 })
+      const layout = await page.evaluate(() => ({
+        viewportWidth: window.innerWidth,
+        documentWidth: document.documentElement.scrollWidth
+      }))
+      // 覆盖: 移动端页面必须由局部容器承载宽表，不能让 document 横向溢出。
+      expect(layout.documentWidth).toBeLessThanOrEqual(layout.viewportWidth)
+      if (target.name === 'compare') {
+        const headerFits = await page.locator('.product-cell .truncate').first().evaluate((element) =>
+          element.scrollWidth <= element.clientWidth
+        )
+        expect(headerFits).toBeTruthy()
+      }
+      await page.screenshot({ path: `test-results/mobile-${target.name}.png`, fullPage: true })
     }
   })
 })

@@ -362,7 +362,7 @@ onBeforeUnmount(() => {
         class="border border-gray-200 rounded p-3 hover:border-gray-400 transition-colors cursor-pointer"
         @click="viewDetail(hit)"
       >
-        <div class="flex items-start gap-3">
+        <div class="flex flex-wrap items-start gap-3">
           <img
             :src="getPrimaryImageUrl(hit)"
             :alt="`${getPublicOemLabel(hit)} 产品主图`"
@@ -385,8 +385,8 @@ onBeforeUnmount(() => {
             </div>
             <div v-if="hit.oem2" class="text-xs text-gray-500 mt-1">OEM 2: {{ hit.oem2 }}</div>
           </div>
-          <div class="flex items-center gap-2">
-            <span v-if="hit.rankingScore != null" class="text-xs text-gray-400">
+          <div class="flex w-full items-center gap-2 sm:ml-auto sm:w-auto">
+            <span v-if="hit.rankingScore != null" class="hidden text-xs text-gray-400 sm:inline">
               相关度 {{ (hit.rankingScore * 100).toFixed(0) }}%
             </span>
             <!-- V24-F38: 降级模式 (isLegacyFallback=true) 隐藏 "展开 OEM" 按钮 -->
