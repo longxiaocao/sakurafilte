@@ -256,8 +256,28 @@ export interface ProductDetail {
 /** 客户公开详情契约：内部聚合和后台运营字段不向浏览器传递。 */
 export type PublicProductDetail = Omit<
   ProductDetail,
-  'mr1' | 'isPublished' | 'rowVersion' | 'isDiscontinued' | 'createdAt' | 'updatedAt'
->
+  'mr1' | 'isPublished' | 'rowVersion' | 'isDiscontinued' | 'createdAt' | 'updatedAt' | 'crossReferences' | 'images'
+> & {
+  crossReferences: PublicXrefInfo[]
+  images: PublicProductImageInfo[]
+}
+
+export interface PublicXrefInfo {
+  productName1?: string
+  oemBrand?: string
+  oemNo3?: string
+  oem2?: string
+  machineType?: string
+}
+
+export interface PublicProductImageInfo {
+  slot: number
+  imageKey: string
+  imageUrl: string
+  isPrimary: boolean
+  oemNo3?: string
+  imageRole?: string
+}
 
 export interface XrefInfo {
   id: number

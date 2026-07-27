@@ -221,9 +221,9 @@ public record PublicProductDetailDto(
     int? QtyPerCarton, decimal? WeightKgs,
     decimal? CartonLengthMm, decimal? CartonWidthMm, decimal? CartonHeightMm,
     decimal? VolumePerCartonM3,
-    List<XrefInfo> CrossReferences,
+    List<PublicXrefInfo> CrossReferences,
     List<MachineAppInfo> MachineApplications,
-    List<ProductImageInfo> Images)
+    List<PublicProductImageInfo> Images)
 {
     public static PublicProductDetailDto From(ProductDetailDto source)
     {
@@ -250,9 +250,32 @@ public record PublicProductDetailDto(
         source.QtyPerCarton, source.WeightKgs,
         source.CartonLengthMm, source.CartonWidthMm, source.CartonHeightMm,
         source.VolumePerCartonM3,
-        source.CrossReferences.Where(x => x.IsPublished).ToList(), source.MachineApplications, source.Images);
+        source.CrossReferences
+            .Where(x => x.IsPublished)
+            .Select(x => new PublicXrefInfo(x.ProductName1, x.OemBrand, x.OemNo3, x.Oem2, x.MachineType))
+            .ToList(),
+        source.MachineApplications,
+        source.Images.Select(x => new PublicProductImageInfo(
+            x.Slot, x.ImageKey, x.ImageUrl, x.IsPrimary, x.OemNo3, x.ImageRole)).ToList());
     }
 }
+
+/// <summary>客户可见的 OEM3 交叉引用，不包含后台排序、状态和并发字段。</summary>
+public record PublicXrefInfo(
+    string? ProductName1,
+    string? OemBrand,
+    string? OemNo3,
+    string? Oem2,
+    string? MachineType);
+
+/// <summary>客户可见的产品图片信息，不包含产品外键和上传审计字段。</summary>
+public record PublicProductImageInfo(
+    short Slot,
+    string ImageKey,
+    string ImageUrl,
+    bool IsPrimary,
+    string? OemNo3,
+    string? ImageRole);
 
 public record XrefInfo(long Id, string? ProductName1, string? OemBrand, string? OemNo3, string? Oem2, int SortOrder, string? MachineType, bool IsPublished, uint RowVersion);
 

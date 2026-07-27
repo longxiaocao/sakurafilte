@@ -12,7 +12,7 @@ namespace SakuraFilter.Api.Controllers;
 ///   - 复刻 AdminProductService.CompareAsync 的查询结构, 但排除 is_discontinued=true
 ///     (前台不应展示下架产品, 与 PublicProductController.GetBySlug 一致)
 ///   - 上限 6 个产品, 单次 query + InMemory 分组, 避免 N+1
-///   - 返回: { count, items: ProductDetailDto[] }, 与 admin compare 形态一致
+///   - 返回: { count, items: PublicProductDetailDto[] }，只包含客户字段
 ///
 /// 与 admin/compare 的差异:
 ///   - 路径: /api/public/compare vs /api/admin/products/compare
@@ -72,7 +72,7 @@ public class PublicCompareController : ControllerBase
             .ToList();
 
         if (ordered.Count == 0)
-            return Ok(new { count = 0, items = Array.Empty<ProductDetailDto>() });
+            return Ok(new { count = 0, items = Array.Empty<PublicProductDetailDto>() });
 
         var matchedIds = ordered.Select(p => p.Id).ToList();
 
@@ -134,6 +134,8 @@ public class PublicCompareController : ControllerBase
 
         _logger.LogInformation("PublicCompare: ids=[{Ids}] returned={Count}",
             string.Join(",", idList), result.Count);
-        return Ok(new { count = result.Count, items = result });
+        // 管理端 DTO 含 MR1、发布状态和审计字段；公开对比必须经过客户契约投影。
+        var publicItems = result.Select(PublicProductDetailDto.From).ToList();
+        return Ok(new { count = publicItems.Count, items = publicItems });
     }
 }

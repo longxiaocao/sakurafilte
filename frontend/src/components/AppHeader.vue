@@ -296,8 +296,7 @@ interface GlobalSearchSuggestion {
 }
 
 function getSuggestionOem(hit: AggregateSearchHit): string {
-  return hit.oemList?.find((item) => item.isPublished && item.oemNo3)?.oemNo3
-    ?? hit.oemList?.find((item) => item.oemNo3)?.oemNo3
+  return hit.oemList?.find((item) => item.oemNo3)?.oemNo3
     ?? hit.oem2
     ?? ''
 }

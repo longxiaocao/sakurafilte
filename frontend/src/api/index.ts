@@ -366,7 +366,7 @@ export const productApi = {
 //   用途: 产品详情页"加入对比" 按钮跳转目标; 也可作为公开 URL 分享
 //   限位: 最多 6 个产品 (后端校验, 超限 400)
 export const publicCompareApi = {
-  compare(ids: number[]): Promise<{ count: number; items: ProductDetail[] }> {
+  compare(ids: number[]): Promise<{ count: number; items: PublicProductDetail[] }> {
     if (ids.length === 0) {
       return Promise.resolve({ count: 0, items: [] })
     }
