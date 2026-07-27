@@ -296,7 +296,18 @@ public class PublicSearchController : ControllerBase
             .Take(pageSize)
             .Select(p => new PublicSearchHit(
                 p.Id,
-                p.OemNoDisplay,
+                // WHY: 与公开详情和聚合搜索统一展示首个已发布 OEM3，主表字段仅作兼容回退。
+                _db.CrossReferences
+                    .Where(x => x.ProductId == p.Id && x.IsPublished && !x.IsDiscontinued
+                        && x.OemNo3 != null && x.OemNo3 != "")
+                    .OrderBy(x => _db.XrefOemBrands
+                        .Where(b => b.Brand == x.OemBrand && b.DeletedAt == null)
+                        .Select(b => (int?)b.SortOrder)
+                        .FirstOrDefault() ?? int.MaxValue)
+                    .ThenBy(x => x.SortOrder)
+                    .ThenBy(x => x.OemNo3)
+                    .Select(x => x.OemNo3!)
+                    .FirstOrDefault() ?? p.OemNoDisplay,
                 p.Oem2,
                 p.ProductName1,
                 p.Type,

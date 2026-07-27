@@ -164,7 +164,18 @@ public class PublicProductController : ControllerBase
             {
                 p.Id,
                 p.Type,
-                p.OemNoDisplay,
+                // WHY: 按类型浏览属于公开产品入口，必须与详情/对比页使用相同的 OEM3 展示规则。
+                OemNoDisplay = _db.CrossReferences
+                    .Where(x => x.ProductId == p.Id && x.IsPublished && !x.IsDiscontinued
+                        && x.OemNo3 != null && x.OemNo3 != "")
+                    .OrderBy(x => _db.XrefOemBrands
+                        .Where(b => b.Brand == x.OemBrand && b.DeletedAt == null)
+                        .Select(b => (int?)b.SortOrder)
+                        .FirstOrDefault() ?? int.MaxValue)
+                    .ThenBy(x => x.SortOrder)
+                    .ThenBy(x => x.OemNo3)
+                    .Select(x => x.OemNo3!)
+                    .FirstOrDefault() ?? p.OemNoDisplay,
                 p.ProductName1,
                 p.D1Mm,
                 p.D2Mm,
