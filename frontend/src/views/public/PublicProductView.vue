@@ -21,7 +21,8 @@ import { buildProductUrl } from '@/utils/build-product-url'
 const route = useRoute()
 const router = useRouter()
 
-const slug = computed(() => String(route.params.oem || ''))  // param name still 'oem' (backward compat)
+// SEO 路由使用 oem3；保留旧 oem 参数兼容历史入口。
+const slug = computed(() => String(route.params.oem3 ?? route.params.oem ?? ''))
 const data = ref<PublicProductDetail | null>(null)
 const loading = ref(false)
 const err = ref('')
