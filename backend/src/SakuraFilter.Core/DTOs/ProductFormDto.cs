@@ -225,8 +225,15 @@ public record PublicProductDetailDto(
     List<MachineAppInfo> MachineApplications,
     List<ProductImageInfo> Images)
 {
-    public static PublicProductDetailDto From(ProductDetailDto source) => new(
-        source.Id, source.OemNoDisplay, source.Oem2,
+    public static PublicProductDetailDto From(ProductDetailDto source)
+    {
+        // 公开主编号统一取首个已发布 OEM3；主表 OemNoDisplay 仅保留作无交叉引用时的兼容回退。
+        var publicOem3 = source.CrossReferences.FirstOrDefault(x => x.IsPublished && !string.IsNullOrWhiteSpace(x.OemNo3))?.OemNo3
+            ?? source.CrossReferences.FirstOrDefault(x => !string.IsNullOrWhiteSpace(x.OemNo3))?.OemNo3
+            ?? source.OemNoDisplay;
+
+        return new(
+        source.Id, publicOem3, source.Oem2,
         source.ProductName1, source.ProductName2, source.Type, source.Remark,
         source.D1Mm, source.D2Mm, source.D3Mm, source.D4Mm,
         source.H1Mm, source.H2Mm, source.H3Mm, source.H4Mm,
@@ -243,7 +250,8 @@ public record PublicProductDetailDto(
         source.QtyPerCarton, source.WeightKgs,
         source.CartonLengthMm, source.CartonWidthMm, source.CartonHeightMm,
         source.VolumePerCartonM3,
-        source.CrossReferences, source.MachineApplications, source.Images);
+        source.CrossReferences.Where(x => x.IsPublished).ToList(), source.MachineApplications, source.Images);
+    }
 }
 
 public record XrefInfo(long Id, string? ProductName1, string? OemBrand, string? OemNo3, string? Oem2, int SortOrder, string? MachineType, bool IsPublished, uint RowVersion);
