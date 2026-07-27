@@ -156,6 +156,10 @@ function getPublicOemLabel(hit: AggregateSearchHit): string {
   return getPrimaryOem(hit)?.oemNo3 || hit.oem2 || 'OEM -'
 }
 
+function stripSearchHighlight(value: string | null | undefined): string | undefined {
+  return value?.replace(/<\/?mark>/gi, '')
+}
+
 const placeholderImage = '/images/product-placeholder.svg'
 
 function getPrimaryImageUrl(hit: AggregateSearchHit): string {
@@ -175,8 +179,8 @@ function usePlaceholder(event: Event): void {
 function viewDetail(hit: AggregateSearchHit) {
   const firstOem = getPrimaryOem(hit)
   const url = buildProductUrl({
-    productName1: hit.productName1,
-    productName2: hit.productName2,
+    productName1: stripSearchHighlight(hit.productName1),
+    productName2: stripSearchHighlight(hit.productName2),
     oemBrand: firstOem?.oemBrand,
     oemNo3: firstOem?.oemNo3,
     oemNoDisplay: firstOem?.oemNo3 || hit.oem2
