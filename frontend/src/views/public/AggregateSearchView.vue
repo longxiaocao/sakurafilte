@@ -26,10 +26,11 @@ const page = ref<number>(route.query.page ? Number(route.query.page) : 1)
 const pageSize = ref<number>(20)
 // 高级筛选 (折叠展开, 默认收起)
 const showAdvanced = ref(false)
+const routeTolerance = Number(route.query.tolerance)
 const advancedForm = reactive({
-  type: '',
-  machineCategory: '',
-  tolerance: 5
+  type: (route.query.type as string) || '',
+  machineCategory: (route.query.machineCategory as string) || '',
+  tolerance: [1, 5, 10].includes(routeTolerance) ? routeTolerance : 5
 })
 const quickProductTypes = ['Air Filter', 'Oil Filter', 'Fuel Filter', 'Hydraulic Filter'] as const
 
@@ -137,6 +138,9 @@ function syncUrl() {
   const query: Record<string, string> = {}
   if (q.value.trim()) query.q = q.value.trim()
   if (page.value > 1) query.page = String(page.value)
+  if (advancedForm.type) query.type = advancedForm.type
+  if (advancedForm.machineCategory) query.machineCategory = advancedForm.machineCategory
+  if (advancedForm.tolerance !== 5) query.tolerance = String(advancedForm.tolerance)
   router.replace({ path: '/search/aggregate', query })
 }
 
@@ -233,7 +237,7 @@ function getHighlighted(hit: AggregateSearchHit, field: string): string {
 
 onMounted(() => {
   loadMachineCatalog()
-  if (q.value.trim()) doSearch()
+  if (q.value.trim() || advancedForm.type || advancedForm.machineCategory) doSearch()
 })
 
 onBeforeUnmount(() => {

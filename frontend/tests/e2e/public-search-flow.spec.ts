@@ -115,4 +115,45 @@ test.describe('P1-E2E-3 公开搜索流程 (用户视角)', () => {
       await page.screenshot({ path: `test-results/mobile-${target.name}.png`, fullPage: true })
     }
   })
+
+  test('7. 桌面机型目录按场景、品牌、型号联动公开搜索', async ({ page }) => {
+    await injectZhLocale(page)
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.goto(`${BASE}/search/aggregate`, { waitUntil: 'domcontentloaded', timeout: 20000 })
+
+    const catalog = page.locator('aside[aria-label="机型分类目录"]')
+    await catalog.waitFor({ timeout: 15000 })
+    const modelButton = catalog.getByRole('button', { name: /^Model-/ }).first()
+    await modelButton.waitFor({ timeout: 10000 })
+
+    // 从实际目录读取三级标签，避免测试依赖某一批固定演示数据。
+    const section = modelButton.locator('xpath=ancestor::section')
+    const categoryButton = section.getByRole('button').first()
+    const brandButton = modelButton.locator('xpath=../preceding-sibling::button')
+    const category = (await categoryButton.innerText()).trim()
+    const brand = (await brandButton.innerText()).trim()
+    const model = (await modelButton.innerText()).trim()
+    const searchInput = page.getByPlaceholder('输入关键词 (产品名 / OEM / 机型 / 品牌)')
+
+    await categoryButton.click()
+    await expect.poll(() => new URL(page.url()).searchParams.get('machineCategory')).toBeTruthy()
+    await expect(searchInput).toHaveValue('')
+
+    await brandButton.click()
+    await expect(searchInput).toHaveValue(brand)
+    await expect.poll(() => new URL(page.url()).searchParams.get('q')).toBe(brand)
+
+    const responsePromise = page.waitForResponse((response) =>
+      response.request().method() === 'POST' && response.url().includes('/public/search/aggregate')
+    )
+    await modelButton.click()
+    const response = await responsePromise
+    expect(response.ok()).toBeTruthy()
+    await expect(searchInput).toHaveValue(`${brand} ${model}`)
+
+    const query = new URL(page.url()).searchParams
+    expect(query.get('q')).toBe(`${brand} ${model}`)
+    expect(query.get('machineCategory')).toBe(category.toLowerCase())
+    await page.screenshot({ path: 'test-results/e2e-machine-catalog-linkage.png' })
+  })
 })

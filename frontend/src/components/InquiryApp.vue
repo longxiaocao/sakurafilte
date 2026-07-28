@@ -3,7 +3,7 @@
 //   - 显示询盘按钮, 点击弹窗表单 (ElDialog)
 //   - 表单: 联系人/电话/邮箱/留言
 //   - 必填校验: 联系人 + (电话|邮箱 至少一项)
-//   - 提交: 后端 /api/public/inquiry 待 Phase 5 实现, 当前用 mailto: 兜底
+//   - 提交: 当前交付为 VITE_INQUIRY_EMAIL 配置的 mailto 方案，不在前端或后端保存客户信息
 //   - 注意: props.oemNo3 实际传值为 product.oemNoDisplay (产品 OEM 编号)
 import { ref, reactive, computed } from 'vue'
 import { ElMessage } from 'element-plus'

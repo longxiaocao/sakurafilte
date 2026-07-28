@@ -135,7 +135,7 @@ async function bootstrap(): Promise<void> {
     console.warn('[Detail] CompareApp load failed:', err)
   }
 
-  // InquiryApp: 询盘表单 (mailto: 兜底, 后端 API 待 Phase 5)
+  // InquiryApp: 询盘表单（通过 VITE_INQUIRY_EMAIL 配置的 mailto 发送）
   try {
     const InquiryApp = (await import('@/components/InquiryApp.vue')).default
     safeMount('inquiry-app', InquiryApp, {
