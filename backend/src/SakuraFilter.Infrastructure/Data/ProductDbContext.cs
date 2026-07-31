@@ -29,6 +29,8 @@ public class ProductDbContext : DbContext
     public DbSet<DictMedia> DictMedias => Set<DictMedia>();           // 多字段 2
     public DbSet<DictMachine> DictMachines => Set<DictMachine>();     // 多字段 3
     public DbSet<DictEngine> DictEngines => Set<DictEngine>();         // 多字段 2
+    // Task 2: 机型-MR.1 绑定关系 (批量绑定 MR.1 到 dict_machine)
+    public DbSet<MachineMr1Binding> MachineMr1Bindings => Set<MachineMr1Binding>();
 
     // V2: 分区 6 占位空表
     public DbSet<Partition6Placeholder> Partition6Placeholders => Set<Partition6Placeholder>();
@@ -273,6 +275,22 @@ public class ProductDbContext : DbContext
             e.ToTable("partition6_placeholder");
             e.HasKey(p => p.Id);
             e.Property(p => p.CreatedAt).HasDefaultValueSql("now()");
+        });
+
+        // Task 2: MachineMr1Binding 机型-MR.1 绑定关系
+        //   (machine_id, mr_1) 唯一约束保证幂等, 等价于 ON CONFLICT (machine_id, mr_1) DO NOTHING
+        mb.Entity<MachineMr1Binding>(e =>
+        {
+            e.ToTable("machine_mr1_bindings");
+            e.HasKey(b => b.Id);
+            e.Property(b => b.MachineId).IsRequired();
+            e.Property(b => b.Mr1).HasMaxLength(10).IsRequired();
+            e.Property(b => b.CreatedAt).HasDefaultValueSql("now()");
+            // (machine_id, mr_1) 唯一约束: 幂等保证, 重复绑定同一 MR.1 不报错 (端点层跳过)
+            e.HasIndex(b => new { b.MachineId, b.Mr1 })
+                .IsUnique()
+                .HasDatabaseName("uq_machine_mr1_bindings");
+            e.HasIndex(b => b.MachineId).HasDatabaseName("idx_machine_mr1_bindings_machine");
         });
     }
 }

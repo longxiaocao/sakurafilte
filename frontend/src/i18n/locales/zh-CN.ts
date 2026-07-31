@@ -378,7 +378,6 @@ export default {
 
 
 
-
       },
       label: {
 
@@ -401,7 +400,6 @@ export default {
 
 
 
-
       },
       title: {
         add_machine_model: '新增机型',
@@ -411,6 +409,36 @@ export default {
         machine_model_brand_cannot_be: '机型品牌不能为空',
         machine_model_brand_length: '机型品牌长度不能超过 200',
 
+      },
+      // P1 Task 3: 三级树 + 批量绑定按钮文案
+      btn: {
+        view_tree: '查看三级树',
+        batch_bind_mr1: '批量绑定 MR.1',
+      },
+      // P1 Task 3: 三级树对话框文案
+      tree_dialog: {
+        title: '机型三级树 (Category → Brand → Model)',
+        node_count: '共 {count} 个机型',
+      },
+      // P1 Task 3: 批量绑定对话框文案
+      bind_dialog: {
+        title: '批量绑定 MR.1 到机型',
+        label_machine: '机型',
+        label_mr1_list: 'MR.1 列表 (每行一个)',
+        label_replace: '绑定模式',
+        replace_append: '追加 (保留已有绑定)',
+        replace_replace: '替换 (清除已有绑定)',
+        placeholder_mr1: '粘贴 MR.1 编号, 每行一个',
+        submit: '提交绑定',
+        result_title: '绑定结果',
+        result_bound: '成功绑定',
+        result_skipped: '已跳过 (已存在)',
+        result_removed: '已移除',
+        result_not_found: '不存在的 MR.1 ({count})',
+        success: '绑定完成',
+        partial: '部分成功',
+        error_machine_required: '请选择机型',
+        error_mr1_empty: 'MR.1 列表不能为空',
       },
     },
     mediasview: {

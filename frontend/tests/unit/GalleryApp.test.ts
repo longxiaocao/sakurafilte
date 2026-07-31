@@ -111,7 +111,7 @@ describe('GalleryApp', () => {
     expect(wrapper.find('.gallery-thumbs').exists()).toBe(false)
     expect(wrapper.text()).toContain('暂无图片')
     // 主图 src 应为 placeholder
-    expect(wrapper.find('.gallery-main img').attributes('src')).toBe('/static/placeholder.png')
+    expect(wrapper.find('.gallery-main img').attributes('src')).toBe('/images/product-placeholder.svg')
   })
 
   // ===== 主图加载失败兜底 =====
@@ -127,7 +127,7 @@ describe('GalleryApp', () => {
     // 触发 @error 事件
     await mainImg.trigger('error')
     // 应切换为 placeholder
-    expect(wrapper.find('.gallery-main img').attributes('src')).toBe('/static/placeholder.png')
+    expect(wrapper.find('.gallery-main img').attributes('src')).toBe('/images/product-placeholder.svg')
   })
 
   // ===== alt 文本 =====

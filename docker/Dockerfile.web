@@ -14,8 +14,17 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci --no-audit --no-fund
 
-# 复制源代码 + 构建
+# 复制源代码
 COPY . .
+# 公开站点变量在构建期注入；它们会进入浏览器代码，禁止填写密钥或内部地址。
+ARG VITE_INQUIRY_EMAIL
+ARG VITE_PUBLIC_ABOUT_TEXT
+ARG VITE_PUBLIC_NEWS_TEXT
+ARG VITE_PUBLIC_CONTACT_TEXT
+ENV VITE_INQUIRY_EMAIL=$VITE_INQUIRY_EMAIL \
+    VITE_PUBLIC_ABOUT_TEXT=$VITE_PUBLIC_ABOUT_TEXT \
+    VITE_PUBLIC_NEWS_TEXT=$VITE_PUBLIC_NEWS_TEXT \
+    VITE_PUBLIC_CONTACT_TEXT=$VITE_PUBLIC_CONTACT_TEXT
 RUN npm run build
 
 # ========== 阶段 2: Nginx 部署 ==========

@@ -92,6 +92,7 @@ public static class AdminXrefReorderEndpoints
                 orderby x.SortOrder, x.OemNo3
                 select new
                 {
+                    id = x.Id,  // 🔧 fix: 联调发现 oemNo3 不唯一 (同 Brand 下 DON-00000 有多条不同 mr1 记录), 必须用 Id 主键定位
                     oemNo3 = x.OemNo3,
                     sortOrder = x.SortOrder,
                     mr1 = p.Mr1,
@@ -136,7 +137,7 @@ public static class AdminXrefReorderEndpoints
                 {
                     // 单条更新走 xmin 乐观锁 (修复漏洞 13)
                     //   SQL: UPDATE cross_references SET sort_order = @p
-                    //        WHERE oem_brand = @b AND oem_no_3 = @o AND xmin = @rv
+                    //        WHERE id = @id AND xmin = @rv
                     //   xmin 不匹配 → 0 行受影响 → 抛 XREF_CONFLICT
                     //   🔧 fix 42883/42846: PostgreSQL 无 xid = bigint 操作符, 且不允许 CAST(bigint AS xid) / CAST(integer AS xid)
                     //     原因: C# uint (4 字节) 经 Npgsql 推断为 bigint (8 字节), 与 xid 列比较报错 42883
@@ -145,13 +146,16 @@ public static class AdminXrefReorderEndpoints
                     //     正确修复: 走 text 中转 — CAST(CAST(uint AS text) AS xid)
                     //       PG 允许 text→xid 隐式转换 (CREATE CAST 定义了 text 入口)
                     //     边界: text 路径仅接受数字字符串, 非数字会报错 (本场景 rowVersion 来自 GET 接口, 类型安全)
+                    //   🔧 fix 23505 (联调发现真实业务 bug): 原 SQL 用 WHERE oem_brand + oem_no_3 定位,
+                    //     但 oemNo3 在 cross_references 表不唯一 (同 Brand 下 DON-00000 可对应多条不同 mr1 记录),
+                    //     导致第一次 UPDATE 改了所有同 oemNo3 行, 第二次 POST 用旧 rowVersion 比对 xmin 不匹配 → 409
+                    //     修复: WHERE 改用 Id 主键定位单行 (Id 唯一, 不存在误更新)
                     //     发现场景: 联调 E2E 测试 POST /api/admin/xrefs/reorder 时触发 (单测/集成测试未覆盖此 raw SQL 路径)
                     var rowsAffected = await db.Database.ExecuteSqlInterpolatedAsync($@"
                         UPDATE cross_references
                         SET sort_order = {item.SortOrder}
-                        WHERE oem_brand = {req.OemBrand}
-                          AND oem_no_3 = {item.OemNo3}
-                          AND xmin = CAST(CAST({item.RowVersion} AS text) AS xid)  -- V2: xmin 乐观锁, 类型 xid; 修复 42883/42846 经 text 中转", ct);
+                        WHERE id = {item.Id}
+                          AND xmin = CAST(CAST({item.RowVersion} AS text) AS xid)  -- V2: xmin 乐观锁, 类型 xid; 修复 42883/42846 经 text 中转; 修复 23505 用 Id 主键定位", ct);
 
                     if (rowsAffected == 0)
                     {
@@ -207,10 +211,12 @@ public record XrefReorderRequest(
 /// <summary>
 /// V2 Task 2.1.4: OEM 3 排序单项
 /// </summary>
-/// <param name="OemNo3">OEM 3 号</param>
+/// <param name="Id">cross_references 表主键 (联调发现 oemNo3 不唯一, 必须用 Id 主键定位)</param>
+/// <param name="OemNo3">OEM 3 号 (仅前端展示用, 不参与 UPDATE WHERE)</param>
 /// <param name="SortOrder">新排序值 (类竞价排名, 数值越小越靠前)</param>
 /// <param name="RowVersion">xmin 乐观锁令牌 (GET 接口返回的 rowVersion, 透传回来比对)</param>
 public record XrefReorderItem(
+    long Id,
     string OemNo3,
     int SortOrder,
     uint RowVersion

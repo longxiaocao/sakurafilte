@@ -36,6 +36,7 @@
 | 8 | 分区 2 / OEM 3 | `CrossReference`、`build-product-url.ts` | URL、详情与搜索 E2E | 本轮待回归 |
 | 9 | 分区 2 / 上架 | `CrossReference.IsPublished` | 公开产品发布状态测试 | 本轮待回归 |
 | 10 | 分区 2 / Remark | `Product.Remark`、`AdminProductFormView.vue` | 后端 DTO 测试 | 本轮待回归 |
+  > **位置说明 (2026-07-30 核实)**: Excel 原文"对应产品区 remark 栏"暗示 remark 属产品级。代码实现将 `remark` 落在 `Product` 主表 (分区 1)，`CrossReference` 实体无 remark 字段。经用户确认 (Task 4 选 A)，现状符合 spec 意图，产品级 remark 即可，不新增 `cross_references.remark` 列。
 | 11 | 分区 2 / 排序 | `CrossReference.SortOrder`、`AdminXrefReorderView.vue` | 公开聚合排序测试 | 本轮待回归 |
 | 12 | 分区 2 / Machine Type | `CrossReference.MachineType`、`MachineApplication.MachineCategory` | 目录与聚合筛选集成测试 | 本轮待回归 |
 | 13 | 分区 3 / H1 | `Product.H1Mm`、`H1MmRaw` | 尺寸范围搜索测试 | 本轮待回归 |
@@ -98,6 +99,8 @@
 - 图片 1 为每个 OEM3 独立主图；图片 2-6 为同 MR.1 共享详情图。
 - 分区 6 不进入主链路、不在前台展示，按客户确认不额外建空业务表。
 - About、News、Contact 的正式业务文案可为空，由 `VITE_PUBLIC_*_TEXT` 在部署时补充；询盘使用 `VITE_INQUIRY_EMAIL` 的 mailto，不实现工单、CRM、webhook 或后台询盘列表。
+- **OemNoDisplay 派生逻辑 (2026-07-30 核实)**: 规划V2.docx 第四章 M1 描述"Product Name 1 自动同步关联 OEM3 展示名"，实际代码 `AdminProductService.CreateAsync/UpdateAsync` 的 `OemNoDisplay` 从 `Oem2` 派生 (非 ProductName1)。经用户确认 (Task 5 选 A)，OEM2 派生更符合业务 (OEM2 是产品自身编号，PN1 是产品类型名)，维持现状，标注"规划描述与实现偏差，实现更优"。
+- **聚合搜索高亮净化 (2026-07-30 核实)**: spec F14 字面要求 DOMPurify (ALLOWED_TAGS: ['mark'])，实际 `frontend/src/utils/html-sanitizer.ts` 用 30 行正则等价实现 (先全量 HTML 转义再仅还原 `<mark>` 标签)。经用户确认 (Task 6 选 A)，维持现状，安全性更强 (比 DOMPurify 默认配置更严格) + 节省 22KB 包体积。决策详见 `.ai/decisions.md` ADR #21。
 
 ## 本轮回归结论（2026-07-28）
 

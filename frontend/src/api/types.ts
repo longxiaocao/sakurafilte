@@ -652,6 +652,34 @@ export interface MachineCatalogResponse {
   categories: MachineCatalogCategory[]
 }
 
+// ===== P1 Task 3: 后台机型三级树 + MR.1 批量绑定 (admin 端点) =====
+//   GET  /api/admin/machine-tree          → MachineTreeNode[]
+//   POST /api/admin/machine-apps/batch-bind → BatchBindResponse
+//   字段命名遵循项目惯例 (camelCase, 与后端 System.Text.Json camelCase 序列化一致)
+export interface MachineModelNode {
+  machineId: number
+  modelName: string
+}
+export interface MachineBrandNode {
+  brand: string
+  models: MachineModelNode[]
+}
+export interface MachineTreeNode {
+  category: string
+  brands: MachineBrandNode[]
+}
+export interface BatchBindRequest {
+  machineId: number
+  mr1List: string[]
+  replace: boolean
+}
+export interface BatchBindResponse {
+  bound: number
+  skipped: number
+  removed: number
+  notFound: string[]
+}
+
 // ===== V2 Task 1.3: 聚合搜索 (POST /api/public/search/aggregate) =====
 //   文档级返回: 公开键 + OEM3 嵌套数组 + _formatted 高亮
 //   与后端 AggregateSearchDto.cs 一一对应 (PascalCase 序列化)
@@ -718,6 +746,7 @@ export interface XrefBrandItem {
 }
 
 export interface XrefOem3Item {
+  id: number  // 🔧 fix: cross_references 表主键 (联调发现 oemNo3 不唯一, 必须用 Id 定位 UPDATE)
   oemNo3: string
   sortOrder: number
   mr1: string | null
@@ -726,6 +755,7 @@ export interface XrefOem3Item {
 }
 
 export interface XrefReorderItem {
+  id: number  // 🔧 fix: cross_references 表主键 (与 GET 返回的 id 对应, 用于 UPDATE WHERE)
   oemNo3: string
   sortOrder: number
   rowVersion: number

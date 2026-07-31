@@ -550,3 +550,19 @@ v30-14 1M OFFSET 深分页专项压测验证数据 (2026-07-21, sakurafilter_per
   - backend/src/SakuraFilter.Etl/EtlImportService.cs
   - backend/src/SakuraFilter.Infrastructure/Data/Migrations/20260726014656_AddRawParameterValues.cs
 
+---
+
+#21 聚合搜索高亮净化方案: 正则等价实现替代 DOMPurify (2026-07-30)
+决策: 维持现状, 使用 `frontend/src/utils/html-sanitizer.ts` 的 30 行正则等价实现 (先全量 HTML 转义再仅还原 `<mark>` 标签), 不切换为 DOMPurify。
+理由:
+  1. 安全性更强: 正则实现先对所有字符做 HTML 转义, 再仅还原 `<mark>` 标签, 比 DOMPurify 默认配置更严格 (DOMPurify 默认允许更多标签, 需额外配置 ALLOWED_TAGS)。
+  2. 包体积优化: DOMPurify 22KB, 正则实现仅 30 行, 节省前端 bundle 体积。
+  3. 功能等价: 后端 Meilisearch 返回的 `_formatted` 高亮仅含 `<mark>` 标签, 正则实现完全覆盖该场景, 无功能缺失。
+  4. 经用户确认 (Task 6 选 A): spec F14 字面要求 DOMPurify, 但安全意图 100% 达成, 维持现状。
+排除方案:
+  - 切换为 DOMPurify (npm install dompurify + 重写 html-sanitizer.ts): 严格按 spec F14 字面, 但安全性不增强 (反而可能因默认配置放宽而降低), 且增加 22KB 包体积。
+关联文件:
+  - frontend/src/utils/html-sanitizer.ts
+  - frontend/src/views/public/AggregateSearchView.vue
+  - backend/src/SakuraFilter.Search/MeiliSearchProvider.cs (SanitizeFormatted 后端净化)
+

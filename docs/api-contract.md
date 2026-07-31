@@ -172,8 +172,8 @@ GET /api/public/by-type
 | `POST` | `/api/admin/products/compare` | 产品对比 |
 | `GET` | `/api/admin/products/{id}` | 产品详情 |
 | `PUT` | `/api/admin/products/{id}` | 更新产品 |
-| `DELETE` | `/api/admin/products/{id}` | 软删除（`is_discontinued = true`） |
-| `POST` | `/api/admin/products/{id}/restore` | 恢复下架产品 |
+| `DELETE` | `/api/admin/products/{id}` | 软删除（`is_discontinued = true`，非幂等：重复删除返回 409 + `InvalidOperationException`） |
+| `POST` | `/api/admin/products/{id}/restore` | 恢复下架产品（非幂等：重复恢复返回 409 + `InvalidOperationException`） |
 
 **ProductFormDto 请求体**（13 字段长度校验，P2-2 修复）：
 
@@ -306,13 +306,15 @@ GET /api/admin/auth/status
 }
 ```
 
-## 5. ETL 公开端点（X-Admin-Token）
+## 5. ETL 公开端点（X-Admin-Token，兼容旧入口）
+
+> **关系说明**: 这些是兼容旧入口端点，新调用请走 4.3 节 `/api/admin/etl/trigger` + `entityType` 参数。旧端点保留是为了向后兼容，功能等价于新端点。
 
 | 方法 | 路径 | 用途 |
 |---|---|---|
-| `POST` | `/api/etl/import` | 触发产品 ETL |
-| `POST` | `/api/etl/import-xrefs` | 触发 cross_reference ETL |
-| `POST` | `/api/etl/import-apps` | 触发 machine_application ETL |
+| `POST` | `/api/etl/import` | 触发产品 ETL（等价 /api/admin/etl/trigger + entityType=products） |
+| `POST` | `/api/etl/import-xrefs` | 触发 cross_reference ETL（等价 /api/admin/etl/trigger + entityType=xrefs） |
+| `POST` | `/api/etl/import-apps` | 触发 machine_application ETL（等价 /api/admin/etl/trigger + entityType=apps） |
 | `GET` | `/api/etl/status` | 当前 ETL 任务状态 |
 
 **ETL 三种模式**：
@@ -331,7 +333,8 @@ GET /api/admin/auth/status
 |---|---|
 | `/api/etl/*` | 30 req/min（`etl` 策略） |
 | `/api/admin/*` | 60 req/min（`admin` 策略） |
-| 公开搜索 | 120 req/min（`public` 策略） |
+| `/api/search` | 300 req/min（`search` 策略） |
+| 公开搜索 `/api/public/*` | 120 req/min（`public` 策略） |
 | `/api/perf/ingest` | 60 req/min（豁免鉴权但不豁免限流） |
 
 **限流响应**：

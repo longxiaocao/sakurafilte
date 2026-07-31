@@ -369,7 +369,6 @@ export default {
 
 
 
-
       },
       label: {
 
@@ -392,7 +391,6 @@ export default {
 
 
 
-
       },
       title: {
         add_machine_model: 'Add Machine Model',
@@ -402,6 +400,36 @@ export default {
         machine_model_brand_cannot_be: 'Machine Model Brand cannot be empty',
         machine_model_brand_length: 'Machine Model Brand Length 不能超过 200',
 
+      },
+      // P1 Task 3: tree + batch bind button labels
+      btn: {
+        view_tree: 'View 3-Level Tree',
+        batch_bind_mr1: 'Batch Bind MR.1',
+      },
+      // P1 Task 3: tree dialog labels
+      tree_dialog: {
+        title: 'Machine 3-Level Tree (Category → Brand → Model)',
+        node_count: '{count} machine models',
+      },
+      // P1 Task 3: batch bind dialog labels
+      bind_dialog: {
+        title: 'Batch Bind MR.1 to Machine',
+        label_machine: 'Machine',
+        label_mr1_list: 'MR.1 List (one per line)',
+        label_replace: 'Bind Mode',
+        replace_append: 'Append (keep existing bindings)',
+        replace_replace: 'Replace (clear existing bindings)',
+        placeholder_mr1: 'Paste MR.1 numbers, one per line',
+        submit: 'Submit Bind',
+        result_title: 'Bind Result',
+        result_bound: 'Bound',
+        result_skipped: 'Skipped (already bound)',
+        result_removed: 'Removed',
+        result_not_found: 'MR.1 not found ({count})',
+        success: 'Bind complete',
+        partial: 'Partial success',
+        error_machine_required: 'Please select a machine',
+        error_mr1_empty: 'MR.1 list cannot be empty',
       },
     },
     mediasview: {

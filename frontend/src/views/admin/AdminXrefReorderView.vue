@@ -88,6 +88,7 @@ async function saveReorder(isRetry: boolean) {
   // 改进 2.3: 保留用户拖拽后的 dragList 副本, 重试时仅刷新 rowVersion, 不丢失用户意图
   const userOrderedDragList = [...dragList.value]
   const items = userOrderedDragList.map((item, idx) => ({
+    id: item.id,  // 🔧 fix: 联调发现 oemNo3 不唯一, 必须用 Id 主键定位 UPDATE
     oemNo3: item.oemNo3,
     sortOrder: idx + 1,
     rowVersion: item.rowVersion  // 透传 xmin 乐观锁令牌
@@ -114,19 +115,20 @@ async function saveReorder(isRetry: boolean) {
         try {
           // WHY 临时拉取: 仅为了拿最新的 rowVersion, 不覆盖 dragList (保留用户拖拽意图)
           const fresh = await adminXrefApi.listByBrand(selectedBrand.value)
-          // 构建 oemNo3 → rowVersion 映射, 用于更新 userOrderedDragList
-          const rvMap = new Map(fresh.items.map((it) => [it.oemNo3, it.rowVersion]))
-          // 边界: 用户拖拽的某个 oemNo3 已被他人删除 → rvMap 取不到 → 终止重试
-          const missingOem = userOrderedDragList.find((it) => !rvMap.has(it.oemNo3))
-          if (missingOem) {
-            ElMessage.warning(`OEM 3 ${missingOem.oemNo3} 已被他人删除, 已自动刷新列表, 请重新拖拽`)
+          // 构建 id → rowVersion 映射, 用于更新 userOrderedDragList
+          //   🔧 fix: 用 id 而非 oemNo3 (联调发现 oemNo3 不唯一, 会拿错 rowVersion)
+          const rvMap = new Map(fresh.items.map((it) => [it.id, it.rowVersion]))
+          // 边界: 用户拖拽的某项已被他人删除 → rvMap 取不到 → 终止重试
+          const missingItem = userOrderedDragList.find((it) => !rvMap.has(it.id))
+          if (missingItem) {
+            ElMessage.warning(`OEM 3 ${missingItem.oemNo3} 已被他人删除, 已自动刷新列表, 请重新拖拽`)
             await loadOemList()
             return
           }
           // 用最新 rowVersion + 用户拖拽顺序覆盖 dragList, 然后重试
           dragList.value = userOrderedDragList.map((it) => ({
             ...it,
-            rowVersion: rvMap.get(it.oemNo3) as any
+            rowVersion: rvMap.get(it.id) as any
           }))
           // 重试 (递归 1 次, isRetry=true, 再 409 会走下方弹框分支)
           await saveReorder(true)
