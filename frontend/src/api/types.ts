@@ -435,6 +435,12 @@ export interface EtlActiveTaskInfo {
     inserted: number
     updated: number
     skipped: number
+    // 🔧 fix: 补全 skipped 细分字段, 与后端 GetActiveTaskInfo() 对齐 (SSE 实时推送)
+    skippedMissingOem?: number
+    skippedMissingMr1?: number
+    skippedNullField?: number
+    skippedDuplicate?: number
+    typeMismatches?: number
     errors: number
     indexed: number
     indexPending: number
