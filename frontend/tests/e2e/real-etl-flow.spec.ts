@@ -207,7 +207,9 @@ test.describe.serial('P1-E2E-ETL 真实 ETL 全流程 (拖拽 + SSE + 暂停/恢
     expect(triggerBtnCount).toBeGreaterThanOrEqual(1)
 
     // 断言 3: 路径输入框存在 (form.jsonlPath, 默认 D:/data/sakurafilter/products.jsonl)
-    const pathInput = page.locator('.el-input input').first()
+    //   WHY 用 placeholder*="JSONL": zh-CN "JSONL 绝对路径" / en-US "JSONL Absolute Path" 均含 "JSONL", 跨语言稳定
+    //   WHY 不用 .el-input input:first(): 页面有多个 input (搜索框等), first() 会误匹配
+    const pathInput = page.locator('input[placeholder*="JSONL"]').first()
     await expect(pathInput).toBeVisible({ timeout: 5000 })
 
     await page.screenshot({ path: `${SHOT_DIR}/real-etl-1-load.png`, fullPage: true })
@@ -257,6 +259,15 @@ test.describe.serial('P1-E2E-ETL 真实 ETL 全流程 (拖拽 + SSE + 暂停/恢
   test('3. 拖拽 XLSX → 路径填入 → 触发 ETL → SSE 进度', async ({ page }) => {
     await injectAdminContext(page)
     await injectAdminTokenToWindow(page)
+
+    // 在 goto 前监听 SSE 请求 (useEtlProgress onMounted 时发起 fetch streaming)
+    //   WHY 提前监听: SSE 在 onMounted 时发起, goto 后立即建立, 错过则 waitForRequest 超时
+    //   WHY 不用 performance API: fetch + ReadableStream 长连接不会立即出现在 performance entries 中
+    const ssePromise = page.waitForRequest(
+      (req) => req.url().includes('/api/admin/etl/progress/stream') && req.method() === 'GET',
+      { timeout: 15000 }
+    ).catch(() => null)
+
     await page.goto(`${BASE}/admin/etl`, { waitUntil: 'domcontentloaded', timeout: 20000 })
     await page.waitForSelector('h1', { timeout: 10000 })
 
@@ -265,7 +276,8 @@ test.describe.serial('P1-E2E-ETL 真实 ETL 全流程 (拖拽 + SSE + 暂停/恢
 
     // 断言 1: form.jsonlPath 被填为 D:/data/sakurafilter/test-products.xlsx
     //   AdminEtlView.handleFilesDropped: SERVER_BASE_DIR + '/' + file.name
-    const pathInput = page.locator('.el-input input').first()
+    //   WHY 用 placeholder*="JSONL": 同用例1, 精确定位路径输入框, 避免 first() 误匹配搜索框
+    const pathInput = page.locator('input[placeholder*="JSONL"]').first()
     await expect.poll(async () => {
       const v = await pathInput.inputValue().catch(() => '')
       return v
@@ -291,14 +303,11 @@ test.describe.serial('P1-E2E-ETL 真实 ETL 全流程 (拖拽 + SSE + 暂停/恢
     expect(triggerReq).not.toBeNull()
     expect(triggerReq!.url()).toContain('/api/admin/etl/trigger')
 
-    // 断言 3: SSE 端点被调用 (fetch + ReadableStream, 走 GET /api/admin/etl/progress/stream)
-    //   useEtlProgress 在 onMounted 时就发起 SSE 连接, 此处验证其存在
-    const sseCalled = await page.evaluate(() => {
-      // 检查 performance entries 是否有 progress/stream 请求
-      const entries = performance.getEntriesByType('resource')
-      return entries.some((e) => e.name.includes('/api/admin/etl/progress/stream'))
-    })
-    expect(sseCalled).toBe(true)
+    // 断言 3: SSE 端点被调用 (fetch + ReadableStream, GET /api/admin/etl/progress/stream)
+    //   useEtlProgress 在 onMounted 时发起 SSE 连接, 用 waitForRequest 捕获
+    const sseReq = await ssePromise
+    expect(sseReq).not.toBeNull()
+    expect(sseReq!.url()).toContain('/api/admin/etl/progress/stream')
 
     // 断言 4: 进度条/流程图节点出现 (用轮询而非 waitForTimeout)
     //   EtlPipeline.vue: 任务 running 时 .pipeline-node .state-active 出现
@@ -462,52 +471,51 @@ test.describe.serial('P1-E2E-ETL 真实 ETL 全流程 (拖拽 + SSE + 暂停/恢
     await page.screenshot({ path: `${SHOT_DIR}/real-etl-6-complete.png`, fullPage: true })
   })
 
-  test('7. SSE 断开重连 (setOffline 模拟网络中断)', async ({ page, context }) => {
+  test('7. SSE 断开重连 (route 拦截模拟服务端错误 → 指数退避重连)', async ({ page }) => {
     await injectAdminContext(page)
     await injectAdminTokenToWindow(page)
+
+    // 步骤 0: 用 page.route 拦截 SSE 端点返回 500, 触发 useEtlProgress 的 catch → scheduleReconnect
+    //   WHY 不用 context.setOffline: 已建立的 fetch + ReadableStream 连接在 setOffline 后不会立即断开
+    //     (reader.read() 在等待后端数据, 浏览器不会主动 abort offline 时的已建立连接)
+    //   WHY 用 route.fulfill 500: connectSSE 的 resp.ok 为 false → throw → catch → scheduleReconnect
+    const sseRoutePattern = '**/api/admin/etl/progress/stream'
+    await page.route(sseRoutePattern, (route) => {
+      route.fulfill({ status: 500, body: 'Internal Server Error (test mock)' })
+    })
+
+    // 监听初始 SSE 请求 (会被 route 拦截返回 500)
+    const initialSsePromise = page.waitForRequest(
+      (req) => req.url().includes('/api/admin/etl/progress/stream') && req.method() === 'GET',
+      { timeout: 15000 }
+    ).catch(() => null)
+
     await page.goto(`${BASE}/admin/etl`, { waitUntil: 'domcontentloaded', timeout: 20000 })
     await page.waitForSelector('h1', { timeout: 10000 })
 
-    // 步骤 1: 等待初始 SSE 连接已建立 (验证 progress/stream 请求存在)
-    await expect.poll(async () => {
-      const entries = await page.evaluate(() =>
-        performance.getEntriesByType('resource').filter((e) =>
-          e.name.includes('/api/admin/etl/progress/stream')
-        ).length
-      )
-      return entries
-    }, { timeout: 10000, intervals: [500, 1000] }).toBeGreaterThanOrEqual(1)
+    // 步骤 1: 等待初始 SSE 请求被拦截 (返回 500, useEtlProgress 进入 catch → scheduleReconnect)
+    const initialSseReq = await initialSsePromise
+    expect(initialSseReq).not.toBeNull()
+    expect(initialSseReq!.url()).toContain('/api/admin/etl/progress/stream')
 
-    const initialSseCount = await page.evaluate(() =>
-      performance.getEntriesByType('resource').filter((e) =>
-        e.name.includes('/api/admin/etl/progress/stream')
-      ).length
-    )
+    // 等待 useEtlProgress 进入 catch 并设置重连 timer (computeReconnectDelay(1) = 1000ms)
+    //   WHY waitForTimeout: 等待 setTimeout(1000) 触发, 不可用轮询替代
+    await page.waitForTimeout(2500)
 
-    // 步骤 2: 模拟网络断开 (useEtlProgress fetch 会抛错 → 进 catch → 指数退避重连)
-    await context.setOffline(true)
+    // 步骤 2: 取消 route 拦截, 设置重连监听
+    //   unroute 后, 下一次 scheduleReconnect 触发的 connectSSE 请求将正常到达后端
+    const reconnectPromise = page.waitForRequest(
+      (req) => req.url().includes('/api/admin/etl/progress/stream') && req.method() === 'GET',
+      { timeout: 15000 }
+    ).catch(() => null)
 
-    // 断言 1: 网络断开后 SSE 不再有新请求 (等待 2s 确认)
-    await page.waitForTimeout(2000) // 此处 waitForTimeout 用于确认断开期无新请求
-    const offlineSseCount = await page.evaluate(() =>
-      performance.getEntriesByType('resource').filter((e) =>
-        e.name.includes('/api/admin/etl/progress/stream')
-      ).length
-    )
-    expect(offlineSseCount).toBe(initialSseCount) // 断网期间无新 SSE 请求
+    await page.unroute(sseRoutePattern)
 
-    // 步骤 3: 恢复网络 → SSE 应自动重连 (computeReconnectDelay(1) = 1000ms)
-    await context.setOffline(false)
-
-    // 断言 2: SSE 自动重连 (轮询等待新的 progress/stream 请求, 容忍 computeReconnectDelay 的 1s 起步)
-    await expect.poll(async () => {
-      const count = await page.evaluate(() =>
-        performance.getEntriesByType('resource').filter((e) =>
-          e.name.includes('/api/admin/etl/progress/stream')
-        ).length
-      )
-      return count
-    }, { timeout: 15000, intervals: [500, 1000, 2000] }).toBeGreaterThan(initialSseCount)
+    // 断言 2: SSE 自动重连 (新的 progress/stream 请求已发出, 不再被拦截)
+    //   scheduleReconnect 在断网期间可能已重试 1-2 次, 延迟 1s→2s, 15s 超时足够
+    const reconnectReq = await reconnectPromise
+    expect(reconnectReq).not.toBeNull()
+    expect(reconnectReq!.url()).toContain('/api/admin/etl/progress/stream')
 
     await page.screenshot({ path: `${SHOT_DIR}/real-etl-7-reconnect.png`, fullPage: true })
   })
