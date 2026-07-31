@@ -40,22 +40,26 @@ public static class AdminXrefReorderEndpoints
 
             // 取 XrefOemBrand 字典 (仅未软删除),LEFT JOIN cross_references 统计白名单内 OEM 3 数量
             // WHY LEFT JOIN: 即使 brand 下白名单为空, 字典仍展示 (count=0),便于管理员清理
-            // WHY 仅统计 sort_order > 0: 改造为白名单优先模式后, oem3Count 应反映白名单内数量,
-            //   与右侧 GET /?oemBrand=X 列表 (仅返回 sort_order > 0) 保持一致
+            // WHY 字典始终展示: 品牌字典独立于白名单数据, 不应因白名单为空而隐藏品牌
+            //   上一版 where x != null && x.SortOrder > 0 导致白名单清空后品牌列表为空,
+            //   用户无法选择品牌新增白名单 (用户反馈: "品牌列表为空, 没办法直接维护")
+            // 🔧 P0 fix: 之前 where x == null || (!x.IsDiscontinued && x.SortOrder > 0) 仍有 bug:
+            //   当品牌有关联产品但 sort_order=0 (白名单清空) 时, x != null 且不满足 sort_order>0,
+            //   品牌被错误过滤掉, 只剩 1 条记录; 正确做法是 WHERE 不过滤关联产品, 改在 COUNT 用条件聚合
+            // oem3Count 用条件聚合: 仅统计白名单内 (x != null && !x.IsDiscontinued && x.SortOrder > 0)
             var brands = await (
                 from b in db.XrefOemBrands.AsNoTracking()
                 where b.DeletedAt == null
                 join x in db.CrossReferences.AsNoTracking()
                     on b.Brand equals x.OemBrand into bx
                 from x in bx.DefaultIfEmpty()
-                where x != null && !x.IsDiscontinued && x.SortOrder > 0
                 group x by new { b.Brand, b.SortOrder } into g
                 orderby g.Key.SortOrder, g.Key.Brand
                 select new
                 {
                     brand = g.Key.Brand,
                     sortOrder = g.Key.SortOrder,
-                    oem3Count = g.Count()
+                    oem3Count = g.Count(x => x != null && !x.IsDiscontinued && x.SortOrder > 0)
                 }).ToListAsync(ct);
 
             var result = brands.Cast<object>().ToList();
@@ -65,6 +69,95 @@ public static class AdminXrefReorderEndpoints
         })
         .WithSummary("获取 OEM 品牌列表 (含 sortOrder + oem3Count, 按 sortOrder 排序)")
         .WithName("AdminXrefReorder_ListBrands");
+
+        // ===== 白名单改造: POST /brands — 新增品牌到 xref_oem_brand 字典 =====
+        //   用户需求: 品牌应可独立新增, 新增后即可在该品牌下添加白名单
+        //   幂等性: 若品牌已存在 (未软删) 返 409; 若曾软删则恢复 (DeletedAt = null)
+        //   sort_order: 新增时 = max(sort_order) + 1, 排到字典末尾 (便于管理员后续拖拽调整)
+        //   安全: trim + 非空校验, 防止空白品牌名入库
+        group.MapPost("/brands", async (
+            XrefBrandCreatePayload req,
+            ProductDbContext db,
+            IMemoryCache cache,
+            ILoggerFactory loggerFactory,
+            CancellationToken ct) =>
+        {
+            var logger = loggerFactory.CreateLogger("AdminXrefReorder");
+            if (req == null || string.IsNullOrWhiteSpace(req.Brand))
+                return Results.BadRequest(new ProblemDetails
+                {
+                    Title = "缺少参数", Status = StatusCodes.Status400BadRequest, Detail = "brand 必填"
+                });
+
+            var brand = req.Brand.Trim();
+            if (brand.Length > 100)
+                return Results.BadRequest(new ProblemDetails
+                {
+                    Title = "参数过长", Status = StatusCodes.Status400BadRequest,
+                    Detail = "brand 长度不能超过 100 字符"
+                });
+
+            // 检查是否已存在 (含软删除记录, 用于判断是新增还是恢复)
+            var existing = await db.XrefOemBrands
+                .Where(b => b.Brand == brand)
+                .FirstOrDefaultAsync(ct);
+
+            if (existing != null && existing.DeletedAt == null)
+                return Results.Conflict(new ProblemDetails
+                {
+                    Type = "https://sakurafilter.com/errors/brand-exists",
+                    Title = "品牌已存在",
+                    Status = StatusCodes.Status409Conflict,
+                    Detail = $"品牌 '{brand}' 已存在于字典中, 无法重复新增",
+                    Extensions = { ["errorCode"] = "BRAND_EXISTS" }
+                });
+
+            if (existing != null)
+            {
+                // 恢复软删除记录 (保留原 sort_order, 避免重新计算末尾位置)
+                existing.DeletedAt = null;
+                existing.UpdatedAt = DateTime.UtcNow;
+                await db.SaveChangesAsync(ct);
+                cache.Remove("xref.brands.list");
+                logger.LogInformation("品牌字典恢复 (软删恢复): brand={Brand} sortOrder={SortOrder}", brand, existing.SortOrder);
+                return Results.Created($"/api/admin/xrefs/reorder/brands/{Uri.EscapeDataString(brand)}", new
+                {
+                    brand = existing.Brand,
+                    sortOrder = existing.SortOrder,
+                    oem3Count = 0,
+                    restored = true
+                });
+            }
+
+            // 新增: sort_order = max(sort_order) + 1, 排到字典末尾
+            //   边界: 字典为空时 max 为 null → sort_order = 1
+            var maxSortOrder = await db.XrefOemBrands
+                .Where(b => b.DeletedAt == null)
+                .Select(b => (int?)b.SortOrder)
+                .MaxAsync(ct) ?? 0;
+
+            var entity = new XrefOemBrand
+            {
+                Brand = brand,
+                SortOrder = maxSortOrder + 1,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+            db.XrefOemBrands.Add(entity);
+            await db.SaveChangesAsync(ct);
+            cache.Remove("xref.brands.list");
+
+            logger.LogInformation("品牌字典新增: brand={Brand} sortOrder={SortOrder}", brand, entity.SortOrder);
+            return Results.Created($"/api/admin/xrefs/reorder/brands/{Uri.EscapeDataString(brand)}", new
+            {
+                brand = entity.Brand,
+                sortOrder = entity.SortOrder,
+                oem3Count = 0,
+                restored = false
+            });
+        })
+        .WithSummary("新增品牌到 xref_oem_brand 字典 (sort_order=max+1, 软删可恢复)")
+        .WithName("AdminXrefReorder_CreateBrand");
 
         // ===== Task 2.1.3: GET /?oemBrand=BOSCH — 返回某 Brand 下白名单内 OEM 3 列表 =====
         //   V24-F86: 加分页 (page/pageSize) + 搜索 (q, oemNo3 模糊匹配), 解决全量加载卡顿
@@ -659,3 +752,9 @@ public record XrefItemUpdatePayload(
     bool IsPublished,
     uint RowVersion
 );
+
+/// <summary>
+/// 白名单改造: 新增品牌请求体 (POST /brands)
+/// </summary>
+/// <param name="Brand">品牌名 (与 XrefOemBrand.Brand 一致, 会 trim)</param>
+public record XrefBrandCreatePayload(string Brand);

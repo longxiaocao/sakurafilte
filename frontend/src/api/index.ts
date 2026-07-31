@@ -487,6 +487,12 @@ export const adminXrefApi = {
       return { total: items.length, items }
     })
   },
+  // POST /api/admin/xrefs/reorder/brands — 新增品牌到字典 (sort_order=max+1, 软删可恢复)
+  //   白名单改造: 用户可独立新增品牌, 新增后即可在该品牌下添加白名单
+  //   冲突返 409 BRAND_EXISTS (品牌已存在且未软删)
+  addBrand(brand: string): Promise<{ brand: string; sortOrder: number; oem3Count: number; restored: boolean }> {
+    return http.post('/admin/xrefs/reorder/brands', { brand }).then((r) => r.data)
+  },
   // GET /api/admin/xrefs/reorder?oemBrand=BOSCH — 某 Brand 下 OEM 3 列表 (分页 + 搜索, 含 rowVersion)
   //   V24-F86: 加 page/pageSize/q 参数, 返回 XrefOem3Page (含分页元数据)
   listByBrand(

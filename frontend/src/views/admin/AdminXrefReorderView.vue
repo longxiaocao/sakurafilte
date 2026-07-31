@@ -279,8 +279,12 @@ async function openEditDialog(item: XrefOem3Item) {
 }
 
 // ===== V24-F86: product 联想 (复用 adminProductApi.search, 多字段模糊查询) =====
-//   白名单改造: 加 oemBrand 过滤, 仅返回该品牌下产品 (避免误选其他品牌的产品入白名单)
-//   修复: 原来只用 mr1 搜索, 用户输入产品名/OEM 号无结果; 改为 mr1 + productName1 + oemNoDisplay 三字段
+//   🔧 P0 fix: 移除 oemBrand 过滤, 让用户能搜索所有产品
+//   原因: cross_references.oem_brand 独立于 products.oem_brand, 一个产品可关联到多个品牌
+//   (如产品 A 可在 Donaldson 下有 OEM 3 号 DON-001, 也可在 FLEETGUARD 下有 FLT-001)
+//   之前按 oemBrand 过滤导致新品牌 (如 FLEETGUARD) 下搜索返回空, 用户无法添加白名单
+//   修复: 不按品牌过滤, 让用户自由搜索所有产品; 选择后由后端创建 cross_reference 关联
+//   多字段: mr1 + productName1 (mr1 优先, 无结果再按 productName1)
 async function searchProducts(q: string) {
   if (!q || q.trim().length < 1) {
     productOptions.value = []
@@ -289,10 +293,8 @@ async function searchProducts(q: string) {
   productLoading.value = true
   try {
     // 优先按 mr1 搜索 (核心业务字段)
-    const brand = form.oemBrand || selectedBrand.value || undefined
     const resp = await adminProductApi.search({
       mr1: q.trim(),
-      oemBrand: brand,
       page: 1,
       pageSize: 20,
       includeDiscontinued: false
@@ -301,7 +303,6 @@ async function searchProducts(q: string) {
     if (resp.items.length === 0) {
       const resp2 = await adminProductApi.search({
         productName1: q.trim(),
-        oemBrand: brand,
         page: 1,
         pageSize: 20,
         includeDiscontinued: false
@@ -425,6 +426,46 @@ async function loadBrandsSilently() {
   }
 }
 
+// ===== 新增品牌弹窗 (用户独立新增品牌到字典, 新增后即可在该品牌下添加白名单) =====
+const brandDialogVisible = ref(false)
+const newBrandName = ref('')
+const brandSubmitting = ref(false)
+
+function openCreateBrandDialog() {
+  newBrandName.value = ''
+  brandDialogVisible.value = true
+}
+
+async function submitBrand() {
+  const name = newBrandName.value.trim()
+  if (!name) {
+    ElMessage.error('请输入品牌名')
+    return
+  }
+  brandSubmitting.value = true
+  try {
+    const result = await adminXrefApi.addBrand(name)
+    ElMessage.success(result.restored ? `品牌 '${result.brand}' 已恢复` : `品牌 '${result.brand}' 已新增`)
+    brandDialogVisible.value = false
+    // 刷新品牌列表并自动选中新品牌
+    await loadBrands()
+    selectedBrand.value = result.brand
+    page.value = 1
+    searchQ.value = ''
+    await loadOemList()
+  } catch (e: any) {
+    const status = e?.response?.status
+    const errorCode = e?.response?.data?.errorCode
+    if (status === 409 || errorCode === 'BRAND_EXISTS') {
+      ElMessage.error(e?.response?.data?.detail || '品牌已存在')
+    } else {
+      ElMessage.error(e?.response?.data?.detail || '新增品牌失败')
+    }
+  } finally {
+    brandSubmitting.value = false
+  }
+}
+
 onMounted(loadBrands)
 </script>
 
@@ -441,8 +482,9 @@ onMounted(loadBrands)
     <div class="flex gap-4" style="min-height: 600px">
       <!-- 左侧: Brand 列表 -->
       <div class="w-64 border border-gray-200 rounded">
-        <div class="px-3 py-2 border-b border-gray-200 bg-gray-50 text-sm font-medium">
-          品牌 ({{ brands.length }})
+        <div class="px-3 py-2 border-b border-gray-200 bg-gray-50 text-sm font-medium flex items-center justify-between">
+          <span>品牌 ({{ brands.length }})</span>
+          <el-button size="small" text type="primary" @click="openCreateBrandDialog">+ 新增</el-button>
         </div>
         <div v-loading="loadingBrands" class="overflow-auto" style="max-height: 540px">
           <div
@@ -605,6 +647,35 @@ onMounted(loadBrands)
         <el-button @click="dialogVisible = false">取消</el-button>
         <el-button type="primary" :loading="dialogLoading" @click="submitForm">
           {{ dialogMode === 'create' ? '添加到白名单' : '保存' }}
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 新增品牌弹窗 (用户独立新增品牌到字典, 新增后即可在该品牌下添加白名单) -->
+    <el-dialog
+      v-model="brandDialogVisible"
+      title="新增品牌"
+      width="420px"
+      :close-on-click-modal="false"
+    >
+      <el-form :model="{ name: newBrandName }" label-width="80px" label-position="right">
+        <el-form-item label="品牌名">
+          <el-input
+            v-model="newBrandName"
+            placeholder="输入品牌名 (如 BOSCH, DONALDSON)"
+            maxlength="100"
+            show-word-limit
+            @keyup.enter="submitBrand"
+          />
+        </el-form-item>
+        <div class="text-xs text-gray-500 pl-[80px]">
+          提示: 新增后品牌将加入字典, 排到列表末尾; 之后可在该品牌下"添加到白名单"选择产品
+        </div>
+      </el-form>
+      <template #footer>
+        <el-button @click="brandDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="brandSubmitting" @click="submitBrand">
+          新增品牌
         </el-button>
       </template>
     </el-dialog>
