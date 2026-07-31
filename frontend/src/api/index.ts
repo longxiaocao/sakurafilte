@@ -28,7 +28,10 @@ import type {
   AlertStats,
   AlertRuleItem,
   AlertTestRequest,
-  AlertTestResult
+  AlertTestResult,
+  MachineTreeNode,
+  BatchBindRequest,
+  BatchBindResponse
 } from './types'
 
 // ===== JWT 鉴权 API (commit aff3ac3 后端 JWT 体系) =====
@@ -475,8 +478,14 @@ export const adminProductApi = {
 // ===== V2 Task 2.2.7: OEM 3 排序管理 API =====
 export const adminXrefApi = {
   // GET /api/admin/xrefs/reorder/brands — 品牌 + sortOrder + oem3Count
+  //   🔧 fix: 后端返回 { brands: [...] } 但前端契约声明 { total, items }
+  //     历史不一致导致 AdminXrefReorderView.vue loadBrands 拿到 undefined.items → 页面崩溃
+  //     修复: 前端映射 brands → items, 保持外部 API 契约 { total, items } 不变
   listBrands(): Promise<{ total: number; items: import('./types').XrefBrandItem[] }> {
-    return http.get('/admin/xrefs/reorder/brands').then((r) => r.data)
+    return http.get('/admin/xrefs/reorder/brands').then((r) => {
+      const items = ((r.data?.brands ?? r.data?.items) || []) as import('./types').XrefBrandItem[]
+      return { total: items.length, items }
+    })
   },
   // GET /api/admin/xrefs/reorder?oemBrand=BOSCH — 某 Brand 下 OEM 3 列表 (含 rowVersion)
   listByBrand(oemBrand: string): Promise<{ total: number; items: import('./types').XrefOem3Item[] }> {
@@ -874,4 +883,22 @@ export const dictApi = {
     }
   }
 }
+
+// ===== P1 Task 3: 后台机型三级树 + MR.1 批量绑定 API (admin 角色) =====
+//   getTree:    GET   /api/admin/machine-tree            → MachineTreeNode[] (category → brand → model)
+//   batchBind:  POST  /api/admin/machine-apps/batch-bind  → BatchBindResponse (200 全成功 / 207 部分成功)
+//   鉴权: http 拦截器自动注入 Authorization Bearer / X-Admin-Token
+//   错误码: 400 BATCH_BIND_LIMIT_EXCEEDED / 404 MACHINE_NOT_FOUND / 400 MR1_FORMAT_INVALID
+export const machineApi = {
+  getTree(): Promise<MachineTreeNode[]> {
+    return http.get('/admin/machine-tree').then((r) => r.data)
+  },
+  batchBind(req: BatchBindRequest): Promise<BatchBindResponse> {
+    return http.post('/admin/machine-apps/batch-bind', req).then((r) => r.data)
+  }
+}
+
+// P1 Task 3: re-export 类型, 供调用方 `import { type MachineTreeNode } from '@/api'` 使用
+//   (与 generated-types re-export 模式一致, 见 types.ts 文件末尾)
+export type { MachineTreeNode, BatchBindRequest, BatchBindResponse } from './types'
 

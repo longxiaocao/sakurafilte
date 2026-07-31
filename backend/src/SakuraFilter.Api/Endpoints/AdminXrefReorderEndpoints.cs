@@ -138,12 +138,20 @@ public static class AdminXrefReorderEndpoints
                     //   SQL: UPDATE cross_references SET sort_order = @p
                     //        WHERE oem_brand = @b AND oem_no_3 = @o AND xmin = @rv
                     //   xmin 不匹配 → 0 行受影响 → 抛 XREF_CONFLICT
+                    //   🔧 fix 42883/42846: PostgreSQL 无 xid = bigint 操作符, 且不允许 CAST(bigint AS xid) / CAST(integer AS xid)
+                    //     原因: C# uint (4 字节) 经 Npgsql 推断为 bigint (8 字节), 与 xid 列比较报错 42883
+                    //     错误尝试 1: CAST(bigint AS xid) 报 42846 (PG 不允许直接 bigint→xid)
+                    //     错误尝试 2: CAST(integer AS xid) 报 42846 (PG 不允许 int4→xid 显式 cast)
+                    //     正确修复: 走 text 中转 — CAST(CAST(uint AS text) AS xid)
+                    //       PG 允许 text→xid 隐式转换 (CREATE CAST 定义了 text 入口)
+                    //     边界: text 路径仅接受数字字符串, 非数字会报错 (本场景 rowVersion 来自 GET 接口, 类型安全)
+                    //     发现场景: 联调 E2E 测试 POST /api/admin/xrefs/reorder 时触发 (单测/集成测试未覆盖此 raw SQL 路径)
                     var rowsAffected = await db.Database.ExecuteSqlInterpolatedAsync($@"
                         UPDATE cross_references
                         SET sort_order = {item.SortOrder}
                         WHERE oem_brand = {req.OemBrand}
                           AND oem_no_3 = {item.OemNo3}
-                          AND xmin = {item.RowVersion}  -- V2: xmin 乐观锁, 类型 xid (uint)", ct);
+                          AND xmin = CAST(CAST({item.RowVersion} AS text) AS xid)  -- V2: xmin 乐观锁, 类型 xid; 修复 42883/42846 经 text 中转", ct);
 
                     if (rowsAffected == 0)
                     {
