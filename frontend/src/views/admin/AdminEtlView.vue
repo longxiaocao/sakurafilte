@@ -487,10 +487,10 @@ function statusTagType(s: string): 'success' | 'warning' | 'info' | 'danger' | '
     <el-card shadow="never" class="mb-3">
       <template #header>
         <div class="flex items-center gap-2">
-          <span class="font-semibold">全量重建</span>
+          <span class="font-semibold">{{ t('admin.etlview.string.full_rebuild') }}</span>
           <el-tag size="small" type="danger">DANGER</el-tag>
           <el-tooltip
-            content="清空 Meilisearch 全部文档并从 PostgreSQL 全量同步, 与 ETL 任务互斥"
+            :content="t('admin.etlview.string.full_rebuild_tip')"
             placement="top"
           >
             <el-icon class="text-gray-400 cursor-help"><InfoFilled /></el-icon>
@@ -501,8 +501,8 @@ function statusTagType(s: string): 'success' | 'warning' | 'info' | 'danger' | '
         type="warning"
         :closable="false"
         class="mb-3"
-        title="执行后将清空 Meilisearch 全部文档并重新同步, 期间搜索短暂不可用"
-        description="适用场景: 索引结构变更后强制重建 / 数据漂移修复 / schema 字段更新后生效"
+        :title="t('admin.etlview.string.full_rebuild_alert_title')"
+        :description="t('admin.etlview.string.full_rebuild_alert_desc')"
       />
       <div class="flex items-center gap-3 mb-3">
         <el-button

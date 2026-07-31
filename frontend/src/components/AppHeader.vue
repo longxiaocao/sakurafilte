@@ -23,15 +23,16 @@ const { locale, t } = useI18n()  // P2.6
 const isAdminPath = computed(() => route.path.startsWith('/admin'))
 
 // Day 10: 字典管理下拉菜单 (P1.3 OEM 品牌 + P2.2 7 个新字典)
+// V24-F103 i18n 残留修复: label 改为 i18n key, 模板内用 t() 渲染
 const dictItems = [
-  { label: 'OEM 品牌', path: '/admin/dict/oem-brands' },
-  { label: '产品名 1', path: '/admin/dict/product-name1s' },
-  { label: '产品名 2', path: '/admin/dict/product-name2s' },
-  { label: '类型 (Type)', path: '/admin/dict/types' },
-  { label: 'OEM 3', path: '/admin/dict/oem-no3s' },
-  { label: '介质 (Media)', path: '/admin/dict/medias' },
-  { label: '机型 (Machine)', path: '/admin/dict/machines' },
-  { label: '发动机 (Engine)', path: '/admin/dict/engines' }
+  { labelKey: 'nav.dictItems.oemBrand', path: '/admin/dict/oem-brands' },
+  { labelKey: 'nav.dictItems.productName1', path: '/admin/dict/product-name1s' },
+  { labelKey: 'nav.dictItems.productName2', path: '/admin/dict/product-name2s' },
+  { labelKey: 'nav.dictItems.type', path: '/admin/dict/types' },
+  { labelKey: 'nav.dictItems.oem3', path: '/admin/dict/oem-no3s' },
+  { labelKey: 'nav.dictItems.media', path: '/admin/dict/medias' },
+  { labelKey: 'nav.dictItems.machine', path: '/admin/dict/machines' },
+  { labelKey: 'nav.dictItems.engine', path: '/admin/dict/engines' }
 ]
 
 // Day 9.2: 修复 - "产品详情" 路由是 /product/:oem, 单独一个 nav 项无法满足参数化路径
@@ -46,36 +47,37 @@ const dictItems = [
 //   优先级 (数字越小越靠前): 公共 3 (1-3) → admin 高优 5 (4-8) → 低优 5 (9-13)
 //   动态收纳: ResizeObserver 监听 nav 容器宽度, 贪心决定哪些进 "更多"
 const allNavItems = computed(() => {
-  const items: Array<{ key: string; label: string; icon: string; path?: string; action?: string; dropdown?: string; priority: number }> = [
+  // V24-F103 i18n 残留修复: label 改为 i18n key, 模板内用 t() 渲染
+  const items: Array<{ key: string; labelKey: string; icon: string; path?: string; action?: string; dropdown?: string; priority: number }> = [
     // 公共区 (始终在池子里, 不论路径不论登录)
-    { key: 'about', label: 'About us', path: '/about', icon: 'OfficeBuilding', priority: 1 },
-    { key: 'product', label: 'Product', path: '/search', icon: 'Search', priority: 2 },
-    { key: 'news', label: 'News', path: '/news', icon: 'Document', priority: 3 },
-    { key: 'contact', label: 'Contact us', path: '/contact', icon: 'Message', priority: 4 },
-    { key: 'oem', label: 'OEM 查询', action: 'oemLookup', icon: 'Document', priority: 5 },
-    { key: 'compare', label: '产品对比', path: '/compare', icon: 'DataLine', priority: 6 }
+    { key: 'about', labelKey: 'nav.about', path: '/about', icon: 'OfficeBuilding', priority: 1 },
+    { key: 'product', labelKey: 'nav.product', path: '/search', icon: 'Search', priority: 2 },
+    { key: 'news', labelKey: 'nav.news', path: '/news', icon: 'Document', priority: 3 },
+    { key: 'contact', labelKey: 'nav.contact', path: '/contact', icon: 'Message', priority: 4 },
+    { key: 'oem', labelKey: 'nav.oemLookup', action: 'oemLookup', icon: 'Document', priority: 5 },
+    { key: 'compare', labelKey: 'nav.compare', path: '/compare', icon: 'DataLine', priority: 6 }
   ]
   // 已登录用户: 在任何路径都看到 admin 入口, 解决 v3 跳公开页丢 admin 体验问题
   if (user.value) {
     // admin 高优 (必显示, 不可收纳)
     items.push(
-      { key: 'products', label: '产品管理', path: '/admin/products', icon: 'Goods', priority: 4 },
-      { key: 'adv-search', label: '高级搜索', path: '/public/search', icon: 'Filter', priority: 5 },
-      { key: 'dict', label: '字典管理', dropdown: 'dict', icon: 'Collection', priority: 6 },
+      { key: 'products', labelKey: 'nav.productManage', path: '/admin/products', icon: 'Goods', priority: 4 },
+      { key: 'adv-search', labelKey: 'nav.advSearch', path: '/public/search', icon: 'Filter', priority: 5 },
+      { key: 'dict', labelKey: 'nav.dictManage', dropdown: 'dict', icon: 'Collection', priority: 6 },
       // V2 Task 2.2.6: OEM 排序管理入口 (priority 6.5, 在字典和 ETL 之间)
-      { key: 'xref-reorder', label: 'OEM 排序', path: '/admin/xrefs/reorder', icon: 'Sort', priority: 6.5 },
-      { key: 'etl', label: 'ETL 触发', path: '/admin/etl', icon: 'Loading', priority: 7 }
+      { key: 'xref-reorder', labelKey: 'nav.xrefReorder', path: '/admin/xrefs/reorder', icon: 'Sort', priority: 6.5 },
+      { key: 'etl', labelKey: 'nav.etlTrigger', path: '/admin/etl', icon: 'Loading', priority: 7 }
     )
     if (isAdmin()) {
-      items.push({ key: 'users', label: '用户管理', path: '/admin/users', icon: 'User', priority: 8 })
+      items.push({ key: 'users', labelKey: 'nav.userManage', path: '/admin/users', icon: 'User', priority: 8 })
     }
     // admin 低优 (可收纳, 宽度不够时进 "更多" 下拉)
     items.push(
-      { key: 'adv-compare', label: '高级对比', path: '/admin/compare', icon: 'DataBoard', priority: 9 },
-      { key: 'perf', label: '性能', path: '/admin/perf', icon: 'TrendCharts', priority: 10 },
-      { key: 'errors', label: '错误', path: '/admin/errors', icon: 'Warning', priority: 11 },
-      { key: 'api', label: 'API', path: '/admin/api-docs', icon: 'Document', priority: 12 },
-      { key: 'help', label: '帮助', path: '/admin/help', icon: 'QuestionFilled', priority: 13 }
+      { key: 'adv-compare', labelKey: 'nav.advCompare', path: '/admin/compare', icon: 'DataBoard', priority: 9 },
+      { key: 'perf', labelKey: 'nav.perf', path: '/admin/perf', icon: 'TrendCharts', priority: 10 },
+      { key: 'errors', labelKey: 'nav.errors', path: '/admin/errors', icon: 'Warning', priority: 11 },
+      { key: 'api', labelKey: 'nav.api', path: '/admin/api-docs', icon: 'Document', priority: 12 },
+      { key: 'help', labelKey: 'nav.help', path: '/admin/help', icon: 'QuestionFilled', priority: 13 }
     )
   }
   return items
@@ -150,8 +152,9 @@ function measureButtons() {
 const visibleNavItems = computed(() => {
   const visible = allNavItems.value.filter((i) => !overflowKeys.value.has(i.key))
   // 如果有溢出项, 在主顶栏末尾插入 "更多" 按钮 (虚拟项)
+  // V24-F103 i18n 残留修复: labelKey 改为 i18n key (nav.more)
   if (overflowKeys.value.size > 0 && allNavItems.value.length > 0) {
-    visible.push({ key: '__more__', label: '更多', icon: 'More', priority: 99 } as any)
+    visible.push({ key: '__more__', labelKey: 'nav.more', icon: 'More', priority: 99 } as any)
   }
   return visible
 })
@@ -365,7 +368,7 @@ function doGlobalSearch() {
     <button
       class="sm:hidden -ml-1 p-2 hover:bg-[var(--color-bg-hover)] flex items-center"
       @click="mobileNavOpen = true"
-      aria-label="打开导航菜单"
+      :aria-label="t('common.aria.openNav')"
       :aria-expanded="mobileNavOpen"
     >
       <el-icon aria-hidden="true"><Menu /></el-icon>
@@ -378,13 +381,13 @@ function doGlobalSearch() {
       :fetch-suggestions="queryGlobalSuggestions"
       :trigger-on-focus="false"
       :debounce="300"
-      placeholder="搜索产品 / OEM / 机型"
+      :placeholder="t('common.aria.searchPlaceholder')"
       size="small"
       class="hidden md:block w-60 ml-3"
       @keyup.enter="doGlobalSearch"
       @select="selectGlobalSuggestion"
       clearable
-      aria-label="全局搜索框, 输入时显示联想建议, 回车跳转聚合搜索页"
+      :aria-label="t('common.aria.searchBox')"
     >
       <template #prefix>
         <el-icon aria-hidden="true"><Search /></el-icon>
@@ -399,7 +402,7 @@ function doGlobalSearch() {
     <nav
       ref="navContainerRef"
       class="hidden sm:flex items-center gap-1 ml-3 flex-1 min-w-0 overflow-hidden"
-      aria-label="主导航"
+      :aria-label="t('common.aria.mainNav')"
     >
       <template v-for="item in visibleNavItems" :key="item.key">
         <!-- 字典管理下拉 (P1.3 + P2.2 共 8 个) -->
@@ -414,11 +417,11 @@ function doGlobalSearch() {
               'px-1.5 py-1 text-xs hover:bg-[var(--color-bg-hover)] whitespace-nowrap flex items-center',
               route.path.startsWith('/admin/dict/') ? 'text-accent font-medium' : 'text-neutral-700'
             ]"
-            :aria-label="`展开${item.label}下拉菜单`"
+            :aria-label="t(item.labelKey)"
             :aria-expanded="false"
           >
             <el-icon class="mr-1" aria-hidden="true"><component :is="item.icon" /></el-icon>
-            {{ item.label }}
+            {{ t(item.labelKey) }}
             <el-icon class="ml-1" aria-hidden="true"><ArrowDown /></el-icon>
           </button>
           <template #dropdown>
@@ -429,7 +432,7 @@ function doGlobalSearch() {
                 :command="d.path"
                 :disabled="route.path === d.path"
               >
-                {{ d.label }}
+                {{ t(d.labelKey) }}
               </el-dropdown-item>
             </el-dropdown-menu>
           </template>
@@ -442,11 +445,11 @@ function doGlobalSearch() {
           <button
             :data-nav-key="item.key"
             class="px-1.5 py-1 text-xs hover:bg-[var(--color-bg-hover)] whitespace-nowrap flex items-center"
-            aria-label="展开更多功能菜单"
+            :aria-label="t('common.aria.expandMore')"
             :aria-expanded="false"
           >
             <el-icon class="mr-1" aria-hidden="true"><More /></el-icon>
-            更多
+            {{ t('nav.more') }}
             <el-tag
               v-if="overflowItems.length > 0"
               size="small"
@@ -464,7 +467,7 @@ function doGlobalSearch() {
                 :disabled="m.path && route.path === m.path"
               >
                 <el-icon class="mr-2" aria-hidden="true"><component :is="m.icon" /></el-icon>
-                {{ m.label }}
+                {{ t(m.labelKey) }}
               </el-dropdown-item>
             </el-dropdown-menu>
           </template>
@@ -477,11 +480,11 @@ function doGlobalSearch() {
             'px-1.5 py-1 text-xs hover:bg-[var(--color-bg-hover)] whitespace-nowrap flex items-center',
             item.path && route.path === item.path ? 'text-accent font-medium' : 'text-neutral-700'
           ]"
-          :aria-label="item.label"
+          :aria-label="t(item.labelKey)"
           :aria-current="item.path && route.path === item.path ? 'page' : undefined"
         >
           <el-icon class="mr-1" aria-hidden="true"><component :is="item.icon" /></el-icon>
-          {{ item.label }}
+          {{ t(item.labelKey) }}
         </button>
       </template>
     </nav>
@@ -490,19 +493,20 @@ function doGlobalSearch() {
     <button
       @click="theme.toggle()"
       class="hidden sm:flex px-2 py-1 text-sm hairline hover:bg-[var(--color-bg-hover)] items-center gap-1"
-      :title="theme.mode === 'dark' ? '切换到浅色' : '切换到深色'"
-      aria-label="主题切换"
+      :title="theme.mode === 'dark' ? t('common.aria.switchToLight') : t('common.aria.switchToDark')"
+      :aria-label="t('common.aria.themeToggle')"
       :aria-pressed="theme.mode === 'dark'"
     >
       <el-icon aria-hidden="true"><Moon v-if="theme.mode === 'light'" /><Sunny v-else /></el-icon>
-      <span class="hidden sm:inline">{{ theme.mode === 'dark' ? '深色' : '浅色' }}</span>
+      <span class="hidden sm:inline">{{ t(`theme.${theme.mode}`) }}</span>
     </button>
     <!-- P2.6: 语言切换按钮 (中英双语, 移动端由 drawer 接管) -->
     <button
+      data-testid="locale-toggle"
       @click="toggleLocale"
       class="hidden sm:flex px-2 py-1 text-sm hairline hover:bg-[var(--color-bg-hover)] items-center gap-1"
-      :aria-label="`切换语言, 当前 ${locale === 'zh-CN' ? '中文' : 'English'}`"
-      title="切换语言"
+      :aria-label="t('common.aria.switchLang', { lang: locale === 'zh-CN' ? '中文' : 'English' })"
+      :title="t('common.aria.switchLang', { lang: locale === 'zh-CN' ? '中文' : 'English' })"
     >
       <el-icon aria-hidden="true"><Promotion /></el-icon>
       <span class="hidden sm:inline">{{ locale === 'zh-CN' ? '中' : 'EN' }}</span>
@@ -517,7 +521,7 @@ function doGlobalSearch() {
     >
       <button
         class="px-2 py-1 text-sm hairline hover:bg-[var(--color-bg-hover)] flex items-center gap-1"
-        :aria-label="`用户菜单: ${user.username}, 角色 ${user.role}`"
+        :aria-label="t('common.aria.userMenu', { username: user.username, role: user.role })"
         :aria-expanded="false"
       >
         <el-icon aria-hidden="true"><User /></el-icon>
@@ -533,8 +537,8 @@ function doGlobalSearch() {
       </button>
       <template #dropdown>
         <el-dropdown-menu>
-          <el-dropdown-item command="changePassword">修改密码</el-dropdown-item>
-          <el-dropdown-item command="logout" divided>退出登录</el-dropdown-item>
+          <el-dropdown-item command="changePassword">{{ t('auth.changePassword') }}</el-dropdown-item>
+          <el-dropdown-item command="logout" divided>{{ t('auth.logout') }}</el-dropdown-item>
         </el-dropdown-menu>
       </template>
     </el-dropdown>
@@ -543,10 +547,10 @@ function doGlobalSearch() {
       v-else
       @click="toggleAdmin"
       class="hidden sm:flex px-2 py-1 text-sm hairline hover:bg-[var(--color-bg-hover)] items-center gap-1"
-      :aria-label="isAdminPath ? '退出后台' : '进入后台登录'"
+      :aria-label="isAdminPath ? t('nav.exitAdmin') : t('common.aria.enterAdminLogin')"
     >
       <el-icon aria-hidden="true"><Lock v-if="!isAdminPath" /><Unlock v-else /></el-icon>
-      {{ isAdminPath ? '退出后台' : '进入后台' }}
+      {{ isAdminPath ? t('nav.exitAdmin') : t('nav.enterAdmin') }}
     </button>
   </header>
 
@@ -559,7 +563,7 @@ function doGlobalSearch() {
     size="85%"
     :with-header="false"
     class="sm:hidden"
-    aria-label="移动端导航菜单"
+    :aria-label="t('common.aria.mobileNav')"
   >
     <div
       class="h-full flex flex-col p-4"
@@ -572,13 +576,13 @@ function doGlobalSearch() {
         :fetch-suggestions="queryGlobalSuggestions"
         :trigger-on-focus="false"
         :debounce="300"
-        placeholder="搜索产品 / OEM / 机型"
+        :placeholder="t('common.aria.searchPlaceholder')"
         size="default"
         class="mb-4"
         @keyup.enter="doGlobalSearch"
         @select="selectGlobalSuggestion"
         clearable
-        aria-label="全局搜索框, 输入时显示联想建议, 回车跳转聚合搜索页"
+        :aria-label="t('common.aria.searchBox')"
       >
         <template #prefix>
           <el-icon aria-hidden="true"><Search /></el-icon>
@@ -587,22 +591,22 @@ function doGlobalSearch() {
           <span class="font-mono text-xs">{{ item.value }}</span>
         </template>
       </el-autocomplete>
-      <nav class="flex flex-col gap-1 flex-1" aria-label="移动端主导航">
+      <nav class="flex flex-col gap-1 flex-1" :aria-label="t('common.aria.mobileNav')">
         <!-- P-Admin-UX v3: 移动端 drawer 展示全部按钮 (无视 overflow), 简化交互 -->
         <template v-for="item in allNavItems" :key="'m-' + item.key">
           <!-- 字典管理: drawer 内展开为分组列表, 避免嵌套 dropdown -->
           <div v-if="item.dropdown === 'dict'" class="flex flex-col">
-            <div class="text-xs uppercase px-2 py-1 text-muted">字典管理</div>
+            <div class="text-xs uppercase px-2 py-1 text-muted">{{ t('nav.dictGroup') }}</div>
             <button
               v-for="d in dictItems"
               :key="d.path"
               @click="goDict(d.path); closeMobileNav()"
               class="px-2 py-2 text-left text-sm flex items-center hover:bg-[var(--color-bg-hover)]"
               :class="route.path === d.path ? 'text-accent font-medium' : ''"
-              :aria-label="d.label"
+              :aria-label="t(d.labelKey)"
               :aria-current="route.path === d.path ? 'page' : undefined"
             >
-              {{ d.label }}
+              {{ t(d.labelKey) }}
             </button>
           </div>
           <button
@@ -610,11 +614,11 @@ function doGlobalSearch() {
             @click="go(item); closeMobileNav()"
             class="px-2 py-2 text-left text-sm flex items-center hover:bg-[var(--color-bg-hover)]"
             :class="item.path && route.path === item.path ? 'text-accent font-medium' : ''"
-            :aria-label="item.label"
+            :aria-label="t(item.labelKey)"
             :aria-current="item.path && route.path === item.path ? 'page' : undefined"
           >
             <el-icon class="mr-2" aria-hidden="true"><component :is="item.icon" /></el-icon>
-            {{ item.label }}
+            {{ t(item.labelKey) }}
           </button>
         </template>
       </nav>
@@ -623,15 +627,15 @@ function doGlobalSearch() {
         <button
           @click="theme.toggle(); closeMobileNav()"
           class="px-2 py-2 text-left text-sm flex items-center hover:bg-[var(--color-bg-hover)]"
-          :aria-label="theme.mode === 'dark' ? '切换到浅色' : '切换到深色'"
+          :aria-label="theme.mode === 'dark' ? t('common.aria.switchToLight') : t('common.aria.switchToDark')"
         >
           <el-icon class="mr-2" aria-hidden="true"><Moon v-if="theme.mode === 'light'" /><Sunny v-else /></el-icon>
-          {{ theme.mode === 'dark' ? '浅色' : '深色' }}
+          {{ theme.mode === 'dark' ? t('theme.light') : t('theme.dark') }}
         </button>
         <button
           @click="toggleLocale(); closeMobileNav()"
           class="px-2 py-2 text-left text-sm flex items-center hover:bg-[var(--color-bg-hover)]"
-          :aria-label="`切换语言, 当前 ${locale === 'zh-CN' ? '中文' : 'English'}`"
+          :aria-label="t('common.aria.switchLang', { lang: locale === 'zh-CN' ? '中文' : 'English' })"
         >
           <el-icon class="mr-2" aria-hidden="true"><Promotion /></el-icon>
           {{ locale === 'zh-CN' ? 'English' : '中文' }}
@@ -647,19 +651,19 @@ function doGlobalSearch() {
           v-if="user"
           @click="handleLogout(); closeMobileNav()"
           class="px-2 py-2 text-left text-sm flex items-center text-red-500 hover:bg-[var(--color-bg-hover)]"
-          aria-label="退出登录"
+          :aria-label="t('auth.logout')"
         >
           <el-icon class="mr-2" aria-hidden="true"><SwitchButton /></el-icon>
-          退出登录
+          {{ t('auth.logout') }}
         </button>
         <button
           v-else
           @click="toggleAdmin(); closeMobileNav()"
           class="px-2 py-2 text-left text-sm flex items-center hover:bg-[var(--color-bg-hover)]"
-          :aria-label="isAdminPath ? '退出后台' : '进入后台登录'"
+          :aria-label="isAdminPath ? t('nav.exitAdmin') : t('common.aria.enterAdminLogin')"
         >
           <el-icon class="mr-2" aria-hidden="true"><Lock v-if="!isAdminPath" /><Unlock v-else /></el-icon>
-          {{ isAdminPath ? '退出后台' : '进入后台' }}
+          {{ isAdminPath ? t('nav.exitAdmin') : t('nav.enterAdmin') }}
         </button>
       </div>
     </div>

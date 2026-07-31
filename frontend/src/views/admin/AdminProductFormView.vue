@@ -570,10 +570,10 @@ onBeforeUnmount(() => {
 <template>
   <div class="p-3 w-full" v-loading="loading">
     <div class="flex items-center gap-2 mb-3">
-      <el-button @click="router.back()" size="small">返回</el-button>
+      <el-button @click="router.back()" size="small">{{ t('common.back') }}</el-button>
       <h1 class="text-lg font-medium">{{ isEdit ? t('admin.productformview.string.edit_product_id', { id: productId }) : t('admin.productformview.templatetext.add_product') }}</h1>
       <div class="flex-1" />
-      <el-button type="primary" @click="save" :loading="saving">保存</el-button>
+      <el-button type="primary" @click="save" :loading="saving">{{ t('common.save') }}</el-button>
     </div>
 
     <!-- V24-F101 (P2-2, 规则 8): 编辑模式加载失败时显示 error UI + 重试, 不显示空表单 -->
@@ -581,11 +581,11 @@ onBeforeUnmount(() => {
       v-if="loadError"
       icon="error"
       :title="loadError"
-      sub-title="无法加载产品数据, 请重试或返回列表"
+      :sub-title="t('admin.productformview.string.load_failed_subtitle')"
     >
       <template #extra>
-        <el-button type="primary" @click="load" :loading="loading">重试</el-button>
-        <el-button @click="router.back()">返回列表</el-button>
+        <el-button type="primary" @click="load" :loading="loading">{{ t('common.retry') }}</el-button>
+        <el-button @click="router.back()">{{ t('admin.productformview.string.back_to_list') }}</el-button>
       </template>
     </el-result>
 
@@ -631,7 +631,7 @@ onBeforeUnmount(() => {
         </el-collapse-item>
 
         <!-- 分区 2: 交叉引用 -->
-        <el-collapse-item :title="`t('admin.productformview.string.cross_reference_count', { count: form.crossReferences.length })`" name="2">
+        <el-collapse-item :title="t('admin.productformview.string.cross_reference_count', { count: form.crossReferences.length })" name="2">
           <div v-for="(x, i) in form.crossReferences" :key="x._uid" class="flex gap-2 mb-2">
             <!-- Day 10: P1.3 自动补全 — 字典为空时降级为自由输入 -->
             <el-autocomplete
@@ -653,9 +653,9 @@ onBeforeUnmount(() => {
               :placeholder="t('admin.productformview.placeholder.oem_input_auto')" style="width: 240px" clearable size="small"
               :trigger-on-focus="true" :debounce="200" />
             <el-input v-model="x.productName1" :placeholder="t('common.field.product_name')" size="small" />
-            <el-button text type="danger" @click="removeXref(i)">删除</el-button>
+            <el-button text type="danger" @click="removeXref(i)">{{ t('common.delete') }}</el-button>
           </div>
-          <el-button @click="addXref" size="small">+ 添加交叉引用</el-button>
+          <el-button @click="addXref" size="small">{{ t('admin.productformview.string.add_xref') }}</el-button>
         </el-collapse-item>
 
         <!-- 分区 3: 尺寸 -->
@@ -728,7 +728,7 @@ onBeforeUnmount(() => {
                 :placeholder="t('common.field.auto_calculated')"
                 class="!w-32"
               >
-                <template #append>只读</template>
+                <template #append>{{ t('common.readonly') }}</template>
               </el-input>
               <FieldHelpPopover field-key="volumePerCartonM3" />
             </el-form-item>
@@ -759,14 +759,14 @@ onBeforeUnmount(() => {
                 :placeholder="t('common.field.auto_calculated')"
                 class="!w-32"
               >
-                <template #append>只读</template>
+                <template #append>{{ t('common.readonly') }}</template>
               </el-input>
             </el-form-item>
           </div>
         </el-collapse-item>
 
         <!-- 分区 7: 车型 (P2.2: machine/engine 字段全部 typeahead) -->
-        <el-collapse-item :title="`t('admin.productformview.string.machine_applications_count', { count: form.machineApplications.length })`" name="7">
+        <el-collapse-item :title="t('admin.productformview.string.machine_applications_count', { count: form.machineApplications.length })" name="7">
           <div v-for="(m, i) in form.machineApplications" :key="m._uid" class="grid grid-cols-5 gap-2 mb-2">
             <!-- 机型品牌: typeahead -->
             <el-autocomplete v-model="m.machineBrand" :fetch-suggestions="queryMachineBrand"
@@ -787,7 +787,7 @@ onBeforeUnmount(() => {
               <el-button text type="danger" @click="removeApp(i)">×</el-button>
             </div>
           </div>
-          <el-button @click="addApp" size="small">+ 添加车型</el-button>
+          <el-button @click="addApp" size="small">{{ t('admin.productformview.string.add_machine_app') }}</el-button>
         </el-collapse-item>
 
         <!-- V2 Task 3.3.1: 分区 8 图片 (主图区 + 详情图区分层, 仅编辑) -->

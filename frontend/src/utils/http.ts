@@ -121,7 +121,13 @@ export const ERROR_CODE_I18N: Record<string, string> = {
   IMAGE_PRIMARY_DUPLICATE: '主图已存在 (每个产品仅允许 1 张主图)',
   IMAGE_DETAIL_SLOT_DUPLICATE: '图片详情槽位重复',
   MR1_NOT_FOUND: 'MR.1 编号不存在',
-  OEM3_NOT_FOUND: 'OEM 3 编号不存在'
+  OEM3_NOT_FOUND: 'OEM 3 编号不存在',
+  // ===== 文件上传错误码 (3 个) =====
+  //   场景: 后端 magic number 校验 / 文件大小限制 / 空文件检测
+  INVALID_FILE_TYPE: '文件格式无效',
+  FILE_TOO_LARGE: '文件过大',
+  EMPTY_FILE: '文件为空',
+  MR1_EMPTY: 'mr_1 不能为空'
 }
 
 /**

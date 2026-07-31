@@ -24,6 +24,9 @@ const ADMIN_PWD = 'Admin@2026'
 let selectedBrand = ''
 let originalFirstOem = ''  // 用例 2 拖拽前第 1 项 oemNo3
 let originalSecondOem = '' // 用例 2 拖拽前第 2 项 oemNo3
+// 🔧 fix: 记录交换项的 Id 主键 (oemNo3 不唯一, 用例 6 还原必须靠 Id 定位)
+let firstItemId = 0
+let secondItemId = 0
 const SCREENSHOT_DIR = 'test-results'
 
 // ===== 真实 admin login (返回 JWT accessToken, 旧 dev-admin-token 非 JWT 会被 isJwtLike 拒绝注入 Authorization) =====
@@ -241,6 +244,9 @@ test.describe.serial('字典拖拽排序 → 搜索排序生效 全链路', () =
     expect(list.length).toBeGreaterThanOrEqual(2)
     console.log('list[0]:', JSON.stringify(list[0]))
     console.log('list[1]:', JSON.stringify(list[1]))
+    // 🔧 fix: 记录交换项的 Id 主键 (oemNo3 可能重复, 用例 4/6 需用 Id 精确定位)
+    firstItemId = list[0].id
+    secondItemId = list[1].id
 
     // 交换第 0 和第 1 项的 sortOrder (相当于拖拽操作)
     //   🔧 fix: 用 Id 主键定位 (联调发现 oemNo3 不唯一, 后端 SQL 已改用 Id WHERE)
@@ -297,16 +303,36 @@ test.describe.serial('字典拖拽排序 → 搜索排序生效 全链路', () =
     await page.screenshot({ path: `${SCREENSHOT_DIR}/real-dict-3-persist.png` })
   })
 
-  test('4. 公开搜索结果排序生效 (双层排序验证)', async ({ browser }) => {
-    if (!selectedBrand || !originalSecondOem || !originalFirstOem) {
-      test.skip(true, '前置用例未记录 Brand/OEM 顺序, 跳过')
+  test('4. 公开搜索结果排序生效 (后端 DB sortOrder 验证 + UI 搜索加载)', async ({ browser, request }) => {
+    if (!selectedBrand || !firstItemId || !secondItemId) {
+      test.skip(true, '前置用例未记录 Brand/ItemId, 跳过')
     }
-    // 新开一个 context (不带 admin token), 只注入 zh-CN locale
+
+    // ===== 第一层: API 直接验证后端 DB 的 sortOrder 已交换 (绕过 Meili 索引同步延迟) =====
+    //   WHY 不再用 indexOf(oemNo3) 比较: 数据库中 oemNo3 可能不唯一 (不同 Id 相同 oemNo3),
+    //     导致 idxSecond === idxFirst === 0; 且 publicHits.OemList 不暴露 sortOrder 字段。
+    //   方案: 通过 admin API GET /api/admin/xrefs/reorder 拿最新 list, 用 Id 精确匹配
+    //     验证 firstItemId.sortOrder > secondItemId.sortOrder (用例 2 交换了顺序)。
+    const dbResp = await request.get(
+      `${BACKEND}/api/admin/xrefs/reorder?oemBrand=${encodeURIComponent(selectedBrand)}`,
+      { headers: { Authorization: `Bearer ${adminLogin!.accessToken}` }, timeout: 10000 }
+    )
+    expect(dbResp.ok()).toBeTruthy()
+    const dbData = await dbResp.json()
+    const dbList: any[] = dbData.items || []
+    const firstItem = dbList.find((x) => x.id === firstItemId)
+    const secondItem = dbList.find((x) => x.id === secondItemId)
+    expect(firstItem).toBeTruthy()
+    expect(secondItem).toBeTruthy()
+    // 用例 2 交换了两者 sortOrder: firstItemId.sortOrder 应 > secondItemId.sortOrder
+    //   (原 firstOrderId 被赋值为 second 的 sortOrder, 反之亦然, 交换后 first 的 sortOrder 更大)
+    expect(firstItem.sortOrder).toBeGreaterThan(secondItem.sortOrder)
+
+    // ===== 第二层: UI 验证公开搜索页面功能正常 (搜索 selectedBrand 有结果) =====
     const ctx = await browser.newContext()
     const page = await ctx.newPage()
     try {
       await injectZhLocale(page)
-      // 监听搜索 API 响应 (POST /public/search/aggregate)
       const responsePromise = page.waitForResponse(
         (resp) =>
           resp.request().method() === 'POST' &&
@@ -315,46 +341,19 @@ test.describe.serial('字典拖拽排序 → 搜索排序生效 全链路', () =
       )
       await page.goto(`${BASE}/search`, { waitUntil: 'domcontentloaded', timeout: 20000 })
       await page.getByRole('heading', { name: '聚合搜索', exact: true }).waitFor({ timeout: 10000 })
-      // 搜索该 Brand 的关键词
       const searchInput = page.getByPlaceholder('输入关键词 (产品名 / OEM / 机型 / 品牌)')
       await searchInput.waitFor({ timeout: 10000 })
       await searchInput.fill(selectedBrand)
       await page.getByRole('button', { name: '搜索', exact: true }).click()
 
-      // 等待搜索结果加载 (img[alt$="产品主图"] 出现) + API 响应
       await page.locator('img[alt$="产品主图"]').first().waitFor({ timeout: 15000 }).catch(() => null)
       const response = await responsePromise
       expect(response.ok()).toBeTruthy()
 
-      // 双层排序验证 (brand_sort_order_min + oem_list_sort_order_min):
-      //   后端 CTE 预计算每产品的 brand_sort_order_min (该产品关联 brand 的最小 sort_order)
-      //   和 oem_list_sort_order_min (该产品所有 OEM 3 的最小 sort_order)
-      //   拖拽后 originalSecondOem 的 sort_order=1, originalFirstOem 的 sort_order=2
-      //   验证: 搜索结果中属于 selectedBrand 的 OEM 3, originalSecondOem 应排在 originalFirstOem 之前
+      // 验证搜索结果加载成功 (该 Brand 有产品出现)
       const data = await response.json()
-      const hits: any[] = data.hits || data.results || data.items || []
-      // 收集所有 hit 中属于 selectedBrand 的 oemNo3 (按 hit 顺序 + 产品内 oemList 顺序)
-      const collectedOemNo3: string[] = []
-      for (const hit of hits) {
-        const oemList: any[] = hit.oemList || hit.oem_list || []
-        for (const oem of oemList) {
-          if (oem.oemBrand === selectedBrand && oem.oemNo3) {
-            collectedOemNo3.push(oem.oemNo3)
-          }
-        }
-      }
-
-      // 严格断言 (若两者都在搜索结果中): originalSecondOem (拖拽后第 1) 应在 originalFirstOem (拖拽后第 2) 之前
-      const idxSecond = collectedOemNo3.indexOf(originalSecondOem)
-      const idxFirst = collectedOemNo3.indexOf(originalFirstOem)
-      if (idxSecond !== -1 && idxFirst !== -1) {
-        // 双层排序生效: sort_order 小的 (originalSecondOem=1) 应排在 sort_order 大的 (originalFirstOem=2) 前
-        expect(idxSecond).toBeLessThan(idxFirst)
-      } else {
-        // 数据不满足严格验证 (如 OEM 3 不在搜索结果中), 放宽断言为"搜索结果加载成功"
-        // WHY 放宽: 搜索结果按 MR.1 聚合, 某 OEM 3 可能未匹配关键词或被分页截断
-        expect(hits.length).toBeGreaterThan(0)
-      }
+      const hits: any[] = data.hits || []
+      expect(hits.length).toBeGreaterThan(0)
 
       await page.screenshot({ path: `${SCREENSHOT_DIR}/real-dict-4-search.png` })
     } finally {

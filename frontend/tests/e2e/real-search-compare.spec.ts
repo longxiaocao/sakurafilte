@@ -30,9 +30,30 @@
 //     测试环境若为纯前端 dev (5173), Vite history fallback 走 SPA 兜底路由 PublicProductView.vue。
 // ============================================================================
 
-import { test, expect, type Page } from '@playwright/test'
+import { test, expect, type Page, type APIRequestContext } from '@playwright/test'
 
 const BASE = process.env.BASE_URL || 'http://localhost:5175'
+const BACKEND = process.env.BACKEND_URL || 'http://localhost:5148'
+
+// ===== 通过 API 获取与 excludeId 不同的产品 ID (修复用例4产品 ID 重复问题) =====
+//   WHY 不依赖 UI 点击第 2 个搜索结果: 聚合搜索按 MR.1 聚合, 同一产品的不同 OEM
+//   在详情页按 oem 查询时会命中同一 Product.Id, 导致 secondProductId === firstProductId,
+//   列调序无意义 (moveRight 在单列时 disabled)。
+//   方案: 直接调 /api/public/by-type 拿已上架产品列表, 取第一个 != excludeId 的 Id。
+async function pickDistinctProductId(request: APIRequestContext, excludeId: string | null): Promise<string | null> {
+  const resp = await request.get(`${BACKEND}/api/public/by-type`, { timeout: 15000 })
+  if (!resp.ok()) return null
+  const data = await resp.json()
+  const groups: any[] = data.groups || []
+  for (const g of groups) {
+    const products: any[] = g.products || []
+    for (const p of products) {
+      const idStr = String(p.id)
+      if (idStr !== excludeId) return idStr
+    }
+  }
+  return null
+}
 
 // 复用现有模式 (public-search-flow.spec.ts v30-22 修复):
 //   Playwright chromium 默认 en-US, 按钮文案变 "Search" 导致 getByRole 找不到;
@@ -155,31 +176,15 @@ test.describe.serial('真实搜索→详情→对比→列序持久化 E2E (用�
     await page.screenshot({ path: 'test-results/real-search-3-compare.png', fullPage: true })
   })
 
-  test('4. 对比页列调序 → 刷新后顺序持久化', async ({ page }) => {
+  test('4. 对比页列调序 → 刷新后顺序持久化', async ({ request, page }) => {
     expect(firstProductId).not.toBeNull()
     await injectZhLocale(page)
 
-    // 为验证列调序需 ≥2 列, 先获取第 2 个产品 ID:
-    //   重新搜索 filter → 点第 2 个结果 → 详情页"加入对比" → 从 /compare?ids=Y 解析
-    await page.goto(`${BASE}/search`, { waitUntil: 'domcontentloaded', timeout: 20000 })
-    await page.getByPlaceholder('输入关键词 (产品名 / OEM / 机型 / 品牌)').fill('filter')
-    await page.getByRole('button', { name: '搜索', exact: true }).click()
-    await page.locator('img[alt$="产品主图"]').nth(1).waitFor({ timeout: 15000 })
-
-    await Promise.all([
-      page.waitForURL(/\/products\//, { timeout: 20000 }),
-      page.locator('img[alt$="产品主图"]').nth(1).click()
-    ])
-    await page.locator('h1').first().waitFor({ timeout: 15000 })
-
-    const compareBtn2 = page.getByRole('button', { name: '加入对比', exact: true })
-    await compareBtn2.waitFor({ timeout: 15000 })
-    await Promise.all([
-      page.waitForURL(/\/compare/, { timeout: 20000 }),
-      compareBtn2.click()
-    ])
-    const ids2 = new URL(page.url()).searchParams.get('ids') || ''
-    secondProductId = ids2.split(',')[0] || null
+    // 🔧 fix: 通过 API 直接获取与 firstProductId 不同的产品 ID
+    //   WHY 不再走 UI 点击第 2 个搜索结果: 聚合搜索按 MR.1 聚合, 第 1/2 个卡片的
+    //   primary oem 可能关联同一 Product.Id, 导致 secondProductId === firstProductId,
+    //   列调序无意义。改用 /api/public/by-type 拿已上架产品列表, 确保拿到不同 Id。
+    secondProductId = await pickDistinctProductId(request, firstProductId)
     expect(secondProductId).not.toBeNull()
     // 确保 2 个不同产品 (否则列调序无意义, moveRight 在单列时 disabled)
     expect(secondProductId).not.toBe(firstProductId)

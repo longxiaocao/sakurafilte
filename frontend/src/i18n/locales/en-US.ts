@@ -16,10 +16,10 @@ export default {
 
         outer_carton: 'Outer Carton',
         outer_carton_pcs: 'Outer Carton/pcs',
-        outer_carton_kg: 'Outer Carton 重 (kg)',
-        outer_carton_length_mm: 'Outer Carton 长 (mm)',
-        outer_carton_width_mm: 'Outer Carton 宽 (mm)',
-        outer_carton_height_mm: 'Outer Carton 高 (mm)',
+        outer_carton_kg: 'Outer Carton Weight (kg)',
+        outer_carton_length_mm: 'Outer Carton Length (mm)',
+        outer_carton_width_mm: 'Outer Carton Width (mm)',
+        outer_carton_height_mm: 'Outer Carton Height (mm)',
         crossref_vehicle_model: 'CrossRef / Vehicle Model',
         oem_cross_reference: 'OEM Cross-Reference',
         machine_applications: 'Machine Applications',
@@ -240,6 +240,11 @@ export default {
         on_etl_file: 'Drop here to fill ETL file path',
 
         cancel_signal_sent_code: 'Cancel signal sent (code: {code}), task will terminate soon',
+        // V24-F103 i18n residue fix: full rebuild Meilisearch index text
+        full_rebuild: 'Full Rebuild',
+        full_rebuild_tip: 'Clears all Meilisearch documents and re-syncs from PostgreSQL. Mutually exclusive with ETL tasks.',
+        full_rebuild_alert_title: 'Execution will clear all Meilisearch documents and re-sync. Search will be briefly unavailable during this period.',
+        full_rebuild_alert_desc: 'Use cases: force rebuild after index schema change / data drift repair / schema field update',
       },
       success: {
         dry_run_validation_completed: 'dry-run validation completed',
@@ -321,46 +326,77 @@ export default {
     },
     helpview: {
       string: {
-        xlsx_to: '拖拽 XLSX to 此',
+        xlsx_to: 'Drag XLSX here',
         search: 'Search',
-        alternative_brand_cross_references: 'Alternative Brand 厂家名 (cross_references.oem_brand), e.g.: Mann, Bosch, Mahle',
+        alternative_brand_cross_references: 'Alternative brand manufacturer (cross_references.oem_brand), e.g.: Mann, Bosch, Mahle',
 
-        product_name_e_g: 'Product 主Name (e.g.: Oil Filter, Fuel Filter), 影响frontend Product',
+        product_name_e_g: 'Product main name (e.g.: Oil Filter, Fuel Filter), affects frontend product page',
 
-        product_name_model_back: 'Product 副Name/Model Back 缀 (e.g.: OF100)',
-        category_oil_fuel_air: '5 固定Category: oil / fuel / air / cabin / others, sort_order 决定frontend Sort Order',
-        type_type: 'Type (Type)',
-        alternative_brand_oem_number: 'Alternative Brand OEM Number (5.27M distinct), 字典化便于 typeahead 联想',
-        filter_media_name_model: 'Filter Media Name + Model (2 Field 字典), e.g.: Cellulose / A020',
-        media_media: 'Media (Media)',
-        machine_brand_model_name: 'Machine Brand + Model + Name, 按 4 大类聚合: Agriculture / Commercial / Construction / others',
-        machine_model_machine: 'Machine Model (Machine)',
+        product_name_model_back: 'Product sub-name/model suffix (e.g.: OF100)',
+        category_oil_fuel_air: '5 fixed categories: oil / fuel / air / cabin / others, sort_order determines frontend sort order',
+        type_type: 'Type',
+        alternative_brand_oem_number: 'Alternative brand OEM number (5.27M distinct), dictionary for typeahead',
+        filter_media_name_model: 'Filter media name + model (2-field dict), e.g.: Cellulose / A020',
+        media_media: 'Media',
+        machine_brand_model_name: 'Machine brand + model + name, aggregated by 4 categories: Agriculture / Commercial / Construction / others',
+        machine_model_machine: 'Machine Model',
         engine_brand_model: 'Engine Brand + Model',
-        engine_engine: 'Engine (Engine)',
-        for_input_oem_number: 'for 什么Input OEM Number Back 无法 Search?',
-        check_if_oem_is: 'Check if 该 OEM is in products.oem2 field (Note: not cross_references.oem_brand). Public Page uses oemNoDisplay / oem2, Admin Search uses any field.',
-        oem_yes_no_in: '检查该 OEM Yes No in Product Table oem2 Field 里 (注意: 不Yes cross_references.oem_brand). frontend Published 用 oemNoDisplay',
-        for_add_product_typeahead: 'for 什么 Add Product 时 typeahead 联想不to 想要 Value?',
+        engine_engine: 'Engine',
+        for_input_oem_number: 'Why does inputting OEM number return no search results?',
+        check_if_oem_is: 'Check if the OEM is in products.oem2 field (Note: not cross_references.oem_brand). Public page uses oemNoDisplay / oem2, Admin search uses any field.',
+        oem_yes_no_in: 'Check if the OEM is in product table oem2 field (Note: not cross_references.oem_brand). Frontend published uses oemNoDisplay',
+        for_add_product_typeahead: 'Why does typeahead on Add Product not suggest the desired value?',
         dictionary_is_maintained_in: 'Dictionary is maintained in admin, need to add value in "Dictionary Management" → target dict → Add. typeahead only returns existing values (top 20 by sort_order).',
         dictionary_management: 'Dictionary Management',
-        dimensions_search_h_back: 'Dimensions Search (H1 = 100) Back 0 items Result, but 库里有这pcs Product?',
-        dimensions_search_default_mm: 'Dimensions Search Default 容差 ±5mm (固定, 不可改), 即 95-105 之间. 如果Product H1 = 110, 不会命. 改用更小 H1 Value or Precise ID Query.',
-        etl_trigger_back_in: 'ETL Trigger Back 卡in reading Status?',
+        dimensions_search_h_back: 'Dimensions search (H1 = 100) returns 0 results, but the product exists in DB?',
+        dimensions_search_default_mm: 'Dimensions search default tolerance ±5mm (fixed, not configurable), i.e. 95-105. If product H1 = 110, no match. Use smaller H1 value or precise ID query.',
+        etl_trigger_back_in: 'ETL trigger stuck in reading status?',
         reading_phase_is_streaming: 'reading phase is streaming COPY staging, large files (1M rows) may take 30-60s. If no progress after 5 minutes, check backend log (output/SPIKE-REPORT-*.md) for SQL errors.',
-        batch_delete_product: '怎么 Batch Delete Product?',
+        batch_delete_product: 'How to batch delete products?',
         in_admin_product_list: 'In admin product list, select multiple rows → top "Batch Discontinue" button. Discontinue = is_discontinued=true, hidden on public page, history preserved. For physical delete, use SQL (carefully).',
-        upload_image_back_frontend_sho: 'Upload Image Back frontend 不Show?',
+        upload_image_back_frontend_sho: 'Uploaded image not showing on frontend?',
         check_product_ispublished_true: 'Check (1) product isPublished=true (2) slot 1-6 range (3) browser console for OSS pre-signed URL 1h validity. If expired, reload product page.',
-        product_ispublished_true_listed: '检查 (1) Product isPublished=true (Listed) (2) slot 1-6 范围 (3) Browser console 看 OSS 预Signature URL 1',
+        product_ispublished_true_listed: 'Check (1) product isPublished=true (listed) (2) slot 1-6 range (3) browser console for OSS pre-signed URL 1h validity',
         enter_admin: 'Enter Admin',
-        mode_full_load_insert: '+ Mode (full-load / insert-only / upsert), 点',
+        mode_full_load_insert: '+ Mode (full-load / insert-only / upsert), click',
+        // V24-F103 i18n residue fix: HelpView static doc content i18n
+        page_title: 'Admin Operation Guide',
+        page_subtitle: '5 modules: Quick Start / Dictionary Specs / Bulk Import / Search Tolerance / FAQ',
+        quick_start_title: '1. Quick Start (5 steps)',
+        quick_start_step1: 'Click "Enter Admin" at top-right, enter credentials (admin/Admin@2026 or operator/Operator@2026)',
+        quick_start_step2: 'Dictionary Management → seed 8 dictionaries (first deploy): run spike-test/_seed_dict_*.py (6 scripts)',
+        quick_start_step3: 'ETL Trigger → select products.xlsx / xrefs.xlsx / apps.xlsx, recommend "full-load" mode',
+        quick_start_step4: 'Product Management → query by 8 fields / OEM / bulk paste, click product to enter detail',
+        quick_start_step5: 'Product detail page supports uploading 6 images (slot 1-6) + editing 7 partition fields (admin product form)',
+        dict_norms_title: '2. Dictionary Specs (8 items)',
+        dict_norms_desc: 'Dictionary = admin-maintained standard value set. Public typeahead / admin form / public search all read from dictionary, ensuring site-wide consistency.',
+        col_dict: 'Dict',
+        col_field: 'Ref Field',
+        col_desc: 'Description',
+        col_unit: 'Unit',
+        col_example: 'Example',
+        dict_drag_tip: '💡 Drag-sort: the ≡ handle on each row of dictionary admin page, sort_order persisted, public display sorted by sort_order asc.',
+        batch_import_title: '3. Bulk Import Flow (XLSX drag-drop)',
+        batch_import_step1: 'Prepare Excel: products / xrefs / machine_applications tables (column names see ETL Trigger page)',
+        batch_import_step2: 'ETL Trigger page → drag XLSX file → auto-detect entity + mode (recommend full-load, insert-only for additions)',
+        batch_import_step3: 'Progress 5 stages: reading → staging → inserting → committing → meili-sync, any failure can pause/resume',
+        batch_import_step4: 'On completion, a row is written to etl_progress_log (with read/stage/inserted/skipped/missing_oem/error counts)',
+        batch_import_step5: 'Admin product management "Search" to verify imported data is queryable',
+        batch_import_perf: '⚠ Performance: 1M products full-load ~2-3 min, 5M xrefs ~5-8 min, 1M apps ~2 min (PG local test data)',
+        search_tolerance_title: '4. Search Tolerance (±5mm fixed)',
+        search_tolerance_desc: 'Dimension fields (H1-H4 / D1-D4) search default ±5mm tolerance, i.e. H1=100 matches products with H1∈[95,105]. Backend AdminProductService hardcodes tolerance=5, frontend does not expose toggle.',
+        search_tolerance_combo: 'Multi-field combinations use AND (narrowing), single field match returns (public search supports all 8 fields).',
+        field_help_title: 'Field Help (top 10 commonly used)',
+        field_help_tip: 'Full field help: hover the ? icon next to each field in admin product form.',
+        faq_title: '5. Frequently Asked Questions (FAQ)',
+        footer: 'SakuraFilter Admin · Help Docs',
       },
       title: {
-        start: '快速Start',
-        en_v4: '[EN] 字典使用规范',
+        start: 'Quick Start',
+        en_v4: 'Dictionary Specs',
         batch_import: 'Batch Import',
-        search_v2: 'Search 容差',
-        common: 'Common 问题',
+        search_v2: 'Search Tolerance',
+        common: 'FAQ',
       },
     },
     machinesview: {
@@ -599,19 +635,19 @@ export default {
 
 
         master_box_qty: 'Master Box Qty',
-        master_carton_kg: 'Master Carton 重 (kg)',
-        master_carton_length_mm: 'Master Carton 长 (mm)',
-        master_carton_width_mm: 'Master Carton 宽 (mm)',
-        master_carton_height_mm: 'Master Carton 高 (mm)',
+        master_carton_kg: 'Master Carton Weight (kg)',
+        master_carton_length_mm: 'Master Carton Length (mm)',
+        master_carton_width_mm: 'Master Carton Width (mm)',
+        master_carton_height_mm: 'Master Carton Height (mm)',
         master_box_volume_m: 'Master Box Volume (m³)',
       },
       placeholder: {
 
 
-        brand_input_auto: 'Brand (Input Auto 补全)',
-        oem_input_auto: 'OEM 3 (Input Auto 补全)',
+        brand_input_auto: 'Brand (Input Auto Complete)',
+        oem_input_auto: 'OEM 3 (Input Auto Complete)',
 
-        input_auto_name_model: 'Input Auto 补全 (name/model OR 匹配)',
+        input_auto_name_model: 'Input Auto Complete (name/model OR match)',
 
 
         brand_required: 'Brand (Required)',
@@ -622,12 +658,16 @@ export default {
       },
       string: {
         by_modify: 'by Modify',
-        by_user_modify: 'by 其他User Modify',
+        by_user_modify: 'by other user',
         slot_slot_uploaded: 'Slot {slot} Uploaded',
         slot_slot_deleted: 'Slot {slot} Deleted',
         edit_product_id: 'Edit Product #{id}',
         cross_reference_count: '② Cross-Reference ({count})',
         machine_applications_count: '⑥ Machine Applications ({count})',
+        add_xref: '+ Add Cross-Reference',
+        add_machine_app: '+ Add Machine Application',
+        back_to_list: 'Back to List',
+        load_failed_subtitle: 'Failed to load product data. Please retry or go back to list.',
       },
       success: {
         saved: 'Saved',
@@ -640,7 +680,7 @@ export default {
         basic_info: 'Basic Info',
         dimensions_mm: '③ Dimensions (mm)',
 
-        image: '⑦ Image (1-6 槽位)',
+        image: '⑦ Image (1-6 slots)',
       },
       warning: {
         please_first_save_product_then: 'Please first Save Product then Upload Image',
@@ -924,21 +964,21 @@ export default {
 
       admin_force_cancel: 'Admin override',
 
-      carton_volume_m3: 'carton Volume (m³)',
+      carton_volume_m3: 'Carton Volume (m³)',
 
-      carton_width_mm: 'carton 宽 (mm)',
+      carton_width_mm: 'Carton Width (mm)',
 
-      carton_length_mm: 'carton 长 (mm)',
+      carton_length_mm: 'Carton Length (mm)',
 
-      carton_height_mm: 'carton 高 (mm)',
+      carton_height_mm: 'Carton Height (mm)',
 
-      auto_calculated: 'Auto 计算',
+      auto_calculated: 'Auto calculated',
 
-      at_least_8_chars: 'At least 8 pcs 字符',
+      at_least_8_chars: 'At least 8 characters',
 
       role: 'Role',
 
-      input_autocomplete: 'Input Auto 补全',
+      input_autocomplete: 'Input Auto Complete',
 
       email: 'Email',
 
@@ -1042,6 +1082,7 @@ export default {
     import: 'Import',
     copy: 'Copy',
     copied: 'Copied',
+    readonly: 'Read-only',
     success: 'Success',
     failed: 'Failed',
     noData: 'No data',
@@ -1082,6 +1123,21 @@ export default {
       // ----- Warning -----
       warn_040: 'Compare list is full (6/6), please remove first'
     },
+    // V24-F103 i18n residue fix: aria-label a11y text (AppHeader + DictManagerLayout)
+    aria: {
+      openNav: 'Open navigation menu',
+      mainNav: 'Main navigation',
+      mobileNav: 'Mobile navigation menu',
+      expandMore: 'Expand more functions menu',
+      themeToggle: 'Toggle theme',
+      switchLang: 'Switch language, current {lang}',
+      userMenu: 'User menu: {username}, role {role}',
+      searchBox: 'Global search box, shows suggestions while typing, press Enter to open aggregate search',
+      searchPlaceholder: 'Search product / OEM / model',
+      enterAdminLogin: 'Enter admin login',
+      switchToLight: 'Switch to light',
+      switchToDark: 'Switch to dark'
+    },
     dictviewcommon: {
       total_drag: 'Total {total} (Active {active}, Soft-deleted {soft}) · Drag to Sort',
     },
@@ -1116,6 +1172,10 @@ export default {
       IMAGE_DETAIL_SLOT_DUPLICATE: 'Image detail slot duplicate',
       MR1_NOT_FOUND: 'MR.1 number not found',
       OEM3_NOT_FOUND: 'OEM 3 number not found',
+      INVALID_FILE_TYPE: 'Invalid file type',
+      FILE_TOO_LARGE: 'File too large',
+      EMPTY_FILE: 'Empty file',
+      MR1_EMPTY: 'mr_1 is empty',
     },
   },
   nav: {
@@ -1129,7 +1189,44 @@ export default {
     perf: 'Performance',
     help: 'Help',
     enterAdmin: 'Enter Admin',
-    exitAdmin: 'Exit Admin'
+    exitAdmin: 'Exit Admin',
+    // V24-F103 i18n residue fix: AppHeader nav buttons + dict dropdown + drawer
+    more: 'More',
+    about: 'About us',
+    news: 'News',
+    contact: 'Contact us',
+    product: 'Product',
+    advSearch: 'Advanced Search',
+    xrefReorder: 'OEM Reorder',
+    advCompare: 'Advanced Compare',
+    errors: 'Errors',
+    api: 'API',
+    dictGroup: 'Dictionary',
+    dictItems: {
+      oemBrand: 'OEM Brand',
+      productName1: 'Product Name 1',
+      productName2: 'Product Name 2',
+      type: 'Type',
+      oem3: 'OEM 3',
+      media: 'Media',
+      machine: 'Machine',
+      engine: 'Engine'
+    }
+  },
+  // V24-F103 i18n residue fix: DictManagerLayout headers/status/buttons/aria-label
+  dict: {
+    colId: 'ID',
+    colSort: 'Order',
+    colXref: 'Refs',
+    colUpdated: 'Updated',
+    colStatus: 'Status',
+    colAction: 'Actions',
+    includeDeleted: 'Include deleted',
+    statusDeleted: 'Deleted',
+    statusActive: 'Active',
+    retrying: 'Retrying…',
+    retry: 'Retry',
+    createButton: 'Add'
   },
   auth: {
     title: 'SakuraFilter',

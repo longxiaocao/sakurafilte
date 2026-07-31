@@ -98,9 +98,9 @@ function cellClass(col: DictColumn): string {
         style="width: 200px"
         @keyup.enter="mgr.onSearch"
       />
-      <el-button size="small" @click="mgr.onSearch">搜索</el-button>
+      <el-button size="small" @click="mgr.onSearch">{{ t('common.search') }}</el-button>
       <el-checkbox v-model="mgr.includeDeleted.value" @change="mgr.load" size="small">
-        含已删
+        {{ t('dict.includeDeleted') }}
       </el-checkbox>
       <el-button type="primary" size="small" @click="mgr.openCreate">
         {{ createButtonText }}
@@ -123,7 +123,7 @@ function cellClass(col: DictColumn): string {
             @click="mgr.load"
             :disabled="mgr.loading.value"
           >
-            {{ mgr.loading.value ? '重试中…' : '重试' }}
+            {{ mgr.loading.value ? t('dict.retrying') : t('dict.retry') }}
           </el-button>
         </div>
       </template>
@@ -141,18 +141,18 @@ function cellClass(col: DictColumn): string {
       <!-- 表头 -->
       <div class="dict-head">
         <div class="cell-drag"></div>
-        <div class="cell-id">ID</div>
+        <div class="cell-id">{{ t('dict.colId') }}</div>
         <!-- 数据列标题: 优先用 #row-cells-header slot, 否则用 columns 配置 -->
         <slot name="row-cells-header">
           <div v-for="col in columns" :key="col.label" :class="cellClass(col)">
             {{ col.label }}
           </div>
         </slot>
-        <div class="cell-sort">排序</div>
-        <div class="cell-xref">引用</div>
-        <div class="cell-updated">更新</div>
-        <div class="cell-status">状态</div>
-        <div class="cell-action">操作</div>
+        <div class="cell-sort">{{ t('dict.colSort') }}</div>
+        <div class="cell-xref">{{ t('dict.colXref') }}</div>
+        <div class="cell-updated">{{ t('dict.colUpdated') }}</div>
+        <div class="cell-status">{{ t('dict.colStatus') }}</div>
+        <div class="cell-action">{{ t('dict.colAction') }}</div>
       </div>
       <!-- 表行 -->
       <div
@@ -185,8 +185,8 @@ function cellClass(col: DictColumn): string {
         <div class="cell-xref">{{ row.xrefCount }}</div>
         <div class="cell-updated">{{ mgr.fmtDate(row.updatedAt) }}</div>
         <div class="cell-status">
-          <el-tag v-if="row.deletedAt" type="info" size="small">已删</el-tag>
-          <el-tag v-else type="success" size="small">启用</el-tag>
+          <el-tag v-if="row.deletedAt" type="info" size="small">{{ t('dict.statusDeleted') }}</el-tag>
+          <el-tag v-else type="success" size="small">{{ t('dict.statusActive') }}</el-tag>
         </div>
         <div class="cell-action">
           <el-button
@@ -194,21 +194,21 @@ function cellClass(col: DictColumn): string {
             text
             @click="mgr.openEdit(row)"
             :disabled="!!row.deletedAt"
-          >编辑</el-button>
+          >{{ t('common.edit') }}</el-button>
           <el-button
             v-if="!row.deletedAt"
             size="small"
             text
             type="warning"
             @click="mgr.softDelete(row)"
-          >删除</el-button>
+          >{{ t('common.delete') }}</el-button>
           <el-button
             v-else
             size="small"
             text
             type="success"
             @click="mgr.restore(row)"
-          >恢复</el-button>
+          >{{ t('common.action.restored') }}</el-button>
         </div>
       </div>
       <!-- 空状态 -->
@@ -240,8 +240,8 @@ function cellClass(col: DictColumn): string {
         <slot name="dialog-form" :form="mgr.dialogForm" :mode="mgr.dialogMode.value" />
       </el-form>
       <template #footer>
-        <el-button @click="mgr.dialogOpen.value = false">取消</el-button>
-        <el-button type="primary" @click="mgr.saveDialog">保存</el-button>
+        <el-button @click="mgr.dialogOpen.value = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" @click="mgr.saveDialog">{{ t('common.save') }}</el-button>
       </template>
     </el-dialog>
   </div>

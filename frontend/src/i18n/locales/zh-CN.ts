@@ -249,6 +249,11 @@ export default {
         on_etl_file: '松开以填入 ETL 文件路径',
 
         cancel_signal_sent_code: '已发送取消信号 (码: {code}), 任务即将终止',
+        // V24-F103 i18n 残留修复: 全量重建 Meilisearch 索引文案
+        full_rebuild: '全量重建',
+        full_rebuild_tip: '清空 Meilisearch 全部文档并从 PostgreSQL 全量同步, 与 ETL 任务互斥',
+        full_rebuild_alert_title: '执行后将清空 Meilisearch 全部文档并重新同步, 期间搜索短暂不可用',
+        full_rebuild_alert_desc: '适用场景: 索引结构变更后强制重建 / 数据漂移修复 / schema 字段更新后生效',
       },
       success: {
         dry_run_validation_completed: 'dry-run 校验完成',
@@ -363,6 +368,37 @@ export default {
         product_ispublished_true_listed: '检查 (1) 产品 isPublished=true (上架) (2) slot 1-6 范围 (3) 浏览器 console 看 OSS 预签名 URL 1 ',
         enter_admin: '进入后台',
         mode_full_load_insert: ' + 模式 (full-load / insert-only / upsert), 点 ',
+        // V24-F103 i18n 残留修复: HelpView 静态文档内容 i18n 化
+        page_title: '后台操作指南',
+        page_subtitle: '5 个模块: 快速开始 / 字典规范 / 批量导入 / 搜索容差 / FAQ',
+        quick_start_title: '1. 快速开始 (5 步入门)',
+        quick_start_step1: '点击右上"进入后台登录", 输入账号密码 (admin/Admin@2026 或 operator/Operator@2026)',
+        quick_start_step2: '字典管理 → 8 个字典先 seed 数据 (首次部署): 走 spike-test/_seed_dict_*.py 6 个脚本',
+        quick_start_step3: 'ETL 触发 → 选择 products.xlsx / xrefs.xlsx / apps.xlsx, 推荐"全量"模式触发',
+        quick_start_step4: '产品管理 → 用 8 字段 / OEM 查询 / 批量粘贴查询, 命中产品进入详情',
+        quick_start_step5: '产品详情页支持上传 6 张图 (slot 1-6) + 编辑 7 分区字段 (后台产品表单)',
+        dict_norms_title: '2. 字典使用规范 (8 个)',
+        dict_norms_desc: '字典 = 后台可维护的标准值集合. 前台 typeahead / 后台表单 / 公开搜索均从字典取, 保证全站一致.',
+        col_dict: '字典',
+        col_field: '引用字段',
+        col_desc: '说明',
+        col_unit: '单位',
+        col_example: '示例',
+        dict_drag_tip: '💡 拖拽排序: 字典管理页每行的 ≡ 按钮, sort_order 持久化, 前台展示按 sort_order 升序.',
+        batch_import_title: '3. 批量导入流程 (XLSX 拖拽)',
+        batch_import_step1: '准备 Excel: products / xrefs / machine_applications 三张表 (列名见 ETL 触发页)',
+        batch_import_step2: 'ETL 触发页 → 拖入 XLSX 文件 → 自动识别 entity + 模式 (推荐 full-load 全量, insert-only 仅新增)',
+        batch_import_step3: '进度条 5 阶段: reading → staging → inserting → committing → meili-sync, 任一阶段失败可暂停/恢复',
+        batch_import_step4: '完成后会在 etl_progress_log 写一行 (含 read/stage/inserted/skipped/missing_oem/error 计数)',
+        batch_import_step5: '后台产品管理用"搜索"验证导入数据是否可查',
+        batch_import_perf: '⚠ 性能: 1M products 全量约 2-3 分钟, 5M xrefs 约 5-8 分钟, 1M apps 约 2 分钟 (PG 本地测试数据)',
+        search_tolerance_title: '4. 搜索容差 (±5mm 固定)',
+        search_tolerance_desc: '尺寸字段 (H1-H4 / D1-D4) 搜索默认 ±5mm 容差, 即 H1=100 命中 H1∈[95,105] 的所有产品。后端 AdminProductService 已 hardcode tolerance=5, 前端不暴露切换.',
+        search_tolerance_combo: '多字段组合走 AND 关系 (收窄), 单字段命中即返回 (公开搜索 8 字段同时支持).',
+        field_help_title: '字段说明 (常用 10 个)',
+        field_help_tip: '完整字段说明见后台产品表单每个字段后的 ? 图标 (鼠标悬停).',
+        faq_title: '5. 常见问题 (FAQ)',
+        footer: 'SakuraFilter 后台 · 帮助文档',
       },
       title: {
         start: '快速开始',
@@ -637,6 +673,10 @@ export default {
         edit_product_id: '编辑产品 #{id}',
         cross_reference_count: '② 交叉引用 ({count})',
         machine_applications_count: '⑥ 适用车型 ({count})',
+        add_xref: '+ 添加交叉引用',
+        add_machine_app: '+ 添加车型',
+        back_to_list: '返回列表',
+        load_failed_subtitle: '无法加载产品数据, 请重试或返回列表',
       },
       success: {
         saved: '已保存',
@@ -1052,6 +1092,7 @@ export default {
     import: '导入',
     copy: '复制',
     copied: '已复制',
+    readonly: '只读',
     success: '操作成功',
     failed: '操作失败',
     noData: '暂无数据',
@@ -1092,6 +1133,21 @@ export default {
       // ----- 警告提示 -----
       warn_040: '已选满 6 个对比, 请先移除'
     },
+    // V24-F103 i18n 残留修复: aria-label 无障碍标签文案 (AppHeader + DictManagerLayout)
+    aria: {
+      openNav: '打开导航菜单',
+      mainNav: '主导航',
+      mobileNav: '移动端导航菜单',
+      expandMore: '展开更多功能菜单',
+      themeToggle: '主题切换',
+      switchLang: '切换语言, 当前 {lang}',
+      userMenu: '用户菜单: {username}, 角色 {role}',
+      searchBox: '全局搜索框, 输入时显示联想建议, 回车跳转聚合搜索页',
+      searchPlaceholder: '搜索产品 / OEM / 机型',
+      enterAdminLogin: '进入后台登录',
+      switchToLight: '切换到浅色',
+      switchToDark: '切换到深色'
+    },
     dictviewcommon: {
       total_drag: '共 {total} 条 (启用 {active}, 软删 {soft}) · 拖动以排序',
     },
@@ -1126,6 +1182,10 @@ export default {
       IMAGE_DETAIL_SLOT_DUPLICATE: '图片详情槽位重复',
       MR1_NOT_FOUND: 'MR.1 编号不存在',
       OEM3_NOT_FOUND: 'OEM 3 编号不存在',
+      INVALID_FILE_TYPE: '文件格式无效',
+      FILE_TOO_LARGE: '文件过大',
+      EMPTY_FILE: '文件为空',
+      MR1_EMPTY: 'mr_1 不能为空',
     },
   },
   nav: {
@@ -1139,7 +1199,44 @@ export default {
     perf: '性能',
     help: '帮助',
     enterAdmin: '进入后台',
-    exitAdmin: '退出后台'
+    exitAdmin: '退出后台',
+    // V24-F103 i18n 残留修复: AppHeader 顶栏按钮 + 字典下拉 + drawer 文案
+    more: '更多',
+    about: 'About us',
+    news: 'News',
+    contact: 'Contact us',
+    product: 'Product',
+    advSearch: '高级搜索',
+    xrefReorder: 'OEM 排序',
+    advCompare: '高级对比',
+    errors: '错误',
+    api: 'API',
+    dictGroup: '字典管理',
+    dictItems: {
+      oemBrand: 'OEM 品牌',
+      productName1: '产品名 1',
+      productName2: '产品名 2',
+      type: '类型 (Type)',
+      oem3: 'OEM 3',
+      media: '介质 (Media)',
+      machine: '机型 (Machine)',
+      engine: '发动机 (Engine)'
+    }
+  },
+  // V24-F103 i18n 残留修复: DictManagerLayout 表头/状态/按钮/aria-label
+  dict: {
+    colId: 'ID',
+    colSort: '排序',
+    colXref: '引用',
+    colUpdated: '更新',
+    colStatus: '状态',
+    colAction: '操作',
+    includeDeleted: '含已删',
+    statusDeleted: '已删',
+    statusActive: '启用',
+    retrying: '重试中…',
+    retry: '重试',
+    createButton: '新增'
   },
   auth: {
     title: 'SakuraFilter',

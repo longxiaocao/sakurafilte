@@ -62,9 +62,9 @@ const helpPreview = computed(() => helpPreviewKeys
 
 <template>
   <div class="p-3 w-full">
-    <h1 class="text-lg font-medium mb-1">后台操作指南</h1>
+    <h1 class="text-lg font-medium mb-1">{{ t('admin.helpview.string.page_title') }}</h1>
     <p class="text-xs text-muted mb-3">
-      5 个模块: 快速开始 / 字典规范 / 批量导入 / 搜索容差 / FAQ
+      {{ t('admin.helpview.string.page_subtitle') }}
     </p>
 
     <el-anchor
@@ -80,28 +80,28 @@ const helpPreview = computed(() => helpPreviewKeys
 
     <!-- 1. 快速开始 -->
     <section id="quickstart" class="hairline p-4 mb-3">
-      <h2 class="text-base font-medium mb-2">1. 快速开始 (5 步入门)</h2>
+      <h2 class="text-base font-medium mb-2">{{ t('admin.helpview.string.quick_start_title') }}</h2>
       <ol class="text-sm leading-7 list-decimal pl-5 text-[var(--color-text-muted)]">
-        <li>点击右上"进入后台登录", 输入账号密码 (admin/Admin@2026 或 operator/Operator@2026)</li>
-        <li>字典管理 → 8 个字典先 seed 数据 (首次部署): 走 spike-test/_seed_dict_*.py 6 个脚本</li>
-        <li>ETL 触发 → 选择 products.xlsx / xrefs.xlsx / apps.xlsx, 推荐"全量"模式触发</li>
-        <li>产品管理 → 用 8 字段 / OEM 查询 / 批量粘贴查询, 命中产品进入详情</li>
-        <li>产品详情页支持上传 6 张图 (slot 1-6) + 编辑 7 分区字段 (后台产品表单)</li>
+        <li>{{ t('admin.helpview.string.quick_start_step1') }}</li>
+        <li>{{ t('admin.helpview.string.quick_start_step2') }}</li>
+        <li>{{ t('admin.helpview.string.quick_start_step3') }}</li>
+        <li>{{ t('admin.helpview.string.quick_start_step4') }}</li>
+        <li>{{ t('admin.helpview.string.quick_start_step5') }}</li>
       </ol>
     </section>
 
     <!-- 2. 字典使用规范 -->
     <section id="dict" class="hairline p-4 mb-3">
-      <h2 class="text-base font-medium mb-2">2. 字典使用规范 (8 个)</h2>
+      <h2 class="text-base font-medium mb-2">{{ t('admin.helpview.string.dict_norms_title') }}</h2>
       <p class="text-xs text-muted mb-2">
-        字典 = 后台可维护的标准值集合. 前台 typeahead / 后台表单 / 公开搜索均从字典取, 保证全站一致.
+        {{ t('admin.helpview.string.dict_norms_desc') }}
       </p>
       <table class="w-full text-sm">
         <thead>
           <tr class="hairline-b text-left text-xs text-muted">
-            <th class="py-1 pr-2">字典</th>
-            <th class="py-1 pr-2">引用字段</th>
-            <th class="py-1 pr-2">说明</th>
+            <th class="py-1 pr-2">{{ t('admin.helpview.string.col_dict') }}</th>
+            <th class="py-1 pr-2">{{ t('admin.helpview.string.col_field') }}</th>
+            <th class="py-1 pr-2">{{ t('admin.helpview.string.col_desc') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -115,44 +115,43 @@ const helpPreview = computed(() => helpPreviewKeys
         </tbody>
       </table>
       <p class="text-xs text-muted mt-2">
-        💡 拖拽排序: 字典管理页每行的 ≡ 按钮, sort_order 持久化, 前台展示按 sort_order 升序.
+        {{ t('admin.helpview.string.dict_drag_tip') }}
       </p>
     </section>
 
     <!-- 3. 批量导入 -->
     <section id="import" class="hairline p-4 mb-3">
-      <h2 class="text-base font-medium mb-2">3. 批量导入流程 (XLSX 拖拽)</h2>
+      <h2 class="text-base font-medium mb-2">{{ t('admin.helpview.string.batch_import_title') }}</h2>
       <ol class="text-sm leading-7 list-decimal pl-5">
-        <li>准备 Excel: products / xrefs / machine_applications 三张表 (列名见 ETL 触发页)</li>
-        <li>ETL 触发页 → 拖入 XLSX 文件 → 自动识别 entity + 模式 (推荐 full-load 全量, insert-only 仅新增)</li>
-        <li>进度条 5 阶段: reading → staging → inserting → committing → meili-sync, 任一阶段失败可暂停/恢复</li>
-        <li>完成后会在 etl_progress_log 写一行 (含 read/stage/inserted/skipped/missing_oem/error 计数)</li>
-        <li>后台产品管理用"搜索"验证导入数据是否可查</li>
+        <li>{{ t('admin.helpview.string.batch_import_step1') }}</li>
+        <li>{{ t('admin.helpview.string.batch_import_step2') }}</li>
+        <li>{{ t('admin.helpview.string.batch_import_step3') }}</li>
+        <li>{{ t('admin.helpview.string.batch_import_step4') }}</li>
+        <li>{{ t('admin.helpview.string.batch_import_step5') }}</li>
       </ol>
       <p class="text-xs text-muted mt-2">
-        ⚠ 性能: 1M products 全量约 2-3 分钟, 5M xrefs 约 5-8 分钟, 1M apps 约 2 分钟 (PG 本地测试数据)
+        {{ t('admin.helpview.string.batch_import_perf') }}
       </p>
     </section>
 
     <!-- 4. 搜索容差 -->
     <section id="search" class="hairline p-4 mb-3">
-      <h2 class="text-base font-medium mb-2">4. 搜索容差 (±5mm 固定)</h2>
+      <h2 class="text-base font-medium mb-2">{{ t('admin.helpview.string.search_tolerance_title') }}</h2>
       <p class="text-sm leading-6">
-        尺寸字段 (H1-H4 / D1-D4) 搜索默认 <strong>±5mm</strong> 容差, 即 H1=100 命中 H1∈[95,105] 的所有产品。
-        后端 AdminProductService 已 hardcode <code>tolerance=5</code>, 前端不暴露切换.
+        {{ t('admin.helpview.string.search_tolerance_desc') }}
       </p>
       <p class="text-sm leading-6 mt-1">
-        多字段组合走 AND 关系 (收窄), 单字段命中即返回 (公开搜索 8 字段同时支持).
+        {{ t('admin.helpview.string.search_tolerance_combo') }}
       </p>
 
-      <h3 class="text-sm font-medium mt-3 mb-1">字段说明 (常用 10 个)</h3>
+      <h3 class="text-sm font-medium mt-3 mb-1">{{ t('admin.helpview.string.field_help_title') }}</h3>
       <table class="w-full text-sm">
         <thead>
           <tr class="hairline-b text-left text-xs text-muted">
-            <th class="py-1 pr-2">字段</th>
-            <th class="py-1 pr-2">单位</th>
-            <th class="py-1 pr-2">说明</th>
-            <th class="py-1 pr-2">示例</th>
+            <th class="py-1 pr-2">{{ t('admin.helpview.string.col_field') }}</th>
+            <th class="py-1 pr-2">{{ t('admin.helpview.string.col_unit') }}</th>
+            <th class="py-1 pr-2">{{ t('admin.helpview.string.col_desc') }}</th>
+            <th class="py-1 pr-2">{{ t('admin.helpview.string.col_example') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -165,13 +164,13 @@ const helpPreview = computed(() => helpPreviewKeys
         </tbody>
       </table>
       <p class="text-xs text-muted mt-2">
-        完整字段说明见后台产品表单每个字段后的 <code>?</code> 图标 (鼠标悬停).
+        {{ t('admin.helpview.string.field_help_tip') }}
       </p>
     </section>
 
     <!-- 5. FAQ -->
     <section id="faq" class="hairline p-4 mb-3">
-      <h2 class="text-base font-medium mb-2">5. 常见问题 (FAQ)</h2>
+      <h2 class="text-base font-medium mb-2">{{ t('admin.helpview.string.faq_title') }}</h2>
       <el-collapse>
         <!-- V24-F86 (P2-1): 保留 index key — faqs 是静态数组(6 项永不增删),
              el-collapse-item 的 :name="String(i)" 依赖 index, :title Q${i+1} 依赖序号,
@@ -185,7 +184,7 @@ const helpPreview = computed(() => helpPreviewKeys
     </section>
 
     <p class="text-xs text-muted text-center mt-4">
-      SakuraFilter 后台 · 帮助文档
+      {{ t('admin.helpview.string.footer') }}
     </p>
   </div>
 </template>
