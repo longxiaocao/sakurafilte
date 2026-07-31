@@ -358,7 +358,7 @@ onBeforeUnmount(() => {
         <el-table-column type="selection" width="36" />
         <el-table-column prop="id" label="ID" width="60" />
         <el-table-column prop="oemNoDisplay" label="OEM" width="160" fixed />
-        <el-table-column v-if="showAllColumns" prop="mr1" label="MR.1" width="100" show-overflow-tooltip />
+        <el-table-column prop="mr1" label="MR.1" width="100" show-overflow-tooltip />
         <el-table-column prop="oem2" label="OEM 2" width="120" show-overflow-tooltip />
         <el-table-column prop="type" :label="t('common.action.type')" width="60" />
         <el-table-column prop="d1Mm" label="D1" width="50" align="right" />

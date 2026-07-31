@@ -1197,7 +1197,7 @@ export default {
     contact: 'Contact us',
     product: 'Product',
     advSearch: 'Advanced Search',
-    xrefReorder: 'OEM Reorder',
+    xrefReorder: 'OEM Whitelist',
     advCompare: 'Advanced Compare',
     errors: 'Errors',
     api: 'API',

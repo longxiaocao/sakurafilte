@@ -778,6 +778,12 @@ public class EtlImportService
                 inserted = p.Inserted,
                 updated = p.Updated,
                 skipped = p.Skipped,
+                // 🔧 fix: 补全 skipped 细分字段, 让前端 SSE 实时显示 (用户反馈 "各种数据似乎并没有数值")
+                skippedMissingOem = p.SkippedMissingOem,
+                skippedMissingMr1 = p.SkippedMissingMr1,
+                skippedNullField = p.SkippedNullField,
+                skippedDuplicate = p.SkippedDuplicate,
+                typeMismatches = p.TypeMismatches,
                 errors = p.Errors,
                 indexed = p.Indexed,
                 indexPending = p.IndexPending,

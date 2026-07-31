@@ -1207,7 +1207,7 @@ export default {
     contact: 'Contact us',
     product: 'Product',
     advSearch: '高级搜索',
-    xrefReorder: 'OEM 排序',
+    xrefReorder: 'OEM 白名单',
     advCompare: '高级对比',
     errors: '错误',
     api: 'API',

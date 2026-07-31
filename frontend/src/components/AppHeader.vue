@@ -431,6 +431,7 @@ function doGlobalSearch() {
                 :key="d.path"
                 :command="d.path"
                 :disabled="route.path === d.path"
+                :class="route.path === d.path ? 'opacity-50 cursor-not-allowed' : ''"
               >
                 {{ t(d.labelKey) }}
               </el-dropdown-item>

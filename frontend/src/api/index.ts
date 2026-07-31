@@ -487,13 +487,39 @@ export const adminXrefApi = {
       return { total: items.length, items }
     })
   },
-  // GET /api/admin/xrefs/reorder?oemBrand=BOSCH — 某 Brand 下 OEM 3 列表 (含 rowVersion)
-  listByBrand(oemBrand: string): Promise<{ total: number; items: import('./types').XrefOem3Item[] }> {
-    return http.get('/admin/xrefs/reorder', { params: { oemBrand } }).then((r) => r.data)
+  // GET /api/admin/xrefs/reorder?oemBrand=BOSCH — 某 Brand 下 OEM 3 列表 (分页 + 搜索, 含 rowVersion)
+  //   V24-F86: 加 page/pageSize/q 参数, 返回 XrefOem3Page (含分页元数据)
+  listByBrand(
+    oemBrand: string,
+    params?: { page?: number; pageSize?: number; q?: string }
+  ): Promise<import('./types').XrefOem3Page> {
+    return http
+      .get('/admin/xrefs/reorder', { params: { oemBrand, ...params } })
+      .then((r) => r.data)
   },
   // POST /api/admin/xrefs/reorder — 批量更新 sort_order (含 xmin 乐观锁, 冲突返 409)
   reorder(req: import('./types').XrefReorderRequest): Promise<{ updated: number }> {
     return http.post('/admin/xrefs/reorder', req).then((r) => r.data)
+  },
+  // ===== V24-F86: 单条 CRUD =====
+  // GET /api/admin/xrefs/reorder/items/{id} — 取单条详情 (编辑回填用)
+  getItem(id: number): Promise<import('./types').XrefOem3Detail> {
+    return http.get(`/admin/xrefs/reorder/items/${id}`).then((r) => r.data)
+  },
+  // POST /api/admin/xrefs/reorder/items — 新增单条 (校验 productId 存在, 触发索引重建)
+  addItem(payload: import('./types').XrefOem3CreatePayload): Promise<import('./types').XrefOem3Detail> {
+    return http.post('/admin/xrefs/reorder/items', payload).then((r) => r.data)
+  },
+  // PUT /api/admin/xrefs/reorder/items/{id} — 编辑单条 (含 xmin 乐观锁, 冲突返 409)
+  updateItem(id: number, payload: import('./types').XrefOem3UpdatePayload): Promise<{ id: number; rowVersion: number }> {
+    return http.put(`/admin/xrefs/reorder/items/${id}`, payload).then((r) => r.data)
+  },
+  // DELETE /api/admin/xrefs/reorder/items/{id}?rowVersion= — 从白名单移除 (置 sort_order=0, 不删产品本身)
+  //   rowVersion 通过 query 传递 (DELETE 通常无 body), 缺省时后端不加乐观锁条件
+  //   白名单改造: 响应体从 {id, isDiscontinued} 改为 {id, sortOrder, removedFromWhitelist}
+  deleteItem(id: number, rowVersion?: number): Promise<{ id: number; sortOrder: number; removedFromWhitelist: boolean }> {
+    const params = rowVersion != null ? { rowVersion } : {}
+    return http.delete(`/admin/xrefs/reorder/items/${id}`, { params }).then((r) => r.data)
   }
 }
 

@@ -772,6 +772,52 @@ export interface XrefReorderRequest {
   items: XrefReorderItem[]
 }
 
+// ===== V24-F86: OEM 3 单条 CRUD (分页 + 增删改查) =====
+//   GET /items/{id} 返回详情 (编辑回填用, 字段比列表更全)
+export interface XrefOem3Detail {
+  id: number
+  productId: number
+  productName1: string | null
+  oemBrand: string | null
+  oemNo3: string | null
+  oem2: string | null
+  sortOrder: number
+  machineType: string | null
+  isPublished: boolean
+  isDiscontinued: boolean
+  mr1: string | null
+  rowVersion: number
+}
+
+//   POST /items 新增请求体
+export interface XrefOem3CreatePayload {
+  productId: number
+  oemBrand: string
+  oemNo3: string
+  oem2?: string | null
+  machineType?: string | null
+  isPublished: boolean
+}
+
+//   PUT /items/{id} 编辑请求体 (含 rowVersion 乐观锁令牌)
+export interface XrefOem3UpdatePayload {
+  oemNo3: string
+  machineType: string | null
+  isPublished: boolean
+  rowVersion: number
+}
+
+//   GET /?oemBrand=BOSCH 分页返回 (含 total/page/pageSize/totalPages 元数据)
+export interface XrefOem3Page {
+  oemBrand: string
+  brandSortOrder: number | null
+  items: XrefOem3Item[]
+  total: number
+  page: number
+  pageSize: number
+  totalPages: number
+}
+
 // ===== V2 Task 2.3.5: 同 MR.1 其他 OEM 3 列表 (前台详情页推荐区块) =====
 export interface SiblingOem3Item {
   oemBrand: string | null

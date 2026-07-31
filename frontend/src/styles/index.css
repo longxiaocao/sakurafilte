@@ -218,6 +218,19 @@ textarea,
   box-shadow: none !important;
 }
 
+/* 🔧 fix: 补回 light 模式下 input 的 1px 边框 (EP 用 inset box-shadow 模拟边框, 上面的 box-shadow:none 会清除它)
+ *   WHY 不用 border: 1px solid: EP 的 .el-input__wrapper 已用 box-shadow: 0 0 0 1px var inset 作为边框
+ *   去掉 box-shadow 后 input 在 light 模式几乎无边框视觉, 用户反馈 "不知道从哪输入" */
+.el-input__wrapper {
+  box-shadow: 0 0 0 1px var(--color-border) inset !important;
+}
+.el-input__wrapper.is-focus {
+  box-shadow: 0 0 0 1px var(--color-accent) inset !important;
+}
+.el-input__wrapper:hover {
+  box-shadow: 0 0 0 1px var(--color-text-muted) inset !important;
+}
+
 .el-button--primary {
   --el-button-bg-color: var(--color-accent);
   --el-button-border-color: var(--color-accent);

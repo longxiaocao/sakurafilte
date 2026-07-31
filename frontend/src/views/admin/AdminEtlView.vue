@@ -334,7 +334,15 @@ const pipelineRows = computed(() => {
       inserted: task.value.activeTask.inserted,
       updated: task.value.activeTask.updated,
       indexed: task.value.activeTask.indexed,
-      errors: task.value.activeTask.errors
+      errors: task.value.activeTask.errors,
+      // 🔧 fix: 补全 skipped 细分, 让 Pipeline 卡片实时显示 (用户反馈 "各种数据似乎并没有数值")
+      skipped: task.value.activeTask.skipped,
+      skippedMissingOem: task.value.activeTask.skippedMissingOem,
+      skippedMissingMr1: task.value.activeTask.skippedMissingMr1,
+      skippedNullField: task.value.activeTask.skippedNullField,
+      skippedDuplicate: task.value.activeTask.skippedDuplicate,
+      typeMismatches: task.value.activeTask.typeMismatches,
+      indexPending: task.value.activeTask.indexPending
     }
   }
   if (lastFinished.value) {
@@ -343,7 +351,14 @@ const pipelineRows = computed(() => {
       inserted: lastFinished.value.inserted,
       updated: lastFinished.value.updated,
       indexed: lastFinished.value.indexed,
-      errors: lastFinished.value.errors
+      errors: lastFinished.value.errors,
+      skipped: lastFinished.value.skipped,
+      skippedMissingOem: lastFinished.value.skippedMissingOem,
+      skippedMissingMr1: (lastFinished.value as any).skippedMissingMr1,
+      skippedNullField: lastFinished.value.skippedNullField,
+      skippedDuplicate: lastFinished.value.skippedDuplicate,
+      typeMismatches: (lastFinished.value as any).typeMismatches,
+      indexPending: lastFinished.value.indexPending
     }
   }
   return {}
@@ -400,6 +415,44 @@ function statusTagType(s: string): 'success' | 'warning' | 'info' | 'danger' | '
         :progress-pct="progressPct"
         :elapsed-sec="elapsedSec"
       />
+      <!-- 🔧 fix: 实时 skipped 细分 (SSE 推送, 用户反馈 "各种数据似乎并没有数值") -->
+      <div v-if="pipelineRows.skipped || pipelineRows.errors" class="mt-3 pt-3 border-t border-[var(--color-border)]">
+        <div class="text-xs text-[var(--color-text-muted)] mb-2">跳过/错误细分 (实时)</div>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+          <div class="flex flex-col">
+            <span class="text-xs text-[var(--color-text-muted)]">跳过总数</span>
+            <span class="font-mono">{{ fmt(pipelineRows.skipped) }}</span>
+          </div>
+          <div class="flex flex-col">
+            <span class="text-xs text-[var(--color-text-muted)]">OEM 缺失</span>
+            <span class="font-mono">{{ fmt(pipelineRows.skippedMissingOem) }}</span>
+          </div>
+          <div class="flex flex-col">
+            <span class="text-xs text-[var(--color-text-muted)]">MR.1 缺失</span>
+            <span class="font-mono">{{ fmt(pipelineRows.skippedMissingMr1) }}</span>
+          </div>
+          <div class="flex flex-col">
+            <span class="text-xs text-[var(--color-text-muted)]">字段为空</span>
+            <span class="font-mono">{{ fmt(pipelineRows.skippedNullField) }}</span>
+          </div>
+          <div class="flex flex-col">
+            <span class="text-xs text-[var(--color-text-muted)]">重复去重</span>
+            <span class="font-mono">{{ fmt(pipelineRows.skippedDuplicate) }}</span>
+          </div>
+          <div class="flex flex-col">
+            <span class="text-xs text-[var(--color-text-muted)]">类型不匹配</span>
+            <span class="font-mono">{{ fmt(pipelineRows.typeMismatches) }}</span>
+          </div>
+          <div class="flex flex-col">
+            <span class="text-xs text-[var(--color-text-muted)]">错误数</span>
+            <span class="font-mono text-red-600">{{ fmt(pipelineRows.errors) }}</span>
+          </div>
+          <div class="flex flex-col">
+            <span class="text-xs text-[var(--color-text-muted)]">索引待同步</span>
+            <span class="font-mono">{{ fmt(pipelineRows.indexPending) }}</span>
+          </div>
+        </div>
+      </div>
     </el-card>
 
     <!-- 3. 触发卡片 -->

@@ -92,6 +92,10 @@ test_api.ps1
 spike-test/_commit_msg.txt
 spike-test/_debug_*.py
 
+# Vite 开发服务器运行日志 (可重建, 不提交)
+frontend/vite.err
+frontend/vite.out
+
 # 临时调试 / 中间产物
 **/_temp_*
 **/_scratch_*
