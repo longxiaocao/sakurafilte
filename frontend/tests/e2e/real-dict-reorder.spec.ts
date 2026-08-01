@@ -175,7 +175,9 @@ test.describe.serial('字典拖拽排序 → 搜索排序生效 全链路', () =
     await injectAdminToken(page)
     await page.goto(`${BASE}/admin/xrefs/reorder`, { waitUntil: 'domcontentloaded', timeout: 15000 })
     // 等待标题加载 (页面挂载标志)
-    await page.waitForSelector('h1:has-text("OEM 排序管理")', { timeout: 10000 })
+    // 🔧 fix(审查): 断言与实现对齐 — 页面 h1 实际文案为 "OEM 白名单管理" (V24-F86 白名单改造后),
+    //   旧断言 "OEM 排序管理" 导致 10000ms 超时 (预存不一致, 2026-08-01 E2E 全量回归暴露)
+    await page.waitForSelector('h1:has-text("OEM 白名单管理")', { timeout: 10000 })
     // 等待 Brand 列表加载 (Brand 项含 "sort:" 文本)
     await page.waitForSelector('div.cursor-pointer:has-text("sort:")', { timeout: 10000 })
     // 断言: 至少有 1 个 Brand 可选
