@@ -16,6 +16,7 @@
 //   - 添加弹窗按 selectedBrand 过滤产品搜索 (adminProductApi.search 加 oemBrand 参数)
 import { ref, onMounted, reactive, onBeforeUnmount } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { useI18n } from 'vue-i18n'
 import draggable from 'vuedraggable'
 import { adminXrefApi, adminProductApi } from '@/api'
 import type {
@@ -25,6 +26,8 @@ import type {
   XrefOem3UpdatePayload,
   ProductListItem
 } from '@/api/types'
+
+const { t } = useI18n()
 
 // ===== Brand 列表状态 =====
 const brands = ref<XrefBrandItem[]>([])
@@ -76,7 +79,7 @@ async function loadBrands() {
       await loadOemList()
     }
   } catch (e: any) {
-    ElMessage.error(e?.response?.data?.detail || '加载品牌列表失败')
+    ElMessage.error(e?.response?.data?.detail || t('admin.xrefreorder.err_load_brands'))
   } finally {
     loadingBrands.value = false
   }
@@ -104,7 +107,7 @@ async function loadOemList() {
     total.value = resp.total
     totalPages.value = resp.totalPages
   } catch (e: any) {
-    ElMessage.error(e?.response?.data?.detail || '加载 OEM 3 列表失败')
+    ElMessage.error(e?.response?.data?.detail || t('admin.xrefreorder.err_load_oem_list'))
     oemList.value = []
     dragList.value = []
     total.value = 0
@@ -178,7 +181,7 @@ async function saveReorder(isRetry: boolean) {
     // WHY 重新加载: 后端 UPDATE 后 xmin 自动变化, 前端持有的 rowVersion 已失效
     //   下次拖拽必须用最新 rowVersion, 否则会触发 409
     await loadOemList()
-    ElMessage.success(`已保存 ${items.length} 条 OEM 3 排序`)
+    ElMessage.success(t('admin.xrefreorder.success_saved_order', { count: items.length }))
   } catch (e: any) {
     // Task 2.2.4: 409 XREF_CONFLICT 处理
     const status = e?.response?.status
@@ -200,7 +203,7 @@ async function saveReorder(isRetry: boolean) {
           // 边界: 用户拖拽的某项已被他人删除 → rvMap 取不到 → 终止重试
           const missingItem = userOrderedDragList.find((it) => !rvMap.has(it.id))
           if (missingItem) {
-            ElMessage.warning(`OEM 3 ${missingItem.oemNo3} 已被他人删除, 已自动刷新列表, 请重新拖拽`)
+            ElMessage.warning(t('admin.xrefreorder.warn_item_deleted', { oemNo3: missingItem.oemNo3 }))
             await loadOemList()
             return
           }
@@ -219,12 +222,12 @@ async function saveReorder(isRetry: boolean) {
       }
       // 第二次仍 409 或重试拉取失败: 真并发冲突, 弹框让用户决策
       ElMessageBox.confirm(
-        'OEM 3 排序已被其他用户修改, 已自动重试仍失败, 请刷新后手动重试。是否立即刷新?',
-        '排序冲突',
-        { confirmButtonText: '刷新', cancelButtonText: '取消', type: 'warning' }
+        t('admin.xrefreorder.conflict_message'),
+        t('admin.xrefreorder.conflict_title'),
+        { confirmButtonText: t('admin.xrefreorder.refresh'), cancelButtonText: t('admin.xrefreorder.cancel'), type: 'warning' }
       ).then(() => loadOemList()).catch(() => {})
     } else {
-      ElMessage.error(e?.response?.data?.detail || '保存排序失败')
+      ElMessage.error(e?.response?.data?.detail || t('admin.xrefreorder.err_save_order'))
     }
   } finally {
     saving.value = false
@@ -271,7 +274,7 @@ async function openEditDialog(item: XrefOem3Item) {
       { id: detail.productId, oemNoDisplay: '', mr1: detail.mr1 ?? undefined } as ProductListItem
     ]
   } catch (e: any) {
-    ElMessage.error(e?.response?.data?.detail || '加载详情失败')
+    ElMessage.error(e?.response?.data?.detail || t('admin.xrefreorder.err_load_detail'))
     dialogVisible.value = false
   } finally {
     dialogLoading.value = false
@@ -336,15 +339,15 @@ function onProductSelected(productId: number) {
 // ===== V24-F86: 提交表单 (新增/编辑) =====
 async function submitForm() {
   if (form.productId <= 0) {
-    ElMessage.error('请选择关联产品')
+    ElMessage.error(t('admin.xrefreorder.err_select_product'))
     return
   }
   if (!form.oemBrand) {
-    ElMessage.error('oemBrand 必填')
+    ElMessage.error(t('admin.xrefreorder.err_oem_brand_required'))
     return
   }
   if (!form.oemNo3) {
-    ElMessage.error('oemNo3 必填')
+    ElMessage.error(t('admin.xrefreorder.err_oem_no3_required'))
     return
   }
   dialogLoading.value = true
@@ -359,7 +362,7 @@ async function submitForm() {
         isPublished: form.isPublished
       }
       await adminXrefApi.addItem(payload)
-      ElMessage.success('已添加到白名单')
+      ElMessage.success(t('admin.xrefreorder.success_added'))
     } else {
       if (editingId.value == null) return
       const payload: XrefOem3UpdatePayload = {
@@ -371,7 +374,7 @@ async function submitForm() {
       const result = await adminXrefApi.updateItem(editingId.value, payload)
       // 更新本地 rowVersion (xmin 已变, 下次编辑需用新值)
       form.rowVersion = result.rowVersion
-      ElMessage.success('编辑成功')
+      ElMessage.success(t('admin.xrefreorder.success_edited'))
     }
     dialogVisible.value = false
     await loadOemList()
@@ -380,9 +383,9 @@ async function submitForm() {
   } catch (e: any) {
     const status = e?.response?.status
     if (status === 409) {
-      ElMessage.error(e?.response?.data?.detail || '冲突, 请刷新重试')
+      ElMessage.error(e?.response?.data?.detail || t('admin.xrefreorder.err_conflict'))
     } else {
-      ElMessage.error(e?.response?.data?.detail || '保存失败')
+      ElMessage.error(e?.response?.data?.detail || t('admin.xrefreorder.err_save_failed'))
     }
   } finally {
     dialogLoading.value = false
@@ -394,24 +397,24 @@ async function submitForm() {
 async function deleteItem(item: XrefOem3Item) {
   try {
     await ElMessageBox.confirm(
-      `确认从白名单移除 OEM 3 "${item.oemNo3}"? (产品本身不会被删除, 仅不再优先展示)`,
-      '从白名单移除',
-      { confirmButtonText: '移除', cancelButtonText: '取消', type: 'warning' }
+      t('admin.xrefreorder.confirm_remove_message', { oemNo3: item.oemNo3 }),
+      t('admin.xrefreorder.remove_from_whitelist'),
+      { confirmButtonText: t('admin.xrefreorder.remove'), cancelButtonText: t('admin.xrefreorder.cancel'), type: 'warning' }
     )
   } catch {
     return  // 用户取消
   }
   try {
     await adminXrefApi.deleteItem(item.id, item.rowVersion)
-    ElMessage.success('已从白名单移除')
+    ElMessage.success(t('admin.xrefreorder.success_removed'))
     await loadOemList()
     await loadBrandsSilently()
   } catch (e: any) {
     const status = e?.response?.status
     if (status === 409) {
-      ElMessage.error(e?.response?.data?.detail || '冲突, 请刷新重试')
+      ElMessage.error(e?.response?.data?.detail || t('admin.xrefreorder.err_conflict'))
     } else {
-      ElMessage.error(e?.response?.data?.detail || '移除失败')
+      ElMessage.error(e?.response?.data?.detail || t('admin.xrefreorder.err_remove_failed'))
     }
   }
 }
@@ -439,13 +442,13 @@ function openCreateBrandDialog() {
 async function submitBrand() {
   const name = newBrandName.value.trim()
   if (!name) {
-    ElMessage.error('请输入品牌名')
+    ElMessage.error(t('admin.xrefreorder.err_brand_name_required'))
     return
   }
   brandSubmitting.value = true
   try {
     const result = await adminXrefApi.addBrand(name)
-    ElMessage.success(result.restored ? `品牌 '${result.brand}' 已恢复` : `品牌 '${result.brand}' 已新增`)
+    ElMessage.success(result.restored ? t('admin.xrefreorder.success_brand_restored', { brand: result.brand }) : t('admin.xrefreorder.success_brand_added', { brand: result.brand }))
     brandDialogVisible.value = false
     // 刷新品牌列表并自动选中新品牌
     await loadBrands()
@@ -457,9 +460,9 @@ async function submitBrand() {
     const status = e?.response?.status
     const errorCode = e?.response?.data?.errorCode
     if (status === 409 || errorCode === 'BRAND_EXISTS') {
-      ElMessage.error(e?.response?.data?.detail || '品牌已存在')
+      ElMessage.error(e?.response?.data?.detail || t('admin.xrefreorder.err_brand_exists'))
     } else {
-      ElMessage.error(e?.response?.data?.detail || '新增品牌失败')
+      ElMessage.error(e?.response?.data?.detail || t('admin.xrefreorder.err_add_brand_failed'))
     }
   } finally {
     brandSubmitting.value = false
@@ -481,9 +484,9 @@ onBeforeUnmount(() => {
   <div class="p-4 max-w-7xl mx-auto">
     <!-- 标题 -->
     <div class="border-b border-gray-200 pb-3 mb-4 dark:border-[var(--color-border)]">
-      <h1 class="text-xl font-medium">OEM 白名单管理</h1>
+      <h1 class="text-xl font-medium">{{ t('admin.xrefreorder.page_title') }}</h1>
       <p class="text-xs text-gray-500 mt-1 dark:text-[var(--color-text-muted)]">
-        拖拽调整白名单内 OEM 3 优先展示顺序 (数值越小越靠前, 类竞价排名) · 自动保存 · 冲突时刷新重试 · 仅显示已加入白名单的产品
+        {{ t('admin.xrefreorder.page_subtitle') }}
       </p>
     </div>
 
@@ -491,8 +494,8 @@ onBeforeUnmount(() => {
       <!-- 左侧: Brand 列表 -->
       <div class="w-64 border border-gray-200 rounded dark:border-[var(--color-border)]">
         <div class="px-3 py-2 border-b border-gray-200 bg-gray-50 text-sm font-medium flex items-center justify-between dark:border-[var(--color-border)] dark:bg-[var(--color-bg-elevated)]">
-          <span>品牌 ({{ brands.length }})</span>
-          <el-button size="small" text type="primary" @click="openCreateBrandDialog">+ 新增</el-button>
+          <span>{{ t('admin.xrefreorder.brand_label', { count: brands.length }) }}</span>
+          <el-button size="small" text type="primary" @click="openCreateBrandDialog">{{ t('admin.xrefreorder.add_brand') }}</el-button>
         </div>
         <div v-loading="loadingBrands" class="overflow-auto" style="max-height: 540px">
           <div
@@ -504,11 +507,11 @@ onBeforeUnmount(() => {
           >
             <div class="flex-1 min-w-0">
               <div class="text-sm truncate">{{ b.brand }}</div>
-              <div class="text-xs text-gray-500 dark:text-[var(--color-text-muted)]">白名单 {{ b.oem3Count }} 条 · brand sort: {{ b.sortOrder }}</div>
+              <div class="text-xs text-gray-500 dark:text-[var(--color-text-muted)]">{{ t('admin.xrefreorder.brand_whitelist_count', { count: b.oem3Count, sortOrder: b.sortOrder }) }}</div>
             </div>
           </div>
           <div v-if="!loadingBrands && brands.length === 0" class="p-4 text-center text-gray-400 text-sm dark:text-[var(--color-text-muted)]">
-            无品牌数据
+            {{ t('admin.xrefreorder.no_brand_data') }}
           </div>
         </div>
       </div>
@@ -517,9 +520,9 @@ onBeforeUnmount(() => {
       <div class="flex-1 border border-gray-200 rounded dark:border-[var(--color-border)]">
         <div class="px-3 py-2 border-b border-gray-200 bg-gray-50 flex items-center justify-between flex-wrap gap-2 dark:border-[var(--color-border)] dark:bg-[var(--color-bg-elevated)]">
           <div class="text-sm font-medium flex items-center gap-2">
-            {{ selectedBrand || '请选择品牌' }}
+            {{ selectedBrand || t('admin.xrefreorder.select_brand_placeholder') }}
             <span v-if="total > 0" class="text-xs text-gray-500 dark:text-[var(--color-text-muted)]">
-              (共 {{ total }} 条, 第 {{ page }}/{{ totalPages || 1 }} 页)
+              {{ t('admin.xrefreorder.total_info', { total, page, totalPages: totalPages || 1 }) }}
             </span>
           </div>
           <div class="flex items-center gap-2">
@@ -528,14 +531,15 @@ onBeforeUnmount(() => {
               v-model="searchQ"
               size="small"
               clearable
-              placeholder="搜索白名单内 OEM 3 号"
+              :placeholder="t('admin.xrefreorder.search_placeholder')"
+              :aria-label="t('admin.xrefreorder.search_placeholder')"
               style="width: 180px"
               @input="onSearchInput"
               @clear="onSearchInput"
             />
             <!-- 白名单改造: 添加到白名单按钮 (后端 sort_order=max+1 自动入白名单) -->
             <el-button size="small" type="success" @click="openCreateDialog" :disabled="!selectedBrand">
-              添加到白名单
+              {{ t('admin.xrefreorder.add_to_whitelist') }}
             </el-button>
             <el-button
               v-if="dragList.length > 0"
@@ -544,7 +548,7 @@ onBeforeUnmount(() => {
               :loading="saving"
               @click="manualSave"
             >
-              保存排序
+              {{ t('admin.xrefreorder.save_order') }}
             </el-button>
           </div>
         </div>
@@ -566,23 +570,23 @@ onBeforeUnmount(() => {
                 <div class="flex-1 min-w-0">
                   <div class="font-mono text-sm truncate">{{ element.oemNo3 }}</div>
                   <div class="text-xs text-gray-500 dark:text-[var(--color-text-muted)]">
-                    MR.1: {{ element.mr1 || '-' }}
-                    <el-tag v-if="!element.isPublished" size="small" type="info" class="ml-1">未上架</el-tag>
+                    {{ t('admin.xrefreorder.mr1_label', { mr1: element.mr1 || '-' }) }}
+                    <el-tag v-if="!element.isPublished" size="small" type="info" class="ml-1">{{ t('admin.xrefreorder.unpublished') }}</el-tag>
                   </div>
                 </div>
-                <span class="text-xs text-gray-400 dark:text-[var(--color-text-muted)]">sort: {{ element.sortOrder }}</span>
+                <span class="text-xs text-gray-400 dark:text-[var(--color-text-muted)]">{{ t('admin.xrefreorder.sort_label', { sortOrder: element.sortOrder }) }}</span>
                 <!-- V24-F86: 编辑/从白名单移除按钮 -->
                 <div class="flex items-center gap-1">
-                  <el-button size="small" text @click="openEditDialog(element)">编辑</el-button>
-                  <el-button size="small" text type="danger" @click="deleteItem(element)">从白名单移除</el-button>
+                  <el-button size="small" text @click="openEditDialog(element)">{{ t('admin.xrefreorder.edit') }}</el-button>
+                  <el-button size="small" text type="danger" @click="deleteItem(element)">{{ t('admin.xrefreorder.remove_from_whitelist') }}</el-button>
                 </div>
               </div>
             </template>
           </draggable>
 
           <div v-else-if="!loadingOem" class="py-12 text-center text-gray-400 text-sm dark:text-[var(--color-text-muted)]">
-            <p v-if="selectedBrand">当前品牌尚未维护白名单, 点击"添加到白名单"选择需要优先展示的产品</p>
-            <p v-else>请从左侧选择品牌</p>
+            <p v-if="selectedBrand">{{ t('admin.xrefreorder.empty_no_whitelist') }}</p>
+            <p v-else>{{ t('admin.xrefreorder.empty_select_brand') }}</p>
           </div>
         </div>
 
@@ -605,16 +609,16 @@ onBeforeUnmount(() => {
     <!-- V24-F86: 添加到白名单 / 编辑弹窗 -->
     <el-dialog
       v-model="dialogVisible"
-      :title="dialogMode === 'create' ? '添加到白名单' : '编辑 OEM 3'"
+      :title="dialogMode === 'create' ? t('admin.xrefreorder.dialog_add_title') : t('admin.xrefreorder.dialog_edit_title')"
       width="520px"
       :close-on-click-modal="false"
     >
       <el-form v-loading="dialogLoading" :model="form" label-width="100px" label-position="right">
         <!-- 当前品牌 (只读显示, 不可编辑, 自动取 selectedBrand) -->
-        <el-form-item label="当前品牌">
+        <el-form-item :label="t('admin.xrefreorder.field_current_brand')">
           <span class="text-sm font-medium">{{ form.oemBrand || selectedBrand || '-' }}</span>
         </el-form-item>
-        <el-form-item label="关联产品">
+        <el-form-item :label="t('admin.xrefreorder.field_product')">
           <!-- productId 联想 (el-select remote, 多字段搜索, 自动按当前 brand 过滤) -->
           <el-select
             v-model="form.productId"
@@ -623,7 +627,7 @@ onBeforeUnmount(() => {
             :remote-method="searchProducts"
             :loading="productLoading"
             :disabled="dialogMode === 'edit'"
-            placeholder="输入 MR.1 / 产品名搜索该品牌下产品"
+            :placeholder="t('admin.xrefreorder.product_placeholder')"
             style="width: 100%"
             @change="onProductSelected"
           >
@@ -635,26 +639,26 @@ onBeforeUnmount(() => {
             />
           </el-select>
         </el-form-item>
-        <el-form-item label="OEM 3 号">
-          <el-input v-model="form.oemNo3" placeholder="OEM 3 号 (对外展示主键)" />
+        <el-form-item :label="t('admin.xrefreorder.field_oem_no3')">
+          <el-input v-model="form.oemNo3" :placeholder="t('admin.xrefreorder.field_oem_no3')" />
         </el-form-item>
-        <el-form-item label="OEM 2">
-          <el-input v-model="form.oem2" placeholder="OEM 2 号 (可选)" />
+        <el-form-item :label="t('admin.xrefreorder.field_oem2')">
+          <el-input v-model="form.oem2" :placeholder="t('admin.xrefreorder.field_oem2')" />
         </el-form-item>
-        <el-form-item label="机型类型">
-          <el-input v-model="form.machineType" placeholder="机型类型 (如 others)" />
+        <el-form-item :label="t('admin.xrefreorder.field_machine_type')">
+          <el-input v-model="form.machineType" :placeholder="t('admin.xrefreorder.field_machine_type')" />
         </el-form-item>
-        <el-form-item label="是否发布">
+        <el-form-item :label="t('admin.xrefreorder.field_is_published')">
           <el-switch v-model="form.isPublished" />
         </el-form-item>
         <div v-if="dialogMode === 'create'" class="text-xs text-gray-500 pl-[100px] dark:text-[var(--color-text-muted)]">
-          提示: 提交后该产品将自动加入白名单 (sort_order = 当前最大值 + 1), 排到白名单末尾, 可拖拽调整顺序
+          {{ t('admin.xrefreorder.dialog_add_hint') }}
         </div>
       </el-form>
       <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
+        <el-button @click="dialogVisible = false">{{ t('admin.xrefreorder.cancel') }}</el-button>
         <el-button type="primary" :loading="dialogLoading" @click="submitForm">
-          {{ dialogMode === 'create' ? '添加到白名单' : '保存' }}
+          {{ dialogMode === 'create' ? t('admin.xrefreorder.dialog_add_title') : t('admin.xrefreorder.save') }}
         </el-button>
       </template>
     </el-dialog>
@@ -662,28 +666,28 @@ onBeforeUnmount(() => {
     <!-- 新增品牌弹窗 (用户独立新增品牌到字典, 新增后即可在该品牌下添加白名单) -->
     <el-dialog
       v-model="brandDialogVisible"
-      title="新增品牌"
+      :title="t('admin.xrefreorder.add_brand_dialog_title')"
       width="420px"
       :close-on-click-modal="false"
     >
       <el-form :model="{ name: newBrandName }" label-width="80px" label-position="right">
-        <el-form-item label="品牌名">
+        <el-form-item :label="t('admin.xrefreorder.field_brand_name')">
           <el-input
             v-model="newBrandName"
-            placeholder="输入品牌名 (如 BOSCH, DONALDSON)"
+            :placeholder="t('admin.xrefreorder.brand_name_placeholder')"
             maxlength="100"
             show-word-limit
             @keyup.enter="submitBrand"
           />
         </el-form-item>
         <div class="text-xs text-gray-500 pl-[80px] dark:text-[var(--color-text-muted)]">
-          提示: 新增后品牌将加入字典, 排到列表末尾; 之后可在该品牌下"添加到白名单"选择产品
+          {{ t('admin.xrefreorder.add_brand_hint') }}
         </div>
       </el-form>
       <template #footer>
         <el-button @click="brandDialogVisible = false">取消</el-button>
         <el-button type="primary" :loading="brandSubmitting" @click="submitBrand">
-          新增品牌
+          {{ t('admin.xrefreorder.add_brand_dialog_title') }}
         </el-button>
       </template>
     </el-dialog>

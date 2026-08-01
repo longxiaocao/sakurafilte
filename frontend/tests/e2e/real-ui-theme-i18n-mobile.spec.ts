@@ -373,6 +373,10 @@ test.describe('3. i18n 切换: zh-CN → en-US, 覆盖全部路由', () => {
       const DOC_ROUTES_RELAXED: Record<string, number> = {
         '/demo': 1000,        // 开发者演示页, 大量中文演示内容
         '/admin/help': 200,   // 文档页, field-help.ts 静态说明
+        // 2026-08-01: /admin/api-docs 是 Swagger 浏览器, 页面 UI 文案已 i18n 化;
+        //   残留中文来自后端端点 summary/description (XML 注释, 动态数据), 非前端 UI 文案,
+        //   后端数据国际化留 P2 (见 .ai/suggestions.md)
+        '/admin/api-docs': 2000,
       }
       const threshold = DOC_ROUTES_RELAXED[route.path] ?? 80
       const residue = await getUiChineseResidue(page)

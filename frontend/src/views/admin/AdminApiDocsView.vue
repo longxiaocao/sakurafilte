@@ -34,7 +34,7 @@ async function fetchSchema() {
     if (r.ok) {
       schema.value = await r.json()
     } else {
-      throw new Error('Swagger 不可用, 尝试回退')
+      throw new Error(t('admin.apidocs.err_swagger_unavailable'))
     }
   } catch {
     // 回退: 加载本地 openapi.json
@@ -45,12 +45,12 @@ async function fetchSchema() {
         ElMessage.warning(t('common.feedback.success_012'))
       } else {
         // V24-F102 (P2-2, 规则 8): 记录 loadError, 让模板显示持久 el-alert + 重试按钮
-        loadError.value = 'Swagger 不可用, 且本地 openapi.json 也无法访问'
+        loadError.value = t('admin.apidocs.err_swagger_and_local_unavailable')
         ElMessage.error(t('common.feedback.error_023'))
       }
     } catch (e: any) {
       // V24-F102: 内层 catch 也记录 loadError
-      loadError.value = e?.message || 'Swagger 与 openapi.json 均加载失败'
+      loadError.value = e?.message || t('admin.apidocs.err_swagger_and_openapi_failed')
       ElMessage.error(t('common.feedback.error_022'))
     }
   } finally {
@@ -127,6 +127,7 @@ const filteredModules = computed<Module[]>(() => {
 
 const totalEndpoints = computed(() => modules.value.reduce((s, m) => s + m.endpoints.length, 0))
 const totalSchemas = computed(() => Object.keys(schema.value?.components?.schemas || {}).length)
+const filteredEndpointCount = computed(() => filteredModules.value.reduce((s, m) => s + m.endpoints.length, 0))
 
 function toggle(path: string, method: string) {
   const key = `${method}-${path}`
@@ -193,10 +194,10 @@ onMounted(fetchSchema)
   <div class="p-3 max-w-screen-2xl mx-auto">
     <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
       <div>
-        <h1 class="text-lg font-medium">API 文档</h1>
+        <h1 class="text-lg font-medium">{{ t('admin.apidocs.page_title') }}</h1>
         <p class="text-xs text-muted">
-          批次 6d — OpenAPI 3.0 浏览器
-          <span v-if="schema">· 实时拉取自 /swagger/v1/swagger.json</span>
+          {{ t('admin.apidocs.subtitle_batch') }}
+          <span v-if="schema">{{ t('admin.apidocs.subtitle_source') }}</span>
         </p>
       </div>
       <div class="flex items-center gap-2">
@@ -204,7 +205,7 @@ onMounted(fetchSchema)
           @click="refresh"
           :disabled="loading"
           class="px-2 py-1 text-xs hairline hover:bg-[var(--color-bg-hover)] disabled:opacity-50"
-        >{{ loading ? '加载中…' : '↻ 刷新' }}</button>
+        >{{ loading ? t('admin.apidocs.loading') : t('admin.apidocs.refresh') }}</button>
         <a
           href="http://localhost:5148/swagger"
           target="_blank"
@@ -217,15 +218,15 @@ onMounted(fetchSchema)
     <!-- 统计 -->
     <div v-if="schema" class="grid grid-cols-2 md:grid-cols-3 gap-2 mb-3">
       <div class="hairline p-2">
-        <div class="text-xs text-muted">模块数</div>
+        <div class="text-xs text-muted">{{ t('admin.apidocs.stat_modules') }}</div>
         <div class="text-lg font-medium">{{ modules.length }}</div>
       </div>
       <div class="hairline p-2">
-        <div class="text-xs text-muted">端点数</div>
+        <div class="text-xs text-muted">{{ t('admin.apidocs.stat_endpoints') }}</div>
         <div class="text-lg font-medium">{{ totalEndpoints }}</div>
       </div>
       <div class="hairline p-2">
-        <div class="text-xs text-muted">数据模型</div>
+        <div class="text-xs text-muted">{{ t('admin.apidocs.stat_schemas') }}</div>
         <div class="text-lg font-medium">{{ totalSchemas }}</div>
       </div>
     </div>
@@ -235,20 +236,20 @@ onMounted(fetchSchema)
       <select
         v-model="filterTag"
         class="px-2 py-1 text-xs hairline bg-[var(--color-bg-elevated)]"
-        aria-label="按模块筛选"
+        :aria-label="t('admin.apidocs.filter_module_aria')"
       >
-        <option value="">全部模块</option>
+        <option value="">{{ t('admin.apidocs.filter_all_modules') }}</option>
         <option v-for="t in allTags" :key="t" :value="t">{{ t }}</option>
       </select>
       <input
         v-model="search"
         type="text"
-        placeholder="搜索路径 / 方法 / 摘要…"
+        :placeholder="t('admin.apidocs.search_placeholder')"
         class="px-2 py-1 text-xs hairline bg-[var(--color-bg-elevated)] flex-1 min-w-[200px]"
-        aria-label="搜索端点"
+        :aria-label="t('admin.apidocs.search_aria')"
       />
       <span class="text-xs text-muted">
-        显示 {{ filteredModules.reduce((s, m) => s + m.endpoints.length, 0) }} / {{ totalEndpoints }}
+        {{ t('admin.apidocs.showing_count', { shown: filteredEndpointCount, total: totalEndpoints }) }}
       </span>
     </div>
 
@@ -264,7 +265,7 @@ onMounted(fetchSchema)
         <div class="flex items-center justify-between">
           <span>{{ loadError }}</span>
           <el-button size="small" @click="refresh" :disabled="loading">
-            {{ loading ? '重试中…' : '重试' }}
+            {{ loading ? t('admin.apidocs.retrying') : t('admin.apidocs.retry') }}
           </el-button>
         </div>
       </template>
@@ -278,7 +279,7 @@ onMounted(fetchSchema)
       <section v-for="mod in filteredModules" :key="mod.name" class="hairline p-3">
         <h2 class="text-base font-medium mb-2">
           {{ mod.name }}
-          <span class="text-xs text-muted">({{ mod.endpoints.length }} 端点)</span>
+          <span class="text-xs text-muted">{{ t('admin.apidocs.endpoint_count', { count: mod.endpoints.length }) }}</span>
         </h2>
         <ul class="divide-y divide-[var(--color-border)]">
           <li v-for="ep in mod.endpoints" :key="ep.method + ep.path" class="py-2">
@@ -296,7 +297,7 @@ onMounted(fetchSchema)
               <button
                 @click="copyCurl(ep)"
                 class="px-2 py-0.5 text-[10px] hairline hover:bg-[var(--color-bg-hover)]"
-                :aria-label="`复制 ${ep.method} ${ep.path} 的 cURL`"
+                :aria-label="t('admin.apidocs.copy_curl_aria', { method: ep.method, path: ep.path })"
               >cURL</button>
             </div>
             <div v-if="ep.op.summary" class="text-xs text-muted ml-7 mt-0.5">
@@ -344,7 +345,7 @@ onMounted(fetchSchema)
     </div>
 
     <div v-if="!loading && schema && filteredModules.length === 0" class="text-center text-sm text-muted py-8">
-      无匹配的端点
+      {{ t('admin.apidocs.no_matching_endpoints') }}
     </div>
   </div>
 </template>
