@@ -15,7 +15,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { publicCompareApi } from '@/api'
-import type { ProductDetail, XrefInfo, MachineAppInfo } from '@/api/types'
+import type { PublicProductDetail, PublicXrefInfo, MachineAppInfo } from '@/api/types'
 import { buildProductUrl } from '@/utils/build-product-url'
 import { safeGetItem, safeSetItem, safeRemoveItem } from '@/utils/safeStorage'
 
@@ -29,13 +29,13 @@ const COMPARE_KEY = 'sakurafilter_compare_ids'
 
 // ===== 字段定义 (与 AdminCompareView 一致) =====
 interface FieldDef {
-  key: keyof ProductDetail | string
+  key: keyof PublicProductDetail | string
   label: string
-  get: (p: ProductDetail) => string
+  get: (p: PublicProductDetail) => string
   eq?: (a: string, b: string) => boolean
 }
 
-const xrefSummary = (list: XrefInfo[] | undefined) => {
+const xrefSummary = (list: PublicXrefInfo[] | undefined) => {
   if (!list || list.length === 0) return ''
   const head = list.slice(0, 3).map((x) => `${x.oemBrand || ''} ${x.oemNo3 || ''}`.trim()).filter(Boolean)
   return head.length === 0 ? '' : head.join('; ') + (list.length > 3 ? ` (+${list.length - 3})` : '')
@@ -58,7 +58,6 @@ const fieldGroups: FieldGroup[] = [
     fields: [
       { key: 'oemNoDisplay', label: 'OEM 编号', get: (p) => p.oemNoDisplay ?? '' },
       { key: 'oem2', label: 'OEM 2', get: (p) => p.oem2 ?? '' },
-      { key: 'mr1', label: 'MR.1', get: (p) => p.mr1 ?? '' },
       { key: 'productName1', label: '产品名 1', get: (p) => p.productName1 ?? '' },
       { key: 'productName2', label: '产品名 2', get: (p) => p.productName2 ?? '' },
       { key: 'type', label: '类型', get: (p) => p.type ?? '' }
@@ -119,7 +118,7 @@ const fieldGroups: FieldGroup[] = [
 // ===== 状态 =====
 const loading = ref(false)
 const error = ref('')
-const products = ref<ProductDetail[]>([])
+const products = ref<PublicProductDetail[]>([])
 const newIdInput = ref('')
 
 // ===== 加载产品 =====
@@ -135,7 +134,7 @@ async function loadByIds(ids: number[]) {
     const data = await publicCompareApi.compare(capped)
     // 按 capped 顺序对齐 (后端可能按 id 排序)
     const map = new Map(data.items.map((p) => [p.id, p]))
-    products.value = capped.map((id) => map.get(id)).filter((p): p is ProductDetail => !!p)
+    products.value = capped.map((id) => map.get(id)).filter((p): p is PublicProductDetail => !!p)
   } catch (e: any) {
     error.value = e?.problem?.detail || e?.response?.data?.error || e?.message || '加载失败'
     ElMessage.error(error.value)
@@ -293,7 +292,7 @@ function cellClass(values: string[]): string {
   return allEqual ? 'same' : 'diff'
 }
 
-function valueOf(p: ProductDetail | undefined, def: FieldDef): string {
+function valueOf(p: PublicProductDetail | undefined, def: FieldDef): string {
   if (!p) return ''
   return def.get(p)
 }
@@ -373,7 +372,7 @@ function doPrint() {
     <div v-if="products.length > 0" class="compare-grid-wrap hairline">
       <div
         class="compare-grid"
-        :style="{ gridTemplateColumns: `200px repeat(${products.length}, minmax(0, 1fr))` }"
+        :style="{ gridTemplateColumns: `160px repeat(${products.length}, minmax(180px, 1fr))` }"
       >
         <div class="compare-header-cell field-name-cell sticky-left">字段</div>
         <div
@@ -391,8 +390,7 @@ function doPrint() {
                     productName2: p.productName2,
                     oemBrand: p.crossReferences?.[0]?.oemBrand,
                     oemNo3: p.crossReferences?.[0]?.oemNo3,
-                    oemNoDisplay: p.oemNoDisplay,
-                    mr1: p.mr1
+                    oemNoDisplay: p.oemNoDisplay
                   })"
                   class="hover:underline"
                 >{{ p.oemNoDisplay }}</a>

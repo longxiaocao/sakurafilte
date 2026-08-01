@@ -14,7 +14,7 @@ import { createApp, type App, type Component } from 'vue'
 import { captureException } from '@/utils/errorMonitor'
 
 // ============================================================================
-// 类型定义 (与 frontend/src/api/types.ts ProductDetailDto 对齐)
+// 类型定义与公开详情契约对齐，不能包含内部 MR1。
 // ============================================================================
 
 interface ProductImageInfo {
@@ -37,7 +37,6 @@ interface ProductImageInfo {
 interface ProductData {
   // V2 Task 4.5: 加 id 字段, CompareApp 跳对比页需要 productId
   id: number
-  mr1: string | null
   oemNoDisplay: string
   oem2: string | null
   productName1: string | null
@@ -117,7 +116,6 @@ async function bootstrap(): Promise<void> {
   try {
     const GalleryApp = (await import('@/components/GalleryApp.vue')).default
     safeMount('gallery-app', GalleryApp, {
-      mr1: product.mr1,
       oemNo3: product.oemNoDisplay,
       images: product.images ?? []
     })
@@ -130,7 +128,6 @@ async function bootstrap(): Promise<void> {
   try {
     const CompareApp = (await import('@/components/CompareApp.vue')).default
     safeMount('compare-app', CompareApp, {
-      mr1: product.mr1,
       oemNo3: product.oemNoDisplay,
       productId: product.id
     })
@@ -138,11 +135,10 @@ async function bootstrap(): Promise<void> {
     console.warn('[Detail] CompareApp load failed:', err)
   }
 
-  // InquiryApp: 询盘表单 (mailto: 兜底, 后端 API 待 Phase 5)
+  // InquiryApp: 询盘表单（通过 VITE_INQUIRY_EMAIL 配置的 mailto 发送）
   try {
     const InquiryApp = (await import('@/components/InquiryApp.vue')).default
     safeMount('inquiry-app', InquiryApp, {
-      mr1: product.mr1,
       oemNo3: product.oemNoDisplay,
       brand: product.crossReferences?.[0]?.oemBrand ?? null,
       productName1: product.productName1

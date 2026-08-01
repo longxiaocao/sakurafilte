@@ -12,7 +12,7 @@ namespace SakuraFilter.Api.Controllers;
 ///   - 复刻 AdminProductService.CompareAsync 的查询结构, 但排除 is_discontinued=true
 ///     (前台不应展示下架产品, 与 PublicProductController.GetBySlug 一致)
 ///   - 上限 6 个产品, 单次 query + InMemory 分组, 避免 N+1
-///   - 返回: { count, items: ProductDetailDto[] }, 与 admin compare 形态一致
+///   - 返回: { count, items: PublicProductDetailDto[] }，只包含客户字段
 ///
 /// 与 admin/compare 的差异:
 ///   - 路径: /api/public/compare vs /api/admin/products/compare
@@ -63,7 +63,7 @@ public class PublicCompareController : ControllerBase
 
         // 公开版排除下架产品
         var products = await _db.Products.AsNoTracking()
-            .Where(p => idList.Contains(p.Id) && !p.IsDiscontinued)
+            .Where(p => idList.Contains(p.Id) && p.IsPublished && !p.IsDiscontinued)
             .ToListAsync(ct);
         var ordered = idList
             .Select(id => products.FirstOrDefault(p => p.Id == id))
@@ -72,16 +72,23 @@ public class PublicCompareController : ControllerBase
             .ToList();
 
         if (ordered.Count == 0)
-            return Ok(new { count = 0, items = Array.Empty<ProductDetailDto>() });
+            return Ok(new { count = 0, items = Array.Empty<PublicProductDetailDto>() });
 
         var matchedIds = ordered.Select(p => p.Id).ToList();
 
         // 单次查 xref + apps (公开对比是表格视图, 不需要图片)
         //   WHY 复用 AdminProductService.CompareAsync 模式, 不引入图片预签名复杂度
         //   用户需要看图可点击任一列进入 /product/{oem} 详情页 (该页面会查图)
-        var xrefs = await _db.CrossReferences.AsNoTracking()
-            .Where(x => matchedIds.Contains(x.ProductId))
-            .Select(x => new { x.ProductId, x.Id, x.ProductName1, x.OemBrand, x.OemNo3, x.Oem2, x.SortOrder, x.MachineType, x.IsPublished, x.RowVersion })
+        var xrefs = await (
+            from x in _db.CrossReferences.AsNoTracking()
+            where matchedIds.Contains(x.ProductId)
+            orderby (_db.XrefOemBrands
+                        .Where(b => b.Brand == x.OemBrand && b.DeletedAt == null)
+                        .Select(b => (int?)b.SortOrder)
+                        .FirstOrDefault() ?? int.MaxValue),
+                    x.SortOrder,
+                    x.OemNo3
+            select new { x.ProductId, x.Id, x.ProductName1, x.OemBrand, x.OemNo3, x.Oem2, x.SortOrder, x.MachineType, x.IsPublished, x.RowVersion })
             .ToListAsync(ct);
         var apps = await _db.MachineApplications.AsNoTracking()
             .Where(m => matchedIds.Contains(m.ProductId))
@@ -115,10 +122,12 @@ public class PublicCompareController : ControllerBase
                 p.H1Mm, p.H2Mm, p.H3Mm, p.H4Mm,
                 p.D7Thread, p.D8Thread,
                 p.NoCheckValves, p.NoBypassValves,
+                p.NoCheckValvesRaw, p.NoBypassValvesRaw,
                 p.Media, p.MediaModel,
                 p.BypassValveLr, p.BypassValveHr,
                 p.Efficiency1, p.Efficiency2, p.BypassPressure,
                 p.CollapsePressureBar,
+                p.BypassValveLrRaw, p.BypassValveHrRaw, p.BypassPressureRaw, p.CollapsePressureBarRaw,
                 p.SealingMaterial, p.TempRange,
                 p.QtyPerCarton, p.WeightKgs,
                 p.CartonLengthMm, p.CartonWidthMm, p.CartonHeightMm,
@@ -132,6 +141,8 @@ public class PublicCompareController : ControllerBase
 
         _logger.LogInformation("PublicCompare: ids=[{Ids}] returned={Count}",
             string.Join(",", idList), result.Count);
-        return Ok(new { count = result.Count, items = result });
+        // 管理端 DTO 含 MR1、发布状态和审计字段；公开对比必须经过客户契约投影。
+        var publicItems = result.Select(PublicProductDetailDto.From).ToList();
+        return Ok(new { count = publicItems.Count, items = publicItems });
     }
 }

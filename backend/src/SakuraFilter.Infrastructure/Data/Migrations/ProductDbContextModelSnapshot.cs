@@ -1012,13 +1012,25 @@ namespace SakuraFilter.Infrastructure.Data.Migrations
                         .HasColumnType("numeric")
                         .HasColumnName("bypass_pressure");
 
+                    b.Property<string>("BypassPressureRaw")
+                        .HasColumnType("text")
+                        .HasColumnName("bypass_pressure_raw");
+
                     b.Property<decimal?>("BypassValveHr")
                         .HasColumnType("numeric")
                         .HasColumnName("bypass_valve_hr");
 
+                    b.Property<string>("BypassValveHrRaw")
+                        .HasColumnType("text")
+                        .HasColumnName("bypass_valve_hr_raw");
+
                     b.Property<decimal?>("BypassValveLr")
                         .HasColumnType("numeric")
                         .HasColumnName("bypass_valve_lr");
+
+                    b.Property<string>("BypassValveLrRaw")
+                        .HasColumnType("text")
+                        .HasColumnName("bypass_valve_lr_raw");
 
                     b.Property<decimal?>("CartonHeightMm")
                         .HasColumnType("numeric")
@@ -1035,6 +1047,10 @@ namespace SakuraFilter.Infrastructure.Data.Migrations
                     b.Property<decimal?>("CollapsePressureBar")
                         .HasColumnType("numeric")
                         .HasColumnName("collapse_pressure_bar");
+
+                    b.Property<string>("CollapsePressureBarRaw")
+                        .HasColumnType("text")
+                        .HasColumnName("collapse_pressure_bar_raw");
 
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
@@ -1188,9 +1204,17 @@ namespace SakuraFilter.Infrastructure.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("no_bypass_valves");
 
+                    b.Property<string>("NoBypassValvesRaw")
+                        .HasColumnType("text")
+                        .HasColumnName("no_bypass_valves_raw");
+
                     b.Property<int?>("NoCheckValves")
                         .HasColumnType("integer")
                         .HasColumnName("no_check_valves");
+
+                    b.Property<string>("NoCheckValvesRaw")
+                        .HasColumnType("text")
+                        .HasColumnName("no_check_valves_raw");
 
                     b.Property<string>("Oem2")
                         .HasColumnType("text")

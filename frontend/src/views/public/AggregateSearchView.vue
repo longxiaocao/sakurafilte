@@ -2,7 +2,7 @@
 // V2 Task 1.3.2: 聚合搜索页 (需求 5)
 //   URL: /search/aggregate?q=CAT 320D&page=1
 //   - 调 POST /api/public/search/aggregate (Meili 主 + PG 兜底)
-//   - 文档级展示: MR.1 卡片 + 可展开 oemList (每个 OEM 3 一行)
+//   - 文档级聚合、OEM 3 对外展示 + 可展开 oemList (每个 OEM 3 一行)
 //   - _formatted 高亮渲染 (sanitizeFormatted 双保险, 只允许 <mark> 标签)
 //   - 500ms 防抖 + AbortController 取消前序请求 (复用 PublicSearchView 模式)
 //   - Musk 风格极简: 纯黑白 + 1px 细线 + 8px 网格 + 无阴影
@@ -12,8 +12,8 @@ import { ElMessage } from 'element-plus'
 // V24-F38: 改用 searchWithFallback (封装聚合 API 404 降级逻辑)
 //   保留 publicSearchApi 导入: clearSearch 等其他函数可能用到 (此处仅类型兼容)
 // V24-F40: shouldShowLegacyFallbackWarn 5 秒去重, 避免连续搜索刷屏
-import { searchWithFallback, wasLastSearchLegacyFallback, shouldShowLegacyFallbackWarn } from '@/api'
-import type { AggregateSearchHit, AggregateSearchResponse } from '@/api/types'
+import { publicSearchApi, searchWithFallback, wasLastSearchLegacyFallback, shouldShowLegacyFallbackWarn } from '@/api'
+import type { AggregateSearchHit, AggregateSearchResponse, MachineCatalogResponse } from '@/api/types'
 import { sanitizeFormatted } from '@/utils/html-sanitizer'
 import { buildProductUrl } from '@/utils/build-product-url'
 
@@ -26,28 +26,32 @@ const page = ref<number>(route.query.page ? Number(route.query.page) : 1)
 const pageSize = ref<number>(20)
 // 高级筛选 (折叠展开, 默认收起)
 const showAdvanced = ref(false)
+const routeTolerance = Number(route.query.tolerance)
 const advancedForm = reactive({
-  type: '',
-  machineCategory: '',
-  tolerance: 5,
-  includeDiscontinued: false
+  type: (route.query.type as string) || '',
+  machineCategory: (route.query.machineCategory as string) || '',
+  tolerance: [1, 5, 10].includes(routeTolerance) ? routeTolerance : 5
 })
+const quickProductTypes = ['Air Filter', 'Oil Filter', 'Fuel Filter', 'Hydraulic Filter'] as const
+
+function toggleQuickProductType(type: string) {
+  advancedForm.type = advancedForm.type === type ? '' : type
+}
 
 // ===== 搜索结果状态 =====
 const loading = ref(false)
 const results = ref<AggregateSearchHit[]>([])
 const total = ref(0)
 const totalPages = ref(0)
-const processingTimeMs = ref(0)
-const provider = ref<string>('')
 const lastError = ref('')
-// 展开的 MR.1 卡片 (展示完整 oemList)
-const expandedMr1 = ref<Set<string>>(new Set())
+// 展开的聚合卡片使用服务端提供的公开键。
+const expandedKeys = ref<Set<string>>(new Set())
 // V24-F38 (spec 改进建议): 标记本次搜索是否降级到旧 API
 //   - true: 聚合 API 404, 降级到 searchApi.search, 无 oemList/machineList 嵌套
 //   - false: 聚合 API 正常, 完整渲染
 //   - 渲染时检查: 降级时隐藏 "展开 OEM" 按钮 + 机型列表区域
 const isLegacyFallback = ref(false)
+const machineCatalog = ref<MachineCatalogResponse>({ categories: [] })
 
 // ===== 防抖 + AbortController (Task 1.3.5) =====
 let debounceTimer: number | null = null
@@ -77,7 +81,6 @@ async function doSearch() {
         page: page.value,
         pageSize: pageSize.value,
         tolerance: advancedForm.tolerance,
-        includeDiscontinued: advancedForm.includeDiscontinued,
         type: advancedForm.type || undefined,
         machineCategory: advancedForm.machineCategory || undefined
       },
@@ -96,8 +99,6 @@ async function doSearch() {
     results.value = resp.hits || []
     total.value = resp.total
     totalPages.value = resp.totalPages
-    processingTimeMs.value = resp.processingTimeMs
-    provider.value = resp.provider
   } catch (e: any) {
     // AbortError 静默 (用户快速输入时正常取消)
     if (e?.name === 'CanceledError' || e?.code === 'ERR_CANCELED') return
@@ -137,28 +138,56 @@ function syncUrl() {
   const query: Record<string, string> = {}
   if (q.value.trim()) query.q = q.value.trim()
   if (page.value > 1) query.page = String(page.value)
+  if (advancedForm.type) query.type = advancedForm.type
+  if (advancedForm.machineCategory) query.machineCategory = advancedForm.machineCategory
+  if (advancedForm.tolerance !== 5) query.tolerance = String(advancedForm.tolerance)
   router.replace({ path: '/search/aggregate', query })
 }
 
-// 展开/收起 MR.1 卡片的 oemList
-function toggleExpand(mr1: string) {
-  const next = new Set(expandedMr1.value)
-  if (next.has(mr1)) next.delete(mr1)
-  else next.add(mr1)
-  expandedMr1.value = next
+// 展开/收起聚合卡片的 oemList
+function toggleExpand(key: string) {
+  const next = new Set(expandedKeys.value)
+  if (next.has(key)) next.delete(key)
+  else next.add(key)
+  expandedKeys.value = next
+}
+
+function getPrimaryOem(hit: AggregateSearchHit) {
+  return hit.oemList?.find((item) => item.oemNo3)
+}
+
+function getPublicOemLabel(hit: AggregateSearchHit): string {
+  return getPrimaryOem(hit)?.oemNo3 || hit.oem2 || 'OEM -'
+}
+
+function stripSearchHighlight(value: string | null | undefined): string | undefined {
+  return value?.replace(/<\/?mark>/gi, '')
+}
+
+const placeholderImage = '/images/product-placeholder.svg'
+
+function getPrimaryImageUrl(hit: AggregateSearchHit): string {
+  const oemNo3 = getPrimaryOem(hit)?.oemNo3
+  return oemNo3 ? `/oem2/${encodeURIComponent(oemNo3)}.jpg` : placeholderImage
+}
+
+function usePlaceholder(event: Event): void {
+  const image = event.currentTarget as HTMLImageElement | null
+  if (image && image.src !== new URL(placeholderImage, window.location.origin).href) {
+    image.src = placeholderImage
+  }
 }
 
 // V2 Task 4.4: 跳转产品详情 SEO URL
-//   AggregateSearchHit 含完整字段 (mr1/pn1/pn2/oemList[0].brand&oemNo3), 可拼完整 SEO URL
+//   AggregateSearchHit 含产品名和 OEM3，可拼完整 SEO URL。
 function viewDetail(hit: AggregateSearchHit) {
-  const firstOem = hit.oemList?.[0]
+  const firstOem = getPrimaryOem(hit)
   const url = buildProductUrl({
-    productName1: hit.productName1,
-    productName2: hit.productName2,
+    productName1: stripSearchHighlight(hit.productName1),
+    productName2: stripSearchHighlight(hit.productName2),
     oemBrand: firstOem?.oemBrand,
     oemNo3: firstOem?.oemNo3,
-    oemNoDisplay: hit.oem2 || hit.mr1,
-    mr1: hit.mr1
+    oemNoDisplay: firstOem?.oemNo3 || hit.oem2
   })
   window.location.href = url
 }
@@ -169,11 +198,31 @@ function clearSearch() {
   advancedForm.type = ''
   advancedForm.machineCategory = ''
   advancedForm.tolerance = 5
-  advancedForm.includeDiscontinued = false
   page.value = 1
   results.value = []
   total.value = 0
   syncUrl()
+}
+
+async function loadMachineCatalog() {
+  try {
+    machineCatalog.value = await publicSearchApi.machineCatalog()
+  } catch (error) {
+    // 目录加载失败不阻断公开搜索，避免辅助导航影响主流程。
+    console.warn('[AggregateSearchView] 机型目录加载失败', error)
+  }
+}
+
+function selectMachine(category: string, brand?: string, model?: string) {
+  const categoryMap: Record<string, string> = {
+    Agriculture: 'agriculture', Commercial: 'commercial', Construction: 'construction',
+    Industrial: 'industrial', others: 'others'
+  }
+  advancedForm.machineCategory = categoryMap[category] || 'others'
+  q.value = [brand, model].filter(Boolean).join(' ')
+  page.value = 1
+  syncUrl()
+  doSearch()
 }
 
 // 取 _formatted 字段值 (后端高亮版本, 前端 sanitizeFormatted 双保险)
@@ -187,7 +236,8 @@ function getHighlighted(hit: AggregateSearchHit, field: string): string {
 }
 
 onMounted(() => {
-  if (q.value.trim()) doSearch()
+  loadMachineCatalog()
+  if (q.value.trim() || advancedForm.type || advancedForm.machineCategory) doSearch()
 })
 
 onBeforeUnmount(() => {
@@ -197,9 +247,41 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="p-4 max-w-7xl mx-auto">
+  <div class="p-4 max-w-screen-2xl mx-auto">
+    <div class="lg:grid lg:grid-cols-[220px_minmax(0,1fr)] lg:gap-6">
+      <aside
+        v-if="machineCatalog.categories.some(category => category.brands.length > 0)"
+        class="hidden lg:block self-start sticky top-4 max-h-[calc(100vh-5rem)] overflow-y-auto border border-gray-200 p-3 dark:border-[var(--color-border)]"
+        aria-label="机型分类目录"
+      >
+        <div class="text-sm font-medium pb-2 mb-2 border-b border-gray-200 dark:border-[var(--color-border)]">机型目录</div>
+        <section v-for="category in machineCatalog.categories" :key="category.category" class="py-2 border-b border-gray-100 last:border-b-0 dark:border-[var(--color-border-subtle)]">
+          <el-button text size="small" class="!px-0 !font-medium" @click="selectMachine(category.category)">
+            {{ category.category }}
+          </el-button>
+          <div v-for="brand in category.brands" :key="brand.brand" class="mt-1 text-xs">
+            <el-button text size="small" class="!h-auto !px-0" @click="selectMachine(category.category, brand.brand)">
+              {{ brand.brand }}
+            </el-button>
+            <div v-if="brand.models.length" class="ml-2 mt-1 space-y-1">
+              <el-button
+                v-for="model in brand.models.slice(0, 8)"
+                :key="model"
+                text
+                size="small"
+                class="!h-auto !px-0 block text-left text-gray-500 dark:text-[var(--color-text-muted)]"
+                @click="selectMachine(category.category, brand.brand, model)"
+              >
+                {{ model }}
+              </el-button>
+            </div>
+          </div>
+        </section>
+      </aside>
+
+      <div class="min-w-0">
     <!-- 标题 + 搜索框 -->
-    <div class="border-b border-gray-200 pb-3 mb-4">
+    <div class="border-b border-gray-200 pb-3 mb-4 dark:border-[var(--color-border)]">
       <h1 class="text-xl font-medium mb-3">聚合搜索</h1>
       <div class="flex gap-2 items-center">
         <el-input
@@ -215,19 +297,26 @@ onBeforeUnmount(() => {
         </el-button>
         <el-button size="large" @click="clearSearch">清空</el-button>
       </div>
+      <div class="flex flex-wrap gap-2 mt-3" aria-label="产品类型快捷筛选">
+        <el-button
+          v-for="type in quickProductTypes"
+          :key="type"
+          size="small"
+          :type="advancedForm.type === type ? 'primary' : 'default'"
+          @click="toggleQuickProductType(type)"
+        >
+          {{ type }}
+        </el-button>
+      </div>
       <!-- 高级筛选 (折叠展开) -->
       <div class="mt-2">
         <el-button text size="small" @click="showAdvanced = !showAdvanced">
           {{ showAdvanced ? '收起高级筛选' : '展开高级筛选' }}
         </el-button>
-        <div v-if="showAdvanced" class="flex flex-wrap gap-3 mt-2 p-3 border border-gray-200 rounded">
+        <div v-if="showAdvanced" class="flex flex-wrap gap-3 mt-2 p-3 border border-gray-200 rounded dark:border-[var(--color-border)]">
           <el-form-item label="分类" class="!mb-0">
             <el-select v-model="advancedForm.type" placeholder="全部" clearable size="small" style="width: 120px">
-              <el-option label="机油滤" value="oil" />
-              <el-option label="燃油滤" value="fuel" />
-              <el-option label="空气滤" value="air" />
-              <el-option label="空调滤" value="cabin" />
-              <el-option label="其他" value="others" />
+              <el-option v-for="type in quickProductTypes" :key="type" :label="type" :value="type" />
             </el-select>
           </el-form-item>
           <el-form-item label="机型分类" class="!mb-0">
@@ -246,120 +335,150 @@ onBeforeUnmount(() => {
               <el-option label="±10mm" :value="10" />
             </el-select>
           </el-form-item>
-          <el-form-item label="含下架" class="!mb-0">
-            <el-switch v-model="advancedForm.includeDiscontinued" />
-          </el-form-item>
         </div>
       </div>
     </div>
+
+    <el-collapse v-if="machineCatalog.categories.some(category => category.brands.length > 0)" class="mb-4 lg:hidden">
+      <el-collapse-item title="机型目录" name="machine-catalog">
+        <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <section v-for="category in machineCatalog.categories" :key="category.category" class="min-w-0">
+            <el-button text size="small" class="!px-0 !font-medium" @click="selectMachine(category.category)">
+              {{ category.category }}
+            </el-button>
+            <div v-for="brand in category.brands" :key="brand.brand" class="mt-1 text-xs">
+              <el-button text size="small" class="!h-auto !px-0" @click="selectMachine(category.category, brand.brand)">
+                {{ brand.brand }}
+              </el-button>
+              <div v-if="brand.models.length" class="ml-2 flex flex-wrap gap-x-2">
+                <el-button
+                  v-for="model in brand.models.slice(0, 8)"
+                  :key="model"
+                  text
+                  size="small"
+                  class="!h-auto !px-0 text-gray-500 dark:text-[var(--color-text-muted)]"
+                  @click="selectMachine(category.category, brand.brand, model)"
+                >
+                  {{ model }}
+                </el-button>
+              </div>
+            </div>
+          </section>
+        </div>
+      </el-collapse-item>
+    </el-collapse>
 
     <!-- 错误提示 -->
     <div v-if="lastError" class="p-3 mb-3 border border-red-300 bg-red-50 text-red-700 text-sm">
       {{ lastError }}
     </div>
 
-    <!-- 元信息 (总数 / 耗时 / provider) -->
-    <div v-if="total > 0" class="text-sm text-gray-600 mb-3 flex gap-4">
+    <!-- 元信息 -->
+    <div v-if="total > 0" class="text-sm text-gray-600 mb-3 dark:text-[var(--color-text-muted)]">
       <span>共 {{ total }} 条</span>
-      <span>耗时 {{ processingTimeMs }}ms</span>
-      <span>来源: {{ provider === 'meilisearch' ? 'Meilisearch' : 'PostgreSQL (兜底)' }}</span>
     </div>
 
     <!-- 加载中 -->
-    <div v-if="loading" class="py-12 text-center text-gray-500">
+    <div v-if="loading" class="py-12 text-center text-gray-500 dark:text-[var(--color-text-muted)]">
       <el-icon class="is-loading text-2xl"><Loading /></el-icon>
       <p class="mt-2">搜索中...</p>
     </div>
 
     <!-- 空结果 -->
-    <div v-else-if="!loading && results.length === 0 && q.trim()" class="py-12 text-center text-gray-500">
+    <div v-else-if="!loading && results.length === 0 && q.trim()" class="py-12 text-center text-gray-500 dark:text-[var(--color-text-muted)]">
       <p>未找到匹配结果</p>
       <p class="text-xs mt-1">尝试更换关键词或调整筛选条件</p>
     </div>
 
-    <!-- 搜索结果列表 (MR.1 文档级卡片) -->
-    <div v-else class="space-y-2">
+    <!-- 搜索结果列表 (内部按 MR.1 聚合，对外展示 OEM 3) -->
+    <div v-else class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
       <div
         v-for="hit in results"
-        :key="hit.mr1"
-        class="border border-gray-200 rounded p-3 hover:border-gray-400 transition-colors cursor-pointer"
+        :key="hit.key"
+        class="border border-gray-200 rounded p-3 hover:border-gray-400 transition-colors cursor-pointer dark:border-[var(--color-border)] dark:hover:border-[var(--color-border-strong)]"
+        role="link"
+        tabindex="0"
+        :aria-label="`查看产品 ${getPublicOemLabel(hit)} 详情`"
         @click="viewDetail(hit)"
+        @keyup.enter="viewDetail(hit)"
       >
-        <!-- MR.1 主信息行 -->
         <div class="flex items-start gap-3">
-          <div class="flex-1 min-w-0">
+          <img
+            :src="getPrimaryImageUrl(hit)"
+            :alt="`${getPublicOemLabel(hit)} 产品主图`"
+            class="h-20 w-20 shrink-0 border border-gray-100 object-contain bg-white"
+            loading="lazy"
+            @error="usePlaceholder"
+          />
+          <!-- 右侧内容区: 垂直分层 (主信息行 + 操作行), 避免三块混排 -->
+          <div class="flex-1 min-w-0 flex flex-col gap-2">
+            <!-- 第一行: 物品型号主信息 -->
             <div class="flex items-baseline gap-2 flex-wrap">
-              <span class="font-mono text-sm text-gray-900 font-medium">{{ hit.mr1 }}</span>
+              <span class="font-mono text-sm text-gray-900 font-medium dark:text-[var(--color-text)]">{{ getPublicOemLabel(hit) }}</span>
               <!-- V2 Task 1.3.3: v-html 渲染 _formatted 高亮 (sanitizeFormatted 双保险) -->
               <span
                 v-if="getHighlighted(hit, 'product_name_1')"
-                class="text-sm text-gray-700"
+                class="text-sm text-gray-700 dark:text-[var(--color-text)]"
                 v-html="getHighlighted(hit, 'product_name_1')"
               ></span>
-              <span v-if="hit.productName2" class="text-xs text-gray-500">{{ hit.productName2 }}</span>
-              <el-tag size="small" type="info">{{ hit.type }}</el-tag>
-              <el-tag v-if="!hit.isPublished" size="small" type="warning">未上架</el-tag>
-              <el-tag v-if="hit.isDiscontinued" size="small" type="danger">已下架</el-tag>
+              <span v-if="hit.productName2" class="text-xs text-gray-500 dark:text-[var(--color-text-muted)]">{{ hit.productName2 }}</span>
+              <el-tag size="small" type="info">{{ stripSearchHighlight(hit.type) }}</el-tag>
             </div>
-            <div v-if="hit.oem2" class="text-xs text-gray-500 mt-1">OEM 2: {{ hit.oem2 }}</div>
-          </div>
-          <div class="flex items-center gap-2">
-            <span v-if="hit.rankingScore != null" class="text-xs text-gray-400">
-              相关度 {{ (hit.rankingScore * 100).toFixed(0) }}%
-            </span>
-            <!-- V24-F38: 降级模式 (isLegacyFallback=true) 隐藏 "展开 OEM" 按钮 -->
-            <!--   WHY: 旧 API 返回空 oemList, 展开后无内容, 按钮点击无意义 -->
-            <el-button
-              v-if="!isLegacyFallback"
-              text
-              size="small"
-              @click.stop="toggleExpand(hit.mr1)"
-            >
-              {{ expandedMr1.has(hit.mr1) ? '收起' : `展开 OEM (${hit.oemList.length})` }}
-            </el-button>
-            <!-- V24-F38: 降级模式显示 "基础模式" 标记, 告知用户无 OEM 嵌套详情 -->
-            <el-tag v-if="isLegacyFallback" size="small" type="info">基础模式</el-tag>
+            <!-- 第二行: OEM 2 (可选) -->
+            <div v-if="hit.oem2" class="text-xs text-gray-500 dark:text-[var(--color-text-muted)]">OEM 2: {{ hit.oem2 }}</div>
+            <!-- 第三行: 操作区 (相关度 + 展开 OEM 按钮), justify-between 分隔 -->
+            <div class="flex items-center justify-between gap-2">
+              <span v-if="hit.rankingScore != null" class="text-xs text-gray-400 dark:text-[var(--color-text-muted)]">
+                相关度 {{ (hit.rankingScore * 100).toFixed(0) }}%
+              </span>
+              <span v-else></span>
+              <!-- V24-F38: 降级模式 (isLegacyFallback=true) 隐藏 "展开 OEM" 按钮 -->
+              <!--   WHY: 旧 API 返回空 oemList, 展开后无内容, 按钮点击无意义 -->
+              <el-button
+                v-if="!isLegacyFallback"
+                text
+                size="small"
+                @click.stop="toggleExpand(hit.key)"
+              >
+                {{ expandedKeys.has(hit.key) ? '收起' : `展开 OEM (${hit.oemList.length})` }}
+              </el-button>
+              <!-- V24-F38: 降级模式显示 "基础模式" 标记, 告知用户无 OEM 嵌套详情 -->
+              <el-tag v-if="isLegacyFallback" size="small" type="info">基础模式</el-tag>
+            </div>
           </div>
         </div>
 
         <!-- OEM 3 列表 (展开时显示) -->
         <!-- V24-F38: 降级模式 (isLegacyFallback=true) 不渲染 oemList 区域 -->
         <!--   WHY: 旧 API 返回空 oemList, 渲染空表格无意义且误导用户 -->
-        <div v-if="!isLegacyFallback && expandedMr1.has(hit.mr1)" class="mt-3 pt-3 border-t border-gray-100">
-          <div class="text-xs text-gray-500 mb-2">交叉引用 (OEM 3 列表,按品牌优先级排序)</div>
+        <div v-if="!isLegacyFallback && expandedKeys.has(hit.key)" class="mt-3 pt-3 border-t border-gray-100 dark:border-[var(--color-border-subtle)]">
+          <div class="text-xs text-gray-500 mb-2 dark:text-[var(--color-text-muted)]">交叉引用 (OEM 3 列表,按品牌优先级排序)</div>
           <table class="w-full text-xs">
-            <thead class="text-gray-500 border-b border-gray-200">
+            <thead class="text-gray-500 border-b border-gray-200 dark:text-[var(--color-text-muted)] dark:border-[var(--color-border)]">
               <tr>
                 <th class="text-left py-1 px-2 font-normal">OEM Brand</th>
                 <th class="text-left py-1 px-2 font-normal">OEM 3</th>
                 <th class="text-left py-1 px-2 font-normal">OEM 2</th>
-                <th class="text-left py-1 px-2 font-normal">Sort</th>
                 <th class="text-left py-1 px-2 font-normal">机型类型</th>
-                <th class="text-left py-1 px-2 font-normal">上架</th>
               </tr>
             </thead>
             <tbody>
               <tr
                 v-for="(oem, idx) in hit.oemList"
                 :key="`${oem.oemBrand}-${oem.oemNo3}-${idx}`"
-                class="border-b border-gray-100 hover:bg-gray-50"
+                class="border-b border-gray-100 hover:bg-gray-50 dark:border-[var(--color-border-subtle)] dark:hover:bg-[var(--color-bg-hover)]"
               >
                 <td class="py-1 px-2">{{ oem.oemBrand || '-' }}</td>
                 <td class="py-1 px-2 font-mono">{{ oem.oemNo3 || '-' }}</td>
                 <td class="py-1 px-2 font-mono">{{ oem.oem2 || '-' }}</td>
-                <td class="py-1 px-2">{{ oem.sortOrder }}</td>
                 <td class="py-1 px-2">{{ oem.machineType || '-' }}</td>
-                <td class="py-1 px-2">
-                  <el-tag v-if="oem.isPublished" size="small" type="success">上架</el-tag>
-                  <el-tag v-else size="small" type="info">下架</el-tag>
-                </td>
               </tr>
             </tbody>
           </table>
 
           <!-- 机型列表 (展开时显示) -->
           <div v-if="hit.machineList.length > 0" class="mt-3">
-            <div class="text-xs text-gray-500 mb-2">适配机型 ({{ hit.machineList.length }})</div>
+            <div class="text-xs text-gray-500 mb-2 dark:text-[var(--color-text-muted)]">适配机型 ({{ hit.machineList.length }})</div>
             <div class="flex flex-wrap gap-1">
               <el-tag
                 v-for="(m, idx) in hit.machineList.slice(0, 20)"
@@ -369,7 +488,7 @@ onBeforeUnmount(() => {
               >
                 {{ [m.machineBrand, m.machineModel].filter(Boolean).join(' ') }}
               </el-tag>
-              <span v-if="hit.machineList.length > 20" class="text-xs text-gray-400 self-center">
+              <span v-if="hit.machineList.length > 20" class="text-xs text-gray-400 self-center dark:text-[var(--color-text-muted)]">
                 + {{ hit.machineList.length - 20 }} 更多
               </span>
             </div>
@@ -387,6 +506,8 @@ onBeforeUnmount(() => {
         layout="prev, pager, next, total"
         background
       />
+    </div>
+      </div>
     </div>
   </div>
 </template>

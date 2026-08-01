@@ -125,8 +125,8 @@ test.describe('v30-22 深度 E2E: JWT 登录流程', () => {
 test.describe('v30-22 深度 E2E: 搜索流程', () => {
   test('2.1 搜索页加载 + 输入框 + 搜索按钮存在', async ({ page }) => {
     await page.goto(`${BASE}/search`, { waitUntil: 'domcontentloaded', timeout: 20000 })
-    // 等待搜索输入框 (data-testid) — 用 toBeVisible 替代 count() 以获得 auto-wait (修复时序 flaky)
-    const searchInput = page.locator('[data-testid="search-input"]').first()
+    // /search 已统一跳转公开聚合搜索页，按用户可见占位符定位真实输入框。
+    const searchInput = page.getByPlaceholder('输入关键词 (产品名 / OEM / 机型 / 品牌)')
     await expect(searchInput).toBeVisible({ timeout: 10000 })
     // 验证搜索按钮 (用 type=primary 或文案)
     const searchBtn = page.locator('button:has-text("搜索"), button[type="primary"]').first()
@@ -136,8 +136,8 @@ test.describe('v30-22 深度 E2E: 搜索流程', () => {
 
   test('2.2 输入关键词 + 点击搜索 → 不白屏', async ({ page }) => {
     await page.goto(`${BASE}/search`, { waitUntil: 'domcontentloaded', timeout: 20000 })
-    await page.waitForSelector('[data-testid="search-input"], input[type="text"]', { timeout: 10000 })
-    const searchInput = page.locator('[data-testid="search-input"]').first()
+    const searchInput = page.getByPlaceholder('输入关键词 (产品名 / OEM / 机型 / 品牌)')
+    await expect(searchInput).toBeVisible({ timeout: 10000 })
     await searchInput.fill('CAT')
     // 点击搜索按钮 (宽松定位: 任何含"搜索"文案的按钮, 或 primary 按钮)
     const searchBtn = page.locator('button:has-text("搜索"), button[type="primary"]').first()

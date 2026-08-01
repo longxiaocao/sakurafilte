@@ -218,6 +218,8 @@ export interface ProductDetail {
   d8Thread?: string
   noCheckValves?: number
   noBypassValves?: number
+  noCheckValvesRaw?: string
+  noBypassValvesRaw?: string
   media?: string
   mediaModel?: string
   bypassValveLr?: number
@@ -226,6 +228,10 @@ export interface ProductDetail {
   efficiency2?: string
   bypassPressure?: number
   collapsePressureBar?: number
+  bypassValveLrRaw?: string
+  bypassValveHrRaw?: string
+  bypassPressureRaw?: string
+  collapsePressureBarRaw?: string
   sealingMaterial?: string
   tempRange?: string
   qtyPerCarton?: number
@@ -245,6 +251,32 @@ export interface ProductDetail {
   crossReferences: XrefInfo[]
   machineApplications: MachineAppInfo[]
   images: ProductImageInfo[]
+}
+
+/** 客户公开详情契约：内部聚合和后台运营字段不向浏览器传递。 */
+export type PublicProductDetail = Omit<
+  ProductDetail,
+  'mr1' | 'isPublished' | 'rowVersion' | 'isDiscontinued' | 'createdAt' | 'updatedAt' | 'crossReferences' | 'images'
+> & {
+  crossReferences: PublicXrefInfo[]
+  images: PublicProductImageInfo[]
+}
+
+export interface PublicXrefInfo {
+  productName1?: string
+  oemBrand?: string
+  oemNo3?: string
+  oem2?: string
+  machineType?: string
+}
+
+export interface PublicProductImageInfo {
+  slot: number
+  imageKey: string
+  imageUrl: string
+  isPrimary: boolean
+  oemNo3?: string
+  imageRole?: string
 }
 
 export interface XrefInfo {
@@ -403,6 +435,12 @@ export interface EtlActiveTaskInfo {
     inserted: number
     updated: number
     skipped: number
+    // 🔧 fix: 补全 skipped 细分字段, 与后端 GetActiveTaskInfo() 对齐 (SSE 实时推送)
+    skippedMissingOem?: number
+    skippedMissingMr1?: number
+    skippedNullField?: number
+    skippedDuplicate?: number
+    typeMismatches?: number
     errors: number
     indexed: number
     indexPending: number
@@ -605,8 +643,51 @@ export interface PublicEightResponse {
   items: PublicSearchHit[]
 }
 
+// ===== 项目规划V2: 公开三级机型目录 =====
+export interface MachineCatalogBrand {
+  brand: string
+  models: string[]
+}
+
+export interface MachineCatalogCategory {
+  category: string
+  brands: MachineCatalogBrand[]
+}
+
+export interface MachineCatalogResponse {
+  categories: MachineCatalogCategory[]
+}
+
+// ===== P1 Task 3: 后台机型三级树 + MR.1 批量绑定 (admin 端点) =====
+//   GET  /api/admin/machine-tree          → MachineTreeNode[]
+//   POST /api/admin/machine-apps/batch-bind → BatchBindResponse
+//   字段命名遵循项目惯例 (camelCase, 与后端 System.Text.Json camelCase 序列化一致)
+export interface MachineModelNode {
+  machineId: number
+  modelName: string
+}
+export interface MachineBrandNode {
+  brand: string
+  models: MachineModelNode[]
+}
+export interface MachineTreeNode {
+  category: string
+  brands: MachineBrandNode[]
+}
+export interface BatchBindRequest {
+  machineId: number
+  mr1List: string[]
+  replace: boolean
+}
+export interface BatchBindResponse {
+  bound: number
+  skipped: number
+  removed: number
+  notFound: string[]
+}
+
 // ===== V2 Task 1.3: 聚合搜索 (POST /api/public/search/aggregate) =====
-//   文档级返回: mr1 + oemList 嵌套数组 + _formatted 高亮 + _rankingScore
+//   文档级返回: 公开键 + OEM3 嵌套数组 + _formatted 高亮
 //   与后端 AggregateSearchDto.cs 一一对应 (PascalCase 序列化)
 export interface AggregateSearchRequest {
   q?: string
@@ -641,15 +722,13 @@ export interface AggregateMachineItem {
 }
 
 export interface AggregateSearchHit {
-  mr1: string
+  key: string
   productName1?: string | null
   productName2?: string | null
   oem2?: string | null
   type: string
   remark?: string | null
   media?: string | null
-  isPublished: boolean
-  isDiscontinued: boolean
   oemList: AggregateOemItem[]
   machineList: AggregateMachineItem[]
   // _formatted 高亮字段 (后端已做 XSS 防御, 前端 sanitizeFormatted 双保险)
@@ -662,8 +741,6 @@ export interface AggregateSearchResponse {
   page: number
   pageSize: number
   totalPages: number
-  processingTimeMs: number
-  provider: string  // "meilisearch" | "postgres"
   hits: AggregateSearchHit[]
 }
 
@@ -675,6 +752,7 @@ export interface XrefBrandItem {
 }
 
 export interface XrefOem3Item {
+  id: number  // 🔧 fix: cross_references 表主键 (联调发现 oemNo3 不唯一, 必须用 Id 定位 UPDATE)
   oemNo3: string
   sortOrder: number
   mr1: string | null
@@ -683,6 +761,7 @@ export interface XrefOem3Item {
 }
 
 export interface XrefReorderItem {
+  id: number  // 🔧 fix: cross_references 表主键 (与 GET 返回的 id 对应, 用于 UPDATE WHERE)
   oemNo3: string
   sortOrder: number
   rowVersion: number
@@ -691,6 +770,52 @@ export interface XrefReorderItem {
 export interface XrefReorderRequest {
   oemBrand: string
   items: XrefReorderItem[]
+}
+
+// ===== V24-F86: OEM 3 单条 CRUD (分页 + 增删改查) =====
+//   GET /items/{id} 返回详情 (编辑回填用, 字段比列表更全)
+export interface XrefOem3Detail {
+  id: number
+  productId: number
+  productName1: string | null
+  oemBrand: string | null
+  oemNo3: string | null
+  oem2: string | null
+  sortOrder: number
+  machineType: string | null
+  isPublished: boolean
+  isDiscontinued: boolean
+  mr1: string | null
+  rowVersion: number
+}
+
+//   POST /items 新增请求体
+export interface XrefOem3CreatePayload {
+  productId: number
+  oemBrand: string
+  oemNo3: string
+  oem2?: string | null
+  machineType?: string | null
+  isPublished: boolean
+}
+
+//   PUT /items/{id} 编辑请求体 (含 rowVersion 乐观锁令牌)
+export interface XrefOem3UpdatePayload {
+  oemNo3: string
+  machineType: string | null
+  isPublished: boolean
+  rowVersion: number
+}
+
+//   GET /?oemBrand=BOSCH 分页返回 (含 total/page/pageSize/totalPages 元数据)
+export interface XrefOem3Page {
+  oemBrand: string
+  brandSortOrder: number | null
+  items: XrefOem3Item[]
+  total: number
+  page: number
+  pageSize: number
+  totalPages: number
 }
 
 // ===== V2 Task 2.3.5: 同 MR.1 其他 OEM 3 列表 (前台详情页推荐区块) =====

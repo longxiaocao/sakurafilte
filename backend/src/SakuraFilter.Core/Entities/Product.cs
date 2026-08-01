@@ -50,6 +50,8 @@ public class Product
     // ========== Day 8.1: 分区 3 (No. Check / Bypass Valves) ==========
     [Column("no_check_valves")]  public int? NoCheckValves { get; set; }
     [Column("no_bypass_valves")] public int? NoBypassValves { get; set; }
+    [Column("no_check_valves_raw")] public string? NoCheckValvesRaw { get; set; }
+    [Column("no_bypass_valves_raw")] public string? NoBypassValvesRaw { get; set; }
 
     // ========== Day 8.1: 分区 5 (Media Model, Bypass Valve HR, Efficiency 2, Bypass Pressure) ==========
     [Column("media_model")]     public string? MediaModel { get; set; }
@@ -60,6 +62,10 @@ public class Product
     [Column("bypass_valve_hr")] public decimal? BypassValveHr { get; set; }  // Day 8.1
     [Column("bypass_pressure")] public decimal? BypassPressure { get; set; }  // Day 8.1 (列早存在, 类型 NUMERIC)
     [Column("collapse_pressure_bar")] public decimal? CollapsePressureBar { get; set; }
+    [Column("bypass_valve_lr_raw")] public string? BypassValveLrRaw { get; set; }
+    [Column("bypass_valve_hr_raw")] public string? BypassValveHrRaw { get; set; }
+    [Column("bypass_pressure_raw")] public string? BypassPressureRaw { get; set; }
+    [Column("collapse_pressure_bar_raw")] public string? CollapsePressureBarRaw { get; set; }
     [Column("temp_range")]      public string? TempRange { get; set; }
 
     // 包装 (Carton)
@@ -458,4 +464,24 @@ public class DictEngine
     [Column("created_at")] public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     [Column("updated_at")] public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     [Column("deleted_at")] public DateTime? DeletedAt { get; set; }
+}
+
+/// <summary>
+/// 机型-MR.1 绑定关系 (Task 2: 批量绑定 MR.1 到机型)
+/// 用途: dict_machines ↔ products.mr_1 的多对多绑定, 支撑后台"一个机型对应多个 MR.1"管理
+/// 设计:
+///   - (machine_id, mr_1) 唯一约束, 保证幂等 (重复绑定不报错, 跳过)
+///   - machine_id 关联 dict_machines.id (逻辑外键, 不强制 FK 约束以允许字典软删除后保留绑定历史)
+///   - mr_1 关联 products.mr_1 (不强制外键, 允许产品下架后保留绑定历史)
+///   - WHY 独立新表而非复用 machine_applications: 现有 machine_applications 表语义是
+///     "产品↔机型适配详情" (含 brand/model/engine 等丰富字段, 按 product_id 关联),
+///     与本任务"dict_machine.id ↔ mr_1 批量绑定"语义不同, 在现有表加 machine_id/mr_1
+///     会破坏 ETL 流程和现有语义
+/// </summary>
+public class MachineMr1Binding
+{
+    public long Id { get; set; }
+    [Column("machine_id")] public long MachineId { get; set; }
+    [Column("mr_1")] public string Mr1 { get; set; } = "";
+    [Column("created_at")] public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

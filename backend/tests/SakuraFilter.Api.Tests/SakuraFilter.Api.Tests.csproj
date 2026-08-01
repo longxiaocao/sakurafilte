@@ -20,6 +20,8 @@
     <!-- V24-F52: EF Core InMemory 用于 OemBrandDictService.ApplyChangeAsync 单元测试
          WHY InMemory: ApplyChangeAsync 逻辑不依赖 PG 特性 (ILIKE/advisory lock), InMemory 足以验证 product_id 查询 + pending 写入 -->
     <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="8.0.10" />
+    <!-- Task 1: TestHost 用于 HTTP 级别 401 鉴权测试 (轻量级, 无需 WebApplicationFactory/Program.cs 入口) -->
+    <PackageReference Include="Microsoft.AspNetCore.TestHost" Version="8.0.10" />
     <PackageReference Include="coverlet.collector" Version="6.0.2">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>

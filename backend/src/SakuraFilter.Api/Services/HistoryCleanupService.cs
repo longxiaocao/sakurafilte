@@ -79,8 +79,10 @@ public class HistoryCleanupService : BackgroundService
             return;
         }
 
-        var retentionDays = int.Parse(settings.GetValueOrDefault("history.retention_days") ?? "0");
-        var batchSize = int.Parse(settings.GetValueOrDefault("history.cleanup_batch_size") ?? "10000");
+        // 🔧 fix(审查): int.Parse → TryParse + 默认值 (对齐 EtlLogCleanupService v30-16 修复)
+        //   WHY: system_settings 写入非法值 (非数字) 时 int.Parse 抛 FormatException, 后台服务每轮重试崩溃
+        var retentionDays = int.TryParse(settings.GetValueOrDefault("history.retention_days") ?? "0", out var rd) ? rd : 0;
+        var batchSize = int.TryParse(settings.GetValueOrDefault("history.cleanup_batch_size") ?? "10000", out var bs) ? bs : 10000;
 
         if (retentionDays <= 0)
         {

@@ -62,18 +62,22 @@ public class PublicProductController : ControllerBase
         if (slug.Length > 200)
             return BadRequest(new { error = "slug 长度不能超过 200" });
 
-        // 解析 slug: 取最后一段作为 oem (支持 OEM 含 '-')
-        var oem = slug.Contains('-') ? slug[(slug.LastIndexOf('-') + 1)..] : slug;
-
-        // V2 Task 4.7: 调用公共 IProductDetailService.GetByOemAsync
-        var detail = await _detailService.GetByOemAsync(oem, ct);
+        // OEM3 可包含连字符（例如 DON-08332），必须优先按完整值查询。
+        // 仅当完整值未命中时，才兼容历史复合 slug 的最后一段。
+        var detail = await _detailService.GetByOemAsync(slug, ct);
+        var oem = slug;
+        if (detail == null && slug.Contains('-'))
+        {
+            oem = slug[(slug.LastIndexOf('-') + 1)..];
+            detail = await _detailService.GetByOemAsync(oem, ct);
+        }
         if (detail == null)
         {
             _logger.LogInformation("GetBySlug: 404 slug={Slug} oem={Oem}", slug, oem);
             return NotFound(new { error = $"产品不存在: {slug}" });
         }
-        _logger.LogInformation("GetBySlug: 200 slug={Slug} mr1={Mr1}", slug, detail.Mr1);
-        return Ok(detail);
+        _logger.LogInformation("GetBySlug: 200 slug={Slug}", slug);
+        return Ok(PublicProductDetailDto.From(detail));
     }
 
     /// <summary>
@@ -154,13 +158,24 @@ public class PublicProductController : ControllerBase
         var typeNames = types.Select(t => t.Type).ToList();
         // 单次 SQL 拉所有 type 的 active product 摘要, 内存分组, 避免 N+1
         var productRows = await _db.Products.AsNoTracking()
-            .Where(p => !p.IsDiscontinued && p.Type != null && typeNames.Contains(p.Type))
+            .Where(p => p.IsPublished && !p.IsDiscontinued && p.Type != null && typeNames.Contains(p.Type))
             .OrderBy(p => p.Id)
             .Select(p => new
             {
                 p.Id,
                 p.Type,
-                p.OemNoDisplay,
+                // WHY: 按类型浏览属于公开产品入口，必须与详情/对比页使用相同的 OEM3 展示规则。
+                OemNoDisplay = _db.CrossReferences
+                    .Where(x => x.ProductId == p.Id && x.IsPublished && !x.IsDiscontinued
+                        && x.OemNo3 != null && x.OemNo3 != "")
+                    .OrderBy(x => _db.XrefOemBrands
+                        .Where(b => b.Brand == x.OemBrand && b.DeletedAt == null)
+                        .Select(b => (int?)b.SortOrder)
+                        .FirstOrDefault() ?? int.MaxValue)
+                    .ThenBy(x => x.SortOrder)
+                    .ThenBy(x => x.OemNo3)
+                    .Select(x => x.OemNo3!)
+                    .FirstOrDefault() ?? p.OemNoDisplay,
                 p.ProductName1,
                 p.D1Mm,
                 p.D2Mm,
@@ -193,19 +208,23 @@ public class PublicProductController : ControllerBase
     }
 
     /// <summary>
-    /// V2 Task 2.3.4: 同 MR.1 其他 OEM 3 列表 (前台详情页"同 MR.1 推荐其他 OEM 3"区块)
-    /// URL: GET /api/public/products/{mr1}/sibling-oem3
+    /// 同组其他 OEM 3 列表。路径只接收客户可见的 OEM3，MR1 聚合留在服务端。
+    /// URL: GET /api/public/products/{oem3}/sibling-oem3
     /// 排序: brand_sort_order → sort_order (与 Meilisearch oem_list 数组排序一致, Task 2.3.1)
     /// 过滤: is_published=true AND is_discontinued=false (前台不展示下架/未发布)
     /// 返回: oemBrand / oemNo3 / oem2 / sortOrder / machineType / brandSortOrder
     /// </summary>
-    [HttpGet("products/{mr1}/sibling-oem3")]
-    public async Task<IActionResult> GetSiblingOem3(string mr1, CancellationToken ct)
+    [HttpGet("products/{oem3}/sibling-oem3")]
+    public async Task<IActionResult> GetSiblingOem3(string oem3, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(mr1))
-            return BadRequest(new { error = "mr1 不能为空" });
-        if (mr1.Length > 10)
-            return BadRequest(new { error = "mr1 长度不能超过 10" });
+        if (string.IsNullOrWhiteSpace(oem3))
+            return BadRequest(new { error = "oem3 不能为空" });
+        if (oem3.Length > 200)
+            return BadRequest(new { error = "oem3 长度不能超过 200" });
+
+        var current = await _detailService.GetByOemAsync(oem3, ct);
+        if (current?.Mr1 is not { Length: > 0 } mr1)
+            return NotFound(new { error = "产品不存在" });
 
         // 查询同 MR.1 下所有上架 OEM 3 (含 brand_sort_order LEFT JOIN)
         //   WHY LEFT JOIN: brand 软删除时 brand_sort_order 为 null, 排序时按 int.MaxValue 兜底

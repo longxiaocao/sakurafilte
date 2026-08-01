@@ -39,6 +39,8 @@ public record ProductFormDto
     public string? D8Thread { get; init; }
     public int? NoCheckValves { get; init; }
     public int? NoBypassValves { get; init; }
+    public string? NoCheckValvesRaw { get; init; }
+    public string? NoBypassValvesRaw { get; init; }
 
     // ============ 分区 5: 技术参数 ============
     public string? Media { get; init; }
@@ -49,6 +51,10 @@ public record ProductFormDto
     public string? Efficiency2 { get; init; }
     public decimal? BypassPressure { get; init; }  // NUMERIC 列, 用 decimal 而非 string
     public decimal? CollapsePressureBar { get; init; }
+    public string? BypassValveLrRaw { get; init; }
+    public string? BypassValveHrRaw { get; init; }
+    public string? BypassPressureRaw { get; init; }
+    public string? CollapsePressureBarRaw { get; init; }
     public string? SealingMaterial { get; init; }
     public string? TempRange { get; init; }
 
@@ -81,8 +87,8 @@ public record XrefInput(
     int SortOrder,          // V2: OEM 3 排序(默认 0)
     string? MachineType,    // V2: 机型类型(agriculture/commercial/construction/industrial/others)
     bool IsPublished,       // V2: 是否发布
-    long? Id,               // D3-21: 已有 xref 的 Id (新增项为 null)
-    uint? RowVersion        // D3-21: 已有 xref 的 RowVersion (xmin, 来自 GET /api/admin/products/{id}, 用于乐观锁)
+    long? Id = null,        // D3-21: 已有 xref 的 Id (新增项为 null)
+    uint? RowVersion = null // D3-21: 已有 xref 的 RowVersion (xmin, 来自 GET /api/admin/products/{id}, 用于乐观锁)
 );
 
 /// <summary>机型适配输入项 (Day 8.1: 分区 7 全部字段)</summary>
@@ -167,10 +173,13 @@ public record ProductDetailDto(
     decimal? H1Mm, decimal? H2Mm, decimal? H3Mm, decimal? H4Mm,
     string? D7Thread, string? D8Thread,
     int? NoCheckValves, int? NoBypassValves,
+    string? NoCheckValvesRaw, string? NoBypassValvesRaw,
     string? Media, string? MediaModel,
     decimal? BypassValveLr, decimal? BypassValveHr,
     string? Efficiency1, string? Efficiency2, decimal? BypassPressure,
     decimal? CollapsePressureBar,
+    string? BypassValveLrRaw, string? BypassValveHrRaw,
+    string? BypassPressureRaw, string? CollapsePressureBarRaw,
     string? SealingMaterial, string? TempRange,
     int? QtyPerCarton, decimal? WeightKgs,
     decimal? CartonLengthMm, decimal? CartonWidthMm, decimal? CartonHeightMm,
@@ -184,6 +193,89 @@ public record ProductDetailDto(
     List<MachineAppInfo> MachineApplications,
     List<ProductImageInfo> Images
 );
+
+/// <summary>
+/// 客户端公开产品详情契约。
+/// MR1、发布状态、并发令牌与审计时间仅供内部管理，不能通过公开接口或 SSR 数据岛输出。
+/// </summary>
+public record PublicProductDetailDto(
+    long Id,
+    string OemNoDisplay,
+    string? Oem2,
+    string? ProductName1,
+    string? ProductName2,
+    string Type,
+    string? Remark,
+    decimal? D1Mm, decimal? D2Mm, decimal? D3Mm, decimal? D4Mm,
+    decimal? H1Mm, decimal? H2Mm, decimal? H3Mm, decimal? H4Mm,
+    string? D7Thread, string? D8Thread,
+    int? NoCheckValves, int? NoBypassValves,
+    string? NoCheckValvesRaw, string? NoBypassValvesRaw,
+    string? Media, string? MediaModel,
+    decimal? BypassValveLr, decimal? BypassValveHr,
+    string? Efficiency1, string? Efficiency2, decimal? BypassPressure,
+    decimal? CollapsePressureBar,
+    string? BypassValveLrRaw, string? BypassValveHrRaw,
+    string? BypassPressureRaw, string? CollapsePressureBarRaw,
+    string? SealingMaterial, string? TempRange,
+    int? QtyPerCarton, decimal? WeightKgs,
+    decimal? CartonLengthMm, decimal? CartonWidthMm, decimal? CartonHeightMm,
+    decimal? VolumePerCartonM3,
+    List<PublicXrefInfo> CrossReferences,
+    List<MachineAppInfo> MachineApplications,
+    List<PublicProductImageInfo> Images)
+{
+    public static PublicProductDetailDto From(ProductDetailDto source)
+    {
+        // 公开主编号统一取首个已发布 OEM3；主表 OemNoDisplay 仅保留作无交叉引用时的兼容回退。
+        var publicOem3 = source.CrossReferences.FirstOrDefault(x => x.IsPublished && !string.IsNullOrWhiteSpace(x.OemNo3))?.OemNo3
+            ?? source.CrossReferences.FirstOrDefault(x => !string.IsNullOrWhiteSpace(x.OemNo3))?.OemNo3
+            ?? source.OemNoDisplay;
+
+        return new(
+        source.Id, publicOem3, source.Oem2,
+        source.ProductName1, source.ProductName2, source.Type, source.Remark,
+        source.D1Mm, source.D2Mm, source.D3Mm, source.D4Mm,
+        source.H1Mm, source.H2Mm, source.H3Mm, source.H4Mm,
+        source.D7Thread, source.D8Thread,
+        source.NoCheckValves, source.NoBypassValves,
+        source.NoCheckValvesRaw, source.NoBypassValvesRaw,
+        source.Media, source.MediaModel,
+        source.BypassValveLr, source.BypassValveHr,
+        source.Efficiency1, source.Efficiency2, source.BypassPressure,
+        source.CollapsePressureBar,
+        source.BypassValveLrRaw, source.BypassValveHrRaw,
+        source.BypassPressureRaw, source.CollapsePressureBarRaw,
+        source.SealingMaterial, source.TempRange,
+        source.QtyPerCarton, source.WeightKgs,
+        source.CartonLengthMm, source.CartonWidthMm, source.CartonHeightMm,
+        source.VolumePerCartonM3,
+        source.CrossReferences
+            .Where(x => x.IsPublished)
+            .Select(x => new PublicXrefInfo(x.ProductName1, x.OemBrand, x.OemNo3, x.Oem2, x.MachineType))
+            .ToList(),
+        source.MachineApplications,
+        source.Images.Select(x => new PublicProductImageInfo(
+            x.Slot, x.ImageKey, x.ImageUrl, x.IsPrimary, x.OemNo3, x.ImageRole)).ToList());
+    }
+}
+
+/// <summary>客户可见的 OEM3 交叉引用，不包含后台排序、状态和并发字段。</summary>
+public record PublicXrefInfo(
+    string? ProductName1,
+    string? OemBrand,
+    string? OemNo3,
+    string? Oem2,
+    string? MachineType);
+
+/// <summary>客户可见的产品图片信息，不包含产品外键和上传审计字段。</summary>
+public record PublicProductImageInfo(
+    short Slot,
+    string ImageKey,
+    string ImageUrl,
+    bool IsPrimary,
+    string? OemNo3,
+    string? ImageRole);
 
 public record XrefInfo(long Id, string? ProductName1, string? OemBrand, string? OemNo3, string? Oem2, int SortOrder, string? MachineType, bool IsPublished, uint RowVersion);
 

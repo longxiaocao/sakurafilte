@@ -33,13 +33,17 @@ public static class AdminEtlEndpoints
             logger.LogInformation("手动 ETL 触发 entity={Entity} mode={Mode} file={File} dryRun={Dry}",
                 req.EntityType ?? "products", req.Mode, req.JsonlPath, req.DryRun);
 
-            if (config.ValidateJsonlPath(req.JsonlPath, requireJsonlExtension: req.DryRun) is { } pathErr)
+            if (config.ValidateJsonlPath(req.JsonlPath) is { } pathErr)
                 return Results.BadRequest(new { error = pathErr });
 
             if (req.DryRun)
             {
                 if (!File.Exists(req.JsonlPath))
                     return Results.Problem(detail: $"文件不存在: {req.JsonlPath}", statusCode: 404, title: "File Not Found");
+
+                var previewPath = Path.GetExtension(req.JsonlPath).Equals(".xlsx", StringComparison.OrdinalIgnoreCase)
+                    ? await EtlSpreadsheetAdapter.ConvertAsync(req.JsonlPath, req.EntityType ?? "products", ct)
+                    : req.JsonlPath;
 
                 var lines = 0;
                 var samples = new List<string>();
@@ -55,7 +59,7 @@ public static class AdminEtlEndpoints
                     "apps" or "machine_applications" => new[] { "oem_no_normalized", "machine_brand", "machine_model" },
                     _ => new[] { "oem_no_normalized" }
                 };
-                using (var fs = File.OpenRead(req.JsonlPath))
+                using (var fs = File.OpenRead(previewPath))
                 using (var sr = new StreamReader(fs))
                 {
                     string? line;

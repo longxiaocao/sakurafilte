@@ -19,12 +19,11 @@ interface GalleryImage {
 interface GalleryProps {
   images: GalleryImage[]
   oemNo3: string
-  mr1: string | null
 }
 
 const props = defineProps<GalleryProps>()
 
-const placeholderUrl = '/static/placeholder.png'
+const placeholderUrl = '/images/product-placeholder.svg'
 
 // 主图初始: 优先 isPrimary, 否则取第一张
 const primaryInitial = computed(() => {
@@ -66,7 +65,7 @@ function onImageError(): void {
         :title="`Slot ${img.slot ?? idx + 1}`"
         @click="selectImage(img)"
       >
-        <img :src="img.imageUrl" :alt="`Slot ${img.slot ?? idx + 1}`" loading="lazy" />
+        <img :src="img.imageUrl || placeholderUrl" :alt="`Slot ${img.slot ?? idx + 1}`" loading="lazy" @error="onImageError" />
       </button>
     </div>
     <p v-else-if="props.images.length === 1" class="gallery-hint">仅 1 张图片</p>

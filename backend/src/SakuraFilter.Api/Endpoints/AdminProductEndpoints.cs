@@ -218,6 +218,12 @@ public static class AdminProductEndpoints
                     title: "Payload Too Large");
             }
             catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+            // 🔧 fix (联调发现真实业务 bug): 并发上传同 slot 触发 23505 unique_violation
+            //   原代码仅捕获 KeyNotFoundException/InvalidOperationException, DbUpdateException 落到 500 兜底
+            //   AdminProductImageService.UploadAsync 注释 (L181) 明确说"并发竞态第二个会撞 23505 → 409 ERR_DB_CONFLICT"
+            //   但实际未实现, E2E real-optimistic-lock 用例 4 验证时返回 500 而非 409
+            //   修复: 显式捕获 DbUpdateException, 走 ProblemDetailsFactory 映射为 409 ERR_DB_CONFLICT
+            catch (DbUpdateException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
         })
         .WithSummary("V2 上传主图 (slot=1, 按 OEM 3 命名, 唯一约束 uq_product_images_primary)")
         .WithName("AdminUploadPrimaryImage")
@@ -250,6 +256,8 @@ public static class AdminProductEndpoints
                     title: "Payload Too Large");
             }
             catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+            // 🔧 fix (联调发现真实业务 bug): 详情图并发上传同 slot 撞 23505, 显式捕获 DbUpdateException → 409
+            catch (DbUpdateException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
         })
         .WithSummary("V2 上传详情图 (slot 2-6, 按 MR.1 命名, 唯一约束 uq_product_images_detail_slot)")
         .WithName("AdminUploadDetailImage")
@@ -278,6 +286,22 @@ public static class AdminProductEndpoints
         group.MapGet("/{mr1}/images", async (string mr1, AdminProductImageService svc, CancellationToken ct) =>
             Results.Ok(await svc.ListAsync(mr1, ct)))
         .WithName("AdminListProductImages");
+
+        group.MapPost("/images/import-folder", async (
+            ImageFolderImportRequest body, AdminProductImageService svc, HttpContext ctx, CancellationToken ct) =>
+        {
+            if (string.IsNullOrWhiteSpace(body.FolderPath))
+                return Results.BadRequest(new { error = "folderPath 不能为空" });
+            try
+            {
+                var result = await svc.ImportFolderAsync(body.FolderPath, ResolveUser(ctx), ct);
+                return Results.Ok(result);
+            }
+            catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+            catch (DirectoryNotFoundException ex) { return Results.NotFound(new { error = ex.Message }); }
+        })
+        .WithSummary("按 OEM3-1 与 MR1-2..6 文件名批量导入图片")
+        .WithName("AdminImportProductImages");
 
         // 变更历史
         group.MapGet("/{id:long}/history", async (

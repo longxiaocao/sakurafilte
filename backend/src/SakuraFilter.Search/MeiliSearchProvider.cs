@@ -737,11 +737,20 @@ public class MeiliSearchProvider : ISearchProvider
     /// <param name="ct">取消令牌</param>
     public async Task InitializeAsync(CancellationToken ct = default)
     {
+        // 首次为数万条存量文档创建 filterable 属性时，Meilisearch 需要重建倒排索引，
+        // 实测可能超过 30 秒；初始化在后台执行，因此应等待任务完成而非留下半配置索引。
+        const int schemaTaskTimeoutMs = 120_000;
+
         // V2 (S4-9): 遍历所有 WriteTargets 配置 schema (灰度期间两个索引都需配置)
         foreach (var target in _writeTargets)
         {
             try
             {
+                // 新部署的 Meilisearch 尚未拥有索引时，直接更新 settings 会返回
+                // index_not_found 并被下面的容错逻辑吞掉，后续首次写入虽会自动建索引，
+                // 但筛选/排序字段不会被配置，公开搜索因此降级到 PostgreSQL。
+                await EnsureIndexExistsAsync(target, ct);
+
                 // FilterableAttributes: 支持范围/等值过滤的字段 (与 SearchAsync.BuildFilter 一致)
                 var filterable = new[]
                 {
@@ -759,7 +768,7 @@ public class MeiliSearchProvider : ISearchProvider
                 };
                 // SDK 0.15.4: WaitForTaskAsync(int taskUid, double timeoutMs, int intervalMs = 500)
                 var filterTask = await target.UpdateFilterableAttributesAsync(filterable, ct);
-                await target.WaitForTaskAsync(filterTask.TaskUid, 30000);
+                await target.WaitForTaskAsync(filterTask.TaskUid, schemaTaskTimeoutMs);
 
                 // SortableAttributes: 支持排序的字段 (Brand 优先级 + 更新时间)
                 var sortable = new[]
@@ -770,7 +779,7 @@ public class MeiliSearchProvider : ISearchProvider
                     "d1_mm", "d2_mm", "d3_mm", "h1_mm", "h2_mm", "h3_mm"  // 尺寸排序
                 };
                 var sortTask = await target.UpdateSortableAttributesAsync(sortable, ct);
-                await target.WaitForTaskAsync(sortTask.TaskUid, 30000);
+                await target.WaitForTaskAsync(sortTask.TaskUid, schemaTaskTimeoutMs);
 
                 // SearchableAttributes: 全文检索字段 (顺序=相关性权重)
                 //   WHY 显式配置: 默认所有字符串字段都参与搜索,但嵌套数组字段会干扰相关性
@@ -785,13 +794,13 @@ public class MeiliSearchProvider : ISearchProvider
                     "machine_list.machine_brand", "machine_list.machine_model", "machine_list.engine_brand"
                 };
                 var searchTask = await target.UpdateSearchableAttributesAsync(searchable, ct);
-                await target.WaitForTaskAsync(searchTask.TaskUid, 30000);
+                await target.WaitForTaskAsync(searchTask.TaskUid, schemaTaskTimeoutMs);
 
                 // S6/S3-19: stopWords (移除 of/for/and/a, 防止型号 OF-100 误删 + "A Brand" 首词误删)
                 //   WHY: spec L1533 + L1881 要求, "a" 会导致 "A Brand"/"A Filter" 品牌名首词被删
                 var stopWords = new[] { "the", "an" };
                 var stopTask = await target.UpdateStopWordsAsync(stopWords, ct);
-                await target.WaitForTaskAsync(stopTask.TaskUid, 30000);
+                await target.WaitForTaskAsync(stopTask.TaskUid, schemaTaskTimeoutMs);
 
                 // S4 修复: typoTolerance (OneTypo=3/TwoTypos=5, 3 字品牌缩写容错)
                 //   WHY: spec L1526 + L1685 要求, 默认 5/9, 先改 4/8, 再改为 3/5 让 "BOS" 匹配 "BOSCH"
@@ -805,13 +814,13 @@ public class MeiliSearchProvider : ISearchProvider
                     }
                 };
                 var typoTask = await target.UpdateTypoToleranceAsync(typoTolerance, ct);
-                await target.WaitForTaskAsync(typoTask.TaskUid, 30000);
+                await target.WaitForTaskAsync(typoTask.TaskUid, schemaTaskTimeoutMs);
 
                 // S5/S3-20: separatorTokens (移除 "-", 防 OEM 号 F-000000001 被错误分割)
                 //   WHY: spec L1527 + L1882 要求, "-" 是 OEM 号常见组成部分, 作为分隔符会破坏号码完整性
                 var separatorTokens = new[] { " ", "/", ",", "." };
                 var sepTask = await target.UpdateSeparatorTokensAsync(separatorTokens, ct);
-                await target.WaitForTaskAsync(sepTask.TaskUid, 30000);
+                await target.WaitForTaskAsync(sepTask.TaskUid, schemaTaskTimeoutMs);
 
                 _logger.LogInformation("Meili schema 已配置: target={Target}, filterable={FilterCount}, sortable={SortCount}, searchable={SearchCount}",
                     target.Uid, filterable.Length, sortable.Length, searchable.Length);
@@ -821,6 +830,20 @@ public class MeiliSearchProvider : ISearchProvider
                 _logger.LogWarning(ex, "Meili schema 配置失败 target={Target} (搜索功能可能降级)", target.Uid);
                 // 不抛出: 单个 target 失败不影响其他 target,启动不应阻塞
             }
+        }
+    }
+
+    private async Task EnsureIndexExistsAsync(Meilisearch.Index target, CancellationToken ct)
+    {
+        try
+        {
+            await _client.GetIndexAsync(target.Uid, ct);
+        }
+        catch (MeilisearchApiError ex) when (string.Equals(ex.Code, "index_not_found", StringComparison.OrdinalIgnoreCase))
+        {
+            var task = await _client.CreateIndexAsync(target.Uid, "mr_1", ct);
+            await target.WaitForTaskAsync(task.TaskUid, 30000);
+            _logger.LogInformation("Meili 索引已创建: target={Target}, taskUid={TaskUid}", target.Uid, task.TaskUid);
         }
     }
 

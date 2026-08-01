@@ -14,6 +14,10 @@ interface ImportMetaEnv {
   //   "true" = 允许降级到旧 API (dev 默认)
   //   "false" / 未设置 = 404 时直接抛错 (prod 默认)
   readonly VITE_ENABLE_LEGACY_FALLBACK?: string
+  readonly VITE_INQUIRY_EMAIL?: string
+  readonly VITE_PUBLIC_ABOUT_TEXT?: string
+  readonly VITE_PUBLIC_NEWS_TEXT?: string
+  readonly VITE_PUBLIC_CONTACT_TEXT?: string
 }
 
 interface ImportMeta {

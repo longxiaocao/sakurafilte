@@ -41,6 +41,11 @@ export default defineConfig({
       '/health': {
         target: 'http://localhost:5148',
         changeOrigin: true
+      },
+      // 🔧 fix: 代理 /swagger 到后端, AdminApiDocsView.vue fetch('/swagger/v1/swagger.json') 需要
+      '/swagger': {
+        target: 'http://localhost:5148',
+        changeOrigin: true
       }
     }
   },

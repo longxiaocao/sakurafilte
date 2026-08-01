@@ -96,7 +96,8 @@ public class PublicSearchController : ControllerBase
         //   EF Core 翻译 distinctOems.Contains(p.Oem2) 为 p.oem_2 = ANY(...)
         //   排除 Oem2=null 行, 避免 "Contains('')" 误匹配
         var candidates = await _db.Products.AsNoTracking()
-            .Where(p => p.Oem2 != null && distinctOems.Contains(p.Oem2))
+            .Where(p => p.IsPublished && !p.IsDiscontinued
+                && p.Oem2 != null && distinctOems.Contains(p.Oem2))
             .Select(p => new
             {
                 p.Id,
@@ -215,7 +216,7 @@ public class PublicSearchController : ControllerBase
         var sw = System.Diagnostics.Stopwatch.StartNew();
 
         // 起手: active products
-        var query = _db.Products.AsNoTracking().Where(p => !p.IsDiscontinued);
+        var query = _db.Products.AsNoTracking().Where(p => p.IsPublished && !p.IsDiscontinued);
 
         // 文本字段: 单值 ILIKE (走 P0.1 EscapeLikePattern + 3 参重载)
         //   1) oem_no_2: 产品自身 OEM 2 字段
@@ -296,7 +297,18 @@ public class PublicSearchController : ControllerBase
             .Take(pageSize)
             .Select(p => new PublicSearchHit(
                 p.Id,
-                p.OemNoDisplay,
+                // WHY: 与公开详情和聚合搜索统一展示首个已发布 OEM3，主表字段仅作兼容回退。
+                _db.CrossReferences
+                    .Where(x => x.ProductId == p.Id && x.IsPublished && !x.IsDiscontinued
+                        && x.OemNo3 != null && x.OemNo3 != "")
+                    .OrderBy(x => _db.XrefOemBrands
+                        .Where(b => b.Brand == x.OemBrand && b.DeletedAt == null)
+                        .Select(b => (int?)b.SortOrder)
+                        .FirstOrDefault() ?? int.MaxValue)
+                    .ThenBy(x => x.SortOrder)
+                    .ThenBy(x => x.OemNo3)
+                    .Select(x => x.OemNo3!)
+                    .FirstOrDefault() ?? p.OemNoDisplay,
                 p.Oem2,
                 p.ProductName1,
                 p.Type,
@@ -376,7 +388,6 @@ public class PublicSearchController : ControllerBase
     ///     }
     /// </remarks>
     [HttpPost("aggregate")]
-    [ProducesResponseType(typeof(AggregateSearchResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Aggregate(
         [FromBody] AggregateSearchRequest? req,
@@ -416,7 +427,38 @@ public class PublicSearchController : ControllerBase
         _logger.LogInformation("aggregate search: q={Q} page={Page} pageSize={PageSize} → total={Total} provider={Provider} elapsed={Elapsed}ms",
             req.Q, page, pageSize, response.Total, response.Provider, response.ProcessingTimeMs);
 
-        return Ok(response);
+        // 聚合查询内部以 MR1 分组，但公开响应只能交付客户字段。
+        // key 用于前端展开状态，优先取公开 OEM3，不得回退或序列化 MR1。
+        var publicHits = response.Hits.Select((hit, index) => new
+        {
+            key = hit.OemList.FirstOrDefault(x => x.IsPublished && !string.IsNullOrWhiteSpace(x.OemNo3))?.OemNo3
+                  ?? hit.OemList.FirstOrDefault(x => !string.IsNullOrWhiteSpace(x.OemNo3))?.OemNo3
+                  ?? hit.Oem2
+                  ?? $"result-{index}",
+            hit.ProductName1,
+            hit.ProductName2,
+            hit.Oem2,
+            hit.Type,
+            hit.Remark,
+            hit.Media,
+            OemList = hit.OemList
+                .Where(x => x.IsPublished)
+                .Select(x => new { x.OemBrand, x.OemNo3, x.Oem2, x.MachineType })
+                .ToList(),
+            hit.MachineList,
+            Formatted = hit.Formatted?.Where(x => x.Key == "product_name_1")
+                .ToDictionary(x => x.Key, x => x.Value),
+            hit.RankingScore
+        });
+
+        return Ok(new
+        {
+            response.Total,
+            response.Page,
+            response.PageSize,
+            response.TotalPages,
+            Hits = publicHits
+        });
     }
 
     /// <summary>

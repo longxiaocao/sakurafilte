@@ -534,3 +534,35 @@ v30-14 1M OFFSET 深分页专项压测验证数据 (2026-07-21, sakurafilter_per
 关联文件:
   - backend/src/SakuraFilter.Search/MeiliSearchProvider.cs (L166-178 SearchAsync 加两层 Sort; L266-278 AggregateSearchAsync 加两层 Sort; L541-546 brand_sort_order_min DefaultIfEmpty 修复; L548-554 oem_list_sort_order_min DefaultIfEmpty + sort_order=0 过滤)
 
+#20 规划V2特殊参数双存储方案 (2026-07-26)
+决策: 对 No. Check Valves、No. Bypass Valves、Bypass Valve LR/HR、Bypass Pressure、Collapse Pressure 新增 `*_raw` 原始文本列；保留现有整数/数值列作为检索值。原始值为单一数值且可带单位时自动派生检索值，分数或复合表达式不做猜测。
+理由:
+  - 规划V2要求尺寸与技术参数可包含特殊字符，同时要支持数值检索；直接把字段改为字符串会破坏既有筛选、索引和 API 契约。
+  - 与已存在的 d1-h4 `*_raw` 实现一致，原值用于展示和追溯，数值用于范围查询。
+  - `1/2`、`N/A` 这类表达式不存在唯一数值语义，错误派生会产生误匹配；`1.2 bar` 则可无歧义保留为 1.2。
+排除方案:
+  - 将既有数值列直接改为 text: 会破坏现有搜索和索引，且迁移风险高。
+  - 使用单一正则提取第一个数字: 会把分数、区间和复合参数误判为精确值。
+关联文件:
+  - backend/src/SakuraFilter.Core/Entities/Product.cs
+  - backend/src/SakuraFilter.Core/DTOs/ProductFormDto.cs
+  - backend/src/SakuraFilter.Api/Services/AdminProductService.cs
+  - backend/src/SakuraFilter.Etl/EtlImportService.cs
+  - backend/src/SakuraFilter.Infrastructure/Data/Migrations/20260726014656_AddRawParameterValues.cs
+
+---
+
+#21 聚合搜索高亮净化方案: 正则等价实现替代 DOMPurify (2026-07-30)
+决策: 维持现状, 使用 `frontend/src/utils/html-sanitizer.ts` 的 30 行正则等价实现 (先全量 HTML 转义再仅还原 `<mark>` 标签), 不切换为 DOMPurify。
+理由:
+  1. 安全性更强: 正则实现先对所有字符做 HTML 转义, 再仅还原 `<mark>` 标签, 比 DOMPurify 默认配置更严格 (DOMPurify 默认允许更多标签, 需额外配置 ALLOWED_TAGS)。
+  2. 包体积优化: DOMPurify 22KB, 正则实现仅 30 行, 节省前端 bundle 体积。
+  3. 功能等价: 后端 Meilisearch 返回的 `_formatted` 高亮仅含 `<mark>` 标签, 正则实现完全覆盖该场景, 无功能缺失。
+  4. 经用户确认 (Task 6 选 A): spec F14 字面要求 DOMPurify, 但安全意图 100% 达成, 维持现状。
+排除方案:
+  - 切换为 DOMPurify (npm install dompurify + 重写 html-sanitizer.ts): 严格按 spec F14 字面, 但安全性不增强 (反而可能因默认配置放宽而降低), 且增加 22KB 包体积。
+关联文件:
+  - frontend/src/utils/html-sanitizer.ts
+  - frontend/src/views/public/AggregateSearchView.vue
+  - backend/src/SakuraFilter.Search/MeiliSearchProvider.cs (SanitizeFormatted 后端净化)
+

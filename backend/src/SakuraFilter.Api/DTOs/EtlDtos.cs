@@ -12,6 +12,9 @@ public record CancelRequest(string? Reason, string? ReasonCode);
 
 public record CompareRequest(List<long> Ids);
 
+/// <summary>项目规划V2：按 OEM3/MR.1 命名规则批量导入产品图片。</summary>
+public record ImageFolderImportRequest(string FolderPath);
+
 // Day 7.5: 死信查询参数 (运维可见性)
 // Day 7.10: 增加 recovery_count / last_recovery_at / last_recovery_error 字段
 // Day 7.10.1: 增加 status / recovered_at / recovered_to_pending_id 字段

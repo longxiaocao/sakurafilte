@@ -158,14 +158,14 @@ async function doCancel() {
       title: t('admin.etlview.string.cancel_etl_task'),
       message: `
         <div style="text-align:left;font-size:13px;line-height:1.6">
-          <div style="margin-bottom:8px;color:#606266">请选择取消原因 (会写入历史审计, 按此码聚合):</div>
+          <div style="margin-bottom:8px;color:var(--el-text-color-regular)">请选择取消原因 (会写入历史审计, 按此码聚合):</div>
           <div id="cancel-reason-list" style="display:flex;flex-direction:column;gap:6px">
             ${reasonCodeOptions.map((o, i) => `
-              <label style="display:flex;align-items:flex-start;gap:6px;cursor:pointer;padding:6px 8px;border:1px solid #ebeef5;border-radius:4px;${i === 0 ? 'background:#ecf5ff;border-color:#409eff' : ''}">
+              <label style="display:flex;align-items:flex-start;gap:6px;cursor:pointer;padding:6px 8px;border:1px solid var(--el-border-color-lighter);border-radius:4px;${i === 0 ? 'background:var(--el-color-primary-light-9);border-color:var(--el-color-primary)' : ''}">
                 <input type="radio" name="cancel-reason-code" value="${o.value}" ${i === 0 ? 'checked' : ''} style="margin-top:3px" />
                 <div>
                   <div style="font-weight:600">${o.label}</div>
-                  <div style="color:#909399;font-size:12px">${o.value} — ${o.defaultReason}</div>
+                  <div style="color:var(--el-text-color-secondary);font-size:12px">${o.value} — ${o.defaultReason}</div>
                 </div>
               </label>
             `).join('')}
@@ -334,7 +334,15 @@ const pipelineRows = computed(() => {
       inserted: task.value.activeTask.inserted,
       updated: task.value.activeTask.updated,
       indexed: task.value.activeTask.indexed,
-      errors: task.value.activeTask.errors
+      errors: task.value.activeTask.errors,
+      // 🔧 fix: 补全 skipped 细分, 让 Pipeline 卡片实时显示 (用户反馈 "各种数据似乎并没有数值")
+      skipped: task.value.activeTask.skipped,
+      skippedMissingOem: task.value.activeTask.skippedMissingOem,
+      skippedMissingMr1: task.value.activeTask.skippedMissingMr1,
+      skippedNullField: task.value.activeTask.skippedNullField,
+      skippedDuplicate: task.value.activeTask.skippedDuplicate,
+      typeMismatches: task.value.activeTask.typeMismatches,
+      indexPending: task.value.activeTask.indexPending
     }
   }
   if (lastFinished.value) {
@@ -343,7 +351,14 @@ const pipelineRows = computed(() => {
       inserted: lastFinished.value.inserted,
       updated: lastFinished.value.updated,
       indexed: lastFinished.value.indexed,
-      errors: lastFinished.value.errors
+      errors: lastFinished.value.errors,
+      skipped: lastFinished.value.skipped,
+      skippedMissingOem: lastFinished.value.skippedMissingOem,
+      skippedMissingMr1: (lastFinished.value as any).skippedMissingMr1,
+      skippedNullField: lastFinished.value.skippedNullField,
+      skippedDuplicate: lastFinished.value.skippedDuplicate,
+      typeMismatches: (lastFinished.value as any).typeMismatches,
+      indexPending: lastFinished.value.indexPending
     }
   }
   return {}
@@ -400,6 +415,44 @@ function statusTagType(s: string): 'success' | 'warning' | 'info' | 'danger' | '
         :progress-pct="progressPct"
         :elapsed-sec="elapsedSec"
       />
+      <!-- 🔧 fix: 实时 skipped 细分 (SSE 推送, 用户反馈 "各种数据似乎并没有数值") -->
+      <div v-if="pipelineRows.skipped || pipelineRows.errors" class="mt-3 pt-3 border-t border-[var(--color-border)]">
+        <div class="text-xs text-[var(--color-text-muted)] mb-2">跳过/错误细分 (实时)</div>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+          <div class="flex flex-col">
+            <span class="text-xs text-[var(--color-text-muted)]">跳过总数</span>
+            <span class="font-mono">{{ fmt(pipelineRows.skipped) }}</span>
+          </div>
+          <div class="flex flex-col">
+            <span class="text-xs text-[var(--color-text-muted)]">OEM 缺失</span>
+            <span class="font-mono">{{ fmt(pipelineRows.skippedMissingOem) }}</span>
+          </div>
+          <div class="flex flex-col">
+            <span class="text-xs text-[var(--color-text-muted)]">MR.1 缺失</span>
+            <span class="font-mono">{{ fmt(pipelineRows.skippedMissingMr1) }}</span>
+          </div>
+          <div class="flex flex-col">
+            <span class="text-xs text-[var(--color-text-muted)]">字段为空</span>
+            <span class="font-mono">{{ fmt(pipelineRows.skippedNullField) }}</span>
+          </div>
+          <div class="flex flex-col">
+            <span class="text-xs text-[var(--color-text-muted)]">重复去重</span>
+            <span class="font-mono">{{ fmt(pipelineRows.skippedDuplicate) }}</span>
+          </div>
+          <div class="flex flex-col">
+            <span class="text-xs text-[var(--color-text-muted)]">类型不匹配</span>
+            <span class="font-mono">{{ fmt(pipelineRows.typeMismatches) }}</span>
+          </div>
+          <div class="flex flex-col">
+            <span class="text-xs text-[var(--color-text-muted)]">错误数</span>
+            <span class="font-mono text-red-600">{{ fmt(pipelineRows.errors) }}</span>
+          </div>
+          <div class="flex flex-col">
+            <span class="text-xs text-[var(--color-text-muted)]">索引待同步</span>
+            <span class="font-mono">{{ fmt(pipelineRows.indexPending) }}</span>
+          </div>
+        </div>
+      </div>
     </el-card>
 
     <!-- 3. 触发卡片 -->
@@ -487,10 +540,10 @@ function statusTagType(s: string): 'success' | 'warning' | 'info' | 'danger' | '
     <el-card shadow="never" class="mb-3">
       <template #header>
         <div class="flex items-center gap-2">
-          <span class="font-semibold">全量重建</span>
+          <span class="font-semibold">{{ t('admin.etlview.string.full_rebuild') }}</span>
           <el-tag size="small" type="danger">DANGER</el-tag>
           <el-tooltip
-            content="清空 Meilisearch 全部文档并从 PostgreSQL 全量同步, 与 ETL 任务互斥"
+            :content="t('admin.etlview.string.full_rebuild_tip')"
             placement="top"
           >
             <el-icon class="text-gray-400 cursor-help"><InfoFilled /></el-icon>
@@ -501,8 +554,8 @@ function statusTagType(s: string): 'success' | 'warning' | 'info' | 'danger' | '
         type="warning"
         :closable="false"
         class="mb-3"
-        title="执行后将清空 Meilisearch 全部文档并重新同步, 期间搜索短暂不可用"
-        description="适用场景: 索引结构变更后强制重建 / 数据漂移修复 / schema 字段更新后生效"
+        :title="t('admin.etlview.string.full_rebuild_alert_title')"
+        :description="t('admin.etlview.string.full_rebuild_alert_desc')"
       />
       <div class="flex items-center gap-3 mb-3">
         <el-button

@@ -2,16 +2,16 @@
 //   覆盖 spec 要求的 Public_* / Admin_* 含 404 / VueMountFailure / LegacyRedirect
 //
 // 测试目标:
-//   1. LegacyRedirect: 旧 URL /product/{oem} → 301 → 新 SEO URL /products/{pn1-mr1Suffix6}/...
+//   1. LegacyRedirect: 旧 URL /product/{oem} → 301 → 新 SEO URL /products/{pn1}/...
 //   2. SEO URL 直接访问: Razor SSR 渲染 + Vue 子组件 mount (GalleryApp/CompareApp/InquiryApp)
-//   3. 404 场景: 不存在的 mr1 → 404 页面
+//   3. 404 场景: 不存在的 OEM3 → 404 页面
 //   4. VueMountFailure 兜底: Vue mount 失败时 SSR 内容仍可见 (渐进增强)
 //   5. 聚合搜索页加载 + Vue mount
 //
 // 依赖:
 //   - 前端 dev server (http://localhost:5173) 或 prod build (http://localhost:80)
 //   - 后端 API (http://localhost:5148) 含 V2 产品数据 (Mr1/Oem2/IsPublished)
-//   - 后端 Razor Pages SSR 路由 (/products/{pn1-mr1}/{pn2}/{brand}/{oem3})
+//   - 后端 Razor Pages SSR 路由 (/products/{pn1}/{pn2}/{brand}/{oem3})
 //
 // 注意:
 //   - 沿用现有 E2E 容错策略 (页面不白屏 + 关键元素存在)
@@ -27,7 +27,7 @@ test.describe('V2 Task 5.3.4: SEO URL 重定向 + Razor SSR + Vue mount', () => 
 
   test('1. 旧 URL /product/{oem} 触发 301 重定向到新 SEO URL', async ({ page }) => {
     // WHY LegacyRedirect: V2 引入 SEO URL 后, 旧 /product/{oem} 路由保留 24h+ 兼容期
-    //   后端 PublicProductController.cs 301 重定向到 /products/{pn1-mr1}/{pn2}/{brand}/{oem3}
+    //   后端 PublicProductController.cs 301 重定向到 /products/{pn1}/{pn2}/{brand}/{oem3}
     //   测试策略: 访问旧 URL, 期望最终 URL 以 /products/ 开头 (经 301 跳转)
     const oem = 'P0505921' // spike-test 库已知产品
     const response = await page.goto(`${BASE}/product/${oem}`, { waitUntil: 'domcontentloaded', timeout: 15000 })
@@ -43,11 +43,11 @@ test.describe('V2 Task 5.3.4: SEO URL 重定向 + Razor SSR + Vue mount', () => 
     const isLegacyUrl = finalUrl.includes('/product/')
     expect(isV2SeoUrl || isLegacyUrl).toBeTruthy()
 
-    // 若是 V2 SEO URL, 验证格式: /products/{pn1-mr1Suffix6}/{pn2}/{brand}/{oem3}
+    // 若是 V2 SEO URL, 验证格式: /products/{pn1}/{pn2}/{brand}/{oem3}
     if (isV2SeoUrl) {
       const urlPath = new URL(finalUrl).pathname
       const segments = urlPath.split('/').filter(Boolean)
-      // 期望: ['products', '{pn1-mr1Suffix6}', '{pn2}', '{brand}', '{oem3}']
+      // 期望: ['products', '{pn1}', '{pn2}', '{brand}', '{oem3}']
       expect(segments[0]).toBe('products')
       expect(segments.length).toBeGreaterThanOrEqual(4)
     }
@@ -70,11 +70,11 @@ test.describe('V2 Task 5.3.4: SEO URL 重定向 + Razor SSR + Vue mount', () => 
 
   test('3. SEO URL 直接访问 Razor SSR 渲染产品详情', async ({ page }) => {
     // WHY Razor SSR: V2 用 ASP.NET MVC Razor Pages 渲染产品详情页 (SEO 友好)
-    //   Razor 输出 HTML 包含产品基本信息 (pn1/pn2/brand/oem3/mr1)
+    //   Razor 输出 HTML 只包含客户字段 (pn1/pn2/brand/oem3)
     //   Vue 子组件 (GalleryApp/CompareApp/InquiryApp) 通过 partial hydration mount
     //   测试策略: 访问已知 SEO URL, 验证 SSR HTML 包含产品字段
     //   注: 此测试依赖后端有 V2 产品数据, 若无数据则降级验证页面不白屏
-    const seoUrl = `${BASE}/products/air-filter-000001/premium/bosch/f0001`
+    const seoUrl = `${BASE}/products/air-filter/premium/bosch/f0001`
     const response = await page.goto(seoUrl, { waitUntil: 'domcontentloaded', timeout: 15000 })
 
     // 验证不白屏
@@ -91,7 +91,7 @@ test.describe('V2 Task 5.3.4: SEO URL 重定向 + Razor SSR + Vue mount', () => 
     // WHY Vue mount: V2 Razor SSR 输出包含 #gallery-app / #compare-app / #inquiry-app 占位符
     //   Vue 客户端脚本 product-detail-client.ts mount 子组件到这些占位符
     //   测试策略: 访问产品详情页, 等待 Vue mount 完成 (最长 5s)
-    const seoUrl = `${BASE}/products/air-filter-000001/premium/bosch/f0001`
+    const seoUrl = `${BASE}/products/air-filter/premium/bosch/f0001`
     await page.goto(seoUrl, { waitUntil: 'domcontentloaded', timeout: 15000 })
 
     // 等待 Vue mount (5s 超时, mount 失败不阻塞测试, 只记录)
@@ -109,9 +109,9 @@ test.describe('V2 Task 5.3.4: SEO URL 重定向 + Razor SSR + Vue mount', () => 
 
   // ========== 3. 404 场景 ==========
 
-  test('5. 不存在的 mr1 访问 SEO URL 返回 404 (不白屏)', async ({ page }) => {
+  test('5. 不存在的 OEM3 访问 SEO URL 返回 404 (不白屏)', async ({ page }) => {
     // WHY 404 兜底: V2 SEO URL 路由查不到产品时应返回 404 页面 (非 500 红屏)
-    const seoUrl = `${BASE}/products/nonexistent-999999/unknown/unknown/unknown-999999`
+    const seoUrl = `${BASE}/products/nonexistent/unknown/unknown/unknown`
     const response = await page.goto(seoUrl, { waitUntil: 'domcontentloaded', timeout: 15000 })
 
     // 验证不白屏
@@ -127,7 +127,7 @@ test.describe('V2 Task 5.3.4: SEO URL 重定向 + Razor SSR + Vue mount', () => 
     // WHY 渐进增强: V2 Razor SSR 输出的 HTML 应独立可读, 不依赖 Vue mount
     //   即便 Vue 脚本加载失败 (网络问题/JS 错误), 用户仍能看到产品基本信息
     //   测试策略: 拦截 Vue 脚本请求模拟 mount 失败, 验证 SSR HTML 仍可见
-    const seoUrl = `${BASE}/products/air-filter-000001/premium/bosch/f0001`
+    const seoUrl = `${BASE}/products/air-filter/premium/bosch/f0001`
 
     // 拦截 product-detail-client.ts 加载 (模拟 Vue mount 失败)
     await page.route('**/product-detail-client*', (route) => route.abort())

@@ -42,10 +42,9 @@ public interface IProductDetailService
     string BuildSlug(string? input);
 
     /// <summary>
-    /// V2 Task 4.5.13: 拼 SEO URL (含 mr1 末 6 位防 slug 冲突)
-    /// 格式: /products/{pn1Slug}-{mr1Suffix6}/{pn2Slug}/{brandSlug}/{oem3Slug}
-    ///   WHY mr1Suffix6: 多产品同 pn1/pn2/brand/oem3 时 slug 冲突, 末 6 位 mr1 唯一兜底
-    /// 全部小写 (与 BuildSlug 一致, 避免 SEO 大小写重复)
+    /// 公开 SEO URL。
+    /// 格式: /products/{pn1Slug}/{pn2Slug}/{brandSlug}/{oem3Slug}
+    /// OEM3 是公开详情页的定位键；MR1 只用于服务端内部聚合，绝不进入客户 URL。
     /// </summary>
     string BuildProductUrl(ProductDetailDto p);
 }
@@ -75,16 +74,18 @@ public class ProductDetailService : IProductDetailService
         // 长度防御: 列长 50, 拒绝超长输入避免无效 DB 查询
         if (oem.Length > 200) return null;
 
-        // P3-2 修复: 3 次 fallback 合并为 1 次 OR 查询 + ORDER BY priority
-        //   优先级: OemNoDisplay (1) > Oem2 (2) > Mr1 (3)
+        // P3-2 修复: fallback 合并为 1 次 OR 查询 + ORDER BY priority。
+        // 公开入口优先匹配已上架 OEM3；随后兼容产品主表 OEM、OEM2 与内部 MR1。
         //   DB 往返 3→1, fallback 命中场景 ~6ms → ~2ms
         var matched = await _db.Products.AsNoTracking()
-            .Where(p => !p.IsDiscontinued &&
-                        (p.OemNoDisplay == oem || p.Oem2 == oem || p.Mr1 == oem))
+            .Where(p => p.IsPublished && !p.IsDiscontinued &&
+                        (p.CrossReferences.Any(x => x.OemNo3 == oem && x.IsPublished && !x.IsDiscontinued)
+                         || p.OemNoDisplay == oem || p.Oem2 == oem || p.Mr1 == oem))
             .Select(p => new
             {
                 Id = (long?)p.Id,
-                Priority = p.OemNoDisplay == oem ? 1 : (p.Oem2 == oem ? 2 : 3)
+                Priority = p.CrossReferences.Any(x => x.OemNo3 == oem && x.IsPublished && !x.IsDiscontinued) ? 1
+                    : (p.OemNoDisplay == oem ? 2 : (p.Oem2 == oem ? 3 : 4))
             })
             .OrderBy(x => x.Priority)
             .FirstOrDefaultAsync(ct);
@@ -198,17 +199,16 @@ public class ProductDetailService : IProductDetailService
 
     public string BuildProductUrl(ProductDetailDto p)
     {
-        // V2 Task 4.5.13: /products/{pn1Slug}-{mr1Suffix6}/{pn2Slug}/{brandSlug}/{oem3Slug}
-        //   mr1Suffix6: mr1 末 6 位, 防多产品同 pn1/pn2/brand/oem3 时 slug 冲突
-        //   pn1/pn2/brand 段走 BuildSlug 小写化 (SEO 友好, 不参与 DB 反查)
+        // pn1/pn2/brand 段走 BuildSlug 小写化 (SEO 友好, 不参与 DB 反查)。
         var pn1Slug = BuildSlug(p.ProductName1);
         var pn2Slug = BuildSlug(p.ProductName2);
-        // brand: 取第一个 crossReference 的 OemBrand (V2 OEM 3 主图命名同口径)
-        var brand = p.CrossReferences?.FirstOrDefault()?.OemBrand;
+        // 公开 URL 必须与详情页展示的主 OEM3 保持一致，不能优先使用主表内部展示编号。
+        var primaryXref = p.CrossReferences.FirstOrDefault(x => x.IsPublished && !string.IsNullOrWhiteSpace(x.OemNo3))
+            ?? p.CrossReferences.FirstOrDefault(x => !string.IsNullOrWhiteSpace(x.OemNo3));
+        var brand = primaryXref?.OemBrand;
         var brandSlug = BuildSlug(brand);
-        // oem3: 取 OemNoDisplay (兼容老 OEM) 或第一个 crossReference 的 OemNo3
-        var oem3 = !string.IsNullOrEmpty(p.OemNoDisplay) ? p.OemNoDisplay
-                  : (p.CrossReferences?.FirstOrDefault()?.OemNo3 ?? p.Mr1 ?? "");
+        // 无 OEM3 数据时才兼容回退主表编号。
+        var oem3 = primaryXref?.OemNo3 ?? p.OemNoDisplay;
         // V24-F42 (spec F5-1): oem3 段保留大小写, 不走 BuildSlug
         //   WHY: 后端 GetByOemAsync 用 == 大小写敏感查询 (p.OemNoDisplay == oem),
         //        BuildSlug 会 ToLowerInvariant 小写化, 若 DB 中 OEM 含大写字母 (如 "F0001"),
@@ -217,11 +217,7 @@ public class ProductDetailService : IProductDetailService
         //        后端 GetByOemAsync 用 Uri.UnescapeDataString 解码后精确匹配
         //   注: oem3 是 OEM 编号 (数字+字母), 通常不含空格/下划线, 无需 BuildSlug 折叠
         var oem3Slug = string.IsNullOrEmpty(oem3) ? "untitled" : Uri.EscapeDataString(oem3);
-        // mr1 末 6 位 (Task 4.5.13 防冲突, 仅用于 URL 唯一性, 不参与 DB 反查, 可小写化)
-        var mr1Suffix = (p.Mr1?.Length ?? 0) > 6 ? p.Mr1![^6..].ToLowerInvariant() : (p.Mr1 ?? "nomr1");
-
-        // V24-F42: 不再整体 ToLowerInvariant (oem3Slug 已保留大小写)
-        //   pn1Slug/pn2Slug/brandSlug/mr1Suffix 已各自小写化, 仅 oem3Slug 保留原值
-        return $"/products/{pn1Slug}-{mr1Suffix}/{pn2Slug}/{brandSlug}/{oem3Slug}";
+        // 不再整体 ToLowerInvariant：oem3Slug 保留原值大小写以便精确反查。
+        return $"/products/{pn1Slug}/{pn2Slug}/{brandSlug}/{oem3Slug}";
     }
 }

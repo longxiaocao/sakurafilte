@@ -109,7 +109,7 @@ function colorFor(code: string): string {
           :cy="RADIUS"
           :r="RADIUS - STROKE / 2"
           fill="none"
-          stroke="#f3f4f6"
+          stroke="var(--color-bg-hover)"
           :stroke-width="STROKE"
         />
         <!-- 分段 -->
@@ -137,7 +137,7 @@ function colorFor(code: string): string {
           text-anchor="middle"
           font-size="22"
           font-weight="600"
-          fill="#111827"
+          fill="var(--color-text)"
         >
           {{ data?.total ?? 0 }}
         </text>
@@ -146,7 +146,7 @@ function colorFor(code: string): string {
           :y="RADIUS + 14"
           text-anchor="middle"
           font-size="11"
-          fill="#6b7280"
+          fill="var(--color-text-muted)"
         >
           总取消数
         </text>
@@ -203,7 +203,7 @@ function colorFor(code: string): string {
 }
 .legend-item:hover,
 .legend-item.is-hover {
-  background: #f9fafb;
+  background: var(--color-bg-hover);
 }
 .legend-item.is-dim {
   opacity: 0.5;
@@ -215,23 +215,23 @@ function colorFor(code: string): string {
   flex: 0 0 auto;
 }
 .legend-label {
-  color: #111827;
+  color: var(--color-text);
   font-weight: 500;
   flex: 0 0 auto;
 }
 .legend-code {
-  color: #4b5563;
+  color: var(--color-text-muted);
   font-family: 'SF Mono', Consolas, monospace;
   font-size: 10px;
   flex: 0 0 auto;
 }
 .legend-count {
   margin-left: auto;
-  color: #374151;
+  color: var(--color-text-muted);
   font-variant-numeric: tabular-nums;
 }
 .legend-empty {
-  color: #9ca3af;
+  color: var(--color-text-muted);
   font-size: 12px;
   padding: 8px 0;
 }

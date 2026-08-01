@@ -16,8 +16,10 @@ public static class EndpointRouteBuilderExtensions
         app.MapAdminEtlEndpoints();
         app.MapAdminAlertEndpoints();  // P2-1
         app.MapAdminXrefReorderEndpoints();  // V2 Task 2.1: OEM 3 排序管理
+        app.MapAdminMachineBatchBindEndpoints();  // Task 2: 批量绑定 MR.1 到机型
         app.MapDeadLetterEndpoints();
         app.MapDictionaryEndpoints();
+        app.MapAdminMachineTreeEndpoints();  // Task 1: 机型三级树查询
         app.MapPublicTypeaheadEndpoints();
         // V2 Task 4.3: sitemap.xml 端点
         app.MapSitemapEndpoints();

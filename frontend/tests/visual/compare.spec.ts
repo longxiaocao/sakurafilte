@@ -1,7 +1,7 @@
 // P3.5 (Task 12): 对比 UI 视觉/截图测试 (Playwright, 可选)
 //   用法: npx playwright test tests/visual/compare.spec.ts
 //   前置: 需安装 @playwright/test + 后端运行在 http://localhost:5082 + 至少 3 个产品已导入
-//   截图输出: tests/visual/__screenshots__/compare.png
+//   截图输出: test-results/compare.png
 //
 //   跑测试前:
 //     1. cd frontend && npm i -D @playwright/test
@@ -46,7 +46,7 @@ test.describe('P3.5 产品对比 UI', () => {
     console.log(`[compare] diff=${diffCount}, same=${sameCount}`)
 
     // 5. 截图 (含全页)
-    const screenshotPath = path.join(__dirname, '__screenshots__', 'compare.png')
+    const screenshotPath = path.join(process.cwd(), 'test-results', 'compare.png')
     await page.screenshot({ path: screenshotPath, fullPage: true })
     console.log(`[compare] 截图: ${screenshotPath}`)
 

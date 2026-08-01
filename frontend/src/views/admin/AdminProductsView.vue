@@ -113,7 +113,8 @@ async function load() {
     const req = { ...filter, page: page.value, pageSize: pageSize.value }
     const data = await adminProductApi.search(req, { signal: myAbort.signal })
     items.value = data.items
-    total.value = data.total
+    // 🔧 fix(审查): total 兜底 — 后端 countMode=none 时返回 -1 (当前 UI 无入口但存在自然降级路径), el-pagination 负 total 异常
+    total.value = Math.max(0, data.total ?? 0)
     hasMore.value = !!data.hasMore
     countModeUsed.value = data.countModeUsed || 'exact'
   } catch (e: any) {
@@ -358,7 +359,7 @@ onBeforeUnmount(() => {
         <el-table-column type="selection" width="36" />
         <el-table-column prop="id" label="ID" width="60" />
         <el-table-column prop="oemNoDisplay" label="OEM" width="160" fixed />
-        <el-table-column v-if="showAllColumns" prop="mr1" label="MR.1" width="100" show-overflow-tooltip />
+        <el-table-column prop="mr1" label="MR.1" width="100" show-overflow-tooltip />
         <el-table-column prop="oem2" label="OEM 2" width="120" show-overflow-tooltip />
         <el-table-column prop="type" :label="t('common.action.type')" width="60" />
         <el-table-column prop="d1Mm" label="D1" width="50" align="right" />
@@ -405,7 +406,7 @@ onBeforeUnmount(() => {
 
     <!-- 分页 -->
     <div class="flex items-center justify-between mt-3">
-      <span class="text-xs text-muted">共 {{ total }} 条</span>
+      <span class="text-xs text-muted">{{ countModeUsed === 'estimated' ? `约 ${total} 条 (估计值)` : `共 ${total} 条` }}</span>
       <el-pagination
         :current-page="page"
         :page-size="pageSize"

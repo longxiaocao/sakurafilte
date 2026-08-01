@@ -6,6 +6,7 @@ import type {
   SearchRequest,
   SearchResult,
   ProductDetail,
+  PublicProductDetail,
   ProductHistoryItem,
   AdminSearchRequest,
   PageResp,
@@ -27,7 +28,10 @@ import type {
   AlertStats,
   AlertRuleItem,
   AlertTestRequest,
-  AlertTestResult
+  AlertTestResult,
+  MachineTreeNode,
+  BatchBindRequest,
+  BatchBindResponse
 } from './types'
 
 // ===== JWT 鉴权 API (commit aff3ac3 后端 JWT 体系) =====
@@ -330,13 +334,9 @@ export async function searchWithFallback(
         page: req.page ?? 1,
         pageSize: req.pageSize ?? 20,
         totalPages: Math.ceil(legacyResp.result.total / (req.pageSize ?? 20)),
-        processingTimeMs: legacyResp.result.elapsedMs,
-        provider: legacyResp.provider,
-        hits: (legacyResp.result.items || []).map((item) => ({
-          mr1: '',  // 旧 API 无 mr1 字段, 留空
+        hits: (legacyResp.result.items || []).map((item, index) => ({
+          key: item.oemNoDisplay ?? `legacy-${index}`,
           type: item.type || '',
-          isPublished: !item.isDiscontinued,
-          isDiscontinued: item.isDiscontinued,
           oemList: [],
           machineList: []
         }))
@@ -352,15 +352,15 @@ export async function searchWithFallback(
 //   URL 格式 (R1 规格): {name1}-{name2}-{oemBrand}-{oemNo}
 //   后端 GetBySlug 内部解析 slug 末段为 oem
 export const productApi = {
-  getByOem(slug: string): Promise<ProductDetail> {
+  getByOem(slug: string): Promise<PublicProductDetail> {
     // 注意: 走 http 拦截器, 即使已登录后台 (有 token) 也可访问公开端点 (后端 [AllowAnonymous])
     return http.get(`/public/product/${encodeURIComponent(slug)}`).then((r) => r.data)
   },
-  // V2 Task 2.3.5: 同 MR.1 其他 OEM 3 列表 (详情页推荐区块, 后端已排序)
-  //   GET /api/public/products/{mr1}/sibling-oem3
+  // 同组其他 OEM 3 列表，参数使用公开 OEM3，服务端内部按 MR1 聚合。
+  //   GET /api/public/products/{oem3}/sibling-oem3
   //   返回排序后列表 (brand_sort_order → sort_order), 前端不再二次排序
-  siblingOem3(mr1: string): Promise<{ total: number; items: import('./types').SiblingOem3Item[] }> {
-    return http.get(`/public/products/${encodeURIComponent(mr1)}/sibling-oem3`).then((r) => r.data)
+  siblingOem3(oem3: string): Promise<{ total: number; items: import('./types').SiblingOem3Item[] }> {
+    return http.get(`/public/products/${encodeURIComponent(oem3)}/sibling-oem3`).then((r) => r.data)
   }
 }
 
@@ -369,7 +369,7 @@ export const productApi = {
 //   用途: 产品详情页"加入对比" 按钮跳转目标; 也可作为公开 URL 分享
 //   限位: 最多 6 个产品 (后端校验, 超限 400)
 export const publicCompareApi = {
-  compare(ids: number[]): Promise<{ count: number; items: ProductDetail[] }> {
+  compare(ids: number[]): Promise<{ count: number; items: PublicProductDetail[] }> {
     if (ids.length === 0) {
       return Promise.resolve({ count: 0, items: [] })
     }
@@ -380,9 +380,13 @@ export const publicCompareApi = {
 // ===== P3.4 (Task 11.5): 公开搜索 (8 字段多框, 无需 token) =====
 //   GET /api/public/search?oemBrand=...&oemNo2=...&oemNo3=...&machineBrand=...&machineModel=...&modelName=...&engineBrand=...&engineType=...
 //   返: { total, page, pageSize, totalPages, elapsedMs, countMode, items: [{id, oemNoDisplay, oem2, productName1, type, d1Mm, h1Mm}] }
-import type { PublicEightRequest, PublicEightResponse } from './types'
+import type { MachineCatalogResponse, PublicEightRequest, PublicEightResponse } from './types'
 export const publicSearchApi = {
-  eightField(req: PublicEightRequest): Promise<PublicEightResponse> {
+  machineCatalog(): Promise<MachineCatalogResponse> {
+    return http.get('/public/machine-brands/catalog').then((r) => r.data)
+  },
+
+  eightField(req: PublicEightRequest, config?: { signal?: AbortSignal }): Promise<PublicEightResponse> {
     // 过滤 undefined / 空字符串, axios 不会把空串当未传, 显式构造 params
     const params: Record<string, string | number> = {}
     if (req.oemBrand) params.oemBrand = req.oemBrand
@@ -395,7 +399,7 @@ export const publicSearchApi = {
     if (req.engineType) params.engineType = req.engineType
     params.page = req.page ?? 1
     params.pageSize = req.pageSize ?? 20
-    return http.get('/public/search', { params }).then((r) => r.data)
+    return http.get('/public/search', { params, ...config }).then((r) => r.data)
   },
 
   // P-Demo: 8 字段 typeahead 候选项 (输入 2 字符起返回 distinct 候选, 最多 20 条)
@@ -420,7 +424,7 @@ export const publicSearchApi = {
   },
 
   // V2 Task 1.3.6: 聚合搜索 (POST /api/public/search/aggregate)
-  //   文档级返回: mr1 + oemList 嵌套数组 + _formatted 高亮 + _rankingScore
+  //   文档级返回: 公开键 + OEM3 嵌套数组 + _formatted 高亮
   //   支持 AbortSignal: 500ms 防抖 + 取消前序请求
   //   provider 字段: "meilisearch" / "postgres" (Meili 离线时降级)
   aggregate(
@@ -474,16 +478,54 @@ export const adminProductApi = {
 // ===== V2 Task 2.2.7: OEM 3 排序管理 API =====
 export const adminXrefApi = {
   // GET /api/admin/xrefs/reorder/brands — 品牌 + sortOrder + oem3Count
+  //   🔧 fix: 后端返回 { brands: [...] } 但前端契约声明 { total, items }
+  //     历史不一致导致 AdminXrefReorderView.vue loadBrands 拿到 undefined.items → 页面崩溃
+  //     修复: 前端映射 brands → items, 保持外部 API 契约 { total, items } 不变
   listBrands(): Promise<{ total: number; items: import('./types').XrefBrandItem[] }> {
-    return http.get('/admin/xrefs/reorder/brands').then((r) => r.data)
+    return http.get('/admin/xrefs/reorder/brands').then((r) => {
+      const items = ((r.data?.brands ?? r.data?.items) || []) as import('./types').XrefBrandItem[]
+      return { total: items.length, items }
+    })
   },
-  // GET /api/admin/xrefs/reorder?oemBrand=BOSCH — 某 Brand 下 OEM 3 列表 (含 rowVersion)
-  listByBrand(oemBrand: string): Promise<{ total: number; items: import('./types').XrefOem3Item[] }> {
-    return http.get('/admin/xrefs/reorder', { params: { oemBrand } }).then((r) => r.data)
+  // POST /api/admin/xrefs/reorder/brands — 新增品牌到字典 (sort_order=max+1, 软删可恢复)
+  //   白名单改造: 用户可独立新增品牌, 新增后即可在该品牌下添加白名单
+  //   冲突返 409 BRAND_EXISTS (品牌已存在且未软删)
+  addBrand(brand: string): Promise<{ brand: string; sortOrder: number; oem3Count: number; restored: boolean }> {
+    return http.post('/admin/xrefs/reorder/brands', { brand }).then((r) => r.data)
+  },
+  // GET /api/admin/xrefs/reorder?oemBrand=BOSCH — 某 Brand 下 OEM 3 列表 (分页 + 搜索, 含 rowVersion)
+  //   V24-F86: 加 page/pageSize/q 参数, 返回 XrefOem3Page (含分页元数据)
+  listByBrand(
+    oemBrand: string,
+    params?: { page?: number; pageSize?: number; q?: string }
+  ): Promise<import('./types').XrefOem3Page> {
+    return http
+      .get('/admin/xrefs/reorder', { params: { oemBrand, ...params } })
+      .then((r) => r.data)
   },
   // POST /api/admin/xrefs/reorder — 批量更新 sort_order (含 xmin 乐观锁, 冲突返 409)
   reorder(req: import('./types').XrefReorderRequest): Promise<{ updated: number }> {
     return http.post('/admin/xrefs/reorder', req).then((r) => r.data)
+  },
+  // ===== V24-F86: 单条 CRUD =====
+  // GET /api/admin/xrefs/reorder/items/{id} — 取单条详情 (编辑回填用)
+  getItem(id: number): Promise<import('./types').XrefOem3Detail> {
+    return http.get(`/admin/xrefs/reorder/items/${id}`).then((r) => r.data)
+  },
+  // POST /api/admin/xrefs/reorder/items — 新增单条 (校验 productId 存在, 触发索引重建)
+  addItem(payload: import('./types').XrefOem3CreatePayload): Promise<import('./types').XrefOem3Detail> {
+    return http.post('/admin/xrefs/reorder/items', payload).then((r) => r.data)
+  },
+  // PUT /api/admin/xrefs/reorder/items/{id} — 编辑单条 (含 xmin 乐观锁, 冲突返 409)
+  updateItem(id: number, payload: import('./types').XrefOem3UpdatePayload): Promise<{ id: number; rowVersion: number }> {
+    return http.put(`/admin/xrefs/reorder/items/${id}`, payload).then((r) => r.data)
+  },
+  // DELETE /api/admin/xrefs/reorder/items/{id}?rowVersion= — 从白名单移除 (置 sort_order=0, 不删产品本身)
+  //   rowVersion 通过 query 传递 (DELETE 通常无 body), 缺省时后端不加乐观锁条件
+  //   白名单改造: 响应体从 {id, isDiscontinued} 改为 {id, sortOrder, removedFromWhitelist}
+  deleteItem(id: number, rowVersion?: number): Promise<{ id: number; sortOrder: number; removedFromWhitelist: boolean }> {
+    const params = rowVersion != null ? { rowVersion } : {}
+    return http.delete(`/admin/xrefs/reorder/items/${id}`, { params }).then((r) => r.data)
   }
 }
 
@@ -873,4 +915,22 @@ export const dictApi = {
     }
   }
 }
+
+// ===== P1 Task 3: 后台机型三级树 + MR.1 批量绑定 API (admin 角色) =====
+//   getTree:    GET   /api/admin/machine-tree            → MachineTreeNode[] (category → brand → model)
+//   batchBind:  POST  /api/admin/machine-apps/batch-bind  → BatchBindResponse (200 全成功 / 207 部分成功)
+//   鉴权: http 拦截器自动注入 Authorization Bearer / X-Admin-Token
+//   错误码: 400 BATCH_BIND_LIMIT_EXCEEDED / 404 MACHINE_NOT_FOUND / 400 MR1_FORMAT_INVALID
+export const machineApi = {
+  getTree(): Promise<MachineTreeNode[]> {
+    return http.get('/admin/machine-tree').then((r) => r.data)
+  },
+  batchBind(req: BatchBindRequest): Promise<BatchBindResponse> {
+    return http.post('/admin/machine-apps/batch-bind', req).then((r) => r.data)
+  }
+}
+
+// P1 Task 3: re-export 类型, 供调用方 `import { type MachineTreeNode } from '@/api'` 使用
+//   (与 generated-types re-export 模式一致, 见 types.ts 文件末尾)
+export type { MachineTreeNode, BatchBindRequest, BatchBindResponse } from './types'
 

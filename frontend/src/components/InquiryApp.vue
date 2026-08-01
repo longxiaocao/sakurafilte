@@ -3,13 +3,12 @@
 //   - 显示询盘按钮, 点击弹窗表单 (ElDialog)
 //   - 表单: 联系人/电话/邮箱/留言
 //   - 必填校验: 联系人 + (电话|邮箱 至少一项)
-//   - 提交: 后端 /api/public/inquiry 待 Phase 5 实现, 当前用 mailto: 兜底
+//   - 提交: 当前交付为 VITE_INQUIRY_EMAIL 配置的 mailto 方案，不在前端或后端保存客户信息
 //   - 注意: props.oemNo3 实际传值为 product.oemNoDisplay (产品 OEM 编号)
 import { ref, reactive, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 
 interface InquiryProps {
-  mr1: string | null
   oemNo3: string
   brand?: string | null
   productName1?: string | null
@@ -18,6 +17,7 @@ interface InquiryProps {
 const props = defineProps<InquiryProps>()
 
 const dialogVisible = ref(false)
+const inquiryEmail = import.meta.env.VITE_INQUIRY_EMAIL?.trim() ?? ''
 
 interface InquiryForm {
   contact: string
@@ -50,19 +50,21 @@ function submit(): void {
     ElMessage.warning('请填写联系人, 并至少提供电话或邮箱')
     return
   }
-  // TODO Phase 5: POST /api/public/inquiry (后端 API 待实现)
-  // 当前: 用 mailto: 兜底, 让用户用邮件客户端发送
+  if (!inquiryEmail) {
+    ElMessage.info('询盘邮箱尚未配置, 请通过联系页获取销售联系方式')
+    return
+  }
+  // 当前交付口径: 使用部署配置的收件邮箱打开邮件客户端，不落库存储客户信息。
   const subject = encodeURIComponent(`[询盘] ${props.oemNo3} - ${props.productName1 ?? ''}`)
   const body = encodeURIComponent(
     `联系人: ${form.contact}\n` +
     `电话: ${form.phone}\n` +
     `邮箱: ${form.email}\n` +
     `产品 OEM: ${props.oemNo3}\n` +
-    `MR.1: ${props.mr1 ?? '-'}\n` +
     `品牌: ${props.brand ?? '-'}\n\n` +
     `留言:\n${form.message}`
   )
-  window.location.href = `mailto:sales@sakurafilter.com?subject=${subject}&body=${body}`
+  window.location.href = `mailto:${encodeURIComponent(inquiryEmail)}?subject=${subject}&body=${body}`
   dialogVisible.value = false
   ElMessage.success('已打开邮件客户端, 请发送询盘邮件')
 }
@@ -70,6 +72,7 @@ function submit(): void {
 
 <template>
   <div class="inquiry-app">
+    <p class="inquiry-hint">可咨询质量要求、目标价格、MOQ 与交期。</p>
     <button type="button" class="inquiry-btn" @click="openDialog">
       立即询盘
     </button>
@@ -113,6 +116,11 @@ function submit(): void {
 }
 .inquiry-btn:hover {
   background: #f5f5f5;
+}
+.inquiry-hint {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: #666;
 }
 .product-info {
   font-size: 13px;

@@ -31,7 +31,12 @@ export const http: AxiosInstance = axios.create({
 // 请求拦截: 优先 Authorization Bearer, 旧 dev token 兜底 X-Admin-Token
 http.interceptors.request.use((cfg: InternalAxiosRequestConfig) => {
   const auth = useAdminAuthStore()
-  if (auth.token) {
+  // WHY 跳过 /public/* 鉴权头注入: 公开端点 (聚合搜索/机型目录等) AllowAnonymous
+  //   后端对携带过期 Bearer 的公开端点会返回 401, 触发 refresh→失败→redirectToLogin→clearAuth
+  //   导致管理员在首页搜索时登录态丢失 (用户反馈 2026-07-31)
+  //   公开端点无需鉴权, 不应注入 token
+  const isPublicEndpoint = cfg.url?.startsWith('/public/') || cfg.url?.startsWith('public/')
+  if (auth.token && !isPublicEndpoint) {
     if (isJwtLike(auth.token)) {
       cfg.headers.set(TOKEN_HEADER_BEARER, `Bearer ${auth.token}`)
     } else {
@@ -121,7 +126,13 @@ export const ERROR_CODE_I18N: Record<string, string> = {
   IMAGE_PRIMARY_DUPLICATE: '主图已存在 (每个产品仅允许 1 张主图)',
   IMAGE_DETAIL_SLOT_DUPLICATE: '图片详情槽位重复',
   MR1_NOT_FOUND: 'MR.1 编号不存在',
-  OEM3_NOT_FOUND: 'OEM 3 编号不存在'
+  OEM3_NOT_FOUND: 'OEM 3 编号不存在',
+  // ===== 文件上传错误码 (3 个) =====
+  //   场景: 后端 magic number 校验 / 文件大小限制 / 空文件检测
+  INVALID_FILE_TYPE: '文件格式无效',
+  FILE_TOO_LARGE: '文件过大',
+  EMPTY_FILE: '文件为空',
+  MR1_EMPTY: 'mr_1 不能为空'
 }
 
 /**
