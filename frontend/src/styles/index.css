@@ -17,6 +17,11 @@
   --color-bg-diff: #fffbe6;
   --color-bg-same: #f5f5f5;
   --color-shadow: transparent;
+  /* 层级变量 (light 与 dark 同值或浅色值, 与 html.dark 块对齐) */
+  --color-bg-overlay: #ffffff;
+  --color-bg-input: #ffffff;
+  --color-border-strong: #9ca3af;
+  --color-border-subtle: #f3f4f6;
 }
 
 /* P5.3 dark 主题: <html class="dark"> 时覆盖 CSS 变量 */
@@ -290,6 +295,14 @@ html.dark {
   --el-tag-border-color: var(--color-border);
   --el-switch-off-color: var(--color-border);
   --el-switch-on-color: var(--color-accent);
+  /* P5.3: v-loading 遮罩深色化 (EP 默认半透明白, dark 下整页发白) */
+  --el-mask-color: rgba(0, 0, 0, 0.7);
+  /* tag/alert 各 type 的浅色背景 (EP 用 --el-color-*-light-9), dark 下覆盖为深色底 */
+  --el-color-danger-light-9: var(--color-bg-hover);
+  --el-color-success-light-9: var(--color-bg-hover);
+  --el-color-warning-light-9: var(--color-bg-hover);
+  --el-color-info-light-9: var(--color-bg-hover);
+  --el-color-error-light-9: var(--color-bg-hover);
 }
 
 html.dark .el-card,
@@ -326,7 +339,7 @@ html.dark .el-table--striped .el-table__body tr.el-table__row--striped td {
 .el-table {
   font-size: 13px;
   --el-table-border-color: var(--color-border);
-  --el-table-header-bg-color: #fafafa;
+  --el-table-header-bg-color: var(--color-bg-table-stripe);
   --el-table-row-hover-bg-color: var(--color-bg-hover);
 }
 

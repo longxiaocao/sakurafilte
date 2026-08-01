@@ -386,7 +386,7 @@ export const publicSearchApi = {
     return http.get('/public/machine-brands/catalog').then((r) => r.data)
   },
 
-  eightField(req: PublicEightRequest): Promise<PublicEightResponse> {
+  eightField(req: PublicEightRequest, config?: { signal?: AbortSignal }): Promise<PublicEightResponse> {
     // 过滤 undefined / 空字符串, axios 不会把空串当未传, 显式构造 params
     const params: Record<string, string | number> = {}
     if (req.oemBrand) params.oemBrand = req.oemBrand
@@ -399,7 +399,7 @@ export const publicSearchApi = {
     if (req.engineType) params.engineType = req.engineType
     params.page = req.page ?? 1
     params.pageSize = req.pageSize ?? 20
-    return http.get('/public/search', { params }).then((r) => r.data)
+    return http.get('/public/search', { params, ...config }).then((r) => r.data)
   },
 
   // P-Demo: 8 字段 typeahead 候选项 (输入 2 字符起返回 distinct 候选, 最多 20 条)

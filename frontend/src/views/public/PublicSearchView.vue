@@ -164,6 +164,9 @@ watch(page, () => {
 watch(pageSize, () => {
   if (syncing) return
   syncUrlFromForm()
+  // 🔧 fix(审查): 已在第 1 页时切换每页条数, el-pagination 重置 current-page 为 1 但值不变,
+  //   watch(page) 不触发 → 列表不刷新; 显式刷新
+  if (page.value === 1 && !allEmpty.value) doSearch()
 })
 
 // 监听 route 变化 (浏览器后退/前进/分享链接打开) → 还原 form
@@ -175,16 +178,22 @@ watch(() => route.query, () => {
   syncing = true
   syncFormFromUrl()
   syncing = false
-  // URL 变化时也跑一次搜索 (若是分享链接)
-  if (filledCount.value > 0) doSearch()
+  // 🔧 fix(审查): 移除此处立即 doSearch — 输入时 watch(form) 同步 URL 会触发本 watch,
+  //   与下方 500ms debounce watch(form) 叠加, 造成每按键 2 次请求 (1 次立即 + 1 次防抖)
+  //   表单还原后的搜索由 debounce watch 自动承担, 初始分享链接搜索由 onMounted 处理
 })
 
 // ===== 搜索执行 =====
+// 取消前序未完成请求, 防止旧响应后到覆盖新结果 (快速输入竞态)
+let searchAbort: AbortController | null = null
 async function doSearch() {
   if (allEmpty.value) {
     ElMessage.warning(t('common.feedback.warn_040'))
     return
   }
+  searchAbort?.abort()
+  const ctrl = new AbortController()
+  searchAbort = ctrl
   loading.value = true
   lastError.value = ''
   try {
@@ -199,7 +208,7 @@ async function doSearch() {
       engineType: form.engineType || undefined,
       page: page.value,
       pageSize: pageSize.value
-    })
+    }, { signal: ctrl.signal })
     results.value = resp.items
     total.value = resp.total
     totalPages.value = resp.totalPages
@@ -207,12 +216,18 @@ async function doSearch() {
     countMode.value = resp.countMode
     applySeo()
   } catch (e: any) {
+    // 被新请求取消 (AbortError): 静默, 不覆盖 loading/结果
+    if (e?.name === 'CanceledError' || e?.code === 'ERR_CANCELED') return
     lastError.value = e?.problem?.detail || e?.response?.data?.detail || e?.message || '搜索失败'
     results.value = []
     total.value = 0
     totalPages.value = 0
   } finally {
-    loading.value = false
+    // 仅当前请求负责关闭 loading (被取消的旧请求不干扰新请求状态)
+    if (searchAbort === ctrl) {
+      loading.value = false
+      searchAbort = null
+    }
   }
 }
 
@@ -346,6 +361,8 @@ onUnmounted(() => {
     window.clearTimeout(debounceTimer)
     debounceTimer = null
   }
+  searchAbort?.abort()
+  searchAbort = null
   for (const key in typeaheadControllers) {
     typeaheadControllers[key]?.abort()
     typeaheadControllers[key] = null

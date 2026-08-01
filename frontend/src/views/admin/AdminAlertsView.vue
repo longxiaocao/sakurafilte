@@ -490,7 +490,7 @@ onBeforeUnmount(() => {
 }
 .detail-value { font-size: 13px; }
 .json-block {
-  background: #fafafa;
+  background: var(--color-bg-elevated);
   border: 1px solid var(--el-border-color-lighter);
   border-radius: 4px;
   padding: 10px;

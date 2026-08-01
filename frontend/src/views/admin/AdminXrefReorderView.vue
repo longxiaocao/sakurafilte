@@ -14,7 +14,7 @@
 //   - "添加到白名单": 新建 cross_reference, 后端自动 sort_order = max+1, 新增即入白名单
 //   - "从白名单移除": 置 sort_order = 0 (产品本身不删, 仅不再优先展示)
 //   - 添加弹窗按 selectedBrand 过滤产品搜索 (adminProductApi.search 加 oemBrand 参数)
-import { ref, onMounted, reactive } from 'vue'
+import { ref, onMounted, reactive, onBeforeUnmount } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import draggable from 'vuedraggable'
 import { adminXrefApi, adminProductApi } from '@/api'
@@ -467,22 +467,30 @@ async function submitBrand() {
 }
 
 onMounted(loadBrands)
+
+// 🔧 fix(审查): 卸载时清理防抖 timer — 之前缺失, 卸载后 timer 仍会触发 loadOemList 访问已卸载状态
+onBeforeUnmount(() => {
+  if (searchTimer) {
+    clearTimeout(searchTimer)
+    searchTimer = null
+  }
+})
 </script>
 
 <template>
   <div class="p-4 max-w-7xl mx-auto">
     <!-- 标题 -->
-    <div class="border-b border-gray-200 pb-3 mb-4">
+    <div class="border-b border-gray-200 pb-3 mb-4 dark:border-[var(--color-border)]">
       <h1 class="text-xl font-medium">OEM 白名单管理</h1>
-      <p class="text-xs text-gray-500 mt-1">
+      <p class="text-xs text-gray-500 mt-1 dark:text-[var(--color-text-muted)]">
         拖拽调整白名单内 OEM 3 优先展示顺序 (数值越小越靠前, 类竞价排名) · 自动保存 · 冲突时刷新重试 · 仅显示已加入白名单的产品
       </p>
     </div>
 
     <div class="flex gap-4" style="min-height: 600px">
       <!-- 左侧: Brand 列表 -->
-      <div class="w-64 border border-gray-200 rounded">
-        <div class="px-3 py-2 border-b border-gray-200 bg-gray-50 text-sm font-medium flex items-center justify-between">
+      <div class="w-64 border border-gray-200 rounded dark:border-[var(--color-border)]">
+        <div class="px-3 py-2 border-b border-gray-200 bg-gray-50 text-sm font-medium flex items-center justify-between dark:border-[var(--color-border)] dark:bg-[var(--color-bg-elevated)]">
           <span>品牌 ({{ brands.length }})</span>
           <el-button size="small" text type="primary" @click="openCreateBrandDialog">+ 新增</el-button>
         </div>
@@ -490,27 +498,27 @@ onMounted(loadBrands)
           <div
             v-for="b in brands"
             :key="b.brand"
-            class="px-3 py-2 border-b border-gray-100 cursor-pointer hover:bg-gray-50 flex items-center justify-between"
-            :class="{ 'bg-blue-50 border-l-2 border-l-blue-500': b.brand === selectedBrand }"
+            class="px-3 py-2 border-b border-gray-100 cursor-pointer hover:bg-gray-50 flex items-center justify-between dark:border-[var(--color-border-subtle)] dark:hover:bg-[var(--color-bg-hover)]"
+            :class="{ 'bg-blue-50 border-l-2 border-l-blue-500': b.brand === selectedBrand, 'dark:bg-[var(--color-bg-hover)] dark:border-l-[var(--color-accent)]': b.brand === selectedBrand }"
             @click="selectBrand(b.brand)"
           >
             <div class="flex-1 min-w-0">
               <div class="text-sm truncate">{{ b.brand }}</div>
-              <div class="text-xs text-gray-500">白名单 {{ b.oem3Count }} 条 · brand sort: {{ b.sortOrder }}</div>
+              <div class="text-xs text-gray-500 dark:text-[var(--color-text-muted)]">白名单 {{ b.oem3Count }} 条 · brand sort: {{ b.sortOrder }}</div>
             </div>
           </div>
-          <div v-if="!loadingBrands && brands.length === 0" class="p-4 text-center text-gray-400 text-sm">
+          <div v-if="!loadingBrands && brands.length === 0" class="p-4 text-center text-gray-400 text-sm dark:text-[var(--color-text-muted)]">
             无品牌数据
           </div>
         </div>
       </div>
 
       <!-- 右侧: OEM 3 拖拽列表 + 分页 + 搜索 + CRUD -->
-      <div class="flex-1 border border-gray-200 rounded">
-        <div class="px-3 py-2 border-b border-gray-200 bg-gray-50 flex items-center justify-between flex-wrap gap-2">
+      <div class="flex-1 border border-gray-200 rounded dark:border-[var(--color-border)]">
+        <div class="px-3 py-2 border-b border-gray-200 bg-gray-50 flex items-center justify-between flex-wrap gap-2 dark:border-[var(--color-border)] dark:bg-[var(--color-bg-elevated)]">
           <div class="text-sm font-medium flex items-center gap-2">
             {{ selectedBrand || '请选择品牌' }}
-            <span v-if="total > 0" class="text-xs text-gray-500">
+            <span v-if="total > 0" class="text-xs text-gray-500 dark:text-[var(--color-text-muted)]">
               (共 {{ total }} 条, 第 {{ page }}/{{ totalPages || 1 }} 页)
             </span>
           </div>
@@ -552,17 +560,17 @@ onMounted(loadBrands)
             @end="onDragEnd"
           >
             <template #item="{ element, index }">
-              <div class="flex items-center gap-3 px-3 py-2 border border-gray-200 rounded mb-1 hover:border-gray-400 bg-white">
-                <span class="drag-handle cursor-move text-gray-400 hover:text-gray-700">⋮⋮</span>
-                <span class="text-xs font-mono text-gray-500 w-8">{{ (page - 1) * pageSize + index + 1 }}</span>
+              <div class="flex items-center gap-3 px-3 py-2 border border-gray-200 rounded mb-1 hover:border-gray-400 bg-white dark:border-[var(--color-border)] dark:hover:border-[var(--color-border-strong)] dark:bg-[var(--color-bg-elevated)]">
+                <span class="drag-handle cursor-move text-gray-400 hover:text-gray-700 dark:text-[var(--color-text-muted)]">⋮⋮</span>
+                <span class="text-xs font-mono text-gray-500 w-8 dark:text-[var(--color-text-muted)]">{{ (page - 1) * pageSize + index + 1 }}</span>
                 <div class="flex-1 min-w-0">
                   <div class="font-mono text-sm truncate">{{ element.oemNo3 }}</div>
-                  <div class="text-xs text-gray-500">
+                  <div class="text-xs text-gray-500 dark:text-[var(--color-text-muted)]">
                     MR.1: {{ element.mr1 || '-' }}
                     <el-tag v-if="!element.isPublished" size="small" type="info" class="ml-1">未上架</el-tag>
                   </div>
                 </div>
-                <span class="text-xs text-gray-400">sort: {{ element.sortOrder }}</span>
+                <span class="text-xs text-gray-400 dark:text-[var(--color-text-muted)]">sort: {{ element.sortOrder }}</span>
                 <!-- V24-F86: 编辑/从白名单移除按钮 -->
                 <div class="flex items-center gap-1">
                   <el-button size="small" text @click="openEditDialog(element)">编辑</el-button>
@@ -572,14 +580,14 @@ onMounted(loadBrands)
             </template>
           </draggable>
 
-          <div v-else-if="!loadingOem" class="py-12 text-center text-gray-400 text-sm">
+          <div v-else-if="!loadingOem" class="py-12 text-center text-gray-400 text-sm dark:text-[var(--color-text-muted)]">
             <p v-if="selectedBrand">当前品牌尚未维护白名单, 点击"添加到白名单"选择需要优先展示的产品</p>
             <p v-else>请从左侧选择品牌</p>
           </div>
         </div>
 
         <!-- V24-F86: 分页组件 (pageSize=50) -->
-        <div v-if="total > 0" class="px-3 py-2 border-t border-gray-200 flex justify-end">
+        <div v-if="total > 0" class="px-3 py-2 border-t border-gray-200 flex justify-end dark:border-[var(--color-border)]">
           <el-pagination
             v-model:current-page="page"
             v-model:page-size="pageSize"
@@ -639,7 +647,7 @@ onMounted(loadBrands)
         <el-form-item label="是否发布">
           <el-switch v-model="form.isPublished" />
         </el-form-item>
-        <div v-if="dialogMode === 'create'" class="text-xs text-gray-500 pl-[100px]">
+        <div v-if="dialogMode === 'create'" class="text-xs text-gray-500 pl-[100px] dark:text-[var(--color-text-muted)]">
           提示: 提交后该产品将自动加入白名单 (sort_order = 当前最大值 + 1), 排到白名单末尾, 可拖拽调整顺序
         </div>
       </el-form>
@@ -668,7 +676,7 @@ onMounted(loadBrands)
             @keyup.enter="submitBrand"
           />
         </el-form-item>
-        <div class="text-xs text-gray-500 pl-[80px]">
+        <div class="text-xs text-gray-500 pl-[80px] dark:text-[var(--color-text-muted)]">
           提示: 新增后品牌将加入字典, 排到列表末尾; 之后可在该品牌下"添加到白名单"选择产品
         </div>
       </el-form>

@@ -251,11 +251,11 @@ onBeforeUnmount(() => {
     <div class="lg:grid lg:grid-cols-[220px_minmax(0,1fr)] lg:gap-6">
       <aside
         v-if="machineCatalog.categories.some(category => category.brands.length > 0)"
-        class="hidden lg:block self-start sticky top-4 max-h-[calc(100vh-5rem)] overflow-y-auto border border-gray-200 p-3"
+        class="hidden lg:block self-start sticky top-4 max-h-[calc(100vh-5rem)] overflow-y-auto border border-gray-200 p-3 dark:border-[var(--color-border)]"
         aria-label="机型分类目录"
       >
-        <div class="text-sm font-medium pb-2 mb-2 border-b border-gray-200">机型目录</div>
-        <section v-for="category in machineCatalog.categories" :key="category.category" class="py-2 border-b border-gray-100 last:border-b-0">
+        <div class="text-sm font-medium pb-2 mb-2 border-b border-gray-200 dark:border-[var(--color-border)]">机型目录</div>
+        <section v-for="category in machineCatalog.categories" :key="category.category" class="py-2 border-b border-gray-100 last:border-b-0 dark:border-[var(--color-border-subtle)]">
           <el-button text size="small" class="!px-0 !font-medium" @click="selectMachine(category.category)">
             {{ category.category }}
           </el-button>
@@ -269,7 +269,7 @@ onBeforeUnmount(() => {
                 :key="model"
                 text
                 size="small"
-                class="!h-auto !px-0 block text-left text-gray-500"
+                class="!h-auto !px-0 block text-left text-gray-500 dark:text-[var(--color-text-muted)]"
                 @click="selectMachine(category.category, brand.brand, model)"
               >
                 {{ model }}
@@ -281,7 +281,7 @@ onBeforeUnmount(() => {
 
       <div class="min-w-0">
     <!-- 标题 + 搜索框 -->
-    <div class="border-b border-gray-200 pb-3 mb-4">
+    <div class="border-b border-gray-200 pb-3 mb-4 dark:border-[var(--color-border)]">
       <h1 class="text-xl font-medium mb-3">聚合搜索</h1>
       <div class="flex gap-2 items-center">
         <el-input
@@ -313,7 +313,7 @@ onBeforeUnmount(() => {
         <el-button text size="small" @click="showAdvanced = !showAdvanced">
           {{ showAdvanced ? '收起高级筛选' : '展开高级筛选' }}
         </el-button>
-        <div v-if="showAdvanced" class="flex flex-wrap gap-3 mt-2 p-3 border border-gray-200 rounded">
+        <div v-if="showAdvanced" class="flex flex-wrap gap-3 mt-2 p-3 border border-gray-200 rounded dark:border-[var(--color-border)]">
           <el-form-item label="分类" class="!mb-0">
             <el-select v-model="advancedForm.type" placeholder="全部" clearable size="small" style="width: 120px">
               <el-option v-for="type in quickProductTypes" :key="type" :label="type" :value="type" />
@@ -356,7 +356,7 @@ onBeforeUnmount(() => {
                   :key="model"
                   text
                   size="small"
-                  class="!h-auto !px-0 text-gray-500"
+                  class="!h-auto !px-0 text-gray-500 dark:text-[var(--color-text-muted)]"
                   @click="selectMachine(category.category, brand.brand, model)"
                 >
                   {{ model }}
@@ -374,18 +374,18 @@ onBeforeUnmount(() => {
     </div>
 
     <!-- 元信息 -->
-    <div v-if="total > 0" class="text-sm text-gray-600 mb-3">
+    <div v-if="total > 0" class="text-sm text-gray-600 mb-3 dark:text-[var(--color-text-muted)]">
       <span>共 {{ total }} 条</span>
     </div>
 
     <!-- 加载中 -->
-    <div v-if="loading" class="py-12 text-center text-gray-500">
+    <div v-if="loading" class="py-12 text-center text-gray-500 dark:text-[var(--color-text-muted)]">
       <el-icon class="is-loading text-2xl"><Loading /></el-icon>
       <p class="mt-2">搜索中...</p>
     </div>
 
     <!-- 空结果 -->
-    <div v-else-if="!loading && results.length === 0 && q.trim()" class="py-12 text-center text-gray-500">
+    <div v-else-if="!loading && results.length === 0 && q.trim()" class="py-12 text-center text-gray-500 dark:text-[var(--color-text-muted)]">
       <p>未找到匹配结果</p>
       <p class="text-xs mt-1">尝试更换关键词或调整筛选条件</p>
     </div>
@@ -395,8 +395,12 @@ onBeforeUnmount(() => {
       <div
         v-for="hit in results"
         :key="hit.key"
-        class="border border-gray-200 rounded p-3 hover:border-gray-400 transition-colors cursor-pointer"
+        class="border border-gray-200 rounded p-3 hover:border-gray-400 transition-colors cursor-pointer dark:border-[var(--color-border)] dark:hover:border-[var(--color-border-strong)]"
+        role="link"
+        tabindex="0"
+        :aria-label="`查看产品 ${getPublicOemLabel(hit)} 详情`"
         @click="viewDetail(hit)"
+        @keyup.enter="viewDetail(hit)"
       >
         <div class="flex items-start gap-3">
           <img
@@ -410,21 +414,21 @@ onBeforeUnmount(() => {
           <div class="flex-1 min-w-0 flex flex-col gap-2">
             <!-- 第一行: 物品型号主信息 -->
             <div class="flex items-baseline gap-2 flex-wrap">
-              <span class="font-mono text-sm text-gray-900 font-medium">{{ getPublicOemLabel(hit) }}</span>
+              <span class="font-mono text-sm text-gray-900 font-medium dark:text-[var(--color-text)]">{{ getPublicOemLabel(hit) }}</span>
               <!-- V2 Task 1.3.3: v-html 渲染 _formatted 高亮 (sanitizeFormatted 双保险) -->
               <span
                 v-if="getHighlighted(hit, 'product_name_1')"
-                class="text-sm text-gray-700"
+                class="text-sm text-gray-700 dark:text-[var(--color-text)]"
                 v-html="getHighlighted(hit, 'product_name_1')"
               ></span>
-              <span v-if="hit.productName2" class="text-xs text-gray-500">{{ hit.productName2 }}</span>
+              <span v-if="hit.productName2" class="text-xs text-gray-500 dark:text-[var(--color-text-muted)]">{{ hit.productName2 }}</span>
               <el-tag size="small" type="info">{{ stripSearchHighlight(hit.type) }}</el-tag>
             </div>
             <!-- 第二行: OEM 2 (可选) -->
-            <div v-if="hit.oem2" class="text-xs text-gray-500">OEM 2: {{ hit.oem2 }}</div>
+            <div v-if="hit.oem2" class="text-xs text-gray-500 dark:text-[var(--color-text-muted)]">OEM 2: {{ hit.oem2 }}</div>
             <!-- 第三行: 操作区 (相关度 + 展开 OEM 按钮), justify-between 分隔 -->
             <div class="flex items-center justify-between gap-2">
-              <span v-if="hit.rankingScore != null" class="text-xs text-gray-400">
+              <span v-if="hit.rankingScore != null" class="text-xs text-gray-400 dark:text-[var(--color-text-muted)]">
                 相关度 {{ (hit.rankingScore * 100).toFixed(0) }}%
               </span>
               <span v-else></span>
@@ -447,10 +451,10 @@ onBeforeUnmount(() => {
         <!-- OEM 3 列表 (展开时显示) -->
         <!-- V24-F38: 降级模式 (isLegacyFallback=true) 不渲染 oemList 区域 -->
         <!--   WHY: 旧 API 返回空 oemList, 渲染空表格无意义且误导用户 -->
-        <div v-if="!isLegacyFallback && expandedKeys.has(hit.key)" class="mt-3 pt-3 border-t border-gray-100">
-          <div class="text-xs text-gray-500 mb-2">交叉引用 (OEM 3 列表,按品牌优先级排序)</div>
+        <div v-if="!isLegacyFallback && expandedKeys.has(hit.key)" class="mt-3 pt-3 border-t border-gray-100 dark:border-[var(--color-border-subtle)]">
+          <div class="text-xs text-gray-500 mb-2 dark:text-[var(--color-text-muted)]">交叉引用 (OEM 3 列表,按品牌优先级排序)</div>
           <table class="w-full text-xs">
-            <thead class="text-gray-500 border-b border-gray-200">
+            <thead class="text-gray-500 border-b border-gray-200 dark:text-[var(--color-text-muted)] dark:border-[var(--color-border)]">
               <tr>
                 <th class="text-left py-1 px-2 font-normal">OEM Brand</th>
                 <th class="text-left py-1 px-2 font-normal">OEM 3</th>
@@ -462,7 +466,7 @@ onBeforeUnmount(() => {
               <tr
                 v-for="(oem, idx) in hit.oemList"
                 :key="`${oem.oemBrand}-${oem.oemNo3}-${idx}`"
-                class="border-b border-gray-100 hover:bg-gray-50"
+                class="border-b border-gray-100 hover:bg-gray-50 dark:border-[var(--color-border-subtle)] dark:hover:bg-[var(--color-bg-hover)]"
               >
                 <td class="py-1 px-2">{{ oem.oemBrand || '-' }}</td>
                 <td class="py-1 px-2 font-mono">{{ oem.oemNo3 || '-' }}</td>
@@ -474,7 +478,7 @@ onBeforeUnmount(() => {
 
           <!-- 机型列表 (展开时显示) -->
           <div v-if="hit.machineList.length > 0" class="mt-3">
-            <div class="text-xs text-gray-500 mb-2">适配机型 ({{ hit.machineList.length }})</div>
+            <div class="text-xs text-gray-500 mb-2 dark:text-[var(--color-text-muted)]">适配机型 ({{ hit.machineList.length }})</div>
             <div class="flex flex-wrap gap-1">
               <el-tag
                 v-for="(m, idx) in hit.machineList.slice(0, 20)"
@@ -484,7 +488,7 @@ onBeforeUnmount(() => {
               >
                 {{ [m.machineBrand, m.machineModel].filter(Boolean).join(' ') }}
               </el-tag>
-              <span v-if="hit.machineList.length > 20" class="text-xs text-gray-400 self-center">
+              <span v-if="hit.machineList.length > 20" class="text-xs text-gray-400 self-center dark:text-[var(--color-text-muted)]">
                 + {{ hit.machineList.length - 20 }} 更多
               </span>
             </div>

@@ -4,7 +4,7 @@
 //   - 支持搜索/筛选/排序/复制/导出/清空
 //   - 一键复制事件详情, 便于贴到 issue/工单
 //   - 手动触发测试错误, 验证监控链路
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import {
@@ -140,6 +140,15 @@ function changeAutoRefresh(sec: number) {
 
 onMounted(() => {
   refresh()
+})
+
+// 🔧 fix(审查): 卸载时清理自动刷新 interval — 之前缺失导致离开页面后 interval 持续
+//   对已卸载组件 ref 写状态, 且长期占用资源 (内存泄漏)
+onBeforeUnmount(() => {
+  if (timer) {
+    clearInterval(timer)
+    timer = null
+  }
 })
 </script>
 

@@ -2,6 +2,9 @@ import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import ElementPlus from 'element-plus'
 import 'element-plus/dist/index.css'
+// P5.3 dark 主题: 引入 Element Plus 官方暗色变量 (弹窗/日期面板/消息等深色细节跟随)
+//   WHY: 项目用 html.dark class 驱动主题, EP 官方 dark css-vars 基于该 class 生效
+import 'element-plus/theme-chalk/dark/css-vars.css'
 import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 
 import App from './App.vue'

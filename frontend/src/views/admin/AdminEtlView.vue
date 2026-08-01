@@ -158,14 +158,14 @@ async function doCancel() {
       title: t('admin.etlview.string.cancel_etl_task'),
       message: `
         <div style="text-align:left;font-size:13px;line-height:1.6">
-          <div style="margin-bottom:8px;color:#606266">请选择取消原因 (会写入历史审计, 按此码聚合):</div>
+          <div style="margin-bottom:8px;color:var(--el-text-color-regular)">请选择取消原因 (会写入历史审计, 按此码聚合):</div>
           <div id="cancel-reason-list" style="display:flex;flex-direction:column;gap:6px">
             ${reasonCodeOptions.map((o, i) => `
-              <label style="display:flex;align-items:flex-start;gap:6px;cursor:pointer;padding:6px 8px;border:1px solid #ebeef5;border-radius:4px;${i === 0 ? 'background:#ecf5ff;border-color:#409eff' : ''}">
+              <label style="display:flex;align-items:flex-start;gap:6px;cursor:pointer;padding:6px 8px;border:1px solid var(--el-border-color-lighter);border-radius:4px;${i === 0 ? 'background:var(--el-color-primary-light-9);border-color:var(--el-color-primary)' : ''}">
                 <input type="radio" name="cancel-reason-code" value="${o.value}" ${i === 0 ? 'checked' : ''} style="margin-top:3px" />
                 <div>
                   <div style="font-weight:600">${o.label}</div>
-                  <div style="color:#909399;font-size:12px">${o.value} — ${o.defaultReason}</div>
+                  <div style="color:var(--el-text-color-secondary);font-size:12px">${o.value} — ${o.defaultReason}</div>
                 </div>
               </label>
             `).join('')}

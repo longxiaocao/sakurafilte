@@ -37,6 +37,8 @@ const AUTH_ERROR_I18N: Record<string, string> = {
 }
 
 async function handleLogin() {
+  // 🔧 fix(审查): 防重入 — loading 期间重复触发 (双击按钮/快速 Enter) 只发一次请求
+  if (loading.value) return
   // 输入校验: 前端兜底, 避免空请求
   if (!form.username || !form.password) {
     errorMsg.value = t('auth.usernamePlaceholder') + ' / ' + t('auth.passwordPlaceholder')
@@ -112,7 +114,6 @@ async function handleLogin() {
             autocomplete="current-password"
             :aria-label="t('auth.password')"
             aria-required="true"
-            @keyup.enter="handleLogin"
           />
         </div>
         <el-alert

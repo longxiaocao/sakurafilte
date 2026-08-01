@@ -31,6 +31,8 @@ function validate(): string | null {
 }
 
 async function handleSubmit() {
+  // 🔧 fix(审查): 防重入 — loading 期间重复触发 (双击按钮/快速 Enter) 只发一次请求
+  if (loading.value) return
   const err = validate()
   if (err) {
     ElMessage.warning(err)
@@ -97,7 +99,6 @@ async function handleSubmit() {
             show-password
             :prefix-icon="Lock"
             autocomplete="new-password"
-            @keyup.enter="handleSubmit"
           />
         </div>
         <el-button

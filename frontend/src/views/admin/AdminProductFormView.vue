@@ -200,7 +200,13 @@ watch(cartonVolume, (v) => {
 })
 
 async function load() {
-  if (!isEdit.value) return
+  if (!isEdit.value) {
+    // 🔧 fix(审查): 新增模式无 GET 数据, 直接启动自动保存
+    //   WHY 之前 return 提前退出, load 尾部的 draft.startAutoSave() 永远执行不到 → 新增草稿失效
+    //   startAutoSave 幂等 (内部 stopWatch 判重), 重复调用安全
+    draft.startAutoSave()
+    return
+  }
   // V24-F101 (P2-2, 规则 8): 编辑模式加载失败时显示 error UI + 重试, 不再静默吞
   loadError.value = null
   loading.value = true
