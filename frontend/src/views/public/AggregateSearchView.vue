@@ -398,7 +398,7 @@ onBeforeUnmount(() => {
         class="border border-gray-200 rounded p-3 hover:border-gray-400 transition-colors cursor-pointer"
         @click="viewDetail(hit)"
       >
-        <div class="flex flex-wrap items-start gap-3">
+        <div class="flex items-start gap-3">
           <img
             :src="getPrimaryImageUrl(hit)"
             :alt="`${getPublicOemLabel(hit)} 产品主图`"
@@ -406,8 +406,9 @@ onBeforeUnmount(() => {
             loading="lazy"
             @error="usePlaceholder"
           />
-          <!-- OEM 3 主信息行 -->
-          <div class="flex-1 min-w-0">
+          <!-- 右侧内容区: 垂直分层 (主信息行 + 操作行), 避免三块混排 -->
+          <div class="flex-1 min-w-0 flex flex-col gap-2">
+            <!-- 第一行: 物品型号主信息 -->
             <div class="flex items-baseline gap-2 flex-wrap">
               <span class="font-mono text-sm text-gray-900 font-medium">{{ getPublicOemLabel(hit) }}</span>
               <!-- V2 Task 1.3.3: v-html 渲染 _formatted 高亮 (sanitizeFormatted 双保险) -->
@@ -419,24 +420,27 @@ onBeforeUnmount(() => {
               <span v-if="hit.productName2" class="text-xs text-gray-500">{{ hit.productName2 }}</span>
               <el-tag size="small" type="info">{{ stripSearchHighlight(hit.type) }}</el-tag>
             </div>
-            <div v-if="hit.oem2" class="text-xs text-gray-500 mt-1">OEM 2: {{ hit.oem2 }}</div>
-          </div>
-          <div class="flex w-full items-center gap-2 sm:ml-auto sm:w-auto">
-            <span v-if="hit.rankingScore != null" class="hidden text-xs text-gray-400 sm:inline">
-              相关度 {{ (hit.rankingScore * 100).toFixed(0) }}%
-            </span>
-            <!-- V24-F38: 降级模式 (isLegacyFallback=true) 隐藏 "展开 OEM" 按钮 -->
-            <!--   WHY: 旧 API 返回空 oemList, 展开后无内容, 按钮点击无意义 -->
-            <el-button
-              v-if="!isLegacyFallback"
-              text
-              size="small"
-              @click.stop="toggleExpand(hit.key)"
-            >
-              {{ expandedKeys.has(hit.key) ? '收起' : `展开 OEM (${hit.oemList.length})` }}
-            </el-button>
-            <!-- V24-F38: 降级模式显示 "基础模式" 标记, 告知用户无 OEM 嵌套详情 -->
-            <el-tag v-if="isLegacyFallback" size="small" type="info">基础模式</el-tag>
+            <!-- 第二行: OEM 2 (可选) -->
+            <div v-if="hit.oem2" class="text-xs text-gray-500">OEM 2: {{ hit.oem2 }}</div>
+            <!-- 第三行: 操作区 (相关度 + 展开 OEM 按钮), justify-between 分隔 -->
+            <div class="flex items-center justify-between gap-2">
+              <span v-if="hit.rankingScore != null" class="text-xs text-gray-400">
+                相关度 {{ (hit.rankingScore * 100).toFixed(0) }}%
+              </span>
+              <span v-else></span>
+              <!-- V24-F38: 降级模式 (isLegacyFallback=true) 隐藏 "展开 OEM" 按钮 -->
+              <!--   WHY: 旧 API 返回空 oemList, 展开后无内容, 按钮点击无意义 -->
+              <el-button
+                v-if="!isLegacyFallback"
+                text
+                size="small"
+                @click.stop="toggleExpand(hit.key)"
+              >
+                {{ expandedKeys.has(hit.key) ? '收起' : `展开 OEM (${hit.oemList.length})` }}
+              </el-button>
+              <!-- V24-F38: 降级模式显示 "基础模式" 标记, 告知用户无 OEM 嵌套详情 -->
+              <el-tag v-if="isLegacyFallback" size="small" type="info">基础模式</el-tag>
+            </div>
           </div>
         </div>
 

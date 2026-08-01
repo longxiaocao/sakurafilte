@@ -591,6 +591,15 @@ public static class AdminXrefReorderEndpoints
             await using var tx = await db.Database.BeginTransactionAsync(ct);
             try
             {
+                // 收集受影响的 productId, 用于事务提交前批量入队索引重建
+                // WHY: XrefReorderItem 仅含 Id/OemNo3/SortOrder/RowVersion, 需查 DB 获取 productId
+                var affectedIds = req.Items.Select(x => x.Id).ToList();
+                var productIds = await db.CrossReferences.AsNoTracking()
+                    .Where(x => affectedIds.Contains(x.Id))
+                    .Select(x => x.ProductId)
+                    .Distinct()
+                    .ToListAsync(ct);
+
                 foreach (var item in req.Items)
                 {
                     // 单条更新走 xmin 乐观锁 (修复漏洞 13)
@@ -624,11 +633,20 @@ public static class AdminXrefReorderEndpoints
                     }
                 }
 
+                // WHY 触发索引重建: sort_order 变化影响 Meili 文档的 oem_list_sort_order_min 排序权重
+                //   修复遗漏: 单条 CRUD (新增/编辑/移除) 均已调用 EnqueueIndexRebuildAsync, 批量排序遗漏
+                //   场景: 管理员调整白名单顺序后, 前台搜索结果未反映新顺序 (用户反馈 2026-07-31)
+                foreach (var pid in productIds)
+                {
+                    await EnqueueIndexRebuildAsync(db, pid, logger, ct);
+                }
+
                 await tx.CommitAsync(ct);
                 // 改进 2.1: 排序更新成功后清 brand 列表缓存 (oem3Count 可能变化)
                 cache.Remove("xref.brands.list");
-                logger.LogInformation("OEM 3 批量排序更新成功: brand={Brand} count={Count}", req.OemBrand, req.Items.Count);
-                return Results.Ok(new { updated = req.Items.Count, oemBrand = req.OemBrand });
+                logger.LogInformation("OEM 3 批量排序更新成功: brand={Brand} count={Count} 索引重建入队 {IndexCount} 条",
+                    req.OemBrand, req.Items.Count, productIds.Count);
+                return Results.Ok(new { updated = req.Items.Count, oemBrand = req.OemBrand, indexRebuildEnqueued = productIds.Count });
             }
             catch (InvalidOperationException ex) when (ex.Message.Contains("XREF_CONFLICT"))
             {
