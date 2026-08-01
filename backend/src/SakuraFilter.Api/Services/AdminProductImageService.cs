@@ -167,7 +167,7 @@ public class AdminProductImageService
         var key = await BuildKeyAsync(imageRole, oemNo3, mr1, slot, ext, ct);
         var sizeBytes = stream.Length;
 
-        // ===== 1. DB 事务占位 =====
+        // ===== 1. DB 事务开始 =====
         await using var tx = await _db.Database.BeginTransactionAsync(ct);
 
         // V24-F57: 删除 V2 Task 3.2.6/3.2.7 的"重复即拒绝"软校验, 改为支持覆盖上传

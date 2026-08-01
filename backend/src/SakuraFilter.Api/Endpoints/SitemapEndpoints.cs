@@ -25,8 +25,9 @@ namespace SakuraFilter.Api.Endpoints;
 ///   - 分片页查询 OFFSET 较大时性能下降, 生产可改 keyset (WHERE mr_1 > last_mr_1)
 ///
 /// 失效策略:
-///   - OEM 3 上架/下架/排序变更时由 AdminProductService 主动调 InvalidateCache() 清除相关缓存
-///   - 当前简化版: 仅按 TTL 自然过期 (1 小时), 后续可加主动失效
+///   - 当前实现: 仅按 TTL 自然过期 (1 小时), 不主动失效
+///   - 预留: InvalidateCache() 方法已实现, 供后续 OEM 3 变更时由业务层调用 (2026-07-31 审查确认当前无调用方,
+///     sitemap 变更最长滞后 1 小时; 如需即时反映, 接线到 AdminXrefReorder/AdminProduct 变更路径)
 /// </summary>
 public static class SitemapEndpoints
 {
@@ -229,8 +230,8 @@ public static class SitemapEndpoints
         return $"{scheme}://{host}".TrimEnd('/');
     }
 
-    // V2 Task 4.3: 主动失效缓存 (供 AdminProductService 在 OEM 3 变更时调用)
-    //   WHY 单独暴露: 端点是 static, AdminProductService 注入 IMemoryCache 后可直接调
+    // V2 Task 4.3: 主动失效缓存 (预留接口, 当前无调用方 — 2026-07-31 审查确认)
+    //   当前 sitemap 仅靠 TTL (3600s) 自然过期; 若需 OEM 3 变更即时反映, 在 AdminXrefReorder/AdminProduct 变更后调用
     public static void InvalidateCache(IMemoryCache cache, int? shard = null)
     {
         if (shard.HasValue)
