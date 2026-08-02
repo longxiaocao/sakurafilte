@@ -675,7 +675,7 @@ export const alertsApi = {
 // ===== P2.2: 复用 BaseDictService 抽象, 7 个新字典走同 URL 模式 =====
 export const dictApi = {
   oemBrands: {
-    list(q?: string, includeDeleted = false, limit?: number): Promise<{ count: number; items: OemBrandItem[] }> {
+    list(q?: string, includeDeleted = false, limit?: number): Promise<{ total: number; count: number; items: OemBrandItem[] }> {
       const params: Record<string, any> = {}
       if (q) params.q = q
       if (includeDeleted) params.includeDeleted = true
@@ -705,7 +705,7 @@ export const dictApi = {
   },
   // ===== P2.2: Product Name 1 =====
   productName1s: {
-    list(q?: string, includeDeleted = false, limit?: number): Promise<{ count: number; items: ProductName1Item[] }> {
+    list(q?: string, includeDeleted = false, limit?: number): Promise<{ total: number; count: number; items: ProductName1Item[] }> {
       const params: Record<string, any> = {}
       if (q) params.q = q
       if (includeDeleted) params.includeDeleted = true
@@ -735,7 +735,7 @@ export const dictApi = {
   },
   // ===== P2.2: Product Name 2 =====
   productName2s: {
-    list(q?: string, includeDeleted = false, limit?: number): Promise<{ count: number; items: ProductName2Item[] }> {
+    list(q?: string, includeDeleted = false, limit?: number): Promise<{ total: number; count: number; items: ProductName2Item[] }> {
       const params: Record<string, any> = {}
       if (q) params.q = q
       if (includeDeleted) params.includeDeleted = true
@@ -765,7 +765,7 @@ export const dictApi = {
   },
   // ===== P2.2: Type (固定 5 值: oil/fuel/air/cabin/others) =====
   types: {
-    list(q?: string, includeDeleted = false, limit?: number): Promise<{ count: number; items: TypeItem[] }> {
+    list(q?: string, includeDeleted = false, limit?: number): Promise<{ total: number; count: number; items: TypeItem[] }> {
       const params: Record<string, any> = {}
       if (q) params.q = q
       if (includeDeleted) params.includeDeleted = true
@@ -795,7 +795,7 @@ export const dictApi = {
   },
   // ===== P2.2: OEM 3 =====
   oemNo3s: {
-    list(q?: string, includeDeleted = false, limit?: number): Promise<{ count: number; items: OemNo3Item[] }> {
+    list(q?: string, includeDeleted = false, limit?: number): Promise<{ total: number; count: number; items: OemNo3Item[] }> {
       const params: Record<string, any> = {}
       if (q) params.q = q
       if (includeDeleted) params.includeDeleted = true
@@ -825,7 +825,7 @@ export const dictApi = {
   },
   // ===== P2.2: Media (2 字段: media_name + media_model) =====
   medias: {
-    list(q?: string, includeDeleted = false, limit?: number): Promise<{ count: number; items: MediaItem[] }> {
+    list(q?: string, includeDeleted = false, limit?: number): Promise<{ total: number; count: number; items: MediaItem[] }> {
       const params: Record<string, any> = {}
       if (q) params.q = q
       if (includeDeleted) params.includeDeleted = true
@@ -855,7 +855,7 @@ export const dictApi = {
   },
   // ===== P2.2: Machine (3 字段: machine_brand + machine_model + machine_name) =====
   machines: {
-    list(q?: string, includeDeleted = false, limit?: number): Promise<{ count: number; items: MachineItem[] }> {
+    list(q?: string, includeDeleted = false, limit?: number): Promise<{ total: number; count: number; items: MachineItem[] }> {
       const params: Record<string, any> = {}
       if (q) params.q = q
       if (includeDeleted) params.includeDeleted = true
@@ -886,7 +886,7 @@ export const dictApi = {
   },
   // ===== P2.2: Engine (2 字段: engine_brand + engine_type) =====
   engines: {
-    list(q?: string, includeDeleted = false, limit?: number): Promise<{ count: number; items: EngineItem[] }> {
+    list(q?: string, includeDeleted = false, limit?: number): Promise<{ total: number; count: number; items: EngineItem[] }> {
       const params: Record<string, any> = {}
       if (q) params.q = q
       if (includeDeleted) params.includeDeleted = true

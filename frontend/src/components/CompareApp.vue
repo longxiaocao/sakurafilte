@@ -83,28 +83,28 @@ function viewCompare(): void {
 .compare-btn {
   padding: 8px 16px;
   font-size: 14px;
-  border: 1px solid #000;
+  border: 1px solid var(--color-text);
   cursor: pointer;
   border-radius: 4px;
   transition: background 0.15s, color 0.15s;
 }
 .compare-btn.primary {
-  background: #000;
-  color: #fff;
+  background: var(--color-text);
+  color: var(--color-bg);
 }
 .compare-btn.primary:hover:not(:disabled) {
-  background: #333;
+  opacity: 0.85;
 }
 .compare-btn.primary:disabled {
-  background: #ccc;
-  border-color: #ccc;
+  background: var(--color-border);
+  border-color: var(--color-border);
   cursor: not-allowed;
 }
 .compare-btn.ghost {
   background: transparent;
-  color: #000;
+  color: var(--color-text);
 }
 .compare-btn.ghost:hover {
-  background: #f5f5f5;
+  background: var(--color-bg-soft);
 }
 </style>

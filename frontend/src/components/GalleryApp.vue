@@ -101,7 +101,8 @@ function onImageError(): void {
   width: 100%;
   aspect-ratio: 1 / 1;
   padding: 0;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--color-border);
+  /* 图片容器保持白底 (商品图通常白底, 设计意图) */
   background: #fff;
   cursor: pointer;
   overflow: hidden;
@@ -109,10 +110,10 @@ function onImageError(): void {
   transition: border-color 0.15s;
 }
 .gallery-thumb:hover {
-  border-color: #999;
+  border-color: var(--color-muted);
 }
 .gallery-thumb.active {
-  border-color: #000;
+  border-color: var(--color-text);
   border-width: 2px;
 }
 .gallery-thumb img {
@@ -124,10 +125,10 @@ function onImageError(): void {
   margin: 0;
   padding: 4px 8px;
   font-size: 12px;
-  color: #999;
+  color: var(--color-muted);
 }
 .gallery-empty {
-  color: #ccc;
+  color: var(--color-muted);
   text-align: center;
   padding: 16px;
 }

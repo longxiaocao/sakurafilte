@@ -108,19 +108,19 @@ function submit(): void {
 .inquiry-btn {
   padding: 8px 16px;
   font-size: 14px;
-  background: #fff;
-  color: #000;
-  border: 1px solid #000;
+  background: var(--color-bg);
+  color: var(--color-text);
+  border: 1px solid var(--color-text);
   cursor: pointer;
   border-radius: 4px;
 }
 .inquiry-btn:hover {
-  background: #f5f5f5;
+  background: var(--color-bg-soft);
 }
 .inquiry-hint {
   margin: 0 0 8px;
   font-size: 13px;
-  color: #666;
+  color: var(--color-muted);
 }
 .product-info {
   font-size: 13px;

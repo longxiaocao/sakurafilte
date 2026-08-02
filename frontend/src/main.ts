@@ -87,7 +87,16 @@ function enhanceA11yOnDom() {
 function makeTablesKeyboardAccessible() {
   const init = () => enhanceA11yOnDom()
   init()
-  const obs = new MutationObserver(() => init())
+  // 🔧 fix(审查): rAF 节流 — 高频 DOM 变化 (表格/列表渲染) 时合并为每帧一次扫描,
+  //   避免每次 mutation 都全量 querySelectorAll (长列表/弱网下的性能开销)
+  let rafId = 0
+  const obs = new MutationObserver(() => {
+    if (rafId) return
+    rafId = requestAnimationFrame(() => {
+      rafId = 0
+      init()
+    })
+  })
   obs.observe(document.body, { childList: true, subtree: true })
 }
 if (typeof window !== 'undefined') {

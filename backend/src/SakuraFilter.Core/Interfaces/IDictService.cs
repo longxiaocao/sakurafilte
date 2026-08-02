@@ -22,6 +22,11 @@ public interface IDictService<TItem> where TItem : class
     Task<List<TItem>> ListAsync(
         string? keyword, bool includeDeleted, int? limit, CancellationToken ct);
 
+    /// <summary>列表总数 (与 ListAsync 相同过滤条件, 用于前端真实 total 展示)</summary>
+    /// <remarks>2026-08-02 新增: 原 count 为截断条数 (limit 后), >limit 条时前端显示失真</remarks>
+    Task<long> CountAsync(
+        string? keyword, bool includeDeleted, CancellationToken ct);
+
     /// <summary>typeahead 自动补全 (后台表单分区字段用,字段精简)</summary>
     /// <param name="q">前缀模糊 (转义 LIKE 通配符)</param>
     /// <param name="limit">限 N 条 (内部 clamp 1-50)</param>

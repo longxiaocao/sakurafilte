@@ -36,7 +36,7 @@ export interface DictManagerConfig<
       search?: string,
       includeDeleted?: boolean,
       limit?: number
-    ) => Promise<{ items: T[] }>
+    ) => Promise<{ items: T[]; total?: number }>
     create: (...args: any[]) => Promise<unknown>
     update: (id: number, payload: any) => Promise<unknown>
     delete: (id: number) => Promise<unknown>
@@ -114,6 +114,8 @@ export function useDictManager<
   // ========== state ==========
   const items = ref<T[]>([]) as Ref<T[]>
   const loading = ref(false)
+  // 🔧 fix(审查): 真实总数 (后端 CountAsync, 2026-08-02) — 原 total=items.length 在 >500 条时失真
+  const totalCount = ref(0)
   // V24-F102 (P2-2, 规则 8): 加 loadError, 加载失败时显示持久 el-alert + 重试按钮
   const loadError = ref<string | null>(null)
   const includeDeleted = ref(false)
@@ -132,12 +134,13 @@ export function useDictManager<
     // V24-F102 (P2-2, 规则 8): 进入 load 时清空 loadError, 避免上次失败提示残留
     loadError.value = null
     try {
-      const { items: list } = await api.list(
+      const { items: list, total: realTotal } = await api.list(
         searchKw.value || undefined,
         includeDeleted.value,
         500
       )
       items.value = list
+      totalCount.value = realTotal ?? list.length
     } catch (e: any) {
       ElMessage.error(t('common.action.load_failed') + (e?.message || ''))
       // V24-F102 (P2-2, 规则 8): 持久 error UI, 让用户能看到错误并重试
@@ -290,7 +293,7 @@ export function useDictManager<
   }
 
   // ========== computed ==========
-  const total = computed(() => items.value.length)
+  const total = computed(() => totalCount.value)
   const activeCount = computed(() =>
     items.value.filter((x) => !x.deletedAt).length
   )

@@ -107,6 +107,25 @@ public abstract class BaseDictService<TItem> : IDictService<TItem>
         return await query.ToListAsync(ct);
     }
 
+    /// <summary>列表总数 (与 ListAsync 相同过滤: 软删状态 + 关键词模糊, 不截断)</summary>
+    /// <remarks>2026-08-02 新增: 修复前端 total 失真 (原 count = 截断条数)</remarks>
+    public virtual async Task<long> CountAsync(
+        string? keyword, bool includeDeleted, CancellationToken ct = default)
+    {
+        var query = Set(_db).AsNoTracking();
+        if (!includeDeleted)
+        {
+            query = query.Where(b => EF.Property<DateTime?>(b, DeletedAtProperty) == null);
+        }
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var kw = keyword.Trim();
+            var pattern = $"%{kw.EscapeLikePattern()}%";
+            query = query.Where(BuildSearchPredicate(pattern));
+        }
+        return await query.LongCountAsync(ct);
+    }
+
     // ========== 2. TypeaheadAsync ==========
     //   只返未删除, 按 sort_order 升序
     public virtual async Task<List<TItem>> TypeaheadAsync(

@@ -4,10 +4,14 @@
 //   居中提示: "松开导入文件" + 文件类型
 //   跟随 Musk 极简风: hairline 边框 + 单色强调
 import { computed } from 'vue'
-import { useGlobalDragDrop } from '@/composables/useGlobalDragDrop'
+import { useRoute } from 'vue-router'
+import { useGlobalDragDrop, DEFAULT_ADMIN_ACCEPT } from '@/composables/useGlobalDragDrop'
 
 const { isDragging, hint } = useGlobalDragDrop()
-const visible = computed(() => isDragging.value)
+const route = useRoute()
+// 🔧 fix(审查): 遮罩仅在白名单路由 (admin) 显示 — 原实现全局显示,
+//   非 admin 页面 (如公开搜索) 拖文件时遮罩闪现但无回调可执行 (无意义打扰)
+const visible = computed(() => isDragging.value && DEFAULT_ADMIN_ACCEPT(route.path))
 </script>
 
 <template>

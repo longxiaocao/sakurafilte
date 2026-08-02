@@ -47,7 +47,8 @@ public static class DictionaryEndpoints
             OemBrandDictService svc, CancellationToken ct) =>
         {
             var items = await svc.ListOemBrandsAsync(q, includeDeleted ?? false, limit, ct);
-            return Results.Ok(new { count = items.Count, items });
+            var total = await svc.CountAsync(q, includeDeleted ?? false, ct);
+            return Results.Ok(new { total, count = items.Count, items });
         }).WithName("AdminListOemBrands");
 
         g.MapGet("/typeahead", async (
@@ -114,7 +115,8 @@ public static class DictionaryEndpoints
             ProductName1DictService svc, CancellationToken ct) =>
         {
             var items = await svc.ListProductName1sAsync(q, includeDeleted ?? false, limit, ct);
-            return Results.Ok(new { count = items.Count, items });
+            var total = await svc.CountAsync(q, includeDeleted ?? false, ct);
+            return Results.Ok(new { total, count = items.Count, items });
         }).WithName("AdminListProductName1s");
 
         g.MapGet("/typeahead", async (
@@ -177,7 +179,8 @@ public static class DictionaryEndpoints
             ProductName2DictService svc, CancellationToken ct) =>
         {
             var items = await svc.ListProductName2sAsync(q, includeDeleted ?? false, limit, ct);
-            return Results.Ok(new { count = items.Count, items });
+            var total = await svc.CountAsync(q, includeDeleted ?? false, ct);
+            return Results.Ok(new { total, count = items.Count, items });
         }).WithName("AdminListProductName2s");
 
         g.MapGet("/typeahead", async (
@@ -240,7 +243,8 @@ public static class DictionaryEndpoints
             TypeDictService svc, CancellationToken ct) =>
         {
             var items = await svc.ListTypesAsync(q, includeDeleted ?? false, limit, ct);
-            return Results.Ok(new { count = items.Count, items });
+            var total = await svc.CountAsync(q, includeDeleted ?? false, ct);
+            return Results.Ok(new { total, count = items.Count, items });
         }).WithName("AdminListTypes");
 
         g.MapGet("/typeahead", async (
@@ -303,7 +307,8 @@ public static class DictionaryEndpoints
             OemNo3DictService svc, CancellationToken ct) =>
         {
             var items = await svc.ListOemNo3sAsync(q, includeDeleted ?? false, limit, ct);
-            return Results.Ok(new { count = items.Count, items });
+            var total = await svc.CountAsync(q, includeDeleted ?? false, ct);
+            return Results.Ok(new { total, count = items.Count, items });
         }).WithName("AdminListOemNo3s");
 
         g.MapGet("/typeahead", async (
@@ -366,7 +371,8 @@ public static class DictionaryEndpoints
             MediaDictService svc, CancellationToken ct) =>
         {
             var items = await svc.ListMediasAsync(q, includeDeleted ?? false, limit, ct);
-            return Results.Ok(new { count = items.Count, items });
+            var total = await svc.CountAsync(q, includeDeleted ?? false, ct);
+            return Results.Ok(new { total, count = items.Count, items });
         }).WithName("AdminListMedias");
         g.MapGet("/typeahead", async (
             [FromQuery] string? q, [FromQuery] int? limit,
@@ -423,7 +429,8 @@ public static class DictionaryEndpoints
             MachineDictService svc, CancellationToken ct) =>
         {
             var items = await svc.ListMachinesAsync(q, includeDeleted ?? false, limit, ct);
-            return Results.Ok(new { count = items.Count, items });
+            var total = await svc.CountAsync(q, includeDeleted ?? false, ct);
+            return Results.Ok(new { total, count = items.Count, items });
         }).WithName("AdminListMachines");
         g.MapGet("/typeahead", async (
             [FromQuery] string? q, [FromQuery] int? limit,
@@ -480,7 +487,8 @@ public static class DictionaryEndpoints
             EngineDictService svc, CancellationToken ct) =>
         {
             var items = await svc.ListEnginesAsync(q, includeDeleted ?? false, limit, ct);
-            return Results.Ok(new { count = items.Count, items });
+            var total = await svc.CountAsync(q, includeDeleted ?? false, ct);
+            return Results.Ok(new { total, count = items.Count, items });
         }).WithName("AdminListEngines");
         g.MapGet("/typeahead", async (
             [FromQuery] string? q, [FromQuery] int? limit,
