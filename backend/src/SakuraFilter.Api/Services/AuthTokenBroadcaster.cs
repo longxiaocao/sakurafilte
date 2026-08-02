@@ -118,7 +118,16 @@ public class AuthTokenBroadcaster : IHostedService, IAsyncDisposable
                         var completed = await Task.WhenAny(waitTask, heartbeatTask);
                         if (completed == waitTask)
                         {
-                            // WaitAsync 完成 (连接断/出错), 退出内层 while 由外层重试
+                            // 🔧 fix(审查): 收到 NOTIFY 后 continue 而非 break 重连
+                            //   WHY 原实现 break → Dispose + 重连, 与异步 Notification 事件处理器
+                            //     (ReloadFromDbAsync 未完成) 竞争同一连接, Npgsql 抛 "Connection is busy"
+                            //     → 无限重连循环 (5s→60s 退避), LISTEN 间歇失效, rotate 广播丢失,
+                            //     /health/ready 误判 stale (2026-08-02 实测)
+                            //   修复: 连接仍 Open 时继续等下一个通知; 连接异常时才 break 重连
+                            if (_listenConn.State == System.Data.ConnectionState.Open)
+                            {
+                                continue;
+                            }
                             break;
                         }
                         // heartbeatTask 触发, 继续循环 (报心跳 + 再等)

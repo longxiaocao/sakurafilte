@@ -149,7 +149,9 @@ def test_p55_health_ready():
     # 503 也算通过 (PG 不可用时是预期的 degraded)
     assert code in (200, 503), f"健康检查应 200/503, 实际 {code}: {body}"
     data = json.loads(body)
-    assert data.get("status") in ("ready", "degraded"), f"status 错: {data}"
+    # 🔧 fix(审查): status 枚举对齐实现 — 后端返回 "healthy"/"degraded"/"unhealthy"
+    #   (CommonEndpoints.cs /health/ready), 旧断言期望 "ready" (从未被返回过, 脚本过时)
+    assert data.get("status") in ("healthy", "degraded", "unhealthy"), f"status 错: {data}"
     assert "checks" in data, f"checks 字段缺失: {data}"
 
 
@@ -383,12 +385,19 @@ def test_p55_perf_panel_route_registered():
 
 
 def test_p55_perf_panel_nav_item():
-    """P5.5.9: AppHeader 有'性能'菜单项"""
+    """P5.5.9: AppHeader 有'性能'菜单项 (i18n 化后文案走 nav.perf key)
+    🔧 fix(审查): 旧断言检查源码含'性能'字面量, AppHeader i18n 化后文案改为 t('nav.perf') 调用,
+      源码不再含中文字面量 → 静态检查过时失败 (CI 7-21 起连续失败). 改为检查 labelKey 绑定 + i18n 值存在
+    """
     header = SRC / "components" / "AppHeader.vue"
     assert header.is_file(), f"缺 AppHeader.vue: {header}"
     content = header.read_text(encoding="utf-8")
     assert "/admin/perf" in content, "AppHeader 缺 /admin/perf 菜单项"
-    assert "性能" in content, "AppHeader 缺 '性能' 文案"
+    assert "labelKey: 'nav.perf'" in content, "AppHeader 性能菜单未走 i18n (nav.perf)"
+    zh = (SRC / "i18n" / "locales" / "zh-CN.ts").read_text(encoding="utf-8")
+    assert "perf: '性能'" in zh, "zh-CN nav.perf 缺失 (性能文案)"
+    en = (SRC / "i18n" / "locales" / "en-US.ts").read_text(encoding="utf-8")
+    assert "perf:" in en, "en-US nav.perf 缺失"
 
 
 def test_p55_health_proxy_configured():
