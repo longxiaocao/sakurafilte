@@ -41,3 +41,14 @@
 - [2026-07-31] [P2] DemoView.vue 中文硬编码: 开发者内部演示页 (/demo), 大量中文演示内容未走 i18n. real-ui-theme-i18n-mobile.spec.ts 已对该路由设置放宽阈值 (1000 字), 不阻塞测试. 影响范围: 仅开发者演示页, 非用户面向. 后续 i18n 化需提取演示文案到 demo 命名空间, 预估 ~30min | 触发文件: frontend/src/views/DemoView.vue
 - [2026-07-31] [P2] field-help.ts 中文硬编码: 后台产品表单字段辅助说明 (FieldHelpPopover hover 显示), 静态文案未走 i18n. real-ui-theme-i18n-mobile.spec.ts 已排除 .el-popper 元素检测, 不阻塞测试. 影响范围: 仅后台 hover 辅助说明, 非主要 UI 文案. 后续 i18n 化需将 field-help 映射表改为 i18n key 引用, 预估 ~45min | 触发文件: frontend/src/data/field-help.ts
 
+- [2026-08-01] [P1] ✅ 已修复 (commit 277d8f2): AdminXrefReorderView i18n 化 — 模板+script 全部文案走 i18n (admin.xrefreorder 45 key), 3.2 admin-xrefs 测试通过 | 触发文件: frontend/src/views/admin/AdminXrefReorderView.vue
+- [2026-08-01] [P2] ✅ 已修复 (commit 277d8f2): AdminApiDocsView 页面 UI 文案 i18n 化 (admin.apidocs 19 key). 剩余 ~1276 字为后端 Swagger summary/description (XML 注释动态数据), 测试阈值放宽至 2000, 后端数据 i18n 留 P2 | 触发文件: frontend/src/views/admin/AdminApiDocsView.vue, backend XML 注释
+- [2026-08-01] [P2] E2E /health/ready 需 Meilisearch 在线: deep-flow 9.1 期望 status=healthy, 本机 Meili 离线时返回 degraded (搜索主路径降级 PG, 功能正常). 完整 E2E 全绿需启动 Meili (docker compose up meilisearch) | 触发文件: frontend/tests/e2e/deep-flow.spec.ts L359
+- [2026-08-02] [P2-3] ✅ 处置: V27-9-1 API 契约测试步骤已禁用 (e2e.yml) — 引用的 spike-test/_e2e_audit/_api_contract_test.py 从未提交 (CI exit 2 file-not-found 长期失败). 脚本实现待用户决策 (与 ADR #4 Testcontainers 冲突), 落地提交后恢复步骤 | 触发文件: .github/workflows/e2e.yml
+- [2026-08-02] [教训] CI 与本地测试是两套系统: spike-test Python 脚本 (CI e2e/frontend-contract job) vs Playwright (本地). 本地 Playwright 全绿不代表 CI 绿; 交付前必须用 gh 核对最近 CI run | 触发场景: 277d8f2 等连续 4 次 master push CI 失败未发现
+- [2026-08-02] [P2] ✅ 已修复 (commit d24a599): 字典列表真实 total — IDictService/BaseDictService 加 CountAsync, 8 端点返回 {total,count,items}, useDictManager 用真实 total (>500 条显示失真修复) | 触发文件: backend/src/SakuraFilter.Api/Endpoints/DictionaryEndpoints.cs, frontend/src/composables/useDictManager.ts
+- [2026-08-02] [P2] ✅ 已修复 (commit d24a599): 详情页三组件 (CompareApp/InquiryApp/GalleryApp) 主题接入 — _Layout.cshtml 主题脚本 + html.dark 变量覆盖, 组件硬编码色值改 CSS 变量 (图片容器白底保留) | 触发文件: backend/src/SakuraFilter.Api/Pages/Shared/_Layout.cshtml
+- [2026-08-02] [P2] ✅ 已修复 (commit d24a599): DragDropOverlay 非 admin 页遮罩闪现 — visible 加 DEFAULT_ADMIN_ACCEPT 白名单; main.ts MutationObserver rAF 节流 | 触发文件: frontend/src/components/DragDropOverlay.vue
+- [2026-08-02] [评估保持] 死端点清理 (by-type//api/products/{oem}//api/admin/products 列表等): 删除收益低 (无功能/性能影响), 风险中 (外部脚本/运维可能依赖, dead-letter 有 spike-test 引用), 改动面大 (端点+服务+测试) — 保持现状 | 触发文件: backend/src/SakuraFilter.Api/Endpoints/*.cs
+- [2026-08-02] [评估保持] Sitemap 主动失效接线: shard 缓存无法精确枚举/失效 (keyset 分片), 接线仅清 index 收益低 — 保持 TTL 1h 方案 | 触发文件: backend/src/SakuraFilter.Api/Endpoints/SitemapEndpoints.cs
+- [2026-08-02] [评估保持] DemoView/field-help i18n: DemoView 内部演示页 (非用户面向, 测试已放宽阈值), field-help hover 辅助 (测试已排除 .el-popper) — 保持 P2 | 触发文件: frontend/src/views/DemoView.vue, frontend/src/data/field-help.ts

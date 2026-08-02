@@ -566,3 +566,19 @@ v30-14 1M OFFSET 深分页专项压测验证数据 (2026-07-21, sakurafilter_per
   - frontend/src/views/public/AggregateSearchView.vue
   - backend/src/SakuraFilter.Search/MeiliSearchProvider.cs (SanitizeFormatted 后端净化)
 
+
+#22 /api/perf 鉴权路径修复 — AdminPaths 补 /api/perf (2026-08-02)
+决策: Auth:AdminPaths 加 "/api/perf", Auth:ExemptPaths 加 "/api/perf/ingest"
+理由: v30-19 给 /api/perf 加 RequireAuthorization("Admin") 但漏同步 DevTokenAuthMiddleware 的 AdminPaths 前缀 → X-Admin-Token 请求 401 (只有 JWT 能访问), CI 7-21 起连续失败. 补前缀后 dev token 可访问 /api/perf (与 /api/admin/* 同级凭据); /api/perf/ingest 保持无鉴权 (ADR #1: sendBeacon 无法带 token), 通过 ExemptPaths 精确放行避免被 StartsWith(/api/perf) 波及
+排除方案:
+  - 改脚本用 JWT 登录: 脚本需登录流程, 复杂且 dev token 本就应覆盖后台端点
+  - 移除 /api/perf 的 RequireAuthorization: 回退安全修复 (v30-19 P0)
+关联文件: backend/src/SakuraFilter.Api/appsettings.json, spike-test/_test_p55_p71_e2e.py
+
+#23 AuthTokenBroadcaster WaitAsync 重连循环修复 (2026-08-02)
+决策: WaitAsync 收到 NOTIFY 后 continue 继续等待, 而非 break 重连
+理由: 原实现收到通知即 break → Dispose + 重连, 与异步 Notification 事件处理器 (ReloadFromDbAsync 未完成) 竞争同一 Npgsql 连接 → "Connection is busy" 无限重连循环 → LISTEN 间歇失效, token 轮转广播丢失, /health/ready 误判 stale. 连接仍 Open 时继续等下一个通知是 Npgsql WaitAsync 标准用法
+排除方案:
+  - 事件处理器改同步: Notification 事件本身是 fire-and-forget, 无法同步等待
+  - 连接池隔离: 复杂度高, 收益低
+关联文件: backend/src/SakuraFilter.Api/Services/AuthTokenBroadcaster.cs
