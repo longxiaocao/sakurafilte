@@ -131,7 +131,7 @@ REGRESSION_CHECKS = [
         "title": "GetBySlug 3 次 fallback 合并为 1 次 OR 查询",
         # v28-4 P0 修复: P3-2 修复实际在 IProductDetailService.cs L78 (PublicProductController 调用 IProductDetailService.GetByOemAsync)
         "file": "backend/src/SakuraFilter.Api/Services/IProductDetailService.cs",
-        "fix_pattern": r"3 次 fallback 合并为 1 次 OR 查询",
+        "fix_pattern": r"P3-2 修复: fallback 合并为 1 次 OR 查询",
     },
     # ===== V2 架构迁移 (47 项) — 8 个子类别 =====
     # ----- V2-DS 数据结构 (10 项): Product/CrossReference/MachineApplication/ProductImage V2 字段全集 -----

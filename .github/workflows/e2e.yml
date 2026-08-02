@@ -741,25 +741,26 @@ jobs:
       # 复用 frontend-contract job 已有的 PG + API 5148 + Vite 5173 + Python 环境
       # 新增依赖: Python playwright + chromium (仅 design audit 需要)
 
-      # V27-9-1: API 契约测试 (urllib 标准库, 无新依赖)
-      #   覆盖: 公开 API + 后台 API + 错误处理 + 前后端联动 (4 section, 20+ 端点)
-      #   CI 模式 (USE_DEV_TOKEN=1): 用 X-Admin-Token 绕过 JWT 登录, 适配空库
-      - name: V27-9-1 API contract test (urllib, 20+ endpoints)
-        working-directory: spike-test
-        env:
-          BACKEND_URL: ${{ env.BACKEND_URL }}
-          ADMIN_TOKEN: ${{ env.ADMIN_TOKEN }}
-          USE_DEV_TOKEN: "1"
-        run: |
-          echo "===== V27-9-1 API 契约测试 ====="
-          OUTPUT=$(python _e2e_audit/_api_contract_test.py 2>&1)
-          echo "$OUTPUT"
-          # 检查真正的失败 ([FAIL] 是网络/解析错误, [ERR] 是 HTTP 4xx/5xx 含预期)
-          if echo "$OUTPUT" | grep -q '\[FAIL\]'; then
-            echo "::error::V27-9-1 API 契约测试存在 [FAIL] 行, 需排查"
-            exit 1
-          fi
-          echo "[PASS] V27-9-1 API 契约测试通过"
+      # V27-9-1: API 契约测试 — 已禁用 (2026-08-02)
+      #   🔧 fix(审查): 该步骤引用的 spike-test/_e2e_audit/_api_contract_test.py 从未提交到 git
+      #     (本地/远程均不存在), CI 每次 exit 2 (file not found) 导致 frontend-contract job 失败
+      #   处置: 脚本实现是 suggestions P2-3 待办 (与 ADR #4 Testcontainers 冲突, 待用户决策),
+      #     决策落地并提交脚本后恢复此步骤; 契约覆盖暂由 frontend/tests/contract + Playwright e2e 承担
+      # - name: V27-9-1 API contract test (urllib, 20+ endpoints)
+      #   working-directory: spike-test
+      #   env:
+      #     BACKEND_URL: ${{ env.BACKEND_URL }}
+      #     ADMIN_TOKEN: ${{ env.ADMIN_TOKEN }}
+      #     USE_DEV_TOKEN: "1"
+      #   run: |
+      #     echo "===== V27-9-1 API 契约测试 ====="
+      #     OUTPUT=$(python _e2e_audit/_api_contract_test.py 2>&1)
+      #     echo "$OUTPUT"
+      #     if echo "$OUTPUT" | grep -q '\[FAIL\]'; then
+      #       echo "::error::V27-9-1 API 契约测试存在 [FAIL] 行, 需排查"
+      #       exit 1
+      #     fi
+      #     echo "[PASS] V27-9-1 API 契约测试通过"
 
       # V27-9-2: 安装 Python Playwright + Chromium (design audit 需要)
       #   ~30s, 与 Node Playwright 独立 (Python 包不共享 Node 浏览器二进制)
