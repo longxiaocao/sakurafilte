@@ -231,6 +231,8 @@ def clean_products_sheet(df: pd.DataFrame) -> list[dict]:
             stats['parsed_special_date'] += 1
 
         out.append({
+            'mr_1': clean_string(row.get('MR.1')),
+            'is_published': True,  # 客户目录导入 = 在售目录, 默认上架 (真实 Excel 无发布列; 管理后台可批量下架)
             'oem_no_display': oem_display,
             'oem_no_normalized': oem_norm,
             'type': type_val,
@@ -279,6 +281,7 @@ def clean_xrefs_sheet(df: pd.DataFrame) -> list[dict]:
             continue
 
         out.append({
+            'is_published': True,  # 同 products: 客户 OEM 替代目录默认上架 (主键对齐见第 5 步 product_oem→mr_1)
             'product_oem': normalize_oem(oem),
             'product_name_1': clean_string(row.get('Product Name 1')),
             'oem_brand': brand,
@@ -387,6 +390,20 @@ def main():
     stats['xrefs_aligned_dropped'] = before_x - len(xrefs)
     stats['apps_aligned_dropped'] = before_a - len(apps)
     log.info(f"对齐: xrefs 丢弃 {before_x - len(xrefs)} 条, apps 丢弃 {before_a - len(apps)} 条 (产品集 {len(product_oem_set)} 个 OEM)")
+
+    # 5) V2 主键对齐: product_oem → mr_1 (ETL 契约: xrefs/apps 以 mr_1 关联 products)
+    #    WHY: 项目主键已从 OEM NO.2 升级为 MR.1 (自有编码), 清洗脚本需同步 — 否则 ETL 导入全部
+    #      'mr_1 为空, 跳过' (2026-08-04 真实数据演练实证: 50K 产品 0 插入)
+    oem_to_mr1 = {p['oem_no_normalized']: p['mr_1'] for p in products if p.get('mr_1')}
+    missing = 0
+    for item in xrefs + apps:
+        mr1 = oem_to_mr1.get(item.pop('product_oem'))
+        if mr1:
+            item['mr_1'] = mr1
+        else:
+            missing += 1
+    if missing:
+        log.warning(f"OEM→MR.1 映射缺失 {missing} 条 (xrefs/apps 无对应产品)")
 
     # 5) 写出 JSONL
     for name, items in [('products', products), ('xrefs', xrefs), ('apps', apps)]:

@@ -61,7 +61,7 @@ services:
       Etl__IndexReplayBatchSize: "500"
     volumes:
       # 数据迁移演练: 宿主机 jsonl 数据挂载到容器只读目录 (生产可挂载 ETL 数据卷或走上传)
-      - ./spike-test/spike-test/output/v2_mock:/tmp/etl:ro
+      - ./spike-test/output/cleaned:/tmp/etl:ro
     networks:
       - sakura-net
     healthcheck:

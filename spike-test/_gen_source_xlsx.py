@@ -151,6 +151,7 @@ def gen_product_row(idx: int) -> dict:
     thread2 = random.choices(THREADS, THREAD_WEIGHTS)[0] if random.random() < 0.7 else None
 
     return {
+        "MR.1": f"MR{idx:06d}",  # 自有产品编码 (V2 唯一主键, 真实客户 Excel 产品区含此列)
         "OEM NO.2": oem,
         "Product Name 1": product_name_1,
         "Product Name 2": product_name_2,
@@ -176,12 +177,21 @@ def gen_product_row(idx: int) -> dict:
     }
 
 
+_USED_OEM3: set[tuple[str, str]] = set()  # 全局 (brand, oem_no_3) 唯一集 — 模拟真实业务: OEM 编号全目录唯一 (uq_xrefs_brand_oem3)
+
 def gen_xref_rows(product_oem: str, product_type: str) -> list[dict]:
     """为一个产品生成 5-20 个 xref (符合 etl_clean.py clean_xrefs_sheet 期望)"""
     n = random.randint(5, 20)
     rows = []
     for i in range(n):
         brand = random.choices(OEM_BRANDS, OEM_BRAND_WEIGHTS)[0]
+        # 唯一性: 全局 (brand, oem_no_3) 不重复 (ETL 唯一索引 uq_xrefs_brand_oem3, 演练实证 23505)
+        while True:
+            oem3 = gen_oem_no_3(brand, random.randint(1, 999999))
+            key = (brand, oem3)
+            if key not in _USED_OEM3:
+                _USED_OEM3.add(key)
+                break
         # xref 的 Product Name 1: 60% 与产品 type 同步, 30% 加 variant, 10% 用品牌名
         r = random.random()
         if r < 0.60:
@@ -194,7 +204,7 @@ def gen_xref_rows(product_oem: str, product_type: str) -> list[dict]:
             "OEM NO.2": product_oem,
             " OEM Brand": brand,  # 注意前导空格 (etl_clean.py 期望)
             "Product Name 1": xref_name1,
-            "OEM NO.3": gen_oem_no_3(brand, random.randint(1, 999999)),
+            "OEM NO.3": oem3,
         })
     return rows
 
@@ -203,11 +213,18 @@ def gen_app_rows(product_oem: str) -> list[dict]:
     """为一个产品生成 1-30 个机型 (符合 etl_clean.py clean_apps_sheet 期望)"""
     n = random.randint(1, 30)
     rows = []
+    used_models: set[str] = set()  # 产品内 (brand, model) 唯一 (uq_apps_product_brand_model)
     for i in range(n):
+        while True:
+            brand = random.choices(MACHINE_BRANDS, MACHINE_BRAND_WEIGHTS)[0]
+            model = f"M{random.randint(100, 999)}"
+            if (brand, model) not in used_models:
+                used_models.add((brand, model))
+                break
         rows.append({
             "OEM NO.2": product_oem,
-            "Machine Brand": random.choices(MACHINE_BRANDS, MACHINE_BRAND_WEIGHTS)[0],
-            "Machine Model": f"M{random.randint(100, 999)}",
+            "Machine Brand": brand,
+            "Machine Model": model,
             "Model Name": random.choice(MODEL_NAMES),
             "Engine Brand": random.choices(ENGINE_BRANDS, ENGINE_BRAND_WEIGHTS)[0],
             "Engine Type": f"E{random.randint(1, 99)}",

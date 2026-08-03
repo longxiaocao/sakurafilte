@@ -613,3 +613,13 @@ v30-14 1M OFFSET 深分页专项压测验证数据 (2026-07-21, sakurafilter_per
   - fix(P1): AuthTokenBroadcaster async void 事件处理器竞争连接 → Channel 同步 TryWrite + 主循环顺序处理, "Connection is busy" 刷屏根除 (0 次/60s)
 排除方案: 80/443 双监听共存 (选 80 全跳转, 生产形态)
 关联文件: docker/nginx.conf, docker/security-headers.conf, docker-compose.prod.yml, AuthTokenBroadcaster.cs
+
+#27 真实数据导入演练 (2026-08-04)
+决策: 50K 产品真实规模 ETL 链路验证 (生成真实格式 Excel → etl_clean → 3 端点导入 → Meili 重建)
+结果: products 50,000 + xrefs 624,539 + apps 775,457 全量导入 0 错误; 8字段/机型/聚合搜索/SEO 全通
+演练修复 (4 轮迭代, 均为脚本契约失配, 非系统缺陷):
+  - etl_clean 输出缺 mr_1 (V2 主键升级后清洗脚本未同步) → 生成器补 MR.1 列 + 清洗输出 mr_1 + OEM→MR.1 映射
+  - xrefs 23505 (uq_xrefs_brand_oem3 全局唯一): 生成器随机 OEM NO.3 重复 → 全局唯一集 (真实业务 OEM 号唯一)
+  - apps 23505 (uq_apps_product_brand_model 产品内唯一): 生成器同产品 model 重复 → 产品内唯一集
+  - is_published 全 false → 导入后前台不可见: 清洗补 is_published=true (客户目录=在售目录, 管理后台可批量下架)
+关联文件: spike-test/_gen_source_xlsx.py, spike-test/etl_clean.py, spike-test/_etl_prod_load.py
