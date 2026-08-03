@@ -52,3 +52,6 @@
 - [2026-08-02] [评估保持] 死端点清理 (by-type//api/products/{oem}//api/admin/products 列表等): 删除收益低 (无功能/性能影响), 风险中 (外部脚本/运维可能依赖, dead-letter 有 spike-test 引用), 改动面大 (端点+服务+测试) — 保持现状 | 触发文件: backend/src/SakuraFilter.Api/Endpoints/*.cs
 - [2026-08-02] [评估保持] Sitemap 主动失效接线: shard 缓存无法精确枚举/失效 (keyset 分片), 接线仅清 index 收益低 — 保持 TTL 1h 方案 | 触发文件: backend/src/SakuraFilter.Api/Endpoints/SitemapEndpoints.cs
 - [2026-08-02] [评估保持] DemoView/field-help i18n: DemoView 内部演示页 (非用户面向, 测试已放宽阈值), field-help hover 辅助 (测试已排除 .el-popper) — 保持 P2 | 触发文件: frontend/src/views/DemoView.vue, frontend/src/data/field-help.ts
+- [2026-08-03] [P1] ETL 三步导入后 Meili oem_list 为空: products 先索引时 xrefs 未导入, xrefs 导入后未自动触发产品重建 → 需手动 POST /api/admin/etl/reindex-all. 生产 ETL 流程 (products→xrefs→apps) 后必须触发全量 reindex (演练实证) | 触发文件: backend/src/SakuraFilter.Etl/EtlImportService.cs, MeiliSearchProvider.cs
+- [2026-08-03] [P1] AuthTokenBroadcaster continue 修复不彻底: WaitAsync 收到 NOTIFY 后 continue 再 WaitAsync, 若事件处理器 (ReloadFromDbAsync) 未完成仍报 "Connection is busy" (演练日志实证) — 需在事件处理器完成后/带延迟重试, 或 WaitAsync 前检查连接忙状态 | 触发文件: backend/src/SakuraFilter.Api/Services/AuthTokenBroadcaster.cs L116
+- [2026-08-03] [P2] EF 模型与 DB 不一致: MachineApplication.IsDiscontinued HasDefaultValue(false) 但迁移未生成列默认值 → 已补 020 迁移 | 触发文件: backend/migrations/020_machine_apps_is_discontinued_default.sql
