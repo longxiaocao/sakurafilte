@@ -591,3 +591,13 @@ v30-14 1M OFFSET 深分页专项压测验证数据 (2026-07-21, sakurafilter_per
   - DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1: 丢失全球化 (时区/文化), 项目显式设 false
   - web healthcheck 改 curl: Alpine busybox 无 curl
 关联文件: docker-compose.prod.yml, docker/Dockerfile.api, docker/Dockerfile.web, docker/nginx.conf, backend/src/SakuraFilter.Api/Program.cs, SitemapEndpoints.cs
+
+#25 运维演练结论: 密钥轮换 + 备份恢复 (2026-08-03)
+决策: 轮换走 DB 写 + pg_notify 广播 (CLI rotate-token 的等价验证), 备份用 pg_dump -Fc
+理由: 生产容器内 CLI 无法直连 DB (端口未映射), 演练改为容器内 psql 直接写 auth_token_state + NOTIFY, 验证结果与 CLI 行为等价
+演练实证:
+  - 轮换1: current=新/previous=旧 → 新 200 + 旧 200 (过渡期) + 无关 401, API 未重启实时生效
+  - 轮换2: current=新2/previous=新1 → 旧原始 key 401 (脱离双 key 即失效)
+  - 备份: pg_dump -Fc 109KB → pg_restore 临时库, 27 表全恢复, 行数完全一致 (100/300/500)
+  - 恢复后 DROP 测试库, 生产库未受影响
+关联文件: auth_token_state 轮换机制, docker-compose.prod.yml (postgres 无端口映射)
