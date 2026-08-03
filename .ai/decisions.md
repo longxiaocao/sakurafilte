@@ -582,3 +582,12 @@ v30-14 1M OFFSET 深分页专项压测验证数据 (2026-07-21, sakurafilter_per
   - 事件处理器改同步: Notification 事件本身是 fire-and-forget, 无法同步等待
   - 连接池隔离: 复杂度高, 收益低
 关联文件: backend/src/SakuraFilter.Api/Services/AuthTokenBroadcaster.cs
+
+#24 生产部署编排修复 (2026-08-02, Docker Desktop 演练)
+决策: prod compose 补 db-init/db-migrate 迁移链 + api --migrate-db 模式; Dockerfile.api 补 ICU; nginx 显式 root
+理由: 部署演练发现 6 个预存缺陷: ① 编排无迁移步骤, 空库 42P01 崩溃; ② .NET8 Alpine 缺 icu-libs (SIGSEGV 139); ③ Dockerfile.web COPY 超出构建上下文; ④ Alpine nginx prefix=/etc/nginx 默认 root 不存在 (try_files 循环 500); ⑤ web healthcheck localhost→::1 误判; ⑥ api 缺 robots.txt (nginx 已反代)
+排除方案:
+  - EnsureCreated 替代 EF Migrate: 无迁移历史, 运维不可控; EF 34 迁移 + SQL 增量与 CI 组合等价
+  - DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1: 丢失全球化 (时区/文化), 项目显式设 false
+  - web healthcheck 改 curl: Alpine busybox 无 curl
+关联文件: docker-compose.prod.yml, docker/Dockerfile.api, docker/Dockerfile.web, docker/nginx.conf, backend/src/SakuraFilter.Api/Program.cs, SitemapEndpoints.cs
