@@ -623,3 +623,10 @@ v30-14 1M OFFSET 深分页专项压测验证数据 (2026-07-21, sakurafilter_per
   - apps 23505 (uq_apps_product_brand_model 产品内唯一): 生成器同产品 model 重复 → 产品内唯一集
   - is_published 全 false → 导入后前台不可见: 清洗补 is_published=true (客户目录=在售目录, 管理后台可批量下架)
 关联文件: spike-test/_gen_source_xlsx.py, spike-test/etl_clean.py, spike-test/_etl_prod_load.py
+
+#28 自动 reindex 优化 (2026-08-04)
+决策: xrefs/apps 导入后自动增量同步 Meili — 收集受影响产品 id → touch products.updated_at → 复用 SyncSearchIndexAsync 时间窗
+验证 (生产栈实测): MR000001 oem_list 14→15→16 两次增量导入自动更新, 0 手动 reindex; 增量场景只重建受影响文档
+配套修复: LISTEN 长连接 Pooling=false (池化复用与 WaitAsync 竞争 busy, 修复后 0 次/2min)
+排除方案: 导入后自动 reindex-all 全量重建 (50K 文档每次导入都重建, 增量场景浪费)
+关联文件: EtlImportService.cs (SyncAffectedProductsAsync), AuthTokenBroadcaster.cs, EtlProgressBroadcaster.cs
