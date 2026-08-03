@@ -603,3 +603,13 @@ v30-14 1M OFFSET 深分页专项压测验证数据 (2026-07-21, sakurafilter_per
 关联文件: auth_token_state 轮换机制, docker-compose.prod.yml (postgres 无端口映射)
 补充: Grafana 管理员密码在 grafana-data volume 首次初始化时固化 (compose 默认读 .env 而非 .env.prod; --env-file .env.prod 需显式指定)
   - 若忘记密码: docker compose -f docker-compose.prod.yml stop grafana && docker compose -f docker-compose.prod.yml rm -f grafana && docker volume rm sakurafilter_grafana-data (provisioning 会自动重建数据源+面板, 但丢失手工配置)
+
+#26 阶段4 TLS 部署 (2026-08-03)
+决策: nginx 443 HTTPS (HTTP/2 + TLS1.2/1.3) + 80→301 跳转 + HSTS; 自签名证书演练, LE 接入点路径不变
+关键修复 (演练实证):
+  - 安全头丢失: location 内 add_header 覆盖 server 级 → security-headers.conf include 片段统一注入
+  - 健康端点: /health/live|ready 注册于根路径 (CommonEndpoints.cs), 443 需显式反代, 否则落 SPA fallback
+  - compose env: 默认读 .env 而非 .env.prod → 部署必须 --env-file .env.prod (api 曾空连接串崩溃 139)
+  - fix(P1): AuthTokenBroadcaster async void 事件处理器竞争连接 → Channel 同步 TryWrite + 主循环顺序处理, "Connection is busy" 刷屏根除 (0 次/60s)
+排除方案: 80/443 双监听共存 (选 80 全跳转, 生产形态)
+关联文件: docker/nginx.conf, docker/security-headers.conf, docker-compose.prod.yml, AuthTokenBroadcaster.cs
