@@ -100,6 +100,13 @@ services:
         condition: service_healthy
     ports:
       - "80:80"
+      - "443:443"
+    volumes:
+      # Nginx 配置卷挂载 (改配置免重建镜像: docker compose exec web nginx -s reload)
+      - ./docker/nginx.conf:/etc/nginx/conf.d/sakurafilter.conf:ro
+      - ./docker/security-headers.conf:/etc/nginx/conf.d/security-headers.conf:ro
+      # TLS 证书 (自签名演练; 生产挂载 Let's Encrypt 全链, 路径不变; 证书不入库)
+      - ./docker/certs:/etc/nginx/certs:ro
     networks:
       - sakura-net
     healthcheck:

@@ -7,6 +7,7 @@
 //     - 失败降级策略不同 (auth 失败需立即告警, etl 可降级为本地轮询)
 //     - 后续审计/告警可单独扩展
 using System.Text.Json;
+using System.Threading.Channels;
 using Npgsql;
 
 namespace SakuraFilter.Api.Services;
@@ -20,6 +21,13 @@ public class AuthTokenBroadcaster : IHostedService, IAsyncDisposable
     private NpgsqlConnection? _listenConn;
     private CancellationTokenSource? _cts;
     private Task? _listenTask;
+    // 🔧 fix(P1): NOTIFY payload 经 Channel 传递给主循环顺序处理
+    //   WHY 原实现: Notification 事件处理器是 async void (内部 await ReloadFromDbAsync),
+    //     WaitAsync 返回后循环立即 continue 再调 WaitAsync, 与未完成的事件处理器竞争同一连接
+    //     → Npgsql 抛 "Connection is busy" (2026-08-03 生产栈日志实证, 每 5s 刷屏一次)
+    //   修复: 事件处理器只做同步 TryWrite (不持有连接), ReloadFromDb 在主循环内 await 完成,
+    //      WaitAsync 与 ReloadFromDb 永不并发 → busy 根除
+    private readonly Channel<string> _notifyChannel = Channel.CreateUnbounded<string>();
     // 连续失败计数, 驱动指数退避重连 (5s -> 10s -> 20s -> 40s -> 60s 封顶)
     private int _consecutiveFailures;
     public bool IsListening { get; private set; }
@@ -80,27 +88,12 @@ public class AuthTokenBroadcaster : IHostedService, IAsyncDisposable
                 _consecutiveFailures = 0;  // 重连成功重置计数, 让退避从 5s 重新开始
                 _logger.LogInformation("[AuthTokenBroadcaster] LISTEN auth_token_rotated 已启动");
 
-                _listenConn.Notification += async (sender, e) =>
+                _listenConn.Notification += (sender, e) =>
                 {
-                    if (e.Payload is null) return;
-                    // V24-F99 (P2-3, 规则 6.3): 禁止日志完整 PG NOTIFY payload
-                    //   WHY: AuthTokenStore.RotateAsync 的 payload 含 current/previous token 完整明文
-                    //     日志该 payload 会让任何能读日志的人 (运维/SRE/日志聚合系统) 获取 admin token 绕过鉴权
-                    //   审计字段 (rotatedBy/rotatedAt) 在下方独立日志, 不需完整 payload
-                    try
+                    // 🔧 fix(P1): 同步 TryWrite — 不再在事件处理器内 await (见字段注释 WHY)
+                    if (e.Payload is not null)
                     {
-                        // 解析 payload 用于审计
-                        using var doc = JsonDocument.Parse(e.Payload);
-                        var root = doc.RootElement;
-                        var rotatedBy = root.TryGetProperty("rotatedBy", out var by) ? by.GetString() : null;
-                        _logger.LogInformation("[AuthTokenBroadcaster] 收到 auth_token_rotated 广播, 触发 ReloadFromDb (by={By})", rotatedBy);
-                        using var scope = _services.CreateScope();
-                        var store = scope.ServiceProvider.GetRequiredService<IAuthTokenStore>();
-                        await store.ReloadFromDbAsync(ct);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "[AuthTokenBroadcaster] ReloadFromDb 失败");
+                        _notifyChannel.Writer.TryWrite(e.Payload);
                     }
                 };
 
@@ -118,12 +111,13 @@ public class AuthTokenBroadcaster : IHostedService, IAsyncDisposable
                         var completed = await Task.WhenAny(waitTask, heartbeatTask);
                         if (completed == waitTask)
                         {
-                            // 🔧 fix(审查): 收到 NOTIFY 后 continue 而非 break 重连
-                            //   WHY 原实现 break → Dispose + 重连, 与异步 Notification 事件处理器
-                            //     (ReloadFromDbAsync 未完成) 竞争同一连接, Npgsql 抛 "Connection is busy"
-                            //     → 无限重连循环 (5s→60s 退避), LISTEN 间歇失效, rotate 广播丢失,
-                            //     /health/ready 误判 stale (2026-08-02 实测)
-                            //   修复: 连接仍 Open 时继续等下一个通知; 连接异常时才 break 重连
+                            // 🔧 fix(P1): 顺序处理 channel 内积压的 NOTIFY (ReloadFromDb 在循环内 await 完成)
+                            //   WHY: 事件处理器只 TryWrite, 这里 drain 全部 payload — 与 WaitAsync 无竞争 (见字段注释)
+                            while (_notifyChannel.Reader.TryRead(out var payload))
+                            {
+                                await HandleNotificationAsync(payload);
+                            }
+                            // 连接仍 Open 时继续等下一个通知; 连接异常时才 break 重连
                             if (_listenConn.State == System.Data.ConnectionState.Open)
                             {
                                 continue;
@@ -164,5 +158,28 @@ public class AuthTokenBroadcaster : IHostedService, IAsyncDisposable
             }
         }
         IsListening = false;
+    }
+
+    /// <summary>顺序处理一条 NOTIFY payload (在 ListenLoopAsync 主循环内调用, 不与 WaitAsync 竞争)</summary>
+    private async Task HandleNotificationAsync(string payload)
+    {
+        // V24-F99 (P2-3, 规则 6.3): 禁止日志完整 PG NOTIFY payload
+        //   WHY: AuthTokenStore.RotateAsync 的 payload 含 current/previous token 完整明文
+        //     日志该 payload 会让任何能读日志的人 (运维/SRE/日志聚合系统) 获取 admin token 绕过鉴权
+        //   审计字段 (rotatedBy/rotatedAt) 在下方独立日志, 不需完整 payload
+        try
+        {
+            using var doc = JsonDocument.Parse(payload);
+            var root = doc.RootElement;
+            var rotatedBy = root.TryGetProperty("rotatedBy", out var by) ? by.GetString() : null;
+            _logger.LogInformation("[AuthTokenBroadcaster] 收到 auth_token_rotated 广播, 触发 ReloadFromDb (by={By})", rotatedBy);
+            using var scope = _services.CreateScope();
+            var store = scope.ServiceProvider.GetRequiredService<IAuthTokenStore>();
+            await store.ReloadFromDbAsync(CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[AuthTokenBroadcaster] ReloadFromDb 失败");
+        }
     }
 }
