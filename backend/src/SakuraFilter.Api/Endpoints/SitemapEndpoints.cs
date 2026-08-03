@@ -46,6 +46,22 @@ public static class SitemapEndpoints
             .WithOpenApi()
             .RequireRateLimiting("sitemap");
 
+        // GET /robots.txt — 爬虫指引 (nginx 已反代到 api)
+        // 🔧 fix(部署演练): 补充缺失的 robots 端点 — nginx.conf 配了 = /robots.txt 反代但 api 无实现 (404)
+        app.MapGet("/robots.txt", (HttpContext ctx) =>
+        {
+            var scheme = ctx.Request.Headers["X-Forwarded-Proto"].FirstOrDefault() ?? ctx.Request.Scheme;
+            var host = ctx.Request.Headers["X-Forwarded-Host"].FirstOrDefault() ?? ctx.Request.Host.Value;
+            var baseUrl = $"{scheme}://{host}";
+            return Results.Text(
+                $"User-agent: *\nAllow: /\n\nSitemap: {baseUrl}/sitemap.xml\n",
+                "text/plain");
+        })
+            .WithSummary("robots.txt (允许全站 + sitemap 指引)")
+            .WithName("RobotsTxt")
+            .WithOpenApi()
+            .RequireRateLimiting("sitemap");
+
         // GET /sitemaps/products-{shard}.xml — 单分片 urlset
         app.MapGet("/sitemaps/products-{shard:int}.xml", MapSitemapShardAsync)
             .WithSummary("sitemap 分片 urlset (每分片 ≤ 50000 URL)")

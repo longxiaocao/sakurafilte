@@ -35,8 +35,12 @@ RUN dotnet publish src/SakuraFilter.Api/SakuraFilter.Api.csproj \
 FROM mcr.microsoft.com/dotnet/aspnet:8.0-alpine AS runtime
 WORKDIR /app
 
-# 安装时区数据 (某些时区计算需要)
-RUN apk add --no-cache tzdata
+# 安装时区数据 + ICU 全球化 (库 + 数据)
+# 🔧 fix(部署演练): .NET 8 在 Alpine 上 CultureInfo 初始化需 libicu 共享库 (icu-libs)
+#   + 数据文件 (icu-data-full); 仅装 data 时缺 libicuuc.so 仍 SIGSEGV (exit 139)
+#   apk 源切国内 (mirrors.aliyun.com) 加速: 默认 dl-cdn.alpinelinux.org 国内 10s+ 超时
+RUN sed -i 's|dl-cdn.alpinelinux.org|mirrors.aliyun.com|g' /etc/apk/repositories \
+    && apk add --no-cache tzdata icu-libs icu-data-full
 
 # 创建非 root 用户
 RUN adduser -D -u 1000 sakura && \

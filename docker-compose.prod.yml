@@ -31,6 +31,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
       meilisearch:
         condition: service_started
     environment:
@@ -78,8 +80,10 @@ services:
 
   web:
     build:
-      context: ./frontend
-      dockerfile: ../docker/Dockerfile.web
+      # 🔧 fix(部署演练): context 改为项目根 — 原 ./frontend 上下文不含 docker/nginx.conf,
+      #   Dockerfile.web 的 COPY docker/nginx.conf 超出上下文报 not-found (prod 预存缺陷)
+      context: .
+      dockerfile: docker/Dockerfile.web
       args:
         VITE_INQUIRY_EMAIL: ${VITE_INQUIRY_EMAIL:-}
         VITE_PUBLIC_ABOUT_TEXT: ${VITE_PUBLIC_ABOUT_TEXT:-}
@@ -89,13 +93,16 @@ services:
     container_name: sakura-web
     restart: unless-stopped
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     ports:
       - "80:80"
     networks:
       - sakura-net
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      # 🔧 fix(部署演练): 用 127.0.0.1 而非 localhost — busybox wget 解析 localhost 优先 ::1 (IPv6),
+      #   nginx 仅监听 IPv4 → healthcheck 误判 connection refused (unhealthy)
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/health"]
       interval: 30s
       timeout: 3s
       retries: 3
@@ -106,6 +113,42 @@ services:
           memory: 256M
 
   # ===== 数据层 =====
+  # 🔧 fix(部署演练): 新增 db-init (EF 迁移) + db-migrate (SQL 增量) 一次性服务
+  #   原编排无迁移步骤, prod 空库启动即崩 (42P01 relation "users" does not exist)
+  #   顺序: postgres → db-init (EF 34 迁移建全表) → db-migrate (002-019 SQL 增量) → api → web
+  db-init:
+    image: sakurafilter-api:1.0.0
+    container_name: sakura-db-init
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
+    command: ["--migrate-db"]
+    networks:
+      - sakura-net
+
+  db-migrate:
+    image: postgres:16-alpine
+    container_name: sakura-db-migrate
+    restart: "no"
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    volumes:
+      - ./backend/migrations:/migrations:ro
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    command: >
+      sh -c 'for f in /migrations/*.sql; do
+        echo "===== Executing $$f =====";
+        psql -h postgres -U ${POSTGRES_USER} -d ${POSTGRES_DB} -v ON_ERROR_STOP=1 -f "$$f" || exit 1;
+      done;
+      echo "===== All SQL migrations applied ====="'
+    networks:
+      - sakura-net
+
   postgres:
     image: postgres:16-alpine
     container_name: sakura-postgres

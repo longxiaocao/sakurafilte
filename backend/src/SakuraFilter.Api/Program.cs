@@ -1,4 +1,23 @@
 using SakuraFilter.Api.Extensions;
+using Microsoft.EntityFrameworkCore;
+using SakuraFilter.Infrastructure.Data;
+
+// 生产部署一次性迁移模式: dotnet SakuraFilter.Api.dll --migrate-db
+//   WHY: prod 配置 Db:AutoMigrateOnStartup=false (避免多实例并发迁移),
+//        部署编排 (docker compose db-init 服务) 显式执行 EF 迁移后再启动 API
+//        与 CI 模式 (EnsureCreated + SQL 脚本) 等价, 更规范 (含迁移历史表)
+if (args.Contains("--migrate-db"))
+{
+    var migrateConn = Environment.GetEnvironmentVariable("ConnectionStrings__Postgres")
+        ?? throw new InvalidOperationException("ConnectionStrings__Postgres 未配置 (--migrate-db 模式)");
+    var migrateOpts = new DbContextOptionsBuilder<ProductDbContext>()
+        .UseNpgsql(migrateConn)
+        .Options;
+    using var migrateDb = new ProductDbContext(migrateOpts);
+    await migrateDb.Database.MigrateAsync();
+    Console.WriteLine("EF 迁移完成 (--migrate-db)");
+    return;
+}
 
 var builder = WebApplication.CreateBuilder(args);
 

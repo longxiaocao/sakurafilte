@@ -11,11 +11,12 @@ FROM node:20-alpine AS build
 WORKDIR /app
 
 # 仅当 package*.json 变化时才重装依赖 (Docker 缓存优化)
-COPY package*.json ./
+# 🔧 fix(部署演练): context 为项目根后, frontend 内容在 frontend/ 子目录
+COPY frontend/package*.json ./
 RUN npm ci --no-audit --no-fund
 
-# 复制源代码
-COPY . .
+# 复制源代码 (frontend 目录)
+COPY frontend/ .
 # 公开站点变量在构建期注入；它们会进入浏览器代码，禁止填写密钥或内部地址。
 ARG VITE_INQUIRY_EMAIL
 ARG VITE_PUBLIC_ABOUT_TEXT
