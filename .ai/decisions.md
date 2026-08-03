@@ -601,3 +601,5 @@ v30-14 1M OFFSET 深分页专项压测验证数据 (2026-07-21, sakurafilter_per
   - 备份: pg_dump -Fc 109KB → pg_restore 临时库, 27 表全恢复, 行数完全一致 (100/300/500)
   - 恢复后 DROP 测试库, 生产库未受影响
 关联文件: auth_token_state 轮换机制, docker-compose.prod.yml (postgres 无端口映射)
+补充: Grafana 管理员密码在 grafana-data volume 首次初始化时固化 (compose 默认读 .env 而非 .env.prod; --env-file .env.prod 需显式指定)
+  - 若忘记密码: docker compose -f docker-compose.prod.yml stop grafana && docker compose -f docker-compose.prod.yml rm -f grafana && docker volume rm sakurafilter_grafana-data (provisioning 会自动重建数据源+面板, 但丢失手工配置)
