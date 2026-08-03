@@ -77,7 +77,10 @@ public class AuthTokenBroadcaster : IHostedService, IAsyncDisposable
             _hostedStatus.ReportAlive(nameof(AuthTokenBroadcaster));
             try
             {
-                _listenConn = new NpgsqlConnection(_pgConn);
+                // 🔧 fix(P1): LISTEN 长连接禁用连接池 — 池化连接会被复用给普通查询, 与 WaitAsync
+                //   竞争触发 "Connection is busy" (生产日志实证, 修复后残余 1 次/5min)
+                var listenBuilder = new NpgsqlConnectionStringBuilder(_pgConn) { Pooling = false };
+                _listenConn = new NpgsqlConnection(listenBuilder.ConnectionString);
                 await _listenConn.OpenAsync(ct);
                 await using (var cmd = _listenConn.CreateCommand())
                 {

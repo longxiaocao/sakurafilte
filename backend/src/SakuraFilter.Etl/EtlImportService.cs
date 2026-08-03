@@ -1238,6 +1238,59 @@ public class EtlImportService
     }
 
     /// <summary>
+    /// 🔧 fix(自动reindex): xrefs/apps 导入完成后, 对受影响产品触达 Meili 增量同步
+    /// WHY: products 导入自带 SyncSearchIndexAsync (updated_at 时间窗), 但 xrefs/apps 导入不触碰
+    ///   products.updated_at → oem_list/machine_list 过期, 此前需手动 reindex-all (真实数据演练实证, ADR #27)
+    /// 策略: 收集受影响产品 id → touch products.updated_at → 复用 SyncSearchIndexAsync 时间窗查询
+    ///   增量场景 (小批 upsert) 只同步少量文档; full-load 大导入同步全部 (等价全量重建, 走增量路径)
+    /// </summary>
+    private Task SyncAffectedProductsAsync(HashSet<long> productIds, string entity, CancellationToken ct)
+    {
+        if (productIds.Count == 0)
+        {
+            _logger.LogInformation("[自动reindex] {Entity} 导入无受影响产品, 跳过索引同步", entity);
+            return Task.CompletedTask;
+        }
+        _logger.LogInformation("[自动reindex] {Entity} 导入完成, 触发 {Count} 个受影响产品索引同步", entity, productIds.Count);
+        Progress.SetStage("meili-sync");
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var scope = _sp.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<ProductDbContext>();
+                var now = DateTime.UtcNow;
+                // touch updated_at (分批避免超长 IN 列表); SyncSearchIndexAsync(now) 查询 >= now 命中
+                //   EF Core 8 + Npgsql: chunk.Contains(p.Id) 翻译为 = ANY(@p) 数组参数, 单参数高效
+                var ids = productIds.ToArray();
+                const int chunkSize = 2000;
+                for (var i = 0; i < ids.Length; i += chunkSize)
+                {
+                    var chunk = ids.Skip(i).Take(chunkSize).ToArray();
+                    await db.Products
+                        .Where(p => chunk.Contains(p.Id))
+                        .ExecuteUpdateAsync(s => s.SetProperty(p => p.UpdatedAt, now), CancellationToken.None);
+                }
+                await SyncSearchIndexAsync(now, CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[自动reindex] {Entity} 增量同步失败 (可手动 reindex-all 兜底)", entity);
+            }
+            finally
+            {
+                // 竞态防护: 仅当 stage 仍为本任务设置的 meili-sync 时重置 idle,
+                //   避免覆盖用户紧接着触发的下一实体导入 stage (xrefs sync 期间触发 apps 的竞态)
+                if (Progress.Stage == "meili-sync")
+                {
+                    Progress.SetStage("idle");
+                }
+            }
+        });
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
     /// 同步本次导入的 products 到 Meili
     /// V2 改造 (Task 0.4):
     /// 1) 从 products 表查 updated_at >= import_started_at 的所有产品
@@ -1556,6 +1609,8 @@ public class EtlImportService
         const int BatchSize = 1000;
         long lastCommittedBatchId = startLineNo;  // 累计已成功 COMMIT 的总行数 (= checkpoint_id)
         bool isFirstBatch = startLineNo == 0;      // 续读时跳过 full-load 的 TRUNCATE 等特殊处理
+        // 🔧 fix(自动reindex): 跨批收集受影响产品, 导入完成后触达 Meili 增量同步 (替代手动 reindex-all)
+        var affectedProductIds = new HashSet<long>();
         try
         {
             await using var conn = new NpgsqlConnection(_pgConn);
@@ -1603,7 +1658,7 @@ public class EtlImportService
                     //   此前 3-tuple + 后续用 cumulative Progress 算 dup, 公式错误 (dup 翻倍)
                     //   正确 dup = stageCount - affected (本批) — 与 ImportAppsAsync 一致
                     var (batchMissing, batchErrors, xrefStageCount, batchAffected) = await ProcessXrefBatchAsync(
-                        conn, batchLines, oemMap, mode, isFirstBatch, lastCommittedBatchId, ct);
+                        conn, batchLines, oemMap, mode, isFirstBatch, lastCommittedBatchId, ct, affectedProductIds);
                     lastCommittedBatchId += batchLines.Count;
                     Progress.IncrReadBy(batchLines.Count);
                     // dup = stageCount - affected (DISTINCT ON 去重 + ON CONFLICT 跳过)
@@ -1628,7 +1683,7 @@ public class EtlImportService
             {
                 // P1.1 (Task 3) 修复: 同样 4-tuple
                 var (batchMissing, batchErrors, xrefStageCount, batchAffected) = await ProcessXrefBatchAsync(
-                    conn, batchLines, oemMap, mode, isFirstBatch, lastCommittedBatchId, ct);
+                    conn, batchLines, oemMap, mode, isFirstBatch, lastCommittedBatchId, ct, affectedProductIds);
                 lastCommittedBatchId += batchLines.Count;
                 Progress.IncrReadBy(batchLines.Count);
                 var dup = xrefStageCount - batchAffected;
@@ -1636,6 +1691,8 @@ public class EtlImportService
                 isFirstBatch = false;
             }
             Progress.Finish("xrefs", mode);
+            // 🔧 fix(自动reindex): xrefs 导入完成 → 受影响产品增量同步到 Meili (修复 oem_list 过期)
+            await SyncAffectedProductsAsync(affectedProductIds, "xrefs", ct);
         }
         // Day 9.4: 区分取消与失败 (同 products, 见 ImportProductsAsync 注释)
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -1678,7 +1735,8 @@ public class EtlImportService
         string mode,
         bool isFirstBatch,
         long batchStartLineNo,  // P2-9.2: 批次起始全局行号 (用于错误日志定位)
-        CancellationToken ct)
+        CancellationToken ct,
+        HashSet<long>? affectedProductIds = null)  // 🔧 fix(自动reindex): 跨批收集受影响产品, 导入后触达 Meili 增量同步
     {
         long missing = 0;
         long errors = 0;
@@ -1725,6 +1783,8 @@ public class EtlImportService
                             Progress.IncrSkippedMissingMr1();
                             continue;
                         }
+                        // 🔧 fix(自动reindex): 记录受影响产品 (导入后触达 Meili 增量同步)
+                        affectedProductIds?.Add(pid);
                         // V2 Task 5.1.7: machine_type 枚举预检 (DB CHECK 兜底, 但 ETL 层提前跳过避免整批 ROLLBACK)
                         //   合法值: agriculture / commercial / construction / industrial / others (与 DB CHECK 一致)
                         //   空/null: 允许 (machine_type 可空); 非法非空: 计错误 + continue
@@ -1933,6 +1993,8 @@ public class EtlImportService
         Progress.SetRowsTotal(EtlProgress.EstimateFileLines(jsonlPath));
         // Day 9.7: 启动跨实例广播 snapshot timer
         var broadcastCtx = StartSnapshotTimerIfNeeded();
+        // 🔧 fix(自动reindex): 收集受影响产品, 导入完成后触达 Meili 增量同步 (替代手动 reindex-all)
+        var affectedProductIds = new HashSet<long>();
         try
         {
             await using var conn = new NpgsqlConnection(_pgConn);
@@ -1995,6 +2057,8 @@ public class EtlImportService
                             Progress.IncrSkippedMissingMr1();
                             continue;
                         }
+                        // 🔧 fix(自动reindex): 记录受影响产品 (导入后触达 Meili 增量同步)
+                        affectedProductIds.Add(pid);
                         // Day 7.5: 必填字段预检 (SQL 的 WHERE machine_brand IS NOT NULL 静默过滤在这里显式化)
                         // apps ETL 在 COPY 阶段就拦下,免得下游 SQL 默默丢行
                         var brand = GetStringOrNull(doc, "machine_brand");
@@ -2141,6 +2205,8 @@ public class EtlImportService
             await using (var commit = new NpgsqlCommand("COMMIT;", conn))
                 await commit.ExecuteNonQueryAsync(ct);
             Progress.Finish("apps", mode);
+            // 🔧 fix(自动reindex): apps 导入完成 → 受影响产品增量同步到 Meili (修复 machine_list 过期)
+            await SyncAffectedProductsAsync(affectedProductIds, "apps", ct);
         }
         // Day 9.4: 区分取消与失败 (同 products, 见 ImportProductsAsync 注释)
         catch (OperationCanceledException) when (ct.IsCancellationRequested)

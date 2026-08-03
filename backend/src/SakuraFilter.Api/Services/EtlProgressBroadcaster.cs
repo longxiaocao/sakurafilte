@@ -62,7 +62,9 @@ public class EtlProgressBroadcaster : IEtlProgressBroadcaster, IAsyncDisposable
             var delaySec = 3;
             try
             {
-                _listenConn = new NpgsqlConnection(_connectionString);
+                // 🔧 fix(P1): LISTEN 长连接禁用连接池 (同 AuthTokenBroadcaster, 防 WaitAsync 竞争 busy)
+                var listenBuilder = new NpgsqlConnectionStringBuilder(_connectionString) { Pooling = false };
+                _listenConn = new NpgsqlConnection(listenBuilder.ConnectionString);
                 await _listenConn.OpenAsync(ct);
                 _listenConn.Notification += OnNotification;
                 using (var cmd = new NpgsqlCommand($"LISTEN {Channel}", _listenConn))
