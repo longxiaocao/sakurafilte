@@ -507,6 +507,12 @@ export default {
       },
     },
     oembrandsview: {
+      export_csv: 'Export CSV',
+      import_csv: 'Import CSV',
+      import_done: 'Import done',
+      export_failed: 'Export failed, retry later',
+      import_failed: 'Import failed, check format (each line: brand[,sortOrder[,deleted]])',
+      import_partial_fail: 'Some rows failed',
       error: {
 
       },

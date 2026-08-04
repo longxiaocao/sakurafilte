@@ -516,6 +516,12 @@ export default {
       },
     },
     oembrandsview: {
+      export_csv: '导出 CSV',
+      import_csv: '导入 CSV',
+      import_done: '导入完成',
+      export_failed: '导出失败, 请稍后重试',
+      import_failed: '导入失败, 请检查文件格式 (每行: 品牌[,排序[,deleted]])',
+      import_partial_fail: '部分行导入失败',
       error: {
 
       },

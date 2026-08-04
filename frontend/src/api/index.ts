@@ -700,6 +700,13 @@ export const dictApi = {
     restore(id: number): Promise<OemBrandItem> {
       return http.post(`/admin/dict/oem-brands/${id}/restore`).then((r) => r.data)
     },
+    // 🔧 fix(审查): 批量导入导出 (用户反馈: 无数据导入导出入口, 只能逐个添加)
+    exportCsv(): Promise<string> {
+      return http.get('/admin/dict/oem-brands/export', { responseType: 'text' }).then((r) => r.data)
+    },
+    importCsv(csv: string): Promise<{ created: number; updated: number; deleted: number; skipped: number; errors: string[] }> {
+      return http.post('/admin/dict/oem-brands/import', { csv }).then((r) => r.data)
+    },
     reorder(items: OemBrandReorderItem[]): Promise<{ updated: number }> {
       return http.post('/admin/dict/oem-brands/reorder', { items }).then((r) => r.data)
     }

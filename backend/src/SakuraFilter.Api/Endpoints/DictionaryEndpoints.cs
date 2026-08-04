@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using SakuraFilter.Api.Extensions;
 using SakuraFilter.Api.Services;
 using SakuraFilter.Infrastructure.Data;
+using System.Text;
 
 namespace SakuraFilter.Api.Endpoints;
 
@@ -10,6 +11,7 @@ namespace SakuraFilter.Api.Endpoints;
 // 之所以单独声明：原 Program.cs 中作为顶级 record 存在，迁移到 Endpoints 命名空间下。
 public record OemBrandCreateRequest(string Brand, int? SortOrder);
 public record OemBrandUpdateRequest(string? Brand, int? SortOrder);
+public record ImportCsvRequest(string Csv);
 
 /// <summary>
 /// 字典管理端点：admin 角色鉴权 + global 限流。
@@ -72,6 +74,61 @@ public static class DictionaryEndpoints
             catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
         }).WithName("AdminCreateOemBrand");
+
+        // 🔧 fix(审查): 批量导出 CSV — 用户反馈: 无数据导入导出入口, 只能逐个添加
+        g.MapGet("/export", async (OemBrandDictService svc, CancellationToken ct) =>
+        {
+            var items = await svc.ListOemBrandsAsync(null, true, 100000, ct);
+            var sb = new StringBuilder("brand,sortOrder,deleted\n");
+            foreach (var it in items)
+            {
+                var brand = it.Brand.Contains(',') || it.Brand.Contains('"')
+                    ? $"\"{it.Brand.Replace("\"", "\"\"")}\"" : it.Brand;
+                sb.AppendLine($"{brand},{it.SortOrder},{(it.DeletedAt == null ? 0 : 1)}");
+            }
+            return Results.Text(sb.ToString(), "text/csv; charset=utf-8");
+        }).WithName("AdminExportOemBrands");
+
+        // 🔧 fix(审查): 批量导入 CSV — 格式: brand[,sortOrder[,deleted]] 每行一个品牌
+        //   deleted=1 时软删该品牌 (不硬删, 与现有字典删除策略一致)
+        g.MapPost("/import", async (
+            ImportCsvRequest body, OemBrandDictService svc, CancellationToken ct) =>
+        {
+            if (string.IsNullOrWhiteSpace(body.Csv))
+                return Results.BadRequest(new { error = "csv 不能为空" });
+            int created = 0, updated = 0, deleted = 0, skipped = 0;
+            var errors = new List<string>();
+            var lines = body.Csv.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            foreach (var raw in lines)
+            {
+                if (raw.StartsWith("brand,")) continue;  // 表头
+                var parts = raw.Split(',');
+                var brand = parts[0].Trim().Trim('"');
+                if (string.IsNullOrWhiteSpace(brand)) { skipped++; continue; }
+                int? sort = parts.Length > 1 && int.TryParse(parts[1].Trim(), out var s) ? s : null;
+                var wantDeleted = parts.Length > 2 && parts[2].Trim() == "1";
+                try
+                {
+                    var existing = (await svc.ListOemBrandsAsync(brand, true, 5, ct))
+                        .FirstOrDefault(x => x.Brand.Equals(brand, StringComparison.OrdinalIgnoreCase));
+                    if (wantDeleted)
+                    {
+                        if (existing != null && existing.DeletedAt == null) { await svc.DeleteOemBrandAsync(existing.Id, ct); deleted++; }
+                        else { skipped++; }
+                        continue;
+                    }
+                    if (existing != null)
+                    {
+                        if (existing.DeletedAt != null) { await svc.RestoreOemBrandAsync(existing.Id, ct); await svc.UpdateOemBrandAsync(existing.Id, brand, sort, ct); }
+                        else { await svc.UpdateOemBrandAsync(existing.Id, brand, sort, ct); }
+                        updated++;
+                    }
+                    else { await svc.CreateOemBrandAsync(brand, sort, ct); created++; }
+                }
+                catch (Exception ex) { errors.Add($"{brand}: {ex.Message}"); }
+            }
+            return Results.Ok(new { created, updated, deleted, skipped, errors });
+        }).WithName("AdminImportOemBrands");
 
         g.MapPut("/{id:long}", async (
             long id, OemBrandUpdateRequest body, OemBrandDictService svc, HttpContext ctx, CancellationToken ct) =>

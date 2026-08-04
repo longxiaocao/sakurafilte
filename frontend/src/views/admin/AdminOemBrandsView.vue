@@ -11,6 +11,8 @@
 //   行数: 399 → ~60 (减少 85%)
 //   顺便统一底部硬编码文案为 i18n key common.dictviewcommon.total_drag
 import { useI18n } from 'vue-i18n'
+import { ref } from 'vue'
+import { ElMessage } from 'element-plus'
 import { useDictManager } from '@/composables/useDictManager'
 import DictManagerLayout from '@/components/DictManagerLayout.vue'
 import { dictApi, type OemBrandItem, type OemBrandReorderItem } from '@/api'
@@ -36,6 +38,42 @@ const mgr = useDictManager<OemBrandItem, OemBrandReorderItem>({
 const columns = [
   { label: '品牌', width: '1fr', render: (row: OemBrandItem) => row.brand },
 ]
+
+// 🔧 fix(审查): 批量导入导出 — CSV 格式: brand[,sortOrder[,deleted]] 每行一个品牌
+const fileInput = ref<HTMLInputElement | null>(null)
+function triggerImport() {
+  fileInput.value?.click()
+}
+async function onExportCsv() {
+  try {
+    const csv = await dictApi.oemBrands.exportCsv()
+    // \ufeff BOM: 让 Excel 正确识别 UTF-8 (避免中文乱码)
+    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = `oem-brands-${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(a.href)
+  } catch {
+    ElMessage.error(t('admin.oembrandsview.export_failed'))
+  }
+}
+async function onImportFile(e: Event) {
+  const input = e.target as HTMLInputElement
+  const f = input.files?.[0]
+  if (!f) return
+  try {
+    const text = await f.text()
+    const res = await dictApi.oemBrands.importCsv(text)
+    ElMessage.success(`${t('admin.oembrandsview.import_done')}: 新增 ${res.created}, 更新 ${res.updated}, 删除 ${res.deleted}, 跳过 ${res.skipped}`)
+    if (res.errors?.length) ElMessage.warning(`${t('admin.oembrandsview.import_partial_fail')}: ${res.errors.slice(0, 3).join('; ')}`)
+    mgr.load()
+  } catch {
+    ElMessage.error(t('admin.oembrandsview.import_failed'))
+  } finally {
+    input.value = ''
+  }
+}
 </script>
 
 <template>
@@ -52,6 +90,18 @@ const columns = [
     :search-placeholder="t('admin.oembrandsview.placeholder.search_brand')"
     create-button-text="新增品牌"
   >
+    <!-- 🔧 fix(审查): 批量导入导出 (用户反馈: 无数据导入导出入口) -->
+    <template #toolbar-extra>
+      <el-button size="small" @click="onExportCsv">
+        <el-icon class="mr-1" aria-hidden="true"><Download /></el-icon>
+        {{ t('admin.oembrandsview.export_csv') }}
+      </el-button>
+      <el-button size="small" @click="triggerImport">
+        <el-icon class="mr-1" aria-hidden="true"><Upload /></el-icon>
+        {{ t('admin.oembrandsview.import_csv') }}
+      </el-button>
+      <input ref="fileInput" type="file" accept=".csv,text/csv" class="hidden" @change="onImportFile" />
+    </template>
     <template #dialog-form="{ form }">
       <el-form-item :label="t('common.action.brand')" required>
         <el-input
