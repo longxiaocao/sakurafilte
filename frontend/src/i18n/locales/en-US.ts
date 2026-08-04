@@ -100,6 +100,23 @@ export default {
     },
     etlview: {
       page_title: 'ETL Trigger & Monitor',
+      guide_title: 'How to use',
+      guide_step1: '1. Select data entity: Products / OEM Cross-References / Machine Applications',
+      guide_step2: '2. Select import mode: Full reload (truncate & re-import) / Insert only (skip existing) / Upsert (overwrite existing)',
+      guide_step3: '3. Enter the data file path (absolute path accessible inside container, e.g. /tmp/etl/products.jsonl), or drag & drop an XLSX file',
+      guide_step4: '4. Click "Trigger ETL" to run in background; you may click "Run dry-run" to validate only',
+      guide_step5: '5. Check "Pipeline" and "Recent errors" for progress and failure reasons',
+      entity: {
+        products: 'Products',
+        xrefs: 'OEM Cross-References',
+        apps: 'Machine Applications'
+      },
+      mode: {
+        full_load: 'Full reload (truncate & re-import)',
+        insert_only: 'Insert only (skip existing)',
+        upsert: 'Upsert (overwrite existing)'
+      },
+      dry_run_check: 'Dry-run (validate only, no import)',
       section: {
         pipeline: 'Data Pipeline',
         trigger: 'Manual ETL Trigger',
@@ -1314,6 +1331,15 @@ export default {
     colXref: 'Refs',
     colUpdated: 'Updated',
     colStatus: 'Status',
+    bulk: {
+      download_template: 'Download Template',
+      export_csv: 'Export CSV',
+      import_csv: 'Import CSV',
+      import_done: 'Import done',
+      export_failed: 'Export failed, retry later',
+      import_failed: 'Import failed, check format (each line: value[,sortOrder[,deleted]])',
+      import_partial_fail: 'Some rows failed',
+    },
     colAction: 'Actions',
     includeDeleted: 'Include deleted',
     statusDeleted: 'Deleted',

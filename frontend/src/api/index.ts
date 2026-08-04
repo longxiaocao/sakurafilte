@@ -725,6 +725,12 @@ export const dictApi = {
       if (q) params.q = q
       return http.get('/admin/dict/product-name1s/typeahead', { params }).then((r) => r.data)
     },
+    exportCsv(): Promise<string> {
+      return http.get('/admin/dict/product-name1s/export', { responseType: 'text' }).then((r) => r.data)
+    },
+    importCsv(csv: string): Promise<{ created: number; updated: number; deleted: number; skipped: number; errors: string[] }> {
+      return http.post('/admin/dict/product-name1s/import', { csv }).then((r) => r.data)
+    },
     create(productName1: string, sortOrder?: number): Promise<ProductName1Item> {
       return http.post('/admin/dict/product-name1s', { productName1, sortOrder }).then((r) => r.data)
     },
@@ -754,6 +760,12 @@ export const dictApi = {
       const params: Record<string, any> = { limit }
       if (q) params.q = q
       return http.get('/admin/dict/product-name2s/typeahead', { params }).then((r) => r.data)
+    },
+    exportCsv(): Promise<string> {
+      return http.get('/admin/dict/product-name2s/export', { responseType: 'text' }).then((r) => r.data)
+    },
+    importCsv(csv: string): Promise<{ created: number; updated: number; deleted: number; skipped: number; errors: string[] }> {
+      return http.post('/admin/dict/product-name2s/import', { csv }).then((r) => r.data)
     },
     create(productName2: string, sortOrder?: number): Promise<ProductName2Item> {
       return http.post('/admin/dict/product-name2s', { productName2, sortOrder }).then((r) => r.data)
@@ -785,6 +797,12 @@ export const dictApi = {
       if (q) params.q = q
       return http.get('/admin/dict/types/typeahead', { params }).then((r) => r.data)
     },
+    exportCsv(): Promise<string> {
+      return http.get('/admin/dict/types/export', { responseType: 'text' }).then((r) => r.data)
+    },
+    importCsv(csv: string): Promise<{ created: number; updated: number; deleted: number; skipped: number; errors: string[] }> {
+      return http.post('/admin/dict/types/import', { csv }).then((r) => r.data)
+    },
     create(type: string, sortOrder?: number): Promise<TypeItem> {
       return http.post('/admin/dict/types', { type, sortOrder }).then((r) => r.data)
     },
@@ -815,6 +833,12 @@ export const dictApi = {
       if (q) params.q = q
       return http.get('/admin/dict/oem-no3s/typeahead', { params }).then((r) => r.data)
     },
+    exportCsv(): Promise<string> {
+      return http.get('/admin/dict/oem-no3s/export', { responseType: 'text' }).then((r) => r.data)
+    },
+    importCsv(csv: string): Promise<{ created: number; updated: number; deleted: number; skipped: number; errors: string[] }> {
+      return http.post('/admin/dict/oem-no3s/import', { csv }).then((r) => r.data)
+    },
     create(oemNo3: string, sortOrder?: number): Promise<OemNo3Item> {
       return http.post('/admin/dict/oem-no3s', { oemNo3, sortOrder }).then((r) => r.data)
     },
@@ -844,6 +868,12 @@ export const dictApi = {
       const params: Record<string, any> = { limit }
       if (q) params.q = q
       return http.get('/admin/dict/medias/typeahead', { params }).then((r) => r.data)
+    },
+    exportCsv(): Promise<string> {
+      return http.get('/admin/dict/medias/export', { responseType: 'text' }).then((r) => r.data)
+    },
+    importCsv(csv: string): Promise<{ created: number; updated: number; deleted: number; skipped: number; errors: string[] }> {
+      return http.post('/admin/dict/medias/import', { csv }).then((r) => r.data)
     },
     create(mediaName: string, mediaModel?: string, sortOrder?: number): Promise<MediaItem> {
       return http.post('/admin/dict/medias', { mediaName, mediaModel, sortOrder }).then((r) => r.data)
@@ -905,6 +935,12 @@ export const dictApi = {
       const params: Record<string, any> = { limit }
       if (q) params.q = q
       return http.get('/admin/dict/engines/typeahead', { params }).then((r) => r.data)
+    },
+    exportCsv(): Promise<string> {
+      return http.get('/admin/dict/engines/export', { responseType: 'text' }).then((r) => r.data)
+    },
+    importCsv(csv: string): Promise<{ created: number; updated: number; deleted: number; skipped: number; errors: string[] }> {
+      return http.post('/admin/dict/engines/import', { csv }).then((r) => r.data)
     },
     create(engineBrand: string, engineType?: string, sortOrder?: number): Promise<EngineItem> {
       return http.post('/admin/dict/engines', { engineBrand, engineType, sortOrder }).then((r) => r.data)

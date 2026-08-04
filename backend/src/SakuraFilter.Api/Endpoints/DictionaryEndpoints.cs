@@ -2,6 +2,8 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SakuraFilter.Api.Extensions;
 using SakuraFilter.Api.Services;
+using SakuraFilter.Core.Interfaces;
+using SakuraFilter.Core.Entities;
 using SakuraFilter.Infrastructure.Data;
 using System.Text;
 
@@ -164,6 +166,72 @@ public static class DictionaryEndpoints
 
     // -------------------- Product Name 1 --------------------
 
+    // 🔧 fix(审查): 批量导入导出泛型辅助 — OEM 品牌先例 → 6 类单字段字典复用
+    //   CSV 格式: value,sortOrder,deleted (deleted=1 软删; 大小写不敏感匹配 upsert)
+    private static async Task<IResult> ExportDictCsv<TItem>(
+        IDictService<TItem> svc,
+        Func<TItem, string> getValue,
+        Func<TItem, int?> getSort,
+        Func<TItem, DateTime?> getDeleted,
+        CancellationToken ct)
+        where TItem : class
+    {
+        var items = await svc.ListAsync(null, true, 100000, ct);
+        var sb = new StringBuilder("value,sortOrder,deleted\n");
+        foreach (var it in items)
+        {
+            var v = getValue(it);
+            var vv = v.Contains(',') || v.Contains('"') ? $"\"{v.Replace("\"", "\"\"")}\"" : v;
+            sb.AppendLine($"{vv},{getSort(it)},{(getDeleted(it) == null ? 0 : 1)}");
+        }
+        return Results.Text(sb.ToString(), "text/csv; charset=utf-8");
+    }
+
+    private static async Task<IResult> ImportDictCsv<TItem>(
+        string csv,
+        IDictService<TItem> svc,
+        Func<TItem, string> getValue,
+        Func<TItem, DateTime?> getDeleted,
+        Func<TItem, long> getId,
+        CancellationToken ct)
+        where TItem : class
+    {
+        if (string.IsNullOrWhiteSpace(csv))
+            return Results.BadRequest(new { error = "csv 不能为空" });
+        int created = 0, updated = 0, deleted = 0, skipped = 0;
+        var errors = new List<string>();
+        var lines = csv.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        foreach (var raw in lines)
+        {
+            if (raw.StartsWith("value,")) continue;  // 表头
+            var parts = raw.Split(',');
+            var value = parts[0].Trim().Trim('"');
+            if (string.IsNullOrWhiteSpace(value)) { skipped++; continue; }
+            int? sort = parts.Length > 1 && int.TryParse(parts[1].Trim(), out var s) ? s : null;
+            var wantDeleted = parts.Length > 2 && parts[2].Trim() == "1";
+            try
+            {
+                var existing = (await svc.ListAsync(value, true, 5, ct))
+                    .FirstOrDefault(x => getValue(x).Equals(value, StringComparison.OrdinalIgnoreCase));
+                if (wantDeleted)
+                {
+                    if (existing != null && getDeleted(existing) == null) { await svc.DeleteAsync(getId(existing), ct); deleted++; }
+                    else { skipped++; }
+                    continue;
+                }
+                if (existing != null)
+                {
+                    if (getDeleted(existing) != null) { await svc.RestoreAsync(getId(existing), ct); await svc.UpdateAsync(getId(existing), value, sort, ct); }
+                    else { await svc.UpdateAsync(getId(existing), value, sort, ct); }
+                    updated++;
+                }
+                else { await svc.CreateAsync(value, sort, ct); created++; }
+            }
+            catch (Exception ex) { errors.Add($"{value}: {ex.Message}"); }
+        }
+        return Results.Ok(new { created, updated, deleted, skipped, errors });
+    }
+
     private static void MapProductName1Endpoints(IEndpointRouteBuilder group)
     {
         var g = group.MapGroup("/product-name1s");
@@ -193,6 +261,10 @@ public static class DictionaryEndpoints
             catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
         }).WithName("AdminCreateProductName1");
+        g.MapGet("/export", async (ProductName1DictService svc, CancellationToken ct) =>
+            await ExportDictCsv(svc, x => x.ProductName1, x => x.SortOrder, x => x.DeletedAt, ct)).WithName("AdminExportProductName1s");
+        g.MapPost("/import", async (ImportCsvRequest body, ProductName1DictService svc, CancellationToken ct) =>
+            await ImportDictCsv<DictProductName1>(body.Csv, svc, x => x.ProductName1, x => x.DeletedAt, x => x.Id, ct)).WithName("AdminImportProductName1s");
 
         g.MapPut("/{id:long}", async (
             long id, ProductName1UpdateRequest body, ProductName1DictService svc, HttpContext ctx, CancellationToken ct) =>
@@ -257,6 +329,10 @@ public static class DictionaryEndpoints
             catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
         }).WithName("AdminCreateProductName2");
+        g.MapGet("/export", async (ProductName2DictService svc, CancellationToken ct) =>
+            await ExportDictCsv(svc, x => x.ProductName2, x => x.SortOrder, x => x.DeletedAt, ct)).WithName("AdminExportProductName2s");
+        g.MapPost("/import", async (ImportCsvRequest body, ProductName2DictService svc, CancellationToken ct) =>
+            await ImportDictCsv<DictProductName2>(body.Csv, svc, x => x.ProductName2, x => x.DeletedAt, x => x.Id, ct)).WithName("AdminImportProductName2s");
 
         g.MapPut("/{id:long}", async (
             long id, ProductName2UpdateRequest body, ProductName2DictService svc, HttpContext ctx, CancellationToken ct) =>
@@ -321,6 +397,10 @@ public static class DictionaryEndpoints
             catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
         }).WithName("AdminCreateType");
+        g.MapGet("/export", async (TypeDictService svc, CancellationToken ct) =>
+            await ExportDictCsv(svc, x => x.Type, x => x.SortOrder, x => x.DeletedAt, ct)).WithName("AdminExportTypes");
+        g.MapPost("/import", async (ImportCsvRequest body, TypeDictService svc, CancellationToken ct) =>
+            await ImportDictCsv<DictType>(body.Csv, svc, x => x.Type, x => x.DeletedAt, x => x.Id, ct)).WithName("AdminImportTypes");
 
         g.MapPut("/{id:long}", async (
             long id, TypeUpdateRequest body, TypeDictService svc, HttpContext ctx, CancellationToken ct) =>
@@ -385,6 +465,10 @@ public static class DictionaryEndpoints
             catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
         }).WithName("AdminCreateOemNo3");
+        g.MapGet("/export", async (OemNo3DictService svc, CancellationToken ct) =>
+            await ExportDictCsv(svc, x => x.OemNo3, x => x.SortOrder, x => x.DeletedAt, ct)).WithName("AdminExportOemNo3s");
+        g.MapPost("/import", async (ImportCsvRequest body, OemNo3DictService svc, CancellationToken ct) =>
+            await ImportDictCsv<DictOemNo3>(body.Csv, svc, x => x.OemNo3, x => x.DeletedAt, x => x.Id, ct)).WithName("AdminImportOemNo3s");
 
         g.MapPut("/{id:long}", async (
             long id, OemNo3UpdateRequest body, OemNo3DictService svc, HttpContext ctx, CancellationToken ct) =>
@@ -447,6 +531,10 @@ public static class DictionaryEndpoints
             catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
         }).WithName("AdminCreateMedia");
+        g.MapGet("/export", async (MediaDictService svc, CancellationToken ct) =>
+            await ExportDictCsv(svc, x => x.MediaName, x => x.SortOrder, x => x.DeletedAt, ct)).WithName("AdminExportMedias");
+        g.MapPost("/import", async (ImportCsvRequest body, MediaDictService svc, CancellationToken ct) =>
+            await ImportDictCsv<DictMedia>(body.Csv, svc, x => x.MediaName, x => x.DeletedAt, x => x.Id, ct)).WithName("AdminImportMedias");
         g.MapPut("/{id:long}", async (
             long id, MediaUpdateRequest body, MediaDictService svc, HttpContext ctx, CancellationToken ct) =>
         {
@@ -563,6 +651,10 @@ public static class DictionaryEndpoints
             catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
         }).WithName("AdminCreateEngine");
+        g.MapGet("/export", async (EngineDictService svc, CancellationToken ct) =>
+            await ExportDictCsv(svc, x => x.EngineBrand, x => x.SortOrder, x => x.DeletedAt, ct)).WithName("AdminExportEngines");
+        g.MapPost("/import", async (ImportCsvRequest body, EngineDictService svc, CancellationToken ct) =>
+            await ImportDictCsv<DictEngine>(body.Csv, svc, x => x.EngineBrand, x => x.DeletedAt, x => x.Id, ct)).WithName("AdminImportEngines");
         g.MapPut("/{id:long}", async (
             long id, EngineUpdateRequest body, EngineDictService svc, HttpContext ctx, CancellationToken ct) =>
         {

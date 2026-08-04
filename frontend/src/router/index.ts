@@ -81,6 +81,15 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/public/PublicProductView.vue'),
     meta: { title: '产品详情' }
   },
+  // 🔧 fix(审查): /seo/:oem 详情路由 (buildProductUrl 统一跳转目标) —
+  //   缺失导致 OEM 查询/搜索结果点击全部 404 (用户实测 "不管访问什么页面点击后都是 404")
+  //   PublicProductView 已兼容 route.params.oem (slug computed: oem3 ?? oem)
+  {
+    path: '/seo/:oem',
+    name: 'SeoProductDetail',
+    component: () => import('@/views/public/PublicProductView.vue'),
+    meta: { title: '产品详情' }
+  },
   // ===== 需求 4: 后台登录页 (替换 TOKEN 直接输入弹窗) =====
   //   - 公开路由 (requireAuth 不设置, 默认 falsy)
   //   - 登录页内本地映射验证, 成功后写入 useAdminAuthStore.token

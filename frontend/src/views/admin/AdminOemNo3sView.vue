@@ -45,6 +45,8 @@ const columns = [
     empty-text="新增 OEM 3开始"
     :search-placeholder="t('admin.oemno3sview.placeholder.search_oem')"
     create-button-text="新增 OEM 3"
+    :bulk-api="dictApi.oemNo3s"
+    bulk-template="value,sortOrder,deleted&#10;示例OEM3,1,0"
   >
     <template #dialog-form="{ form }">
       <el-form-item label="OEM 3" required>

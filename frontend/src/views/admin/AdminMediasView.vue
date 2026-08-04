@@ -60,6 +60,8 @@ const columns = [
     empty-text="新增 Media开始"
     :search-placeholder="t('admin.mediasview.placeholder.search_media_name_or')"
     create-button-text="新增 Media"
+    :bulk-api="dictApi.medias"
+    bulk-template="value,sortOrder,deleted&#10;示例介质,1,0"
   >
     <template #dialog-form="{ form }">
       <el-form-item :label="t('admin.mediasview.label.media_name')" required>

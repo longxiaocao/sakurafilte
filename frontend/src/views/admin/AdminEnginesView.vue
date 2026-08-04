@@ -60,6 +60,8 @@ const columns = [
     empty-text="新增发动机开始"
     :search-placeholder="t('common.field.search_any_field')"
     create-button-text="新增发动机"
+    :bulk-api="dictApi.engines"
+    bulk-template="value,sortOrder,deleted&#10;示例发动机品牌,1,0"
   >
     <template #dialog-form="{ form }">
       <el-form-item :label="t('common.action.brand')" required>

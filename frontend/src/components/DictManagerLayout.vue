@@ -9,6 +9,8 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import SkeletonCard from '@/components/SkeletonCard.vue'
 import type { DictManagerReturn } from '@/composables/useDictManager'
+import { ref } from 'vue'
+import { ElMessage } from 'element-plus'
 
 const { t } = useI18n()
 
@@ -46,6 +48,13 @@ interface Props {
   dialogWidth?: string
   /** dialog label 宽度, 默认 '100px' */
   dialogLabelWidth?: string
+  /** 🔧 fix(审查): 批量导入导出 — 传入字典 API 对象后自动渲染 下载模板/导出 CSV/导入 CSV 按钮 */
+  bulkApi?: {
+    exportCsv(): Promise<string>
+    importCsv(csv: string): Promise<{ created: number; updated: number; deleted: number; skipped: number; errors: string[] }>
+  }
+  /** 🔧 fix(审查): 导入模板 CSV 内容 (表头 + 示例行) */
+  bulkTemplate?: string
   /** 空状态文案 (如 "新增 Type开始"), 与 i18n key common.action.no_data_click_top_right 拼接 */
   emptyText: string
   /** 搜索框 placeholder i18n key 或纯文本 */
@@ -64,6 +73,52 @@ const props = withDefaults(defineProps<Props>(), {
   dialogLabelWidth: '100px',
   createButtonText: '新增',
 })
+
+// 🔧 fix(审查): 批量导入导出 — 模板下载 / 导出 CSV / 导入 CSV (CSV 格式: value,sortOrder,deleted)
+const fileInput = ref<HTMLInputElement | null>(null)
+function downloadTemplate() {
+  if (!props.bulkTemplate) return
+  const blob = new Blob(['\ufeff' + props.bulkTemplate], { type: 'text/csv;charset=utf-8' })
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = `dict-template-${new Date().toISOString().slice(0, 10)}.csv`
+  a.click()
+  URL.revokeObjectURL(a.href)
+}
+function triggerImport() {
+  fileInput.value?.click()
+}
+async function onExportCsv() {
+  if (!props.bulkApi) return
+  try {
+    const csv = await props.bulkApi.exportCsv()
+    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = `dict-export-${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(a.href)
+  } catch {
+    ElMessage.error(t('dict.bulk.export_failed'))
+  }
+}
+async function onImportFile(e: Event) {
+  if (!props.bulkApi) return
+  const input = e.target as HTMLInputElement
+  const f = input.files?.[0]
+  if (!f) return
+  try {
+    const text = await f.text()
+    const res = await props.bulkApi.importCsv(text)
+    ElMessage.success(`${t('dict.bulk.import_done')}: 新增 ${res.created}, 更新 ${res.updated}, 删除 ${res.deleted}, 跳过 ${res.skipped}`)
+    if (res.errors?.length) ElMessage.warning(`${t('dict.bulk.import_partial_fail')}: ${res.errors.slice(0, 3).join('; ')}`)
+    props.mgr.load()
+  } catch {
+    ElMessage.error(t('dict.bulk.import_failed'))
+  } finally {
+    input.value = ''
+  }
+}
 
 // 根据 columns 推导 grid-template-columns
 const gridTemplate = computed(() => {
@@ -89,6 +144,22 @@ function cellClass(col: DictColumn): string {
       <h1 class="text-lg font-medium">{{ title }}</h1>
       <span v-if="subtitle" class="text-xs text-muted">{{ subtitle }}</span>
       <div class="flex-1" />
+      <template v-if="bulkApi">
+        <!-- 🔧 fix(审查): 批量导入导出通用按钮 (下载模板 / 导出 / 导入) -->
+        <el-button size="small" @click="downloadTemplate">
+          <el-icon class="mr-1" aria-hidden="true"><Document /></el-icon>
+          {{ t('dict.bulk.download_template') }}
+        </el-button>
+        <el-button size="small" @click="onExportCsv">
+          <el-icon class="mr-1" aria-hidden="true"><Download /></el-icon>
+          {{ t('dict.bulk.export_csv') }}
+        </el-button>
+        <el-button size="small" @click="triggerImport">
+          <el-icon class="mr-1" aria-hidden="true"><Upload /></el-icon>
+          {{ t('dict.bulk.import_csv') }}
+        </el-button>
+        <input ref="fileInput" type="file" accept=".csv,text/csv" class="hidden" @change="onImportFile" />
+      </template>
       <slot name="toolbar-extra" />
       <el-input
         v-model="mgr.searchKw.value"

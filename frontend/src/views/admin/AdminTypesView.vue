@@ -54,6 +54,8 @@ const columns = [
     empty-text="新增 Type开始"
     :search-placeholder="t('admin.typesview.placeholder.search_type')"
     create-button-text="新增 Type"
+    :bulk-api="dictApi.types"
+    bulk-template="value,sortOrder,deleted&#10;oil,1,0&#10;fuel,2,0&#10;air,3,0&#10;cabin,4,0&#10;others,5,0"
   >
     <template #dialog-form="{ form }">
       <el-form-item label="Type" required>

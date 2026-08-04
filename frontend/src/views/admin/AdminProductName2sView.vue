@@ -45,6 +45,8 @@ const columns = [
     empty-text="新增产品名 2开始"
     :search-placeholder="t('admin.productname2sview.placeholder.search_product_name')"
     create-button-text="新增产品名 2"
+    :bulk-api="dictApi.productName2s"
+    bulk-template="value,sortOrder,deleted&#10;示例产品名2,1,0"
   >
     <template #dialog-form="{ form }">
       <el-form-item :label="t('common.action.product_name_2')" required>

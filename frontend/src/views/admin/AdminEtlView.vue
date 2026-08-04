@@ -393,6 +393,20 @@ function statusTagType(s: string): 'success' | 'warning' | 'info' | 'danger' | '
   <div class="p-3 max-w-screen-2xl mx-auto">
     <h1 class="text-lg font-medium mb-3">{{ t('admin.etlview.page_title') }}</h1>
 
+    <!-- 🔧 fix(审查): 使用引导 (中文步骤说明, 用户反馈 ETL 界面难理解) -->
+    <el-alert type="info" :closable="false" class="mb-3">
+      <template #title>
+        <span class="font-medium">{{ t('admin.etlview.guide_title') }}</span>
+      </template>
+      <div class="text-sm space-y-0.5 text-[var(--color-text-secondary)]">
+        <p>{{ t('admin.etlview.guide_step1') }}</p>
+        <p>{{ t('admin.etlview.guide_step2') }}</p>
+        <p>{{ t('admin.etlview.guide_step3') }}</p>
+        <p>{{ t('admin.etlview.guide_step4') }}</p>
+        <p>{{ t('admin.etlview.guide_step5') }}</p>
+      </div>
+    </el-alert>
+
     <!-- 1. KPI 概览 -->
     <div class="mb-3">
       <EtlKpiCards />
@@ -466,17 +480,17 @@ function statusTagType(s: string): 'success' | 'warning' | 'info' | 'danger' | '
       <el-form :inline="false" label-width="100px" size="default">
         <el-form-item :label="t('admin.etlview.label.entity')">
           <el-radio-group v-model="form.entity" @change="changeEntity">
-            <el-radio-button value="products">products</el-radio-button>
-            <el-radio-button value="xrefs">xrefs</el-radio-button>
-            <el-radio-button value="apps">apps</el-radio-button>
+            <el-radio-button value="products">{{ t('admin.etlview.entity.products') }}</el-radio-button>
+            <el-radio-button value="xrefs">{{ t('admin.etlview.entity.xrefs') }}</el-radio-button>
+            <el-radio-button value="apps">{{ t('admin.etlview.entity.apps') }}</el-radio-button>
           </el-radio-group>
         </el-form-item>
 
         <el-form-item :label="t('common.field.mode')">
           <el-radio-group v-model="form.mode">
-            <el-radio-button value="full-load">full-load (TRUNCATE+INSERT)</el-radio-button>
-            <el-radio-button value="insert-only">insert-only (ON CONFLICT DO NOTHING)</el-radio-button>
-            <el-radio-button value="upsert">upsert (ON CONFLICT DO UPDATE)</el-radio-button>
+            <el-radio-button value="full-load">{{ t('admin.etlview.mode.full_load') }}</el-radio-button>
+            <el-radio-button value="insert-only">{{ t('admin.etlview.mode.insert_only') }}</el-radio-button>
+            <el-radio-button value="upsert">{{ t('admin.etlview.mode.upsert') }}</el-radio-button>
           </el-radio-group>
         </el-form-item>
 
@@ -491,7 +505,7 @@ function statusTagType(s: string): 'success' | 'warning' | 'info' | 'danger' | '
 
         <el-form-item label=" ">
           <div class="flex items-center gap-3">
-            <el-checkbox v-model="form.dryRun">dry-run (仅校验文件)</el-checkbox>
+            <el-checkbox v-model="form.dryRun">{{ t('admin.etlview.dry_run_check') }}</el-checkbox>
             <el-tooltip
               v-if="form.entity === 'products' && form.mode === 'full-load' && !form.dryRun"
               :content="t('admin.etlview.string.on_truncate_clear_xrefs')"

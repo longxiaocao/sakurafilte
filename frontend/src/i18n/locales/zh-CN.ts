@@ -108,6 +108,23 @@ export default {
     },
     etlview: {
       page_title: 'ETL 触发与监控',
+      guide_title: '使用步骤',
+      guide_step1: '1. 选择数据实体：产品 / OEM 交叉引用 / 机型适配',
+      guide_step2: '2. 选择导入模式：全量重建（清空后重导）· 仅新增（跳过已存在）· 增量更新（存在则覆盖）',
+      guide_step3: '3. 输入数据文件路径（容器内可访问的绝对路径，如 /tmp/etl/products.jsonl），或直接拖拽 XLSX 文件',
+      guide_step4: '4. 点击"触发 ETL"后台执行；可先点"执行 dry-run"只校验不导入',
+      guide_step5: '5. 在"数据流程"与"最近错误"查看实时进度与失败原因',
+      entity: {
+        products: '产品',
+        xrefs: 'OEM 交叉引用',
+        apps: '机型适配'
+      },
+      mode: {
+        full_load: '全量重建 (清空后导入)',
+        insert_only: '仅新增 (跳过已存在)',
+        upsert: '增量更新 (存在则覆盖)'
+      },
+      dry_run_check: '预检 (仅校验文件, 不导入)',
       section: {
         pipeline: '数据流程',
         trigger: '手动 ETL 触发',
@@ -1324,6 +1341,15 @@ export default {
     colXref: '引用',
     colUpdated: '更新',
     colStatus: '状态',
+    bulk: {
+      download_template: '下载模板',
+      export_csv: '导出 CSV',
+      import_csv: '导入 CSV',
+      import_done: '导入完成',
+      export_failed: '导出失败, 请稍后重试',
+      import_failed: '导入失败, 请检查文件格式 (每行: 值[,排序[,deleted]])',
+      import_partial_fail: '部分行导入失败',
+    },
     colAction: '操作',
     includeDeleted: '含已删',
     statusDeleted: '已删',
