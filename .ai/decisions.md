@@ -630,3 +630,11 @@ v30-14 1M OFFSET 深分页专项压测验证数据 (2026-07-21, sakurafilter_per
 配套修复: LISTEN 长连接 Pooling=false (池化复用与 WaitAsync 竞争 busy, 修复后 0 次/2min)
 排除方案: 导入后自动 reindex-all 全量重建 (50K 文档每次导入都重建, 增量场景浪费)
 关联文件: EtlImportService.cs (SyncAffectedProductsAsync), AuthTokenBroadcaster.cs, EtlProgressBroadcaster.cs
+
+#29 演示数据方案 (2026-08-04)
+决策: 客户真实产品区 (1949) 保留 + 模拟生成 OEM 替代/机型适配 (xrefs 24,823 + apps 30,225) 填充演示
+理由: 客户暂缺 OEM/机型关联数据, 前台 OEM 维度搜索无法演示; 生成器基于现有 mr_1 生成关联 (不造新产品)
+唯一约束 (演练实证): xrefs 全局 (brand,oem3) / apps 产品内 (brand,model); products.jsonl 复制行按 mr_1 去重
+恢复路径: 客户数据到位 → etl_clean + full-load 重导替换 (流程不变, 自动 reindex)
+验证: OEM 搜索 total=1 / 机型搜索 35 / 聚合 1000+ / 详情页 200 全通
+关联文件: spike-test/_gen_demo_xrefs_apps.py
