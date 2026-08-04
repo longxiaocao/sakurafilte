@@ -5,6 +5,7 @@
 //   - 兼容旧 token 字段 (供 axios 拦截器读 X-Admin-Token 兜底)
 import { ref, watch } from 'vue'
 import { defineStore, storeToRefs } from 'pinia'
+import { authApi } from '@/api'
 import type { AuthUser, LoginResponse } from '@/api/types'
 
 const STORAGE_KEY = 'sakura_admin_auth'
@@ -52,6 +53,15 @@ export const useAdminAuthStore = defineStore('adminAuth', () => {
   const refreshToken = ref<string>(initial.refreshToken)
   const user = ref<AuthUser | null>(initial.user)
   const expiresAt = ref<number>(initial.expiresAt)
+
+  // 🔧 fix(审查): 自愈 — token 有效但 user 缺失 (旧 localStorage 纯 token 迁移场景) 时从后端补全
+  //   否则 isAdmin() 恒 false → admin 专属项不显示 (用户实测: 刷新后不识别管理员状态)
+  //   401 时 http 拦截器自动 refresh; 失败静默 (由守卫/业务 401 兜底)
+  if (initial.token && !initial.user) {
+    authApi.me().then((u) => {
+      if (token.value && !user.value) user.value = u
+    }).catch(() => { /* token 失效, 走正常 401/登录流程 */ })
+  }
 
   // 持久化: 任一字段变化都写回新 key
   watch(
