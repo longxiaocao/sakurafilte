@@ -246,7 +246,15 @@ public class MeiliSearchProvider : ISearchProvider
         if (!string.IsNullOrWhiteSpace(req.Type))
             filters.Add($"type = \"{EscapeFilter(req.Type)}\"");
         if (!string.IsNullOrWhiteSpace(req.MachineCategory))
-            filters.Add($"machine_list.machine_category = \"{EscapeFilter(req.MachineCategory)}\"");
+        {
+            // 🔧 fix(审查): others = 未分类 → 兼容空值 — 导入数据 machine_category 常为 NULL/'',
+            //   catalog 归一化 null→others 但过滤只精确匹配 others → 点击目录 0 结果 (用户实测)
+            if (req.MachineCategory == "others")
+                // 🔧 fix(实证): 导入数据 machine_category 字段缺失(值为 null) — 用 IS NULL 而非 = ""
+                filters.Add("(machine_list.machine_category = \"others\" OR machine_list.machine_category IS NULL)");
+            else
+                filters.Add($"machine_list.machine_category = \"{EscapeFilter(req.MachineCategory)}\"");
+        }
 
         // 尺寸范围 filter
         if (req.D1.HasValue) { var (lo, hi) = (req.D1.Value - req.Tolerance, req.D1.Value + req.Tolerance); filters.Add($"d1_mm >= {lo} AND d1_mm <= {hi}"); }

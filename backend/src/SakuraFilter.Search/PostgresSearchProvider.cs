@@ -523,8 +523,16 @@ SELECT COUNT(*) FROM sort_cte";
         // 机型分类过滤 (聚合搜索独有)
         if (!string.IsNullOrWhiteSpace(req.MachineCategory))
         {
-            baseWhereSql += " AND EXISTS (SELECT 1 FROM machine_applications m WHERE m.product_id = p.id AND m.machine_category = @machineCategory)";
-            baseParams.Add(new NpgsqlParameter("@machineCategory", NpgsqlDbType.Text) { Value = req.MachineCategory });
+            // 🔧 fix(审查): others = 未分类 → 兼容空值 (同 MeiliSearchProvider, 保证目录点击与搜索一致)
+            if (req.MachineCategory == "others")
+            {
+                baseWhereSql += " AND EXISTS (SELECT 1 FROM machine_applications m WHERE m.product_id = p.id AND (m.machine_category = 'others' OR m.machine_category = '' OR m.machine_category IS NULL))";
+            }
+            else
+            {
+                baseWhereSql += " AND EXISTS (SELECT 1 FROM machine_applications m WHERE m.product_id = p.id AND m.machine_category = @machineCategory)";
+                baseParams.Add(new NpgsqlParameter("@machineCategory", NpgsqlDbType.Text) { Value = req.MachineCategory });
+            }
         }
 
         var page = Math.Max(1, req.Page);

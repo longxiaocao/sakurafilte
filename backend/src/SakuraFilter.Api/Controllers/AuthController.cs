@@ -97,7 +97,14 @@ public class AuthController : ControllerBase
 
         var user = await _userService.AuthenticateAsync(req.Username, req.Password, ip, ua, ct);
         if (user == null)
-            return Unauthorized(new { error = "用户名或密码错误, 或账号已被禁用/锁定" });
+            // 🔧 fix(审查): 统一 ProblemDetails + errorCode — 原 { error } 旧格式前端无法映射,
+            //   登录失败被兜底成误导的 "登录失败, 请稍后重试" (用户实测误以为登录功能被破坏)
+            return Unauthorized(new ProblemDetails
+            {
+                Title = "用户名或密码错误, 或账号已被禁用/锁定",
+                Status = StatusCodes.Status401Unauthorized,
+                Extensions = { ["errorCode"] = "ERR_AUTH_FAILED" }
+            });
 
         var accessToken = _jwt.GenerateAccessToken(user);
         var refresh = await _userService.IssueRefreshTokenAsync(user.Id, ip, ct);
