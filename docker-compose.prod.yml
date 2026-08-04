@@ -48,6 +48,9 @@ services:
       Jwt__ExpireMinutes: "60"
       Jwt__RefreshExpireDays: "7"
       Auth__DevStaticToken: "${ADMIN_DEV_TOKEN}"
+      # 首次启动 seed 默认用户 (Users 表为空时创建 admin/operator, 密码来自 .env.prod)
+      INITIAL_ADMIN_PASSWORD: "${INITIAL_ADMIN_PASSWORD}"
+      INITIAL_OPERATOR_PASSWORD: "${INITIAL_OPERATOR_PASSWORD}"
       # MinIO / Aliyun OSS 切换
       Storage__Provider: "minio"
       Minio__Endpoint: "minio:9000"
