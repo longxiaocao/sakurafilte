@@ -69,19 +69,19 @@ const allNavItems = computed(() => {
       { key: 'dict', labelKey: 'nav.dictManage', dropdown: 'dict', icon: 'Collection', priority: 6 },
     // 🔧 fix(审查): 独立对比页移除, '产品对比'菜单入口删除 — 对比内嵌高级搜索页 (结果勾选 + 详情页按钮),
       // V2 Task 2.2.6: OEM 排序管理入口 (priority 6.5, 在字典和 ETL 之间)
-      { key: 'xref-reorder', labelKey: 'nav.xrefReorder', path: '/admin/xrefs/reorder', icon: 'Sort', priority: 6.5 },
-      { key: 'etl', labelKey: 'nav.etlTrigger', path: '/admin/ops?tab=etl', icon: 'Loading', priority: 7 }
+      { key: 'xref-reorder', labelKey: 'nav.xrefReorder', path: '/admin/xrefs/reorder', icon: 'Sort', priority: 6.5 }
+      // 🔧 fix(审查): ETL 高优独立项移除 — 与 perf/errors/api 合并为 "运维中心" (/admin/ops el-tabs)
     )
     if (isAdmin()) {
       items.push({ key: 'users', labelKey: 'nav.userManage', path: '/admin/users', icon: 'User', priority: 8 })
     }
     // admin 低优 (可收纳, 宽度不够时进 "更多" 下拉)
+    // 🔧 fix(审查): ETL/性能/错误/API 文档 4 项合并为 1 项 "运维中心" (/admin/ops el-tabs) —
+    //   用户反馈: 更多里仍分开显示 4 项, 且整合页信息密度低; 合并后菜单只露 1 入口, 更简洁
+    //   adv-compare 已移除 (对比内嵌高级搜索页, 独立页冗余)
     items.push(
-      { key: 'adv-compare', labelKey: 'nav.advCompare', path: '/admin/compare', icon: 'DataBoard', priority: 9 },
-      { key: 'perf', labelKey: 'nav.perf', path: '/admin/ops?tab=perf', icon: 'TrendCharts', priority: 10 },
-      { key: 'errors', labelKey: 'nav.errors', path: '/admin/ops?tab=errors', icon: 'Warning', priority: 11 },
-      { key: 'api', labelKey: 'nav.api', path: '/admin/ops?tab=api', icon: 'Document', priority: 12 },
-      { key: 'site', labelKey: 'nav.siteContent', path: '/admin/site-content', icon: 'Setting', priority: 12.5 },
+      { key: 'ops', labelKey: 'nav.opsCenter', path: '/admin/ops', icon: 'Setting', priority: 9 },
+      { key: 'site', labelKey: 'nav.siteContent', path: '/admin/site-content', icon: 'Document', priority: 12.5 },
       { key: 'help', labelKey: 'nav.help', path: '/admin/help', icon: 'QuestionFilled', priority: 13 }
     )
   }

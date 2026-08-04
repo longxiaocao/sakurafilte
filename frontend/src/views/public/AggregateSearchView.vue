@@ -55,6 +55,8 @@ const machineCatalog = ref<MachineCatalogResponse>({ categories: [] })
 // 🔧 fix(审查): 目录为空时 grid 回退单列 — 原两列模板 (220px+1fr) 在 aside 不渲染时
 //   只剩 1 个子项 → 内容被压缩在 220px 列 (用户实测 "页面居左 + 搜索框宽度异常")
 const hasMachineCatalog = computed(() => machineCatalog.value.categories.some((c) => c.brands.length > 0))
+// 🔧 fix(审查): 程序性批量更新标志 (selectMachine 合并触发, 防重复请求)
+let programmaticUpdate = false
 
 // ===== 防抖 + AbortController (Task 1.3.5) =====
 let debounceTimer: number | null = null
@@ -116,6 +118,7 @@ async function doSearch() {
 
 // q 输入 → 500ms 防抖搜索
 watch(q, () => {
+  if (programmaticUpdate) return
   if (debounceTimer) window.clearTimeout(debounceTimer)
   debounceTimer = window.setTimeout(() => {
     page.value = 1
@@ -132,6 +135,7 @@ watch(page, () => {
 
 // 高级筛选变化 → 立即搜索 (用户主动改条件, 无需防抖)
 watch(advancedForm, () => {
+  if (programmaticUpdate) return
   page.value = 1
   doSearch()
 }, { deep: true })
@@ -217,6 +221,11 @@ async function loadMachineCatalog() {
 }
 
 function selectMachine(category: string, brand?: string, model?: string) {
+  // 🔧 fix(审查): 程序性批量更新标志 — selectMachine 同时改 machineCategory + q,
+  //   watch(advancedForm)(立即) + watch(q)(500ms 防抖) 会触发两次 doSearch (用户实测 "快速显示两遍")
+  //   setTimeout 0 是宏任务: watch 回调(微任务)执行时标志仍为 true → 跳过; 随后清除 → 后续手动输入不受影响
+  programmaticUpdate = true
+  setTimeout(() => { programmaticUpdate = false }, 0)
   const categoryMap: Record<string, string> = {
     Agriculture: 'agriculture', Commercial: 'commercial', Construction: 'construction',
     Industrial: 'industrial', others: 'others'

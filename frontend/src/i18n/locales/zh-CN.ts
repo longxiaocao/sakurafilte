@@ -1283,6 +1283,7 @@ export default {
     etlTrigger: 'ETL 触发',
     compare: '产品对比',
     perf: '性能',
+    opsCenter: '运维中心',
     help: '帮助',
     enterAdmin: '进入后台',
     exitAdmin: '退出后台',

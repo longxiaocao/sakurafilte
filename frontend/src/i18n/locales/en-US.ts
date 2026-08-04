@@ -1273,6 +1273,7 @@ export default {
     etlTrigger: 'ETL Trigger',
     compare: 'Compare',
     perf: 'Performance',
+    opsCenter: 'Ops Center',
     help: 'Help',
     enterAdmin: 'Enter Admin',
     exitAdmin: 'Exit Admin',

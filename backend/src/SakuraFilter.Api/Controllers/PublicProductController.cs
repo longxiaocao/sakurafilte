@@ -137,8 +137,10 @@ public class PublicProductController : ControllerBase
             });
         }
 
-        // V2 Task 4.2: 用 BuildProductUrl 拼新 SEO URL (服务端拼接, 防开放重定向)
-        var newUrl = _detailService.BuildProductUrl(detail);
+        // 🔧 fix(审查): 301 目标改 /seo/{oem} (SPA 详情页, 完整样式) —
+        //   原 /products/... 被 nginx 反代到 Razor SSR 页 (无 main.css), 浏览器跟随 301 后样式丢失 (用户实测)
+        //   /products/ SSR 路径保留给爬虫 (sitemap/canonical), 不受影响
+        var newUrl = $"/seo/{Uri.EscapeDataString(oem)}";
 
         _logger.LogInformation("LegacyRedirect: 301 oem={Oem} -> {NewUrl}", oem, newUrl);
         return RedirectPermanent(newUrl);

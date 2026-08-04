@@ -58,21 +58,11 @@ function buildSlug(input: string | null | undefined): string {
  * @returns SEO URL (oem3 段保留大小写, 其他段小写)
  */
 export function buildProductUrl(product: ProductUrlInput): string {
-  // V2 Task 4.4: 若仅有 oemNoDisplay (无 pn1/pn2/brand), 降级走 /product/{oem} 触发后端 301
-  //   WHY 降级: SearchView/PublicSearchView 等场景搜索结果只有 oemNoDisplay, 无完整 SEO 字段
-  //   单次 301 重定向可接受, 避免强制改后端搜索 API 返回字段
-  if (!product.productName1 && !product.productName2 && !product.oemBrand
-      && !product.oemNo3 && product.oemNoDisplay) {
-    return `/product/${encodeURIComponent(product.oemNoDisplay)}`
-  }
-
-  const pn1Slug = buildSlug(product.productName1)
-  const pn2Slug = buildSlug(product.productName2)
-  const brandSlug = buildSlug(product.oemBrand)
-  const oem3 = product.oemNo3 ?? product.oemNoDisplay ?? ''
-  // V24-F42 (spec F5-1): oem3 段保留大小写, 仅 URL 编码 (不走 buildSlug)
-  //   WHY: 后端 GetByOemAsync 用 === 大小写敏感查询, buildSlug 会 toLowerCase 导致反查失败
-  const oem3Slug = oem3 ? encodeURIComponent(oem3) : 'untitled'
-
-  return `/products/${pn1Slug}/${pn2Slug}/${brandSlug}/${oem3Slug}`
+  // 🔧 fix(审查): 统一跳转 SPA 详情页 /seo/{oem} — 原 /products/{pn1}/{pn2}/{brand}/{oem3} 被
+  //   nginx 反代到 Razor SSR 页 (无 main.css), 用户实测 "样式丢失, 图标文字不正常"
+  //   /seo/ 是 SPA 路由 (ProductDetailView, 完整 Tailwind + Element Plus 样式)
+  //   /products/ SSR 路径保留给爬虫 (sitemap/canonical 由后端生成, 不受影响)
+  const oem = product.oemNo3 || product.oemNoDisplay
+  if (!oem) return '/search'
+  return `/seo/${encodeURIComponent(oem)}`
 }
