@@ -168,3 +168,4 @@ spike-test/frontend_static_audit.json
 spike-test/frontend_runtime_audit.json
 spike-test/security_scan_report.json
 docker/certs/
+backup-drill/

@@ -157,6 +157,14 @@ jobs:
           path: backend/tests/SakuraFilter.Api.Tests/TestResults/*/coverage.cobertura.xml
           if-no-files-found: ignore
 
+      # 🔧 feat(覆盖率门禁): 防回退门禁 — 阈值 5% (当前基线 7.12%), 覆盖率低于阈值阻塞合并
+      #   WHY: 之前仅收集归档无门禁, 新增大量未测代码可无感拉低覆盖率
+      #   脚本零依赖 (runner 自带 python), 无 nuget/网络脆弱性; 覆盖提升后阈值可上调
+      - name: Coverage gate
+        if: always()
+        working-directory: backend
+        run: python .github/scripts/coverage_gate.py "tests/SakuraFilter.Api.Tests/TestResults/*/coverage.cobertura.xml" 5
+
       # P2-7.1: EF Core 迁移冲突检测 — 验证 idempotent SQL 可生成 + 一次性 SQL 脚本头注释完整
       #   WHY: EF 迁移链与 backend/migrations/*.sql 共存, 迁移语法错误/手动脚本误标会导致生产启动失败
       #   容错策略: continue-on-error=true, 失败仅警告不阻塞构建 (避免环境/工具问题误伤)
