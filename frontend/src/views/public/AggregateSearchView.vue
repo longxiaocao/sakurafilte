@@ -52,6 +52,9 @@ const expandedKeys = ref<Set<string>>(new Set())
 //   - 渲染时检查: 降级时隐藏 "展开 OEM" 按钮 + 机型列表区域
 const isLegacyFallback = ref(false)
 const machineCatalog = ref<MachineCatalogResponse>({ categories: [] })
+// 🔧 fix(审查): 目录为空时 grid 回退单列 — 原两列模板 (220px+1fr) 在 aside 不渲染时
+//   只剩 1 个子项 → 内容被压缩在 220px 列 (用户实测 "页面居左 + 搜索框宽度异常")
+const hasMachineCatalog = computed(() => machineCatalog.value.categories.some((c) => c.brands.length > 0))
 
 // ===== 防抖 + AbortController (Task 1.3.5) =====
 let debounceTimer: number | null = null
@@ -249,9 +252,9 @@ onBeforeUnmount(() => {
 <template>
   <!-- P-Admin-UX: 改 max-w-screen-2xl mx-auto → w-full, 撑满容器 (同 AdminProductsView 先例: 原 1536px 限制下内容只占左侧, 右侧留白) -->
   <div class="p-4 w-full">
-    <div class="lg:grid lg:grid-cols-[220px_minmax(0,1fr)] lg:gap-6">
+    <div :class="hasMachineCatalog ? 'lg:grid lg:grid-cols-[220px_minmax(0,1fr)] lg:gap-6' : ''">
       <aside
-        v-if="machineCatalog.categories.some(category => category.brands.length > 0)"
+        v-if="hasMachineCatalog"
         class="hidden lg:block self-start sticky top-4 max-h-[calc(100vh-5rem)] overflow-y-auto border border-gray-200 p-3 dark:border-[var(--color-border)]"
         aria-label="机型分类目录"
       >
@@ -340,7 +343,7 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <el-collapse v-if="machineCatalog.categories.some(category => category.brands.length > 0)" class="mb-4 lg:hidden">
+    <el-collapse v-if="hasMachineCatalog" class="mb-4 lg:hidden">
       <el-collapse-item title="机型目录" name="machine-catalog">
         <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
           <section v-for="category in machineCatalog.categories" :key="category.category" class="min-w-0">

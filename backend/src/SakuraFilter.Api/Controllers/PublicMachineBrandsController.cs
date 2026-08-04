@@ -48,6 +48,17 @@ public class PublicMachineBrandsController : ControllerBase
             .ThenBy(m => m.MachineBrand)
             .Select(m => new { m.MachineBrand, m.MachineCategory })
             .ToListAsync(ct);
+        if (rows.Count == 0)
+        {
+            // 🔧 fix(审查): 字典未就绪 (演示数据/真实导入前) 时从 machine_applications 聚合机型目录,
+            //   否则前端机型目录为空 → grid 两列模板只剩一列 → 内容被压缩在 220px 列 (用户实测 "页面居左")
+            rows = await _db.MachineApplications.AsNoTracking()
+                .Where(a => a.MachineBrand != null && a.MachineBrand != "")
+                .OrderBy(a => a.MachineBrand)
+                .Select(a => new { MachineBrand = a.MachineBrand ?? "", MachineCategory = a.MachineCategory ?? "others" })
+                .Distinct()
+                .ToListAsync(ct);
+        }
 
         // 内存按 category 分组 + brand 去重
         //   不用 EF GroupBy: 翻译复杂, PG distinct on 写起来不直观, 内存分组对 < 1000 行足够
@@ -89,6 +100,17 @@ public class PublicMachineBrandsController : ControllerBase
             .ThenBy(m => m.MachineModel)
             .Select(m => new { m.MachineCategory, m.MachineBrand, m.MachineModel })
             .ToListAsync(ct);
+        if (rows.Count == 0)
+        {
+            // 🔧 fix(审查): 同 Aggregated — 字典未就绪时从 machine_applications 聚合 (演示数据机型目录可用)
+            rows = await _db.MachineApplications.AsNoTracking()
+                .Where(a => a.MachineBrand != null && a.MachineBrand != "")
+                .OrderBy(a => a.MachineBrand)
+                .ThenBy(a => a.MachineModel)
+                .Select(a => new { MachineCategory = a.MachineCategory ?? "others", MachineBrand = a.MachineBrand ?? "", MachineModel = a.MachineModel })
+                .Distinct()
+                .ToListAsync(ct);
+        }
 
         var categories = AllCategories.Select(category =>
         {

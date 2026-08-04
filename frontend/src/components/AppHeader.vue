@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, ElLoading } from 'element-plus'
 import { useAdminAuth } from '@/composables/useAdminAuth'
 import { useThemeStore } from '@/stores/theme'  // P5.3
-import { authApi, publicSearchApi, siteContentApi } from '@/api'
+import { authApi, publicSearchApi, siteContentApi, productApi } from '@/api'
 import type { AggregateSearchHit } from '@/api/types'
 import { useI18n } from 'vue-i18n'  // P2.6
 import { setLocale } from '@/i18n'  // P2.6
@@ -228,8 +228,17 @@ async function go(item: { path?: string; action?: string }) {
         cancelButtonText: '取消'
       })
       if (oem && oem.trim()) {
+        const kw = oem.trim()
+        // 🔧 fix(审查): 先验证存在性 — 原实现直接整页跳 /product/{oem}, 不存在时后端 404
+        //   → 浏览器渲染 raw JSON (用户实测: "搜什么都找不到 + json 输出")
+        try {
+          await productApi.getByOem(kw)
+        } catch {
+          ElMessage.warning(`未找到 OEM 编号: ${kw}`)
+          return
+        }
         // V2 Task 4.4: 仅有 OEM 编号, buildProductUrl 自动降级为 /product/{oem} 触发后端 301 → SEO URL
-        window.location.href = buildProductUrl({ oemNoDisplay: oem.trim() })
+        window.location.href = buildProductUrl({ oemNoDisplay: kw })
       }
     } catch {
       // 用户取消
