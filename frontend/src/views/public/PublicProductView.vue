@@ -176,8 +176,9 @@ function addToCompare() {
     ElMessage.warning(t('common.feedback.info_004'))
     return
   }
-  // P0 (Day 14): 跳公开对比页 /compare (无 requireAuth), 游客可直接使用
-  router.push(`/compare?ids=${data.value.id}`)
+  // 🔧 fix(审查): 对比内嵌 — 跳高级搜索页并携带 compare 参数 (页面自动勾选并打开对比抽屉)
+  //   独立 /compare 页已移除 (用户反馈与高级搜索重复)
+  router.push(`/public/search?compare=${data.value.id}`)
 }
 
 function numOrDash(v?: number | string) {

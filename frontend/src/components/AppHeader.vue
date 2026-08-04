@@ -57,7 +57,6 @@ const allNavItems = computed(() => {
     { key: 'news', labelKey: 'nav.news', path: '/news', icon: 'Document', priority: 3 },
     { key: 'contact', labelKey: 'nav.contact', path: '/contact', icon: 'Message', priority: 4 },
     { key: 'oem', labelKey: 'nav.oemLookup', action: 'oemLookup', icon: 'Document', priority: 5 },
-    { key: 'compare', labelKey: 'nav.compare', path: '/compare', icon: 'DataLine', priority: 6 }
   ]
   // 已登录用户: 在任何路径都看到 admin 入口, 解决 v3 跳公开页丢 admin 体验问题
   if (user.value) {
@@ -66,6 +65,7 @@ const allNavItems = computed(() => {
       { key: 'products', labelKey: 'nav.productManage', path: '/admin/products', icon: 'Goods', priority: 4 },
       { key: 'adv-search', labelKey: 'nav.advSearch', path: '/public/search', icon: 'Filter', priority: 5 },
       { key: 'dict', labelKey: 'nav.dictManage', dropdown: 'dict', icon: 'Collection', priority: 6 },
+    // 🔧 fix(审查): 独立对比页移除, '产品对比'菜单入口删除 — 对比内嵌高级搜索页 (结果勾选 + 详情页按钮),
       // V2 Task 2.2.6: OEM 排序管理入口 (priority 6.5, 在字典和 ETL 之间)
       { key: 'xref-reorder', labelKey: 'nav.xrefReorder', path: '/admin/xrefs/reorder', icon: 'Sort', priority: 6.5 },
       { key: 'etl', labelKey: 'nav.etlTrigger', path: '/admin/ops?tab=etl', icon: 'Loading', priority: 7 }

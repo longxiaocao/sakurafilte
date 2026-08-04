@@ -288,14 +288,16 @@ async function loadFeatured() {
   }
 }
 
-// P-Demo: 单条加入对比 — 跳到 /compare?ids=... (后端 PublicCompareView 解析)
+// 🔧 fix(审查): 对比功能内嵌 — 移除独立 /compare 页 (用户反馈与高级搜索重复), 勾选后在页内抽屉展示对比
 //   行为: 累加而非替换, 已加入的禁用按钮; 达 MAX_COMPARE 给提示
-//   WHY 跳页面而非弹窗: 与 PublicProductView 行为一致, 公开 URL 可分享
+import { publicCompareApi } from '@/api'
+import type { PublicProductDetail, PublicXrefInfo, MachineAppInfo } from '@/api/types'
+import PublicComparePanel from '@/components/PublicComparePanel.vue'
+
 function addToCompare(row: PublicSearchHit, event?: Event) {
   if (event) event.stopPropagation()  // 阻止冒泡到 row-click (查看详情)
   if (compareIds.value.has(row.id)) {
-    ElMessage.info('已在对比列表中, 跳转查看')
-    router.push('/compare?ids=' + Array.from(compareIds.value).join(','))
+    ElMessage.info('已在对比列表中')
     return
   }
   if (compareIds.value.size >= MAX_COMPARE) {
@@ -309,13 +311,50 @@ function addToCompare(row: PublicSearchHit, event?: Event) {
   ElMessage.success(`已加入对比 (${next.size}/${MAX_COMPARE})`)
 }
 
-// P-Demo: 跳到对比页查看当前已选
-function goCompare() {
+// 对比抽屉 (内嵌)
+const compareOpen = ref(false)
+const compareProducts = ref<PublicProductDetail[]>([])
+const compareLoading = ref(false)
+
+async function openCompare() {
   if (compareIds.value.size === 0) {
-    ElMessage.warning('请先在明细表中点击"加入对比"')
+    ElMessage.warning('请先在结果中点击"加入对比"')
     return
   }
-  router.push('/compare?ids=' + Array.from(compareIds.value).join(','))
+  compareOpen.value = true
+  compareLoading.value = true
+  try {
+    const ids = Array.from(compareIds.value).slice(0, MAX_COMPARE)
+    const data = await publicCompareApi.compare(ids)
+    const map = new Map(data.items.map((p) => [p.id, p]))
+    compareProducts.value = ids.map((id) => map.get(id)).filter((p): p is PublicProductDetail => !!p)
+  } catch (e: any) {
+    ElMessage.error(e?.problem?.detail || e?.response?.data?.error || e?.message || '对比加载失败')
+  } finally {
+    compareLoading.value = false
+  }
+}
+
+function closeCompare() {
+  compareOpen.value = false
+}
+
+function removeFromCompare(idx: number) {
+  const p = compareProducts.value[idx]
+  if (p) {
+    const next = new Set(compareIds.value)
+    next.delete(p.id)
+    compareIds.value = next
+    compareProducts.value = compareProducts.value.filter((_item, i) => i !== idx)
+  }
+}
+
+function moveCompare(idx: number, dir: -1 | 1) {
+  const target = idx + dir
+  if (target < 0 || target >= compareProducts.value.length) return
+  const arr = [...compareProducts.value]
+  ;[arr[idx], arr[target]] = [arr[target], arr[idx]]
+  compareProducts.value = arr
 }
 
 // ===== SEO meta =====
@@ -348,6 +387,23 @@ onUnmounted(() => {
 
 onMounted(() => {
   syncFormFromUrl()
+  // 🔧 fix(审查): 从详情页"加入对比"跳转 (/public/search?compare=id) 时自动勾选并打开对比抽屉
+  const cmp = route.query.compare
+  if (typeof cmp === 'string' && cmp) {
+    const ids = cmp.split(',').map(Number).filter((n) => Number.isInteger(n) && n > 0)
+    if (ids.length > 0) {
+      compareIds.value = new Set(ids.slice(0, MAX_COMPARE))
+      compareOpen.value = true
+      compareLoading.value = true
+      publicCompareApi.compare(ids.slice(0, MAX_COMPARE)).then((data) => {
+        compareProducts.value = data.items
+      }).catch(() => {
+        ElMessage.warning('对比产品加载失败, 可重新搜索添加')
+      }).finally(() => {
+        compareLoading.value = false
+      })
+    }
+  }
   // 进入页面拉一次 featured 明细表 (即使有搜索条件也拉, 用户清空后可看)
   loadFeatured()
   if (filledCount.value > 0) doSearch()
@@ -425,7 +481,7 @@ onUnmounted(() => {
           </span>
           <el-button
             v-if="compareIds.size > 0"
-            @click="goCompare"
+            @click="openCompare"
             type="primary"
             size="small"
             plain
@@ -492,7 +548,7 @@ onUnmounted(() => {
           </span>
           <el-button
             v-if="compareIds.size > 0"
-            @click="goCompare"
+            @click="openCompare"
             size="small"
             plain
             type="primary"
@@ -564,6 +620,25 @@ onUnmounted(() => {
       </div>
     </div>
   </div>
+
+  <!-- 🔧 fix(审查): 产品对比抽屉 (内嵌, 替代独立 /compare 页) -->
+  <el-drawer v-model="compareOpen" title="产品对比" size="80%" direction="rtl">
+    <div v-loading="compareLoading" class="p-3">
+      <div v-if="compareProducts.length === 0 && !compareLoading" class="text-sm text-muted py-8 text-center">
+        暂无对比产品 — 在搜索结果中点击"加入对比"添加产品
+      </div>
+      <PublicComparePanel
+        v-if="compareProducts.length > 0"
+        :products="compareProducts"
+        @move-left="(i: number) => moveCompare(i, -1)"
+        @move-right="(i: number) => moveCompare(i, 1)"
+        @remove="removeFromCompare"
+      />
+      <div v-if="compareProducts.length > 0" class="mt-3 flex justify-end">
+        <el-button size="small" @click="closeCompare">关闭</el-button>
+      </div>
+    </div>
+  </el-drawer>
 </template>
 
 <style scoped>
