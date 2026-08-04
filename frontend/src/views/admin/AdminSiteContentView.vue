@@ -75,7 +75,8 @@ onMounted(load)
 </script>
 
 <template>
-  <div class="p-4 w-full max-w-4xl space-y-4" v-loading="loading">
+  <!-- 🔧 fix(审查): max-w-4xl → w-full 撑满 (用户实测: 站点内容维护页整体偏左) -->
+  <div class="p-4 w-full space-y-4" v-loading="loading">
     <div class="flex items-center justify-between">
       <h1 class="text-lg font-medium">站点内容维护</h1>
       <el-button type="primary" size="small" :loading="saving" @click="save">保存</el-button>

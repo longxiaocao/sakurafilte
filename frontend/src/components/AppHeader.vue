@@ -59,7 +59,9 @@ const allNavItems = computed(() => {
     { key: 'oem', labelKey: 'nav.oemLookup', action: 'oemLookup', icon: 'Document', priority: 5 },
   ]
   // 已登录用户: 在任何路径都看到 admin 入口, 解决 v3 跳公开页丢 admin 体验问题
-  if (user.value) {
+  // 🔧 fix(审查): admin 菜单以 token 为准 (旧 token 迁移场景 user 为 null 时导航仍完整)
+  //   原 if (user.value): 旧 localStorage 纯 token (LEGACY key 迁移) user=null → 已登录但导航只显示公共 5 项 (用户实测反馈)
+  if (token.value) {
     // admin 高优 (必显示, 不可收纳)
     items.push(
       { key: 'products', labelKey: 'nav.productManage', path: '/admin/products', icon: 'Goods', priority: 4 },
