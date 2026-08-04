@@ -363,7 +363,7 @@ export default {
         page_title: 'Admin Operation Guide',
         page_subtitle: '5 modules: Quick Start / Dictionary Specs / Bulk Import / Search Tolerance / FAQ',
         quick_start_title: '1. Quick Start (5 steps)',
-        quick_start_step1: 'Click "Enter Admin" at top-right, enter credentials (admin/Admin@2026 or operator/Operator@2026)',
+        quick_start_step1: "Click \"Enter Admin\" at top-right, enter credentials (admin/Admin{'@'}2026 or operator/Operator{'@'}2026)",
         quick_start_step2: 'Dictionary Management → seed 8 dictionaries (first deploy): run spike-test/_seed_dict_*.py (6 scripts)',
         quick_start_step3: 'ETL Trigger → select products.xlsx / xrefs.xlsx / apps.xlsx, recommend "full-load" mode',
         quick_start_step4: 'Product Management → query by 8 fields / OEM / bulk paste, click product to enter detail',

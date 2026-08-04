@@ -348,8 +348,10 @@ http.interceptors.response.use(
     const status = err.response?.status
     const cfg = err.config as RetriableConfig | undefined
     const data = err.response?.data
-    const isProblemDetails = !!(data && typeof data === 'object' && 'title' in data)
-    const detail = isProblemDetails ? (data.detail || data.title) : undefined
+    // 🔧 fix(审查): isProblemDetails 兼容 {error} 字段 — 后端历史端点 (如旧 404 {"error":"产品不存在"}) 非 RFC7807,
+    //   但含业务错误信息, 不解析会丢失业务详情 (用户实测: 404 只显示泛化 '请求失败 (404)')
+    const isProblemDetails = !!(data && typeof data === 'object' && ('title' in data || 'error' in data))
+    const detail = isProblemDetails ? (data.detail || data.title || data.error) : undefined
     // V24-F37: 提取 errorCode 用于 CURSOR_EXPIRED/CURSOR_INVALID 分支判断
     const errorCode = (data as { errorCode?: string } | undefined)?.errorCode
 

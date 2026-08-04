@@ -218,7 +218,7 @@ async function doSearch() {
   } catch (e: any) {
     // 被新请求取消 (AbortError): 静默, 不覆盖 loading/结果
     if (e?.name === 'CanceledError' || e?.code === 'ERR_CANCELED') return
-    lastError.value = e?.problem?.detail || e?.response?.data?.detail || e?.message || '搜索失败'
+    lastError.value = e?.problem?.detail || e?.response?.data?.detail || e?.response?.data?.error || e?.message || '搜索失败'
     results.value = []
     total.value = 0
     totalPages.value = 0

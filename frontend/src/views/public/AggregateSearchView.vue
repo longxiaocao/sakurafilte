@@ -102,7 +102,7 @@ async function doSearch() {
   } catch (e: any) {
     // AbortError 静默 (用户快速输入时正常取消)
     if (e?.name === 'CanceledError' || e?.code === 'ERR_CANCELED') return
-    lastError.value = e?.problem?.detail || e?.response?.data?.detail || e?.message || '搜索失败'
+    lastError.value = e?.problem?.detail || e?.response?.data?.detail || e?.response?.data?.error || e?.message || '搜索失败'
     results.value = []
     total.value = 0
     totalPages.value = 0
@@ -247,7 +247,8 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="p-4 max-w-screen-2xl mx-auto">
+  <!-- P-Admin-UX: 改 max-w-screen-2xl mx-auto → w-full, 撑满容器 (同 AdminProductsView 先例: 原 1536px 限制下内容只占左侧, 右侧留白) -->
+  <div class="p-4 w-full">
     <div class="lg:grid lg:grid-cols-[220px_minmax(0,1fr)] lg:gap-6">
       <aside
         v-if="machineCatalog.categories.some(category => category.brands.length > 0)"

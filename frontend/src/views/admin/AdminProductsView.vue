@@ -260,7 +260,13 @@ function parseChangedFields(raw?: string): { key: string; oldVal: any; newVal: a
   try {
     const obj = JSON.parse(raw)
     if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
-      return Object.entries(obj).map(([k, v]) => ({ key: k, oldVal: undefined, newVal: v }))
+      return Object.entries(obj).map(([k, v]) => {
+        // 🔧 fix(审查): 兼容两种格式 — 新格式 {Old,New} (Track 双值) / 旧格式平铺新值 (历史数据)
+        if (v && typeof v === 'object' && !Array.isArray(v) && 'New' in v) {
+          return { key: k, oldVal: (v as any).Old, newVal: (v as any).New }
+        }
+        return { key: k, oldVal: undefined, newVal: v }
+      })
     }
     return []
   } catch {
@@ -270,7 +276,14 @@ function parseChangedFields(raw?: string): { key: string; oldVal: any; newVal: a
 
 function fmtDate(iso?: string) {
   if (!iso) return ''
-  return iso.substring(0, 16).replace('T', ' ')
+  // 🔧 fix(审查): 后端存 UTC (timestamp without time zone), 补 'Z' 按 UTC 解析再转本地时区 — 此前直接截断, 时区偏移 8h
+  try {
+    const d = new Date(iso.includes('T') ? iso + 'Z' : iso.replace(' ', 'T') + 'Z')
+    if (Number.isNaN(d.getTime())) return iso.substring(0, 16).replace('T', ' ')
+    return d.toLocaleString('zh-CN', { hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+  } catch {
+    return iso.substring(0, 16).replace('T', ' ')
+  }
 }
 
 function numOrDash(v?: number | string) {
@@ -325,6 +338,56 @@ onBeforeUnmount(() => {
       <el-switch v-model="showAllColumns" size="small" :active-text="t('admin.productsview.string.all_columns')" :inactive-text="t('admin.productsview.string.columns')" inline-prompt class="hidden sm:inline-flex" />
       <el-button size="small" @click="batchCompare" :disabled="selected.length < 2">批量对比 ({{ selected.length }})</el-button>
       <el-button type="primary" size="small" @click="newProduct">新增产品</el-button>
+    </div>
+
+    <!-- 🔧 fix(审查): 高级筛选页内展开区块 (原 el-drawer 侧边栏; 用户反馈: 筛选应在列表界面直接展示) -->
+    <div v-show="drawerOpen" class="hairline p-3 mb-3">
+      <div class="text-sm font-medium mb-2">{{ t('admin.productsview.title.filter') }}</div>
+      <div class="space-y-3">
+        <div class="text-sm font-medium">文本字段</div>
+        <div class="grid grid-cols-2 gap-2">
+          <el-input v-model="advFilter.productName1" :placeholder="t('common.action.product_name_1')" size="small" />
+          <el-input v-model="advFilter.productName2" :placeholder="t('common.action.product_name_2')" size="small" />
+          <el-input v-model="advFilter.mr1" placeholder="MR.1" size="small" />
+          <el-input v-model="advFilter.oem2" placeholder="OEM 2" size="small" />
+          <el-input v-model="advFilter.oemBrand" :placeholder="t('common.field.oem_brand')" size="small" />
+          <el-input v-model="advFilter.mediaName" placeholder="Media" size="small" />
+          <el-input v-model="advFilter.mediaModel" placeholder="MediaModel" size="small" />
+          <el-input v-model="advFilter.sealingMaterial" :placeholder="t('common.action.seal_material')" size="small" />
+          <el-input v-model="advFilter.efficiency1" :placeholder="t('admin.productsview.placeholder.efficiency')" size="small" />
+        </div>
+
+        <div class="text-sm font-medium">尺寸范围 (mm)</div>
+        <div class="grid grid-cols-2 gap-2">
+          <el-input-number v-model="advFilter.d1Min" placeholder="D1 Min" size="small" :min="0" />
+          <el-input-number v-model="advFilter.d1Max" placeholder="D1 Max" size="small" :min="0" />
+          <el-input-number v-model="advFilter.d2Min" placeholder="D2 Min" size="small" :min="0" />
+          <el-input-number v-model="advFilter.d2Max" placeholder="D2 Max" size="small" :min="0" />
+          <el-input-number v-model="advFilter.h1Min" placeholder="H1 Min" size="small" :min="0" />
+          <el-input-number v-model="advFilter.h1Max" placeholder="H1 Max" size="small" :min="0" />
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-xs text-muted">容差 (mm):</span>
+          <el-radio-group v-model="advFilter.sizeTolerance" size="small">
+            <el-radio :value="1">±1</el-radio>
+            <el-radio :value="5">±5</el-radio>
+            <el-radio :value="10">±10</el-radio>
+          </el-radio-group>
+        </div>
+
+        <div class="text-sm font-medium">车型适配</div>
+        <div class="grid grid-cols-2 gap-2">
+          <el-input v-model="advFilter.machineBrand" :placeholder="t('common.action.brand')" size="small" />
+          <el-input v-model="advFilter.machineModel" :placeholder="t('common.action.model')" size="small" />
+          <el-input v-model="advFilter.modelName" :placeholder="t('common.action.name')" size="small" />
+          <el-input v-model="advFilter.engineBrand" :placeholder="t('common.field.engine_brand')" size="small" />
+        </div>
+
+        <div class="flex justify-end gap-2 pt-3">
+          <el-button @click="drawerOpen = false">取消</el-button>
+          <el-button type="primary" @click="applyAdv">应用</el-button>
+        </div>
+      </div>
     </div>
 
     <!-- 表格 -->
@@ -418,58 +481,10 @@ onBeforeUnmount(() => {
       />
     </div>
 
-    <!-- 高级筛选抽屉 -->
-    <el-drawer v-model="drawerOpen" :title="t('admin.productsview.title.filter')" size="640px" direction="rtl">
-      <div class="p-3 space-y-3">
-        <div class="text-sm font-medium">文本字段</div>
-        <div class="grid grid-cols-2 gap-2">
-          <el-input v-model="advFilter.productName1" :placeholder="t('common.action.product_name_1')" size="small" />
-          <el-input v-model="advFilter.productName2" :placeholder="t('common.action.product_name_2')" size="small" />
-          <el-input v-model="advFilter.mr1" placeholder="MR.1" size="small" />
-          <el-input v-model="advFilter.oem2" placeholder="OEM 2" size="small" />
-          <el-input v-model="advFilter.oemBrand" :placeholder="t('common.field.oem_brand')" size="small" />
-          <el-input v-model="advFilter.mediaName" placeholder="Media" size="small" />
-          <el-input v-model="advFilter.mediaModel" placeholder="MediaModel" size="small" />
-          <el-input v-model="advFilter.sealingMaterial" :placeholder="t('common.action.seal_material')" size="small" />
-          <el-input v-model="advFilter.efficiency1" :placeholder="t('admin.productsview.placeholder.efficiency')" size="small" />
-        </div>
-
-        <div class="text-sm font-medium">尺寸范围 (mm)</div>
-        <div class="grid grid-cols-2 gap-2">
-          <el-input-number v-model="advFilter.d1Min" placeholder="D1 Min" size="small" :min="0" />
-          <el-input-number v-model="advFilter.d1Max" placeholder="D1 Max" size="small" :min="0" />
-          <el-input-number v-model="advFilter.d2Min" placeholder="D2 Min" size="small" :min="0" />
-          <el-input-number v-model="advFilter.d2Max" placeholder="D2 Max" size="small" :min="0" />
-          <el-input-number v-model="advFilter.h1Min" placeholder="H1 Min" size="small" :min="0" />
-          <el-input-number v-model="advFilter.h1Max" placeholder="H1 Max" size="small" :min="0" />
-        </div>
-        <div class="flex items-center gap-2">
-          <span class="text-xs text-muted">容差 (mm):</span>
-          <el-radio-group v-model="advFilter.sizeTolerance" size="small">
-            <el-radio :value="1">±1</el-radio>
-            <el-radio :value="5">±5</el-radio>
-            <el-radio :value="10">±10</el-radio>
-          </el-radio-group>
-        </div>
-
-        <div class="text-sm font-medium">车型适配</div>
-        <div class="grid grid-cols-2 gap-2">
-          <el-input v-model="advFilter.machineBrand" :placeholder="t('common.action.brand')" size="small" />
-          <el-input v-model="advFilter.machineModel" :placeholder="t('common.action.model')" size="small" />
-          <el-input v-model="advFilter.modelName" :placeholder="t('common.action.name')" size="small" />
-          <el-input v-model="advFilter.engineBrand" :placeholder="t('common.field.engine_brand')" size="small" />
-        </div>
-
-        <div class="flex justify-end gap-2 pt-3">
-          <el-button @click="drawerOpen = false">取消</el-button>
-          <el-button type="primary" @click="applyAdv">应用</el-button>
-        </div>
-      </div>
-    </el-drawer>
 
     <!-- 历史抽屉 (Day 9.1: 解析 changedFields JSON, 按字段展示) -->
     <!-- Day 9.2: 顶部加筛选 (changeType / since / until / limit) -->
-    <el-drawer v-model="historyOpen" :title="t('admin.productsview.title.en_v6')" size="700px" direction="rtl" :close-on-click-modal="false">
+    <el-drawer v-model="historyOpen" :title="t('admin.productsview.title.en_v6')" size="700px" direction="rtl" :close-on-click-modal="true">
       <!-- 筛选条 -->
       <div class="px-3 py-2 hairline-b bg-[var(--color-bg-hover)]">
         <div class="grid grid-cols-4 gap-2 items-end">
@@ -548,6 +563,13 @@ onBeforeUnmount(() => {
               max-height="240"
             >
               <el-table-column prop="key" :label="t('admin.productsview.label.field')" width="160" />
+              <!-- 🔧 fix(审查): 新增"原值"列 — 此前只显示新值, 无法追溯修改前后 (用户实测反馈) -->
+              <el-table-column :label="t('admin.productsview.label.old_value', '原值')" width="180">
+                <template #default="{ row }">
+                  <code v-if="row.oldVal !== undefined && row.oldVal !== null" class="text-xs text-muted">{{ typeof row.oldVal === 'object' ? JSON.stringify(row.oldVal) : String(row.oldVal) }}</code>
+                  <span v-else class="text-xs text-muted">—</span>
+                </template>
+              </el-table-column>
               <el-table-column :label="t('admin.productsview.label.value')">
                 <template #default="{ row }">
                   <code class="text-xs">{{ row.newVal === null || row.newVal === undefined ? 'null' : typeof row.newVal === 'object' ? JSON.stringify(row.newVal) : String(row.newVal) }}</code>

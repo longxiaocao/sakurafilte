@@ -74,7 +74,14 @@ public class PublicProductController : ControllerBase
         if (detail == null)
         {
             _logger.LogInformation("GetBySlug: 404 slug={Slug} oem={Oem}", slug, oem);
-            return NotFound(new { error = $"产品不存在: {slug}" });
+            // 🔧 fix(审查): NotFound 改 RFC7807 ProblemDetails — 前端拦截器 isProblemDetails 识别 title, 业务信息不再丢失
+            return NotFound(new ProblemDetails
+            {
+                Title = "产品不存在",
+                Detail = $"产品不存在: {slug}",
+                Status = StatusCodes.Status404NotFound,
+                Extensions = { ["errorCode"] = "PRODUCT_NOT_FOUND" },
+            });
         }
         _logger.LogInformation("GetBySlug: 200 slug={Slug}", slug);
         return Ok(PublicProductDetailDto.From(detail));
@@ -120,7 +127,14 @@ public class PublicProductController : ControllerBase
         if (detail == null)
         {
             _logger.LogInformation("LegacyRedirect: 404 oem={Oem}", oem);
-            return NotFound(new { error = $"产品不存在: {oem}" });
+            // 🔧 fix(审查): ProblemDetails 化 (同 GetBySlug)
+            return NotFound(new ProblemDetails
+            {
+                Title = "产品不存在",
+                Detail = $"产品不存在: {oem}",
+                Status = StatusCodes.Status404NotFound,
+                Extensions = { ["errorCode"] = "PRODUCT_NOT_FOUND" },
+            });
         }
 
         // V2 Task 4.2: 用 BuildProductUrl 拼新 SEO URL (服务端拼接, 防开放重定向)
@@ -224,7 +238,14 @@ public class PublicProductController : ControllerBase
 
         var current = await _detailService.GetByOemAsync(oem3, ct);
         if (current?.Mr1 is not { Length: > 0 } mr1)
-            return NotFound(new { error = "产品不存在" });
+            // 🔧 fix(审查): ProblemDetails 化 (同 GetBySlug)
+            return NotFound(new ProblemDetails
+            {
+                Title = "产品不存在",
+                Detail = $"产品不存在: {oem3}",
+                Status = StatusCodes.Status404NotFound,
+                Extensions = { ["errorCode"] = "PRODUCT_NOT_FOUND" },
+            });
 
         // 查询同 MR.1 下所有上架 OEM 3 (含 brand_sort_order LEFT JOIN)
         //   WHY LEFT JOIN: brand 软删除时 brand_sort_order 为 null, 排序时按 int.MaxValue 兜底

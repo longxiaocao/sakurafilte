@@ -98,8 +98,10 @@ public static class MiddlewarePipelineExtensions
         // 9) 响应时间埋点
         app.UseMiddleware<ResponseTimeMiddleware>();
 
-        // 11) Swagger（仅开发）
-        if (env.IsDevelopment())
+        // 11) Swagger（开发 + 生产）
+        //   🔧 fix(审查): 生产也启用 — 后台 API 文档页 (AdminApiDocsView) 依赖 /swagger/v1/swagger.json
+        //   安全权衡: swagger.json 仅含端点结构/参数 schema, 无敏感数据; 若需更强保护可后续加 Admin 鉴权 (v30 预留)
+        if (env.IsDevelopment() || env.IsProduction())
         {
             app.UseSwagger();
             app.UseSwaggerUI(c =>

@@ -372,7 +372,7 @@ export default {
         page_title: '后台操作指南',
         page_subtitle: '5 个模块: 快速开始 / 字典规范 / 批量导入 / 搜索容差 / FAQ',
         quick_start_title: '1. 快速开始 (5 步入门)',
-        quick_start_step1: '点击右上"进入后台登录", 输入账号密码 (admin/Admin@2026 或 operator/Operator@2026)',
+        quick_start_step1: "点击右上\"进入后台登录\", 输入账号密码 (admin/Admin{'@'}2026 或 operator/Operator{'@'}2026)",
         quick_start_step2: '字典管理 → 8 个字典先 seed 数据 (首次部署): 走 spike-test/_seed_dict_*.py 6 个脚本',
         quick_start_step3: 'ETL 触发 → 选择 products.xlsx / xrefs.xlsx / apps.xlsx, 推荐"全量"模式触发',
         quick_start_step4: '产品管理 → 用 8 字段 / OEM 查询 / 批量粘贴查询, 命中产品进入详情',

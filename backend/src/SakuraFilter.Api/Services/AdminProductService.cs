@@ -252,7 +252,9 @@ public class AdminProductService
             var changed = new Dictionary<string, object>();
             void Track<T>(string key, T oldVal, T? newVal)
             {
-                if (!EqualityComparer<T?>.Default.Equals(oldVal, newVal)) changed[key] = newVal!;
+                // 🔧 fix(审查): 存 {Old, New} 双值 — 此前只存新值, 变更历史无法追溯"原来是什么" (用户实测反馈)
+                //   前端 parseChangedFields 兼容: 新格式 {Old,New} / 旧格式平铺新值
+                if (!EqualityComparer<T?>.Default.Equals(oldVal, newVal)) changed[key] = new { Old = oldVal, New = newVal };
             }
 
             // 分区 1
