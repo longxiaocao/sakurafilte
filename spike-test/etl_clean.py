@@ -199,6 +199,16 @@ def normalize_oem(s: str) -> str:
     return re.sub(r'[\s\-_/]', '', s).upper()
 
 
+def derive_mr1(oem_display: str) -> str:
+    """MR.1 确定性派生: 客户数据无 MR.1 列时, 基于 OEM NO.2 规范化派生
+    WHY: V2 主键 mr_1 必填 (ETL 校验), 派生规则确定性 — 同 OEM 永远同 MR.1,
+      重跑清洗不漂移 (顺序编号会随行序变化). 派生值 MR+OEM规范化: SA 42359 -> MRSA42359
+    唯一性: 产品区重复 OEM 行 (完全复制) 由 ETL DISTINCT ON 去重, 派生键不冲突
+    """
+    norm = normalize_oem(oem_display or '')
+    return f"MR{norm}" if norm else ""
+
+
 def clean_products_sheet(df: pd.DataFrame) -> list[dict]:
     """处理 产品区 sheet"""
     out = []
@@ -231,7 +241,7 @@ def clean_products_sheet(df: pd.DataFrame) -> list[dict]:
             stats['parsed_special_date'] += 1
 
         out.append({
-            'mr_1': clean_string(row.get('MR.1')),
+            'mr_1': clean_string(row.get('MR.1')) or derive_mr1(oem_display),
             'is_published': True,  # 客户目录导入 = 在售目录, 默认上架 (真实 Excel 无发布列; 管理后台可批量下架)
             'oem_no_display': oem_display,
             'oem_no_normalized': oem_norm,
