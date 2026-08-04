@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, ElLoading } from 'element-plus'
 import { useAdminAuth } from '@/composables/useAdminAuth'
 import { useThemeStore } from '@/stores/theme'  // P5.3
-import { authApi, publicSearchApi } from '@/api'
+import { authApi, publicSearchApi, siteContentApi } from '@/api'
 import type { AggregateSearchHit } from '@/api/types'
 import { useI18n } from 'vue-i18n'  // P2.6
 import { setLocale } from '@/i18n'  // P2.6
@@ -18,6 +18,8 @@ const route = useRoute()
 const router = useRouter()
 const { isAdmin, user, token, refreshToken, clearAuth } = useAdminAuth()
 const theme = useThemeStore()  // P5.3
+// 🔧 fix(审查): 站点名从后端读取 (后台 AdminSiteContentView 可维护), 兜底 SakuraFilter
+const siteName = ref('SakuraFilter')
 const { locale, t } = useI18n()  // P2.6
 
 const isAdminPath = computed(() => route.path.startsWith('/admin'))
@@ -66,7 +68,7 @@ const allNavItems = computed(() => {
       { key: 'dict', labelKey: 'nav.dictManage', dropdown: 'dict', icon: 'Collection', priority: 6 },
       // V2 Task 2.2.6: OEM 排序管理入口 (priority 6.5, 在字典和 ETL 之间)
       { key: 'xref-reorder', labelKey: 'nav.xrefReorder', path: '/admin/xrefs/reorder', icon: 'Sort', priority: 6.5 },
-      { key: 'etl', labelKey: 'nav.etlTrigger', path: '/admin/etl', icon: 'Loading', priority: 7 }
+      { key: 'etl', labelKey: 'nav.etlTrigger', path: '/admin/ops?tab=etl', icon: 'Loading', priority: 7 }
     )
     if (isAdmin()) {
       items.push({ key: 'users', labelKey: 'nav.userManage', path: '/admin/users', icon: 'User', priority: 8 })
@@ -74,9 +76,10 @@ const allNavItems = computed(() => {
     // admin 低优 (可收纳, 宽度不够时进 "更多" 下拉)
     items.push(
       { key: 'adv-compare', labelKey: 'nav.advCompare', path: '/admin/compare', icon: 'DataBoard', priority: 9 },
-      { key: 'perf', labelKey: 'nav.perf', path: '/admin/perf', icon: 'TrendCharts', priority: 10 },
-      { key: 'errors', labelKey: 'nav.errors', path: '/admin/errors', icon: 'Warning', priority: 11 },
-      { key: 'api', labelKey: 'nav.api', path: '/admin/api-docs', icon: 'Document', priority: 12 },
+      { key: 'perf', labelKey: 'nav.perf', path: '/admin/ops?tab=perf', icon: 'TrendCharts', priority: 10 },
+      { key: 'errors', labelKey: 'nav.errors', path: '/admin/ops?tab=errors', icon: 'Warning', priority: 11 },
+      { key: 'api', labelKey: 'nav.api', path: '/admin/ops?tab=api', icon: 'Document', priority: 12 },
+      { key: 'site', labelKey: 'nav.siteContent', path: '/admin/site-content', icon: 'Setting', priority: 12.5 },
       { key: 'help', labelKey: 'nav.help', path: '/admin/help', icon: 'QuestionFilled', priority: 13 }
     )
   }
@@ -163,6 +166,10 @@ const overflowItems = computed(() => allNavItems.value.filter((i) => overflowKey
 
 // 监听窗口变化 + 路由变化 (路由变化时按钮可能增减, 需重测)
 onMounted(() => {
+  // 站点名 (后台可维护, 失败静默兜底)
+  siteContentApi.publicGet().then((d) => {
+    if (d['site.name']?.trim()) siteName.value = d['site.name']!.trim()
+  }).catch(() => {})
   // 首次渲染后再测 (DOM 已就绪)
   nextTick(() => {
     measureButtons()
@@ -229,6 +236,12 @@ async function go(item: { path?: string; action?: string }) {
   }
   if (item.path) {
     router.push(item.path)
+    return
+  }
+  // 🔧 fix(审查): dropdown 类型项 (如"字典管理", 无 path) 被收纳到"更多"后点击无反应 (用户实测反馈)
+  //   跳转该下拉的默认子页 (字典管理 → OEM 品牌字典页)
+  if ((item as { dropdown?: string }).dropdown === 'dict') {
+    router.push('/admin/dict/oem-brands')
   }
 }
 
@@ -373,7 +386,7 @@ function doGlobalSearch() {
     >
       <el-icon aria-hidden="true"><Menu /></el-icon>
     </button>
-    <div class="font-medium text-base tracking-tight">SakuraFilter</div>
+    <div class="font-medium text-base tracking-tight">{{ siteName }}</div>
     <!-- 改进 1.1: 全局搜索框 (桌面端 md 以上显示, 移动端由 drawer 接管) -->
     <!--   Musk 风格: 1px 细线 + 240px 窄宽度 + Search 前缀图标 -->
     <el-autocomplete

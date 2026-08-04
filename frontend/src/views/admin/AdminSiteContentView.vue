@@ -1,0 +1,128 @@
+<script setup lang="ts">
+// 🔧 fix(审查): 站点内容维护页 (用户反馈: About/News/Contact 无内容且后台无维护入口)
+//   - 站点名 / Logo URL / 关于我们 / 联系我们: 文本编辑
+//   - News: 小型发布 (标题 + 正文 + 发布时间, 列表 CRUD)
+//   - 数据: system_settings key-value (site.* keys), 公开端点供前台读取
+import { onMounted, reactive, ref } from 'vue'
+import { ElMessage } from 'element-plus'
+import { siteContentApi } from '@/api'
+import type { NewsItem, SiteContent } from '@/api'
+
+const saving = ref(false)
+const loading = ref(true)
+
+const form = reactive({
+  siteName: '',
+  logoUrl: '',
+  about: '',
+  contact: '',
+})
+const news = ref<NewsItem[]>([])
+
+function parseNews(raw?: string | null): NewsItem[] {
+  if (!raw) return []
+  try {
+    const arr = JSON.parse(raw)
+    return Array.isArray(arr) ? arr : []
+  } catch {
+    return []
+  }
+}
+
+async function load() {
+  loading.value = true
+  try {
+    const data: SiteContent = await siteContentApi.get()
+    form.siteName = data['site.name'] || ''
+    form.logoUrl = data['site.logo_url'] || ''
+    form.about = data['site.about'] || ''
+    form.contact = data['site.contact'] || ''
+    news.value = parseNews(data['site.news'])
+  } finally {
+    loading.value = false
+  }
+}
+
+function toPayload(): SiteContent {
+  return {
+    'site.name': form.siteName,
+    'site.logo_url': form.logoUrl,
+    'site.about': form.about,
+    'site.contact': form.contact,
+    'site.news': JSON.stringify(news.value),
+  }
+}
+
+async function save() {
+  saving.value = true
+  try {
+    await siteContentApi.put(toPayload())
+    ElMessage.success('已保存')
+  } finally {
+    saving.value = false
+  }
+}
+
+// News CRUD
+function addNews() {
+  news.value.push({ id: `n${Date.now()}`, title: '', body: '', publishedAt: new Date().toISOString().slice(0, 10) })
+}
+function removeNews(idx: number) {
+  news.value.splice(idx, 1)
+}
+
+onMounted(load)
+</script>
+
+<template>
+  <div class="p-4 w-full max-w-4xl space-y-4" v-loading="loading">
+    <div class="flex items-center justify-between">
+      <h1 class="text-lg font-medium">站点内容维护</h1>
+      <el-button type="primary" size="small" :loading="saving" @click="save">保存</el-button>
+    </div>
+
+    <!-- 站点基础配置 -->
+    <div class="hairline p-4 space-y-3">
+      <div class="text-sm font-medium">站点基础配置</div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <div class="text-xs text-muted mb-1">网站名称</div>
+          <el-input v-model="form.siteName" placeholder="SakuraFilter" size="small" />
+        </div>
+        <div>
+          <div class="text-xs text-muted mb-1">Logo URL</div>
+          <el-input v-model="form.logoUrl" placeholder="https://.../logo.png (留空用默认)" size="small" />
+        </div>
+      </div>
+    </div>
+
+    <!-- About / Contact -->
+    <div class="hairline p-4 space-y-3">
+      <div class="text-sm font-medium">关于我们 (About us)</div>
+      <el-input v-model="form.about" type="textarea" :rows="5" placeholder="公司介绍 / 业务说明" />
+      <div class="text-sm font-medium pt-2">联系我们 (Contact us)</div>
+      <el-input v-model="form.contact" type="textarea" :rows="5" placeholder="联系方式 / 地址 / 邮箱 / 电话" />
+    </div>
+
+    <!-- News 发布 -->
+    <div class="hairline p-4 space-y-3">
+      <div class="flex items-center justify-between">
+        <div class="text-sm font-medium">新闻发布 (News)</div>
+        <el-button size="small" @click="addNews">新增新闻</el-button>
+      </div>
+      <div v-if="news.length === 0" class="text-xs text-muted py-3 text-center">暂无新闻, 点击"新增新闻"发布第一条</div>
+      <div v-for="(n, idx) in news" :key="n.id" class="hairline p-3 space-y-2">
+        <div class="flex gap-2">
+          <el-input v-model="n.title" placeholder="新闻标题" size="small" class="flex-1" />
+          <el-input v-model="n.publishedAt" placeholder="发布日期" size="small" style="width: 140px" />
+          <el-button size="small" type="danger" plain @click="removeNews(idx)">删除</el-button>
+        </div>
+        <el-input v-model="n.body" type="textarea" :rows="3" placeholder="新闻正文" />
+      </div>
+    </div>
+
+    <div class="flex justify-end">
+      <el-button type="primary" size="small" :loading="saving" @click="save">保存</el-button>
+    </div>
+  </div>
+</template>

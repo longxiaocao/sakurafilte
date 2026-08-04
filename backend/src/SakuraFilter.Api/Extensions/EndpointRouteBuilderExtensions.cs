@@ -20,6 +20,7 @@ public static class EndpointRouteBuilderExtensions
         app.MapDeadLetterEndpoints();
         app.MapDictionaryEndpoints();
         app.MapAdminMachineTreeEndpoints();  // Task 1: 机型三级树查询
+        app.MapSiteContentEndpoints();  // 站点内容维护 (about/contact/news/站点名/logo)
         app.MapPublicTypeaheadEndpoints();
         // V2 Task 4.3: sitemap.xml 端点
         app.MapSitemapEndpoints();

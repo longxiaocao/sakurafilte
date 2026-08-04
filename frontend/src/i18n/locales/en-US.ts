@@ -1287,6 +1287,7 @@ export default {
     advCompare: 'Advanced Compare',
     errors: 'Errors',
     api: 'API',
+    siteContent: 'Site Content',
     dictGroup: 'Dictionary',
     dictItems: {
       oemBrand: 'OEM Brand',

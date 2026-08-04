@@ -1297,6 +1297,7 @@ export default {
     advCompare: '高级对比',
     errors: '错误',
     api: 'API',
+    siteContent: '站点内容',
     dictGroup: '字典管理',
     dictItems: {
       oemBrand: 'OEM 品牌',

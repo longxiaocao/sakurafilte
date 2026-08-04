@@ -894,3 +894,19 @@ export type {
   XrefInput
 } from './generated-types'
 
+
+// ===== SiteContent: 站点内容 (about/contact/news/站点名/logo) =====
+export interface SiteContent {
+  'site.name'?: string | null
+  'site.logo_url'?: string | null
+  'site.about'?: string | null
+  'site.contact'?: string | null
+  'site.news'?: string | null  // JSON 数组 [{id,title,body,publishedAt}]
+}
+
+export interface NewsItem {
+  id: string
+  title: string
+  body: string
+  publishedAt: string
+}

@@ -126,8 +126,8 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/admin/etl',
     name: 'AdminEtl',
-    component: () => import('@/views/admin/AdminEtlView.vue'),
-    meta: { title: 'ETL 触发', requireAuth: true }
+    // 🔧 fix(审查): 旧路由保留, 重定向到运维合并页 (ETL/性能/错误/API 文档)
+    redirect: '/admin/ops?tab=etl'
   },
   // ===== P2-1 告警系统: 历史与配置页 (admin 角色) =====
   {
@@ -228,6 +228,14 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/admin/AdminPerfView.vue'),
     meta: { title: '性能监控', requireAuth: true }
   },
+  // ===== 运维合并页 (ETL / 性能 / 错误 / API 文档) =====
+  //   🔧 fix(审查): 用户反馈 4 个独立菜单意义不大 — 合并为单页 el-tabs, 旧路由重定向保留
+  {
+    path: '/admin/ops',
+    name: 'AdminOps',
+    component: () => import('@/views/admin/AdminOpsView.vue'),
+    meta: { title: '运维', requireAuth: true }
+  },
   // ===== 批次 6c: 前端错误日志管理 =====
   //   展示 errorMonitor 捕获的本地事件, 支持搜索/筛选/导出/清空
   //   触发测试错误验证监控链路
@@ -245,6 +253,14 @@ const routes: RouteRecordRaw[] = [
     name: 'AdminApiDocs',
     component: () => import('@/views/admin/AdminApiDocsView.vue'),
     meta: { title: 'API 文档', requireAuth: true }
+  },
+  // ===== 站点内容维护 (About/News/Contact/站点名/logo) =====
+  //   🔧 fix(审查): 用户反馈前台 About/News/Contact 无内容且后台无维护入口
+  {
+    path: '/admin/site-content',
+    name: 'AdminSiteContent',
+    component: () => import('@/views/admin/AdminSiteContentView.vue'),
+    meta: { title: '站点内容', requireAuth: true }
   },
   // ===== 需求 6: 前端优化 Demo 演示页 =====
   //   - 整合展示需求 1-5 的所有优化点

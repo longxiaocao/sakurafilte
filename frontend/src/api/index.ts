@@ -31,7 +31,8 @@ import type {
   AlertTestResult,
   MachineTreeNode,
   BatchBindRequest,
-  BatchBindResponse
+  BatchBindResponse,
+  SiteContent
 } from './types'
 
 // ===== JWT 鉴权 API (commit aff3ac3 后端 JWT 体系) =====
@@ -934,3 +935,21 @@ export const machineApi = {
 //   (与 generated-types re-export 模式一致, 见 types.ts 文件末尾)
 export type { MachineTreeNode, BatchBindRequest, BatchBindResponse } from './types'
 
+
+// ===== SiteContent: 站点内容维护 (about/contact/news/站点名/logo) =====
+//   get:  GET /api/admin/site-content           → SiteContent (后台维护页加载)
+//   put:  PUT /api/admin/site-content           → { ok: true } (保存全部)
+//   publicGet: GET /api/public/site-content     → SiteContent (前台 About/News/Contact 页)
+export const siteContentApi = {
+  get(): Promise<SiteContent> {
+    return http.get('/admin/site-content').then((r) => r.data)
+  },
+  put(data: SiteContent): Promise<{ ok: boolean }> {
+    return http.put('/admin/site-content', data).then((r) => r.data)
+  },
+  publicGet(): Promise<SiteContent> {
+    return http.get('/public/site-content').then((r) => r.data)
+  }
+}
+
+export type { SiteContent, NewsItem } from './types'
