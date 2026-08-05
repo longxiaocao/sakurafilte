@@ -197,13 +197,15 @@ jobs:
             exit $RC
           fi
           
-          # 2) 检查 backend/migrations/*.sql 文件头都含 "一次性脚本,不可重跑" 注释
-          #   WHY: P2-7.1 规定保留的一次性脚本必须有此标记, 否则会被误判可重跑导致数据丢失
+          # 2) 检查 backend/migrations/*.sql 文件头标注 (一次性脚本,不可重跑 或 idempotent 可重跑)
+          #   WHY: P2-7.1 规定保留的一次性脚本必须有此标记; 幂等脚本 (IF NOT EXISTS/ALTER 幂等)
+          #        用 'idempotent 可重跑' 标注 (019/020/021) — 同样合法, 检测一并放行
+          #   🔧 fix(审查): 原检测只认"一次性脚本,不可重跑", 019/020/021 (幂等) 被误判缺失头注释
           MISSING_HEADER=""
           for f in ../../migrations/*.sql; do
             if [ -f "$f" ]; then
-              if ! head -1 "$f" | grep -q "一次性脚本,不可重跑"; then
-                echo "::warning::$f 缺少 '-- 一次性脚本,不可重跑' 头注释"
+              if ! head -1 "$f" | grep -qE "一次性脚本,不可重跑|idempotent"; then
+                echo "::warning::$f 缺少 '-- 一次性脚本,不可重跑' 或 'idempotent 可重跑' 头注释"
                 MISSING_HEADER="$MISSING_HEADER $f"
               fi
             fi

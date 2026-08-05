@@ -40,8 +40,17 @@ public static class StartupExtensions
         ).FirstOrDefaultAsync();
         if (hasBusinessTables == 0)
         {
-            await db.Database.EnsureCreatedAsync();
-            migrateLogger.LogInformation("空库: EnsureCreated 已建基础表 (EF 模型), 后续 SQL 迁移脚本负责演进");
+            // 🔧 fix(审查): EnsureCreated 失败不阻塞启动 — CI 曾因启动异常 60s 超时 (Backend failed to start)
+            //   失败时记录日志, 由后续 SQL 迁移脚本 (backend/migrations/*.sql) 兜底建表
+            try
+            {
+                await db.Database.EnsureCreatedAsync();
+                migrateLogger.LogInformation("空库: EnsureCreated 已建基础表 (EF 模型), 后续 SQL 迁移脚本负责演进");
+            }
+            catch (Exception ex)
+            {
+                migrateLogger.LogError(ex, "空库 EnsureCreated 失败 (不阻塞启动, 由 SQL 迁移脚本兜底)");
+            }
         }
         else
         {

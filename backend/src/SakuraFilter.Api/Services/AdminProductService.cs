@@ -669,12 +669,12 @@ public class AdminProductService
         //   WHY: 原 foreach 串行 await, 单张 ~100ms × 6 = 600ms+; 并行后总耗时 ≈ max(单张) ≈ 100-200ms
         //   per-image try-catch 保留: 单张 OSS 失败不影响其他图, 与原 foreach 语义一致
         //   空集合安全: Task.WhenAll(空 IEnumerable) 返回空数组, 不抛 NRE
-        async Task<string> GetUrlSafe(string? key)
+        Task<string> GetUrlSafe(string? key)
         {
-            if (_storage == null || string.IsNullOrEmpty(key)) return "";
+            if (_storage == null || string.IsNullOrEmpty(key)) return Task.FromResult("");
             // 🔧 fix(审查): 统一代理路径 (同 AdminProductImageService — MinIO 预签名 URL 浏览器不可达 → 裂图)
-            try { return $"/api/public/images/{key}"; }
-            catch (Exception ex) { _logger.LogWarning(ex, "image proxy url failed: key={Key}", key); return ""; }
+            try { return Task.FromResult($"/api/public/images/{key}"); }
+            catch (Exception ex) { _logger.LogWarning(ex, "image proxy url failed: key={Key}", key); return Task.FromResult(""); }
         }
         var urls = await Task.WhenAll(imageRows.Select(img => GetUrlSafe(img.ImageKey)));
         for (int i = 0; i < imageRows.Count; i++)
