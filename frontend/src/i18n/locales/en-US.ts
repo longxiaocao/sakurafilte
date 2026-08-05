@@ -526,7 +526,6 @@ export default {
     },
     oembrandsview: {
       export_csv: 'Export CSV',
-      export_excel: 'Export Excel',
       import_csv: 'Import CSV',
       import_done: 'Import done',
       export_failed: 'Export failed, retry later',
@@ -1386,6 +1385,7 @@ export default {
     bulk: {
       download_template: 'Download Template',
       export_csv: 'Export CSV',
+      export_excel: 'Export Excel',
       import_csv: 'Import CSV',
       import_done: 'Import done',
       hint: 'Edit CSV with a plain text editor before importing to avoid Excel auto number conversion (e.g. 00123 → 123, long IDs to scientific notation)',

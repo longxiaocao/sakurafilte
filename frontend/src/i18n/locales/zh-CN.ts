@@ -535,7 +535,6 @@ export default {
     },
     oembrandsview: {
       export_csv: '导出 CSV',
-      export_excel: '导出 Excel',
       import_csv: '导入 CSV',
       import_done: '导入完成',
       export_failed: '导出失败, 请稍后重试',
@@ -1396,6 +1395,7 @@ export default {
     bulk: {
       download_template: '下载模板',
       export_csv: '导出 CSV',
+      export_excel: '导出 Excel',
       import_csv: '导入 CSV',
       import_done: '导入完成',
       hint: '建议用文本编辑器编辑 CSV 后再导入, 避免 Excel 自动转换数字 (如 00123 → 123、长编号转科学计数法)',
