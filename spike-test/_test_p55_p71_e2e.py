@@ -385,19 +385,19 @@ def test_p55_perf_panel_route_registered():
 
 
 def test_p55_perf_panel_nav_item():
-    """P5.5.9: AppHeader 有'性能'菜单项 (i18n 化后文案走 nav.perf key)
-    🔧 fix(审查): 旧断言检查源码含'性能'字面量, AppHeader i18n 化后文案改为 t('nav.perf') 调用,
-      源码不再含中文字面量 → 静态检查过时失败 (CI 7-21 起连续失败). 改为检查 labelKey 绑定 + i18n 值存在
+    """P5.5.9c: AppHeader 性能入口 — 已合并进'运维中心' (/admin/ops?tab=perf)
+    🔧 fix(审查): 用户反馈 ETL/性能/错误/API 菜单过密 → 合并为单入口 opsCenter (V24 菜单改造);
+      旧断言查 /admin/perf + nav.perf 字面量已过时, 适配合并后结构
     """
     header = SRC / "components" / "AppHeader.vue"
     assert header.is_file(), f"缺 AppHeader.vue: {header}"
     content = header.read_text(encoding="utf-8")
-    assert "/admin/perf" in content, "AppHeader 缺 /admin/perf 菜单项"
-    assert "labelKey: 'nav.perf'" in content, "AppHeader 性能菜单未走 i18n (nav.perf)"
+    assert "/admin/ops" in content, "AppHeader 缺运维中心入口 (perf 已合并进 /admin/ops)"
+    assert "opsCenter" in content, "AppHeader 运维中心未走 i18n (nav.opsCenter)"
     zh = (SRC / "i18n" / "locales" / "zh-CN.ts").read_text(encoding="utf-8")
-    assert "perf: '性能'" in zh, "zh-CN nav.perf 缺失 (性能文案)"
+    assert "opsCenter: '运维中心'" in zh, "zh-CN nav.opsCenter 缺失 (运维中心)"
     en = (SRC / "i18n" / "locales" / "en-US.ts").read_text(encoding="utf-8")
-    assert "perf:" in en, "en-US nav.perf 缺失"
+    assert "opsCenter:" in en, "en-US nav.opsCenter 缺失"
 
 
 def test_p55_health_proxy_configured():
