@@ -263,7 +263,7 @@ public class AdminProductServiceTests
     }
 
     [Fact]
-    public async Task GetByIdAsync_WithImages_ReturnsSignedUrls()
+    public async Task GetByIdAsync_WithImages_ReturnsProxyUrls()
     {
         await using var db = CreateInMemoryDb();
         db.Products.Add(CreateProduct());
@@ -281,13 +281,15 @@ public class AdminProductServiceTests
         var result = await sut.GetByIdAsync(1, default);
 
         result.Images.Should().HaveCount(1);
-        result.Images[0].ImageUrl.Should().Be("https://signed.example.com/primary.jpg");
+        // 🔧 fix(审查): 统一代理路径 — imageUrl 不再返回预签名 URL
+        result.Images[0].ImageUrl.Should().Be("/api/public/images/products/primary/OEM001/OEM001-1.jpg");
     }
 
     [Fact]
-    public async Task GetByIdAsync_StorageFailure_ReturnsEmptyUrl_DoesNotThrow()
+    public async Task GetByIdAsync_StorageFailure_ReturnsProxyUrl_DoesNotThrow()
     {
-        // WHY: per-image try-catch 保留, 单张 OSS 失败不影响其他图, 与原 foreach 语义一致
+        // WHY: 🔧 fix(审查) — imageUrl 改为代理路径 (/api/public/images/{key}), 生成不依赖 storage 可用性;
+        //   存储异常在代理端点请求时才暴露 (404/500), 列表/详情组装不再因 OSS 故障整体失败
         await using var db = CreateInMemoryDb();
         db.Products.Add(CreateProduct());
         db.ProductImages.Add(new ProductImage
@@ -302,7 +304,7 @@ public class AdminProductServiceTests
 
         var result = await sut.GetByIdAsync(1, default);
 
-        result.Images[0].ImageUrl.Should().Be("");  // 失败兜底为空字符串
+        result.Images[0].ImageUrl.Should().Be("/api/public/images/k1");  // 代理路径, 不依赖 storage
     }
 
     [Fact]

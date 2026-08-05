@@ -15,18 +15,20 @@ public class SecurityHeadersMiddleware
     private readonly IHostEnvironment _env;
     private readonly ILogger<SecurityHeadersMiddleware> _logger;
 
-    // 开发环境 CSP: 允许 'unsafe-inline' + 'unsafe-eval' (Swagger UI 依赖)
+    // 开发环境 CSP: 允许 'unsafe-inline' + 'unsafe-eval' (Swagger UI 依赖), 放行 Cloudflare Turnstile
     private const string DevCsp =
-        "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; " +
+        "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com; " +
         "style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; " +
-        "font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; " +
+        "font-src 'self' data:; connect-src 'self' https://challenges.cloudflare.com; " +
+        "frame-src https://challenges.cloudflare.com; frame-ancestors 'none'; " +
         "base-uri 'self'; form-action 'self'";
 
-    // 生产环境 CSP: 严格禁止 unsafe-inline/eval
+    // 生产环境 CSP: 严格禁止 unsafe-inline/eval, 放行 Cloudflare Turnstile (验证码 script + iframe + API)
     private const string ProdCsp =
-        "default-src 'self'; script-src 'self'; " +
+        "default-src 'self'; script-src 'self' https://challenges.cloudflare.com; " +
         "style-src 'self'; img-src 'self' data: https:; " +
-        "font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; " +
+        "font-src 'self' data:; connect-src 'self' https://challenges.cloudflare.com; " +
+        "frame-src https://challenges.cloudflare.com; frame-ancestors 'none'; " +
         "base-uri 'self'; form-action 'self'";
 
     public SecurityHeadersMiddleware(

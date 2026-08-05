@@ -738,11 +738,12 @@ public class AdminProductImageServiceTests
     // ==================== GetUrl 异常降级 ====================
 
     /// <summary>
-    /// GetUrl 失败时返回空字符串 (不抛异常, 不阻塞 ListAsync)
-    ///   WHY: 预签名 URL 生成失败不应阻塞列表展示, 前端用空字符串降级显示占位图
+    /// GetUrl 异常时 imageUrl 仍为代理路径 (不抛异常, 不阻塞 ListAsync)
+    ///   WHY: 🔧 fix(审查) — imageUrl 统一为代理路径 /api/public/images/{key}, 生成不依赖 storage;
+    ///        存储异常在代理端点请求时才暴露 (404), 列表组装不再受 OSS 故障影响
     /// </summary>
     [Fact]
-    public async Task ListAsync_StorageGetUrlThrows_ReturnsEmptyUrl()
+    public async Task ListAsync_StorageGetUrlThrows_ReturnsProxyUrl()
     {
         await using var db = CreateInMemoryDb();
         db.Products.Add(CreateProduct());
@@ -760,7 +761,7 @@ public class AdminProductImageServiceTests
         var result = await sut.ListAsync("MR000001", default);
 
         result.Should().HaveCount(1);
-        result[0].ImageUrl.Should().Be("");
+        result[0].ImageUrl.Should().Be("/api/public/images/detail-2");
     }
 
     // ==================== V24-F84: SafeDeleteOldImageAsync 重试逻辑 ====================

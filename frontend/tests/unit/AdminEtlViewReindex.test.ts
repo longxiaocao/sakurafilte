@@ -118,7 +118,7 @@ describe('AdminEtlView 全量重建 (V17-3.1)', () => {
     const wrapper = mount(AdminEtlView, { global: { stubs: childStubs } })
     // 找到"执行全量重建"按钮 (danger type)
     const buttons = wrapper.findAll('button')
-    const reindexBtns = buttons.filter(b => b.text().includes('执行全量重建'))
+    const reindexBtns = buttons.filter(b => b.text().includes('reindex_confirm'))  // mock t() 返回 JSON key 字符串
     expect(reindexBtns.length).toBe(1)  // 确保只匹配一个按钮
     const reindexBtn = reindexBtns[0]
     await reindexBtn.trigger('click')
@@ -133,7 +133,7 @@ describe('AdminEtlView 全量重建 (V17-3.1)', () => {
   it('用户取消确认 → etlApi.reindexAll 不被调用', async () => {
     ;(ElMessageBox.confirm as any).mockRejectedValue(new Error('cancel'))
     const wrapper = mount(AdminEtlView, { global: { stubs: childStubs } })
-    const reindexBtn = wrapper.findAll('button').find(b => b.text().includes('执行全量重建'))
+    const reindexBtn = wrapper.findAll('button').find(b => b.text().includes('reindex_confirm'))  // mock t() 返回 JSON key 字符串
     await reindexBtn!.trigger('click')
     await flushPromises()
     expect(etlApi.reindexAll).not.toHaveBeenCalled()
@@ -153,7 +153,7 @@ describe('AdminEtlView 全量重建 (V17-3.1)', () => {
       error: null,
     })
     const wrapper = mount(AdminEtlView, { global: { stubs: childStubs } })
-    const reindexBtn = wrapper.findAll('button').find(b => b.text().includes('执行全量重建'))
+    const reindexBtn = wrapper.findAll('button').find(b => b.text().includes('reindex_confirm'))  // mock t() 返回 JSON key 字符串
     await reindexBtn!.trigger('click')
     await flushPromises()
     expect(etlApi.reindexAll).toHaveBeenCalledTimes(1)
@@ -177,7 +177,7 @@ describe('AdminEtlView 全量重建 (V17-3.1)', () => {
       error: 'CANCELLED',
     })
     const wrapper = mount(AdminEtlView, { global: { stubs: childStubs } })
-    const reindexBtn = wrapper.findAll('button').find(b => b.text().includes('执行全量重建'))
+    const reindexBtn = wrapper.findAll('button').find(b => b.text().includes('reindex_confirm'))  // mock t() 返回 JSON key 字符串
     await reindexBtn!.trigger('click')
     await flushPromises()
     expect(ElMessage.warning).toHaveBeenCalledTimes(1)
@@ -197,7 +197,7 @@ describe('AdminEtlView 全量重建 (V17-3.1)', () => {
       error: 'MeiliSearch 连接失败',
     })
     const wrapper = mount(AdminEtlView, { global: { stubs: childStubs } })
-    const reindexBtn = wrapper.findAll('button').find(b => b.text().includes('执行全量重建'))
+    const reindexBtn = wrapper.findAll('button').find(b => b.text().includes('reindex_confirm'))  // mock t() 返回 JSON key 字符串
     await reindexBtn!.trigger('click')
     await flushPromises()
     expect(ElMessage.error).toHaveBeenCalledTimes(1)
@@ -213,7 +213,7 @@ describe('AdminEtlView 全量重建 (V17-3.1)', () => {
     err409.response = { status: 409, data: { error: 'ETL 任务在运行' } }
     ;(etlApi.reindexAll as any).mockRejectedValue(err409)
     const wrapper = mount(AdminEtlView, { global: { stubs: childStubs } })
-    const reindexBtn = wrapper.findAll('button').find(b => b.text().includes('执行全量重建'))
+    const reindexBtn = wrapper.findAll('button').find(b => b.text().includes('reindex_confirm'))  // mock t() 返回 JSON key 字符串
     await reindexBtn!.trigger('click')
     await flushPromises()
     expect(ElMessage.warning).toHaveBeenCalledTimes(1)
@@ -229,7 +229,7 @@ describe('AdminEtlView 全量重建 (V17-3.1)', () => {
     err500.response = { status: 500, data: { error: '数据库连接失败' } }
     ;(etlApi.reindexAll as any).mockRejectedValue(err500)
     const wrapper = mount(AdminEtlView, { global: { stubs: childStubs } })
-    const reindexBtn = wrapper.findAll('button').find(b => b.text().includes('执行全量重建'))
+    const reindexBtn = wrapper.findAll('button').find(b => b.text().includes('reindex_confirm'))  // mock t() 返回 JSON key 字符串
     await reindexBtn!.trigger('click')
     await flushPromises()
     // 500 不是 409, 走 else 分支: lastReindex 设置错误兜底
@@ -250,7 +250,7 @@ describe('AdminEtlView 全量重建 (V17-3.1)', () => {
     let resolveApi: (v: any) => void = () => {}
     ;(etlApi.reindexAll as any).mockReturnValue(new Promise(r => { resolveApi = r }))
     const wrapper = mount(AdminEtlView, { global: { stubs: childStubs } })
-    const reindexBtn = wrapper.findAll('button').find(b => b.text().includes('执行全量重建'))!
+    const reindexBtn = wrapper.findAll('button').find(b => b.text().includes('reindex_confirm'))  // mock t() 返回 JSON key 字符串!
     await reindexBtn.trigger('click')
     await flushPromises()
     // 请求进行中: loading = true

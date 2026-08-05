@@ -5,38 +5,6 @@
 // 用途: 与手工 types.ts 对照, 发现字段漂移
 // ============================================
 
-export interface AggregateMachineItem {
-  machineBrand?: string | null
-  machineModel?: string | null
-  machineCategory?: string | null
-}
-
-export interface AggregateOemItem {
-  oemBrand?: string | null
-  oemNo3?: string | null
-  oem2?: string | null
-  sortOrder?: number | null
-  machineType?: string | null
-  isPublished?: boolean | null
-  brandSortOrder?: number | null
-}
-
-export interface AggregateSearchHit {
-  mr1?: string | null
-  productName1?: string | null
-  productName2?: string | null
-  oem2?: string | null
-  type?: string | null
-  remark?: string | null
-  media?: string | null
-  isPublished?: boolean | null
-  isDiscontinued?: boolean | null
-  oemList?: AggregateOemItem[] | null
-  machineList?: AggregateMachineItem[] | null
-  formatted?: any
-  rankingScore?: number | null
-}
-
 export interface AggregateSearchRequest {
   q?: string | null
   page?: number | null
@@ -55,16 +23,6 @@ export interface AggregateSearchRequest {
   d8Thread?: string | null
 }
 
-export interface AggregateSearchResponse {
-  total?: number | null
-  page?: number | null
-  pageSize?: number | null
-  totalPages?: number | null
-  processingTimeMs?: number | null
-  provider?: string | null
-  hits?: AggregateSearchHit[] | null
-}
-
 export interface AlertRuleUpdateRequest {
   enabled?: boolean | null
   severity?: string | null
@@ -78,6 +36,12 @@ export interface AlertTestRequest {
   severity?: string | null
   title?: string | null
   markdown?: string | null
+}
+
+export interface BatchBindRequest {
+  machine_id?: number | null
+  mr1_list?: string[] | null
+  replace?: boolean | null
 }
 
 export interface BatchOemRequest {
@@ -163,6 +127,14 @@ export interface FrontendPerfSample {
   ts?: string | null
 }
 
+export interface ImageFolderImportRequest {
+  folderPath?: string | null
+}
+
+export interface ImportCsvRequest {
+  csv?: string | null
+}
+
 export interface ImportRequest {
   jsonlPath?: string | null
   mode?: string | null
@@ -173,6 +145,7 @@ export interface ImportRequest {
 export interface LoginRequest {
   username?: string | null
   password?: string | null
+  turnstileToken?: string | null
 }
 
 export interface MachineAppInput {
@@ -426,6 +399,24 @@ export interface SearchRequest {
   pageSize?: number | null
 }
 
+export interface StorageConfigDto {
+  provider?: string | null
+  minio?: StorageEndpointConfig | null
+  aliyun?: StorageEndpointConfig | null
+  r2?: StorageEndpointConfig | null
+}
+
+export interface StorageEndpointConfig {
+  endpoint?: string | null
+  accessKey?: string | null
+  secretKey?: string | null
+  accessKeyId?: string | null
+  accessKeySecret?: string | null
+  bucketName?: string | null
+  publicEndpoint?: string | null
+  cdnEndpoint?: string | null
+}
+
 export interface TypeCreateRequest {
   type?: string | null
   sortOrder?: number | null
@@ -452,6 +443,10 @@ export interface UpdateUserRequest {
   isActive?: boolean | null
 }
 
+export interface XrefBrandCreatePayload {
+  brand?: string | null
+}
+
 export interface XrefInput {
   productName1?: string | null
   oemBrand?: string | null
@@ -460,9 +455,28 @@ export interface XrefInput {
   sortOrder?: number | null
   machineType?: string | null
   isPublished?: boolean | null
+  id?: number | null
+  rowVersion?: number | null
+}
+
+export interface XrefItemCreatePayload {
+  productId?: number | null
+  oemBrand?: string | null
+  oemNo3?: string | null
+  oem2?: string | null
+  machineType?: string | null
+  isPublished?: boolean | null
+}
+
+export interface XrefItemUpdatePayload {
+  oemNo3?: string | null
+  machineType?: string | null
+  isPublished?: boolean | null
+  rowVersion?: number | null
 }
 
 export interface XrefReorderItem {
+  id?: number | null
   oemNo3?: string | null
   sortOrder?: number | null
   rowVersion?: number | null
@@ -472,4 +486,4 @@ export interface XrefReorderRequest {
   oemBrand?: string | null
   items?: XrefReorderItem[] | null
 }
-// 共生成 63 个 interface (跳过 1 个框架内置 schema)
+// 共生成 67 个 interface (跳过 1 个框架内置 schema)
