@@ -30,33 +30,18 @@ public static class StartupExtensions
         db.Database.SetCommandTimeout(60);
         var migrateLogger = migrateScope.ServiceProvider.GetRequiredService<ILogger<StartupMarker>>();
 
-        // 🔧 fix(审查): 空库 (无任何业务表) 先 EnsureCreated 建基础表 (EF 模型)
-        //   项目无 C# 迁移类 (Migrations 为空) → MigrateAsync 空转 "无 pending migrations";
-        //   CI 空库 spike_test_v3 因此表全不建 → Day 9.8 等依赖 etl_progress_log 的测试全挂
-        //   模式: EnsureCreated (基础表) + backend/migrations/*.sql (演进, 幂等) = v28-4 注释的 CI 模式
+        // 🔧 fix(审查): 空库 (无任何业务表) 直接走 EF 迁移 — 项目有 C# 迁移 (Data/Migrations/InitialCreate)
+        //   ⚠️ 曾用 EnsureCreated 建表 → 与后续 MigrateAsync 的 CREATE TABLE 冲突 (42P07 relation
+        //   etl_progress_log already exists) → API 启动崩溃 (CI backend failed to start 根因)
+        //   空库: 不种子历史 → GetPendingMigrationsAsync 返回全部迁移 → MigrateAsync 建全表+历史记录
+        //   老环境 (有业务表): 种子历史 (标记 InitialCreate 已应用) → 只跑增量迁移
         var hasBusinessTables = await db.Database.SqlQueryRaw<int>(
             "SELECT COUNT(*)::int AS \"Value\" FROM information_schema.tables " +
             "WHERE table_schema = 'public' AND table_name NOT IN ('__EFMigrationsHistory')"
         ).FirstOrDefaultAsync();
         if (hasBusinessTables == 0)
         {
-            // 🔧 fix(审查): EnsureCreated 失败不阻塞启动 — CI 曾因启动异常 60s 超时 (Backend failed to start)
-            //   失败时记录日志, 由后续 SQL 迁移脚本 (backend/migrations/*.sql) 兜底建表
-            try
-            {
-                // 🔧 fix(审查): EnsureCreated 30s 超时 — CI 曾卡死/慢导致 60s health 超时 (Backend failed to start)
-                using var ensureCts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-                await db.Database.EnsureCreatedAsync(ensureCts.Token);
-                migrateLogger.LogInformation("空库: EnsureCreated 已建基础表 (EF 模型), 后续 SQL 迁移脚本负责演进");
-            }
-            catch (OperationCanceledException)
-            {
-                migrateLogger.LogWarning("空库 EnsureCreated 30s 超时 (由 SQL 迁移脚本兜底建表)");
-            }
-            catch (Exception ex)
-            {
-                migrateLogger.LogError(ex, "空库 EnsureCreated 失败 (不阻塞启动, 由 SQL 迁移脚本兜底)");
-            }
+            migrateLogger.LogInformation("空库: 走 EF 迁移链建表 (InitialCreate + 增量), 后续 SQL 迁移脚本负责演进");
         }
         else
         {
