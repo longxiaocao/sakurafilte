@@ -51,6 +51,9 @@ services:
       # 首次启动 seed 默认用户 (Users 表为空时创建 admin/operator, 密码来自 .env.prod)
       INITIAL_ADMIN_PASSWORD: "${INITIAL_ADMIN_PASSWORD}"
       INITIAL_OPERATOR_PASSWORD: "${INITIAL_OPERATOR_PASSWORD}"
+      # 🔧 fix(审查): Cloudflare Turnstile 人机验证 — 配置后登录页强制验证, 留空跳过 (开发/演示)
+      Turnstile__SiteKey: "${TURNSTILE_SITE_KEY:-}"
+      Turnstile__SecretKey: "${TURNSTILE_SECRET_KEY:-}"
       # MinIO / Aliyun OSS 切换
       Storage__Provider: "minio"
       Minio__Endpoint: "minio:9000"
