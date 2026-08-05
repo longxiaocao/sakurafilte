@@ -1437,6 +1437,7 @@ export default {
     userDisabled: 'Account disabled, contact administrator',
     userLocked: 'Account locked, please try later',
     turnstileRequired: 'Please complete the verification first',
+    turnstileUnavailable: 'Captcha failed to load: add the current domain (e.g. localhost) to your Cloudflare Turnstile settings, then refresh',
     pleaseLogin: 'Please login first',
     defaultAccount: 'Default: admin / (configured at deployment)'
   },

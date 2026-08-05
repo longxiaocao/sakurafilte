@@ -33,7 +33,8 @@ const errorMsg = ref('')
 //   未配置 (开发/演示) 不渲染 widget, 不阻塞登录
 const turnstileWidget = ref<HTMLDivElement | null>(null)
 const turnstileToken = ref('')
-let turnstileLoaded = false
+const turnstileError = ref('')  // 🔧 fix(审查): 渲染失败明确提示 (CF 侧 domain 不匹配等, 避免用户锁死且不知原因)
+const turnstileLoaded = ref(false)
 let turnstileRenderTimer: ReturnType<typeof setTimeout> | null = null
 
 async function initTurnstile() {
@@ -41,28 +42,38 @@ async function initTurnstile() {
     const cfg = await authApi.turnstileConfig()
     if (!cfg.siteKey) return  // 未配置, 跳过
     await nextTick()
-    await loadTurnstileScript()
+    const loaded = await loadTurnstileScript()
+    if (!loaded) {
+      // 脚本加载失败/超时 (网络无法访问 challenges.cloudflare.com) → 明确提示
+      turnstileLoaded.value = true
+      turnstileError.value = t('auth.turnstileUnavailable')
+      return
+    }
     renderTurnstile(cfg.siteKey)
   } catch {
-    // 配置加载失败 → 不渲染验证码 (不阻塞登录)
+    turnstileError.value = t('auth.turnstileUnavailable')
   }
 }
 
-function loadTurnstileScript(): Promise<void> {
+function loadTurnstileScript(): Promise<boolean> {
   return new Promise((resolve) => {
     // @ts-ignore — window.turnstile 来自 CF 脚本
-    if (window.turnstile || document.querySelector('script[data-turnstile]')) { resolve(); return }
+    if (window.turnstile || document.querySelector('script[data-turnstile]')) { resolve(true); return }
     const s = document.createElement('script')
     s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit'
     s.dataset.turnstile = '1'
-    s.onload = () => resolve()
-    s.onerror = () => resolve()  // CDN 不可达 → 不阻塞登录
+    let done = false
+    const finish = (ok: boolean) => { if (!done) { done = true; resolve(ok) } }
+    s.onload = () => finish(true)
+    s.onerror = () => finish(false)
     document.head.appendChild(s)
+    // 8 秒超时: 国内/受限网络访问 CF CDN 慢或失败 → 不再等待, 走明确提示
+    setTimeout(() => finish(false), 8000)
   })
 }
 
 function renderTurnstile(siteKey: string) {
-  turnstileLoaded = true
+  turnstileLoaded.value = true
   // v-if 依赖 turnstileLoaded → 需等下一轮渲染后再挂 widget
   nextTick(() => {
     if (!turnstileWidget.value) return
@@ -71,18 +82,24 @@ function renderTurnstile(siteKey: string) {
       window.turnstile.render(turnstileWidget.value, {
         sitekey: siteKey,
         theme: document.documentElement.classList.contains('dark') ? 'dark' : 'light',
-        callback: (token: string) => { turnstileToken.value = token },
-        'expired-callback': () => { turnstileToken.value = '' },
+        callback: (token: string) => { turnstileToken.value = token; turnstileError.value = '' },
+        'error-callback': () => { turnstileError.value = t('auth.turnstileUnavailable') },
       })
+      // 3 秒检测: iframe 未出现 = CF 侧拒绝渲染 (Site Key 域名未包含当前访问域名)
+      turnstileRenderTimer = setTimeout(() => {
+        if (!turnstileToken.value && !turnstileWidget.value?.querySelector('iframe')) {
+          turnstileError.value = t('auth.turnstileUnavailable')
+        }
+      }, 3000)
     } catch {
-      // 渲染失败 → 不阻塞登录
+      turnstileError.value = t('auth.turnstileUnavailable')
     }
   })
 }
 
 // 主题切换时重渲染 (widget 主题跟随)
 function onThemeChange() {
-  if (!turnstileLoaded || !turnstileWidget.value) return
+  if (!turnstileLoaded.value || !turnstileWidget.value) return
   // @ts-ignore — window.turnstile 来自 CF 脚本
   if (window.turnstile?.reset) {
     // @ts-ignore
@@ -113,10 +130,10 @@ async function handleLogin() {
   loading.value = true
   errorMsg.value = ''
   // 🔧 fix(审查): Turnstile 配置了 siteKey 时, 必须完成人机验证 (token 非空)
-  const siteKeyConfigured = turnstileLoaded
+  const siteKeyConfigured = turnstileLoaded.value
   if (siteKeyConfigured && !turnstileToken.value) {
     loading.value = false
-    errorMsg.value = t('auth.turnstileRequired')
+    errorMsg.value = turnstileError.value || t('auth.turnstileRequired')
     return
   }
   try {
@@ -199,6 +216,7 @@ async function handleLogin() {
         />
         <!-- 🔧 fix(审查): Cloudflare Turnstile 人机验证 (后端配置 SiteKey 后显示) -->
         <div v-if="turnstileLoaded" ref="turnstileWidget" class="flex justify-center py-1"></div>
+        <p v-if="turnstileError" class="text-xs text-red-500 text-center">{{ turnstileError }}</p>
         <el-button
           type="primary"
           size="large"

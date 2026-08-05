@@ -17,7 +17,9 @@ export default defineConfig({
     headless: true,
     viewport: { width: 1440, height: 900 },
     actionTimeout: 10000,
-    navigationTimeout: 15000
+    navigationTimeout: 15000,
+    // 本地可用 BASE_URL=https://localhost (自签证书) 跑 E2E; CI 用 http dev server 不受影响
+    ignoreHTTPSErrors: true
   },
   projects: [
     {

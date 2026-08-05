@@ -1447,6 +1447,7 @@ export default {
     userDisabled: '账号已被禁用, 请联系管理员',
     userLocked: '账号已锁定, 请稍后重试',
     turnstileRequired: '请先完成人机验证',
+    turnstileUnavailable: '验证码加载失败: 请在 Cloudflare Turnstile 设置中添加当前访问域名 (如 localhost), 保存后刷新本页',
     pleaseLogin: '请先登录',
     defaultAccount: '默认账号: admin / (部署时配置)'
   },

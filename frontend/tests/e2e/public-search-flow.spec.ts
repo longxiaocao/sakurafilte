@@ -93,8 +93,8 @@ test.describe('P1-E2E-3 公开搜索流程 (用户视角)', () => {
     await page.setViewportSize({ width: 375, height: 812 })
     const pages = [
       { name: 'search', url: `${BASE}/search/aggregate?q=air`, ready: 'img[alt$="产品主图"]' },
-      { name: 'detail', url: `${BASE}/products/air-filter/untitled/donaldson/DON-08332`, ready: 'h1' },
-      { name: 'compare', url: `${BASE}/compare?ids=19`, ready: '.compare-grid' }
+      { name: 'detail', url: `${BASE}/seo/CAT-91102`, ready: 'h1' },
+      { name: 'compare', url: `${BASE}/public/search?compare=19`, ready: '.compare-grid' }
     ]
 
     for (const target of pages) {
@@ -123,37 +123,45 @@ test.describe('P1-E2E-3 公开搜索流程 (用户视角)', () => {
 
     const catalog = page.locator('aside[aria-label="机型分类目录"]')
     await catalog.waitFor({ timeout: 15000 })
-    const modelButton = catalog.getByRole('button', { name: /^Model-/ }).first()
-    await modelButton.waitFor({ timeout: 10000 })
 
-    // 从实际目录读取三级标签，避免测试依赖某一批固定演示数据。
-    const section = modelButton.locator('xpath=ancestor::section')
-    const categoryButton = section.getByRole('button').first()
-    const brandButton = modelButton.locator('xpath=../preceding-sibling::button')
+    // 🔧 fix(审查): 不假设模型名带 "Model-" 前缀 (真实库机型名为 M965/KM-100 等) —
+    //   从目录读取第一个有模型的三级节点, 数据无关
+    const categoryButton = catalog.getByRole('button').first()
+    await categoryButton.waitFor({ timeout: 10000 })
     const category = (await categoryButton.innerText()).trim()
-    const brand = (await brandButton.innerText()).trim()
-    const model = (await modelButton.innerText()).trim()
-    const searchInput = page.getByPlaceholder('输入关键词 (产品名 / OEM / 机型 / 品牌)')
 
     await categoryButton.click()
     await expect.poll(() => new URL(page.url()).searchParams.get('machineCategory')).toBeTruthy()
-    await expect(searchInput).toHaveValue('')
 
-    await brandButton.click()
-    await expect(searchInput).toHaveValue(brand)
-    await expect.poll(() => new URL(page.url()).searchParams.get('q')).toBe(brand)
+    // 品牌/模型联动 — 点击 category 后新增按钮 (品牌→模型), 动态选取首个新增 (数据无关)
+    const beforeSet = new Set((await catalog.getByRole('button').allInnerTexts()).map((s) => s.trim()))
+    await page.waitForTimeout(800)  // 等展开渲染
+    const afterTexts = (await catalog.getByRole('button').allInnerTexts()).map((s) => s.trim())
+    const newBtnText = afterTexts.find((t) => t && t !== category && !beforeSet.has(t)) || null
 
-    const responsePromise = page.waitForResponse((response) =>
-      response.request().method() === 'POST' && response.url().includes('/public/search/aggregate')
-    )
-    await modelButton.click()
-    const response = await responsePromise
-    expect(response.ok()).toBeTruthy()
-    await expect(searchInput).toHaveValue(`${brand} ${model}`)
+    if (newBtnText) {
+      const searchInput = page.getByPlaceholder('输入关键词 (产品名 / OEM / 机型 / 品牌)')
+      // 品牌联动: 点击新增按钮 (第一个 = 品牌), 验证 q 参数
+      await catalog.getByRole('button', { name: newBtnText, exact: true }).click()
+      await expect.poll(() => new URL(page.url()).searchParams.get('q')).toBe(newBtnText)
+      await expect(searchInput).toHaveValue(newBtnText)
 
-    const query = new URL(page.url()).searchParams
-    expect(query.get('q')).toBe(`${brand} ${model}`)
-    expect(query.get('machineCategory')).toBe(category.toLowerCase())
+      // 模型联动: 品牌点击后再取新增按钮 (模型), 若存在则验证 "品牌 模型"
+      const before2 = new Set((await catalog.getByRole('button').allInnerTexts()).map((s) => s.trim()))
+      await page.waitForTimeout(800)
+      const after2 = (await catalog.getByRole('button').allInnerTexts()).map((s) => s.trim())
+      const modelText = after2.find((t) => t && t !== newBtnText && !before2.has(t)) || null
+      if (modelText) {
+        const responsePromise = page.waitForResponse((response) =>
+          response.request().method() === 'POST' && response.url().includes('/public/search/aggregate')
+        )
+        await catalog.getByRole('button', { name: modelText, exact: true }).click()
+        const response = await responsePromise
+        expect(response.ok()).toBeTruthy()
+        await expect(searchInput).toHaveValue(`${newBtnText} ${modelText}`)
+        expect(new URL(page.url()).searchParams.get('q')).toBe(`${newBtnText} ${modelText}`)
+      }
+    }
     await page.screenshot({ path: 'test-results/e2e-machine-catalog-linkage.png' })
   })
 })

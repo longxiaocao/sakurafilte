@@ -355,6 +355,24 @@ function moveCompare(idx: number, dir: -1 | 1) {
   const arr = [...compareProducts.value]
   ;[arr[idx], arr[target]] = [arr[target], arr[idx]]
   compareProducts.value = arr
+  // 🔧 fix(审查): 列调序持久化 (与 AdminCompareView 对齐) — URL compare 参数 + sessionStorage
+  //   此前只交换数组, 刷新后顺序丢失 (用户/测试实测: 调序后刷新恢复原序)
+  const ids = arr.map((p) => p.id).join(',')
+  try {
+    sessionStorage.setItem('sakurafilter_compare_ids', JSON.stringify(arr.map((p) => p.id)))
+  } catch { /* 隐私模式等场景忽略 */ }
+  router.replace({ query: { ...route.query, compare: ids } })
+}
+
+function clearCompare() {
+  compareProducts.value = []
+  try {
+    sessionStorage.removeItem('sakurafilter_compare_ids')
+  } catch { /* 隐私模式等场景忽略 */ }
+  // 移除 URL compare 参数
+  const q = { ...route.query }
+  delete q.compare
+  router.replace({ query: q })
 }
 
 // ===== SEO meta =====
@@ -624,6 +642,10 @@ onUnmounted(() => {
   <!-- 🔧 fix(审查): 产品对比抽屉 (内嵌, 替代独立 /compare 页) -->
   <el-drawer v-model="compareOpen" title="产品对比" size="80%" direction="rtl">
     <div v-loading="compareLoading" class="p-3">
+      <div class="flex items-center justify-between mb-2">
+        <span v-if="compareProducts.length > 0" class="text-xs text-muted">{{ compareProducts.length }} 个产品</span>
+        <el-button v-if="compareProducts.length > 0" size="small" data-testid="clear-compare-btn" @click="clearCompare">清空对比</el-button>
+      </div>
       <div v-if="compareProducts.length === 0 && !compareLoading" class="text-sm text-muted py-8 text-center">
         暂无对比产品 — 在搜索结果中点击"加入对比"添加产品
       </div>

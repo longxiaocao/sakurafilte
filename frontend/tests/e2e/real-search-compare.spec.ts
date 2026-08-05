@@ -33,6 +33,7 @@
 import { test, expect, type Page, type APIRequestContext } from '@playwright/test'
 
 const BASE = process.env.BASE_URL || 'http://localhost:5175'
+// 后端 API 基址: CI 为 http://localhost:5148; 本地可用 BACKEND_URL=https://localhost 指向生产栈
 const BACKEND = process.env.BACKEND_URL || 'http://localhost:5148'
 
 // ===== 通过 API 获取与 excludeId 不同的产品 ID (修复用例4产品 ID 重复问题) =====
@@ -41,15 +42,32 @@ const BACKEND = process.env.BACKEND_URL || 'http://localhost:5148'
 //   列调序无意义 (moveRight 在单列时 disabled)。
 //   方案: 直接调 /api/public/by-type 拿已上架产品列表, 取第一个 != excludeId 的 Id。
 async function pickDistinctProductId(request: APIRequestContext, excludeId: string | null): Promise<string | null> {
+  // 1. by-type (有 type 分组数据时优先)
   const resp = await request.get(`${BACKEND}/api/public/by-type`, { timeout: 15000 })
-  if (!resp.ok()) return null
-  const data = await resp.json()
-  const groups: any[] = data.groups || []
-  for (const g of groups) {
-    const products: any[] = g.products || []
-    for (const p of products) {
-      const idStr = String(p.id)
-      if (idStr !== excludeId) return idStr
+  if (resp.ok()) {
+    const data = await resp.json()
+    const groups: any[] = data.groups || []
+    for (const g of groups) {
+      const products: any[] = g.products || []
+      for (const p of products) {
+        const idStr = String(p.id)
+        if (idStr !== excludeId) return idStr
+      }
+    }
+  }
+  // 2. 🔧 fix(审查): fallback — 演示数据 products.type 常为空 → by-type 无分组;
+  //   改走 admin 产品列表 (X-Admin-Token), 与 CI 的 e2e seed 数据兼容
+  const adminToken = process.env.ADMIN_TOKEN || 'dev-admin-token-rotate-in-prod-MZK4R9P3X6V2N7Q1L5F0B8H3C'
+  const a = await request.get(`${BACKEND}/api/admin/products?pageSize=10`, {
+    headers: { 'X-Admin-Token': adminToken },
+    timeout: 15000
+  })
+  if (a.ok()) {
+    const data = await a.json()
+    const items: any[] = data.items || []
+    for (const it of items) {
+      const idStr = String(it.id ?? '')
+      if (idStr && idStr !== excludeId) return idStr
     }
   }
   return null
@@ -123,12 +141,13 @@ test.describe.serial('真实搜索→详情→对比→列序持久化 E2E (用�
 
     // 点击第一个搜索结果卡片 (viewDetail 用 window.location.href 整页跳转 SEO URL)
     await Promise.all([
-      page.waitForURL(/\/products\//, { timeout: 20000 }),
+      // 🔧 fix(审查): 统一 /seo/{oem} SPA 详情路径 (原 /products/ 四段走 Razor SSR 无 main.css 样式丢失)
+      page.waitForURL(/\/seo\//, { timeout: 20000 }),
       page.locator('img[alt$="产品主图"]').first().click()
     ])
 
-    // 断言1: URL 匹配 /products/:pn1/:pn2/:brand/:oem3 格式 (V2 Task 4.4 SEO URL)
-    await expect(page).toHaveURL(/\/products\/[^/]+\/[^/]+\/[^/]+\/[^/]+/)
+    // 断言1: URL 为 /seo/:oem 格式 (V2 Task 4.4 SEO URL — 统一 SPA 详情)
+    await expect(page).toHaveURL(/\/seo\/[^/]+/)
 
     // 断言2: 详情页有产品信息 (h1 产品名渲染, 说明 data 加载成功; SSR/SPA 均有 h1)
     await page.locator('h1').first().waitFor({ timeout: 15000 })
@@ -146,7 +165,7 @@ test.describe.serial('真实搜索→详情→对比→列序持久化 E2E (用�
     await page.locator('img[alt$="产品主图"]').first().waitFor({ timeout: 15000 })
 
     await Promise.all([
-      page.waitForURL(/\/products\//, { timeout: 20000 }),
+      page.waitForURL(/\/seo\//, { timeout: 20000 }),
       page.locator('img[alt$="产品主图"]').first().click()
     ])
     await page.locator('h1').first().waitFor({ timeout: 15000 })
@@ -156,14 +175,15 @@ test.describe.serial('真实搜索→详情→对比→列序持久化 E2E (用�
     const compareBtn = page.getByRole('button', { name: '加入对比', exact: true })
     await compareBtn.waitFor({ timeout: 15000 })
 
-    // 点击后跳转 /compare?ids=<id> (SSR: window.location.href 整页跳转; SPA: router.push)
+    // 点击后跳转对比页 (SPA: /public/search?compare=<ids> — 对比内嵌搜索页; 老 /compare 路由已废弃)
     await Promise.all([
-      page.waitForURL(/\/compare/, { timeout: 20000 }),
+      page.waitForURL(/compare=/, { timeout: 20000 }),
       compareBtn.click()
     ])
 
-    // 从 URL 解析产品 ID, 供后续用例使用 (CompareApp 跳转 URL 为 /compare?ids=<singleId>)
-    const idsParam = new URL(page.url()).searchParams.get('ids') || ''
+    // 从 URL 解析产品 ID, 供后续用例使用 (跳转 URL 为 /public/search?compare=<ids>; 兼容老 ids 参数)
+    const u = new URL(page.url())
+    const idsParam = u.searchParams.get('compare') || u.searchParams.get('ids') || ''
     firstProductId = idsParam.split(',')[0] || null
     expect(firstProductId).not.toBeNull()
 
@@ -189,8 +209,8 @@ test.describe.serial('真实搜索→详情→对比→列序持久化 E2E (用�
     // 确保 2 个不同产品 (否则列调序无意义, moveRight 在单列时 disabled)
     expect(secondProductId).not.toBe(firstProductId)
 
-    // 访问带 2 个 id 的对比页, 验证列调序持久化
-    await page.goto(`${BASE}/compare?ids=${firstProductId},${secondProductId}`, {
+    // 访问带 2 个 id 的对比页, 验证列调序持久化 (对比内嵌搜索页: /public/search?compare=<ids>)
+    await page.goto(`${BASE}/public/search?compare=${firstProductId},${secondProductId}`, {
       waitUntil: 'domcontentloaded',
       timeout: 20000
     })
@@ -217,8 +237,8 @@ test.describe.serial('真实搜索→详情→对比→列序持久化 E2E (用�
 
     // 等待 URL query.ids 顺序持久化 (router.replace 完成, 确保 reload 前已更新)
     await expect.poll(
-      () => (new URL(page.url()).searchParams.get('ids') || '').split(','),
-      { timeout: 10000, message: 'URL ids 顺序应已更新' }
+      () => (new URL(page.url()).searchParams.get('compare') || new URL(page.url()).searchParams.get('ids') || '').split(','),
+      { timeout: 10000, message: 'URL compare 顺序应已更新' }
     ).not.toEqual([firstProductId, secondProductId])
 
     // 刷新页面, 验证 URL query.ids + sessionStorage 持久化生效
@@ -234,7 +254,7 @@ test.describe.serial('真实搜索→详情→对比→列序持久化 E2E (用�
     const stored = await page.evaluate(() => sessionStorage.getItem('sakurafilter_compare_ids'))
     expect(stored).not.toBeNull()
     const storedIds: number[] = JSON.parse(stored as string)
-    const urlIds = (new URL(page.url()).searchParams.get('ids') || '').split(',')
+    const urlIds = (new URL(page.url()).searchParams.get('compare') || new URL(page.url()).searchParams.get('ids') || '').split(',')
     // sessionStorage 持久化的 ID 顺序应与 URL query.ids 顺序一致
     expect(storedIds.map(String)).toEqual(urlIds)
 
@@ -246,7 +266,7 @@ test.describe.serial('真实搜索→详情→对比→列序持久化 E2E (用�
     expect(secondProductId).not.toBeNull()
     await injectZhLocale(page)
 
-    await page.goto(`${BASE}/compare?ids=${firstProductId},${secondProductId}`, {
+    await page.goto(`${BASE}/public/search?compare=${firstProductId},${secondProductId}`, {
       waitUntil: 'domcontentloaded',
       timeout: 20000
     })
@@ -276,14 +296,14 @@ test.describe.serial('真实搜索→详情→对比→列序持久化 E2E (用�
     expect(secondProductId).not.toBeNull()
     await injectZhLocale(page)
 
-    await page.goto(`${BASE}/compare?ids=${firstProductId},${secondProductId}`, {
+    await page.goto(`${BASE}/public/search?compare=${firstProductId},${secondProductId}`, {
       waitUntil: 'domcontentloaded',
       timeout: 20000
     })
     await page.locator('.compare-grid').waitFor({ timeout: 15000 })
 
-    // 点击"清空"按钮 (clearAll → persistUrlOrder → persistCompareIds([]) → safeRemoveItem)
-    const clearBtn = page.getByRole('button', { name: '清空', exact: true })
+    // 点击"清空对比"按钮 (公开对比抽屉 — 清空列表 + sessionStorage + URL 参数)
+    const clearBtn = page.getByTestId('clear-compare-btn')
     await expect(clearBtn).toBeEnabled({ timeout: 10000 })
     await clearBtn.click()
 
