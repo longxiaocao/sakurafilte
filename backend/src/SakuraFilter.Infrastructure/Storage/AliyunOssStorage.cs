@@ -50,6 +50,24 @@ public class AliyunOssStorage : IObjectStorage
         await Task.Run(() => _client.DeleteObject(_bucket, key), ct);
     }
 
+    // 🔧 fix: 图片代理读流 (同 MinioStorage.GetAsync — 代理端点统一读流, 云存储切换无感)
+    public async Task<(Stream Stream, string ContentType)> GetAsync(string key, CancellationToken ct = default)
+    {
+        var obj = await Task.Run(() => _client.GetObject(_bucket, key), ct);
+        return (obj.Content, InferContentType(key));
+    }
+
+    private static string InferContentType(string key)
+        => Path.GetExtension(key).ToLowerInvariant() switch
+        {
+            ".jpg" or ".jpeg" => "image/jpeg",
+            ".png" => "image/png",
+            ".webp" => "image/webp",
+            ".gif" => "image/gif",
+            ".svg" => "image/svg+xml",
+            _ => "application/octet-stream"
+        };
+
     public string GetUrl(string key, int expirySeconds = 3600)
     {
         // 同步预签名 URL, 与 MinioStorage 行为一致

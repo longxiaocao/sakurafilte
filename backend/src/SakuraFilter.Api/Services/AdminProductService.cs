@@ -672,8 +672,9 @@ public class AdminProductService
         async Task<string> GetUrlSafe(string? key)
         {
             if (_storage == null || string.IsNullOrEmpty(key)) return "";
-            try { return await _storage.GetPresignedUrlAsync(key, 3600, ct); }
-            catch (Exception ex) { _logger.LogWarning(ex, "GetPresignedUrl failed: key={Key}", key); return ""; }
+            // 🔧 fix(审查): 统一代理路径 (同 AdminProductImageService — MinIO 预签名 URL 浏览器不可达 → 裂图)
+            try { return $"/api/public/images/{key}"; }
+            catch (Exception ex) { _logger.LogWarning(ex, "image proxy url failed: key={Key}", key); return ""; }
         }
         var urls = await Task.WhenAll(imageRows.Select(img => GetUrlSafe(img.ImageKey)));
         for (int i = 0; i < imageRows.Count; i++)

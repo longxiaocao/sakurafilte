@@ -114,7 +114,7 @@ public static class DictionaryEndpoints
             return await ImportOemBrandRows(rows, svc, ct);
         }).WithName("AdminImportOemBrands");
         // 🔧 fix(审查): XLSX 批量导入 (双格式 — 复用行级处理, 解析后与 CSV 同逻辑)
-        g.MapPost("/import-xlsx", async ([FromForm] IFormFile file, OemBrandDictService svc, CancellationToken ct) =>
+        g.MapPost("/import-xlsx", async (IFormFile file, OemBrandDictService svc, CancellationToken ct) =>
             await ImportOemBrandRows(ParseXlsxRows(file), svc, ct)).DisableAntiforgery().WithName("AdminImportOemBrandsXlsx");
 
         g.MapPut("/{id:long}", async (
@@ -427,7 +427,7 @@ public static class DictionaryEndpoints
         }).WithName("AdminExportProductName1sXlsx");
         g.MapPost("/import", async (ImportCsvRequest body, ProductName1DictService svc, CancellationToken ct) =>
             await ImportDictCsv<DictProductName1>(body.Csv, svc, x => x.ProductName1, x => x.DeletedAt, x => x.Id, ct)).WithName("AdminImportProductName1s");
-        g.MapPost("/import-xlsx", async ([FromForm] IFormFile file, ProductName1DictService svc, CancellationToken ct) =>
+        g.MapPost("/import-xlsx", async (IFormFile file, ProductName1DictService svc, CancellationToken ct) =>
             await ImportDictRows(ParseXlsxRows(file), svc, x => x.ProductName1, x => x.DeletedAt, x => x.Id, ct)).DisableAntiforgery().WithName("AdminImportProductName1sXlsx");
 
         g.MapPut("/{id:long}", async (
@@ -502,7 +502,7 @@ public static class DictionaryEndpoints
         }).WithName("AdminExportProductName2sXlsx");
         g.MapPost("/import", async (ImportCsvRequest body, ProductName2DictService svc, CancellationToken ct) =>
             await ImportDictCsv<DictProductName2>(body.Csv, svc, x => x.ProductName2, x => x.DeletedAt, x => x.Id, ct)).WithName("AdminImportProductName2s");
-        g.MapPost("/import-xlsx", async ([FromForm] IFormFile file, ProductName2DictService svc, CancellationToken ct) =>
+        g.MapPost("/import-xlsx", async (IFormFile file, ProductName2DictService svc, CancellationToken ct) =>
             await ImportDictRows(ParseXlsxRows(file), svc, x => x.ProductName2, x => x.DeletedAt, x => x.Id, ct)).DisableAntiforgery().WithName("AdminImportProductName2sXlsx");
 
         g.MapPut("/{id:long}", async (
@@ -577,7 +577,7 @@ public static class DictionaryEndpoints
         }).WithName("AdminExportTypesXlsx");
         g.MapPost("/import", async (ImportCsvRequest body, TypeDictService svc, CancellationToken ct) =>
             await ImportDictCsv<DictType>(body.Csv, svc, x => x.Type, x => x.DeletedAt, x => x.Id, ct)).WithName("AdminImportTypes");
-        g.MapPost("/import-xlsx", async ([FromForm] IFormFile file, TypeDictService svc, CancellationToken ct) =>
+        g.MapPost("/import-xlsx", async (IFormFile file, TypeDictService svc, CancellationToken ct) =>
             await ImportDictRows(ParseXlsxRows(file), svc, x => x.Type, x => x.DeletedAt, x => x.Id, ct)).DisableAntiforgery().WithName("AdminImportTypesXlsx");
 
         g.MapPut("/{id:long}", async (
@@ -652,7 +652,7 @@ public static class DictionaryEndpoints
         }).WithName("AdminExportOemNo3sXlsx");
         g.MapPost("/import", async (ImportCsvRequest body, OemNo3DictService svc, CancellationToken ct) =>
             await ImportDictCsv<DictOemNo3>(body.Csv, svc, x => x.OemNo3, x => x.DeletedAt, x => x.Id, ct)).WithName("AdminImportOemNo3s");
-        g.MapPost("/import-xlsx", async ([FromForm] IFormFile file, OemNo3DictService svc, CancellationToken ct) =>
+        g.MapPost("/import-xlsx", async (IFormFile file, OemNo3DictService svc, CancellationToken ct) =>
             await ImportDictRows(ParseXlsxRows(file), svc, x => x.OemNo3, x => x.DeletedAt, x => x.Id, ct)).DisableAntiforgery().WithName("AdminImportOemNo3sXlsx");
 
         g.MapPut("/{id:long}", async (
@@ -725,7 +725,7 @@ public static class DictionaryEndpoints
         }).WithName("AdminExportMediasXlsx");
         g.MapPost("/import", async (ImportCsvRequest body, MediaDictService svc, CancellationToken ct) =>
             await ImportDictCsv<DictMedia>(body.Csv, svc, x => x.MediaName, x => x.DeletedAt, x => x.Id, ct)).WithName("AdminImportMedias");
-        g.MapPost("/import-xlsx", async ([FromForm] IFormFile file, MediaDictService svc, CancellationToken ct) =>
+        g.MapPost("/import-xlsx", async (IFormFile file, MediaDictService svc, CancellationToken ct) =>
             await ImportDictRows(ParseXlsxRows(file), svc, x => x.MediaName, x => x.DeletedAt, x => x.Id, ct)).DisableAntiforgery().WithName("AdminImportMediasXlsx");
         g.MapPut("/{id:long}", async (
             long id, MediaUpdateRequest body, MediaDictService svc, HttpContext ctx, CancellationToken ct) =>
@@ -814,7 +814,7 @@ public static class DictionaryEndpoints
             return await ImportMachineRows(rows, svc, ct);
         }).WithName("AdminImportMachines");
         // 🔧 fix(审查): 机型字典 XLSX 导入 (双格式)
-        g.MapPost("/import-xlsx", async ([FromForm] IFormFile file, MachineDictService svc, CancellationToken ct) =>
+        g.MapPost("/import-xlsx", async (IFormFile file, MachineDictService svc, CancellationToken ct) =>
             await ImportMachineRows(ParseXlsxRows(file), svc, ct)).DisableAntiforgery().WithName("AdminImportMachinesXlsx");
         g.MapPut("/{id:long}", async (
             long id, MachineUpdateRequest body, MachineDictService svc, HttpContext ctx, CancellationToken ct) =>
@@ -883,7 +883,7 @@ public static class DictionaryEndpoints
         }).WithName("AdminExportEnginesXlsx");
         g.MapPost("/import", async (ImportCsvRequest body, EngineDictService svc, CancellationToken ct) =>
             await ImportDictCsv<DictEngine>(body.Csv, svc, x => x.EngineBrand, x => x.DeletedAt, x => x.Id, ct)).WithName("AdminImportEngines");
-        g.MapPost("/import-xlsx", async ([FromForm] IFormFile file, EngineDictService svc, CancellationToken ct) =>
+        g.MapPost("/import-xlsx", async (IFormFile file, EngineDictService svc, CancellationToken ct) =>
             await ImportDictRows(ParseXlsxRows(file), svc, x => x.EngineBrand, x => x.DeletedAt, x => x.Id, ct)).DisableAntiforgery().WithName("AdminImportEnginesXlsx");
         g.MapPut("/{id:long}", async (
             long id, EngineUpdateRequest body, EngineDictService svc, HttpContext ctx, CancellationToken ct) =>

@@ -93,7 +93,10 @@ function ensureLinkTag(rel: string, href: string) {
 // 副图: oem2/{OEM}_{slot}.jpg (slot 2-6)
 function buildImageUrl(key: string, oem: string, slot: number): string {
   if (key && key.startsWith('http')) return key
-  // 命名: oem2/{OEM}.jpg (主图) / oem2/{OEM}_{slot}.jpg (副图)
+  // 🔧 fix(审查): 有存储 key 时走 API 代理 — key 为安全字符集 [A-Za-z0-9/._-], 无需 URL 编码
+  //   (encodeURIComponent 会产生 %2F → Kestrel 拒绝 → 400; 后端 IsSafeKey 白名单兜底)
+  if (key) return `/api/public/images/${key}`
+  // 旧命名兜底 (无 key 时): oem2/{OEM}.jpg (主图) / oem2/{OEM}_{slot}.jpg (副图)
   const slotSuffix = slot === 1 ? '' : `_${slot}`
   return `/oem2/${oem}${slotSuffix}.jpg`
 }

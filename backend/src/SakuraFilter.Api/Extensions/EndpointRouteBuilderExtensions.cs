@@ -19,6 +19,7 @@ public static class EndpointRouteBuilderExtensions
         app.MapAdminMachineBatchBindEndpoints();  // Task 2: 批量绑定 MR.1 到机型
         app.MapDeadLetterEndpoints();
         app.MapDictionaryEndpoints();
+        app.MapStorageEndpoints();  // 🔧 fix: 图片代理端点 (MinIO 容器内不可直连 → 裂图)
         app.MapAdminMachineTreeEndpoints();  // Task 1: 机型三级树查询
         app.MapSiteContentEndpoints();  // 站点内容维护 (about/contact/news/站点名/logo)
         app.MapPublicTypeaheadEndpoints();

@@ -17,6 +17,12 @@ public interface IObjectStorage
     /// <summary>异步获取预签名 URL(P1.2 新增, 用于前台产品页直接 OSS 读图, 避免后端中转带宽)</summary>
     Task<string> GetPresignedUrlAsync(string key, int expirySeconds = 3600, CancellationToken ct = default);
 
+    /// <summary>
+    /// 读取对象流 (🔧 fix: 图片代理端点用 — 容器内 MinIO 不对外暴露, 预签名 URL host 浏览器不可达 → 裂图;
+    /// 代理读流后由 API 返回, 云存储(R2/OSS)切换时同样生效)
+    /// </summary>
+    Task<(Stream Stream, string ContentType)> GetAsync(string key, CancellationToken ct = default);
+
     /// <summary>检查文件存在</summary>
     Task<bool> ExistsAsync(string key, CancellationToken ct = default);
 

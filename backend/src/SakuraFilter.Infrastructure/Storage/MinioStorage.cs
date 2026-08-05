@@ -39,6 +39,28 @@ public class MinioStorage : IObjectStorage
         await _client.RemoveObjectAsync(args, ct);
     }
 
+    // 🔧 fix: 图片代理读流 (容器内 MinIO 预签名 URL 浏览器不可达 → 裂图; 代理端点读流返回)
+    public async Task<(Stream Stream, string ContentType)> GetAsync(string key, CancellationToken ct = default)
+    {
+        var ms = new MemoryStream();
+        var args = new GetObjectArgs().WithBucket(_bucket).WithObject(key)
+            .WithCallbackStream(s => s.CopyTo(ms));
+        await _client.GetObjectAsync(args, ct);
+        ms.Position = 0;
+        return (ms, InferContentType(key));
+    }
+
+    private static string InferContentType(string key)
+        => Path.GetExtension(key).ToLowerInvariant() switch
+        {
+            ".jpg" or ".jpeg" => "image/jpeg",
+            ".png" => "image/png",
+            ".webp" => "image/webp",
+            ".gif" => "image/gif",
+            ".svg" => "image/svg+xml",
+            _ => "application/octet-stream"
+        };
+
     public string GetUrl(string key, int expirySeconds = 3600)
     {
         // 预签名 URL,前端可直接访问

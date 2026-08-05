@@ -393,7 +393,9 @@ public class AdminProductImageService
     {
         try
         {
-            return await Task.Run(() => _storage.GetUrl(key, 3600));
+            // 🔧 fix(审查): 统一走 API 代理路径 — 容器内 MinIO 预签名 URL host (minio:9000) 浏览器不可达 → 裂图
+            //   key 为安全字符集不编码 (encodeURIComponent 的 %2F 会被 Kestrel 拒绝 → 400)
+            return $"/api/public/images/{key}";
         }
         catch
         {
