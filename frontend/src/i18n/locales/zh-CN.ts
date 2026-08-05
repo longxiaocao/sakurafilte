@@ -1310,7 +1310,27 @@ export default {
     opsCenter: '运维中心',
     // 🔧 fix(审查): 运维中心 el-tabs label i18n (原硬编码中文)
     opsview: {
-      tab: { etl: 'ETL 触发与监控', perf: '性能', errors: '错误', api: 'API 文档' }
+      tab: { etl: 'ETL 触发与监控', perf: '性能', errors: '错误', api: 'API 文档', storage: '存储配置' }
+    },
+    storage: {
+      provider: '存储服务商',
+      provider_tip: '切换后保存并重启容器生效; 图片代理端点 (API 中转) 在三种存储下均正常工作',
+      endpoint: 'Endpoint',
+      access_key: 'Access Key',
+      secret_key: 'Secret Key',
+      access_key_id: 'AccessKey ID',
+      access_key_secret: 'AccessKey Secret',
+      bucket: 'Bucket 名称',
+      public_endpoint: 'Public Endpoint (浏览器访问地址)',
+      cdn_endpoint: 'CDN 域名 (可选)',
+      test: '连通性测试',
+      save: '保存配置',
+      test_ok: '连通性测试通过',
+      test_failed: '连通性测试失败',
+      saved: '已保存, 重启容器后生效',
+      save_failed: '保存失败, 请稍后重试',
+      load_failed: '加载配置失败',
+      restart_tip: '保存的配置将在容器重启后生效 (存储客户端为单例, 不支持热切换)。测试按钮用于验证凭证与网络连通性 (上传/读取/删除探针)。',
     },
     help: '帮助',
     enterAdmin: '进入后台',
@@ -1426,6 +1446,7 @@ export default {
     authFailed: '用户名或密码错误',
     userDisabled: '账号已被禁用, 请联系管理员',
     userLocked: '账号已锁定, 请稍后重试',
+    turnstileRequired: '请先完成人机验证',
     pleaseLogin: '请先登录',
     defaultAccount: '默认账号: admin / (部署时配置)'
   },

@@ -1300,7 +1300,27 @@ export default {
     opsCenter: 'Ops Center',
     // 🔧 fix(审查): 运维中心 el-tabs label i18n
     opsview: {
-      tab: { etl: 'ETL Trigger & Monitor', perf: 'Performance', errors: 'Errors', api: 'API Docs' }
+      tab: { etl: 'ETL Trigger & Monitor', perf: 'Performance', errors: 'Errors', api: 'API Docs', storage: 'Storage Config' }
+    },
+    storage: {
+      provider: 'Storage Provider',
+      provider_tip: 'Save then restart container to apply; the image proxy endpoint works with all providers',
+      endpoint: 'Endpoint',
+      access_key: 'Access Key',
+      secret_key: 'Secret Key',
+      access_key_id: 'AccessKey ID',
+      access_key_secret: 'AccessKey Secret',
+      bucket: 'Bucket Name',
+      public_endpoint: 'Public Endpoint (browser URL)',
+      cdn_endpoint: 'CDN Domain (optional)',
+      test: 'Test Connection',
+      save: 'Save Config',
+      test_ok: 'Connection test passed',
+      test_failed: 'Connection test failed',
+      saved: 'Saved, restart container to apply',
+      save_failed: 'Save failed, retry later',
+      load_failed: 'Failed to load config',
+      restart_tip: 'Saved config applies after container restart (storage client is singleton). The test button verifies credentials/connectivity (upload/read/delete probe).',
     },
     help: 'Help',
     enterAdmin: 'Enter Admin',
@@ -1416,6 +1436,7 @@ export default {
     authFailed: 'Invalid username or password',
     userDisabled: 'Account disabled, contact administrator',
     userLocked: 'Account locked, please try later',
+    turnstileRequired: 'Please complete the verification first',
     pleaseLogin: 'Please login first',
     defaultAccount: 'Default: admin / (configured at deployment)'
   },

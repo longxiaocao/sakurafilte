@@ -1,6 +1,9 @@
 using SakuraFilter.Api.Extensions;
+using SakuraFilter.Core.DTOs;
 using Microsoft.EntityFrameworkCore;
 using SakuraFilter.Infrastructure.Data;
+using Npgsql;
+using System.Text.Json;
 
 // 生产部署一次性迁移模式: dotnet SakuraFilter.Api.dll --migrate-db
 //   WHY: prod 配置 Db:AutoMigrateOnStartup=false (避免多实例并发迁移),
@@ -20,6 +23,10 @@ if (args.Contains("--migrate-db"))
 }
 
 var builder = WebApplication.CreateBuilder(args);
+
+// 🔧 fix(审查): 存储配置 DB 覆盖 (运维中心"存储配置"页保存后重启生效)
+//   读 system_settings.storage_config → 追加 in-memory 配置 (优先级高于环境变量)
+await ApplyStorageConfigOverridesAsync(builder);
 
 // 服务注册（按职责拆分到 ServiceCollectionExtensions）
 //   RateLimit 策略 (global/search/etl/auth/public/sitemap) 已在 AddSakuraFilterServices 内统一注册
@@ -51,3 +58,49 @@ app.MapRazorPages();
 await app.InitializeSearchAsync();
 
 app.Run();
+
+// 🔧 fix(审查): 存储配置 DB 覆盖 (运维中心"存储配置"页保存后重启生效)
+//   读 system_settings.storage_config → 追加 in-memory 配置 (优先级高于环境变量)
+//   WHY: 存储客户端是单例, 无法热切换; 保存后重启容器即按新配置启动
+static async Task ApplyStorageConfigOverridesAsync(WebApplicationBuilder builder)
+{
+    var connStr = builder.Configuration.GetConnectionString("Postgres")
+        ?? builder.Configuration["ConnectionStrings__Postgres"];
+    if (string.IsNullOrEmpty(connStr)) return;
+    try
+    {
+        await using var conn = new NpgsqlConnection(connStr);
+        await conn.OpenAsync();
+        await using var cmd = new NpgsqlCommand("SELECT value FROM system_settings WHERE key = 'storage_config' LIMIT 1", conn);
+        var raw = await cmd.ExecuteScalarAsync() as string;
+        if (string.IsNullOrEmpty(raw)) return;
+        var cfg = JsonSerializer.Deserialize<StorageConfigDto>(raw);
+        if (cfg == null || string.IsNullOrEmpty(cfg.Provider)) return;
+        var kv = new Dictionary<string, string?>
+        {
+            ["Storage:Provider"] = cfg.Provider,
+            ["Minio:Endpoint"] = cfg.Minio?.Endpoint,
+            ["Minio:AccessKey"] = cfg.Minio?.AccessKey,
+            ["Minio:SecretKey"] = cfg.Minio?.SecretKey,
+            ["Minio:BucketName"] = cfg.Minio?.BucketName,
+            ["Minio:PublicEndpoint"] = cfg.Minio?.PublicEndpoint,
+            ["R2:Endpoint"] = cfg.R2?.Endpoint,
+            ["R2:AccessKeyId"] = cfg.R2?.AccessKeyId,
+            ["R2:AccessKeySecret"] = cfg.R2?.AccessKeySecret,
+            ["R2:BucketName"] = cfg.R2?.BucketName,
+            ["R2:PublicEndpoint"] = cfg.R2?.PublicEndpoint,
+            ["Aliyun:Endpoint"] = cfg.Aliyun?.Endpoint,
+            ["Aliyun:AccessKeyId"] = cfg.Aliyun?.AccessKeyId,
+            ["Aliyun:AccessKeySecret"] = cfg.Aliyun?.AccessKeySecret,
+            ["Aliyun:BucketName"] = cfg.Aliyun?.BucketName,
+            ["Aliyun:PublicEndpoint"] = cfg.Aliyun?.PublicEndpoint,
+            ["Aliyun:CdnEndpoint"] = cfg.Aliyun?.CdnEndpoint,
+        };
+        builder.Configuration.AddInMemoryCollection(kv.Where(p => p.Value != null)!);
+        Console.WriteLine($"[Storage] 已应用 system_settings 存储配置覆盖: Provider={cfg.Provider}");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"[Storage] storage_config 覆盖失败(忽略, 用环境变量): {ex.Message}");
+    }
+}

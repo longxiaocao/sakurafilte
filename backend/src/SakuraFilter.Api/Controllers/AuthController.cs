@@ -26,19 +26,25 @@ public class AuthController : ControllerBase
     private readonly ILogger<AuthController> _logger;
     private readonly IValidator<LoginRequest> _loginValidator;
     private readonly IValidator<ChangePasswordRequest> _changePasswordValidator;
+    private readonly IConfiguration _config;
+    private readonly IHttpClientFactory _httpClientFactory;
 
     public AuthController(
         UserService userService,
         JwtTokenService jwt,
         ILogger<AuthController> logger,
         IValidator<LoginRequest> loginValidator,
-        IValidator<ChangePasswordRequest> changePasswordValidator)
+        IValidator<ChangePasswordRequest> changePasswordValidator,
+        IConfiguration config,
+        IHttpClientFactory httpClientFactory)
     {
         _userService = userService;
         _jwt = jwt;
         _logger = logger;
         _loginValidator = loginValidator;
         _changePasswordValidator = changePasswordValidator;
+        _config = config;
+        _httpClientFactory = httpClientFactory;
     }
 
     /// <summary>
@@ -95,9 +101,29 @@ public class AuthController : ControllerBase
         // 截断 User-Agent 防止超长 (列定义 255)
         if (ua.Length > 255) ua = ua[..255];
 
+        // 🔧 fix(审查): Cloudflare Turnstile 人机验证 (Turnstile:SecretKey 配置后强制; 未配置=跳过, 开发/演示不阻塞)
+        var turnstileSecret = _config["Turnstile:SecretKey"];
+        if (!string.IsNullOrEmpty(turnstileSecret))
+        {
+            if (string.IsNullOrEmpty(req.TurnstileToken))
+                return BadRequest(new ProblemDetails
+                {
+                    Title = "人机验证未完成, 请重试",
+                    Status = StatusCodes.Status400BadRequest,
+                    Extensions = { ["errorCode"] = "ERR_TURNSTILE_REQUIRED" }
+                });
+            var ok = await VerifyTurnstileAsync(turnstileSecret, req.TurnstileToken, ip, ct);
+            if (!ok)
+                return BadRequest(new ProblemDetails
+                {
+                    Title = "人机验证失败, 请重试",
+                    Status = StatusCodes.Status400BadRequest,
+                    Extensions = { ["errorCode"] = "ERR_TURNSTILE_FAILED" }
+                });
+        }
+
         var user = await _userService.AuthenticateAsync(req.Username, req.Password, ip, ua, ct);
-        if (user == null)
-            // 🔧 fix(审查): 统一 ProblemDetails + errorCode — 原 { error } 旧格式前端无法映射,
+        if (user == null)            // 🔧 fix(审查): 统一 ProblemDetails + errorCode — 原 { error } 旧格式前端无法映射,
             //   登录失败被兜底成误导的 "登录失败, 请稍后重试" (用户实测误以为登录功能被破坏)
             return Unauthorized(new ProblemDetails
             {
@@ -246,7 +272,41 @@ public class AuthController : ControllerBase
 
         return Ok(new { success = true });
     }
+
+    /// <summary>Turnstile 站点配置 (前端判断是否渲染验证码; 未配置返回空 siteKey)</summary>
+    [HttpGet("turnstile-config")]
+    [AllowAnonymous]
+    public IActionResult TurnstileConfig()
+        => Ok(new { siteKey = _config["Turnstile:SiteKey"] ?? "" });
+
+    private async Task<bool> VerifyTurnstileAsync(string secret, string token, string? ip, CancellationToken ct)
+    {
+        try
+        {
+            using var http = _httpClientFactory.CreateClient();
+            var form = new FormUrlEncodedContent(new[]
+            {
+                new KeyValuePair<string, string>("secret", secret),
+                new KeyValuePair<string, string>("response", token),
+                new KeyValuePair<string, string>("remoteip", ip ?? ""),
+            });
+            var resp = await http.PostAsync("https://challenges.cloudflare.com/turnstile/v0/siteverify", form, ct);
+            var json = await resp.Content.ReadFromJsonAsync<TurnstileVerifyResponse>(cancellationToken: ct);
+            return json is { Success: true };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Turnstile verify 调用失败 (按通过处理, 避免验证码服务故障阻断登录)");
+            return true;
+        }
+    }
 }
+
+    public sealed class TurnstileVerifyResponse
+    {
+        public bool Success { get; set; }
+        public string[]? ErrorCodes { get; set; }
+    }
 
 // ========== 请求 DTO (内嵌, 与 Controller 同文件, 避免散落) ==========
 
@@ -254,6 +314,9 @@ public class LoginRequest
 {
     public string Username { get; set; } = "";
     public string Password { get; set; } = "";
+
+    /// <summary>Cloudflare Turnstile 人机验证 token (Turnstile:SiteKey 配置后必填)</summary>
+    public string? TurnstileToken { get; set; }
 }
 
 public class RefreshRequest

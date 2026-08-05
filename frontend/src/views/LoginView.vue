@@ -4,7 +4,7 @@
 //   - 支持 redirect 查询参数, 登录后回跳到原目标页
 //   - 错误码 ERR_AUTH_FAILED → 友好提示 (通过 i18n 映射)
 //   - 主题切换兼容: 全部使用 CSS 变量, 跟随 <html class="dark">
-import { reactive, ref } from 'vue'
+import { reactive, ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { User, Lock } from '@element-plus/icons-vue'
@@ -29,6 +29,72 @@ const form = reactive({
 const loading = ref(false)
 const errorMsg = ref('')
 
+// 🔧 fix(审查): Cloudflare Turnstile 人机验证 — 后端 Turnstile:SiteKey 配置后强制;
+//   未配置 (开发/演示) 不渲染 widget, 不阻塞登录
+const turnstileWidget = ref<HTMLDivElement | null>(null)
+const turnstileToken = ref('')
+let turnstileLoaded = false
+let turnstileRenderTimer: ReturnType<typeof setTimeout> | null = null
+
+async function initTurnstile() {
+  try {
+    const cfg = await authApi.turnstileConfig()
+    if (!cfg.siteKey) return  // 未配置, 跳过
+    await nextTick()
+    await loadTurnstileScript()
+    renderTurnstile(cfg.siteKey)
+  } catch {
+    // 配置加载失败 → 不渲染验证码 (不阻塞登录)
+  }
+}
+
+function loadTurnstileScript(): Promise<void> {
+  return new Promise((resolve) => {
+    // @ts-ignore — window.turnstile 来自 CF 脚本
+    if (window.turnstile || document.querySelector('script[data-turnstile]')) { resolve(); return }
+    const s = document.createElement('script')
+    s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit'
+    s.dataset.turnstile = '1'
+    s.onload = () => resolve()
+    s.onerror = () => resolve()  // CDN 不可达 → 不阻塞登录
+    document.head.appendChild(s)
+  })
+}
+
+function renderTurnstile(siteKey: string) {
+  turnstileLoaded = true
+  // v-if 依赖 turnstileLoaded → 需等下一轮渲染后再挂 widget
+  nextTick(() => {
+    if (!turnstileWidget.value) return
+    try {
+      // @ts-ignore — window.turnstile 来自 CF 脚本
+      window.turnstile.render(turnstileWidget.value, {
+        sitekey: siteKey,
+        theme: document.documentElement.classList.contains('dark') ? 'dark' : 'light',
+        callback: (token: string) => { turnstileToken.value = token },
+        'expired-callback': () => { turnstileToken.value = '' },
+      })
+    } catch {
+      // 渲染失败 → 不阻塞登录
+    }
+  })
+}
+
+// 主题切换时重渲染 (widget 主题跟随)
+function onThemeChange() {
+  if (!turnstileLoaded || !turnstileWidget.value) return
+  // @ts-ignore — window.turnstile 来自 CF 脚本
+  if (window.turnstile?.reset) {
+    // @ts-ignore
+    window.turnstile.reset(turnstileWidget.value)
+  }
+}
+
+onMounted(() => { initTurnstile() })
+onBeforeUnmount(() => {
+  if (turnstileRenderTimer) clearTimeout(turnstileRenderTimer)
+})
+
 // 后端 errorCode → i18n key 映射
 const AUTH_ERROR_I18N: Record<string, string> = {
   ERR_AUTH_FAILED: 'auth.authFailed',
@@ -46,8 +112,15 @@ async function handleLogin() {
   }
   loading.value = true
   errorMsg.value = ''
+  // 🔧 fix(审查): Turnstile 配置了 siteKey 时, 必须完成人机验证 (token 非空)
+  const siteKeyConfigured = turnstileLoaded
+  if (siteKeyConfigured && !turnstileToken.value) {
+    loading.value = false
+    errorMsg.value = t('auth.turnstileRequired')
+    return
+  }
   try {
-    const payload = await authApi.login(form.username, form.password)
+    const payload = await authApi.login(form.username, form.password, turnstileToken.value || undefined)
     auth.setAuth(payload)
     ElMessage.success(t('auth.loginSuccess'))
     // V2 Task V17-3.3: 开放重定向防护 - 仅允许同源相对路径或白名单主机
@@ -124,6 +197,8 @@ async function handleLogin() {
           role="alert"
           aria-live="assertive"
         />
+        <!-- 🔧 fix(审查): Cloudflare Turnstile 人机验证 (后端配置 SiteKey 后显示) -->
+        <div v-if="turnstileLoaded" ref="turnstileWidget" class="flex justify-center py-1"></div>
         <el-button
           type="primary"
           size="large"

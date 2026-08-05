@@ -20,6 +20,7 @@ public static class EndpointRouteBuilderExtensions
         app.MapDeadLetterEndpoints();
         app.MapDictionaryEndpoints();
         app.MapStorageEndpoints();  // 🔧 fix: 图片代理端点 (MinIO 容器内不可直连 → 裂图)
+        app.MapStorageConfigEndpoints();  // 🔧 fix: 存储配置 (运维中心: 查看/保存/连通测试)
         app.MapAdminMachineTreeEndpoints();  // Task 1: 机型三级树查询
         app.MapSiteContentEndpoints();  // 站点内容维护 (about/contact/news/站点名/logo)
         app.MapPublicTypeaheadEndpoints();

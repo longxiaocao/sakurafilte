@@ -42,8 +42,12 @@ import type {
 //   me:           GET    /api/auth/me                                                  (需 Authorization)
 //   changePassword: POST /api/auth/change-password    { oldPassword, newPassword }   (需 Authorization)
 export const authApi = {
-  login(username: string, password: string): Promise<LoginResponse> {
-    return http.post('/auth/login', { username, password }).then((r) => r.data)
+  login(username: string, password: string, turnstileToken?: string): Promise<LoginResponse> {
+    return http.post('/auth/login', { username, password, turnstileToken }).then((r) => r.data)
+  },
+  // 🔧 fix(审查): Turnstile 站点配置 (未配置返回空 siteKey, 前端不渲染验证码)
+  turnstileConfig(): Promise<{ siteKey: string }> {
+    return http.get('/auth/turnstile-config').then((r) => r.data)
   },
   refresh(refreshToken: string): Promise<LoginResponse> {
     return http.post('/auth/refresh', { refreshToken }).then((r) => r.data)
@@ -528,6 +532,19 @@ export const adminXrefApi = {
     const params = rowVersion != null ? { rowVersion } : {}
     return http.delete(`/admin/xrefs/reorder/items/${id}`, { params }).then((r) => r.data)
   }
+}
+
+// ===== 存储配置 (运维中心: Provider 切换 / 连通测试 / 保存) =====
+export const storageApi = {
+  getConfig(): Promise<any> {
+    return http.get('/admin/storage/config').then((r) => r.data)
+  },
+  saveConfig(cfg: Record<string, unknown>): Promise<{ ok: boolean; message: string }> {
+    return http.put('/admin/storage/config', cfg).then((r) => r.data)
+  },
+  testConfig(cfg: Record<string, unknown>): Promise<{ ok: boolean; message: string; latencyMs?: number }> {
+    return http.post('/admin/storage/test', cfg).then((r) => r.data)
+  },
 }
 
 // ===== 图片管理 (V2 Task 3.3.3: 主图/详情图分层) =====

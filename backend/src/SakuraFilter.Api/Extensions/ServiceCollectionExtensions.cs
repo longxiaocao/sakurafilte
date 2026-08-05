@@ -258,6 +258,30 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IObjectStorage>(sp =>
         {
             var logger = sp.GetRequiredService<ILogger<StorageProviderMarker>>();
+            // 🔧 fix(审查): Cloudflare R2 — S3 兼容协议, 复用 MinioStorage (Minio SDK 即 S3 客户端)
+            //   外贸场景推荐 (无流出流量费 + 自带全球边缘); 运维中心存储配置页可切换
+            if (storageProvider == "r2")
+            {
+                var r2Config = configuration.GetSection("R2");
+                var r2Endpoint = r2Config["Endpoint"] ?? "";
+                var r2AccessKey = r2Config["AccessKeyId"] ?? "";
+                var r2SecretKey = r2Config["AccessKeySecret"] ?? "";
+                if (string.IsNullOrEmpty(r2AccessKey) || string.IsNullOrEmpty(r2SecretKey))
+                    throw new InvalidOperationException(
+                        "R2:AccessKeyId / AccessKeySecret 未配置 (Cloudflare R2 S3 API 凭证, 环境变量 R2__AccessKeyId / R2__AccessKeySecret)");
+                var r2Client = new MinioClient()
+                    .WithEndpoint(r2Endpoint)   // https://<account>.r2.cloudflarestorage.com
+                    .WithCredentials(r2AccessKey, r2SecretKey)
+                    .WithSSL(true)
+                    .WithRegion("auto")
+                    .Build();
+                logger.LogInformation("[Storage] Provider=r2, Endpoint={Endpoint}, Bucket={Bucket}", r2Endpoint, r2Config["BucketName"]);
+                return new MinioStorage(
+                    r2Client,
+                    r2Config["BucketName"] ?? "sakurafilter",
+                    r2Config["PublicEndpoint"] ?? $"https://{r2Config["BucketName"]}.r2.cloudflarestorage.com");
+            }
+
             if (storageProvider == "aliyun-oss")
             {
                 var config = configuration.GetSection("Aliyun");
