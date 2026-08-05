@@ -12,6 +12,7 @@ WHY 自写而非 reportgenerator -thresholds:
   防止新增大量未测代码把覆盖率拉低; 覆盖提升后阈值可逐步上调
 """
 import glob
+import os
 import sys
 import xml.etree.ElementTree as ET
 
@@ -23,16 +24,21 @@ def main() -> int:
 
     files = glob.glob(sys.argv[1])
     if not files:
-        print(f"[coverage] 未找到覆盖率文件: {sys.argv[1]}")
+        print(f"::error::[coverage] 未找到覆盖率文件: {sys.argv[1]}")
         return 1
 
     threshold = float(sys.argv[2]) / 100.0
+    # 🔧 fix(审查): 取最新文件 (glob 默认字典序, 历史低覆盖率文件可能被选中 → 误判 FAIL)
+    files.sort(key=os.path.getmtime, reverse=True)
     root = ET.parse(files[0]).getroot()
     rate = float(root.get("line-rate", "0"))
 
     ok = rate >= threshold
-    print(f"[coverage] line-rate={rate:.2%} 阈值={threshold:.2%} "
-          f"{'PASS' if ok else 'FAIL (覆盖率低于阈值, 请补充测试或调整阈值)'}")
+    print(f"[coverage] line-rate={rate:.2%} 阈值={threshold:.2%} 文件数={len(files)} "
+          f"选用={files[0]} {'PASS' if ok else 'FAIL (覆盖率低于阈值, 请补充测试或调整阈值)'}")
+    if not ok:
+        # GitHub Actions UI 可见 (无需 admin 日志权限)
+        print(f"::error::[coverage] line-rate={rate:.2%} 低于阈值 {threshold:.2%} (文件: {files[0]})")
     return 0 if ok else 1
 
 
