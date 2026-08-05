@@ -23,7 +23,9 @@ const router = useRouter()
 
 const isEdit = computed(() => !!route.params.id)
 const productId = computed(() => (route.params.id ? Number(route.params.id) : 0))
-const activeNames = ref(['1', '3', '5', '6'])
+// 🔧 fix(审查): Tab 式分区重构 (用户反馈: 信息密度低) — el-collapse 多区展开 → el-tabs 左侧竖向 Tab
+//   默认激活基础信息分区, 切换分区保留表单状态
+const activeTab = ref('1')
 
 // P2-7 修复 v2: 保存乐观锁冲突后的 reload timer 引用, 卸载时清理
 //   WHY: 用户在 1.5s 内导航离开后, 旧 timer 仍会触发 window.location.reload() 造成意外跳转
@@ -133,6 +135,13 @@ const uploadProgress = ref<number>(0)
 //   images[1..5] 为详情图 (slot=2-6, imageRole=detail)
 //   WHY 复用数组: 旧 UI 6 slot 网格布局保留, 仅语义分层
 const images = ref<Record<number, { slot: number; imageKey: string; imageUrl: string; oemNo3?: string | null; imageRole?: string }>>({})
+// 🔧 fix(审查): 详情图动态槽位 — 只显示已占用槽 + 1 个可添加槽 (用户反馈: 6 个空槽很丑)
+//   上传成功后自动出现下一个空槽, 最多 5 张 (slot 2-6)
+const detailSlots = computed(() => {
+  const used = [2, 3, 4, 5, 6].filter((s) => images.value[s])
+  const next = [2, 3, 4, 5, 6].find((s) => !images.value[s])
+  return next ? [...used, next] : used
+})
 // V2: 主图上传时选择的 OEM 3 (从 form.crossReferences 已保存的 oemList 中选)
 const selectedOemNo3ForPrimary = ref<string>('')
 
@@ -596,10 +605,10 @@ onBeforeUnmount(() => {
     </el-result>
 
     <el-form v-else ref="formRef" :model="form" label-position="top" label-width="100px" size="small">
-      <el-collapse v-model="activeNames">
+      <el-tabs v-model="activeTab" tab-position="left" class="w-full form-tabs">
         <!-- 分区 1: 基础信息 -->
-        <el-collapse-item :title="t('admin.productformview.title.basic_info')" name="1">
-          <div class="grid grid-cols-3 gap-3">
+        <el-tab-pane :label="t('admin.productformview.title.basic_info')" name="1">
+          <div class="grid grid-cols-2 gap-x-6 gap-y-1">
             <!-- P2.2: productName1/2/type 全部 typeahead -->
             <el-form-item :label="t('common.action.product_name_1')">
               <el-autocomplete v-model="form.productName1" :fetch-suggestions="queryProductName1"
@@ -630,14 +639,14 @@ onBeforeUnmount(() => {
             <el-form-item :label="t('common.field.publish')">
               <el-switch v-model="form.isPublished" />
             </el-form-item>
-            <el-form-item :label="t('admin.productformview.label.remark')" class="col-span-3">
+            <el-form-item :label="t('admin.productformview.label.remark')" class="col-span-2">
               <el-input v-model="form.remark" type="textarea" :rows="2" />
             </el-form-item>
           </div>
-        </el-collapse-item>
+        </el-tab-pane>
 
         <!-- 分区 2: 交叉引用 -->
-        <el-collapse-item :title="t('admin.productformview.string.cross_reference_count', { count: form.crossReferences.length })" name="2">
+        <el-tab-pane :label="t('admin.productformview.string.cross_reference_count', { count: form.crossReferences.length })" name="2">
           <div v-for="(x, i) in form.crossReferences" :key="x._uid" class="flex gap-2 mb-2">
             <!-- Day 10: P1.3 自动补全 — 字典为空时降级为自由输入 -->
             <el-autocomplete
@@ -662,11 +671,11 @@ onBeforeUnmount(() => {
             <el-button text type="danger" @click="removeXref(i)">{{ t('common.delete') }}</el-button>
           </div>
           <el-button @click="addXref" size="small">{{ t('admin.productformview.string.add_xref') }}</el-button>
-        </el-collapse-item>
+        </el-tab-pane>
 
         <!-- 分区 3: 尺寸 -->
-        <el-collapse-item :title="t('admin.productformview.title.dimensions_mm')" name="3">
-          <div class="grid grid-cols-4 gap-3">
+        <el-tab-pane :label="t('admin.productformview.title.dimensions_mm')" name="3">
+          <div class="grid grid-cols-4 gap-x-6 gap-y-1">
             <el-form-item label="D1"><el-input-number v-model="form.d1Mm" :min="0" :precision="2" /></el-form-item>
             <el-form-item label="D2"><el-input-number v-model="form.d2Mm" :min="0" :precision="2" /></el-form-item>
             <el-form-item label="D3"><el-input-number v-model="form.d3Mm" :min="0" :precision="2" /></el-form-item>
@@ -680,11 +689,11 @@ onBeforeUnmount(() => {
             <el-form-item :label="t('common.field.check_valve_count')"><el-input v-model="form.noCheckValvesRaw" placeholder="原始值，如 1/2" /></el-form-item>
             <el-form-item :label="t('common.field.bypass_valve_count')"><el-input v-model="form.noBypassValvesRaw" placeholder="原始值，如 N/A" /></el-form-item>
           </div>
-        </el-collapse-item>
+        </el-tab-pane>
 
         <!-- 分区 5: 性能 -->
-        <el-collapse-item :title="$t('common.field.performance')" name="5">
-          <div class="grid grid-cols-3 gap-3">
+        <el-tab-pane :label="$t('common.field.performance')" name="5">
+          <div class="grid grid-cols-2 gap-x-6 gap-y-1">
             <!-- P2.2: Media 字段 typeahead (2 字段) -->
             <el-form-item label="Media">
               <el-autocomplete v-model="form.media" :fetch-suggestions="queryMedia"
@@ -701,11 +710,11 @@ onBeforeUnmount(() => {
             <el-form-item :label="t('common.action.seal_material')"><el-input v-model="form.sealingMaterial" /></el-form-item>
             <el-form-item :label="t('common.field.temperature_range')"><el-input v-model="form.tempRange" /></el-form-item>
           </div>
-        </el-collapse-item>
+        </el-tab-pane>
 
         <!-- 分区 6: 包装 -->
-        <el-collapse-item :title="$t('common.field.packaging')" name="6">
-          <div class="grid grid-cols-4 gap-3">
+        <el-tab-pane :label="$t('common.field.packaging')" name="6">
+          <div class="grid grid-cols-4 gap-x-6 gap-y-1">
             <el-form-item :label="t('common.action.carton_per_pcs')">
               <el-input-number v-model="form.qtyPerCarton" :min="0" />
               <FieldHelpPopover field-key="qtyPerCarton" />
@@ -769,10 +778,10 @@ onBeforeUnmount(() => {
               </el-input>
             </el-form-item>
           </div>
-        </el-collapse-item>
+        </el-tab-pane>
 
         <!-- 分区 7: 车型 (P2.2: machine/engine 字段全部 typeahead) -->
-        <el-collapse-item :title="t('admin.productformview.string.machine_applications_count', { count: form.machineApplications.length })" name="7">
+        <el-tab-pane :label="t('admin.productformview.string.machine_applications_count', { count: form.machineApplications.length })" name="7">
           <div v-for="(m, i) in form.machineApplications" :key="m._uid" class="grid grid-cols-5 gap-2 mb-2">
             <!-- 机型品牌: typeahead -->
             <el-autocomplete v-model="m.machineBrand" :fetch-suggestions="queryMachineBrand"
@@ -794,10 +803,10 @@ onBeforeUnmount(() => {
             </div>
           </div>
           <el-button @click="addApp" size="small">{{ t('admin.productformview.string.add_machine_app') }}</el-button>
-        </el-collapse-item>
+        </el-tab-pane>
 
         <!-- V2 Task 3.3.1: 分区 8 图片 (主图区 + 详情图区分层, 仅编辑) -->
-        <el-collapse-item v-if="isEdit" :title="t('admin.productformview.title.image')" name="8">
+        <el-tab-pane v-if="isEdit" :label="t('admin.productformview.title.image')" name="8">
           <!-- 主图区: 按 OEM 3 命名, slot=1, 同 OEM 3 仅 1 张 -->
           <div class="mb-4 hairline p-3">
             <div class="text-sm font-medium mb-2">主图 (按 OEM 3 命名, slot=1)</div>
@@ -840,7 +849,8 @@ onBeforeUnmount(() => {
           <div class="hairline p-3">
             <div class="text-sm font-medium mb-2">详情图 (按 MR.1 共享, slot 2-6)</div>
             <div class="grid grid-cols-3 gap-3">
-              <div v-for="slot in [2, 3, 4, 5, 6]" :key="slot" class="hairline p-2">
+              <!-- 🔧 fix(审查): 动态槽位 (detailSlots = 已占用 + 1 个可添加) -->
+              <div v-for="slot in detailSlots" :key="slot" class="hairline p-2">
                 <div class="text-xs text-muted mb-1">Slot {{ slot }}</div>
                 <div v-if="images[slot]" class="mb-2">
                   <img :src="images[slot].imageUrl" class="w-full h-24 object-contain bg-[var(--color-bg-hover)]" />
@@ -860,12 +870,16 @@ onBeforeUnmount(() => {
               </div>
             </div>
           </div>
-        </el-collapse-item>
-      </el-collapse>
+        </el-tab-pane>
+      </el-tabs>
     </el-form>
   </div>
 </template>
 <style scoped>
 /* Day 9.4: 车型必填字段未填时红框提示 */
 .app-required :deep(.el-input__wrapper) { box-shadow: 0 0 0 1px #ef4444 inset !important; }
+/* 🔧 fix(审查): 表单密度统一 — 字段间距紧凑一致 + Tab 内容区等高 (用户反馈: 大大小小/下方留白) */
+:deep(.el-form-item) { margin-bottom: 10px; }
+.form-tabs :deep(.el-tabs__content) { min-height: 55vh; }
+.form-tabs :deep(.el-tabs__content > .el-tab-pane) { padding: 0 4px 12px; }
 </style>
