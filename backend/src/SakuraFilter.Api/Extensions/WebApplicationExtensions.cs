@@ -44,8 +44,14 @@ public static class StartupExtensions
             //   失败时记录日志, 由后续 SQL 迁移脚本 (backend/migrations/*.sql) 兜底建表
             try
             {
-                await db.Database.EnsureCreatedAsync();
+                // 🔧 fix(审查): EnsureCreated 30s 超时 — CI 曾卡死/慢导致 60s health 超时 (Backend failed to start)
+                using var ensureCts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+                await db.Database.EnsureCreatedAsync(ensureCts.Token);
                 migrateLogger.LogInformation("空库: EnsureCreated 已建基础表 (EF 模型), 后续 SQL 迁移脚本负责演进");
+            }
+            catch (OperationCanceledException)
+            {
+                migrateLogger.LogWarning("空库 EnsureCreated 30s 超时 (由 SQL 迁移脚本兜底建表)");
             }
             catch (Exception ex)
             {
