@@ -133,6 +133,7 @@ export default {
         dry_run: '最近 dry-run 校验',
         recent_errors: '最近错误 (最多 10 条)',
         audit: '取消审计 (按 reason_code 聚合)'
+      ,reindex_confirm: '执行全量重建', total_cancelled: '总取消数', no_cancelled_records: '暂无取消记录'
       },
       pipeline: {
         stage_read: '读取',
@@ -1307,6 +1308,10 @@ export default {
     compare: '产品对比',
     perf: '性能',
     opsCenter: '运维中心',
+    // 🔧 fix(审查): 运维中心 el-tabs label i18n (原硬编码中文)
+    opsview: {
+      tab: { etl: 'ETL 触发与监控', perf: '性能', errors: '错误', api: 'API 文档' }
+    },
     help: '帮助',
     enterAdmin: '进入后台',
     exitAdmin: '退出后台',
@@ -1341,11 +1346,58 @@ export default {
     colXref: '引用',
     colUpdated: '更新',
     colStatus: '状态',
+    // 🔧 fix(审查): 字典页 title/subtitle i18n 化 (原硬编码中文, 英文状态下残留)
+    pageTitles: {
+      oemBrands: { title: 'OEM 品牌字典', subtitle: 'P1.3 后台管理 · 用于产品表单分区 2 自动补全' },
+      productName1s: { title: '产品名 1 字典', subtitle: 'P2.2 后台管理 · 用于产品表单分区 1 自动补全' },
+      productName2s: { title: '产品名 2 字典', subtitle: 'P2.2 后台管理 · 用于产品表单分区 1 product_name_2 自动补全' },
+      types: { title: '类型字典 (Type)', subtitle: 'P2.2 后台管理 · 固定 5 值: oil / fuel / air / cabin / others · 拖动排序后前台立即生效' },
+      oemNo3s: { title: 'OEM 3 字典', subtitle: 'P2.2 后台管理 · 用于交叉引用分区 2 oem_no_3 自动补全' },
+      medias: { title: '介质字典 (Media)', subtitle: 'P2.2 后台管理 · 2 字段: Media 名称 + 型号 · 用于产品表单分区 4 media/media_model 二合一' },
+      machines: { title: '机型字典 (Machine)', subtitle: 'P2.2 后台管理 · 3 字段: 品牌 + 型号 + 名称 · 用于产品表单分区 7 适用车型' },
+      engines: { title: '发动机字典 (Engine)', subtitle: 'P2.2 后台管理 · 2 字段: 品牌 + 型号 · 用于产品表单分区 7 发动机信息' },
+      compare: '产品对比',
+      errors: '错误日志',
+      perf: '性能监控',
+      siteContent: '站点内容维护',
+      // 🔧 fix(审查): 站点内容维护页表单标签 i18n (原硬编码中文)
+      site: {
+        save: '保存',
+        basic_config: '站点基础配置',
+        site_name: '网站名称',
+        about: '关于我们 (About us)',
+        contact: '联系我们 (Contact us)',
+        news: '新闻发布',
+        add_news: '新增新闻',
+        no_news: '暂无新闻, 点击"新增新闻"发布第一条',
+        delete: '删除',
+      },
+      // 🔧 fix(审查): 产品管理页标题/按钮 i18n
+      products: {
+        page_title: '产品管理',
+        batch_compare: '批量对比',
+        new_product: '新增产品',
+        core: '核心',
+        history: '历史',
+      },
+      // 🔧 fix(审查): empty-text 拼接后缀 (如 "新增品牌" + "开始")
+      empty_start: '开始',
+      // 🔧 fix(审查): 字典列表列标题 i18n (原硬编码中文)
+      columnLabels: {
+        brand: '品牌',
+        productName1: '产品名 1',
+        productName2: '产品名 2',
+        mediaName: 'Media 名称',
+        mediaModel: '型号',
+        model: '型号',
+      },
+    },
     bulk: {
       download_template: '下载模板',
       export_csv: '导出 CSV',
       import_csv: '导入 CSV',
       import_done: '导入完成',
+      hint: '建议用文本编辑器编辑 CSV 后再导入, 避免 Excel 自动转换数字 (如 00123 → 123、长编号转科学计数法)',
       export_failed: '导出失败, 请稍后重试',
       import_failed: '导入失败, 请检查文件格式 (每行: 值[,排序[,deleted]])',
       import_partial_fail: '部分行导入失败',

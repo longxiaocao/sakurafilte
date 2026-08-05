@@ -84,8 +84,11 @@ public static class DictionaryEndpoints
             var sb = new StringBuilder("brand,sortOrder,deleted\n");
             foreach (var it in items)
             {
-                var brand = it.Brand.Contains(',') || it.Brand.Contains('"')
-                    ? $"\"{it.Brand.Replace("\"", "\"\"")}\"" : it.Brand;
+                // 🔧 fix(审查): CSV 数据安全 — 纯数字品牌名用 ="..." 公式包裹 (Excel 打开不转数字/丢前导零)
+                string brand;
+                if (it.Brand.Length > 1 && it.Brand.All(char.IsDigit)) brand = $"=\"{it.Brand}\"";
+                else if (it.Brand.Contains(',') || it.Brand.Contains('"')) brand = $"\"{it.Brand.Replace("\"", "\"\"")}\"";
+                else brand = it.Brand;
                 sb.AppendLine($"{brand},{it.SortOrder},{(it.DeletedAt == null ? 0 : 1)}");
             }
             return Results.Text(sb.ToString(), "text/csv; charset=utf-8");
@@ -105,7 +108,14 @@ public static class DictionaryEndpoints
             {
                 if (raw.StartsWith("brand,")) continue;  // 表头
                 var parts = raw.Split(',');
-                var brand = parts[0].Trim().Trim('"');
+                // 🔧 fix(审查): 先剥离 Excel 公式/文本前缀, 再 Trim — 顺序错误会导致
+                //   ="00789" 先被 Trim('"') 破坏成 =00789 → 公式匹配失败 → 双重包裹 (实测 "=""00789")
+                var brand = parts[0].Trim();
+                if (brand.StartsWith("=\"") && brand.EndsWith("\"") && brand.Length >= 4)
+                    brand = brand.Substring(2, brand.Length - 3);
+                else if (brand.StartsWith("'") && brand.Length > 1)
+                    brand = brand.Substring(1);
+                brand = brand.Trim().Trim('"');
                 if (string.IsNullOrWhiteSpace(brand)) { skipped++; continue; }
                 int? sort = parts.Length > 1 && int.TryParse(parts[1].Trim(), out var s) ? s : null;
                 var wantDeleted = parts.Length > 2 && parts[2].Trim() == "1";
@@ -181,7 +191,12 @@ public static class DictionaryEndpoints
         foreach (var it in items)
         {
             var v = getValue(it);
-            var vv = v.Contains(',') || v.Contains('"') ? $"\"{v.Replace("\"", "\"\"")}\"" : v;
+            // 🔧 fix(审查): CSV 数据安全 — 纯数字文本用 ="..." 公式包裹 (Excel 打开时不转数字/丢前导零/科学计数法)
+            //   sortOrder 等数字语义字段保持数字, 不加公式
+            string vv;
+            if (v.Length > 1 && v.All(char.IsDigit)) vv = $"=\"{v}\"";
+            else if (v.Contains(',') || v.Contains('"')) vv = $"\"{v.Replace("\"", "\"\"")}\"";
+            else vv = v;
             sb.AppendLine($"{vv},{getSort(it)},{(getDeleted(it) == null ? 0 : 1)}");
         }
         return Results.Text(sb.ToString(), "text/csv; charset=utf-8");
@@ -205,7 +220,17 @@ public static class DictionaryEndpoints
         {
             if (raw.StartsWith("value,")) continue;  // 表头
             var parts = raw.Split(',');
-            var value = parts[0].Trim().Trim('"');
+            // 🔧 fix(审查): 剥离 Excel 公式包裹 (导出端 ="00123" 防数字格式化) 与 ' 前缀
+            var value = parts[0].Trim();
+            if (value.StartsWith("=\"") && value.EndsWith("\"") && value.Length >= 4) value = value[2..^1];
+            else if (value.StartsWith("'")) value = value[1..];
+            value = value.Trim().Trim('"');
+            // 🔧 fix(审查): 剥离 Excel 公式/文本前缀 — 导出端对纯数字用 ="..." 包裹,
+            //   用户 Excel 编辑后可能保留 ="00123" 或加 ' 前缀, 导入时还原原始字符串
+            if (value.StartsWith("=\"") && value.EndsWith("\"") && value.Length >= 4)
+                value = value.Substring(2, value.Length - 3);
+            else if (value.StartsWith("'") && value.Length > 1)
+                value = value.Substring(1);
             if (string.IsNullOrWhiteSpace(value)) { skipped++; continue; }
             int? sort = parts.Length > 1 && int.TryParse(parts[1].Trim(), out var s) ? s : null;
             var wantDeleted = parts.Length > 2 && parts[2].Trim() == "1";
@@ -230,6 +255,25 @@ public static class DictionaryEndpoints
             catch (Exception ex) { errors.Add($"{value}: {ex.Message}"); }
         }
         return Results.Ok(new { created, updated, deleted, skipped, errors });
+    }
+
+    // 🔧 fix(审查): CSV 字段导出安全转义 — 纯数字文本 ="..." 包裹 (Excel 防前导零/科学计数法); 含逗号/引号加引号
+    private static string CsvSafe(string? s)
+    {
+        if (string.IsNullOrEmpty(s)) return "";
+        if (s.Length > 1 && s.All(char.IsDigit)) return $"=\"{s.Replace("\"", "\"\"")}\"";
+        if (s.Contains(',') || s.Contains('"')) return $"\"{s.Replace("\"", "\"\"")}\"";
+        return s;
+    }
+
+    // 🔧 fix(审查): CSV 字段导入解析 — 剥离 ="..." 公式 (导出端数字安全) 与 ' 前缀, 再 Trim
+    private static string CsvUnwrap(string? s)
+    {
+        if (string.IsNullOrEmpty(s)) return "";
+        var v = s.Trim();
+        if (v.StartsWith("=\"") && v.EndsWith("\"") && v.Length >= 4) v = v.Substring(2, v.Length - 3);
+        else if (v.StartsWith("'") && v.Length > 1) v = v.Substring(1);
+        return v.Trim().Trim('"');
     }
 
     private static void MapProductName1Endpoints(IEndpointRouteBuilder group)
@@ -593,6 +637,64 @@ public static class DictionaryEndpoints
             catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
         }).WithName("AdminCreateMachine");
+        // 🔧 fix(审查): 机型字典批量导入导出 (用户反馈: 需要扩展) — CSV 6 列: brand,model,name,category,sortOrder,deleted
+        //   数字安全: 纯数字字段 ="..." 包裹 (Excel 防前导零丢失), 导入剥离 (同 OemBrand/泛型)
+        g.MapGet("/export", async (MachineDictService svc, CancellationToken ct) =>
+        {
+            var items = await svc.ListMachinesAsync(null, true, 100000, ct);
+            var sb = new StringBuilder("brand,model,name,category,sortOrder,deleted\n");
+            foreach (var it in items)
+            {
+                sb.AppendLine($"{CsvSafe(it.MachineBrand)},{CsvSafe(it.MachineModel)},{CsvSafe(it.MachineName)},{CsvSafe(it.MachineCategory)},{it.SortOrder},{(it.DeletedAt == null ? 0 : 1)}");
+            }
+            return Results.Text(sb.ToString(), "text/csv; charset=utf-8");
+        }).WithName("AdminExportMachines");
+        g.MapPost("/import", async (
+            ImportCsvRequest body, MachineDictService svc, CancellationToken ct) =>
+        {
+            if (string.IsNullOrWhiteSpace(body.Csv))
+                return Results.BadRequest(new { error = "csv 不能为空" });
+            int created = 0, updated = 0, deleted = 0, skipped = 0;
+            var errors = new List<string>();
+            foreach (var raw in body.Csv.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                if (raw.StartsWith("brand,")) continue;  // 表头
+                var p = raw.Split(',');
+                var brand = CsvUnwrap(p[0]);
+                var model = CsvUnwrap(p.Length > 1 ? p[1] : "");
+                var name = CsvUnwrap(p.Length > 2 ? p[2] : "");
+                var category = CsvUnwrap(p.Length > 3 ? p[3] : "");
+                if (string.IsNullOrWhiteSpace(brand)) { skipped++; continue; }
+                int? sort = p.Length > 4 && int.TryParse(CsvUnwrap(p[4]), out var s) ? s : null;
+                var wantDeleted = p.Length > 5 && CsvUnwrap(p[5]) == "1";
+                try
+                {
+                    var existing = (await svc.ListMachinesAsync(brand, true, 5, ct))
+                        .FirstOrDefault(m => m.MachineBrand.Equals(brand, StringComparison.OrdinalIgnoreCase));
+                    if (wantDeleted)
+                    {
+                        if (existing != null && existing.DeletedAt == null) { await svc.DeleteMachineAsync(existing.Id, ct); deleted++; }
+                        else { skipped++; }
+                        continue;
+                    }
+                    if (existing != null)
+                    {
+                        if (existing.DeletedAt != null) { await svc.RestoreMachineAsync(existing.Id, ct); }
+                        await svc.UpdateMachineAsync(existing.Id, brand, string.IsNullOrEmpty(model) ? null : model,
+                            string.IsNullOrEmpty(name) ? null : name, sort, string.IsNullOrEmpty(category) ? "others" : category, ct);
+                        updated++;
+                    }
+                    else
+                    {
+                        await svc.CreateMachineAsync(brand, string.IsNullOrEmpty(model) ? null : model,
+                            string.IsNullOrEmpty(name) ? null : name, sort, string.IsNullOrEmpty(category) ? "others" : category, ct);
+                        created++;
+                    }
+                }
+                catch (Exception ex) { errors.Add($"{brand}/{model}: {ex.Message}"); }
+            }
+            return Results.Ok(new { created, updated, deleted, skipped, errors });
+        }).WithName("AdminImportMachines");
         g.MapPut("/{id:long}", async (
             long id, MachineUpdateRequest body, MachineDictService svc, HttpContext ctx, CancellationToken ct) =>
         {

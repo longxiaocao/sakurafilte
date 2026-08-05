@@ -125,6 +125,7 @@ export default {
         dry_run: 'Recent dry-run Validation',
         recent_errors: 'Recent Errors (max 10)',
         audit: 'Cancel Audit (aggregate by reason_code)'
+      ,reindex_confirm: 'Full Rebuild', total_cancelled: 'Total Cancelled', no_cancelled_records: 'No cancelled records'
       },
       pipeline: {
         stage_read: 'Read',
@@ -214,9 +215,9 @@ export default {
         original_json: 'Original JSON',
         timestamp: 'Timestamp',
         error: 'Error',
-        en_v2: '[EN] 原因',
-        phrase_63454: '读/插/改',
-        en_v3: '[EN] 耗时',
+        en_v2: 'Reason',
+        phrase_63454: 'Read/Insert/Update',
+        en_v3: 'Duration',
         cancel_timestamp: 'Cancel Timestamp',
       },
       placeholder: {
@@ -813,14 +814,14 @@ export default {
       },
       string: {
         all_columns: 'All columns',
-        columns: '核心columns',
+        columns: 'Core Columns',
       },
       success: {
         discontinued_v2: 'Discontinued',
 
       },
       title: {
-        filter: '高级Filter',
+        filter: 'Advanced Filter',
         en_v6: '[EN] 变更历史',
       },
       warning: {
@@ -1297,6 +1298,10 @@ export default {
     compare: 'Compare',
     perf: 'Performance',
     opsCenter: 'Ops Center',
+    // 🔧 fix(审查): 运维中心 el-tabs label i18n
+    opsview: {
+      tab: { etl: 'ETL Trigger & Monitor', perf: 'Performance', errors: 'Errors', api: 'API Docs' }
+    },
     help: 'Help',
     enterAdmin: 'Enter Admin',
     exitAdmin: 'Exit Admin',
@@ -1331,11 +1336,58 @@ export default {
     colXref: 'Refs',
     colUpdated: 'Updated',
     colStatus: 'Status',
+    // 🔧 fix(审查): 字典页 title/subtitle i18n 化 (原硬编码中文)
+    pageTitles: {
+      oemBrands: { title: 'OEM Brands', subtitle: 'P1.3 Admin · autocomplete for product form section 2' },
+      productName1s: { title: 'Product Name 1', subtitle: 'P2.2 Admin · autocomplete for product form section 1' },
+      productName2s: { title: 'Product Name 2', subtitle: 'P2.2 Admin · autocomplete for product form section 1' },
+      types: { title: 'Types', subtitle: 'P2.2 Admin · fixed 5 values: oil / fuel / air / cabin / others · drag to reorder' },
+      oemNo3s: { title: 'OEM No.3', subtitle: 'P2.2 Admin · autocomplete for cross-reference section oem_no_3' },
+      medias: { title: 'Media', subtitle: 'P2.2 Admin · 2 fields: Media name + model · product form section 4' },
+      machines: { title: 'Machines', subtitle: 'P2.2 Admin · 3 fields: brand + model + name · product form section 7' },
+      engines: { title: 'Engines', subtitle: 'P2.2 Admin · 2 fields: brand + type · product form section 7' },
+      compare: 'Product Compare',
+      errors: 'Error Logs',
+      perf: 'Performance Monitor',
+      siteContent: 'Site Content',
+      // 🔧 fix(审查): 站点内容维护页表单标签 i18n
+      site: {
+        save: 'Save',
+        basic_config: 'Site Basics',
+        site_name: 'Site Name',
+        about: 'About Us',
+        contact: 'Contact Us',
+        news: 'News',
+        add_news: 'Add News',
+        no_news: 'No news yet, click "Add News" to publish the first one',
+        delete: 'Delete',
+      },
+      // 🔧 fix(审查): 产品管理页标题/按钮 i18n
+      products: {
+        page_title: 'Products',
+        batch_compare: 'Batch Compare',
+        new_product: 'New Product',
+        core: 'Core',
+        history: 'History',
+      },
+      // 🔧 fix(审查): empty-text 拼接后缀
+      empty_start: ' to start',
+      // 🔧 fix(审查): 字典列表列标题 i18n
+      columnLabels: {
+        brand: 'Brand',
+        productName1: 'Product Name 1',
+        productName2: 'Product Name 2',
+        mediaName: 'Media Name',
+        mediaModel: 'Model',
+        model: 'Model',
+      },
+    },
     bulk: {
       download_template: 'Download Template',
       export_csv: 'Export CSV',
       import_csv: 'Import CSV',
       import_done: 'Import done',
+      hint: 'Edit CSV with a plain text editor before importing to avoid Excel auto number conversion (e.g. 00123 → 123, long IDs to scientific notation)',
       export_failed: 'Export failed, retry later',
       import_failed: 'Import failed, check format (each line: value[,sortOrder[,deleted]])',
       import_partial_fail: 'Some rows failed',

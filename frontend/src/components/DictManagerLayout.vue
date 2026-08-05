@@ -159,6 +159,9 @@ function cellClass(col: DictColumn): string {
           {{ t('dict.bulk.import_csv') }}
         </el-button>
         <input ref="fileInput" type="file" accept=".csv,text/csv" class="hidden" @change="onImportFile" />
+        <el-tooltip :content="t('dict.bulk.hint')" placement="top">
+          <el-icon class="text-muted cursor-help" aria-hidden="true"><QuestionFilled /></el-icon>
+        </el-tooltip>
       </template>
       <slot name="toolbar-extra" />
       <el-input

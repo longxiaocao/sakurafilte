@@ -156,7 +156,7 @@ onBeforeUnmount(() => {
   <div class="p-3 max-w-screen-2xl mx-auto">
     <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
       <div>
-        <h1 class="text-lg font-medium">错误日志</h1>
+        <h1 class="text-lg font-medium">{{ t('dict.pageTitles.errors') }}</h1>
         <p class="text-xs text-muted">
           批次 6c — 前端错误监控 (离线优先, localStorage 持久化, 最多 200 条)
         </p>

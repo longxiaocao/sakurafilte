@@ -3,10 +3,13 @@
 //   (用户反馈: 分开 4 个菜单意义不大; 组件耦合度低, tab 懒加载互不影响)
 import { ref } from 'vue'
 import { useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import AdminEtlView from './AdminEtlView.vue'
 import AdminPerfView from './AdminPerfView.vue'
 import AdminErrorView from './AdminErrorView.vue'
 import AdminApiDocsView from './AdminApiDocsView.vue'
+
+const { t } = useI18n()
 
 const activeTab = ref('etl')
 const route = useRoute()
@@ -19,16 +22,16 @@ if (typeof route.query.tab === 'string' && ['etl', 'perf', 'errors', 'api'].incl
 <template>
   <div class="p-4 w-full">
     <el-tabs v-model="activeTab" class="w-full">
-      <el-tab-pane label="ETL 触发与监控" name="etl" lazy>
+      <el-tab-pane :label="t('nav.opsview.tab.etl')" name="etl" lazy>
         <AdminEtlView />
       </el-tab-pane>
-      <el-tab-pane label="性能" name="perf" lazy>
+      <el-tab-pane :label="t('nav.opsview.tab.perf')" name="perf" lazy>
         <AdminPerfView />
       </el-tab-pane>
-      <el-tab-pane label="错误" name="errors" lazy>
+      <el-tab-pane :label="t('nav.opsview.tab.errors')" name="errors" lazy>
         <AdminErrorView />
       </el-tab-pane>
-      <el-tab-pane label="API 文档" name="api" lazy>
+      <el-tab-pane :label="t('nav.opsview.tab.api')" name="api" lazy>
         <AdminApiDocsView />
       </el-tab-pane>
     </el-tabs>

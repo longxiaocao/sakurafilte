@@ -42,8 +42,8 @@ const mgr = useDictManager<EngineItem, EngineReorderItem>({
 
 // 列定义 (2 字段: engineBrand + engineType, engineType 可空显示 '—')
 const columns = [
-  { label: '品牌', width: '1.4fr', render: (row: EngineItem) => row.engineBrand },
-  { label: '型号', width: '1.4fr', render: (row: EngineItem) => row.engineType || '—' },
+  { label: t('dict.columnLabels.brand'), width: '1.4fr', render: (row: EngineItem) => row.engineBrand },
+  { label: t('dict.columnLabels.model'), width: '1.4fr', render: (row: EngineItem) => row.engineType || '—' },
 ]
 </script>
 
@@ -51,15 +51,15 @@ const columns = [
   <DictManagerLayout
     :mgr="mgr"
     :columns="columns"
-    title="发动机字典 (Engine)"
-    subtitle="P2.2 后台管理 · 2 字段: 品牌 + 型号 · 用于产品表单分区 7 发动机信息"
+    :title="t('dict.pageTitles.engines.title')"
+    :subtitle="t('dict.pageTitles.engines.subtitle')"
     dialog-title-create-key="admin.enginesview.title.add_engine"
     dialog-title-edit-key="admin.enginesview.title.edit_engine"
     dialog-width="540px"
     dialog-label-width="120px"
-    empty-text="新增发动机开始"
+    :empty-text="t('admin.enginesview.string.add_engine') + t('dict.empty_start')"
     :search-placeholder="t('common.field.search_any_field')"
-    create-button-text="新增发动机"
+    :create-button-text="t('admin.enginesview.string.add_engine')"
     :bulk-api="dictApi.engines"
     bulk-template="value,sortOrder,deleted&#10;示例发动机品牌,1,0"
   >

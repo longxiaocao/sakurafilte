@@ -42,8 +42,8 @@ const mgr = useDictManager<MediaItem, MediaReorderItem>({
 
 // 列定义 (2 字段: mediaName + mediaModel, mediaModel 可空显示 '—')
 const columns = [
-  { label: 'Media 名称', width: '1.4fr', render: (row: MediaItem) => row.mediaName },
-  { label: '型号', width: '1fr', render: (row: MediaItem) => row.mediaModel || '—' },
+  { label: t('dict.columnLabels.mediaName'), width: '1.4fr', render: (row: MediaItem) => row.mediaName },
+  { label: t('dict.columnLabels.mediaModel'), width: '1fr', render: (row: MediaItem) => row.mediaModel || '—' },
 ]
 </script>
 
@@ -51,15 +51,15 @@ const columns = [
   <DictManagerLayout
     :mgr="mgr"
     :columns="columns"
-    title="介质字典 (Media)"
-    subtitle="P2.2 后台管理 · 2 字段: Media 名称 + 型号 · 用于产品表单分区 4 media/media_model 二合一"
+    :title="t('dict.pageTitles.medias.title')"
+    :subtitle="t('dict.pageTitles.medias.subtitle')"
     dialog-title-create-key="admin.mediasview.title.add_media"
     dialog-title-edit-key="admin.mediasview.title.edit_media"
     dialog-width="540px"
     dialog-label-width="120px"
-    empty-text="新增 Media开始"
+    :empty-text="t('admin.mediasview.string.add_media') + t('dict.empty_start')"
     :search-placeholder="t('admin.mediasview.placeholder.search_media_name_or')"
-    create-button-text="新增 Media"
+    :create-button-text="t('admin.mediasview.string.add_media')"
     :bulk-api="dictApi.medias"
     bulk-template="value,sortOrder,deleted&#10;示例介质,1,0"
   >

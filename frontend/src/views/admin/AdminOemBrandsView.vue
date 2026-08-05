@@ -34,7 +34,7 @@ const mgr = useDictManager<OemBrandItem, OemBrandReorderItem>({
 
 // 列定义 (1 字段: brand)
 const columns = [
-  { label: '品牌', width: '1fr', render: (row: OemBrandItem) => row.brand },
+  { label: t('dict.columnLabels.brand'), width: '1fr', render: (row: OemBrandItem) => row.brand },
 ]
 </script>
 
@@ -42,15 +42,15 @@ const columns = [
   <DictManagerLayout
     :mgr="mgr"
     :columns="columns"
-    title="OEM 品牌字典"
-    subtitle="P1.3 后台管理 · 用于产品表单分区 2 自动补全"
+    :title="t('dict.pageTitles.oemBrands.title')"
+    :subtitle="t('dict.pageTitles.oemBrands.subtitle')"
     dialog-title-create-key="admin.oembrandsview.string.add_brand"
     dialog-title-edit-key="admin.oembrandsview.title.edit_brand"
     dialog-width="480px"
     dialog-label-width="100px"
-    empty-text="新增品牌开始"
+    :empty-text="t('admin.oembrandsview.string.add_brand') + t('dict.empty_start')"
     :search-placeholder="t('admin.oembrandsview.placeholder.search_brand')"
-    create-button-text="新增品牌"
+    :create-button-text="t('admin.oembrandsview.string.add_brand')"
     :bulk-api="dictApi.oemBrands"
     bulk-template="brand,sortOrder,deleted&#10;示例品牌,1,0&#10;示例品牌2,2,0"
   >

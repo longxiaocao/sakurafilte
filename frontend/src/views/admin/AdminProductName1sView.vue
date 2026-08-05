@@ -30,7 +30,7 @@ const mgr = useDictManager<ProductName1Item, ProductName1ReorderItem>({
 
 // 列定义 (1 字段: productName1)
 const columns = [
-  { label: '产品名 1', width: '1fr', render: (row: ProductName1Item) => row.productName1 },
+  { label: t('dict.columnLabels.productName1'), width: '1fr', render: (row: ProductName1Item) => row.productName1 },
 ]
 </script>
 
@@ -38,15 +38,15 @@ const columns = [
   <DictManagerLayout
     :mgr="mgr"
     :columns="columns"
-    title="产品名 1 字典"
-    subtitle="P2.2 后台管理 · 用于产品表单分区 1 自动补全"
+    :title="t('dict.pageTitles.productName1s.title')"
+    :subtitle="t('dict.pageTitles.productName1s.subtitle')"
     dialog-title-create-key="admin.productname1sview.title.add_product"
     dialog-title-edit-key="admin.productname1sview.title.edit_product"
     dialog-width="480px"
     dialog-label-width="100px"
-    empty-text="新增产品名开始"
+    :empty-text="t('admin.productname1sview.string.add_product') + t('dict.empty_start')"
     :search-placeholder="t('admin.productname1sview.placeholder.search_product_name')"
-    create-button-text="新增产品名"
+    :create-button-text="t('admin.productname1sview.string.add_product')"
     :bulk-api="dictApi.productName1s"
     bulk-template="value,sortOrder,deleted&#10;示例产品名,1,0"
   >

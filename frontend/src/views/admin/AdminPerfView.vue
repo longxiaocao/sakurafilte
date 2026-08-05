@@ -195,7 +195,7 @@ function fmtTime(ts: string | null): string {
   <div class="p-3 w-full">
     <div class="flex items-center justify-between mb-3">
       <div>
-        <h1 class="text-lg font-medium">性能监控</h1>
+        <h1 class="text-lg font-medium">{{ t('dict.pageTitles.perf') }}</h1>
         <p class="text-xs text-muted">
           P5.5 后端性能埋点 — P50/P95/P99 + 错误率 + 健康探针 + Token 轮转状态
         </p>

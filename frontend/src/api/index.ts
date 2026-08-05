@@ -905,6 +905,13 @@ export const dictApi = {
       if (q) params.q = q
       return http.get('/admin/dict/machines/typeahead', { params }).then((r) => r.data)
     },
+    // 🔧 fix(审查): 机型字典批量导入导出 (CSV 6 列: brand,model,name,category,sortOrder,deleted)
+    exportCsv(): Promise<string> {
+      return http.get('/admin/dict/machines/export', { responseType: 'text' }).then((r) => r.data)
+    },
+    importCsv(csv: string): Promise<{ created: number; updated: number; deleted: number; skipped: number; errors: string[] }> {
+      return http.post('/admin/dict/machines/import', { csv }).then((r) => r.data)
+    },
     // Day 11 Phase 1 BUG FIX B: 补 machineCategory 参数 (之前 create 漏传, update 有)
     create(machineBrand: string, machineModel?: string, machineName?: string, sortOrder?: number, machineCategory?: string): Promise<MachineItem> {
       return http.post('/admin/dict/machines', { machineBrand, machineModel, machineName, sortOrder, machineCategory }).then((r) => r.data)

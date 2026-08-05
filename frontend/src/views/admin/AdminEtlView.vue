@@ -284,7 +284,7 @@ async function doReindexAll() {
     await ElMessageBox.confirm(
       '全量重建将清空 Meilisearch 全部文档并从 PostgreSQL 重新同步, 期间搜索将短暂不可用。是否继续?',
       '危险操作确认',
-      { type: 'warning', confirmButtonText: '执行全量重建', cancelButtonText: '取消' }
+      { type: 'warning', confirmButtonText: t('admin.etlview.reindex_confirm'), cancelButtonText: t('common.cancel') }
     )
   } catch {
     return
@@ -578,7 +578,7 @@ function statusTagType(s: string): 'success' | 'warning' | 'info' | 'danger' | '
           :disabled="status === 'running'"
           @click="doReindexAll"
         >
-          执行全量重建
+          {{ t('admin.etlview.reindex_confirm') }}
         </el-button>
         <span v-if="status === 'running'" class="text-xs text-[var(--color-text-muted)]">
           ETL 任务进行中, 全量重建不可用

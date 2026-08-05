@@ -4,8 +4,10 @@
 //   - 5 枚举 + LEGACY (旧数据无 reason_code) 各分配颜色
 //   - 鼠标悬停高亮 + tooltip
 import { computed, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import type { EtlReasonCodeAggregate } from '@/api/types'
 
+const { t } = useI18n()
 // Day 9.8: 显式声明组件名 (Vue 3.3+), Vue DevTools + 错误堆栈能正确显示
 defineOptions({ name: 'EtlReasonCodePie' })
 
@@ -148,7 +150,7 @@ function colorFor(code: string): string {
           font-size="11"
           fill="var(--color-text-muted)"
         >
-          总取消数
+          {{ t('admin.etlview.total_cancelled') }}
         </text>
       </svg>
     </div>
@@ -167,7 +169,7 @@ function colorFor(code: string): string {
         <span class="legend-count">{{ seg.count }} ({{ seg.pct }}%)</span>
       </div>
       <div v-if="!data || data.total === 0" class="legend-empty">
-        暂无取消记录
+        {{ t('admin.etlview.no_cancelled_records') }}
       </div>
     </div>
   </div>

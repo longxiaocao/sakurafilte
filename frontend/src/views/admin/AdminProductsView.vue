@@ -315,7 +315,7 @@ onBeforeUnmount(() => {
        WHY: 原 1536px 限制下 13 列表格 (宽 800+px) 只占左侧 ~50%, 右侧大量留白 -->
   <div class="p-3 w-full">
     <!-- A11y axe: h1 标题 (page-has-heading-one) -->
-    <h1 class="text-lg font-medium mb-3">产品管理</h1>
+    <h1 class="text-lg font-medium mb-3">{{ t('dict.pageTitles.products.page_title') }}</h1>
     <!-- 顶部工具条 -->
     <!-- P1-4 修复: 工具条移动端折叠 - 次要控件 (countMode 标签, t('common.field.all')列 switch) 在 sm 以下隐藏 -->
     <div class="flex items-center gap-2 mb-3 flex-wrap">
@@ -330,14 +330,14 @@ onBeforeUnmount(() => {
         <el-option label="others" value="others" />
       </el-select>
       <el-input v-model="filter.oem3Batch" :placeholder="t('admin.productsview.placeholder.oem_batch_count')" clearable size="small" class="hidden sm:inline-block" style="width: 220px" :aria-label="t('admin.productsview.aria.oem_batch_search')" @keyup.enter="quickSearch" />
-      <el-button type="primary" size="small" @click="quickSearch">搜索</el-button>
-      <el-button size="small" @click="openAdv" class="hidden sm:inline-flex">高级筛选</el-button>
+      <el-button type="primary" size="small" @click="quickSearch">{{ t('common.search') }}</el-button>
+      <el-button size="small" @click="openAdv" class="hidden sm:inline-flex">{{ t('admin.productsview.title.filter') }}</el-button>
       <span class="text-xs text-muted hidden sm:inline">count: {{ countModeUsed }}</span>
       <div class="flex-1" />
       <!-- E2E UI.1 修复: 列设置开关 — 默认隐藏次要列, 点击显示全部 24 列 -->
       <el-switch v-model="showAllColumns" size="small" :active-text="t('admin.productsview.string.all_columns')" :inactive-text="t('admin.productsview.string.columns')" inline-prompt class="hidden sm:inline-flex" />
-      <el-button size="small" @click="batchCompare" :disabled="selected.length < 2">批量对比 ({{ selected.length }})</el-button>
-      <el-button type="primary" size="small" @click="newProduct">新增产品</el-button>
+      <el-button size="small" @click="batchCompare" :disabled="selected.length < 2">{{ t('dict.pageTitles.products.batch_compare') }} ({{ selected.length }})</el-button>
+      <el-button type="primary" size="small" @click="newProduct">{{ t('dict.pageTitles.products.new_product') }}</el-button>
     </div>
 
     <!-- 🔧 fix(审查): 高级筛选页内展开区块 (原 el-drawer 侧边栏; 用户反馈: 筛选应在列表界面直接展示) -->
@@ -454,10 +454,10 @@ onBeforeUnmount(() => {
         </el-table-column>
         <el-table-column :label="t('admin.productsview.label.action')" width="200" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" text @click="editProduct(row)">编辑</el-button>
-            <el-button v-if="!row.isDiscontinued" size="small" text type="warning" @click="discontinue(row)">停售</el-button>
+            <el-button size="small" text @click="editProduct(row)">{{ t('common.edit') }}</el-button>
+            <el-button v-if="!row.isDiscontinued" size="small" text type="warning" @click="discontinue(row)">{{ t('admin.productsview.label.discontinued') }}</el-button>
             <el-button v-else size="small" text type="success" @click="restore(row)">恢复</el-button>
-            <el-button size="small" text @click="viewHistory(row)">历史</el-button>
+            <el-button size="small" text @click="viewHistory(row)">{{ t('dict.pageTitles.products.history') }}</el-button>
             <!-- Day 9.2: history 打开后自动 reload, 避免先开再选筛选项空跑 -->
 
           </template>

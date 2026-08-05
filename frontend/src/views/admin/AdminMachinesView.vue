@@ -234,15 +234,17 @@ onUnmounted(() => {
   <DictManagerLayout
     :mgr="mgr"
     :grid-template="gridTemplate"
-    title="机型字典 (Machine)"
-    subtitle="P2.2 后台管理 · 3 字段: 品牌 + 型号 + 名称 · 用于产品表单分区 7 适用车型"
+    :title="t('dict.pageTitles.machines.title')"
+    :subtitle="t('dict.pageTitles.machines.subtitle')"
     dialog-title-create-key="admin.machinesview.title.add_machine_model"
     dialog-title-edit-key="admin.machinesview.title.edit_machine_model"
     dialog-width="560px"
     dialog-label-width="120px"
-    empty-text="新增机型开始"
+    :empty-text="t('admin.machinesview.string.add_machine_model') + t('dict.empty_start')"
     :search-placeholder="t('common.field.search_any_field')"
-    create-button-text="新增机型"
+    :create-button-text="t('admin.machinesview.string.add_machine_model')"
+    :bulk-api="dictApi.machines"
+    bulk-template="brand,model,name,category,sortOrder,deleted&#10;CAT,320D,挖掘机,engineering,1,0&#10;TOYOTA,TF001,Tractor,automobile,2,0"
   >
     <!-- P1 Task 3: 顶部工具条额外按钮 (查看三级树 + 批量绑定 MR.1) -->
     <template #toolbar-extra>
