@@ -162,8 +162,9 @@ jobs:
       #   脚本零依赖 (runner 自带 python), 无 nuget/网络脆弱性; 覆盖提升后阈值可上调
       - name: Coverage gate
         if: always()
-        working-directory: backend
-        run: python .github/scripts/coverage_gate.py "tests/SakuraFilter.Api.Tests/TestResults/*/coverage.cobertura.xml" 5
+        # 🔧 fix(审查): 去掉 working-directory: backend — 相对路径 .github/scripts 在 backend 下不存在
+        #   → python exit 2 (CI 连续失败根因); glob 用 backend/tests/... (与 Upload coverage step 一致)
+        run: python .github/scripts/coverage_gate.py "backend/tests/SakuraFilter.Api.Tests/TestResults/*/coverage.cobertura.xml" 5
 
       # P2-7.1: EF Core 迁移冲突检测 — 验证 idempotent SQL 可生成 + 一次性 SQL 脚本头注释完整
       #   WHY: EF 迁移链与 backend/migrations/*.sql 共存, 迁移语法错误/手动脚本误标会导致生产启动失败
