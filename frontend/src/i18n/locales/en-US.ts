@@ -526,6 +526,7 @@ export default {
     },
     oembrandsview: {
       export_csv: 'Export CSV',
+      export_excel: 'Export Excel',
       import_csv: 'Import CSV',
       import_done: 'Import done',
       export_failed: 'Export failed, retry later',

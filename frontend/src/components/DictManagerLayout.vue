@@ -48,10 +48,12 @@ interface Props {
   dialogWidth?: string
   /** dialog label 宽度, 默认 '100px' */
   dialogLabelWidth?: string
-  /** 🔧 fix(审查): 批量导入导出 — 传入字典 API 对象后自动渲染 下载模板/导出 CSV/导入 CSV 按钮 */
+  /** 🔧 fix(审查): 批量导入导出 — 传入字典 API 对象后自动渲染 下载模板/导出 CSV/导出 Excel/导入 按钮 */
   bulkApi?: {
     exportCsv(): Promise<string>
     importCsv(csv: string): Promise<{ created: number; updated: number; deleted: number; skipped: number; errors: string[] }>
+    exportXlsx?(): Promise<Blob>
+    importXlsx?(file: File): Promise<{ created: number; updated: number; deleted: number; skipped: number; errors: string[] }>
   }
   /** 🔧 fix(审查): 导入模板 CSV 内容 (表头 + 示例行) */
   bulkTemplate?: string
@@ -102,14 +104,33 @@ async function onExportCsv() {
     ElMessage.error(t('dict.bulk.export_failed'))
   }
 }
+// 🔧 fix(审查): XLSX 导出 (双格式 — Excel 原生格式, 前导零/长数字零风险)
+async function onExportXlsx() {
+  if (!props.bulkApi?.exportXlsx) return
+  try {
+    const blob = await props.bulkApi.exportXlsx()
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = `dict-export-${new Date().toISOString().slice(0, 10)}.xlsx`
+    a.click()
+    URL.revokeObjectURL(a.href)
+  } catch {
+    ElMessage.error(t('dict.bulk.export_failed'))
+  }
+}
 async function onImportFile(e: Event) {
   if (!props.bulkApi) return
   const input = e.target as HTMLInputElement
   const f = input.files?.[0]
   if (!f) return
   try {
-    const text = await f.text()
-    const res = await props.bulkApi.importCsv(text)
+    // 🔧 fix(审查): 按扩展名分流 — .xlsx 走 multipart 上传 (ClosedXML 解析), .csv 走文本
+    let res: { created: number; updated: number; deleted: number; skipped: number; errors: string[] }
+    if (/\.xlsx$/i.test(f.name) && props.bulkApi.importXlsx) {
+      res = await props.bulkApi.importXlsx(f)
+    } else {
+      res = await props.bulkApi.importCsv(await f.text())
+    }
     ElMessage.success(`${t('dict.bulk.import_done')}: 新增 ${res.created}, 更新 ${res.updated}, 删除 ${res.deleted}, 跳过 ${res.skipped}`)
     if (res.errors?.length) ElMessage.warning(`${t('dict.bulk.import_partial_fail')}: ${res.errors.slice(0, 3).join('; ')}`)
     props.mgr.load()
@@ -154,11 +175,15 @@ function cellClass(col: DictColumn): string {
           <el-icon class="mr-1" aria-hidden="true"><Download /></el-icon>
           {{ t('dict.bulk.export_csv') }}
         </el-button>
+        <el-button v-if="bulkApi?.exportXlsx" size="small" type="primary" plain @click="onExportXlsx">
+          <el-icon class="mr-1" aria-hidden="true"><Document /></el-icon>
+          {{ t('dict.bulk.export_excel') }}
+        </el-button>
         <el-button size="small" @click="triggerImport">
           <el-icon class="mr-1" aria-hidden="true"><Upload /></el-icon>
           {{ t('dict.bulk.import_csv') }}
         </el-button>
-        <input ref="fileInput" type="file" accept=".csv,text/csv" class="hidden" @change="onImportFile" />
+        <input ref="fileInput" type="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" class="hidden" @change="onImportFile" />
         <el-tooltip :content="t('dict.bulk.hint')" placement="top">
           <el-icon class="text-muted cursor-help" aria-hidden="true"><QuestionFilled /></el-icon>
         </el-tooltip>

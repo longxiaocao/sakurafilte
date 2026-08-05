@@ -535,6 +535,7 @@ export default {
     },
     oembrandsview: {
       export_csv: '导出 CSV',
+      export_excel: '导出 Excel',
       import_csv: '导入 CSV',
       import_done: '导入完成',
       export_failed: '导出失败, 请稍后重试',

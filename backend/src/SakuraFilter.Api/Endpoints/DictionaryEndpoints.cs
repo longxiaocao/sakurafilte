@@ -6,6 +6,7 @@ using SakuraFilter.Core.Interfaces;
 using SakuraFilter.Core.Entities;
 using SakuraFilter.Infrastructure.Data;
 using System.Text;
+using ClosedXML.Excel;
 
 namespace SakuraFilter.Api.Endpoints;
 
@@ -93,6 +94,13 @@ public static class DictionaryEndpoints
             }
             return Results.Text(sb.ToString(), "text/csv; charset=utf-8");
         }).WithName("AdminExportOemBrands");
+        // 🔧 fix(审查): XLSX 导出 (双格式 — ClosedXML, 前导零/长数字零风险)
+        g.MapGet("/export-xlsx", async (OemBrandDictService svc, CancellationToken ct) =>
+        {
+            var items = await svc.ListOemBrandsAsync(null, true, 100000, ct);
+            return ExportDictXlsx(items, new[] { "brand", "sortOrder", "deleted" },
+                x => new object?[] { x.Brand, x.SortOrder, x.DeletedAt == null ? 0 : 1 });
+        }).WithName("AdminExportOemBrandsXlsx");
 
         // 🔧 fix(审查): 批量导入 CSV — 格式: brand[,sortOrder[,deleted]] 每行一个品牌
         //   deleted=1 时软删该品牌 (不硬删, 与现有字典删除策略一致)
@@ -101,46 +109,13 @@ public static class DictionaryEndpoints
         {
             if (string.IsNullOrWhiteSpace(body.Csv))
                 return Results.BadRequest(new { error = "csv 不能为空" });
-            int created = 0, updated = 0, deleted = 0, skipped = 0;
-            var errors = new List<string>();
-            var lines = body.Csv.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-            foreach (var raw in lines)
-            {
-                if (raw.StartsWith("brand,")) continue;  // 表头
-                var parts = raw.Split(',');
-                // 🔧 fix(审查): 先剥离 Excel 公式/文本前缀, 再 Trim — 顺序错误会导致
-                //   ="00789" 先被 Trim('"') 破坏成 =00789 → 公式匹配失败 → 双重包裹 (实测 "=""00789")
-                var brand = parts[0].Trim();
-                if (brand.StartsWith("=\"") && brand.EndsWith("\"") && brand.Length >= 4)
-                    brand = brand.Substring(2, brand.Length - 3);
-                else if (brand.StartsWith("'") && brand.Length > 1)
-                    brand = brand.Substring(1);
-                brand = brand.Trim().Trim('"');
-                if (string.IsNullOrWhiteSpace(brand)) { skipped++; continue; }
-                int? sort = parts.Length > 1 && int.TryParse(parts[1].Trim(), out var s) ? s : null;
-                var wantDeleted = parts.Length > 2 && parts[2].Trim() == "1";
-                try
-                {
-                    var existing = (await svc.ListOemBrandsAsync(brand, true, 5, ct))
-                        .FirstOrDefault(x => x.Brand.Equals(brand, StringComparison.OrdinalIgnoreCase));
-                    if (wantDeleted)
-                    {
-                        if (existing != null && existing.DeletedAt == null) { await svc.DeleteOemBrandAsync(existing.Id, ct); deleted++; }
-                        else { skipped++; }
-                        continue;
-                    }
-                    if (existing != null)
-                    {
-                        if (existing.DeletedAt != null) { await svc.RestoreOemBrandAsync(existing.Id, ct); await svc.UpdateOemBrandAsync(existing.Id, brand, sort, ct); }
-                        else { await svc.UpdateOemBrandAsync(existing.Id, brand, sort, ct); }
-                        updated++;
-                    }
-                    else { await svc.CreateOemBrandAsync(brand, sort, ct); created++; }
-                }
-                catch (Exception ex) { errors.Add($"{brand}: {ex.Message}"); }
-            }
-            return Results.Ok(new { created, updated, deleted, skipped, errors });
+            var rows = body.Csv.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(l => l.Split(',')).ToList();
+            return await ImportOemBrandRows(rows, svc, ct);
         }).WithName("AdminImportOemBrands");
+        // 🔧 fix(审查): XLSX 批量导入 (双格式 — 复用行级处理, 解析后与 CSV 同逻辑)
+        g.MapPost("/import-xlsx", async ([FromForm] IFormFile file, OemBrandDictService svc, CancellationToken ct) =>
+            await ImportOemBrandRows(ParseXlsxRows(file), svc, ct)).DisableAntiforgery().WithName("AdminImportOemBrandsXlsx");
 
         g.MapPut("/{id:long}", async (
             long id, OemBrandUpdateRequest body, OemBrandDictService svc, HttpContext ctx, CancellationToken ct) =>
@@ -202,8 +177,106 @@ public static class DictionaryEndpoints
         return Results.Text(sb.ToString(), "text/csv; charset=utf-8");
     }
 
-    private static async Task<IResult> ImportDictCsv<TItem>(
-        string csv,
+    private static string CsvSafe(string? s)
+    {
+        if (string.IsNullOrEmpty(s)) return "";
+        if (s.Length > 1 && s.All(char.IsDigit)) return $"=\"{s.Replace("\"", "\"\"")}\"";
+        if (s.Contains(',') || s.Contains('"')) return $"\"{s.Replace("\"", "\"\"")}\"";
+        return s;
+    }
+
+    // 🔧 fix(审查): CSV 字段导入解析 — 剥离 ="..." 公式 (导出端数字安全) 与 ' 前缀, 再 Trim
+    private static string CsvUnwrap(string? s)
+    {
+        if (string.IsNullOrEmpty(s)) return "";
+        var v = s.Trim();
+        if (v.StartsWith("=\"") && v.EndsWith("\"") && v.Length >= 4) v = v.Substring(2, v.Length - 3);
+        else if (v.StartsWith("'") && v.Length > 1) v = v.Substring(1);
+        return v.Trim().Trim('"');
+    }
+
+    // 🔧 fix(审查): OEM 品牌行级导入 (CSV/XLSX 共用) — 格式: brand[,sortOrder[,deleted]]
+    private static async Task<IResult> ImportOemBrandRows(IEnumerable<string[]> rows, OemBrandDictService svc, CancellationToken ct)
+    {
+        int created = 0, updated = 0, deleted = 0, skipped = 0;
+        var errors = new List<string>();
+        foreach (var parts in rows)
+        {
+            if (parts.Length >= 1 && parts[0].Trim().ToLowerInvariant() == "brand") continue;  // 表头
+            var brand = CsvUnwrap(parts.Length > 0 ? parts[0] : "");
+            if (string.IsNullOrWhiteSpace(brand)) { skipped++; continue; }
+            int? sort = parts.Length > 1 && int.TryParse(CsvUnwrap(parts[1]), out var s) ? s : null;
+            var wantDeleted = parts.Length > 2 && CsvUnwrap(parts[2]) == "1";
+            try
+            {
+                var existing = (await svc.ListOemBrandsAsync(brand, true, 5, ct))
+                    .FirstOrDefault(x => x.Brand.Equals(brand, StringComparison.OrdinalIgnoreCase));
+                if (wantDeleted)
+                {
+                    if (existing != null && existing.DeletedAt == null) { await svc.DeleteOemBrandAsync(existing.Id, ct); deleted++; }
+                    else { skipped++; }
+                    continue;
+                }
+                if (existing != null)
+                {
+                    if (existing.DeletedAt != null) { await svc.RestoreOemBrandAsync(existing.Id, ct); await svc.UpdateOemBrandAsync(existing.Id, brand, sort, ct); }
+                    else { await svc.UpdateOemBrandAsync(existing.Id, brand, sort, ct); }
+                    updated++;
+                }
+                else { await svc.CreateOemBrandAsync(brand, sort, ct); created++; }
+            }
+            catch (Exception ex) { errors.Add($"{brand}: {ex.Message}"); }
+        }
+        return Results.Ok(new { created, updated, deleted, skipped, errors });
+    }
+
+    // 🔧 fix(审查): 机型字典行级导入 (CSV/XLSX 共用) — 6 列: brand,model,name,category,sortOrder,deleted
+    private static async Task<IResult> ImportMachineRows(IEnumerable<string[]> rows, MachineDictService svc, CancellationToken ct)
+    {
+        int created = 0, updated = 0, deleted = 0, skipped = 0;
+        var errors = new List<string>();
+        foreach (var p in rows)
+        {
+            if (p.Length >= 1 && p[0].Trim().ToLowerInvariant() == "brand") continue;  // 表头
+            var brand = CsvUnwrap(p.Length > 0 ? p[0] : "");
+            var model = CsvUnwrap(p.Length > 1 ? p[1] : "");
+            var name = CsvUnwrap(p.Length > 2 ? p[2] : "");
+            var category = CsvUnwrap(p.Length > 3 ? p[3] : "");
+            if (string.IsNullOrWhiteSpace(brand)) { skipped++; continue; }
+            int? sort = p.Length > 4 && int.TryParse(CsvUnwrap(p[4]), out var s) ? s : null;
+            var wantDeleted = p.Length > 5 && CsvUnwrap(p[5]) == "1";
+            try
+            {
+                var existing = (await svc.ListMachinesAsync(brand, true, 5, ct))
+                    .FirstOrDefault(m => m.MachineBrand.Equals(brand, StringComparison.OrdinalIgnoreCase));
+                if (wantDeleted)
+                {
+                    if (existing != null && existing.DeletedAt == null) { await svc.DeleteMachineAsync(existing.Id, ct); deleted++; }
+                    else { skipped++; }
+                    continue;
+                }
+                if (existing != null)
+                {
+                    if (existing.DeletedAt != null) { await svc.RestoreMachineAsync(existing.Id, ct); }
+                    await svc.UpdateMachineAsync(existing.Id, brand, string.IsNullOrEmpty(model) ? null : model,
+                        string.IsNullOrEmpty(name) ? null : name, sort, string.IsNullOrEmpty(category) ? "others" : category, ct);
+                    updated++;
+                }
+                else
+                {
+                    await svc.CreateMachineAsync(brand, string.IsNullOrEmpty(model) ? null : model,
+                        string.IsNullOrEmpty(name) ? null : name, sort, string.IsNullOrEmpty(category) ? "others" : category, ct);
+                    created++;
+                }
+            }
+            catch (Exception ex) { errors.Add($"{brand}/{model}: {ex.Message}"); }
+        }
+        return Results.Ok(new { created, updated, deleted, skipped, errors });
+    }
+
+    // 🔧 fix(审查): CSV/XLSX 共用行级导入处理 (双格式: XLSX 解析成行列后走同一 upsert 逻辑)
+    private static async Task<IResult> ImportDictRows<TItem>(
+        IEnumerable<string[]> rows,
         IDictService<TItem> svc,
         Func<TItem, string> getValue,
         Func<TItem, DateTime?> getDeleted,
@@ -211,29 +284,17 @@ public static class DictionaryEndpoints
         CancellationToken ct)
         where TItem : class
     {
-        if (string.IsNullOrWhiteSpace(csv))
-            return Results.BadRequest(new { error = "csv 不能为空" });
         int created = 0, updated = 0, deleted = 0, skipped = 0;
         var errors = new List<string>();
-        var lines = csv.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        foreach (var raw in lines)
+        foreach (var parts in rows)
         {
-            if (raw.StartsWith("value,")) continue;  // 表头
-            var parts = raw.Split(',');
-            // 🔧 fix(审查): 剥离 Excel 公式包裹 (导出端 ="00123" 防数字格式化) 与 ' 前缀
-            var value = parts[0].Trim();
-            if (value.StartsWith("=\"") && value.EndsWith("\"") && value.Length >= 4) value = value[2..^1];
-            else if (value.StartsWith("'")) value = value[1..];
-            value = value.Trim().Trim('"');
-            // 🔧 fix(审查): 剥离 Excel 公式/文本前缀 — 导出端对纯数字用 ="..." 包裹,
-            //   用户 Excel 编辑后可能保留 ="00123" 或加 ' 前缀, 导入时还原原始字符串
-            if (value.StartsWith("=\"") && value.EndsWith("\"") && value.Length >= 4)
-                value = value.Substring(2, value.Length - 3);
-            else if (value.StartsWith("'") && value.Length > 1)
-                value = value.Substring(1);
+            // 表头行跳过 (value / brand 为首列)
+            if (parts.Length >= 1 && (parts[0].Trim().ToLowerInvariant() is "value" or "brand"))
+                continue;
+            var value = CsvUnwrap(parts.Length > 0 ? parts[0] : "");
             if (string.IsNullOrWhiteSpace(value)) { skipped++; continue; }
-            int? sort = parts.Length > 1 && int.TryParse(parts[1].Trim(), out var s) ? s : null;
-            var wantDeleted = parts.Length > 2 && parts[2].Trim() == "1";
+            int? sort = parts.Length > 1 && int.TryParse(CsvUnwrap(parts[1]), out var s) ? s : null;
+            var wantDeleted = parts.Length > 2 && CsvUnwrap(parts[2]) == "1";
             try
             {
                 var existing = (await svc.ListAsync(value, true, 5, ct))
@@ -257,23 +318,75 @@ public static class DictionaryEndpoints
         return Results.Ok(new { created, updated, deleted, skipped, errors });
     }
 
-    // 🔧 fix(审查): CSV 字段导出安全转义 — 纯数字文本 ="..." 包裹 (Excel 防前导零/科学计数法); 含逗号/引号加引号
-    private static string CsvSafe(string? s)
+    private static async Task<IResult> ImportDictCsv<TItem>(
+        string csv,
+        IDictService<TItem> svc,
+        Func<TItem, string> getValue,
+        Func<TItem, DateTime?> getDeleted,
+        Func<TItem, long> getId,
+        CancellationToken ct)
+        where TItem : class
     {
-        if (string.IsNullOrEmpty(s)) return "";
-        if (s.Length > 1 && s.All(char.IsDigit)) return $"=\"{s.Replace("\"", "\"\"")}\"";
-        if (s.Contains(',') || s.Contains('"')) return $"\"{s.Replace("\"", "\"\"")}\"";
-        return s;
+        if (string.IsNullOrWhiteSpace(csv))
+            return Results.BadRequest(new { error = "csv 不能为空" });
+        var rows = csv.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(l => l.Split(',')).ToList();
+        return await ImportDictRows(rows, svc, getValue, getDeleted, getId, ct);
     }
 
-    // 🔧 fix(审查): CSV 字段导入解析 — 剥离 ="..." 公式 (导出端数字安全) 与 ' 前缀, 再 Trim
-    private static string CsvUnwrap(string? s)
+    // 🔧 fix(审查): XLSX 导出 (双格式 — ClosedXML 复用 ETL 已有依赖, 无新增包)
+    //   XLSX 天然文本格式: 前导零/长数字零风险 (用户 Excel 直接编辑)
+    private static IResult ExportDictXlsx<TItem>(
+        IEnumerable<TItem> items,
+        string[] headers,
+        Func<TItem, object?[]> getRow)
     {
-        if (string.IsNullOrEmpty(s)) return "";
-        var v = s.Trim();
-        if (v.StartsWith("=\"") && v.EndsWith("\"") && v.Length >= 4) v = v.Substring(2, v.Length - 3);
-        else if (v.StartsWith("'") && v.Length > 1) v = v.Substring(1);
-        return v.Trim().Trim('"');
+        using var wb = new XLWorkbook();
+        var ws = wb.AddWorksheet("data");
+        for (int c = 0; c < headers.Length; c++) ws.Cell(1, c + 1).Value = headers[c];
+        int r = 2;
+        foreach (var it in items)
+        {
+            var row = getRow(it);
+            for (int c = 0; c < row.Length; c++)
+            {
+                var v = row[c];
+                ws.Cell(r, c + 1).Value = v switch
+                {
+                    null => "",
+                    int i => i,
+                    DateTime dt => dt,
+                    _ => v.ToString() ?? ""
+                };
+            }
+            r++;
+        }
+        using var ms = new MemoryStream();
+        wb.SaveAs(ms);
+        return Results.File(ms.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "dict-export.xlsx");
+    }
+
+    // 🔧 fix(审查): XLSX 导入解析 — 首个工作表, 前 20 列, 单元格转字符串
+    private static List<string[]> ParseXlsxRows(IFormFile file)
+    {
+        using var ms = new MemoryStream();
+        file.CopyTo(ms);
+        ms.Position = 0;
+        using var wb = new XLWorkbook(ms);
+        var ws = wb.Worksheets.First();
+        var rows = new List<string[]>();
+        var lastRow = ws.LastRowUsed()?.RowNumber() ?? 0;
+        for (int r = 1; r <= lastRow; r++)
+        {
+            var cells = new List<string>();
+            for (int c = 1; c <= 20; c++)
+            {
+                var cell = ws.Cell(r, c);
+                cells.Add(cell.IsEmpty() ? "" : cell.GetString());
+            }
+            rows.Add(cells.ToArray());
+        }
+        return rows;
     }
 
     private static void MapProductName1Endpoints(IEndpointRouteBuilder group)
@@ -307,8 +420,15 @@ public static class DictionaryEndpoints
         }).WithName("AdminCreateProductName1");
         g.MapGet("/export", async (ProductName1DictService svc, CancellationToken ct) =>
             await ExportDictCsv(svc, x => x.ProductName1, x => x.SortOrder, x => x.DeletedAt, ct)).WithName("AdminExportProductName1s");
+        g.MapGet("/export-xlsx", async (ProductName1DictService svc, CancellationToken ct) =>
+        {
+            var items = await svc.ListAsync(null, true, 100000, ct);
+            return ExportDictXlsx(items, new[] { "value", "sortOrder", "deleted" }, x => new object?[] { x.ProductName1, x.SortOrder, x.DeletedAt == null ? 0 : 1 });
+        }).WithName("AdminExportProductName1sXlsx");
         g.MapPost("/import", async (ImportCsvRequest body, ProductName1DictService svc, CancellationToken ct) =>
             await ImportDictCsv<DictProductName1>(body.Csv, svc, x => x.ProductName1, x => x.DeletedAt, x => x.Id, ct)).WithName("AdminImportProductName1s");
+        g.MapPost("/import-xlsx", async ([FromForm] IFormFile file, ProductName1DictService svc, CancellationToken ct) =>
+            await ImportDictRows(ParseXlsxRows(file), svc, x => x.ProductName1, x => x.DeletedAt, x => x.Id, ct)).DisableAntiforgery().WithName("AdminImportProductName1sXlsx");
 
         g.MapPut("/{id:long}", async (
             long id, ProductName1UpdateRequest body, ProductName1DictService svc, HttpContext ctx, CancellationToken ct) =>
@@ -375,8 +495,15 @@ public static class DictionaryEndpoints
         }).WithName("AdminCreateProductName2");
         g.MapGet("/export", async (ProductName2DictService svc, CancellationToken ct) =>
             await ExportDictCsv(svc, x => x.ProductName2, x => x.SortOrder, x => x.DeletedAt, ct)).WithName("AdminExportProductName2s");
+        g.MapGet("/export-xlsx", async (ProductName2DictService svc, CancellationToken ct) =>
+        {
+            var items = await svc.ListAsync(null, true, 100000, ct);
+            return ExportDictXlsx(items, new[] { "value", "sortOrder", "deleted" }, x => new object?[] { x.ProductName2, x.SortOrder, x.DeletedAt == null ? 0 : 1 });
+        }).WithName("AdminExportProductName2sXlsx");
         g.MapPost("/import", async (ImportCsvRequest body, ProductName2DictService svc, CancellationToken ct) =>
             await ImportDictCsv<DictProductName2>(body.Csv, svc, x => x.ProductName2, x => x.DeletedAt, x => x.Id, ct)).WithName("AdminImportProductName2s");
+        g.MapPost("/import-xlsx", async ([FromForm] IFormFile file, ProductName2DictService svc, CancellationToken ct) =>
+            await ImportDictRows(ParseXlsxRows(file), svc, x => x.ProductName2, x => x.DeletedAt, x => x.Id, ct)).DisableAntiforgery().WithName("AdminImportProductName2sXlsx");
 
         g.MapPut("/{id:long}", async (
             long id, ProductName2UpdateRequest body, ProductName2DictService svc, HttpContext ctx, CancellationToken ct) =>
@@ -443,8 +570,15 @@ public static class DictionaryEndpoints
         }).WithName("AdminCreateType");
         g.MapGet("/export", async (TypeDictService svc, CancellationToken ct) =>
             await ExportDictCsv(svc, x => x.Type, x => x.SortOrder, x => x.DeletedAt, ct)).WithName("AdminExportTypes");
+        g.MapGet("/export-xlsx", async (TypeDictService svc, CancellationToken ct) =>
+        {
+            var items = await svc.ListAsync(null, true, 100000, ct);
+            return ExportDictXlsx(items, new[] { "value", "sortOrder", "deleted" }, x => new object?[] { x.Type, x.SortOrder, x.DeletedAt == null ? 0 : 1 });
+        }).WithName("AdminExportTypesXlsx");
         g.MapPost("/import", async (ImportCsvRequest body, TypeDictService svc, CancellationToken ct) =>
             await ImportDictCsv<DictType>(body.Csv, svc, x => x.Type, x => x.DeletedAt, x => x.Id, ct)).WithName("AdminImportTypes");
+        g.MapPost("/import-xlsx", async ([FromForm] IFormFile file, TypeDictService svc, CancellationToken ct) =>
+            await ImportDictRows(ParseXlsxRows(file), svc, x => x.Type, x => x.DeletedAt, x => x.Id, ct)).DisableAntiforgery().WithName("AdminImportTypesXlsx");
 
         g.MapPut("/{id:long}", async (
             long id, TypeUpdateRequest body, TypeDictService svc, HttpContext ctx, CancellationToken ct) =>
@@ -511,8 +645,15 @@ public static class DictionaryEndpoints
         }).WithName("AdminCreateOemNo3");
         g.MapGet("/export", async (OemNo3DictService svc, CancellationToken ct) =>
             await ExportDictCsv(svc, x => x.OemNo3, x => x.SortOrder, x => x.DeletedAt, ct)).WithName("AdminExportOemNo3s");
+        g.MapGet("/export-xlsx", async (OemNo3DictService svc, CancellationToken ct) =>
+        {
+            var items = await svc.ListAsync(null, true, 100000, ct);
+            return ExportDictXlsx(items, new[] { "value", "sortOrder", "deleted" }, x => new object?[] { x.OemNo3, x.SortOrder, x.DeletedAt == null ? 0 : 1 });
+        }).WithName("AdminExportOemNo3sXlsx");
         g.MapPost("/import", async (ImportCsvRequest body, OemNo3DictService svc, CancellationToken ct) =>
             await ImportDictCsv<DictOemNo3>(body.Csv, svc, x => x.OemNo3, x => x.DeletedAt, x => x.Id, ct)).WithName("AdminImportOemNo3s");
+        g.MapPost("/import-xlsx", async ([FromForm] IFormFile file, OemNo3DictService svc, CancellationToken ct) =>
+            await ImportDictRows(ParseXlsxRows(file), svc, x => x.OemNo3, x => x.DeletedAt, x => x.Id, ct)).DisableAntiforgery().WithName("AdminImportOemNo3sXlsx");
 
         g.MapPut("/{id:long}", async (
             long id, OemNo3UpdateRequest body, OemNo3DictService svc, HttpContext ctx, CancellationToken ct) =>
@@ -577,8 +718,15 @@ public static class DictionaryEndpoints
         }).WithName("AdminCreateMedia");
         g.MapGet("/export", async (MediaDictService svc, CancellationToken ct) =>
             await ExportDictCsv(svc, x => x.MediaName, x => x.SortOrder, x => x.DeletedAt, ct)).WithName("AdminExportMedias");
+        g.MapGet("/export-xlsx", async (MediaDictService svc, CancellationToken ct) =>
+        {
+            var items = await svc.ListAsync(null, true, 100000, ct);
+            return ExportDictXlsx(items, new[] { "value", "sortOrder", "deleted" }, x => new object?[] { x.MediaName, x.SortOrder, x.DeletedAt == null ? 0 : 1 });
+        }).WithName("AdminExportMediasXlsx");
         g.MapPost("/import", async (ImportCsvRequest body, MediaDictService svc, CancellationToken ct) =>
             await ImportDictCsv<DictMedia>(body.Csv, svc, x => x.MediaName, x => x.DeletedAt, x => x.Id, ct)).WithName("AdminImportMedias");
+        g.MapPost("/import-xlsx", async ([FromForm] IFormFile file, MediaDictService svc, CancellationToken ct) =>
+            await ImportDictRows(ParseXlsxRows(file), svc, x => x.MediaName, x => x.DeletedAt, x => x.Id, ct)).DisableAntiforgery().WithName("AdminImportMediasXlsx");
         g.MapPut("/{id:long}", async (
             long id, MediaUpdateRequest body, MediaDictService svc, HttpContext ctx, CancellationToken ct) =>
         {
@@ -649,52 +797,25 @@ public static class DictionaryEndpoints
             }
             return Results.Text(sb.ToString(), "text/csv; charset=utf-8");
         }).WithName("AdminExportMachines");
+        // 🔧 fix(审查): 机型字典 XLSX 导出 (双格式)
+        g.MapGet("/export-xlsx", async (MachineDictService svc, CancellationToken ct) =>
+        {
+            var items = await svc.ListMachinesAsync(null, true, 100000, ct);
+            return ExportDictXlsx(items, new[] { "brand", "model", "name", "category", "sortOrder", "deleted" },
+                x => new object?[] { x.MachineBrand, x.MachineModel, x.MachineName, x.MachineCategory, x.SortOrder, x.DeletedAt == null ? 0 : 1 });
+        }).WithName("AdminExportMachinesXlsx");
         g.MapPost("/import", async (
             ImportCsvRequest body, MachineDictService svc, CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(body.Csv))
                 return Results.BadRequest(new { error = "csv 不能为空" });
-            int created = 0, updated = 0, deleted = 0, skipped = 0;
-            var errors = new List<string>();
-            foreach (var raw in body.Csv.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-            {
-                if (raw.StartsWith("brand,")) continue;  // 表头
-                var p = raw.Split(',');
-                var brand = CsvUnwrap(p[0]);
-                var model = CsvUnwrap(p.Length > 1 ? p[1] : "");
-                var name = CsvUnwrap(p.Length > 2 ? p[2] : "");
-                var category = CsvUnwrap(p.Length > 3 ? p[3] : "");
-                if (string.IsNullOrWhiteSpace(brand)) { skipped++; continue; }
-                int? sort = p.Length > 4 && int.TryParse(CsvUnwrap(p[4]), out var s) ? s : null;
-                var wantDeleted = p.Length > 5 && CsvUnwrap(p[5]) == "1";
-                try
-                {
-                    var existing = (await svc.ListMachinesAsync(brand, true, 5, ct))
-                        .FirstOrDefault(m => m.MachineBrand.Equals(brand, StringComparison.OrdinalIgnoreCase));
-                    if (wantDeleted)
-                    {
-                        if (existing != null && existing.DeletedAt == null) { await svc.DeleteMachineAsync(existing.Id, ct); deleted++; }
-                        else { skipped++; }
-                        continue;
-                    }
-                    if (existing != null)
-                    {
-                        if (existing.DeletedAt != null) { await svc.RestoreMachineAsync(existing.Id, ct); }
-                        await svc.UpdateMachineAsync(existing.Id, brand, string.IsNullOrEmpty(model) ? null : model,
-                            string.IsNullOrEmpty(name) ? null : name, sort, string.IsNullOrEmpty(category) ? "others" : category, ct);
-                        updated++;
-                    }
-                    else
-                    {
-                        await svc.CreateMachineAsync(brand, string.IsNullOrEmpty(model) ? null : model,
-                            string.IsNullOrEmpty(name) ? null : name, sort, string.IsNullOrEmpty(category) ? "others" : category, ct);
-                        created++;
-                    }
-                }
-                catch (Exception ex) { errors.Add($"{brand}/{model}: {ex.Message}"); }
-            }
-            return Results.Ok(new { created, updated, deleted, skipped, errors });
+            var rows = body.Csv.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(l => l.Split(',')).ToList();
+            return await ImportMachineRows(rows, svc, ct);
         }).WithName("AdminImportMachines");
+        // 🔧 fix(审查): 机型字典 XLSX 导入 (双格式)
+        g.MapPost("/import-xlsx", async ([FromForm] IFormFile file, MachineDictService svc, CancellationToken ct) =>
+            await ImportMachineRows(ParseXlsxRows(file), svc, ct)).DisableAntiforgery().WithName("AdminImportMachinesXlsx");
         g.MapPut("/{id:long}", async (
             long id, MachineUpdateRequest body, MachineDictService svc, HttpContext ctx, CancellationToken ct) =>
         {
@@ -755,8 +876,15 @@ public static class DictionaryEndpoints
         }).WithName("AdminCreateEngine");
         g.MapGet("/export", async (EngineDictService svc, CancellationToken ct) =>
             await ExportDictCsv(svc, x => x.EngineBrand, x => x.SortOrder, x => x.DeletedAt, ct)).WithName("AdminExportEngines");
+        g.MapGet("/export-xlsx", async (EngineDictService svc, CancellationToken ct) =>
+        {
+            var items = await svc.ListAsync(null, true, 100000, ct);
+            return ExportDictXlsx(items, new[] { "value", "sortOrder", "deleted" }, x => new object?[] { x.EngineBrand, x.SortOrder, x.DeletedAt == null ? 0 : 1 });
+        }).WithName("AdminExportEnginesXlsx");
         g.MapPost("/import", async (ImportCsvRequest body, EngineDictService svc, CancellationToken ct) =>
             await ImportDictCsv<DictEngine>(body.Csv, svc, x => x.EngineBrand, x => x.DeletedAt, x => x.Id, ct)).WithName("AdminImportEngines");
+        g.MapPost("/import-xlsx", async ([FromForm] IFormFile file, EngineDictService svc, CancellationToken ct) =>
+            await ImportDictRows(ParseXlsxRows(file), svc, x => x.EngineBrand, x => x.DeletedAt, x => x.Id, ct)).DisableAntiforgery().WithName("AdminImportEnginesXlsx");
         g.MapPut("/{id:long}", async (
             long id, EngineUpdateRequest body, EngineDictService svc, HttpContext ctx, CancellationToken ct) =>
         {

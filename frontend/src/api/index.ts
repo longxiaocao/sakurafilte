@@ -704,8 +704,16 @@ export const dictApi = {
     exportCsv(): Promise<string> {
       return http.get('/admin/dict/oem-brands/export', { responseType: 'text' }).then((r) => r.data)
     },
+    exportXlsx(): Promise<Blob> {
+      return http.get('/admin/dict/oem-brands/export-xlsx', { responseType: 'blob' }).then((r) => r.data)
+    },
     importCsv(csv: string): Promise<{ created: number; updated: number; deleted: number; skipped: number; errors: string[] }> {
       return http.post('/admin/dict/oem-brands/import', { csv }).then((r) => r.data)
+    },
+    importXlsx(file: File): Promise<{ created: number; updated: number; deleted: number; skipped: number; errors: string[] }> {
+      const fd = new FormData()
+      fd.append('file', file)
+      return http.post('/admin/dict/oem-brands/import-xlsx', fd).then((r) => r.data)
     },
     reorder(items: OemBrandReorderItem[]): Promise<{ updated: number }> {
       return http.post('/admin/dict/oem-brands/reorder', { items }).then((r) => r.data)
@@ -728,8 +736,16 @@ export const dictApi = {
     exportCsv(): Promise<string> {
       return http.get('/admin/dict/product-name1s/export', { responseType: 'text' }).then((r) => r.data)
     },
+    exportXlsx(): Promise<Blob> {
+      return http.get('/admin/dict/product-name1s/export-xlsx', { responseType: 'blob' }).then((r) => r.data)
+    },
     importCsv(csv: string): Promise<{ created: number; updated: number; deleted: number; skipped: number; errors: string[] }> {
       return http.post('/admin/dict/product-name1s/import', { csv }).then((r) => r.data)
+    },
+    importXlsx(file: File): Promise<{ created: number; updated: number; deleted: number; skipped: number; errors: string[] }> {
+      const fd = new FormData()
+      fd.append('file', file)
+      return http.post('/admin/dict/product-name1s/import-xlsx', fd).then((r) => r.data)
     },
     create(productName1: string, sortOrder?: number): Promise<ProductName1Item> {
       return http.post('/admin/dict/product-name1s', { productName1, sortOrder }).then((r) => r.data)
@@ -764,8 +780,16 @@ export const dictApi = {
     exportCsv(): Promise<string> {
       return http.get('/admin/dict/product-name2s/export', { responseType: 'text' }).then((r) => r.data)
     },
+    exportXlsx(): Promise<Blob> {
+      return http.get('/admin/dict/product-name2s/export-xlsx', { responseType: 'blob' }).then((r) => r.data)
+    },
     importCsv(csv: string): Promise<{ created: number; updated: number; deleted: number; skipped: number; errors: string[] }> {
       return http.post('/admin/dict/product-name2s/import', { csv }).then((r) => r.data)
+    },
+    importXlsx(file: File): Promise<{ created: number; updated: number; deleted: number; skipped: number; errors: string[] }> {
+      const fd = new FormData()
+      fd.append('file', file)
+      return http.post('/admin/dict/product-name2s/import-xlsx', fd).then((r) => r.data)
     },
     create(productName2: string, sortOrder?: number): Promise<ProductName2Item> {
       return http.post('/admin/dict/product-name2s', { productName2, sortOrder }).then((r) => r.data)
@@ -800,8 +824,16 @@ export const dictApi = {
     exportCsv(): Promise<string> {
       return http.get('/admin/dict/types/export', { responseType: 'text' }).then((r) => r.data)
     },
+    exportXlsx(): Promise<Blob> {
+      return http.get('/admin/dict/types/export-xlsx', { responseType: 'blob' }).then((r) => r.data)
+    },
     importCsv(csv: string): Promise<{ created: number; updated: number; deleted: number; skipped: number; errors: string[] }> {
       return http.post('/admin/dict/types/import', { csv }).then((r) => r.data)
+    },
+    importXlsx(file: File): Promise<{ created: number; updated: number; deleted: number; skipped: number; errors: string[] }> {
+      const fd = new FormData()
+      fd.append('file', file)
+      return http.post('/admin/dict/types/import-xlsx', fd).then((r) => r.data)
     },
     create(type: string, sortOrder?: number): Promise<TypeItem> {
       return http.post('/admin/dict/types', { type, sortOrder }).then((r) => r.data)
@@ -836,8 +868,16 @@ export const dictApi = {
     exportCsv(): Promise<string> {
       return http.get('/admin/dict/oem-no3s/export', { responseType: 'text' }).then((r) => r.data)
     },
+    exportXlsx(): Promise<Blob> {
+      return http.get('/admin/dict/oem-no3s/export-xlsx', { responseType: 'blob' }).then((r) => r.data)
+    },
     importCsv(csv: string): Promise<{ created: number; updated: number; deleted: number; skipped: number; errors: string[] }> {
       return http.post('/admin/dict/oem-no3s/import', { csv }).then((r) => r.data)
+    },
+    importXlsx(file: File): Promise<{ created: number; updated: number; deleted: number; skipped: number; errors: string[] }> {
+      const fd = new FormData()
+      fd.append('file', file)
+      return http.post('/admin/dict/oem-no3s/import-xlsx', fd).then((r) => r.data)
     },
     create(oemNo3: string, sortOrder?: number): Promise<OemNo3Item> {
       return http.post('/admin/dict/oem-no3s', { oemNo3, sortOrder }).then((r) => r.data)
@@ -872,8 +912,16 @@ export const dictApi = {
     exportCsv(): Promise<string> {
       return http.get('/admin/dict/medias/export', { responseType: 'text' }).then((r) => r.data)
     },
+    exportXlsx(): Promise<Blob> {
+      return http.get('/admin/dict/medias/export-xlsx', { responseType: 'blob' }).then((r) => r.data)
+    },
     importCsv(csv: string): Promise<{ created: number; updated: number; deleted: number; skipped: number; errors: string[] }> {
       return http.post('/admin/dict/medias/import', { csv }).then((r) => r.data)
+    },
+    importXlsx(file: File): Promise<{ created: number; updated: number; deleted: number; skipped: number; errors: string[] }> {
+      const fd = new FormData()
+      fd.append('file', file)
+      return http.post('/admin/dict/medias/import-xlsx', fd).then((r) => r.data)
     },
     create(mediaName: string, mediaModel?: string, sortOrder?: number): Promise<MediaItem> {
       return http.post('/admin/dict/medias', { mediaName, mediaModel, sortOrder }).then((r) => r.data)
@@ -909,8 +957,16 @@ export const dictApi = {
     exportCsv(): Promise<string> {
       return http.get('/admin/dict/machines/export', { responseType: 'text' }).then((r) => r.data)
     },
+    exportXlsx(): Promise<Blob> {
+      return http.get('/admin/dict/machines/export-xlsx', { responseType: 'blob' }).then((r) => r.data)
+    },
     importCsv(csv: string): Promise<{ created: number; updated: number; deleted: number; skipped: number; errors: string[] }> {
       return http.post('/admin/dict/machines/import', { csv }).then((r) => r.data)
+    },
+    importXlsx(file: File): Promise<{ created: number; updated: number; deleted: number; skipped: number; errors: string[] }> {
+      const fd = new FormData()
+      fd.append('file', file)
+      return http.post('/admin/dict/machines/import-xlsx', fd).then((r) => r.data)
     },
     // Day 11 Phase 1 BUG FIX B: 补 machineCategory 参数 (之前 create 漏传, update 有)
     create(machineBrand: string, machineModel?: string, machineName?: string, sortOrder?: number, machineCategory?: string): Promise<MachineItem> {
@@ -946,8 +1002,16 @@ export const dictApi = {
     exportCsv(): Promise<string> {
       return http.get('/admin/dict/engines/export', { responseType: 'text' }).then((r) => r.data)
     },
+    exportXlsx(): Promise<Blob> {
+      return http.get('/admin/dict/engines/export-xlsx', { responseType: 'blob' }).then((r) => r.data)
+    },
     importCsv(csv: string): Promise<{ created: number; updated: number; deleted: number; skipped: number; errors: string[] }> {
       return http.post('/admin/dict/engines/import', { csv }).then((r) => r.data)
+    },
+    importXlsx(file: File): Promise<{ created: number; updated: number; deleted: number; skipped: number; errors: string[] }> {
+      const fd = new FormData()
+      fd.append('file', file)
+      return http.post('/admin/dict/engines/import-xlsx', fd).then((r) => r.data)
     },
     create(engineBrand: string, engineType?: string, sortOrder?: number): Promise<EngineItem> {
       return http.post('/admin/dict/engines', { engineBrand, engineType, sortOrder }).then((r) => r.data)
