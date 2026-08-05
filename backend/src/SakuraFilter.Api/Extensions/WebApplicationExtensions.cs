@@ -30,7 +30,23 @@ public static class StartupExtensions
         db.Database.SetCommandTimeout(60);
         var migrateLogger = migrateScope.ServiceProvider.GetRequiredService<ILogger<StartupMarker>>();
 
-        await EnsureEfmigrationsHistorySeededAsync(db, migrateLogger);
+        // 🔧 fix(审查): 空库 (无任何业务表) 先 EnsureCreated 建基础表 (EF 模型)
+        //   项目无 C# 迁移类 (Migrations 为空) → MigrateAsync 空转 "无 pending migrations";
+        //   CI 空库 spike_test_v3 因此表全不建 → Day 9.8 等依赖 etl_progress_log 的测试全挂
+        //   模式: EnsureCreated (基础表) + backend/migrations/*.sql (演进, 幂等) = v28-4 注释的 CI 模式
+        var hasBusinessTables = await db.Database.SqlQueryRaw<int>(
+            "SELECT COUNT(*)::int AS \"Value\" FROM information_schema.tables " +
+            "WHERE table_schema = 'public' AND table_name NOT IN ('__EFMigrationsHistory')"
+        ).FirstOrDefaultAsync();
+        if (hasBusinessTables == 0)
+        {
+            await db.Database.EnsureCreatedAsync();
+            migrateLogger.LogInformation("空库: EnsureCreated 已建基础表 (EF 模型), 后续 SQL 迁移脚本负责演进");
+        }
+        else
+        {
+            await EnsureEfmigrationsHistorySeededAsync(db, migrateLogger);
+        }
 
         var pendingMigrations = await db.Database.GetPendingMigrationsAsync();
         if (pendingMigrations.Any())
@@ -146,6 +162,19 @@ public static class StartupExtensions
             ).FirstOrDefaultAsync();
             if (count == 0)
             {
+                // 🔧 fix(审查): 空库 (无任何业务表) 不得种子 — CI 空库 spike_test_v3 中招:
+                //   伪造 InitialCreate 已应用 → GetPendingMigrationsAsync 返回空 → 跳过迁移 → 表全不建
+                //   → Day 9.8 等依赖 etl_progress_log 的测试全挂 (relation does not exist)
+                //   种子仅用于"历史表缺失但已有业务表"的老环境 (SQL 脚本建表)
+                var hasBusinessTables = await db.Database.SqlQueryRaw<int>(
+                    "SELECT COUNT(*)::int AS \"Value\" FROM information_schema.tables " +
+                    "WHERE table_schema = 'public' AND table_name NOT IN ('__EFMigrationsHistory')"
+                ).FirstOrDefaultAsync();
+                if (hasBusinessTables == 0)
+                {
+                    logger.LogInformation("空库 (无业务表), 跳过历史表种子, 走完整 EF 迁移建表");
+                    return;
+                }
                 logger.LogInformation("__EFMigrationsHistory 表不存在,创建并标记 InitialCreate 为已应用 (老环境兼容)");
                 await db.Database.ExecuteSqlRawAsync(@"
                     CREATE TABLE IF NOT EXISTS ""__EFMigrationsHistory"" (
