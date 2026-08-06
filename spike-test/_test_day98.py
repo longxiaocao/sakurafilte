@@ -344,21 +344,29 @@ def test_frontend_component_built():
 
 # ========== 主流程 ==========
 if __name__ == "__main__":
-    print(f"=== Day 9.8 ETL 审计 + reason_code 饼图 E2E ===")
-    print(f"BASE={BASE}")
-    case("1. /history?status=cancelled 返回", test_history_cancelled)
-    case("2. /aggregate 按 reason_code 聚合", test_aggregate_reason_code)
-    case("3. 字段完整性", test_history_field_completeness)
-    case("4. status 过滤生效", test_history_status_filter)
-    case("5. 新 cancel 记录入库", test_new_cancel_recorded)
-    case("6. 前端组件就绪", test_frontend_component_built)
+    # 🔧 fix(审查): 脚本级 try/except — CI 曾 exit 1 但 ::error:: 未显示 (崩在 case 外)
+    #   import/初始化异常未捕获 → 输出 ::error:: + traceback, GitHub UI 可见
+    try:
+        print(f"=== Day 9.8 ETL 审计 + reason_code 饼图 E2E ===")
+        print(f"BASE={BASE}")
+        case("1. /history?status=cancelled 返回", test_history_cancelled)
+        case("2. /aggregate 按 reason_code 聚合", test_aggregate_reason_code)
+        case("3. 字段完整性", test_history_field_completeness)
+        case("4. status 过滤生效", test_history_status_filter)
+        case("5. 新 cancel 记录入库", test_new_cancel_recorded)
+        case("6. 前端组件就绪", test_frontend_component_built)
 
-    print(f"\n=== 总结: {PASS} PASS, {FAIL} FAIL ===")
-    skip_count = len([r for r in RESULTS if r[1] == "SKIP"])
-    if skip_count > 0:
-        print(f"  (其中 {skip_count} 个 SKIP: CI 空数据库或环境不支持)")
-    for n, s, e in RESULTS:
-        marker = "✓" if s == "PASS" else ("○" if s == "SKIP" else "✗")
-        print(f"  {marker} [{s}] {n}" + (f"  ({e})" if e else ""))
-    # Day 9.12: SKIP 不影响 exit code (CI 空数据库不算失败)
-    sys.exit(0 if FAIL == 0 else 1)
+        print(f"\n=== 总结: {PASS} PASS, {FAIL} FAIL ===")
+        skip_count = len([r for r in RESULTS if r[1] == "SKIP"])
+        if skip_count > 0:
+            print(f"  (其中 {skip_count} 个 SKIP: CI 空数据库或环境不支持)")
+        for n, s, e in RESULTS:
+            marker = "✓" if s == "PASS" else ("○" if s == "SKIP" else "✗")
+            print(f"  {marker} [{s}] {n}" + (f"  ({e})" if e else ""))
+        # Day 9.12: SKIP 不影响 exit code (CI 空数据库不算失败)
+        sys.exit(0 if FAIL == 0 else 1)
+    except Exception as _e:
+        import traceback
+        traceback.print_exc()
+        print(f"::error::Day9.8 脚本级异常: {type(_e).__name__}: {_e}")
+        sys.exit(1)
