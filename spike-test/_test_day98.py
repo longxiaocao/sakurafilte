@@ -17,7 +17,12 @@ import os
 import urllib.request
 import urllib.error
 import sys
-import psycopg2
+# 🔧 fix(审查): import 防御 — e2e job 曾缺 psycopg2 (pip 只在 setup job) → ModuleNotFoundError exit 1 无 ::error::
+try:
+    import psycopg2
+except ImportError:
+    print("::error::Day9.8 依赖缺失: psycopg2 未安装 (e2e job 需 pip install psycopg2-binary)")
+    sys.exit(2)
 
 BASE = "http://localhost:5148"
 TOKEN = os.environ.get("ADMIN_TOKEN", "dev-admin-token-rotate-in-prod-MZK4R9P3X6V2N7Q1L5F0B8H3C")

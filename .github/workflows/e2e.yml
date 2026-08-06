@@ -191,6 +191,12 @@ jobs:
           if-no-files-found: ignore
 
       # Day 9.5/9.6/9.7/9.8 跨实例 ETL 测试
+      # 🔧 fix(审查): e2e job 缺 psycopg2 — pip install 只在 setup job (其他 job 环境独立),
+      #   _test_day98/_test_day10 import psycopg2 → ModuleNotFoundError → exit 1 无 ::error::
+      #   (CI Day 9.8 连续失败根因, 与后端代码无关)
+      - name: Install Python deps (e2e job)
+        run: pip install psycopg2-binary
+
       - name: Run E2E Day 9.5 (cancel enum + alert filter + cursor HMAC)
         working-directory: spike-test
         run: python _test_day95.py
