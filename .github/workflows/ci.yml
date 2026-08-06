@@ -280,6 +280,28 @@ jobs:
           echo "::error::Swagger unavailable"
           exit 1
 
+      - name: Run static regression scans (P2 migration + P1/P2/P3 pattern)
+        # 🔧 fix(交付检查): 从 e2e.yml 合并到 ci.yml 快门禁 — 两脚本均为纯静态 grep 扫描,
+        #   无需 API/DB, 放 ci.yml 每次 push 都跑, 让 e2e.yml 专注运行时验证 (ADR #31)
+        working-directory: spike-test
+        run: |
+          echo "===== 静态回归扫描 1/2: P2 迁移安全防回归 ====="
+          if python _test_p2_migration.py; then
+            echo "[PASS] P2 migration regression"
+          else
+            RC=$?
+            echo "::error::P2 migration regression FAIL (rc=$RC)"
+            exit $RC
+          fi
+          echo "===== 静态回归扫描 2/2: P1/P2/P3 修复防回归 (15 修复模式) ====="
+          if python _test_regression.py --scan; then
+            echo "[PASS] P1/P2/P3 pattern scan 全绿"
+          else
+            RC=$?
+            echo "::error::P1/P2/P3 pattern scan FAIL (rc=$RC)"
+            exit $RC
+          fi
+
       - name: Run CI smoke test
         env:
           ADMIN_TOKEN: ${{ env.ADMIN_TOKEN }}

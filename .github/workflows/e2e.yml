@@ -348,21 +348,8 @@ jobs:
             exit $RC
           fi
 
-      # P2 改-1: P2 迁移安全防回归 (AutoMigrate=false 跳过 + SetCommandTimeout(60) + pending 检查)
+      # P2 改-1: P2 迁移安全防回归 — 已合并至 ci.yml (静态回归扫描, ADR #31)
       #   WHY: P2-7.1/P2-7.2 修复后需 CI 防回归, 防止生产启动时迁移超时/误执行
-      - name: Run P2 migration regression
-        working-directory: spike-test
-        env:
-          ADMIN_TOKEN: ${{ env.ADMIN_TOKEN }}
-        run: |
-          echo "===== P2 迁移安全防回归 ====="
-          if python _test_p2_migration.py; then
-            echo "[PASS] P2 迁移安全防回归 全绿"
-          else
-            RC=$?
-            echo "::error::P2 迁移安全回归失败 (rc=$RC)"
-            exit $RC
-          fi
 
       # P2 改-2: P2 ETL 健壮性防回归 (错误行日志补全 + 类型校验 + 文件预检)
       #   WHY: P2-9.2/P2-9.3/P2-9.4 修复后需 CI 防回归, 防止 ETL 错误行丢失上下文/类型漂移
@@ -429,19 +416,9 @@ jobs:
           echo "[PASS] .cs 文件中无硬编码凭据"
 
       # P3 改-4: P1/P2/P3 防回归 (grep 验证 15 个修复模式)
+      # P1/P2/P3 修复防回归 (15 修复模式) — 已合并至 ci.yml (静态回归扫描, ADR #31)
       #   WHY: P0 用 API 验证, P1/P2/P3 多为代码层修复 (无 API 表面), 用 grep 模式验证
       #   覆盖: P1-1/2/3/4/5/6 + P2-1/2/3/4/5/7 + P3-1/2 = 15 个修复点
-      - name: Run P1/P2/P3 regression (15 fixes pattern scan)
-        working-directory: spike-test
-        run: |
-          echo "===== P1/P2/P3 修复防回归 (15 修复模式) ====="
-          if python _test_regression.py --scan; then
-            echo "[PASS] P1/P2/P3 修复防回归 15/15 全绿"
-          else
-            RC=$?
-            echo "::error::P1/P2/P3 防回归 FAIL (rc=$RC), 存在修复模式回归"
-            exit $RC
-          fi
 
       - name: E2E gate check (master only)
         if: github.ref == 'refs/heads/master' && github.event_name == 'push'

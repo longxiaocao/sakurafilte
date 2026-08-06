@@ -28,6 +28,19 @@ docker/*.env
 
 ## 临时调试文件 (SQL/JSON 快照, 不应提交)
 spike-test/_check_*.sql
+
+## 测试产物 / 本地截图 / 覆盖率报告 (交付检查收尾, 2026-08-06)
+backend/coverage-report/
+frontend/_*.png
+frontend/_shot.mjs
+spike-test/output/
+spike-test/spike-test/
+spike-test/*.log
+*.log
+
+## 本机工具配置 (Reasonix 本地状态, 不提交)
+.reasonix/
+reasonix.toml
 spike-test/_login.json
 spike-test/_*.tmp
 # v30-26: 扩展临时 commit msg 规则 (覆盖 _v30_*_commit_msg.txt 等所有版本)
