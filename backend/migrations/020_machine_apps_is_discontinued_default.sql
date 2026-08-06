@@ -1,3 +1,6 @@
+-- ============================================================
+-- 一次性脚本,不可重跑 (迁移序列已应用后禁止再次执行)
+-- ============================================================
 -- 020: machine_applications.is_discontinued 补默认值 false
 -- WHY: EF 模型配置 HasDefaultValue(false) (ProductDbContext L136), 但 EF 迁移未生成列默认值,
 --      ETL raw SQL INSERT (EtlImportService L2070/2079) 不含该列 → NOT NULL 冲突 (23502)
