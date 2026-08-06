@@ -281,10 +281,11 @@ def test_new_cancel_recorded():
     if not saw_running:
         print(f"  [WARN] polling 未见到 running, 强制 cancel")
 
-    # 等 1.5s 让 ETL 进入稳定运行 (避免 cancel 命中 COPY 启动阶段)
-    # WHY 1.5s: 启动到 running 后真正在 COPY 暂存, 此时 cancel 才会产生 cancelled 记录
-    #   太早 cancel 可能在 ETL 还没进入正轨就被吞掉
-    time.sleep(1.5)
+    # 等 0.2s 让 ETL 真正进入 COPY 暂存 (CI 机器快: 100K 行 COPY <2.5s 即完成)
+    # WHY 0.2s: polling 到 running 后立即 cancel, 命中 COPY 阶段 (token 取消 → OCE → cancelled 落库)
+    #   旧 1.5s 在快机器上 ETL 已进入收尾 (不响应 token) → 落库 completed 而非 cancelled → CI 误 FAIL
+    #   (completed 落库已作为 SKIP 兜底, 见下方 recent_completed 检查)
+    time.sleep(0.2)
 
     # 立即 cancel
     cancel_req = urllib.request.Request(
