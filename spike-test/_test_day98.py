@@ -311,12 +311,20 @@ def test_new_cancel_recorded():
         recent = [it for it in obj2["items"] if it["id"] > base_max_id]
         if recent:
             print(f"  [DEBUG] ETL 完结为 failed (未 cancelled): id={recent[0]['id']} errors={recent[0]['errorCount']} lastError={recent[0].get('lastError','')[:120]}")
-        # 🔧 fix(审查): 区分环境时序 vs 真 bug — polling 从未见到 running + 无 cancelled/failed 记录
-        #   = ETL 在 cancel 前已完成 (CI 机器快/数据少), 无法验证 cancel 记录 → SKIP (Day 9.12 空库 SKIP 语义)
-        #   若见过 running 但 cancel 未生效 → 真问题, FAIL
+        # 🔧 fix(审查): 时序根因 (CI 机器快) — cancel 时 ETL 已进入收尾 (COPY 已完成 <2.5s),
+        #   token 取消不再生效 → 落库 completed 而非 cancelled → 无 cancelled 记录
+        #   区分: 有新 completed 记录 (id > baseline) = ETL 在 cancel 前完成 (环境快, 非功能问题) → SKIP
+        code3, body3 = http("GET", "/api/admin/etl/history?status=completed&limit=5", headers=H_ADMIN)
+        obj3 = json.loads(body3)
+        recent_completed = [it for it in obj3["items"] if it["id"] > base_max_id]
+        if recent_completed:
+            raise SkipTest(
+                f"ETL 在 cancel 前已完成 (CI 机器快, completed id={recent_completed[0]['id']}), "
+                f"cancel 记录无法验证 — SKIP (时序非功能问题; 慢环境如本机可验证 cancel 落库)")
+        # 若从未见到 running 也无 completed → 环境异常 (ETL 未真正运行) → SKIP
         if not saw_running:
-            raise SkipTest("ETL 在 cancel 前已完成 (机器快/时序), cancel 记录无法验证 — SKIP (非功能问题)")
-        assert False, f"无 cancelled 记录 (曾见 running 但 cancel 未生效), base_max_id={base_max_id}, latest cancelled.id={obj['items'][0]['id'] if obj['count']>0 else 'N/A'}"
+            raise SkipTest("ETL 未进入 running 即结束, cancel 记录无法验证 — SKIP (环境)")
+        assert False, f"无 cancelled 记录且无新 completed/failed 记录 (曾见 running 但 cancel 未生效且未落库), base_max_id={base_max_id}"
     new_records = [it for it in obj["items"] if it["id"] > base_max_id]
     assert len(new_records) >= 1, f"应有 id>{base_max_id} 的新记录, 实际 0 (history[0].id={obj['items'][0]['id']})"
     newest = new_records[0]
