@@ -284,7 +284,7 @@ public class SearchIndexDeadLetter
     [Column("payload")] public string Payload { get; set; } = "";
     [Column("retry_count")] public int RetryCount { get; set; }
     [Column("last_error")] public string? LastError { get; set; }
-    [Column("created_at")] public DateTime CreatedAt { get; set; }    // 原入队时间
+    [Column("created_at")] public DateTime CreatedAt { get; set; } = DateTime.UtcNow;  // 原入队时间
     [Column("moved_at")] public DateTime MovedAt { get; set; } = DateTime.UtcNow;  // 转入死信时间
 
     // Day 7.10 Item 4: 自动恢复元数据
@@ -329,8 +329,8 @@ public class EtlProgressLog
     [Column("indexed_count")] public long IndexedCount { get; set; }
     [Column("index_pending_count")] public long IndexPendingCount { get; set; }
     [Column("last_error")] public string? LastError { get; set; }
-    [Column("started_at")] public DateTime StartedAt { get; set; }
-    [Column("finished_at")] public DateTime FinishedAt { get; set; }
+    [Column("started_at")] public DateTime StartedAt { get; set; } = DateTime.UtcNow;
+    [Column("finished_at")] public DateTime FinishedAt { get; set; } = DateTime.UtcNow;
     [Column("duration_sec")] public double DurationSec { get; set; }
     [Column("alert_sent")] public bool AlertSent { get; set; }  // Day 7.9: 失败告警是否已推送
     // Day 9.4: 取消审计 (DELETE /api/admin/etl/task 时写入)

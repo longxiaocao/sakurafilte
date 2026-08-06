@@ -5,6 +5,13 @@ using SakuraFilter.Infrastructure.Data;
 using Npgsql;
 using System.Text.Json;
 
+// 🔧 fix(审查): 兼容历史/新库列类型差异 (timestamp vs timestamptz) 与实体 DateTime Kind
+//   WHY: Npgsql 8 严格 Kind 检查 — timestamptz 拒绝 Kind=Unspecified, timestamp 拒绝 Kind=UTC;
+//        项目列类型各地不一致 (CI 新库 EF 迁移 timestamptz, 本地/生产旧库 SQL 迁移 timestamp,
+//        实体统一 DateTime.UtcNow) → Day 10 create 500 "Cannot write DateTime with Kind" (CI 实测)
+//   Fix: 启用 Npgsql legacy 行为 (关闭严格 Kind 校验, 统一按本地时间语义转换), 必须在使用 Npgsql 前设置
+AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
+
 // 生产部署一次性迁移模式: dotnet SakuraFilter.Api.dll --migrate-db
 //   WHY: prod 配置 Db:AutoMigrateOnStartup=false (避免多实例并发迁移),
 //        部署编排 (docker compose db-init 服务) 显式执行 EF 迁移后再启动 API
