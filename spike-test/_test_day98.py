@@ -74,7 +74,8 @@ def case(name, fn):
         print(f"[PASS] {name}")
     except SkipTest as e:
         RESULTS.append((name, "SKIP", str(e)))
-        print(f"[SKIP] {name}: {e}")    except AssertionError as e:
+        print(f"[SKIP] {name}: {e}")
+    except AssertionError as e:
         FAIL += 1
         RESULTS.append((name, "FAIL", str(e)))
         print(f"[FAIL] {name}: {e}")
