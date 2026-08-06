@@ -181,8 +181,13 @@ def test_404_not_found():
         raise AssertionError(f"后端未启动: {body[:200]}")
     assert code == 404, f"不存在产品期望 404, 实际 {code}, body={body[:200]}"
     obj = json.loads(body)
-    assert "error" in obj, f"404 响应缺 error 字段"
-    print(f"  ✓ 404 错误处理正确: {obj['error']}")
+    # 🔧 fix(审查): 后端错误已统一 RFC7807 ProblemDetails (title/status/errorCode),
+    #   旧断言期望 error 字段 (历史 JSON 格式) 已过时 → 适配 ProblemDetails
+    assert "title" in obj, f"404 响应缺 title (ProblemDetails), body={body[:200]}"
+    assert obj.get("status") == 404, f"404 响应 status 字段应为 404, 实际 {obj.get('status')}"
+    assert obj.get("errorCode") == "PRODUCT_NOT_FOUND", \
+        f"404 响应 errorCode 应为 PRODUCT_NOT_FOUND, 实际 {obj.get('errorCode')}"
+    print(f"  ✓ 404 错误处理正确 (ProblemDetails): title={obj['title']}, errorCode={obj['errorCode']}")
 
 
 # ========== Case 3: slug 格式 (R1 规格: name1-name2-oemBrand-oemNo) ==========
