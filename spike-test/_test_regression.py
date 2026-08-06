@@ -79,8 +79,11 @@ REGRESSION_CHECKS = [
         "title": "Swagger 仅 Development 暴露",
         # v28-4 P0 修复: 中间件管道代码实际在 MiddlewarePipelineExtensions.cs
         #   正则放宽: 接受 env.IsDevelopment() 或 app.Environment.IsDevelopment() 两种写法
+        # v31 决策 (381f85a 后续): 生产也暴露 swagger.json — 运维中心 API 文档 Tab (AdminApiDocsView)
+        #   依赖 swagger.json 展示端点结构; 注释明确"无敏感数据 (仅端点结构/参数 schema)",
+        #   预留后续加 Admin 鉴权的更强保护 → 扫描同时接受 Dev 与 Dev+Prod 两种写法
         "file": "backend/src/SakuraFilter.Api/Extensions/MiddlewarePipelineExtensions.cs",
-        "fix_pattern": r"if\s*\((env|app\.Environment)\.IsDevelopment\(\)\)\s*\{[^}]*UseSwagger",
+        "fix_pattern": r"if\s*\((env|app\.Environment)\.IsDevelopment\(\)\)\s*\{[^}]*UseSwagger|if\s*\((env|app\.Environment)\.IsDevelopment\(\)\s*\|\|\s*(env|app\.Environment)\.IsProduction\(\)\)\s*\{[^}]*UseSwagger",
     },
     # ===== P2 中等级 (6 项) =====
     {
