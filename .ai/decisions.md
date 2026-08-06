@@ -638,3 +638,17 @@ v30-14 1M OFFSET 深分页专项压测验证数据 (2026-07-21, sakurafilter_per
 恢复路径: 客户数据到位 → etl_clean + full-load 重导替换 (流程不变, 自动 reindex)
 验证: OEM 搜索 total=1 / 机型搜索 35 / 聚合 1000+ / 详情页 200 全通
 关联文件: spike-test/_gen_demo_xrefs_apps.py
+
+#30 Npgsql DateTime Kind 兼容策略 (2026-08-06)
+决策: Program.cs 启用 `AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true)`，实体 DateTime 全部默认 `DateTime.UtcNow`
+理由: Npgsql 8 严格 Kind 校验 — timestamptz 拒 Unspecified / timestamp 拒 UTC; 项目列类型各地不一致 (CI 新库 EF 迁移 timestamptz, 本地/生产旧库 SQL 迁移 timestamp) → OEM Brand 字典 create 500 "Cannot write DateTime with Kind" (CI 实证)
+排除方案:
+  - 全库 ALTER 统一 timestamptz + 迁移: 需动本地/生产所有表, 部署成本高, 演示环境风险大
+  - 仅修实体赋值: 无法覆盖所有历史列类型差异
+关联文件: backend/src/SakuraFilter.Api/Program.cs, backend/src/SakuraFilter.Core/Entities/Product.cs
+
+#31 CI 分层策略 (2026-08-06)
+决策: 快门禁 (ci.yml: 构建+单测 652+冒烟+coverage gate) 每次 push/PR 必跑; 重防线 (e2e.yml: 全链路 E2E + frontend-contract) master push/PR/月度定时跑; docker.yml 构建镜像
+理由: E2E 全量 (编排 9 测试 + Playwright 跨浏览器) 耗时 ~10min, 每次 push 全跑性价比低; master 为保护分支, 每次提交 = 可发布候选, gate 全开合理 (用户曾连环收 CI 失败邮件)
+经验: CI 快机器 vs 本地慢机器时序敏感测试 (ETL cancel 验证) 不可靠 → 宽容 SKIP + 慢环境可验证; 静态扫描类 (P0 fixes/P1 health/P2 migration/pattern scan) 可合并进 ci.yml 降 E2E 时长 (建议项)
+关联文件: .github/workflows/ci.yml, .github/workflows/e2e.yml
