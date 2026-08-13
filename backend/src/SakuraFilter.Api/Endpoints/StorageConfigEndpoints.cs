@@ -176,13 +176,16 @@ public static class StorageConfigEndpoints
 
     private static async Task TestWithMinio(StorageEndpointConfig cfg, string key, CancellationToken ct, bool r2 = false)
     {
+        // 后台页面允许填写完整 HTTPS 地址，但 MinIO SDK 只接受 host[:port]。
+        // 与服务注册路径使用相同归一化，避免测试通过而重启后不可用。
+        var endpoint = NormalizeS3Endpoint(cfg.Endpoint!);
         var client = new MinioClient()
-            .WithEndpoint(cfg.Endpoint!)
+            .WithEndpoint(endpoint)
             .WithCredentials(cfg.AccessKey ?? cfg.AccessKeyId ?? "", cfg.SecretKey ?? cfg.AccessKeySecret ?? "")
             .WithSSL(r2 || cfg.Endpoint!.StartsWith("https"))
             .Build();
         if (r2) client = new MinioClient()
-            .WithEndpoint(cfg.Endpoint!)
+            .WithEndpoint(endpoint)
             .WithCredentials(cfg.AccessKey ?? cfg.AccessKeyId ?? "", cfg.SecretKey ?? cfg.AccessKeySecret ?? "")
             .WithSSL(true)
             .WithRegion("auto")
@@ -200,6 +203,14 @@ public static class StorageConfigEndpoints
         await client.RemoveObjectAsync(new RemoveObjectArgs()
             .WithBucket(cfg.BucketName!)
             .WithObject(key), ct);
+    }
+
+    private static string NormalizeS3Endpoint(string endpoint)
+    {
+        if (endpoint.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+            endpoint.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            return endpoint[(endpoint.IndexOf("://", StringComparison.Ordinal) + 3)..].TrimEnd('/');
+        return endpoint.TrimEnd('/');
     }
 
     private static async Task TestWithAliyun(StorageEndpointConfig cfg, string key, CancellationToken ct)

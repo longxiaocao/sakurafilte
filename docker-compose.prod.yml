@@ -18,6 +18,7 @@ volumes:
   minio-data:
   grafana-data:
   prometheus-data:
+  data-protection-keys:
 
 services:
   # ===== 应用层 =====
@@ -35,6 +36,8 @@ services:
         condition: service_completed_successfully
       meilisearch:
         condition: service_started
+      data-protection-init:
+        condition: service_completed_successfully
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
@@ -54,18 +57,25 @@ services:
       # 🔧 fix(审查): Cloudflare Turnstile 人机验证 — 配置后登录页强制验证, 留空跳过 (开发/演示)
       Turnstile__SiteKey: "${TURNSTILE_SITE_KEY:-}"
       Turnstile__SecretKey: "${TURNSTILE_SECRET_KEY:-}"
-      # MinIO / Aliyun OSS 切换
-      Storage__Provider: "minio"
+      # 对象存储可在 MinIO / Cloudflare R2 间切换；R2 凭证仅由部署环境注入。
+      Storage__Provider: "${STORAGE_PROVIDER:-minio}"
       Minio__Endpoint: "minio:9000"
       Minio__AccessKey: "${MINIO_ROOT_USER}"
       Minio__SecretKey: "${MINIO_ROOT_PASSWORD}"
       Minio__BucketName: "sakurafilter"
       Minio__PublicEndpoint: "http://localhost:9000"
       Minio__UseSSL: "false"
+      R2__Endpoint: "${R2_ENDPOINT:-}"
+      R2__AccessKeyId: "${R2_ACCESS_KEY_ID:-}"
+      R2__AccessKeySecret: "${R2_ACCESS_KEY_SECRET:-}"
+      R2__BucketName: "${R2_BUCKET_NAME:-}"
+      R2__PublicEndpoint: "${R2_PUBLIC_ENDPOINT:-}"
       Etl__RecentErrorBuffer: "10"
       Etl__IndexReplayPollSeconds: "10"
       Etl__IndexReplayBatchSize: "500"
     volumes:
+      # 持久化 ASP.NET Core DataProtection 密钥；容器重建后登录 Cookie/防伪令牌仍可验证。
+      - data-protection-keys:/home/sakura/.aspnet/DataProtection-Keys
       # 数据迁移演练: 宿主机 jsonl 数据挂载到容器只读目录 (生产可挂载 ETL 数据卷或走上传)
       - ./spike-test/output/cleaned_customer:/tmp/etl:ro
     networks:
@@ -86,6 +96,17 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+
+  # named volume 初始属主为 root；API 使用 uid 1000 运行，需先授予其写入密钥环权限。
+  data-protection-init:
+    image: alpine:3.20
+    container_name: sakura-data-protection-init
+    restart: "no"
+    command: ["sh", "-c", "mkdir -p /keys && chown -R 1000:1000 /keys"]
+    volumes:
+      - data-protection-keys:/keys
+    networks:
+      - sakura-net
 
   web:
     build:

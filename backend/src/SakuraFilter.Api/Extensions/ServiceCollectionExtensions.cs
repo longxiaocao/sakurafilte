@@ -263,14 +263,15 @@ public static class ServiceCollectionExtensions
             if (storageProvider == "r2")
             {
                 var r2Config = configuration.GetSection("R2");
-                var r2Endpoint = r2Config["Endpoint"] ?? "";
+                var r2Endpoint = NormalizeS3Endpoint(r2Config["Endpoint"] ?? "");
                 var r2AccessKey = r2Config["AccessKeyId"] ?? "";
                 var r2SecretKey = r2Config["AccessKeySecret"] ?? "";
                 if (string.IsNullOrEmpty(r2AccessKey) || string.IsNullOrEmpty(r2SecretKey))
                     throw new InvalidOperationException(
                         "R2:AccessKeyId / AccessKeySecret 未配置 (Cloudflare R2 S3 API 凭证, 环境变量 R2__AccessKeyId / R2__AccessKeySecret)");
                 var r2Client = new MinioClient()
-                    .WithEndpoint(r2Endpoint)   // https://<account>.r2.cloudflarestorage.com
+                    // MinIO SDK 的 endpoint 只能是 host[:port]，不能包含 https://。
+                    .WithEndpoint(r2Endpoint)
                     .WithCredentials(r2AccessKey, r2SecretKey)
                     .WithSSL(true)
                     .WithRegion("auto")
@@ -323,6 +324,14 @@ public static class ServiceCollectionExtensions
             );
         });
         return services;
+    }
+
+    private static string NormalizeS3Endpoint(string endpoint)
+    {
+        if (endpoint.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+            endpoint.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            return endpoint[(endpoint.IndexOf("://", StringComparison.Ordinal) + 3)..].TrimEnd('/');
+        return endpoint.TrimEnd('/');
     }
 
     // -------------------- CORS --------------------

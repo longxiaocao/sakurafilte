@@ -71,6 +71,14 @@ app.Run();
 //   WHY: 存储客户端是单例, 无法热切换; 保存后重启容器即按新配置启动
 static async Task ApplyStorageConfigOverridesAsync(WebApplicationBuilder builder)
 {
+    // 部署环境显式指定时优先于运维页历史配置：避免已保存的 MinIO 配置
+    // 覆盖 Docker Secret 注入的 R2 凭证，也避免把生产密钥写回业务数据库。
+    if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("Storage__Provider")))
+    {
+        Console.WriteLine("[Storage] 检测到部署环境 Storage__Provider，跳过 system_settings 存储配置覆盖");
+        return;
+    }
+
     var connStr = builder.Configuration.GetConnectionString("Postgres")
         ?? builder.Configuration["ConnectionStrings__Postgres"];
     if (string.IsNullOrEmpty(connStr)) return;
