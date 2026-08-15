@@ -378,7 +378,7 @@ public static class ServiceCollectionExtensions
             };
             options.AddPolicy("global", ctx =>
                 RateLimitPartition.GetFixedWindowLimiter(
-                    partitionKey: ctx.Connection.RemoteIpAddress?.ToString() ?? "global",
+                    partitionKey: GetClientIp(ctx) ?? "global",
                     factory: _ => new FixedWindowRateLimiterOptions
                     {
                         PermitLimit = rateLimitConfig.GlobalPermitsPerMinute,
@@ -388,7 +388,7 @@ public static class ServiceCollectionExtensions
                     }));
             options.AddPolicy("search", ctx =>
                 RateLimitPartition.GetFixedWindowLimiter(
-                    partitionKey: ctx.Connection.RemoteIpAddress?.ToString() ?? "search",
+                    partitionKey: GetClientIp(ctx) ?? "search",
                     factory: _ => new FixedWindowRateLimiterOptions
                     {
                         PermitLimit = rateLimitConfig.SearchPermitsPerMinute,
@@ -398,7 +398,7 @@ public static class ServiceCollectionExtensions
                     }));
             options.AddPolicy("etl", ctx =>
                 RateLimitPartition.GetFixedWindowLimiter(
-                    partitionKey: ctx.Connection.RemoteIpAddress?.ToString() ?? "etl",
+                    partitionKey: GetClientIp(ctx) ?? "etl",
                     factory: _ => new FixedWindowRateLimiterOptions
                     {
                         PermitLimit = rateLimitConfig.EtlPermitsPerMinute,
@@ -408,7 +408,7 @@ public static class ServiceCollectionExtensions
                     }));
             options.AddPolicy("auth", ctx =>
                 RateLimitPartition.GetFixedWindowLimiter(
-                    partitionKey: ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                    partitionKey: GetClientIp(ctx) ?? "unknown",
                     factory: _ => new FixedWindowRateLimiterOptions
                     {
                         PermitLimit = rateLimitConfig.AuthPermitsPerMinute,
@@ -419,7 +419,7 @@ public static class ServiceCollectionExtensions
             // P1-2 F6: 公开路径限流 (120/min per IP)
             options.AddPolicy("public", ctx =>
                 RateLimitPartition.GetFixedWindowLimiter(
-                    partitionKey: ctx.Connection.RemoteIpAddress?.ToString() ?? "public",
+                    partitionKey: GetClientIp(ctx) ?? "public",
                     factory: _ => new FixedWindowRateLimiterOptions
                     {
                         PermitLimit = rateLimitConfig.PublicPermitsPerMinute,
@@ -430,7 +430,7 @@ public static class ServiceCollectionExtensions
             // P1-2 F6: sitemap 分片页限流 (600/min per IP, 搜索引擎爬虫高频抓取)
             options.AddPolicy("sitemap", ctx =>
                 RateLimitPartition.GetFixedWindowLimiter(
-                    partitionKey: ctx.Connection.RemoteIpAddress?.ToString() ?? "sitemap",
+                    partitionKey: GetClientIp(ctx) ?? "sitemap",
                     factory: _ => new FixedWindowRateLimiterOptions
                     {
                         PermitLimit = rateLimitConfig.SitemapPermitsPerMinute,
@@ -440,6 +440,26 @@ public static class ServiceCollectionExtensions
                     }));
         });
         return services;
+    }
+
+    /// <summary>
+    /// 限流分区键取真实客户端 IP: 优先 X-Forwarded-For 首段 (部署在 LB/反向代理后),
+    /// 兜底 Connection.RemoteIpAddress (直连/无代理场景)。
+    /// WHY: 原实现直接用 RemoteIpAddress 作分区键, 经代理后所有请求被识别为代理 IP,
+    ///      导致全站共享单一限流桶, 单客户端即可拖垮全局 (生产风险)。
+    /// </summary>
+    private static string GetClientIp(HttpContext ctx)
+    {
+        var xff = ctx.Request.Headers["X-Forwarded-For"].ToString();
+        if (!string.IsNullOrWhiteSpace(xff))
+        {
+            var first = xff.Split(',')[0].Trim();
+            if (System.Net.IPAddress.TryParse(first, out _))
+            {
+                return first;
+            }
+        }
+        return ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown";
     }
 
     // -------------------- 业务服务 (Scoped) --------------------
