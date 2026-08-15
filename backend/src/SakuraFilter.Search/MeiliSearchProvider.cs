@@ -305,7 +305,17 @@ public class MeiliSearchProvider : ISearchProvider
             .Select(m => m!)
             .Distinct()
             .ToList();
-        var enrichMap = await EnrichFromPgAsync(pageMr1s, ct);
+        // ① P0 缩索引: oem/machine 列表由 PG 回填。PG 不可用时降级为空列表,
+        //   不阻断 Meili 检索主流程 (保持 ResilientSearchProvider 的韧性设计: 搜索不依赖 PG 在线)。
+        Dictionary<string, (List<AggregateOemItem> OemList, List<AggregateMachineItem> MachineList)> enrichMap = new();
+        try
+        {
+            enrichMap = await EnrichFromPgAsync(pageMr1s, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "PG 回填 oem/machine 列表失败, 降级为空 (搜索结果仍可用)");
+        }
 
         // 映射 hits → AggregateSearchHit (含完整 oem_list + machine_list + _formatted + _rankingScore)
         var hits = new List<AggregateSearchHit>(rawResult.Hits.Count);
@@ -401,13 +411,14 @@ public class MeiliSearchProvider : ISearchProvider
                            (SELECT xb.sort_order FROM xref_oem_brand xb WHERE xb.brand = x.oem_brand AND xb.deleted_at IS NULL LIMIT 1) AS brand_sort_order
                     FROM cross_references x
                     WHERE x.product_id = p.id AND x.is_discontinued = false
-                    ORDER BY (SELECT xb.sort_order FROM xref_oem_brand xb WHERE xb.brand = x.oem_brand AND xb.deleted_at IS NULL LIMIT 1) NULLS LAST, x.sort_order ASC
+                    ORDER BY (SELECT xb.sort_order FROM xref_oem_brand xb WHERE xb.brand = x.oem_brand AND xb.deleted_at IS NULL LIMIT 1) NULLS LAST, x.sort_order ASC, x.oem_brand, x.oem_no_3
                     LIMIT 50) t), '[]'::json) AS oem_list_json,
                 COALESCE((SELECT json_agg(row_to_json(t)) FROM (
-                    SELECT DISTINCT m.machine_brand, m.machine_model, m.machine_category
-                    FROM machine_applications m
-                    WHERE m.product_id = p.id
-                    LIMIT 50) t), '[]'::json) AS machine_list_json
+                SELECT DISTINCT m.machine_brand, m.machine_model, m.machine_category
+                FROM machine_applications m
+                WHERE m.product_id = p.id
+                ORDER BY m.machine_brand, m.machine_model   -- ① P0 缩索引: 对齐旧版 machine_list 展示顺序
+                LIMIT 50) t), '[]'::json) AS machine_list_json
             FROM products p
             WHERE p.mr_1 = ANY(@mr1s)";
 
