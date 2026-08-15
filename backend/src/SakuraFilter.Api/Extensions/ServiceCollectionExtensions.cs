@@ -443,22 +443,13 @@ public static class ServiceCollectionExtensions
     }
 
     /// <summary>
-    /// 限流分区键取真实客户端 IP: 优先 X-Forwarded-For 首段 (部署在 LB/反向代理后),
-    /// 兜底 Connection.RemoteIpAddress (直连/无代理场景)。
-    /// WHY: 原实现直接用 RemoteIpAddress 作分区键, 经代理后所有请求被识别为代理 IP,
-    ///      导致全站共享单一限流桶, 单客户端即可拖垮全局 (生产风险)。
+    /// 限流分区键取已由 ForwardedHeaders 中间件规范化后的客户端 IP。
+    /// WHY: 不能直接读取 X-Forwarded-For；客户端可伪造该请求头绕过限流。
+    /// MiddlewarePipelineExtensions 仅信任内部反向代理网络并限制转发层数，
+    /// 所以此处的 RemoteIpAddress 才可作为可信分区键。
     /// </summary>
     private static string GetClientIp(HttpContext ctx)
     {
-        var xff = ctx.Request.Headers["X-Forwarded-For"].ToString();
-        if (!string.IsNullOrWhiteSpace(xff))
-        {
-            var first = xff.Split(',')[0].Trim();
-            if (System.Net.IPAddress.TryParse(first, out _))
-            {
-                return first;
-            }
-        }
         return ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown";
     }
 

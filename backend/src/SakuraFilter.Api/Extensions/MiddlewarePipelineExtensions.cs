@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.HttpOverrides;
 using Prometheus;
 using SakuraFilter.Api.Services;
+using System.Net;
 
 namespace SakuraFilter.Api.Extensions;
 
@@ -35,10 +36,19 @@ public static class MiddlewarePipelineExtensions
         app.UseMiddleware<CorrelationIdMiddleware>();
 
         // 1) ForwardedHeaders
-        app.UseForwardedHeaders(new ForwardedHeadersOptions
+        var forwardedHeaders = new ForwardedHeadersOptions
         {
-            ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
-        });
+            ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
+            // Docker 编排中 API 只接受来自内部 Nginx 的一层代理头。限制为一层可防止
+            // 客户端构造多段 XFF 后覆盖真实来源；后续接入外部 CDN 时应在 Nginx 先完成 realip 归一化。
+            ForwardLimit = 1
+        };
+        // 默认仅信任 loopback，Docker bridge 上的 Nginx 不会被识别，导致转发头不生效。
+        // API 端口未对外发布，信任 RFC1918 私网仅用于容器内反向代理链。
+        forwardedHeaders.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(IPAddress.Parse("10.0.0.0"), 8));
+        forwardedHeaders.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(IPAddress.Parse("172.16.0.0"), 12));
+        forwardedHeaders.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(IPAddress.Parse("192.168.0.0"), 16));
+        app.UseForwardedHeaders(forwardedHeaders);
 
         // 2) 异常处理
         if (env.IsDevelopment())

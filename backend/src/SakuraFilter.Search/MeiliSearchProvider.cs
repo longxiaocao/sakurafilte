@@ -414,7 +414,7 @@ public class MeiliSearchProvider : ISearchProvider
                     ORDER BY (SELECT xb.sort_order FROM xref_oem_brand xb WHERE xb.brand = x.oem_brand AND xb.deleted_at IS NULL LIMIT 1) NULLS LAST, x.sort_order ASC, x.oem_brand, x.oem_no_3
                     LIMIT 50) t), '[]'::json) AS oem_list_json,
                 COALESCE((SELECT json_agg(row_to_json(t)) FROM (
-                SELECT DISTINCT m.machine_brand, m.machine_model, m.machine_category
+                SELECT DISTINCT m.machine_brand, m.machine_model, m.machine_category, m.engine_brand
                 FROM machine_applications m
                 WHERE m.product_id = p.id
                 ORDER BY m.machine_brand, m.machine_model   -- ① P0 缩索引: 对齐旧版 machine_list 展示顺序
@@ -482,7 +482,7 @@ public class MeiliSearchProvider : ISearchProvider
                 MachineBrand: item.TryGetProperty("machine_brand", out var mb) ? mb.GetString() : null,
                 MachineModel: item.TryGetProperty("machine_model", out var mm) ? mm.GetString() : null,
                 MachineCategory: item.TryGetProperty("machine_category", out var mc) ? mc.GetString() : null,
-                EngineBrand: null  // machine_applications 无 engine_brand 列 (engine_brand 属 products),与 PG 兜底路径一致
+                EngineBrand: item.TryGetProperty("engine_brand", out var eb) ? eb.GetString() : null
             ));
         }
         return list;
@@ -600,7 +600,7 @@ public class MeiliSearchProvider : ISearchProvider
         var machineRows = await _db.MachineApplications
             .AsNoTracking()
             .Where(m => m.ProductId == p.Id)
-            .Select(m => new { m.MachineBrand, m.MachineCategory })
+            .Select(m => new { m.MachineBrand, m.MachineModel, m.MachineCategory, m.EngineBrand })
             .Distinct()
             .ToListAsync(ct);
         var machineCategories = machineRows
@@ -611,6 +611,14 @@ public class MeiliSearchProvider : ISearchProvider
             .ToList();
         var machineBrandsStr = string.Join(" ", machineRows
             .Select(m => m.MachineBrand)
+            .Where(b => !string.IsNullOrWhiteSpace(b))
+            .Distinct());
+        var machineModelsStr = string.Join(" ", machineRows
+            .Select(m => m.MachineModel)
+            .Where(m => !string.IsNullOrWhiteSpace(m))
+            .Distinct());
+        var engineBrandsStr = string.Join(" ", machineRows
+            .Select(m => m.EngineBrand)
             .Where(b => !string.IsNullOrWhiteSpace(b))
             .Distinct());
 
@@ -681,6 +689,8 @@ public class MeiliSearchProvider : ISearchProvider
             IsDiscontinued: p.IsDiscontinued,
             MachineCategories: machineCategories,
             MachineBrandsStr: machineBrandsStr,
+            MachineModelsStr: machineModelsStr,
+            EngineBrandsStr: engineBrandsStr,
             OemListPublishedBrands: publishedBrands,
             OemListPublishedNo3s: publishedNo3s,
             OemBrandsStr: oemBrandsStr,
@@ -877,8 +887,8 @@ public class MeiliSearchProvider : ISearchProvider
                     "product_name_1", "product_name_2", "oem_2", "type", "remark", "media",
                     // 扁平化冗余字段 (S4-13: 空格分隔,可被分词器切分)
                     "oem_brands_str", "oem_no3s_str",
-                    // ① P0 缩索引: 机型品牌检索走 machine_brands_str (原 machine_list.* 数组已移除)
-                    "machine_brands_str"
+                    // ① P0 缩索引: 标量字符串保留原机型/发动机全文搜索能力。
+                    "machine_brands_str", "machine_models_str", "engine_brands_str"
                 };
                 var searchTask = await target.UpdateSearchableAttributesAsync(searchable, ct);
                 await target.WaitForTaskAsync(searchTask.TaskUid, schemaTaskTimeoutMs);

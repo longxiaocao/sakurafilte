@@ -83,9 +83,12 @@ public record Mr1IndexDoc(
     // ===== 标量冗余字段 (取代原嵌套数组 oem_list/machine_list) =====
     // WHY(① P0 缩索引): 原 oem_list/machine_list 嵌套数组随 OEM 交叉引用数膨胀, 是 Meili products 索引 27GB 的主因。
     //   现移出索引体, 检索响应中的 oem_list/machine_list 由 MeiliSearchProvider 检索后从 PG 按 mr_1 回填 (EnrichFromPgAsync)。
-    //   保留以下标量以支持过滤/排序/检索: oem_list_published_brands(品牌过滤) / machine_categories(机型分类过滤) / machine_brands_str(机型品牌检索)。
+    //   保留以下标量以支持过滤/排序/检索: oem_list_published_brands(品牌过滤) / machine_categories(机型分类过滤) /
+    //   machine_brands_str、machine_models_str、engine_brands_str (机型/发动机全文检索)。
     [property: JsonPropertyName("machine_categories")] List<string> MachineCategories,       // 机型分类去重列表 (取代 machine_list.machine_category 过滤)
     [property: JsonPropertyName("machine_brands_str")] string MachineBrandsStr,               // 机型 brand 空格分隔 (取代 machine_list.machine_brand 全文检索)
+    [property: JsonPropertyName("machine_models_str")] string MachineModelsStr,               // 机型 model 空格分隔 (保持原 machine_list.machine_model 搜索能力)
+    [property: JsonPropertyName("engine_brands_str")] string EngineBrandsStr,                 // 发动机品牌空格分隔 (保持原 machine_list.engine_brand 搜索能力)
 
     // ===== 扁平化冗余字段 (修复 S3-7/S3-8/S3-21/S4-16) =====
     [property: JsonPropertyName("oem_list_published_brands")] List<string> OemListPublishedBrands,     // 仅上架 OEM 3 的 brand 去重列表
