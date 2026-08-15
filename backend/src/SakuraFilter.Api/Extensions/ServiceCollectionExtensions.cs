@@ -378,7 +378,7 @@ public static class ServiceCollectionExtensions
             };
             options.AddPolicy("global", ctx =>
                 RateLimitPartition.GetFixedWindowLimiter(
-                    partitionKey: ctx.Connection.RemoteIpAddress?.ToString() ?? "global",
+                    partitionKey: GetClientIp(ctx) ?? "global",
                     factory: _ => new FixedWindowRateLimiterOptions
                     {
                         PermitLimit = rateLimitConfig.GlobalPermitsPerMinute,
@@ -388,7 +388,7 @@ public static class ServiceCollectionExtensions
                     }));
             options.AddPolicy("search", ctx =>
                 RateLimitPartition.GetFixedWindowLimiter(
-                    partitionKey: ctx.Connection.RemoteIpAddress?.ToString() ?? "search",
+                    partitionKey: GetClientIp(ctx) ?? "search",
                     factory: _ => new FixedWindowRateLimiterOptions
                     {
                         PermitLimit = rateLimitConfig.SearchPermitsPerMinute,
@@ -398,7 +398,7 @@ public static class ServiceCollectionExtensions
                     }));
             options.AddPolicy("etl", ctx =>
                 RateLimitPartition.GetFixedWindowLimiter(
-                    partitionKey: ctx.Connection.RemoteIpAddress?.ToString() ?? "etl",
+                    partitionKey: GetClientIp(ctx) ?? "etl",
                     factory: _ => new FixedWindowRateLimiterOptions
                     {
                         PermitLimit = rateLimitConfig.EtlPermitsPerMinute,
@@ -408,7 +408,7 @@ public static class ServiceCollectionExtensions
                     }));
             options.AddPolicy("auth", ctx =>
                 RateLimitPartition.GetFixedWindowLimiter(
-                    partitionKey: ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                    partitionKey: GetClientIp(ctx) ?? "unknown",
                     factory: _ => new FixedWindowRateLimiterOptions
                     {
                         PermitLimit = rateLimitConfig.AuthPermitsPerMinute,
@@ -419,7 +419,7 @@ public static class ServiceCollectionExtensions
             // P1-2 F6: 公开路径限流 (120/min per IP)
             options.AddPolicy("public", ctx =>
                 RateLimitPartition.GetFixedWindowLimiter(
-                    partitionKey: ctx.Connection.RemoteIpAddress?.ToString() ?? "public",
+                    partitionKey: GetClientIp(ctx) ?? "public",
                     factory: _ => new FixedWindowRateLimiterOptions
                     {
                         PermitLimit = rateLimitConfig.PublicPermitsPerMinute,
@@ -430,7 +430,7 @@ public static class ServiceCollectionExtensions
             // P1-2 F6: sitemap 分片页限流 (600/min per IP, 搜索引擎爬虫高频抓取)
             options.AddPolicy("sitemap", ctx =>
                 RateLimitPartition.GetFixedWindowLimiter(
-                    partitionKey: ctx.Connection.RemoteIpAddress?.ToString() ?? "sitemap",
+                    partitionKey: GetClientIp(ctx) ?? "sitemap",
                     factory: _ => new FixedWindowRateLimiterOptions
                     {
                         PermitLimit = rateLimitConfig.SitemapPermitsPerMinute,
@@ -440,6 +440,17 @@ public static class ServiceCollectionExtensions
                     }));
         });
         return services;
+    }
+
+    /// <summary>
+    /// 限流分区键取已由 ForwardedHeaders 中间件规范化后的客户端 IP。
+    /// WHY: 不能直接读取 X-Forwarded-For；客户端可伪造该请求头绕过限流。
+    /// MiddlewarePipelineExtensions 仅信任内部反向代理网络并限制转发层数，
+    /// 所以此处的 RemoteIpAddress 才可作为可信分区键。
+    /// </summary>
+    private static string GetClientIp(HttpContext ctx)
+    {
+        return ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown";
     }
 
     // -------------------- 业务服务 (Scoped) --------------------

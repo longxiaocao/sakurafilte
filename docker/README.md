@@ -93,7 +93,9 @@ Grafana 预置仪表盘 (uid=`sakurafilter-main`) 包含:
 
 1. **必须** 修改 `.env.prod` 所有 `[CHANGE-ME]` 字段
 2. 定期轮转 `ADMIN_DEV_TOKEN` (建议季度)
-3. 启用 HTTPS (在 Nginx 前加 Cloudflare / Caddy / Traefik)
+3. 启用 HTTPS (在 Nginx 前加 Cloudflare / Caddy / Traefik)。使用 Cloudflare 时，生产编排已挂载
+   `cloudflare-realip.conf`，Nginx 只信任 Cloudflare 网段的 `CF-Connecting-IP`，使 API 限流按访客 IP 生效。
+   源站防火墙仍应只允许 Cloudflare IP 段访问 80/443，防止绕过 WAF 和 CDN。
 4. 启用 PostgreSQL 备份自动化 (cron + S3)
 5. 启用 Prometheus 告警 (AlertManager)
 
