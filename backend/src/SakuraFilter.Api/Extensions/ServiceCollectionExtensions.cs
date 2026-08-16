@@ -221,6 +221,9 @@ public static class ServiceCollectionExtensions
         services.Configure<MeiliSearchOptions>(configuration.GetSection("MeiliSearch"));
         services.AddScoped<PostgresSearchProvider>();
         services.AddScoped<MeiliSearchProvider>();
+        // 2026-08 性能优化: 富化结果缓存 + 搜索响应缓存 (独立 MemoryCache 实例, 单例共享, 不与全局 10000 槽竞争)
+        services.AddSingleton<EnrichmentCache>();
+        services.AddSingleton<SearchResponseCache>();
         services.AddScoped<ISearchProvider, ResilientSearchProvider>();
         // v30-20: Meili 主路径性能指标 (Singleton, 与 PerfMetrics 同模式)
         //   WHY Singleton: ring buffer 是无状态共享的, 全局唯一实例, 不需要 Scoped 生命周期
