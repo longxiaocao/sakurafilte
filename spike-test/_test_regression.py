@@ -300,9 +300,9 @@ REGRESSION_CHECKS = [
     },
     {
         "id": "V2-SRCH-2", "level": "V2",
-        "title": "Mr1IndexDoc 嵌套结构 (OemList + MachineList 数组, 替代扁平 ProductIndexDoc)",
+        "title": "Mr1IndexDoc 标量冗余结构 (① P0 缩索引: 嵌套 oem_list/machine_list 移出索引体, 标量字段保留过滤/检索)",
         "file": "backend/src/SakuraFilter.Search/ISearchProvider.cs",
-        "fix_pattern": r'List<OemListItem>\s+OemList.*List<MachineListItem>\s+MachineList',
+        "fix_pattern": r'machine_models_str.*OemListPublishedBrands',
     },
     {
         "id": "V2-SRCH-3", "level": "V2",
