@@ -546,6 +546,7 @@ public class MeiliSearchProvider : ISearchProvider
             ));
         }
         return list;
+
     }
 
     /// <summary>① P0 缩索引: 解析 PG 回填的 machine_list_json (对齐 AggregateMachineItem 形状)</summary>
@@ -565,106 +566,6 @@ public class MeiliSearchProvider : ISearchProvider
         return list;
     }
 
-    /// <summary>
-    /// ① P0 缩索引: Meili 索引体已移出 oem_list/machine_list 嵌套数组 (27GB 主因),
-    ///   聚合检索响应所需的完整 oem_list/machine_list 改在检索后按 mr_1 批量从 PG 回填。
-    ///   仅回填当前页 hits 对应的 mr_1,避免在全量结果上展开大数组。
-    ///   聚合口径与 PostgresSearchProvider 的 LATERAL JOIN 一致 (oem_list_json / machine_list_json)。
-    /// </summary>
-    private async Task<Dictionary<string, (List<AggregateOemItem> OemList, List<AggregateMachineItem> MachineList)>> EnrichFromPgAsync(
-        IEnumerable<string> mr1s, CancellationToken ct)
-    {
-        var result = new Dictionary<string, (List<AggregateOemItem>, List<AggregateMachineItem>)>();
-        var list = mr1s.Where(m => !string.IsNullOrWhiteSpace(m)).Distinct().ToList();
-        if (list.Count == 0) return result;
-
-        const string sql = @"
-            SELECT p.mr_1,
-                COALESCE((SELECT json_agg(row_to_json(t)) FROM (
-                    SELECT x.oem_brand, x.oem_no_3, x.oem_2, x.sort_order, x.machine_type, x.is_published,
-                           (SELECT xb.sort_order FROM xref_oem_brand xb WHERE xb.brand = x.oem_brand AND xb.deleted_at IS NULL LIMIT 1) AS brand_sort_order
-                    FROM cross_references x
-                    WHERE x.product_id = p.id AND x.is_discontinued = false
-                    ORDER BY (SELECT xb.sort_order FROM xref_oem_brand xb WHERE xb.brand = x.oem_brand AND xb.deleted_at IS NULL LIMIT 1) NULLS LAST, x.sort_order ASC, x.oem_brand, x.oem_no_3
-                    LIMIT 50) t), '[]'::json) AS oem_list_json,
-                COALESCE((SELECT json_agg(row_to_json(t)) FROM (
-                SELECT DISTINCT m.machine_brand, m.machine_model, m.machine_category, m.engine_brand
-                FROM machine_applications m
-                WHERE m.product_id = p.id
-                ORDER BY m.machine_brand, m.machine_model   -- ① P0 缩索引: 对齐旧版 machine_list 展示顺序
-                LIMIT 50) t), '[]'::json) AS machine_list_json
-            FROM products p
-            WHERE p.mr_1 = ANY(@mr1s)";
-
-        var conn = (NpgsqlConnection)_db.Database.GetDbConnection();
-        var opened = false;
-        try
-        {
-            if (conn.State != System.Data.ConnectionState.Open)
-            {
-                await conn.OpenAsync(ct);
-                opened = true;
-            }
-            await using var cmd = new NpgsqlCommand(sql, conn);
-            cmd.CommandTimeout = 30;
-            cmd.Parameters.Add(new NpgsqlParameter("@mr1s", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = list.ToArray() });
-            await using var reader = await cmd.ExecuteReaderAsync(ct);
-            while (await reader.ReadAsync(ct))
-            {
-                var mr1 = reader.IsDBNull(reader.GetOrdinal("mr_1")) ? "" : reader.GetString(reader.GetOrdinal("mr_1"));
-                var oemListJson = reader.IsDBNull(reader.GetOrdinal("oem_list_json")) ? "[]" : reader.GetFieldValue<string>(reader.GetOrdinal("oem_list_json"));
-                var machineListJson = reader.IsDBNull(reader.GetOrdinal("machine_list_json")) ? "[]" : reader.GetFieldValue<string>(reader.GetOrdinal("machine_list_json"));
-                result[mr1] = (ParseEnrichedOemList(oemListJson), ParseEnrichedMachineList(machineListJson));
-            }
-        }
-        finally
-        {
-            if (opened && conn.State == System.Data.ConnectionState.Open)
-                await conn.CloseAsync();
-        }
-        return result;
-    }
-
-    /// <summary>① P0 缩索引: 解析 PG 回填的 oem_list_json (对齐 AggregateOemItem 形状)</summary>
-    private static List<AggregateOemItem> ParseEnrichedOemList(string json)
-    {
-        var list = new List<AggregateOemItem>();
-        using var doc = JsonDocument.Parse(json);
-        foreach (var item in doc.RootElement.EnumerateArray())
-        {
-            list.Add(new AggregateOemItem(
-                OemBrand: item.TryGetProperty("oem_brand", out var b) ? b.GetString() : null,
-                OemNo3: item.TryGetProperty("oem_no_3", out var n) ? n.GetString() : null,
-                Oem2: item.TryGetProperty("oem_2", out var o2) ? o2.GetString() : null,
-                SortOrder: item.TryGetProperty("sort_order", out var so) && so.ValueKind == JsonValueKind.Number ? so.GetInt32() : 0,
-                MachineType: item.TryGetProperty("machine_type", out var mt) ? mt.GetString() : null,
-                IsPublished: item.TryGetProperty("is_published", out var ip) && ip.ValueKind == JsonValueKind.True,
-                BrandSortOrder: item.TryGetProperty("brand_sort_order", out var bso) && bso.ValueKind == JsonValueKind.Number ? bso.GetInt32() : null
-            ));
-        }
-        return list;
-    }
-
-    /// <summary>① P0 缩索引: 解析 PG 回填的 machine_list_json (对齐 AggregateMachineItem 形状)</summary>
-    private static List<AggregateMachineItem> ParseEnrichedMachineList(string json)
-    {
-        var list = new List<AggregateMachineItem>();
-        using var doc = JsonDocument.Parse(json);
-        foreach (var item in doc.RootElement.EnumerateArray())
-        {
-            list.Add(new AggregateMachineItem(
-                MachineBrand: item.TryGetProperty("machine_brand", out var mb) ? mb.GetString() : null,
-                MachineModel: item.TryGetProperty("machine_model", out var mm) ? mm.GetString() : null,
-                MachineCategory: item.TryGetProperty("machine_category", out var mc) ? mc.GetString() : null,
-                EngineBrand: item.TryGetProperty("engine_brand", out var eb) ? eb.GetString() : null
-            ));
-        }
-        return list;
-    }
-
-    /// <summary>
-    /// 从 hit 或 _formatted 中提取字段值 (优先 _formatted 高亮版本)
-    /// </summary>
     private static string? ExtractFieldValue(JsonObject hit, JsonNode? formatted, string fieldName)
     {
         if (formatted is JsonObject formattedObj &&
