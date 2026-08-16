@@ -221,6 +221,9 @@ public static class ServiceCollectionExtensions
         services.Configure<MeiliSearchOptions>(configuration.GetSection("MeiliSearch"));
         services.AddScoped<PostgresSearchProvider>();
         services.AddScoped<MeiliSearchProvider>();
+        // 2026-08 性能优化: 富化结果缓存 + 搜索响应缓存 (独立 MemoryCache 实例, 单例共享, 不与全局 10000 槽竞争)
+        services.AddSingleton<EnrichmentCache>();
+        services.AddSingleton<SearchResponseCache>();
         services.AddScoped<ISearchProvider, ResilientSearchProvider>();
         // v30-20: Meili 主路径性能指标 (Singleton, 与 PerfMetrics 同模式)
         //   WHY Singleton: ring buffer 是无状态共享的, 全局唯一实例, 不需要 Scoped 生命周期
@@ -378,7 +381,7 @@ public static class ServiceCollectionExtensions
             };
             options.AddPolicy("global", ctx =>
                 RateLimitPartition.GetFixedWindowLimiter(
-                    partitionKey: ctx.Connection.RemoteIpAddress?.ToString() ?? "global",
+                    partitionKey: GetClientIp(ctx) ?? "global",
                     factory: _ => new FixedWindowRateLimiterOptions
                     {
                         PermitLimit = rateLimitConfig.GlobalPermitsPerMinute,
@@ -388,7 +391,7 @@ public static class ServiceCollectionExtensions
                     }));
             options.AddPolicy("search", ctx =>
                 RateLimitPartition.GetFixedWindowLimiter(
-                    partitionKey: ctx.Connection.RemoteIpAddress?.ToString() ?? "search",
+                    partitionKey: GetClientIp(ctx) ?? "search",
                     factory: _ => new FixedWindowRateLimiterOptions
                     {
                         PermitLimit = rateLimitConfig.SearchPermitsPerMinute,
@@ -398,7 +401,7 @@ public static class ServiceCollectionExtensions
                     }));
             options.AddPolicy("etl", ctx =>
                 RateLimitPartition.GetFixedWindowLimiter(
-                    partitionKey: ctx.Connection.RemoteIpAddress?.ToString() ?? "etl",
+                    partitionKey: GetClientIp(ctx) ?? "etl",
                     factory: _ => new FixedWindowRateLimiterOptions
                     {
                         PermitLimit = rateLimitConfig.EtlPermitsPerMinute,
@@ -408,7 +411,7 @@ public static class ServiceCollectionExtensions
                     }));
             options.AddPolicy("auth", ctx =>
                 RateLimitPartition.GetFixedWindowLimiter(
-                    partitionKey: ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                    partitionKey: GetClientIp(ctx) ?? "unknown",
                     factory: _ => new FixedWindowRateLimiterOptions
                     {
                         PermitLimit = rateLimitConfig.AuthPermitsPerMinute,
@@ -419,7 +422,7 @@ public static class ServiceCollectionExtensions
             // P1-2 F6: 公开路径限流 (120/min per IP)
             options.AddPolicy("public", ctx =>
                 RateLimitPartition.GetFixedWindowLimiter(
-                    partitionKey: ctx.Connection.RemoteIpAddress?.ToString() ?? "public",
+                    partitionKey: GetClientIp(ctx) ?? "public",
                     factory: _ => new FixedWindowRateLimiterOptions
                     {
                         PermitLimit = rateLimitConfig.PublicPermitsPerMinute,
@@ -430,7 +433,7 @@ public static class ServiceCollectionExtensions
             // P1-2 F6: sitemap 分片页限流 (600/min per IP, 搜索引擎爬虫高频抓取)
             options.AddPolicy("sitemap", ctx =>
                 RateLimitPartition.GetFixedWindowLimiter(
-                    partitionKey: ctx.Connection.RemoteIpAddress?.ToString() ?? "sitemap",
+                    partitionKey: GetClientIp(ctx) ?? "sitemap",
                     factory: _ => new FixedWindowRateLimiterOptions
                     {
                         PermitLimit = rateLimitConfig.SitemapPermitsPerMinute,
@@ -440,6 +443,17 @@ public static class ServiceCollectionExtensions
                     }));
         });
         return services;
+    }
+
+    /// <summary>
+    /// 限流分区键取已由 ForwardedHeaders 中间件规范化后的客户端 IP。
+    /// WHY: 不能直接读取 X-Forwarded-For；客户端可伪造该请求头绕过限流。
+    /// MiddlewarePipelineExtensions 仅信任内部反向代理网络并限制转发层数，
+    /// 所以此处的 RemoteIpAddress 才可作为可信分区键。
+    /// </summary>
+    private static string GetClientIp(HttpContext ctx)
+    {
+        return ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown";
     }
 
     // -------------------- 业务服务 (Scoped) --------------------
