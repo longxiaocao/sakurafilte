@@ -1,0 +1,33 @@
+{
+ "concurrency": {
+  "concurrency_1": {
+   "p50_ms": 43.3,
+   "p95_ms": 54.2,
+   "p99_ms": 72.5,
+   "count": 370,
+   "errors": 0
+  },
+  "concurrency_10": {
+   "p50_ms": 67.4,
+   "p95_ms": 121.5,
+   "p99_ms": 214.4,
+   "count": 370,
+   "errors": 0
+  },
+  "concurrency_50": {
+   "p50_ms": 269.3,
+   "p95_ms": 478.5,
+   "p99_ms": 592.0,
+   "count": 370,
+   "errors": 0
+  },
+  "concurrency_100": {
+   "p50_ms": 596.1,
+   "p95_ms": 883.0,
+   "p99_ms": 976.4,
+   "count": 370,
+   "errors": 0
+  }
+ },
+ "note": "\u51b7\u7f13\u5b58: \u6bcf\u6863\u5168\u90e8\u4e0d\u91cd\u590d\u771f\u5b9e mr1 \u67e5\u8be2, \u54cd\u5e94\u7f13\u5b58(\u6309\u8bf7\u6c42\u7b7e\u540d)/\u5bcc\u5316\u7f13\u5b58(\u6309 mr1) \u5168 miss, \u6d4b\u5b8c\u6574\u94fe\u8def (Meili+PG\u5bcc\u5316+\u6784\u5efa)"
+}

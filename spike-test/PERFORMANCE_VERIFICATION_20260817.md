@@ -50,20 +50,66 @@
 - 真实生产：热点查询（用户反复搜同一关键词）命中率高，冷缓存占比低；**P95 反映的是热缓存混合表现**。
 - 如需纯冷缓存压测：清空缓存后单轮 c1 即可（P50 14.8ms 说明冷路径本身也不慢，瓶颈主要在首次构建）。
 
+## 三之二、冷缓存完整链路压测（8-17 21:10 补充，回应"热缓存达标 ≠ 冷缓存达标"）
+> 方法：`spike-test/_bench_aggregate_cold.py` — 每档 370 条**互不重复的真实 mr1 查询**（从 PG 随机采样，
+> 响应缓存按请求签名 / 富化缓存按 mr1 → 全部 miss），测完整链路（Meili 搜索 + PG 富化 + 构建 + 传输）的真实并发能力。
+
+### 修改前（PG max_connections=100 = Npgsql 池上限 100）
+| 并发 | P50 | P95 | P99 | 错误 |
+|---|---|---|---|---|
+| c1 | 51.5 | 212.8 | 384.5 | 0 |
+| c10 | 77.7 | 143.9 | 228.3 | 0 |
+| c50 | 330.6 | **511.7** | 588.2 | 0 |
+| c100 | 960.6 | **15011.5** | 15023.3 | **41 超时** |
+
+**根因定位**：PG `max_connections=100` 被 Npgsql 连接池占满（压测养出 94 个 idle 连接不回收），
+c100 时 100 并发各需 1 连接 → 服务端无剩余槽位 → 新连接排队 15s 雪崩（backend 日志 `Query was cancelled` + PerfAlert P99=15s）。
+
+### 修复后（PG max_connections=200 + 连接串 `Maximum Pool Size=120;Connection Idle Lifetime=60`）
+| 并发 | P50 | P95 | P99 | 错误 |
+|---|---|---|---|---|
+| c1 | 43.3 | **54.2** | 72.5 | 0 |
+| c10 | 67.4 | **121.5** | 214.4 | 0 |
+| c50 | 269.3 | **478.5** | 592.0 | 0 |
+| c100 | 596.1 | **883.0** | 976.4 | 0 |
+
+- **雪崩消除**：c100 P95 15011→883ms、41 超时→0；c1 P95 213→54ms（连接池不再被占满）。
+- **仍未达红线 200ms**：冷缓存完整链路 c50=478ms、c100=883ms。
+
+### 拆解（瓶颈归属）
+| 环节 | c100 P95 |
+|---|---|
+| Meili 直连（高亮收窄后同参，冷查询） | **369ms** |
+| 富化 SQL 单条（EXPLAIN ANALYZE） | 2.6ms（全走索引） |
+| aggregate 完整链路（冷缓存） | 883ms |
+| 剩余（PG 并发排队 + 构建/序列化/传输） | ~510ms |
+
+**关键结论**：
+1. **Meili 是主瓶颈**：6 核机器 + 百万数据 + 高亮，冷查询 c100 直连 P95=369ms 已超红线。
+2. **槽位不是限制**：96→192 槽实测更慢（369→467ms，CPU 饱和下排队反而高效）→ 维持 16/核。
+3. **冷缓存 c100 P95<200ms 在 6 核机器上不可达**（Meili 单项就超），需更多 CPU 核（≥12）或 Meili 横向分片；软件层已无显著空间。
+4. **连接池死结是生产级风险**：PG max_connections=100 = Npgsql 池 100 的配置在生产同样存在（低并发无感，c100 级并发即雪崩）——**生产部署必须同步 `max_connections≥200` + 池上限 120 的调整**。
+5. 热缓存（响应缓存）覆盖热点查询达标；**长尾/新查询（冷）在 c10 以下表现良好（P95 121ms），高并发长尾场景受硬件限制**。
+
 ## 四、为什么与 7 月旧报告不冲突
 - 7 月旧报告（`_bench_results.json` / `_perf_v30_14_1m_offset_*`）记录的是 **PostgreSQL 深分页**场景（`OFFSET` 深翻页 P95 2.5-5.2s）——那是**旧架构的旧路径**，与本次 Meili 全量索引 + aggregate 优化链路**不是同一条链路**。
 - 本次验证的是 **Meili 主路径 + 聚合搜索**（生产前台实际使用的接口），新旧报告分别回答不同阶段的问题，不互相否定。
 
 ## 五、结论
-1. **上线依据已补齐**：百万数据 + Meili 全量重建 + 生产主路径接口 + 双客户端交叉验证，P95 达标、0 错误。
-2. 缓存优化（富化缓存 TTL 3min + 响应缓存 TTL 30s）在真实生产热点流量下有效。
-3. 生产部署注意：`RATELIMIT_ENABLED` 需按生产配置开启（压测时关闭仅限测试环境）。
+1. **热缓存（热点查询）上线依据已补齐**：百万数据 + Meili 全量重建 + 生产主路径接口 + 双客户端交叉验证，c100 P95 141-155ms、0 错误。
+2. **冷缓存（长尾新查询）明确表述**：c10 及以下 P95<122ms 达标；c50/c100 未达红线——Meili 6 核 CPU 物理瓶颈（直连 c100 P95=369ms）+ PG 并发排队。**不可宣称"任意新查询冷缓存 c100 达标"**。
+3. **生产必须修复连接池死结**：`PG max_connections` 与 Npgsql 池上限解耦（≥200 vs 120），否则 c100 级并发雪崩（15s 超时）会在生产复现。
+4. 缓存优化（富化缓存 TTL 3min + 响应缓存 TTL 30s）在真实生产热点流量下有效；长尾高并发场景需硬件（更多核 / Meili 分片）或方案③（富化 JSON 预计算落 R2，缓解 PG 部分）。
+5. 生产部署注意：`RATELIMIT_ENABLED` 需按生产配置开启（压测时关闭仅限测试环境）。
 
 ## 六、证据文件
-- `spike-test/_bench_aggregate.py` — 压测脚本（生产主路径）
-- `spike-test/_bench_aggregate_results.json` — urllib 结果（本次）
-- `spike-test/_bench_aggregate_http_results.json` — http.client 交叉验证结果（本次）
+- `spike-test/_bench_aggregate.py` — 压测脚本（生产主路径，热缓存）
+- `spike-test/_bench_aggregate_cold.py` — 冷缓存压测脚本（每档不重复真实 mr1）
+- `spike-test/_bench_aggregate_results.json` — urllib 热缓存结果
+- `spike-test/_bench_aggregate_http_results.json` — http.client 热缓存交叉验证
+- `spike-test/_bench_aggregate_cold_results.json` — 冷缓存结果（修复连接池后）
 - `spike-test/bench_queries_public.json` — 查询集（37 条）
 - `spike-test/PERFORMANCE_OPTIMIZATION_20260816.md` — 优化全链路报告（8-16）
 - `spike-test/PERFORMANCE_REPORT_1M.md` — 百万数据性能报告（8-16）
 - `spike-test/_dissect_search.py` — Meili vs backend 拆解工具
+- `docker-compose.perf.yml` — 连接池修复（PG 200 + 池 120）与 Meili 槽位 16/核（最优）

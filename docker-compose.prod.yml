@@ -41,7 +41,7 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
-      ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
+      ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};Maximum Pool Size=120;Connection Idle Lifetime=60"
       MeiliSearch__Endpoint: "http://meilisearch:7700"
       MeiliSearch__ApiKey: "${MEILI_MASTER_KEY}"
       MeiliSearch__IndexName: products
@@ -163,7 +163,7 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
+      ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};Maximum Pool Size=120;Connection Idle Lifetime=60"
     command: ["--migrate-db"]
     networks:
       - sakura-net
@@ -192,6 +192,9 @@ services:
     image: postgres:16-alpine
     container_name: sakura-postgres
     restart: unless-stopped
+    # 2026-08-17 冷缓存压测定位: max_connections=100 = Npgsql 池上限 100, c100 级并发连接耗尽雪崩。
+    # 服务端提到 200 与客户端池 120 解耦 (每连接约 5-10MB, 200 连接无压力)。
+    command: ["postgres", "-c", "max_connections=200"]
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
