@@ -1,0 +1,18 @@
+{
+ "concurrency": {
+  "concurrency_50": {
+   "p50_ms": 59.8,
+   "p95_ms": 86.3,
+   "p99_ms": 98.0,
+   "count": 370,
+   "errors": 0
+  },
+  "concurrency_100": {
+   "p50_ms": 123.2,
+   "p95_ms": 155.3,
+   "p99_ms": 170.2,
+   "count": 370,
+   "errors": 0
+  }
+ }
+}
