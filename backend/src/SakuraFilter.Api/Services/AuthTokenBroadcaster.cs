@@ -109,7 +109,8 @@ public class AuthTokenBroadcaster : IHostedService, IAsyncDisposable
                     try
                     {
                         // 4 分钟超时让出, 然后再报心跳 + 重新等 (避免 5min stale 阈值)
-                        var waitTask = _listenConn.WaitAsync(ct);
+                        using var waitCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                        var waitTask = _listenConn.WaitAsync(waitCts.Token);
                         var heartbeatTask = Task.Delay(TimeSpan.FromMinutes(4), ct);
                         var completed = await Task.WhenAny(waitTask, heartbeatTask);
                         if (completed == waitTask)
@@ -127,7 +128,12 @@ public class AuthTokenBroadcaster : IHostedService, IAsyncDisposable
                             }
                             break;
                         }
-                        // heartbeatTask 触发, 继续循环 (报心跳 + 再等)
+
+                        // 心跳先触发时必须取消并等待上一轮 WaitAsync 完成，不能让它挂到下一轮。
+                        // WHY: 同一 NpgsqlConnection 同时存在两个 WaitAsync 会抛 Connection is busy，
+                        //      之后监听器每次重连都失败，健康状态也会被误判为陈旧。
+                        waitCts.Cancel();
+                        try { await waitTask; } catch (OperationCanceledException) { }
                     }
                     catch (OperationCanceledException)
                     {
