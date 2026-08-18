@@ -76,6 +76,63 @@ docker compose down
 5. EF Core `DbContext` 释放连接池
 6. Kestrel 停止接受新连接，等待进行中请求完成
 
+### Docker Compose 生产部署（推荐）
+
+生产环境使用独立的 `docker-compose.prod.yml`（非 base 叠加），服务一览：
+
+| 服务 | 说明 |
+|---|---|
+| `api` | ASP.NET Core backend（:8080→宿主 5148） |
+| `web` | 前端静态站点（Nginx，:80） |
+| `postgres` | PostgreSQL 16（容器名 sakura-postgres，数据卷 postgres-data） |
+| `meilisearch` | 主搜索引擎（数据卷 meili-data） |
+| `minio` | 图片对象存储 |
+| `prometheus` / `grafana` | 监控 |
+| `db-init` / `db-migrate` | 一次性迁移容器（SQL 脚本 + EF migrate） |
+| `data-protection-init` | 数据保护密钥初始化 |
+
+**首次部署**：
+
+```bash
+# 1. 准备环境变量（参考 .env.prod.example，严禁提交 .env）
+cp .env.prod.example .env   # 填入真实密钥
+
+# 2. 起全部服务（db-init/db-migrate 自动执行迁移后退出）
+docker compose -f docker-compose.prod.yml --env-file .env up -d
+
+# 3. 验证
+curl http://localhost:5148/health/ready      # {"status":"healthy",...}
+docker exec sakura-postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SHOW max_connections;"   # 200
+```
+
+**日常更新部署**（⚠️ 连接池参数变更必须重建容器，`restart` 不生效）：
+
+```bash
+git fetch origin && git pull origin master
+# postgres 的 command 参数（max_connections）与 api 的连接串变化需 --force-recreate
+docker compose -f docker-compose.prod.yml --env-file .env up -d --force-recreate postgres api
+# 其余服务（前端/Meili/MinIO/监控）常规更新用 up -d 即可
+docker compose -f docker-compose.prod.yml --env-file .env up -d
+```
+
+**回滚**：
+
+```bash
+git checkout <上个稳定 commit> -- docker-compose.prod.yml
+docker compose -f docker-compose.prod.yml --env-file .env up -d --force-recreate postgres api
+```
+
+**连接池参数说明（2026-08-17 冷缓存压测定位，生产必须保留）**：
+
+| 参数 | 值 | WHY |
+|---|---|---|
+| `postgres.command` | `postgres -c max_connections=200` | 服务端连接上限与客户端池解耦。原默认 100 = Npgsql 池上限 100，c100 级并发时连接耗尽 → 15s 排队雪崩（实测 41 个超时错误） |
+| 连接串 `Maximum Pool Size=120` | 120 | 客户端池上限留余量（< 服务端 200），避免占满服务端 |
+| 连接串 `Connection Idle Lifetime=60` | 60s | 空闲连接 60s 回收，防止压测/高峰后池内养一堆 idle 连接占服务端槽位 |
+
+> 若部署时用环境变量覆盖 `ConnectionStrings__Postgres`，**必须同步追加** `Maximum Pool Size=120;Connection Idle Lifetime=60`，否则池参数不生效。
+> 每连接约 5-10MB 内存，200 连接约 1-2GB，需确保机器内存充足（≥8GB 建议）。
+
 ## 3. 配置说明
 
 ### appsettings.json 关键配置
