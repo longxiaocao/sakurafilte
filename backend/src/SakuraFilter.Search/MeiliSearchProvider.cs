@@ -376,10 +376,17 @@ public class MeiliSearchProvider : ISearchProvider
             var isPublished = hit.TryGetPropertyValue("is_published", out var pubNode) && pubNode?.GetValue<bool>() == true;
             var isDiscontinued = hit.TryGetPropertyValue("is_discontinued", out var discNode) && discNode?.GetValue<bool>() == true;
 
-            // ① P0 缩索引: oem_list/machine_list 由 PG 回填 (见循环前 EnrichFromPgAsync), 不再从 Meili hit 解析
+            // WHY: 兼容 P0 缩索引上线前已存在的旧文档。旧文档仍带嵌套列表，PG 暂时不可用时不能丢失公开 OEM/机型。
             enrichMap.TryGetValue(mr1 ?? "", out var enrichPair);
             var oemList = enrichPair.OemList ?? new List<AggregateOemItem>();
             var machineList = enrichPair.MachineList ?? new List<AggregateMachineItem>();
+            if (oemList.Count == 0 && hit.TryGetPropertyValue("oem_list", out var legacyOem) && legacyOem != null)
+                oemList = ParseLegacyOemList(legacyOem);
+            if (machineList.Count == 0 && hit.TryGetPropertyValue("machine_list", out var legacyMachine) && legacyMachine != null)
+                machineList = ParseLegacyMachineList(legacyMachine);
+
+            // 产品名 1 允许为空；公开目录仍需有可读标题，类型是稳定的业务兜底字段。
+            productName1 ??= type;
 
             // _rankingScore (Meilisearch 0-1)
             double? rankingScore = null;
@@ -564,6 +571,18 @@ public class MeiliSearchProvider : ISearchProvider
             ));
         }
         return list;
+    }
+
+    private static List<AggregateOemItem> ParseLegacyOemList(JsonNode node)
+    {
+        try { return ParseEnrichedOemList(node.ToJsonString()); }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException) { return new List<AggregateOemItem>(); }
+    }
+
+    private static List<AggregateMachineItem> ParseLegacyMachineList(JsonNode node)
+    {
+        try { return ParseEnrichedMachineList(node.ToJsonString()); }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException) { return new List<AggregateMachineItem>(); }
     }
 
     private static string? ExtractFieldValue(JsonObject hit, JsonNode? formatted, string fieldName)
