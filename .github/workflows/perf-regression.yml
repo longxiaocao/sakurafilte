@@ -7,7 +7,7 @@ name: Perf Regression
 # 运行目标: 在 perf 机器上注册的自托管 runner (标签 self-hosted + perf),
 #   该机器已常驻完整数据栈 (postgres/meili/backend, 含 1M+ ETL 与 typeahead_dict)。
 #   一次性注册: 仓库 Settings -> Actions -> Runners -> New self-hosted runner,
-#   选 Linux, 按指引在该机执行 ./config.sh --labels perf 与 ./run.sh。
+#   按指引在该机执行 ./config.cmd --labels perf (Windows) 或 ./config.sh --labels perf (Linux) 与 run。
 #   若 runner 已含最新代码可跳过 "重建 backend"; 默认用 standing 栈直接压测。
 
 on:
@@ -17,6 +17,10 @@ on:
         description: 'Backend base URL to benchmark'
         required: false
         default: 'http://localhost:55148'
+      perf_dir:
+        description: 'Perf compose stack directory on the runner machine'
+        required: false
+        default: '/f/sakurafilter-perf'
       rebuild_backend:
         description: 'Rebuild & redeploy latest backend before benchmark'
         type: boolean
@@ -38,8 +42,9 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: 确保依赖栈运行
+        shell: bash
         run: |
-          cd sakurafilter-perf
+          cd "${{ github.event.inputs.perf_dir || '/f/sakurafilter-perf' }}"
           docker compose -p sakurafilter-perf -f docker-compose.yml -f docker-compose.perf.yml --env-file .env.perf up -d postgres minio meilisearch backend prometheus
           echo "等待 backend healthy ..."
           for i in $(seq 1 30); do
@@ -50,20 +55,21 @@ jobs:
 
       - name: (可选) 重建并部署最新 backend
         if: ${{ github.event.inputs.rebuild_backend == 'true' }}
+        shell: bash
         run: |
-          cd sakurafilter-real
+          cd /f/sakurafilter-real
           docker build -t sakurafilter-backend:latest -f backend/Dockerfile backend
-          cd ../sakurafilter-perf
+          cd /f/sakurafilter-perf
           docker compose -p sakurafilter-perf -f docker-compose.yml -f docker-compose.perf.yml --env-file .env.perf up -d --force-recreate backend
 
       - name: 预热 (触发基数缓存/连接池)
+        shell: bash
         run: |
-          curl -s -o /dev/null -X POST "${{ github.event.inputs.base_url || 'http://localhost:55148' }}/api/public/search/aggregate" \
-            -H 'Content-Type: application/json' \
-            -d '{"page":1,"pageSize":20,"q":"oil","tolerance":5}'
+          curl -s -o /dev/null -X POST "${{ github.event.inputs.base_url || 'http://localhost:55148' }}/api/public/search/aggregate"             -H 'Content-Type: application/json'             -d '{"page":1,"pageSize":20,"q":"oil","tolerance":5}'
           sleep 2
 
       - name: 运行回归检测
+        shell: bash
         env:
           BASE_URL: ${{ github.event.inputs.base_url || 'http://localhost:55148' }}
         run: python3 spike-test/perf_regression.py --rounds 10
@@ -80,4 +86,5 @@ jobs:
 
       - name: 结果摘要
         if: always()
+        shell: bash
         run: cat spike-test/perf_regression_report.md
