@@ -14,6 +14,7 @@ public static class EndpointRouteBuilderExtensions
         app.MapEtlEndpoints();
         app.MapAdminProductEndpoints();
         app.MapAdminEtlEndpoints();
+        app.MapAdminTypeaheadEndpoints();  // 2026-08-20: typeahead 字典表重建 (ETL 后刷新)
         app.MapAdminAlertEndpoints();  // P2-1
         app.MapAdminXrefReorderEndpoints();  // V2 Task 2.1: OEM 3 排序管理
         app.MapAdminMachineBatchBindEndpoints();  // Task 2: 批量绑定 MR.1 到机型

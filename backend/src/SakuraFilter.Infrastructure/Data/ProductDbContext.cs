@@ -21,6 +21,8 @@ public class ProductDbContext : DbContext
     public DbSet<SearchIndexDeadLetter> SearchIndexDeadLetters => Set<SearchIndexDeadLetter>();
     public DbSet<EtlProgressLog> EtlProgressLogs => Set<EtlProgressLog>();  // Day 7.7
     public DbSet<XrefOemBrand> XrefOemBrands => Set<XrefOemBrand>();  // Day 10: P1.3 OEM 品牌字典
+    // 2026-08-20: typeahead 全量 distinct 字典 (8 字段候选快照, 避免 1550 万行明细表 ILIKE)
+    public DbSet<TypeaheadDict> TypeaheadDict => Set<TypeaheadDict>();
     // Day 10+ P2.2: 6 个新字典 (复用 P2.1 IDictService + BaseDictService 抽象)
     public DbSet<DictProductName1> DictProductName1s => Set<DictProductName1>();
     public DbSet<DictProductName2> DictProductName2s => Set<DictProductName2>();
