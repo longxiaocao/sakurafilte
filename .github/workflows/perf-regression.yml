@@ -1,0 +1,83 @@
+name: Perf Regression
+
+# 性能回归自动检测: 对 standing 压测栈跑 aggregate(搜索)+typeahead 压测,
+# 对照 PERF_BASELINE 红线 (搜索 P95<200ms / typeahead max<100ms), 越线即失败并触发 GitHub 告警。
+# 阈值与判定逻辑见 spike-test/perf_regression.py。
+#
+# 运行目标: 在 perf 机器上注册的自托管 runner (标签 self-hosted + perf),
+#   该机器已常驻完整数据栈 (postgres/meili/backend, 含 1M+ ETL 与 typeahead_dict)。
+#   一次性注册: 仓库 Settings -> Actions -> Runners -> New self-hosted runner,
+#   选 Linux, 按指引在该机执行 ./config.sh --labels perf 与 ./run.sh。
+#   若 runner 已含最新代码可跳过 "重建 backend"; 默认用 standing 栈直接压测。
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: 'Backend base URL to benchmark'
+        required: false
+        default: 'http://localhost:55148'
+      rebuild_backend:
+        description: 'Rebuild & redeploy latest backend before benchmark'
+        type: boolean
+        required: false
+        default: false
+  schedule:
+    # 每天 06:17 北京时间 (22:17 UTC) 跑一次, 捕获夜间回归
+    - cron: '17 22 * * *'
+
+concurrency:
+  group: perf-regression
+  cancel-in-progress: false
+
+jobs:
+  perf-regression:
+    runs-on: [self-hosted, perf]
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 确保依赖栈运行
+        run: |
+          cd sakurafilter-perf
+          docker compose -p sakurafilter-perf -f docker-compose.yml -f docker-compose.perf.yml --env-file .env.perf up -d postgres minio meilisearch backend prometheus
+          echo "等待 backend healthy ..."
+          for i in $(seq 1 30); do
+            st=$(docker inspect -f '{{.State.Health.Status}}' sakurafilter-perf-backend-1 2>/dev/null)
+            [ "$st" = "healthy" ] && echo "backend healthy" && break
+            sleep 8
+          done
+
+      - name: (可选) 重建并部署最新 backend
+        if: ${{ github.event.inputs.rebuild_backend == 'true' }}
+        run: |
+          cd sakurafilter-real
+          docker build -t sakurafilter-backend:latest -f backend/Dockerfile backend
+          cd ../sakurafilter-perf
+          docker compose -p sakurafilter-perf -f docker-compose.yml -f docker-compose.perf.yml --env-file .env.perf up -d --force-recreate backend
+
+      - name: 预热 (触发基数缓存/连接池)
+        run: |
+          curl -s -o /dev/null -X POST "${{ github.event.inputs.base_url || 'http://localhost:55148' }}/api/public/search/aggregate" \
+            -H 'Content-Type: application/json' \
+            -d '{"page":1,"pageSize":20,"q":"oil","tolerance":5}'
+          sleep 2
+
+      - name: 运行回归检测
+        env:
+          BASE_URL: ${{ github.event.inputs.base_url || 'http://localhost:55148' }}
+        run: python3 spike-test/perf_regression.py --rounds 10
+
+      - name: 上传报告
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-regression-report
+          path: |
+            spike-test/perf_regression_report.md
+            spike-test/perf_regression_results.json
+            spike-test/_bench_aggregate_results.json
+
+      - name: 结果摘要
+        if: always()
+        run: cat spike-test/perf_regression_report.md
