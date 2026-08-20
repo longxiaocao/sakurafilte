@@ -39,7 +39,14 @@ jobs:
     runs-on: [self-hosted, perf]
     timeout-minutes: 120
     steps:
-      - uses: actions/checkout@v4
+      # 仓库 public: 手动 clone 走 ghfast.top 镜像 (github.com 直连在部分网络下传输不稳定)
+      - name: Checkout (mirror)
+        shell: bash
+        run: |
+          shopt -s dotglob
+          rm -rf -- * 2>/dev/null || true
+          shopt -u dotglob
+          git clone --depth 1 --branch master https://ghfast.top/https://github.com/longxiaocao/sakurafilte .
 
       - name: 确保依赖栈运行
         shell: bash
