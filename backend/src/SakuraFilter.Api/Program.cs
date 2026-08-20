@@ -1,4 +1,5 @@
 using SakuraFilter.Api.Extensions;
+using SakuraFilter.Api.Services;
 using SakuraFilter.Core.DTOs;
 using Microsoft.EntityFrameworkCore;
 using SakuraFilter.Infrastructure.Data;
@@ -49,6 +50,13 @@ await app.InitializeDatabaseAsync();
 await app.SeedDefaultUsersAsync();
 app.InitEtlBroadcaster();
 app.InitAuthTokenStore();
+
+// 预热 typeahead 基数缓存 (1465 万行 GROUP BY ~820ms), 避免首个请求承担该开销
+using (var warmupScope = app.Services.CreateScope())
+{
+    var ta = warmupScope.ServiceProvider.GetRequiredService<PublicTypeaheadService>();
+    await ta.WarmupAsync();
+}
 
 // 中间件管道（按顺序拆分到 MiddlewarePipelineExtensions）
 // 注意: UseRateLimiter 已在 UseSakuraFilterMiddleware 内部第 6 步条件性调用 (基于 RateLimit:Enabled 配置),

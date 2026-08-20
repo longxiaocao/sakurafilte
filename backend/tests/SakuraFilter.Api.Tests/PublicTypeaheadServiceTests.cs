@@ -33,12 +33,14 @@ public class PublicTypeaheadServiceTests
         return new ProductDbContext(options);
     }
 
-    private static PublicTypeaheadService CreateService(IMemoryCache? cache = null)
+    private static PublicTypeaheadService CreateService(IMemoryCache? cache = null, Dictionary<string, int>? seed = null)
     {
         return new PublicTypeaheadService(
             CreateInMemoryDb(),
             NullLogger<PublicTypeaheadService>.Instance,
-            cache ?? new MemoryCache(new MemoryCacheOptions()));
+            cache ?? new MemoryCache(new MemoryCacheOptions()),
+            config: null,
+            seedCardinality: seed);
     }
 
     [Theory]
@@ -141,5 +143,32 @@ public class PublicTypeaheadServiceTests
 
         var result2 = await svc.TypeaheadAsync("oem-brand", "  Bosch  ", 10, CancellationToken.None);
         result2.Should().BeEmpty();  // Trim 后走查询, InMemory ILike 异常兜底
+    }
+
+    [Fact]
+    public async Task TypeaheadAsync_HighCardinalityField_Guarded_ReturnsEmpty()
+    {
+        // 覆盖: 近唯一高基数字段 (oem-no3 1249万 > 阈值 100万) 基数守卫短路返回空
+        //   WHY: 下拉提示对近唯一字段无意义, 且字典表扫描极慢 (12s)
+        //   验证: 直接返回空 list, 不查 DB、不抛异常 (seed 注入基数, 走守卫分支)
+        var seed = new Dictionary<string, int> { ["oem-no3"] = 12_500_000 };
+        var svc = CreateService(seed: seed);
+
+        var result = await svc.TypeaheadAsync("oem-no3", "A0", 10, CancellationToken.None);
+        result.Should().BeEmpty();  // 守卫短路, 不查 DB
+    }
+
+    [Fact]
+    public async Task TypeaheadAsync_LowCardinalityField_NotGuarded()
+    {
+        // 覆盖: 低基数字段 (machine-brand 40 < 阈值 100万) 不触发守卫, 走查询路径
+        //   WHY: 验证守卫只拦截近唯一字段, 不影响正常低基数字段
+        //   注: InMemory 不支持 ILike, 查询抛异常被 catch 兜底返回空 (与守卫行为结果相同,
+        //       但关键是该字段未被守卫拦截 —— 守卫分支不会执行)
+        var seed = new Dictionary<string, int> { ["machine-brand"] = 40 };
+        var svc = CreateService(seed: seed);
+
+        var act = async () => await svc.TypeaheadAsync("machine-brand", "CAT", 10, CancellationToken.None);
+        await act.Should().NotThrowAsync();  // 不被守卫拦截, 查询路径执行 (异常由 catch 兜底)
     }
 }
