@@ -65,7 +65,7 @@ jobs:
       - name: 预热 (触发基数缓存/连接池)
         shell: bash
         run: |
-          curl -s -o /dev/null -X POST "${{ github.event.inputs.base_url || 'http://localhost:55148' }}/api/public/search/aggregate"             -H 'Content-Type: application/json'             -d '{"page":1,"pageSize":20,"q":"oil","tolerance":5}'
+          curl -s -X POST "${{ github.event.inputs.base_url || 'http://localhost:55148' }}/api/public/search/aggregate"             -H 'Content-Type: application/json'             -d '{"page":1,"pageSize":20,"q":"oil","tolerance":5}' > /dev/null
           sleep 2
 
       - name: 运行回归检测
