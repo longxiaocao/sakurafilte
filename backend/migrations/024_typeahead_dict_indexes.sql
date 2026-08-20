@@ -1,4 +1,4 @@
--- 024_typeahead_dict_indexes.sql
+-- idempotent 可重跑: 024 移除全局 GIN, 改每字段 partial GIN (DROP/CREATE INDEX IF NOT EXISTS, 可重复执行)
 -- 修复 typeahead 性能: 移除全局 GIN, 改每字段局部(partial) GIN
 --
 -- 根因 (实测): 023 建的全局 GIN `ix_typeahead_dict_value_trgm` 在 `value` 单列上,
