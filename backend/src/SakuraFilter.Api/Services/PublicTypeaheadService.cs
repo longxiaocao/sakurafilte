@@ -72,11 +72,15 @@ public class PublicTypeaheadService
         }
 
         var pattern = $"%{q.EscapeLikePattern()}%";
-        var escape = "\\";
+        // 2026-08-20 typeahead 性能修复: 三参 ILike (带 ESCAPE) 会让 PG 放弃 GIN trgm 索引
+        // (trgm 索引仅支持无 ESCAPE 的 LIKE/ILIKE), 15.5M 行 machine_applications 上退化成
+        // Index Only Scan + 过滤数百万行 → 3-5s。q 不含需转义字符时用两参 (走 trgm, 毫秒级);
+        // 含 \ % _ 时才保留 ESCAPE (安全兜底, 该场景极少)。
+        var needsEscape = q.IndexOfAny(new[] { '\\', '%', '_' }) >= 0;
 
         try
         {
-            var result = await QueryAsync(field, pattern, escape, limit, ct);
+            var result = await QueryAsync(field, pattern, needsEscape ? "\\" : null, limit, ct);
             // V24-F85: 用 SetWithSize 替代手写 MemoryCacheEntryOptions (5 分钟 TTL + Size=1 配合 SizeLimit=10000)
             _cache.SetWithSize(cacheKey, result, TimeSpan.FromSeconds(CacheTtlSeconds));
             return result;
@@ -91,40 +95,41 @@ public class PublicTypeaheadService
     /// <summary>
     /// 实际查询分发 (从 TypeaheadAsync 抽取, 保持缓存逻辑与查询逻辑分离)
     /// </summary>
-    private async Task<List<string>> QueryAsync(string field, string pattern, string escape, int limit, CancellationToken ct)
+    private async Task<List<string>> QueryAsync(string field, string pattern, string? escape, int limit, CancellationToken ct)
     {
+        // escape == null → 两参 ILike (PG GIN trgm 索引可用); 非 null → 三参带 ESCAPE (特殊字符安全路径)
         return field switch
         {
             "oem-brand"     => await _db.CrossReferences.AsNoTracking()
-                .Where(x => x.OemBrand != null && EF.Functions.ILike(x.OemBrand, pattern, escape))
+                .Where(x => x.OemBrand != null && (escape == null ? EF.Functions.ILike(x.OemBrand, pattern) : EF.Functions.ILike(x.OemBrand, pattern, escape)))
                 .Select(x => x.OemBrand!).Distinct().OrderBy(x => x).Take(limit).ToListAsync(ct),
 
             "oem-no2"       => await _db.Products.AsNoTracking()
-                .Where(x => x.Oem2 != null && EF.Functions.ILike(x.Oem2, pattern, escape))
+                .Where(x => x.Oem2 != null && (escape == null ? EF.Functions.ILike(x.Oem2, pattern) : EF.Functions.ILike(x.Oem2, pattern, escape)))
                 .Select(x => x.Oem2!).Distinct().OrderBy(x => x).Take(limit).ToListAsync(ct),
 
             "oem-no3"       => await _db.CrossReferences.AsNoTracking()
-                .Where(x => x.OemNo3 != null && EF.Functions.ILike(x.OemNo3, pattern, escape))
+                .Where(x => x.OemNo3 != null && (escape == null ? EF.Functions.ILike(x.OemNo3, pattern) : EF.Functions.ILike(x.OemNo3, pattern, escape)))
                 .Select(x => x.OemNo3!).Distinct().OrderBy(x => x).Take(limit).ToListAsync(ct),
 
             "machine-brand" => await _db.MachineApplications.AsNoTracking()
-                .Where(x => x.MachineBrand != null && EF.Functions.ILike(x.MachineBrand, pattern, escape))
+                .Where(x => x.MachineBrand != null && (escape == null ? EF.Functions.ILike(x.MachineBrand, pattern) : EF.Functions.ILike(x.MachineBrand, pattern, escape)))
                 .Select(x => x.MachineBrand!).Distinct().OrderBy(x => x).Take(limit).ToListAsync(ct),
 
             "machine-model" => await _db.MachineApplications.AsNoTracking()
-                .Where(x => x.MachineModel != null && EF.Functions.ILike(x.MachineModel, pattern, escape))
+                .Where(x => x.MachineModel != null && (escape == null ? EF.Functions.ILike(x.MachineModel, pattern) : EF.Functions.ILike(x.MachineModel, pattern, escape)))
                 .Select(x => x.MachineModel!).Distinct().OrderBy(x => x).Take(limit).ToListAsync(ct),
 
             "model-name"    => await _db.MachineApplications.AsNoTracking()
-                .Where(x => x.ModelName != null && EF.Functions.ILike(x.ModelName, pattern, escape))
+                .Where(x => x.ModelName != null && (escape == null ? EF.Functions.ILike(x.ModelName, pattern) : EF.Functions.ILike(x.ModelName, pattern, escape)))
                 .Select(x => x.ModelName!).Distinct().OrderBy(x => x).Take(limit).ToListAsync(ct),
 
             "engine-brand"  => await _db.MachineApplications.AsNoTracking()
-                .Where(x => x.EngineBrand != null && EF.Functions.ILike(x.EngineBrand, pattern, escape))
+                .Where(x => x.EngineBrand != null && (escape == null ? EF.Functions.ILike(x.EngineBrand, pattern) : EF.Functions.ILike(x.EngineBrand, pattern, escape)))
                 .Select(x => x.EngineBrand!).Distinct().OrderBy(x => x).Take(limit).ToListAsync(ct),
 
             "engine-type"   => await _db.MachineApplications.AsNoTracking()
-                .Where(x => x.EngineType != null && EF.Functions.ILike(x.EngineType, pattern, escape))
+                .Where(x => x.EngineType != null && (escape == null ? EF.Functions.ILike(x.EngineType, pattern) : EF.Functions.ILike(x.EngineType, pattern, escape)))
                 .Select(x => x.EngineType!).Distinct().OrderBy(x => x).Take(limit).ToListAsync(ct),
 
             _ => new List<string>()
