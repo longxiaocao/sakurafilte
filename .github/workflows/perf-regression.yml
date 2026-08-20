@@ -9,6 +9,10 @@ name: Perf Regression
 #   一次性注册: 仓库 Settings -> Actions -> Runners -> New self-hosted runner,
 #   按指引在该机执行 ./config.cmd --labels perf (Windows) 或 ./config.sh --labels perf (Linux) 与 run。
 #   若 runner 已含最新代码可跳过 "重建 backend"; 默认用 standing 栈直接压测。
+#
+# 网络适配(不进仓库): 若 runner 机直连 github.com 不稳定, 在该机本地配置
+#   git config --global url."https://ghfast.top/https://github.com/".insteadOf "https://github.com/"
+#   仅影响该机 checkout, 仓库保持通用 actions/checkout@v4。
 
 on:
   workflow_dispatch:
@@ -21,6 +25,10 @@ on:
         description: 'Perf compose stack directory on the runner machine'
         required: false
         default: '/f/sakurafilter-perf'
+      code_dir:
+        description: 'Backend source repo directory on the runner machine (rebuild only)'
+        required: false
+        default: '/f/sakurafilter-real'
       rebuild_backend:
         description: 'Rebuild & redeploy latest backend before benchmark'
         type: boolean
@@ -39,14 +47,7 @@ jobs:
     runs-on: [self-hosted, perf]
     timeout-minutes: 120
     steps:
-      # 仓库 public: 手动 clone 走 ghfast.top 镜像 (github.com 直连在部分网络下传输不稳定)
-      - name: Checkout (mirror)
-        shell: bash
-        run: |
-          shopt -s dotglob
-          rm -rf -- * 2>/dev/null || true
-          shopt -u dotglob
-          git clone --depth 1 --branch master https://ghfast.top/https://github.com/longxiaocao/sakurafilte .
+      - uses: actions/checkout@v4
 
       - name: 确保依赖栈运行
         shell: bash
@@ -64,9 +65,9 @@ jobs:
         if: ${{ github.event.inputs.rebuild_backend == 'true' }}
         shell: bash
         run: |
-          cd /f/sakurafilter-real
+          cd "${{ github.event.inputs.code_dir || '/f/sakurafilter-real' }}"
           docker build -t sakurafilter-backend:latest -f backend/Dockerfile backend
-          cd /f/sakurafilter-perf
+          cd "${{ github.event.inputs.perf_dir || '/f/sakurafilter-perf' }}"
           docker compose -p sakurafilter-perf -f docker-compose.yml -f docker-compose.perf.yml --env-file .env.perf up -d --force-recreate backend
 
       - name: 预热 (触发基数缓存/连接池)
