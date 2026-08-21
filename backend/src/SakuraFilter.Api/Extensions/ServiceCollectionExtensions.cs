@@ -248,8 +248,15 @@ public static class ServiceCollectionExtensions
             sp.GetRequiredService<ILogger<EtlImportService>>(),
             sp,
             sp.GetRequiredService<IOptions<EtlOptions>>(),
-            sp.GetRequiredService<IEtlProgressBroadcaster>()));
+            sp.GetRequiredService<IEtlProgressBroadcaster>(),
+            // 2026-08-21 P1: ETL 完成后自动刷新 typeahead_dict (单一来源, Admin 端点同用)
+            sp.GetRequiredService<TypeaheadDictRebuildService>()));
         services.AddSingleton<IEtlProgressBroadcaster, EtlProgressBroadcaster>();
+
+        // 2026-08-21 P1 修复: typeahead_dict 全量重建服务 — ETL 完成后自动刷新 + 管理员手动兜底共用
+        //   WHY 独立注册: EtlImportService 注入本服务做自动重建; AdminTypeaheadEndpoints 复用同一 SQL (单一来源)
+        //   连接复用全局 NpgsqlDataSource (v30-25 P0: 统一连接池)
+        services.AddSingleton(sp => new TypeaheadDictRebuildService(sp.GetRequiredService<NpgsqlDataSource>()));
         return services;
     }
 

@@ -380,22 +380,27 @@ public class EtlImportService
     //   WHY: 配置校验集中在 EtlOptionsValidator,启动失败立即可见,不必运行期才发现
     // Day 9.6: 可选 IEtlProgressBroadcaster (跨实例 SSE 广播),缺省时单实例本地轮询
     //   - 用 default = null 而非强制注入: 减少对 spike-test 脚本的影响 (它们不通过 DI 构造)
+    // 2026-08-21 P1: 可选 TypeaheadDictRebuildService — ETL 成功后自动刷新 typeahead 快照
+    //   - 用 default = null: 不破坏 spike-test 脚本/单测的既有构造签名
     public EtlImportService(
         string connectionString,
         ILogger<EtlImportService> logger,
         IServiceProvider sp,
         IOptions<EtlOptions> etlOptions,
-        IEtlProgressBroadcaster? broadcaster = null)
+        IEtlProgressBroadcaster? broadcaster = null,
+        TypeaheadDictRebuildService? typeaheadRebuild = null)
     {
         _pgConn = connectionString;
         _logger = logger;
         _sp = sp;
         _options = etlOptions.Value;
         _broadcaster = broadcaster;
+        _typeaheadRebuild = typeaheadRebuild;
         Progress = new EtlProgress(logger, _options.RecentErrorBuffer, sp);
     }
 
     private readonly IEtlProgressBroadcaster? _broadcaster;
+    private readonly TypeaheadDictRebuildService? _typeaheadRebuild;
 
     // ========== Day 8.4 手动触发 + 进度查询 ==========
 
@@ -1203,6 +1208,8 @@ public class EtlImportService
             });
 
             Progress.Finish("products", mode);
+            // 🔧 fix(P1-交付门禁 2026-08-21): 导入成功 → 自动刷新 typeahead_dict 快照 (失败不阻塞)
+            TriggerTypeaheadRebuild("products", mode);
         }
         // Day 9.4: 区分 "用户主动取消" 与 "真异常失败"
         //   Bug: 之前 catch (Exception) 全部走 Fail,导致 CancelActiveTask 后 Npgsql 抛
@@ -1288,6 +1295,37 @@ public class EtlImportService
             }
         });
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// 🔧 fix(P1-交付门禁 2026-08-21): ETL 导入成功后自动刷新 typeahead_dict 快照。
+    /// WHY: typeahead_dict 是公开自动补全的唯一数据源, 但此前仅管理员手动
+    ///   POST /api/admin/typeahead/rebuild 会刷新 —— 新导入的 OEM/机型/发动机数据虽已进
+    ///   PG+Meili, 自动补全却长期找不到, 直到有人记得手动重建 (代码注释曾写 "ETL 后需重建"
+    ///   但 ETL 实现未调用, 属真实数据陈旧 P1 风险)。
+    /// 策略: 三个 Import 方法成功路径 (Progress.Finish 之后) 调用; 失败仅记日志不阻塞 ETL 结果
+    ///   (与 meili-sync 同模式), 管理员仍可手动 /rebuild 兜底。
+    /// </summary>
+    private void TriggerTypeaheadRebuild(string entity, string mode)
+    {
+        if (_typeaheadRebuild is null)
+        {
+            _logger.LogWarning("[自动typeahead] {Entity} 导入完成但未注入 TypeaheadDictRebuildService, 跳过快照刷新", entity);
+            return;
+        }
+        _logger.LogInformation("[自动typeahead] {Entity} 导入完成 (mode={Mode}), 自动刷新 typeahead_dict 快照", entity, mode);
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await _typeaheadRebuild.RebuildAsync(CancellationToken.None);
+                _logger.LogInformation("[自动typeahead] typeahead_dict 快照刷新完成 (entity={Entity})", entity);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[自动typeahead] typeahead_dict 快照刷新失败 (entity={Entity}, 可手动 /api/admin/typeahead/rebuild 兜底)", entity);
+            }
+        });
     }
 
     /// <summary>
@@ -1691,6 +1729,8 @@ public class EtlImportService
                 isFirstBatch = false;
             }
             Progress.Finish("xrefs", mode);
+            // 🔧 fix(P1-交付门禁 2026-08-21): 导入成功 → 自动刷新 typeahead_dict 快照 (失败不阻塞)
+            TriggerTypeaheadRebuild("xrefs", mode);
             // 🔧 fix(自动reindex): xrefs 导入完成 → 受影响产品增量同步到 Meili (修复 oem_list 过期)
             await SyncAffectedProductsAsync(affectedProductIds, "xrefs", ct);
         }
@@ -2205,6 +2245,8 @@ public class EtlImportService
             await using (var commit = new NpgsqlCommand("COMMIT;", conn))
                 await commit.ExecuteNonQueryAsync(ct);
             Progress.Finish("apps", mode);
+            // 🔧 fix(P1-交付门禁 2026-08-21): 导入成功 → 自动刷新 typeahead_dict 快照 (失败不阻塞)
+            TriggerTypeaheadRebuild("apps", mode);
             // 🔧 fix(自动reindex): apps 导入完成 → 受影响产品增量同步到 Meili (修复 machine_list 过期)
             await SyncAffectedProductsAsync(affectedProductIds, "apps", ct);
         }
