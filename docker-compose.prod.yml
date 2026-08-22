@@ -151,6 +151,24 @@ services:
           cpus: "0.5"
           memory: 256M
 
+  # ===== Cloudflare Tunnel (可选, 域名就绪后启用) =====
+  # 🔧 fix(2026-08-22): 生产机无需公网 IP / 端口映射, cloudflared 出站连接 CF 边缘暴露 80/443。
+  #   启用步骤 (见 docs/cloudflare-onboarding.md):
+  #     1) CF 控制台 Zero Trust → Networks → Tunnels → Create a tunnel → 复制 token
+  #     2) 取消下方注释 + .env.prod 配 CLOUDFLARE_TUNNEL_TOKEN=<token>
+  #     3) CF 控制台 Tunnel 配置 public hostname: <域名> → https://web:443 (保持 HTTPS)
+  #     4) 建议同时注释 web 的 80/443 ports 暴露 (Tunnel 模式下不对外开端口, 更安全)
+  # cloudflared:
+  #   image: cloudflare/cloudflared:latest
+  #   container_name: sakura-cloudflared
+  #   restart: unless-stopped
+  #   command: ["tunnel", "run", "--token", "${CLOUDFLARE_TUNNEL_TOKEN}"]
+  #   depends_on:
+  #     web:
+  #       condition: service_healthy
+  #   networks:
+  #     - sakura-net
+
   # ===== 数据层 =====
   # 🔧 fix(部署演练): 新增 db-init (EF 迁移) + db-migrate (SQL 增量) 一次性服务
   #   原编排无迁移步骤, prod 空库启动即崩 (42P01 relation "users" does not exist)
