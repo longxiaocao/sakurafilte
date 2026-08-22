@@ -19,7 +19,10 @@ export default defineConfig({
     actionTimeout: 10000,
     navigationTimeout: 15000,
     // 本地可用 BASE_URL=https://localhost (自签证书) 跑 E2E; CI 用 http dev server 不受影响
-    ignoreHTTPSErrors: true
+    ignoreHTTPSErrors: true,
+    // 🔧 fix(2026-08-22): 本机无 playwright chromium 时可用系统浏览器 (BROWSER_CHANNEL=msedge/chrome),
+    //   未设置则走 playwright 自带 chromium (CI 默认), 行为不变
+    channel: process.env.BROWSER_CHANNEL as any || undefined
   },
   projects: [
     {
