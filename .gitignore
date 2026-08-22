@@ -182,3 +182,5 @@ spike-test/frontend_runtime_audit.json
 spike-test/security_scan_report.json
 docker/certs/
 backup-drill/
+# 数据库备份目录 (scripts/backup-db.sh 输出, 不入库)
+_backups/
