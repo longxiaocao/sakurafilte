@@ -1,0 +1,61 @@
+{
+ "fields": {
+  "oem-brand": {
+   "p50_ms": 15.6,
+   "p95_ms": 16.4,
+   "max_ms": 52.1,
+   "last_items": 1,
+   "ok": true
+  },
+  "oem-no2": {
+   "p50_ms": 15.5,
+   "p95_ms": 16.7,
+   "max_ms": 27.3,
+   "last_items": 4,
+   "ok": true
+  },
+  "oem-no3": {
+   "p50_ms": 10.3,
+   "p95_ms": 16.4,
+   "max_ms": 25.1,
+   "last_items": 0,
+   "ok": true
+  },
+  "machine-brand": {
+   "p50_ms": 3.2,
+   "p95_ms": 3.3,
+   "max_ms": 3.3,
+   "last_items": 0,
+   "ok": true
+  },
+  "machine-model": {
+   "p50_ms": 3.7,
+   "p95_ms": 4.2,
+   "max_ms": 20.2,
+   "last_items": 0,
+   "ok": true
+  },
+  "model-name": {
+   "p50_ms": 3.4,
+   "p95_ms": 3.5,
+   "max_ms": 27.0,
+   "last_items": 0,
+   "ok": true
+  },
+  "engine-brand": {
+   "p50_ms": 3.3,
+   "p95_ms": 3.6,
+   "max_ms": 22.1,
+   "last_items": 0,
+   "ok": true
+  },
+  "engine-type": {
+   "p50_ms": 14.8,
+   "p95_ms": 16.7,
+   "max_ms": 27.6,
+   "last_items": 0,
+   "ok": true
+  }
+ },
+ "all_ok": true
+}
