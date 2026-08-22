@@ -1313,6 +1313,12 @@ public class EtlImportService
             _logger.LogWarning("[自动typeahead] {Entity} 导入完成但未注入 TypeaheadDictRebuildService, 跳过快照刷新", entity);
             return;
         }
+        // 🔧 fix(2026-08-22 Codex 审查): 配置开关 — Etl:AutoRebuildTypeaheadDict=false 可关闭 (默认 true 行为不变)
+        if (!_options.AutoRebuildTypeaheadDict)
+        {
+            _logger.LogInformation("[自动typeahead] {Entity} 导入完成, 但 Etl:AutoRebuildTypeaheadDict=false, 跳过自动刷新 (可手动 /api/admin/typeahead/rebuild)", entity);
+            return;
+        }
         _logger.LogInformation("[自动typeahead] {Entity} 导入完成 (mode={Mode}), 自动刷新 typeahead_dict 快照", entity, mode);
         _ = Task.Run(async () =>
         {

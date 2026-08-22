@@ -26,6 +26,13 @@ public class EtlOptions
     ///   - 校验逻辑: Path.GetFullPath 规范化后, 用 OrdinalIgnoreCase 前缀匹配目录边界
     /// </summary>
     public string[] AllowedImportDirs { get; set; } = Array.Empty<string>();
+
+    /// <summary>
+    /// 🔧 fix(2026-08-22 Codex 审查): typeahead_dict 自动刷新开关。
+    ///   原实现 ETL 导入完成后无条件自动触发全量重建 (products/xrefs/apps 三流程),
+    ///   运维无法快速关闭。默认开启 (行为不变); 配 Etl:AutoRebuildTypeaheadDict=false 关闭。
+    /// </summary>
+    public bool AutoRebuildTypeaheadDict { get; set; } = true;
 }
 
 /// <summary>

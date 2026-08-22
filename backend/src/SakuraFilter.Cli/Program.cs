@@ -9,7 +9,7 @@
 //   枚举 S3/MinIO/OSS 存储桶中所有对象, 与 DB product_images.image_key 比对, 删除孤儿
 //   选项 C (spec 26.4.1): 不引入 BackgroundService, 一次性 CLI 脚本, 适合低频运维场景
 //     --pg-conn <conn>     PG 连接串 (覆盖 appsettings.json)
-//     --storage <minio|oss>  存储类型 (默认 minio)
+//     --storage <minio|oss|r2>  存储类型 (默认 minio)
 //     --endpoint <url>     存储端点 (MinIO: http://localhost:9000, OSS: oss-cn-hangzhou.aliyuncs.com)
 //     --bucket <name>      存储桶名
 //     --access-key <key>   访问 key
@@ -249,7 +249,7 @@ public static class Program
         Console.WriteLine("用法:");
         Console.WriteLine("  rotate-token --new <token> [--old <token>] [--by <user>] [--dry-run] [--pg-conn <conn>]");
         Console.WriteLine("  status [--pg-conn <conn>]");
-        Console.WriteLine("  cleanup-orphan-images [--storage <minio|oss>] [--endpoint <url>] [--bucket <name>]");
+        Console.WriteLine("  cleanup-orphan-images [--storage <minio|oss|r2>] [--endpoint <url>] [--bucket <name>]");
         Console.WriteLine("                        [--access-key <k>] [--secret-key <k>] [--prefix <p>]");
         Console.WriteLine("                        [--dry-run] [--batch-size <n>] [--pg-conn <conn>]");
         Console.WriteLine();
@@ -264,7 +264,7 @@ public static class Program
         Console.WriteLine("  --by          可选, 操作人 (审计用, 默认 anonymous)");
         Console.WriteLine("  --dry-run     只预览, 不写 DB / 不删对象");
         Console.WriteLine("  --pg-conn     可选, PG 连接串 (覆盖 appsettings.json)");
-        Console.WriteLine("  --storage     存储类型: minio (默认) | oss");
+        Console.WriteLine("  --storage     存储类型: minio (默认) | oss | r2 (Cloudflare R2, S3 兼容, 强制 HTTPS)");
         Console.WriteLine("  --endpoint    存储端点 (MinIO 默认 http://localhost:9000)");
         Console.WriteLine("  --bucket      存储桶名 (默认 sakurafilter)");
         Console.WriteLine("  --access-key  访问 key (默认 minioadmin)");
@@ -274,9 +274,10 @@ public static class Program
         Console.WriteLine();
         Console.WriteLine("环境变量:");
         Console.WriteLine("  SakuraFilter_Postgres   PG 连接串 (覆盖 appsettings.json)");
-        Console.WriteLine("  Storage__Provider       存储类型 (minio/oss, 与后端配置一致)");
+        Console.WriteLine("  Storage__Provider       存储类型 (minio/oss/r2, 与后端配置一致)");
         Console.WriteLine("  Minio__Endpoint / Minio__AccessKey / Minio__SecretKey / Minio__Bucket");
         Console.WriteLine("  Oss__Endpoint / Oss__AccessKey / Oss__SecretKey / Oss__Bucket");
+        Console.WriteLine("  R2__Endpoint / R2__AccessKey / R2__SecretKey / R2__Bucket");
         Console.WriteLine();
         Console.WriteLine("轮转步骤 (4 步零停机):");
         Console.WriteLine("  1. 配 appsettings.json: DevStaticTokenPrevious=old + DevStaticToken=new");
@@ -302,21 +303,48 @@ public static class Program
         // MinIO endpoint 不含 scheme (用 UseSSL 控制), OSS endpoint 是完整域名
         //   WHY: MinIO SDK WithEndpoint 要求 "host:port" 格式, 含 http:// 会抛 InvalidEndpointException
         //   OSS SDK OssClient(endpoint, ...) 接受完整域名 (如 oss-cn-hangzhou.aliyuncs.com)
-        var defaultEndpoint = storageType == "oss" ? "oss-cn-hangzhou.aliyuncs.com" : "localhost:9000";
+        // 🔧 fix(2026-08-22 Codex 审查): 新增 r2 — R2 是 S3 兼容, 复用 MinIO 客户端, 强制 HTTPS (WithSSL=true)
+        var defaultEndpoint = storageType switch
+        {
+            "oss" => "oss-cn-hangzhou.aliyuncs.com",
+            "r2" => config["R2:Endpoint"] ?? "xxx.r2.cloudflarestorage.com",
+            _ => "localhost:9000"
+        };
         var endpoint = ResolveArg(args, "--endpoint",
-            storageType == "oss" ? config["Oss:Endpoint"] : config["Minio:Endpoint"]) ?? defaultEndpoint;
-        // 兼容用户误传 http:// 前缀 (MinIO 场景自动剥离)
+            storageType switch
+            {
+                "oss" => config["Oss:Endpoint"],
+                "r2" => config["R2:Endpoint"],
+                _ => config["Minio:Endpoint"]
+            }) ?? defaultEndpoint;
+        // 兼容用户误传 http:// 前缀 (MinIO/R2 场景自动剥离, R2 用 WithSSL=true 强制 HTTPS)
         if (storageType != "oss" && (endpoint.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
                                       endpoint.StartsWith("https://", StringComparison.OrdinalIgnoreCase)))
         {
             endpoint = endpoint.Substring(endpoint.IndexOf("://") + 3);
         }
+        var useSSL = storageType == "r2";  // R2 仅支持 HTTPS
         var bucket = ResolveArg(args, "--bucket",
-            storageType == "oss" ? config["Oss:Bucket"] : config["Minio:Bucket"]) ?? "sakurafilter";
+            storageType switch
+            {
+                "oss" => config["Oss:Bucket"],
+                "r2" => config["R2:Bucket"],
+                _ => config["Minio:Bucket"]
+            }) ?? "sakurafilter";
         var accessKey = ResolveArg(args, "--access-key",
-            storageType == "oss" ? config["Oss:AccessKey"] : config["Minio:AccessKey"]) ?? "minioadmin";
+            storageType switch
+            {
+                "oss" => config["Oss:AccessKey"],
+                "r2" => config["R2:AccessKey"],
+                _ => config["Minio:AccessKey"]
+            }) ?? "minioadmin";
         var secretKey = ResolveArg(args, "--secret-key",
-            storageType == "oss" ? config["Oss:SecretKey"] : config["Minio:SecretKey"]) ?? "minioadmin";
+            storageType switch
+            {
+                "oss" => config["Oss:SecretKey"],
+                "r2" => config["R2:SecretKey"],
+                _ => config["Minio:SecretKey"]
+            }) ?? "minioadmin";
         var prefix = ResolveArg(args, "--prefix", "products/") ?? "products/";
         var dryRun = Array.IndexOf(args, "--dry-run") >= 0;
         var batchSizeStr = ResolveArg(args, "--batch-size", "100");
@@ -338,7 +366,8 @@ public static class Program
         var storageTypeNorm = storageType.ToLowerInvariant();
         IObjectStorage storage = storageTypeNorm switch
         {
-            "minio" => CreateMinioStorage(endpoint, bucket, accessKey, secretKey),
+            "minio" => CreateMinioStorage(endpoint, bucket, accessKey, secretKey, useSSL),
+            "r2" => CreateMinioStorage(endpoint, bucket, accessKey, secretKey, useSSL),
             "oss" => CreateOssStorage(endpoint, bucket, accessKey, secretKey, config["Oss:CdnEndpoint"]),
             _ => throw new ArgumentException($"不支持的 storage 类型: {storageType}")
         };
@@ -451,12 +480,12 @@ public static class Program
         return defaultValue;
     }
 
-    private static MinioStorage CreateMinioStorage(string endpoint, string bucket, string accessKey, string secretKey)
+    private static MinioStorage CreateMinioStorage(string endpoint, string bucket, string accessKey, string secretKey, bool useSSL = false)
     {
         // WHY new MinioClient: CLI 不走 DI, 直接构造 (与 Production ServiceProvider 配置一致)
         //   endpoint 格式: host:port (不含 scheme), WithSSL 控制协议
         //   如用户传 https://minio.example.com:9000, 调用前已剥离 scheme 为 minio.example.com:9000
-        var useSSL = false;  // CLI 默认不启用 SSL (本地 MinIO 场景), 生产环境通过 --endpoint + 显式配置
+        //   R2 (useSSL=true): host 为 xxx.r2.cloudflarestorage.com, 强制 HTTPS (S3 兼容, path-style)
         var client = new MinioClient()
             .WithEndpoint(endpoint)
             .WithCredentials(accessKey, secretKey)
