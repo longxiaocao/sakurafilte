@@ -18,6 +18,14 @@ public interface IObjectStorage
     Task<string> GetPresignedUrlAsync(string key, int expirySeconds = 3600, CancellationToken ct = default);
 
     /// <summary>
+    /// 获取公开直链 URL (2026-08-22 新增, 用于卸载服务器流量)。
+    /// 配置了 PublicEndpoint (如 R2 自定义域名 images.xxx.com / OSS CDN) 时返回 {publicEndpoint}/{key} 直链,
+    /// 浏览器直连云存储/边缘节点, 服务器不中转图片字节。
+    /// 未配置 PublicEndpoint 或 key 非法时返回 null, 调用方应回退 API 代理路径。
+    /// </summary>
+    string? GetPublicUrl(string key);
+
+    /// <summary>
     /// 读取对象流 (🔧 fix: 图片代理端点用 — 容器内 MinIO 不对外暴露, 预签名 URL host 浏览器不可达 → 裂图;
     /// 代理读流后由 API 返回, 云存储(R2/OSS)切换时同样生效)
     /// </summary>

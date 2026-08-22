@@ -393,6 +393,12 @@ public class AdminProductImageService
     {
         try
         {
+            // 🔧 fix(2026-08-22): 优先公开直链 (R2 自定义域名 / OSS CDN) — 浏览器直连云存储, 卸载服务器流量
+            //   PublicEndpoint 未配置时回退 API 代理路径 (容器内 MinIO 场景, 原行为不变)
+            var direct = _storage.GetPublicUrl(key);
+            if (!string.IsNullOrEmpty(direct))
+                return Task.FromResult(direct);
+
             // 🔧 fix(审查): 统一走 API 代理路径 — 容器内 MinIO 预签名 URL host (minio:9000) 浏览器不可达 → 裂图
             //   key 为安全字符集不编码 (encodeURIComponent 的 %2F 会被 Kestrel 拒绝 → 400)
             return Task.FromResult($"/api/public/images/{key}");

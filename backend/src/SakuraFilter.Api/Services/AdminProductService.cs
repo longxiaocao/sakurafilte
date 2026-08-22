@@ -672,8 +672,14 @@ public class AdminProductService
         Task<string> GetUrlSafe(string? key)
         {
             if (_storage == null || string.IsNullOrEmpty(key)) return Task.FromResult("");
-            // 🔧 fix(审查): 统一代理路径 (同 AdminProductImageService — MinIO 预签名 URL 浏览器不可达 → 裂图)
-            try { return Task.FromResult($"/api/public/images/{key}"); }
+            try
+            {
+                // 🔧 fix(2026-08-22): 优先公开直链 (R2/OSS CDN), 浏览器直连卸载服务器流量; 未配置时回退代理
+                var direct = _storage.GetPublicUrl(key);
+                if (!string.IsNullOrEmpty(direct)) return Task.FromResult(direct);
+                // 🔧 fix(审查): 统一代理路径 (同 AdminProductImageService — MinIO 预签名 URL 浏览器不可达 → 裂图)
+                return Task.FromResult($"/api/public/images/{key}");
+            }
             catch (Exception ex) { _logger.LogWarning(ex, "image proxy url failed: key={Key}", key); return Task.FromResult(""); }
         }
         var urls = await Task.WhenAll(imageRows.Select(img => GetUrlSafe(img.ImageKey)));

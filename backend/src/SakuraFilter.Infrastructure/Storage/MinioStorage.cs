@@ -82,6 +82,16 @@ public class MinioStorage : IObjectStorage
         return _client.PresignedGetObjectAsync(args);
     }
 
+    /// <summary>
+    /// 公开直链: {publicEndpoint}/{key}。未配置 publicEndpoint 时返回 null (调用方回退 API 代理)。
+    /// 用途: R2 自定义域名 / OSS CDN 下浏览器直连, 卸载服务器流量。
+    /// </summary>
+    public string? GetPublicUrl(string key)
+    {
+        if (string.IsNullOrWhiteSpace(_publicEndpoint) || string.IsNullOrWhiteSpace(key)) return null;
+        return $"{_publicEndpoint}/{key}";
+    }
+
     public async Task<bool> ExistsAsync(string key, CancellationToken ct = default)
     {
         try

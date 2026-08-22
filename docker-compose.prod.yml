@@ -32,8 +32,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      db-migrate:
-        condition: service_completed_successfully
+      # ⚠️ fix(2026-08-22): db-migrate 已禁用 (注释), 移除依赖避免重建迁移清库
       meilisearch:
         condition: service_started
       data-protection-init:
@@ -81,7 +80,8 @@ services:
     networks:
       - sakura-net
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health/live"]
+      # 🔧 fix(交付门禁 2026-08-21): wget exit=8 (GNU wget 对 HTTP 探活异常), 改用 curl
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:8080/health/live"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -155,38 +155,41 @@ services:
   # 🔧 fix(部署演练): 新增 db-init (EF 迁移) + db-migrate (SQL 增量) 一次性服务
   #   原编排无迁移步骤, prod 空库启动即崩 (42P01 relation "users" does not exist)
   #   顺序: postgres → db-init (EF 34 迁移建全表) → db-migrate (002-019 SQL 增量) → api → web
-  db-init:
-    image: sakurafilter-api:1.0.0
-    container_name: sakura-db-init
-    restart: "no"
-    depends_on:
-      postgres:
-        condition: service_healthy
-    environment:
-      ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};Maximum Pool Size=120;Connection Idle Lifetime=60"
-    command: ["--migrate-db"]
-    networks:
-      - sakura-net
+  # ⚠️ fix(2026-08-22): 已注释禁用 — 生产库已有完整数据 (pg_restore 恢复), 重跑迁移会清空数据!
+  #   此前 rm 容器无效 (compose 服务定义还在), 任何 `up` 都会重建 db-migrate 并重跑迁移 → 数据全清。
+  #   恢复数据后必须保持禁用; 仅首次空库部署时取消注释。
+  # db-init:
+  #   image: sakurafilter-api:1.0.0
+  #   container_name: sakura-db-init
+  #   restart: "no"
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #   environment:
+  #     ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};Maximum Pool Size=120;Connection Idle Lifetime=60"
+  #   command: ["--migrate-db"]
+  #   networks:
+  #     - sakura-net
 
-  db-migrate:
-    image: postgres:16-alpine
-    container_name: sakura-db-migrate
-    restart: "no"
-    depends_on:
-      db-init:
-        condition: service_completed_successfully
-    volumes:
-      - ./backend/migrations:/migrations:ro
-    environment:
-      PGPASSWORD: ${POSTGRES_PASSWORD}
-    command: >
-      sh -c 'for f in /migrations/*.sql; do
-        echo "===== Executing $$f =====";
-        psql -h postgres -U ${POSTGRES_USER} -d ${POSTGRES_DB} -v ON_ERROR_STOP=1 -f "$$f" || exit 1;
-      done;
-      echo "===== All SQL migrations applied ====="'
-    networks:
-      - sakura-net
+  # db-migrate:
+  #   image: postgres:16-alpine
+  #   container_name: sakura-db-migrate
+  #   restart: "no"
+  #   depends_on:
+  #     db-init:
+  #       condition: service_completed_successfully
+  #   volumes:
+  #     - ./backend/migrations:/migrations:ro
+  #   environment:
+  #     PGPASSWORD: ${POSTGRES_PASSWORD}
+  #   command: >
+  #     sh -c 'for f in /migrations/*.sql; do
+  #       echo "===== Executing $$f =====";
+  #       psql -h postgres -U ${POSTGRES_USER} -d ${POSTGRES_DB} -v ON_ERROR_STOP=1 -f "$$f" || exit 1;
+  #     done;
+  #     echo "===== All SQL migrations applied ====="'
+  #   networks:
+  #     - sakura-net
 
   postgres:
     image: postgres:16-alpine
@@ -219,6 +222,12 @@ services:
     image: getmeili/meilisearch:v1.12
     container_name: sakura-meili
     restart: unless-stopped
+    # 🔧 fix(2026-08-22): deploy.resources.limits 在 compose 非 swarm 模式不生效 → 容器实际 1GiB 默认限制,
+    #   1M 文档重建时 Meili 内存顶格、处理队列极慢 (328K 后 30 分钟无进展)。
+    #   显式 --max-indexing-memory 4096 (perf 栈验证写法) + mem_limit 4g (容器级硬限制, 防 OOM),
+    #   重建吞吐恢复正常。
+    mem_limit: 4g
+    command: ["/bin/meilisearch", "--max-indexing-memory", "4096"]
     environment:
       MEILI_MASTER_KEY: ${MEILI_MASTER_KEY}
       MEILI_NO_ANALYTICS: "true"
@@ -231,7 +240,7 @@ services:
       resources:
         limits:
           cpus: "1.0"
-          memory: 1G
+          memory: 4G
 
   minio:
     image: minio/minio:latest
