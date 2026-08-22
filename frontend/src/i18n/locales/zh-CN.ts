@@ -695,6 +695,7 @@ export default {
         slot_slot_uploaded: 'Slot {slot} 上传成功',
         slot_slot_deleted: 'Slot {slot} 已删除',
         edit_product_id: '编辑产品 #{id}',
+        product_not_found: '产品不存在',
         cross_reference_count: '② 交叉引用 ({count})',
         machine_applications_count: '⑥ 适用车型 ({count})',
         add_xref: '+ 添加交叉引用',

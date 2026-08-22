@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using SakuraFilter.Infrastructure.Data;
 
 namespace SakuraFilter.Api.Controllers;
@@ -21,11 +22,13 @@ public class PublicMachineBrandsController : ControllerBase
 {
     private readonly ProductDbContext _db;
     private readonly ILogger<PublicMachineBrandsController> _logger;
+    private readonly IMemoryCache _cache;
 
-    public PublicMachineBrandsController(ProductDbContext db, ILogger<PublicMachineBrandsController> logger)
+    public PublicMachineBrandsController(ProductDbContext db, ILogger<PublicMachineBrandsController> logger, IMemoryCache cache)
     {
         _db = db;
         _logger = logger;
+        _cache = cache;
     }
 
     private static readonly string[] AllCategories =
@@ -93,6 +96,12 @@ public class PublicMachineBrandsController : ControllerBase
     [HttpGet("catalog")]
     public async Task<IActionResult> Catalog(CancellationToken ct)
     {
+        // 🔧 fix(2026-08-22 走查 P3-3): catalog 15.5MB JSON 无缓存, 每次查 DB 构建耗时 ~3.9s。
+        //   静态分类数据 (ETL 重建后更新), MemoryCache TTL 30 分钟, 命中后 <10ms。
+        const string cacheKey = "machine-catalog-dto";
+        if (_cache.TryGetValue(cacheKey, out MachineCatalogDto? cached))
+            return Ok(cached);
+
         var rows = await _db.DictMachines.AsNoTracking()
             .Where(m => m.DeletedAt == null && m.MachineBrand != "")
             .OrderBy(m => m.SortOrder)
@@ -128,7 +137,14 @@ public class PublicMachineBrandsController : ControllerBase
             return new MachineCatalogCategoryDto(category, brands);
         }).ToList();
 
-        return Ok(new MachineCatalogDto(categories));
+        var result = new MachineCatalogDto(categories);
+        // 全局共享缓存配置了 SizeLimit (10000), Set 必须显式指定 Size
+        _cache.Set(cacheKey, result, new MemoryCacheEntryOptions
+        {
+            Size = 1,
+            AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(30)
+        });
+        return Ok(result);
     }
 
     private static string NormalizeCategory(string? value) => value?.Trim().ToLowerInvariant() switch

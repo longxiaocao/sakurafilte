@@ -22,7 +22,12 @@ const route = useRoute()
 const router = useRouter()
 
 const isEdit = computed(() => !!route.params.id)
-const productId = computed(() => (route.params.id ? Number(route.params.id) : 0))
+// 🔧 fix(2026-08-22 走查 P3-1): :id 非数字 (如误输 MR.1 编码) 时 Number() 得 NaN,
+//   标题显示 "Edit Product #NaN"。无效 id → null, 模板显示"产品不存在", load 不发 API 请求。
+const productId = computed(() => {
+  const n = route.params.id ? Number(route.params.id) : 0
+  return Number.isFinite(n) && n > 0 ? n : null
+})
 // 🔧 fix(审查): Tab 式分区重构 (用户反馈: 信息密度低) — el-collapse 多区展开 → el-tabs 左侧竖向 Tab
 //   默认激活基础信息分区, 切换分区保留表单状态
 const activeTab = ref('1')
@@ -219,6 +224,12 @@ async function load() {
   // V24-F101 (P2-2, 规则 8): 编辑模式加载失败时显示 error UI + 重试, 不再静默吞
   loadError.value = null
   loading.value = true
+  // 🔧 fix(2026-08-22 走查 P3-1): 无效 id (非数字/<=0) 不发 API, 直接报"产品不存在"
+  if (productId.value == null) {
+    loadError.value = t('admin.productformview.string.product_not_found')
+    loading.value = false
+    return
+  }
   try {
     const p = await adminProductApi.get(productId.value)
     Object.assign(form, {
@@ -302,7 +313,8 @@ async function save() {
     }
     if (isEdit.value) {
       // E2E BD.3 修复 v2: 带回 GET 时的 RowVersion, 后端用此值检测并发冲突
-      await adminProductApi.update(productId.value, { ...payload, rowVersion: rowVersion.value }, 'admin')
+      // 🔧 fix(2026-08-22 P3-1): productId 类型 number|null, 此处 isEdit + 已过 load 校验, 非空断言
+      await adminProductApi.update(productId.value!, { ...payload, rowVersion: rowVersion.value }, 'admin')
       ElMessage.success(t('admin.productformview.success.saved'))
     } else {
       await adminProductApi.create(payload, 'admin')
@@ -586,7 +598,7 @@ onBeforeUnmount(() => {
   <div class="p-3 w-full" v-loading="loading">
     <div class="flex items-center gap-2 mb-3">
       <el-button @click="router.back()" size="small">{{ t('common.back') }}</el-button>
-      <h1 class="text-lg font-medium">{{ isEdit ? t('admin.productformview.string.edit_product_id', { id: productId }) : t('admin.productformview.templatetext.add_product') }}</h1>
+      <h1 class="text-lg font-medium">{{ isEdit ? (productId == null ? t('admin.productformview.string.product_not_found') : t('admin.productformview.string.edit_product_id', { id: productId })) : t('admin.productformview.templatetext.add_product') }}</h1>
       <div class="flex-1" />
       <el-button type="primary" @click="save" :loading="saving">{{ t('common.save') }}</el-button>
     </div>

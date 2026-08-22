@@ -116,6 +116,19 @@ async function doSearch() {
   }
 }
 
+// 🔧 fix(2026-08-22 走查 P2-1): 已在聚合搜索页时, 用顶部全局搜索框输入回车
+//   → 路由 query.q 变化但组件复用不重挂载 → onMounted 不触发, q ref 不更新 → 结果区空。
+//   watch route.query.q: 同步到 q ref 并立即搜索 (programmaticUpdate 跳过 watch(q) 防抖防重复)。
+watch(() => route.query.q as string | undefined, (newQ, oldQ) => {
+  if (newQ === oldQ) return
+  programmaticUpdate = true
+  setTimeout(() => { programmaticUpdate = false }, 0)
+  q.value = (newQ as string) || ''
+  page.value = 1
+  syncUrl()
+  doSearch()
+})
+
 // q 输入 → 500ms 防抖搜索
 watch(q, () => {
   if (programmaticUpdate) return
@@ -213,7 +226,18 @@ function clearSearch() {
 
 async function loadMachineCatalog() {
   try {
+    // 🔧 fix(2026-08-22 走查 P3-3): 目录 15.5MB JSON (gzip 4.2MB) 每次进页都拉取 → sessionStorage 缓存 30 分钟,
+    //   配合后端 MemoryCache (30 分钟 TTL) 双重减少传输与构建开销。
+    const CACHE_KEY = 'machine-catalog-v1'
+    const cachedRaw = sessionStorage.getItem(CACHE_KEY)
+    if (cachedRaw) {
+      machineCatalog.value = JSON.parse(cachedRaw)
+      return
+    }
     machineCatalog.value = await publicSearchApi.machineCatalog()
+    try { sessionStorage.setItem(CACHE_KEY, JSON.stringify(machineCatalog.value)) } catch { /* 超限忽略 */ }
+    // 30 分钟后清除, 由下一次加载刷新
+    setTimeout(() => { try { sessionStorage.removeItem(CACHE_KEY) } catch { /* ignore */ } }, 30 * 60 * 1000)
   } catch (error) {
     // 目录加载失败不阻断公开搜索，避免辅助导航影响主流程。
     console.warn('[AggregateSearchView] 机型目录加载失败', error)

@@ -686,6 +686,7 @@ export default {
         slot_slot_uploaded: 'Slot {slot} Uploaded',
         slot_slot_deleted: 'Slot {slot} Deleted',
         edit_product_id: 'Edit Product #{id}',
+        product_not_found: 'Product Not Found',
         cross_reference_count: '② Cross-Reference ({count})',
         machine_applications_count: '⑥ Machine Applications ({count})',
         add_xref: '+ Add Cross-Reference',
