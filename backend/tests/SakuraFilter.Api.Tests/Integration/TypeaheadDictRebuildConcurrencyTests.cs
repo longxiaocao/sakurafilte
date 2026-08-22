@@ -71,34 +71,35 @@ public class TypeaheadDictRebuildConcurrencyTests : PgIntegrationTestBase
         await using var conn = new NpgsqlConnection(ConnectionString);
         await conn.OpenAsync();
 
-        // products: 需要 oem_2 (typeahead oem-no2 来源)
+        // products: oem_2 (typeahead oem-no2 来源); 必填: oem_no_display/type/updated_at
+        //   (2026-08-22 CI 实测修正: 缺 oem_no_display → 23502 not-null 违反)
         await using (var cmd = conn.CreateCommand())
         {
             cmd.CommandText = """
-                INSERT INTO products (mr_1, oem_2, product_name_1, type) VALUES
-                ('MR_TST_001', 'TEST-OEM2-A', 'Test Filter', 'OIL FILTER')
+                INSERT INTO products (mr_1, oem_2, oem_no_display, product_name_1, type, updated_at) VALUES
+                ('MRTST001', 'TEST-OEM2-A', 'TST-001', 'Test Filter', 'OIL FILTER', now())
                 ON CONFLICT DO NOTHING;
                 """;
             await cmd.ExecuteNonQueryAsync();
         }
 
-        // cross_references: oem_brand + oem_no_3 (oem-brand / oem-no3 来源)
+        // cross_references: oem_brand + oem_no_3 (oem-brand / oem-no3 来源); 必填: product_id/created_at
         await using (var cmd = conn.CreateCommand())
         {
             cmd.CommandText = """
-                INSERT INTO cross_references (oem_brand, oem_no_3, product_id) VALUES
-                ('TEST-BRAND-A', 'TEST-OEM3-A', 1)
+                INSERT INTO cross_references (oem_brand, oem_no_3, product_id, created_at) VALUES
+                ('TEST-BRAND-A', 'TEST-OEM3-A', 1, now())
                 ON CONFLICT DO NOTHING;
                 """;
             await cmd.ExecuteNonQueryAsync();
         }
 
-        // machine_applications: machine_brand/model_name/engine_* 来源
+        // machine_applications: machine_brand/model_name/engine_* 来源; 必填: product_id/is_ongoing/created_at
         await using (var cmd = conn.CreateCommand())
         {
             cmd.CommandText = """
-                INSERT INTO machine_applications (machine_brand, machine_model, model_name, engine_brand, engine_type, product_id) VALUES
-                ('TEST-MACHINE-A', 'M1000', 'Test Model', 'TEST-ENG-A', 'Diesel', 1)
+                INSERT INTO machine_applications (machine_brand, machine_model, model_name, engine_brand, engine_type, product_id, is_ongoing, created_at) VALUES
+                ('TEST-MACHINE-A', 'M1000', 'Test Model', 'TEST-ENG-A', 'Diesel', 1, false, now())
                 ON CONFLICT DO NOTHING;
                 """;
             await cmd.ExecuteNonQueryAsync();
