@@ -27,6 +27,14 @@ namespace SakuraFilter.Etl;
 /// </summary>
 public class TypeaheadDictRebuildService
 {
+    /// <summary>
+    /// 并发互斥 (2026-08-22 Codex 审查 P1 修复): ETL products/xrefs/apps 导入完成
+    /// 各自 fire-and-forget 触发 RebuildAsync, 并发重建会互相 DROP typeahead_dict_new 临时表
+    /// (第 1 步 DROP IF EXISTS 会把对方的表删掉 → INSERT 到不存在表报错 / 切换混乱)。
+    /// 进程内 SemaphoreSlim 串行化 (单实例部署足够; 多实例需叠加 pg advisory lock)。
+    /// </summary>
+    private readonly SemaphoreSlim _gate = new(1, 1);
+
     /// <summary>临时表名 (原子替换用; 后缀 _new 避免与业务查询冲突)</summary>
     private const string TempTable = "typeahead_dict_new";
 
@@ -82,6 +90,20 @@ public class TypeaheadDictRebuildService
 
     /// <summary>执行全量重建 (原子替换, 无空窗)。调用方负责错误处理 (失败记日志, 不阻塞 ETL)。</summary>
     public async Task RebuildAsync(CancellationToken ct = default)
+    {
+        // 🔧 fix(2026-08-22 Codex 审查 P1): SemaphoreSlim 串行化 — 并发调用排队执行, 防止互删临时表
+        await _gate.WaitAsync(ct);
+        try
+        {
+            await RebuildCoreAsync(ct);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    private async Task RebuildCoreAsync(CancellationToken ct = default)
     {
         await using var conn = await _dataSource.OpenConnectionAsync(ct);
 

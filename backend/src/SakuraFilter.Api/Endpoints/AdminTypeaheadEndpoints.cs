@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using SakuraFilter.Etl;
 
 namespace SakuraFilter.Api.Endpoints;
@@ -18,12 +19,27 @@ public static class AdminTypeaheadEndpoints
         var g = app.MapGroup("/api/admin/typeahead").WithTags("AdminTypeahead")
             .RequireAuthorization("Admin");
 
-        g.MapPost("/rebuild", async (
+        g.MapPost("/rebuild", (
             TypeaheadDictRebuildService rebuild,
+            ILogger<TypeaheadDictRebuildService> logger,
             CancellationToken ct) =>
         {
-            await rebuild.RebuildAsync(ct);
-            return Results.Ok(new { ok = true, message = "typeahead_dict 已重建 (全量 distinct 快照刷新)" });
+            // 🔧 fix(2026-08-22 Codex 审查): 原 await 同步执行 (3-5 分钟), 客户端断开会经
+            //   CancellationToken 中止重建 (实测残留空临时表)。改 fire-and-forget:
+            //   - 立即返回"已触发" (管理员无需保持页面连接)
+            //   - 后台任务不绑定请求 ct (重建由 SemaphoreSlim 串行, 幂等, 失败记日志)
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await rebuild.RebuildAsync(CancellationToken.None);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "[typeahead-rebuild] 手动触发的 typeahead_dict 重建失败");
+                }
+            }, CancellationToken.None);
+            return Results.Accepted((string?)null, new { ok = true, message = "typeahead_dict 重建已触发 (后台执行, 由 SemaphoreSlim 串行化)" });
         }).WithName("AdminRebuildTypeaheadDict").WithOpenApi();
     }
 }
