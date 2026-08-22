@@ -93,35 +93,42 @@ public class TypeaheadDictRebuildConcurrencyTests : PgIntegrationTestBase
         await using var conn = new NpgsqlConnection(ConnectionString);
         await conn.OpenAsync();
 
-        // products: oem_2 (typeahead oem-no2 来源); 必填: oem_no_display/type/updated_at
-        //   (2026-08-22 CI 实测修正: 缺 oem_no_display → 23502 not-null 违反)
+        // products: oem_2 (typeahead oem-no2 来源)
+        //   显式插入全部 NOT NULL 字段 (不依赖默认值): CI 库由 EF migrations 建,
+        //   020/021 等手工 SQL 的默认值未生效 → 靠默认值会 23502 (2026-08-22 CI 实测)
         await using (var cmd = conn.CreateCommand())
         {
             cmd.CommandText = """
-                INSERT INTO products (mr_1, oem_2, oem_no_display, product_name_1, type, updated_at) VALUES
-                ('MRTST001', 'TEST-OEM2-A', 'TST-001', 'Test Filter', 'OIL FILTER', now())
+                INSERT INTO products (mr_1, oem_2, oem_no_display, product_name_1, type,
+                                      is_published, image_status, is_discontinued, created_at, updated_at) VALUES
+                ('MRTST001', 'TEST-OEM2-A', 'TST-001', 'Test Filter', 'OIL FILTER',
+                 true, 'pending', false, now(), now())
                 ON CONFLICT DO NOTHING;
                 """;
             await cmd.ExecuteNonQueryAsync();
         }
 
-        // cross_references: oem_brand + oem_no_3 (oem-brand / oem-no3 来源); 必填: product_id/created_at
+        // cross_references: oem_brand + oem_no_3 (oem-brand / oem-no3 来源)
         await using (var cmd = conn.CreateCommand())
         {
             cmd.CommandText = """
-                INSERT INTO cross_references (oem_brand, oem_no_3, product_id, created_at) VALUES
-                ('TEST-BRAND-A', 'TEST-OEM3-A', 1, now())
+                INSERT INTO cross_references (oem_brand, oem_no_3, product_id,
+                                              is_discontinued, is_published, sort_order, created_at) VALUES
+                ('TEST-BRAND-A', 'TEST-OEM3-A', 1,
+                 false, true, 0, now())
                 ON CONFLICT DO NOTHING;
                 """;
             await cmd.ExecuteNonQueryAsync();
         }
 
-        // machine_applications: machine_brand/model_name/engine_* 来源; 必填: product_id/is_ongoing/created_at
+        // machine_applications: machine_brand/model_name/engine_* 来源
         await using (var cmd = conn.CreateCommand())
         {
             cmd.CommandText = """
-                INSERT INTO machine_applications (machine_brand, machine_model, model_name, engine_brand, engine_type, product_id, is_ongoing, created_at) VALUES
-                ('TEST-MACHINE-A', 'M1000', 'Test Model', 'TEST-ENG-A', 'Diesel', 1, false, now())
+                INSERT INTO machine_applications (machine_brand, machine_model, model_name, engine_brand, engine_type,
+                                                  product_id, is_ongoing, is_discontinued, created_at) VALUES
+                ('TEST-MACHINE-A', 'M1000', 'Test Model', 'TEST-ENG-A', 'Diesel',
+                 1, false, false, now())
                 ON CONFLICT DO NOTHING;
                 """;
             await cmd.ExecuteNonQueryAsync();
