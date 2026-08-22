@@ -36,7 +36,9 @@ public class TypeaheadDictRebuildConcurrencyTests : PgIntegrationTestBase
     {
         if (!IsEnabled) { _output.WriteLine("Skip: PG_TEST_CONNECTION_STRING 未配置"); return; }
 
-        // Arrange: 插入少量源数据 (重建 SQL 对空表也安全, 有数据更能验证 INSERT 路径)
+        // Arrange: 确保线上表存在 (CI int 库由 EF migrations 建, 不含手工 SQL 023 的 typeahead_dict;
+        //   测试自包含建表, 与 023_typeahead_dict.sql 幂等语义一致) + 插入少量源数据
+        await EnsureTypeaheadDictTableAsync();
         await SeedSourceRowsAsync();
 
         var ds = new NpgsqlDataSourceBuilder(ConnectionString).Build();
@@ -63,6 +65,26 @@ public class TypeaheadDictRebuildConcurrencyTests : PgIntegrationTestBase
         tmpCmd.CommandText = "SELECT count(*) FROM pg_tables WHERE tablename = 'typeahead_dict_new'";
         var tmpCount = Convert.ToInt32(await tmpCmd.ExecuteScalarAsync());
         tmpCount.Should().Be(0, "重建完成后不应残留 typeahead_dict_new 临时表");
+    }
+
+    /// <summary>
+    /// 确保 typeahead_dict 线上表存在 (与 023_typeahead_dict.sql 幂等建表一致)。
+    /// WHY: CI 集成测试库由 EF migrations 创建, 不含手工 SQL 023/024 的 typeahead_dict;
+    ///    RebuildAsync 第 4 步 DROP TABLE typeahead_dict 会因表不存在报错 → 测试自包含建表。
+    /// </summary>
+    private async Task EnsureTypeaheadDictTableAsync()
+    {
+        await using var conn = new NpgsqlConnection(ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            CREATE TABLE IF NOT EXISTS typeahead_dict (
+                field  TEXT NOT NULL,
+                value  TEXT NOT NULL,
+                PRIMARY KEY (field, value)
+            );
+            """;
+        await cmd.ExecuteNonQueryAsync();
     }
 
     /// <summary>插入少量源数据: products(1) + cross_references(1) + machine_applications(1)</summary>
