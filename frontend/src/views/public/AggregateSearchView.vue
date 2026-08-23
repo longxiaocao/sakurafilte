@@ -118,11 +118,14 @@ function clearBatch() {
   batchTotal.value = 0; batchHits.value = 0; batchMiss.value = 0; batchElapsedMs.value = 0
 }
 function viewBatchProduct(row: BatchOemResult) {
+  // 🔧 fix(2026-08-23 走查): 必须用 row.oem (用户查询的 OEM) 作 oemNo3/oemNoDisplay,
+  //   之前从旧 SearchView 复制用 row.oem2 是错的 — row.oem2 是 xrefs 表另一条记录的 oem_2 字段
+  //   (不是用户查询的), 跳详情会落到错误 OEM (实测: U0000014 → /seo/FRA-53205 → 404)。
   const url = buildProductUrl({
     productName1: row.productName1,
     oemBrand: row.oemBrand,
-    oemNo3: row.oem2,
-    oemNoDisplay: row.oem2 ?? row.oem
+    oemNo3: row.oem,
+    oemNoDisplay: row.oem
   })
   router.push(url)
 }
