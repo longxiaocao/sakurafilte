@@ -131,10 +131,13 @@ REGRESSION_CHECKS = [
     },
     {
         "id": "P3-2", "level": "P3",
-        "title": "GetBySlug 3 次 fallback 合并为 1 次 OR 查询",
-        # v28-4 P0 修复: P3-2 修复实际在 IProductDetailService.cs L78 (PublicProductController 调用 IProductDetailService.GetByOemAsync)
+        # 🔧 fix(2026-08-23): 原防护要求"3 次 fallback 合并为 1 次 OR 查询" — 但百万行下
+        #   OR+correlated EXISTS 触发 Seq Scan (EXPLAIN cost=9858729, 450ms), 走查实测已改为
+        #   拆两段索引查询 (xrefs.oem_no_3 → products OR, 16+2ms)。防护对齐新实现:
+        #   必须存在"拆两段走索引"特征 (防回退到 3 次 fallback / 单段 Seq Scan)。
+        "title": "GetByOemAsync fallback 拆段索引查询 (原合并 OR 在百万行 Seq Scan 已改)",
         "file": "backend/src/SakuraFilter.Api/Services/IProductDetailService.cs",
-        "fix_pattern": r"P3-2 修复: fallback 合并为 1 次 OR 查询",
+        "fix_pattern": r"匹配查询拆两段走索引",
     },
     # ===== V2 架构迁移 (47 项) — 8 个子类别 =====
     # ----- V2-DS 数据结构 (10 项): Product/CrossReference/MachineApplication/ProductImage V2 字段全集 -----
