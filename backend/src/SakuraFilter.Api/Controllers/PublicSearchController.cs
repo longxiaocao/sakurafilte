@@ -268,6 +268,7 @@ public class PublicSearchController : ControllerBase
         [FromQuery(Name = "modelName")]    string? modelName,
         [FromQuery(Name = "engineBrand")]  string? engineBrand,
         [FromQuery(Name = "engineType")]   string? engineType,
+        [FromQuery(Name = "fuzzy")]        string? fuzzy,
         [FromQuery(Name = "page")]         int page = 1,
         [FromQuery(Name = "pageSize")]     int pageSize = 20,
         CancellationToken ct = default)
@@ -281,12 +282,17 @@ public class PublicSearchController : ControllerBase
         modelName    = modelName?.Trim();
         engineBrand  = engineBrand?.Trim();
         engineType   = engineType?.Trim();
+        fuzzy        = fuzzy?.Trim();
 
-        // 8 字段全部空 → 400
-        if (string.IsNullOrEmpty(oemBrand) && string.IsNullOrEmpty(oemNo2) && string.IsNullOrEmpty(oemNo3)
-            && string.IsNullOrEmpty(machineBrand) && string.IsNullOrEmpty(machineModel)
-            && string.IsNullOrEmpty(modelName) && string.IsNullOrEmpty(engineBrand)
-            && string.IsNullOrEmpty(engineType))
+        // 🔧 fix(2026-08-23 走查): 融合搜索 fuzzy — 不区分 8 字段, 在全部字段 OR 匹配
+        //   (用户"随便输入啥都自动查"), 任一命中即返回。与 8 字段 AND 互补。
+        //   fuzzy 与 8 字段可同时使用 (fuzzy OR + 8 字段 AND 收窄), 全部空才 400。
+        var hasField = !string.IsNullOrEmpty(oemBrand) || !string.IsNullOrEmpty(oemNo2)
+            || !string.IsNullOrEmpty(oemNo3) || !string.IsNullOrEmpty(machineBrand)
+            || !string.IsNullOrEmpty(machineModel) || !string.IsNullOrEmpty(modelName)
+            || !string.IsNullOrEmpty(engineBrand) || !string.IsNullOrEmpty(engineType)
+            || !string.IsNullOrEmpty(fuzzy);
+        if (!hasField)
         {
             return BadRequest(new { error = "至少需要输入 1 个搜索字段" });
         }
@@ -298,6 +304,59 @@ public class PublicSearchController : ControllerBase
 
         // 起手: active products
         var query = _db.Products.AsNoTracking().Where(p => p.IsPublished && !p.IsDiscontinued);
+
+        // ===== fuzzy 融合搜索 (全部字段 OR, 任一命中即返回) =====
+        //   WHY 放最前: 与 8 字段 AND 合并时先收集"宽匹配"候选再收窄
+        //   覆盖字段: products 主表 (oem_no_display/oem_2/product_name_1/product_name_2/type)
+        //     + xrefs (oem_brand/oem_no_3/oem_2) + machine_applications (machine_brand/machine_model/...)
+        //   🔧 fix(2026-08-23 走查): 拆段查询 — 原单条 OR+2 个 EXISTS 在 1M 行 Seq Scan (实测 10s+ 超时)。
+        //     拆成 3 段独立查询 (products/xrefs/machine), 每段走 trgm GIN 索引 (025 迁移),
+        //     合并 product_id 集合再 IN 过滤 (走主键索引)。每段 LIMIT 5000 防超宽结果。
+        if (!string.IsNullOrEmpty(fuzzy))
+        {
+            var f = fuzzy.EscapeLikePattern();
+            // 段1: products 主表 (oem_2 已有 trgm; 025 补 oem_no_display/name1/name2/type)
+            var ids1 = await _db.Products.AsNoTracking()
+                .Where(p => p.IsPublished && !p.IsDiscontinued
+                    && ((p.OemNoDisplay != null && EF.Functions.ILike(p.OemNoDisplay, $"%{f}%", "\\"))
+                        || (p.Oem2 != null && EF.Functions.ILike(p.Oem2, $"%{f}%", "\\"))
+                        || (p.ProductName1 != null && EF.Functions.ILike(p.ProductName1, $"%{f}%", "\\"))
+                        || (p.ProductName2 != null && EF.Functions.ILike(p.ProductName2, $"%{f}%", "\\"))
+                        || (p.Type != null && EF.Functions.ILike(p.Type, $"%{f}%", "\\"))))
+                .Select(p => p.Id)
+                .Take(5000)
+                .ToListAsync(ct);
+            // 段2: xrefs (oem_no_3 已有 trgm, 补齐 brand/oem_2 可后续)
+            var ids2 = await _db.CrossReferences.AsNoTracking()
+                .Where(x => (x.OemNo3 != null && EF.Functions.ILike(x.OemNo3, $"%{f}%", "\\"))
+                    || (x.OemBrand != null && EF.Functions.ILike(x.OemBrand, $"%{f}%", "\\"))
+                    || (x.Oem2 != null && EF.Functions.ILike(x.Oem2, $"%{f}%", "\\")))
+                .Select(x => x.ProductId)
+                .Take(5000)
+                .ToListAsync(ct);
+            // 段3: machine_applications
+            var ids3 = await _db.MachineApplications.AsNoTracking()
+                .Where(m => (m.MachineBrand != null && EF.Functions.ILike(m.MachineBrand, $"%{f}%", "\\"))
+                    || (m.MachineModel != null && EF.Functions.ILike(m.MachineModel, $"%{f}%", "\\"))
+                    || (m.EngineBrand != null && EF.Functions.ILike(m.EngineBrand, $"%{f}%", "\\"))
+                    || (m.EngineType != null && EF.Functions.ILike(m.EngineType, $"%{f}%", "\\"))
+                    || (m.ModelName != null && EF.Functions.ILike(m.ModelName, $"%{f}%", "\\")))
+                .Select(m => m.ProductId)
+                .Take(5000)
+                .ToListAsync(ct);
+            var fuzzyIds = ids1.Concat(ids2).Concat(ids3).Distinct().Take(5000).ToList();
+            if (fuzzyIds.Count == 0)
+            {
+                // 无任何命中 — 提前返回空结果 (不继续 AND 收窄到空)
+                sw.Stop();
+                return Ok(new PublicEightResponse(
+                    Total: 0, Page: page, PageSize: pageSize, TotalPages: 0,
+                    ElapsedMs: (int)sw.ElapsedMilliseconds, CountMode: "exact",
+                    Items: new List<PublicSearchHit>()));
+            }
+            // 用 id 集合过滤 (主键索引 IN, 快) — 后续 8 字段 AND 在此子集上收窄
+            query = query.Where(p => fuzzyIds.Contains(p.Id));
+        }
 
         // 文本字段: 单值 ILIKE (走 P0.1 EscapeLikePattern + 3 参重载)
         //   1) oem_no_2: 产品自身 OEM 2 字段
@@ -372,14 +431,16 @@ public class PublicSearchController : ControllerBase
             countTimedOut = true;
         }
         string countModeUsed = countTimedOut ? "estimated" : "exact";
-        var items = await query
+        // 🔧 fix(2026-08-23 走查): 先查主表投影, 再批量取回 xrefs/machine 关联字段 (避免 N+1)
+        var rows = await query
             .OrderByDescending(p => p.Id)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
-            .Select(p => new PublicSearchHit(
+            .Select(p => new
+            {
                 p.Id,
                 // WHY: 与公开详情和聚合搜索统一展示首个已发布 OEM3，主表字段仅作兼容回退。
-                _db.CrossReferences
+                Oem3 = _db.CrossReferences
                     .Where(x => x.ProductId == p.Id && x.IsPublished && !x.IsDiscontinued
                         && x.OemNo3 != null && x.OemNo3 != "")
                     .OrderBy(x => _db.XrefOemBrands
@@ -393,19 +454,49 @@ public class PublicSearchController : ControllerBase
                 p.Oem2,
                 p.ProductName1,
                 p.Type,
-                p.D1Mm != null ? p.D1Mm.ToString() : null,
-                p.H1Mm != null ? p.H1Mm.ToString() : null
-            ))
+                p.D1Mm,
+                p.H1Mm
+            })
             .ToListAsync(ct);
+
+        // 批量取回关联字段 (每页 ≤100 行, 2 次批量查询, 无 N+1)
+        var rowIds = rows.Select(r => r.Id).ToList();
+        Dictionary<long, string?> brandMap = new();
+        Dictionary<long, (string? Mb, string? Eb)> machineMap = new();
+        if (rowIds.Count > 0)
+        {
+            var brandRows = await _db.CrossReferences.AsNoTracking()
+                .Where(x => rowIds.Contains(x.ProductId) && x.OemBrand != null && x.OemBrand != "")
+                .GroupBy(x => x.ProductId)
+                .Select(g => new { Id = g.Key, Brand = g.Select(x => x.OemBrand!).FirstOrDefault() })
+                .ToListAsync(ct);
+            brandMap = brandRows.ToDictionary(x => x.Id, x => x.Brand);
+            var machineRows = await _db.MachineApplications.AsNoTracking()
+                .Where(m => rowIds.Contains(m.ProductId))
+                .GroupBy(m => m.ProductId)
+                .Select(g => new { Id = g.Key, Mb = g.Select(x => x.MachineBrand).FirstOrDefault(), Eb = g.Select(x => x.EngineBrand).FirstOrDefault() })
+                .ToListAsync(ct);
+            machineMap = machineRows.ToDictionary(x => x.Id, x => (x.Mb, x.Eb));
+        }
+        var items = rows.Select(r => new PublicSearchHit(
+            r.Id,
+            r.Oem3 ?? "",
+            r.Oem2,
+            r.ProductName1,
+            r.Type,
+            r.D1Mm?.ToString(),
+            r.H1Mm?.ToString(),
+            brandMap.GetValueOrDefault(r.Id),
+            machineMap.GetValueOrDefault(r.Id).Mb,
+            machineMap.GetValueOrDefault(r.Id).Eb
+        )).ToList();
 
         sw.Stop();
         var totalPages = (int)Math.Ceiling(total / (double)pageSize);
 
-        _logger.LogInformation("eight-field search: oemBrand={OemBrand} oemNo2={OemNo2} oemNo3={OemNo3} "
-            + "mb={Mb} mm={Mm} mn={Mn} eb={Eb} et={Et} → total={Total}({CountMode}) items={Items} elapsed={Elapsed}ms",
-            oemBrand, oemNo2, oemNo3,
-            machineBrand, machineModel, modelName, engineBrand, engineType,
-            total, countModeUsed, items.Count, sw.ElapsedMilliseconds);
+        _logger.LogInformation($"eight-field search: oemBrand={oemBrand} oemNo2={oemNo2} oemNo3={oemNo3} "
+            + $"mb={machineBrand} mm={machineModel} mn={modelName} eb={engineBrand} et={engineType} "
+            + $"fuzzy={fuzzy} → total={total}({countModeUsed}) items={items.Count} elapsed={sw.ElapsedMilliseconds}ms");
 
         return Ok(new PublicEightResponse(
             Total: total,
@@ -594,7 +685,12 @@ public record PublicSearchHit(
     string? ProductName1,
     string? Type,
     string? D1Mm,
-    string? H1Mm
+    string? H1Mm,
+    // 🔧 fix(2026-08-23 走查): 新增 3 字段 — 结果表格展示 OEM Brand / Machine Brand / Engine Brand,
+    //   用户能确认搜索结果是否目标 (原 6 字段字段偏少)
+    string? OemBrand,
+    string? MachineBrand,
+    string? EngineBrand
 );
 
 /// <summary>P3.4 (Task 11.5): 8 字段响应</summary>

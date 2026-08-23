@@ -75,7 +75,20 @@ public class PublicFeaturedController : ControllerBase
                 p.ProductName1,
                 p.Type,
                 p.D1Mm != null ? p.D1Mm.ToString() : null,
-                p.H1Mm != null ? p.H1Mm.ToString() : null
+                p.H1Mm != null ? p.H1Mm.ToString() : null,
+                // 🔧 fix(2026-08-23 走查): PublicSearchHit 新增 3 字段 (OEM/Machine/Engine Brand)
+                _db.CrossReferences
+                    .Where(x => x.ProductId == p.Id && x.OemBrand != null && x.OemBrand != "")
+                    .Select(x => x.OemBrand!)
+                    .FirstOrDefault(),
+                _db.MachineApplications
+                    .Where(m => m.ProductId == p.Id && m.MachineBrand != null)
+                    .Select(m => m.MachineBrand)
+                    .FirstOrDefault(),
+                _db.MachineApplications
+                    .Where(m => m.ProductId == p.Id && m.EngineBrand != null)
+                    .Select(m => m.EngineBrand)
+                    .FirstOrDefault()
             ))
             .ToListAsync(ct);
 

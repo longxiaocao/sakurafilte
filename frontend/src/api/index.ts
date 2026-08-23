@@ -402,6 +402,8 @@ export const publicSearchApi = {
     if (req.modelName) params.modelName = req.modelName
     if (req.engineBrand) params.engineBrand = req.engineBrand
     if (req.engineType) params.engineType = req.engineType
+    // 🔧 fix(2026-08-23 走查): 融合搜索 fuzzy — 不区分字段, 全部字段 OR 匹配
+    if (req.fuzzy) params.fuzzy = req.fuzzy
     params.page = req.page ?? 1
     params.pageSize = req.pageSize ?? 20
     return http.get('/public/search', { params, ...config }).then((r) => r.data)

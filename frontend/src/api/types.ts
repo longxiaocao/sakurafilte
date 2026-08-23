@@ -619,6 +619,8 @@ export interface PublicEightRequest {
   modelName?: string
   engineBrand?: string
   engineType?: string
+  // 🔧 fix(2026-08-23 走查): 融合搜索 — 不区分字段, 全部字段 OR 匹配
+  fuzzy?: string
   page?: number
   pageSize?: number
 }

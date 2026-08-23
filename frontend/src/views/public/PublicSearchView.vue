@@ -71,7 +71,7 @@ const fields = [
 //   同时保留 AbortController: 快速输入时取消前序请求, 只保留最后一次 (避免响应错乱)
 const typeaheadControllers: Record<string, AbortController | null> = {}
 
-async function fetchSuggestions(fieldKey: string, typeaheadField: string, query: string, cb: (items: string[]) => void) {
+async function fetchSuggestions(fieldKey: string, typeaheadField: string, query: string, cb: (items: { value: string }[]) => void) {
   // 输入 < 2 字符不查 (与后端一致, 避免全表扫描)
   if (!query || query.trim().length < 2) {
     cb([])
@@ -93,6 +93,38 @@ async function fetchSuggestions(fieldKey: string, typeaheadField: string, query:
     if (typeaheadControllers[fieldKey] === ctrl) typeaheadControllers[fieldKey] = null
   }
 }
+
+// ===== 融合搜索 (2026-08-23 走查): 不区分字段, 随便输入自动查 =====
+const fuzzy = ref('')
+
+// ===== 关键词高亮工具 =====
+//   escape HTML 后把匹配子串包 <mark> (黄色底), 返回 v-html 字符串
+function highlight(text: string | null | undefined, keyword: string): string {
+  if (!text) return ''
+  const escaped = String(text).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string))
+  const kw = keyword?.trim()
+  if (!kw) return escaped
+  // 大小写不敏感: 用 lower 定位, 从原文按偏移切
+  const lower = escaped.toLowerCase()
+  const kl = kw.toLowerCase()
+  if (!lower.includes(kl)) return escaped
+  let out = ''
+  let i = 0
+  let idx = 0
+  while ((idx = lower.indexOf(kl, i)) !== -1) {
+    out += escaped.slice(i, idx) + `<mark class="bg-yellow-200 dark:bg-yellow-700/40 px-0.5 rounded">` + escaped.slice(idx, idx + kl.length) + '</mark>'
+    i = idx + kl.length
+  }
+  out += escaped.slice(i)
+  return out
+}
+// 融合搜索词优先级: fuzzy 框 > 8 字段任一非空 (高亮用户输入)
+// 高亮词: 优先 fuzzy 框; 否则 8 字段中任一非空值 (表单值)
+const highlightKeyword = computed(() => {
+  if (fuzzy.value.trim()) return fuzzy.value.trim()
+  const filled = fields.find(f => form[f.key])
+  return filled ? String(form[filled.key] ?? '') : ''
+})
 
 // ===== 搜索结果状态 =====
 const loading = ref(false)
@@ -208,6 +240,8 @@ async function doSearch() {
       modelName: form.modelName || undefined,
       engineBrand: form.engineBrand || undefined,
       engineType: form.engineType || undefined,
+      // 🔧 fix(2026-08-23 走查): 融合搜索 — 不区分字段
+      fuzzy: fuzzy.value.trim() || undefined,
       page: page.value,
       pageSize: pageSize.value
     }, { signal: ctrl.signal })
@@ -257,6 +291,7 @@ watch(page, () => {
 
 function clearAll() {
   for (const f of fields) form[f.key] = ''
+  fuzzy.value = ''
   results.value = []
   total.value = 0
   page.value = 1
@@ -460,6 +495,26 @@ onUnmounted(() => {
       <el-button @click="clearAll" size="small" :disabled="allEmpty">清空</el-button>
     </div>
 
+    <!-- 🔧 fix(2026-08-23 走查): 融合搜索框 — 不区分 8 字段, 随便输入自动查 (全部字段 OR) -->
+    <div class="hairline p-3 mb-3">
+      <label class="block text-xs text-muted mb-1">融合搜索 (不区分字段)</label>
+      <el-autocomplete
+        v-model="fuzzy"
+        placeholder="输入任意值自动查: OEM / 品牌 / 型号 / 发动机 / 产品名 ..."
+        :fetch-suggestions="(q: any, cb: any) => fetchSuggestions('fuzzy', 'oem-brand', String(q ?? ''), cb as any)"
+        :trigger-on-focus="true"
+        clearable
+        size="large"
+        class="w-full"
+        data-testid="public-search-fuzzy"
+        @select="() => doSearch()"
+        @keyup.enter="doSearch"
+      />
+      <div class="mt-2 text-xs text-muted flex items-center gap-3">
+        <span>融合搜索对全部字段模糊匹配 (OEM/品牌/机型/发动机/产品名)</span>
+      </div>
+    </div>
+
     <!-- 8 字段 2 行 4 列 grid 布局 (响应式) -->
     <div class="hairline p-3 mb-3">
       <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
@@ -521,14 +576,35 @@ onUnmounted(() => {
         <el-table-column prop="id" label="ID" width="70" />
         <el-table-column label="OEM" min-width="180" show-overflow-tooltip>
           <template #default="{ row }">
-            <span class="text-blue-600">{{ row.oemNoDisplay || row.oem2 || '—' }}</span>
+            <!-- 🔧 fix(2026-08-23 走查): 关键词高亮 -->
+            <span class="text-blue-600" v-html="highlight(row.oemNoDisplay || row.oem2, highlightKeyword)"></span>
           </template>
         </el-table-column>
         <el-table-column label="OEM 2" min-width="160" show-overflow-tooltip>
-          <template #default="{ row }">{{ row.oem2 || '—' }}</template>
+          <template #default="{ row }">
+            <span v-html="highlight(row.oem2, highlightKeyword) || '—'"></span>
+          </template>
+        </el-table-column>
+        <!-- 🔧 fix(2026-08-23 走查): 新增 3 列 — 用户能确认结果是否目标 (字段偏少) -->
+        <el-table-column label="OEM Brand" min-width="130" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span v-html="highlight(row.oemBrand, highlightKeyword) || '—'"></span>
+          </template>
+        </el-table-column>
+        <el-table-column label="Machine Brand" min-width="140" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span v-html="highlight(row.machineBrand, highlightKeyword) || '—'"></span>
+          </template>
+        </el-table-column>
+        <el-table-column label="Engine Brand" min-width="130" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span v-html="highlight(row.engineBrand, highlightKeyword) || '—'"></span>
+          </template>
         </el-table-column>
         <el-table-column label="Product Name 1" min-width="200" show-overflow-tooltip>
-          <template #default="{ row }">{{ row.productName1 || '—' }}</template>
+          <template #default="{ row }">
+            <span v-html="highlight(row.productName1, highlightKeyword) || '—'"></span>
+          </template>
         </el-table-column>
         <el-table-column prop="type" label="Type" width="100" />
         <el-table-column label="D1 (mm)" width="100" align="right">
