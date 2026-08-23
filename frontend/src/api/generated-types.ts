@@ -368,13 +368,13 @@ export interface PublicSearchHit {
   id?: number | null
   oemNoDisplay?: string | null
   oem2?: string | null
-  oemBrand?: string | null
-  machineBrand?: string | null
-  engineBrand?: string | null
   productName1?: string | null
   type?: string | null
   d1Mm?: string | null
   h1Mm?: string | null
+  oemBrand?: string | null
+  machineBrand?: string | null
+  engineBrand?: string | null
 }
 
 export interface RefreshRequest {
