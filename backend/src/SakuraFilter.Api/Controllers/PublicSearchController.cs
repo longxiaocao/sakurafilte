@@ -92,67 +92,148 @@ public class PublicSearchController : ControllerBase
         if (distinctOems.Count == 0)
             return Ok(new BatchOemResponse(0, 0, 0, new List<BatchOemResult>()));
 
-        // 单次 SQL: WHERE oem_2 = ANY(@oems)
-        //   EF Core 翻译 distinctOems.Contains(p.Oem2) 为 p.oem_2 = ANY(...)
-        //   排除 Oem2=null 行, 避免 "Contains('')" 误匹配
-        var candidates = await _db.Products.AsNoTracking()
-            .Where(p => p.IsPublished && !p.IsDiscontinued
-                && p.Oem2 != null && distinctOems.Contains(p.Oem2))
-            .Select(p => new
+        // 🔧 fix(2026-08-23 走查实测): 批量 API 仅查 products.Oem2 一个字段 (旧实现),
+        //   走查 U0000014 等真实 OEM 在 xrefs.oem_no_3 命中但批量 miss。
+        //   对齐单条 GetByOemAsync (V2-251aaa5 拆段索引查询), 分 3 段走索引,
+        //   优先级: xrefs.OemNo3 → products.OemNoDisplay → products.Oem2 (BitmapOr 走单列索引)。
+        //   每段 ANY(oems) 走单列索引, 总耗时约 3× 段查询 + 1 详情查询, 500 OEM 实测 < 100ms。
+        // 第 1 段: xrefs.oem_no_3 (用户最常贴的 OEM 主表, ix_xrefs_oem_no_3_trgm 索引)
+        var xrefHits = await _db.CrossReferences.AsNoTracking()
+            .Where(x => x.OemNo3 != null && distinctOems.Contains(x.OemNo3))
+            .Select(x => new
             {
-                p.Id,
-                p.Oem2,
-                p.ProductName1
+                x.OemNo3,
+                x.ProductId,
+                x.OemBrand,
+                x.ProductName1,
+                x.Oem2
             })
             .ToListAsync(ct);
+        var xrefByOem = xrefHits
+            .GroupBy(x => x.OemNo3!)
+            .ToDictionary(g => g.Key, g => g.OrderBy(x => x.ProductId).First());
+        var remaining = distinctOems
+            .Where(o => !xrefByOem.ContainsKey(o))
+            .ToList();
 
-        if (candidates.Count == 0)
+        // 第 2 段: products.oem_no_display (主 OEM, 走单列索引)
+        var productHits2 = new List<(string Oem, long Id, string? OemNoDisplay, string? Oem2, string? ProductName1)>();
+        var remaining2 = new List<string>();
+        if (remaining.Count > 0)
         {
-            var emptyResults = distinctOems
-                .Select(oem => new BatchOemResult(oem, Hit: false))
-                .ToList();
-            return Ok(new BatchOemResponse(distinctOems.Count, 0, distinctOems.Count, emptyResults));
+            var pByDisplay = await _db.Products.AsNoTracking()
+                .Where(p => p.IsPublished && !p.IsDiscontinued
+                    && p.OemNoDisplay != null && remaining.Contains(p.OemNoDisplay))
+                .Select(p => new { p.Id, p.OemNoDisplay, p.Oem2, p.ProductName1 })
+                .ToListAsync(ct);
+            var pDisplayMap = pByDisplay
+                .GroupBy(x => x.OemNoDisplay!)
+                .ToDictionary(g => g.Key, g => g.OrderBy(x => x.Id).First());
+            foreach (var oem in remaining)
+            {
+                if (pDisplayMap.TryGetValue(oem, out var hit))
+                {
+                    productHits2.Add((oem, hit.Id, hit.OemNoDisplay, hit.Oem2, hit.ProductName1));
+                }
+                else
+                {
+                    remaining2.Add(oem);
+                }
+            }
         }
 
-        // 每个 product 聚合 brand (来自 cross_references)
-        var productIds = candidates.Select(c => c.Id).Distinct().ToList();
-        var brandGroups = await _db.CrossReferences.AsNoTracking()
-            .Where(x => productIds.Contains(x.ProductId) && x.OemBrand != null)
-            .GroupBy(x => x.ProductId)
-            .Select(g => new
+        // 第 3 段: products.oem_2 (BitmapOr 索引, 兜底)
+        var productHits3 = new List<(string Oem, long Id, string? OemNoDisplay, string? Oem2, string? ProductName1)>();
+        if (remaining2.Count > 0)
+        {
+            var pByOem2 = await _db.Products.AsNoTracking()
+                .Where(p => p.IsPublished && !p.IsDiscontinued
+                    && p.Oem2 != null && remaining2.Contains(p.Oem2))
+                .Select(p => new { p.Id, p.OemNoDisplay, p.Oem2, p.ProductName1 })
+                .ToListAsync(ct);
+            var pOem2Map = pByOem2
+                .GroupBy(x => x.Oem2!)
+                .ToDictionary(g => g.Key, g => g.OrderBy(x => x.Id).First());
+            foreach (var oem in remaining2)
             {
-                ProductId = g.Key,
-                Brands = g.Select(x => x.OemBrand!).Distinct().ToList()
-            })
-            .ToListAsync(ct);
+                if (pOem2Map.TryGetValue(oem, out var hit))
+                {
+                    productHits3.Add((oem, hit.Id, hit.OemNoDisplay, hit.Oem2, hit.ProductName1));
+                }
+            }
+        }
+
+        // 合并所有命中: xrefs 优先 (有 oem_brand), products 段无 brand (BrandMap 查)
+        var allProductIds = xrefHits.Select(x => x.ProductId)
+            .Concat(productHits2.Select(x => x.Id))
+            .Concat(productHits3.Select(x => x.Id))
+            .Distinct()
+            .ToList();
+        object? brandGroupsObj;
+        if (allProductIds.Count == 0)
+        {
+            brandGroupsObj = null;
+        }
+        else
+        {
+            brandGroupsObj = await _db.CrossReferences.AsNoTracking()
+                .Where(x => allProductIds.Contains(x.ProductId) && x.OemBrand != null)
+                .GroupBy(x => x.ProductId)
+                .Select(g => new
+                {
+                    ProductId = g.Key,
+                    Brands = g.Select(x => x.OemBrand!).Distinct().ToList()
+                })
+                .ToListAsync(ct);
+        }
+        var brandGroups = (brandGroupsObj as IEnumerable<dynamic>)?.ToList() ?? new List<dynamic>();
         var brandMap = brandGroups.ToDictionary(
-            b => b.ProductId,
+            b => (long)b.ProductId,
             b => b.Brands.Count == 1 ? b.Brands[0] : string.Join(", ", b.Brands));
 
-        // 同一 OEM 可能命中多条产品, 取 Id 最小 (最早上架) 作为代表
-        var byOem = candidates
-            .GroupBy(c => c.Oem2)
-            .ToDictionary(g => g.Key!, g => g.OrderBy(x => x.Id).First());
-
-        // 按请求顺序 (distinct 后) 产出
+        // 按请求顺序产出 (3 段结果优先级合并: xrefs > oem_no_display > oem_2)
+        var product2Map = productHits2.ToDictionary(x => x.Oem, x => x);
+        var product3Map = productHits3.ToDictionary(x => x.Oem, x => x);
         var results = distinctOems.Select(oem =>
         {
-            if (byOem.TryGetValue(oem, out var hit))
+            if (xrefByOem.TryGetValue(oem, out var x))
             {
                 return new BatchOemResult(
                     Oem: oem,
                     Hit: true,
-                    ProductId: hit.Id,
-                    OemBrand: brandMap.GetValueOrDefault(hit.Id),
-                    ProductName1: hit.ProductName1,
-                    Oem2: hit.Oem2
+                    ProductId: x.ProductId,
+                    OemBrand: x.OemBrand,
+                    ProductName1: x.ProductName1,
+                    Oem2: x.Oem2
+                );
+            }
+            if (product2Map.TryGetValue(oem, out var p2))
+            {
+                return new BatchOemResult(
+                    Oem: oem,
+                    Hit: true,
+                    ProductId: p2.Id,
+                    OemBrand: brandMap.GetValueOrDefault(p2.Id),
+                    ProductName1: p2.ProductName1,
+                    Oem2: p2.Oem2 ?? oem
+                );
+            }
+            if (product3Map.TryGetValue(oem, out var p3))
+            {
+                return new BatchOemResult(
+                    Oem: oem,
+                    Hit: true,
+                    ProductId: p3.Id,
+                    OemBrand: brandMap.GetValueOrDefault(p3.Id),
+                    ProductName1: p3.ProductName1,
+                    Oem2: p3.Oem2
                 );
             }
             return new BatchOemResult(oem, Hit: false);
         }).ToList();
 
         var hitCount = results.Count(r => r.Hit);
-        _logger.LogInformation("batch-oem: distinct={Total} hit={Hit} miss={Miss}",
+        _logger.LogInformation("batch-oem: distinct={Total} hit={Hit} miss={Miss} (xref+display+oem2 三段)",
             distinctOems.Count, hitCount, distinctOems.Count - hitCount);
 
         return Ok(new BatchOemResponse(
@@ -187,6 +268,7 @@ public class PublicSearchController : ControllerBase
         [FromQuery(Name = "modelName")]    string? modelName,
         [FromQuery(Name = "engineBrand")]  string? engineBrand,
         [FromQuery(Name = "engineType")]   string? engineType,
+        [FromQuery(Name = "fuzzy")]        string? fuzzy,
         [FromQuery(Name = "page")]         int page = 1,
         [FromQuery(Name = "pageSize")]     int pageSize = 20,
         CancellationToken ct = default)
@@ -200,12 +282,17 @@ public class PublicSearchController : ControllerBase
         modelName    = modelName?.Trim();
         engineBrand  = engineBrand?.Trim();
         engineType   = engineType?.Trim();
+        fuzzy        = fuzzy?.Trim();
 
-        // 8 字段全部空 → 400
-        if (string.IsNullOrEmpty(oemBrand) && string.IsNullOrEmpty(oemNo2) && string.IsNullOrEmpty(oemNo3)
-            && string.IsNullOrEmpty(machineBrand) && string.IsNullOrEmpty(machineModel)
-            && string.IsNullOrEmpty(modelName) && string.IsNullOrEmpty(engineBrand)
-            && string.IsNullOrEmpty(engineType))
+        // 🔧 fix(2026-08-23 走查): 融合搜索 fuzzy — 不区分 8 字段, 在全部字段 OR 匹配
+        //   (用户"随便输入啥都自动查"), 任一命中即返回。与 8 字段 AND 互补。
+        //   fuzzy 与 8 字段可同时使用 (fuzzy OR + 8 字段 AND 收窄), 全部空才 400。
+        var hasField = !string.IsNullOrEmpty(oemBrand) || !string.IsNullOrEmpty(oemNo2)
+            || !string.IsNullOrEmpty(oemNo3) || !string.IsNullOrEmpty(machineBrand)
+            || !string.IsNullOrEmpty(machineModel) || !string.IsNullOrEmpty(modelName)
+            || !string.IsNullOrEmpty(engineBrand) || !string.IsNullOrEmpty(engineType)
+            || !string.IsNullOrEmpty(fuzzy);
+        if (!hasField)
         {
             return BadRequest(new { error = "至少需要输入 1 个搜索字段" });
         }
@@ -217,6 +304,59 @@ public class PublicSearchController : ControllerBase
 
         // 起手: active products
         var query = _db.Products.AsNoTracking().Where(p => p.IsPublished && !p.IsDiscontinued);
+
+        // ===== fuzzy 融合搜索 (全部字段 OR, 任一命中即返回) =====
+        //   WHY 放最前: 与 8 字段 AND 合并时先收集"宽匹配"候选再收窄
+        //   覆盖字段: products 主表 (oem_no_display/oem_2/product_name_1/product_name_2/type)
+        //     + xrefs (oem_brand/oem_no_3/oem_2) + machine_applications (machine_brand/machine_model/...)
+        //   🔧 fix(2026-08-23 走查): 拆段查询 — 原单条 OR+2 个 EXISTS 在 1M 行 Seq Scan (实测 10s+ 超时)。
+        //     拆成 3 段独立查询 (products/xrefs/machine), 每段走 trgm GIN 索引 (025 迁移),
+        //     合并 product_id 集合再 IN 过滤 (走主键索引)。每段 LIMIT 5000 防超宽结果。
+        if (!string.IsNullOrEmpty(fuzzy))
+        {
+            var f = fuzzy.EscapeLikePattern();
+            // 段1: products 主表 (oem_2 已有 trgm; 025 补 oem_no_display/name1/name2/type)
+            var ids1 = await _db.Products.AsNoTracking()
+                .Where(p => p.IsPublished && !p.IsDiscontinued
+                    && ((p.OemNoDisplay != null && EF.Functions.ILike(p.OemNoDisplay, $"%{f}%", "\\"))
+                        || (p.Oem2 != null && EF.Functions.ILike(p.Oem2, $"%{f}%", "\\"))
+                        || (p.ProductName1 != null && EF.Functions.ILike(p.ProductName1, $"%{f}%", "\\"))
+                        || (p.ProductName2 != null && EF.Functions.ILike(p.ProductName2, $"%{f}%", "\\"))
+                        || (p.Type != null && EF.Functions.ILike(p.Type, $"%{f}%", "\\"))))
+                .Select(p => p.Id)
+                .Take(5000)
+                .ToListAsync(ct);
+            // 段2: xrefs (oem_no_3 已有 trgm, 补齐 brand/oem_2 可后续)
+            var ids2 = await _db.CrossReferences.AsNoTracking()
+                .Where(x => (x.OemNo3 != null && EF.Functions.ILike(x.OemNo3, $"%{f}%", "\\"))
+                    || (x.OemBrand != null && EF.Functions.ILike(x.OemBrand, $"%{f}%", "\\"))
+                    || (x.Oem2 != null && EF.Functions.ILike(x.Oem2, $"%{f}%", "\\")))
+                .Select(x => x.ProductId)
+                .Take(5000)
+                .ToListAsync(ct);
+            // 段3: machine_applications
+            var ids3 = await _db.MachineApplications.AsNoTracking()
+                .Where(m => (m.MachineBrand != null && EF.Functions.ILike(m.MachineBrand, $"%{f}%", "\\"))
+                    || (m.MachineModel != null && EF.Functions.ILike(m.MachineModel, $"%{f}%", "\\"))
+                    || (m.EngineBrand != null && EF.Functions.ILike(m.EngineBrand, $"%{f}%", "\\"))
+                    || (m.EngineType != null && EF.Functions.ILike(m.EngineType, $"%{f}%", "\\"))
+                    || (m.ModelName != null && EF.Functions.ILike(m.ModelName, $"%{f}%", "\\")))
+                .Select(m => m.ProductId)
+                .Take(5000)
+                .ToListAsync(ct);
+            var fuzzyIds = ids1.Concat(ids2).Concat(ids3).Distinct().Take(5000).ToList();
+            if (fuzzyIds.Count == 0)
+            {
+                // 无任何命中 — 提前返回空结果 (不继续 AND 收窄到空)
+                sw.Stop();
+                return Ok(new PublicEightResponse(
+                    Total: 0, Page: page, PageSize: pageSize, TotalPages: 0,
+                    ElapsedMs: (int)sw.ElapsedMilliseconds, CountMode: "exact",
+                    Items: new List<PublicSearchHit>()));
+            }
+            // 用 id 集合过滤 (主键索引 IN, 快) — 后续 8 字段 AND 在此子集上收窄
+            query = query.Where(p => fuzzyIds.Contains(p.Id));
+        }
 
         // 文本字段: 单值 ILIKE (走 P0.1 EscapeLikePattern + 3 参重载)
         //   1) oem_no_2: 产品自身 OEM 2 字段
@@ -291,14 +431,16 @@ public class PublicSearchController : ControllerBase
             countTimedOut = true;
         }
         string countModeUsed = countTimedOut ? "estimated" : "exact";
-        var items = await query
+        // 🔧 fix(2026-08-23 走查): 先查主表投影, 再批量取回 xrefs/machine 关联字段 (避免 N+1)
+        var rows = await query
             .OrderByDescending(p => p.Id)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
-            .Select(p => new PublicSearchHit(
+            .Select(p => new
+            {
                 p.Id,
                 // WHY: 与公开详情和聚合搜索统一展示首个已发布 OEM3，主表字段仅作兼容回退。
-                _db.CrossReferences
+                Oem3 = _db.CrossReferences
                     .Where(x => x.ProductId == p.Id && x.IsPublished && !x.IsDiscontinued
                         && x.OemNo3 != null && x.OemNo3 != "")
                     .OrderBy(x => _db.XrefOemBrands
@@ -312,19 +454,49 @@ public class PublicSearchController : ControllerBase
                 p.Oem2,
                 p.ProductName1,
                 p.Type,
-                p.D1Mm != null ? p.D1Mm.ToString() : null,
-                p.H1Mm != null ? p.H1Mm.ToString() : null
-            ))
+                p.D1Mm,
+                p.H1Mm
+            })
             .ToListAsync(ct);
+
+        // 批量取回关联字段 (每页 ≤100 行, 2 次批量查询, 无 N+1)
+        var rowIds = rows.Select(r => r.Id).ToList();
+        Dictionary<long, string?> brandMap = new();
+        Dictionary<long, (string? Mb, string? Eb)> machineMap = new();
+        if (rowIds.Count > 0)
+        {
+            var brandRows = await _db.CrossReferences.AsNoTracking()
+                .Where(x => rowIds.Contains(x.ProductId) && x.OemBrand != null && x.OemBrand != "")
+                .GroupBy(x => x.ProductId)
+                .Select(g => new { Id = g.Key, Brand = g.Select(x => x.OemBrand!).FirstOrDefault() })
+                .ToListAsync(ct);
+            brandMap = brandRows.ToDictionary(x => x.Id, x => x.Brand);
+            var machineRows = await _db.MachineApplications.AsNoTracking()
+                .Where(m => rowIds.Contains(m.ProductId))
+                .GroupBy(m => m.ProductId)
+                .Select(g => new { Id = g.Key, Mb = g.Select(x => x.MachineBrand).FirstOrDefault(), Eb = g.Select(x => x.EngineBrand).FirstOrDefault() })
+                .ToListAsync(ct);
+            machineMap = machineRows.ToDictionary(x => x.Id, x => (x.Mb, x.Eb));
+        }
+        var items = rows.Select(r => new PublicSearchHit(
+            r.Id,
+            r.Oem3 ?? "",
+            r.Oem2,
+            r.ProductName1,
+            r.Type,
+            r.D1Mm?.ToString(),
+            r.H1Mm?.ToString(),
+            brandMap.GetValueOrDefault(r.Id),
+            machineMap.GetValueOrDefault(r.Id).Mb,
+            machineMap.GetValueOrDefault(r.Id).Eb
+        )).ToList();
 
         sw.Stop();
         var totalPages = (int)Math.Ceiling(total / (double)pageSize);
 
-        _logger.LogInformation("eight-field search: oemBrand={OemBrand} oemNo2={OemNo2} oemNo3={OemNo3} "
-            + "mb={Mb} mm={Mm} mn={Mn} eb={Eb} et={Et} → total={Total}({CountMode}) items={Items} elapsed={Elapsed}ms",
-            oemBrand, oemNo2, oemNo3,
-            machineBrand, machineModel, modelName, engineBrand, engineType,
-            total, countModeUsed, items.Count, sw.ElapsedMilliseconds);
+        _logger.LogInformation($"eight-field search: oemBrand={oemBrand} oemNo2={oemNo2} oemNo3={oemNo3} "
+            + $"mb={machineBrand} mm={machineModel} mn={modelName} eb={engineBrand} et={engineType} "
+            + $"fuzzy={fuzzy} → total={total}({countModeUsed}) items={items.Count} elapsed={sw.ElapsedMilliseconds}ms");
 
         return Ok(new PublicEightResponse(
             Total: total,
@@ -513,7 +685,12 @@ public record PublicSearchHit(
     string? ProductName1,
     string? Type,
     string? D1Mm,
-    string? H1Mm
+    string? H1Mm,
+    // 🔧 fix(2026-08-23 走查): 新增 3 字段 — 结果表格展示 OEM Brand / Machine Brand / Engine Brand,
+    //   用户能确认搜索结果是否目标 (原 6 字段字段偏少)
+    string? OemBrand,
+    string? MachineBrand,
+    string? EngineBrand
 );
 
 /// <summary>P3.4 (Task 11.5): 8 字段响应</summary>
