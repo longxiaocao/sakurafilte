@@ -210,14 +210,14 @@ function clearBatch() {
 }
 
 function viewProductById(row: BatchOemResult) {
-  // V2 Task 4.4: 改用 SEO URL
-  //   BatchOemResult 含 oemBrand + productName1 + oem2, 用 oem2 作为 oem3 段降级
-  //   buildProductUrl 缺 productName2 → slug="untitled", 缺 oemNo3 → 用 oem2
+  // 🔧 fix(2026-08-23 走查): 与 AggregateSearchView.viewBatchProduct 同步修复 —
+  //   oemNo3/oemNoDisplay 必须用 row.oem (用户查询的 OEM)。旧代码用 row.oem2
+  //   是错的 (xrefs 表的另一条 oem_2 字段, 非用户查询), 会跳错误 OEM → 404。
   const url = buildProductUrl({
     productName1: row.productName1,
     oemBrand: row.oemBrand,
-    oemNo3: row.oem2,  // oem2 作 oem3 降级 (BatchOemResult 无 oemNo3 字段)
-    oemNoDisplay: row.oem2 ?? row.oem
+    oemNo3: row.oem,
+    oemNoDisplay: row.oem
   })
   window.location.href = url
 }

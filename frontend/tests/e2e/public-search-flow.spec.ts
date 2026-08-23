@@ -162,6 +162,31 @@ test.describe('P1-E2E-3 公开搜索流程 (用户视角)', () => {
         expect(new URL(page.url()).searchParams.get('q')).toBe(`${newBtnText} ${modelText}`)
       }
     }
-    await page.screenshot({ path: 'test-results/e2e-machine-catalog-linkage.png' })
+
+  test('10. 批量粘贴 → 查询 → 点击命中行 → 跳正确详情 URL', async ({ page }) => {
+    // 🔧 fix(2026-08-23 走查回归防护): 曾踩坑 — 批量结果点击行用 row.oem2 作主键,
+    //   跳 /seo/FRA-53205 (xrefs 另一条 oem_2) → 404; 必须用 row.oem (用户查询的 OEM)。
+    //   本测试断言跳转 URL 包含 /seo/U0000014 (用户输入的 OEM), 防止回退。
+    await injectZhLocale(page)
+    await page.goto(`${BASE}/search`, { waitUntil: 'domcontentloaded', timeout: 20000 })
+    await page.getByRole('button', { name: '批量粘贴', exact: true }).click()
+    const textarea = page.locator('.el-dialog textarea')
+    await textarea.waitFor({ timeout: 5000 })
+    await textarea.fill('U0000014')
+    await page.getByRole('button', { name: '查询', exact: true }).click()
+    const row = page.locator('.el-dialog .el-table__row').first()
+    try {
+      await row.waitFor({ timeout: 8000 })
+    } catch {
+      // CI 空库/演示数据无此 OEM 时跳过 (与既有用例模式一致, 只验证流程不失败)
+      await page.screenshot({ path: 'test-results/e2e-batch-skip.png' })
+      return
+    }
+    await row.click()
+    await page.waitForTimeout(1000)
+    const url = page.url()
+    // 关键断言: 必须落在用户查询的 OEM 上 (不能是 row.oem2 的 FRA-53205)
+    expect(url).toContain('/seo/U0000014')
+    await page.screenshot({ path: 'test-results/e2e-batch-detail.png' })
   })
 })
