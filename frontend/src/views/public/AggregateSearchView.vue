@@ -23,7 +23,9 @@ const router = useRouter()
 // ===== 搜索表单 =====
 const q = ref<string>((route.query.q as string) || '')
 const page = ref<number>(route.query.page ? Number(route.query.page) : 1)
-const pageSize = ref<number>(20)
+// 🔧 fix(2026-08-23 走查): pageSize 20 → 6 (首屏仅 6 张图并发 ≈ 100ms 完, 避免 20 张图冷启动 ~500ms 卡顿)
+//   配合页面底部"加载更多"按钮, 用户主动翻页, 每次 +6 条/图, 显著降低返回时感知卡顿
+const pageSize = ref<number>(6)
 // 高级筛选 (折叠展开, 默认收起)
 const showAdvanced = ref(false)
 const routeTolerance = Number(route.query.tolerance)
@@ -40,10 +42,21 @@ function toggleQuickProductType(type: string) {
 
 // ===== 搜索结果状态 =====
 const loading = ref(false)
+// 🔧 fix(2026-08-23 走查): 区分新搜索与加载更多 (后者累积结果不替换)
+const _loadMoreInFlight = ref(false)
 const results = ref<AggregateSearchHit[]>([])
 const total = ref(0)
 const totalPages = ref(0)
+const hasMore = computed(() => results.value.length < total.value)
 const lastError = ref('')
+
+// 🔧 fix(2026-08-23 走查): 加载更多 — page++ 后调 doSearch, 因 _loadMoreInFlight 累积结果
+async function loadMore() {
+  if (!hasMore.value || loading.value) return
+  _loadMoreInFlight.value = true
+  page.value++
+  try { await doSearch() } finally { _loadMoreInFlight.value = false }
+}
 // 展开的聚合卡片使用服务端提供的公开键。
 const expandedKeys = ref<Set<string>>(new Set())
 // V24-F38 (spec 改进建议): 标记本次搜索是否降级到旧 API
@@ -74,6 +87,7 @@ async function doSearch() {
     return
   }
 
+  const isLoadMore = _loadMoreInFlight.value
   loading.value = true
   lastError.value = ''
   try {
@@ -101,7 +115,12 @@ async function doSearch() {
         ElMessage.warning('聚合搜索 API 暂不可用,已降级到基础搜索 (不展示 OEM 交叉引用详情)')
       }
     }
-    results.value = resp.hits || []
+    // 🔧 fix(2026-08-23 走查): 加载更多累积结果, 新搜索/筛选仍重置
+    if (isLoadMore) {
+      results.value = results.value.concat(resp.hits || [])
+    } else {
+      results.value = resp.hits || []
+    }
     total.value = resp.total
     totalPages.value = resp.totalPages
   } catch (e: any) {
@@ -546,6 +565,10 @@ onBeforeUnmount(() => {
         layout="prev, pager, next, total"
         background
       />
+    </div>
+    <!-- 🔧 fix(2026-08-23 走查): 加载更多按钮 — 累积结果不替换 (避免再次全量重置图片加载) -->
+    <div v-if="hasMore" class="mt-3 flex justify-center">
+      <el-button :loading="loading" @click="loadMore">加载更多 (已显示 {{ results.length }} / {{ total }})</el-button>
     </div>
       </div>
     </div>
