@@ -1242,7 +1242,9 @@ export default {
       info_042: '请先登录',
       info_043: '登录已过期, 请重新登录',
       // ----- 警告提示 -----
-      warn_040: '已选满 6 个对比, 请先移除'
+      warn_040: '已选满 6 个对比, 请先移除',
+      // V24-F103-1: allEmpty 误判修复 (fuzzy 融合框输入时 8 字段全空, 不该误判空表单 → 误用 warn_040)
+      warn_empty_form: '请在融合搜索框或 8 字段中输入至少一项'
     },
     // V24-F103 i18n 残留修复: aria-label 无障碍标签文案 (AppHeader + DictManagerLayout)
     aria: {
