@@ -263,6 +263,7 @@ public static class Program
         Console.WriteLine("  --old         可选, 旧 token (作为 previous 保留过渡)");
         Console.WriteLine("  --by          可选, 操作人 (审计用, 默认 anonymous)");
         Console.WriteLine("  --dry-run     只预览, 不写 DB / 不删对象");
+        Console.WriteLine("  --confirm-dangerous  数据库零引用但桶有对象时, 强制执行删除 (默认拒绝, 防连错环境)");
         Console.WriteLine("  --pg-conn     可选, PG 连接串 (覆盖 appsettings.json)");
         Console.WriteLine("  --storage     存储类型: minio (默认) | oss | r2 (Cloudflare R2, S3 兼容, 强制 HTTPS)");
         Console.WriteLine("  --endpoint    存储端点 (MinIO 默认 http://localhost:9000)");
@@ -347,6 +348,8 @@ public static class Program
             }) ?? "minioadmin";
         var prefix = ResolveArg(args, "--prefix", "products/") ?? "products/";
         var dryRun = Array.IndexOf(args, "--dry-run") >= 0;
+        // 🔧 fix(2026-08-23 Codex 审查): 环境不匹配时强制清理的显式确认参数
+        var confirmDangerous = Array.IndexOf(args, "--confirm-dangerous") >= 0;
         var batchSizeStr = ResolveArg(args, "--batch-size", "100");
         if (!int.TryParse(batchSizeStr, out var batchSize) || batchSize <= 0)
             return Fail($"--batch-size 值无效: {batchSizeStr}");
@@ -441,6 +444,21 @@ public static class Program
             return 0;
         }
 
+        // 🔧 fix(2026-08-23 Codex 审查): 环境不匹配保护 —
+        //   存储桶有对象但数据库零引用时, 大概率是 CLI 连错了环境 (DB 与 R2 桶不属于同一套),
+        //   而非对象真的是孤儿。此时默认拒绝真实删除, 需显式 --confirm-dangerous 强制。
+        //   背景: 实测本机 DB 图片引用 0 + R2 桶 34 对象 → 误判孤儿, 实为测试机环境的正常图片。
+        if (dbKeys.Count == 0 && orphans.Count > 0 && !confirmDangerous)
+        {
+            Console.Error.WriteLine();
+            Console.Error.WriteLine($"⚠️  危险: 存储桶有 {orphans.Count} 个对象, 但数据库 0 个有效 image_key 引用。");
+            Console.Error.WriteLine($"  这通常意味着 CLI 连接的环境与存储桶不匹配 (数据库/R2 不属于同一套环境),");
+            Console.Error.WriteLine($"  而非这些对象真的是孤儿。请核对环境后再操作:");
+            Console.Error.WriteLine($"    - 数据库: {Mask(pgConn)}");
+            Console.Error.WriteLine($"    - 存储:   {storageType} @ {endpoint} / bucket={bucket}");
+            Console.Error.WriteLine($"  如确认环境无误仍需强制清理, 请加 --confirm-dangerous 参数重试。");
+            return 1;
+        }
         // 5. 批量删除 (按 batch_size 分批, 每批后短暂 sleep 防限流)
         Console.WriteLine($"开始删除 {orphans.Count} 个孤儿对象 (batch_size={batchSize})...");
         var deleted = 0;
