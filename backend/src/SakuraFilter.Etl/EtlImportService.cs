@@ -1320,11 +1320,13 @@ public class EtlImportService
             return;
         }
         _logger.LogInformation("[自动typeahead] {Entity} 导入完成 (mode={Mode}), 自动刷新 typeahead_dict 快照", entity, mode);
+        // 🔧 fix(2026-08-23 Codex 审查): 改 RequestRebuildAsync (合并式) — products/xrefs/apps
+        //   三流程连续完成只跑必要次数的全量重建 (防抖合并), 不再每次触发都全量 3-5 分钟。
         _ = Task.Run(async () =>
         {
             try
             {
-                await _typeaheadRebuild.RebuildAsync(CancellationToken.None);
+                await _typeaheadRebuild.RequestRebuildAsync(CancellationToken.None);
                 _logger.LogInformation("[自动typeahead] typeahead_dict 快照刷新完成 (entity={Entity})", entity);
             }
             catch (Exception ex)

@@ -67,6 +67,41 @@ public class TypeaheadDictRebuildConcurrencyTests : PgIntegrationTestBase
         tmpCount.Should().Be(0, "重建完成后不应残留 typeahead_dict_new 临时表");
     }
 
+    [Fact]
+    public async Task ConcurrentRequestRebuilds_Merged_AllSucceed_NoResidue_Integration()
+    {
+        if (!IsEnabled) { _output.WriteLine("Skip: PG_TEST_CONNECTION_STRING 未配置"); return; }
+
+        // Arrange: ETL 路径使用合并式入口 RequestRebuildAsync — 短时间多个 ETL 完成事件
+        //   只保留必要的重建次数 (首个执行 + pending 补跑), 全部并发触发必须收敛且状态正确
+        await EnsureTypeaheadDictTableAsync();
+        await SeedSourceRowsAsync();
+
+        var ds = new NpgsqlDataSourceBuilder(ConnectionString).Build();
+        var rebuild = new TypeaheadDictRebuildService(ds);
+
+        // Act: 并发触发 3 次 RequestRebuildAsync (模拟三 ETL 几乎同时完成)
+        var tasks = Enumerable.Range(0, 3)
+            .Select(_ => rebuild.RequestRebuildAsync(CancellationToken.None));
+        await Task.WhenAll(tasks);
+
+        // Assert 1: 全部完成无异常 (无死锁/无互删临时表)
+        _output.WriteLine($"3 次并发 RequestRebuildAsync 全部收敛 (合并式触发无死锁)");
+
+        // Assert 2: 最终状态正确 — typeahead_dict 有数据 + 无残留临时表
+        await using var conn = new NpgsqlConnection(ConnectionString);
+        await conn.OpenAsync();
+        await using var countCmd = conn.CreateCommand();
+        countCmd.CommandText = "SELECT count(*) FROM typeahead_dict";
+        var rowCount = Convert.ToInt32(await countCmd.ExecuteScalarAsync());
+        rowCount.Should().BeGreaterThanOrEqualTo(3, "typeahead_dict 应包含重建结果");
+
+        await using var tmpCmd = conn.CreateCommand();
+        tmpCmd.CommandText = "SELECT count(*) FROM pg_tables WHERE tablename = 'typeahead_dict_new'";
+        var tmpCount = Convert.ToInt32(await tmpCmd.ExecuteScalarAsync());
+        tmpCount.Should().Be(0, "重建完成后不应残留 typeahead_dict_new 临时表");
+    }
+
     /// <summary>
     /// 确保 typeahead_dict 线上表存在 + pg_trgm 扩展可用 (与 023_typeahead_dict.sql 幂等语义一致)。
     /// WHY: CI 集成测试库由 EF migrations 创建, 不含手工 SQL 023/024 的 typeahead_dict 表,

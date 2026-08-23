@@ -35,6 +35,12 @@ public class TypeaheadDictRebuildService
     /// </summary>
     private readonly SemaphoreSlim _gate = new(1, 1);
 
+    /// <summary>ETL 合并式触发状态: 1=有重建在执行 (RequestRebuildAsync 路径)</summary>
+    private int _rebuildRunning;
+
+    /// <summary>ETL 合并式触发状态: 1=执行期间来了新请求, 当前重建完成后需补跑一次</summary>
+    private int _rebuildPending;
+
     /// <summary>临时表名 (原子替换用; 后缀 _new 避免与业务查询冲突)</summary>
     private const string TempTable = "typeahead_dict_new";
 
@@ -100,6 +106,46 @@ public class TypeaheadDictRebuildService
         finally
         {
             _gate.Release();
+        }
+    }
+
+    /// <summary>
+    /// 🔧 fix(2026-08-23 Codex 审查): ETL 合并式触发入口 (防抖合并)。
+    /// WHY: ETL products/xrefs/apps 三流程连续完成会各触发一次全量重建 (3-5 分钟 × 3,
+    ///   重复扫描数千万行 + CPU/IO 峰值延长)。本方法合并短时间内的多个触发:
+    ///   - 首个触发者执行重建; 执行期间新触发只置 _rebuildPending 标志;
+    ///   - 当前重建完成后若发现 pending 则补跑一次 (确保包含最新数据), 收敛后结束。
+    /// 互斥: 内部经 _gate 与手动 RebuildAsync 串行 (防止互删临时表)。
+    /// 语义: 重建期间来新请求 → 完成后补跑, 不丢数据。
+    /// 注意: 多实例部署需叠加 pg advisory lock (见 RebuildAsync 注释)。
+    /// </summary>
+    public async Task RequestRebuildAsync(CancellationToken ct = default)
+    {
+        // 已有重建在执行 → 标记 pending, 由执行者完成后补跑 (自身立即返回)
+        if (Interlocked.CompareExchange(ref _rebuildRunning, 1, 0) != 0)
+        {
+            Interlocked.Exchange(ref _rebuildPending, 1);
+            return;
+        }
+        try
+        {
+            await _gate.WaitAsync(ct);
+            try
+            {
+                do
+                {
+                    Interlocked.Exchange(ref _rebuildPending, 0);
+                    await RebuildCoreAsync(ct);
+                } while (Volatile.Read(ref _rebuildPending) != 0);
+            }
+            finally
+            {
+                _gate.Release();
+            }
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _rebuildRunning, 0);
         }
     }
 

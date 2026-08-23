@@ -277,7 +277,7 @@ public static class Program
         Console.WriteLine("  Storage__Provider       存储类型 (minio/oss/r2, 与后端配置一致)");
         Console.WriteLine("  Minio__Endpoint / Minio__AccessKey / Minio__SecretKey / Minio__Bucket");
         Console.WriteLine("  Oss__Endpoint / Oss__AccessKey / Oss__SecretKey / Oss__Bucket");
-        Console.WriteLine("  R2__Endpoint / R2__AccessKey / R2__SecretKey / R2__Bucket");
+        Console.WriteLine("  R2__Endpoint / R2__AccessKeyId / R2__AccessKeySecret / R2__BucketName");
         Console.WriteLine();
         Console.WriteLine("轮转步骤 (4 步零停机):");
         Console.WriteLine("  1. 配 appsettings.json: DevStaticTokenPrevious=old + DevStaticToken=new");
@@ -328,21 +328,21 @@ public static class Program
             storageType switch
             {
                 "oss" => config["Oss:Bucket"],
-                "r2" => config["R2:Bucket"],
+                "r2" => config["R2:BucketName"],
                 _ => config["Minio:Bucket"]
             }) ?? "sakurafilter";
         var accessKey = ResolveArg(args, "--access-key",
             storageType switch
             {
                 "oss" => config["Oss:AccessKey"],
-                "r2" => config["R2:AccessKey"],
+                "r2" => config["R2:AccessKeyId"],
                 _ => config["Minio:AccessKey"]
             }) ?? "minioadmin";
         var secretKey = ResolveArg(args, "--secret-key",
             storageType switch
             {
                 "oss" => config["Oss:SecretKey"],
-                "r2" => config["R2:SecretKey"],
+                "r2" => config["R2:AccessKeySecret"],
                 _ => config["Minio:SecretKey"]
             }) ?? "minioadmin";
         var prefix = ResolveArg(args, "--prefix", "products/") ?? "products/";
