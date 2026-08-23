@@ -71,7 +71,7 @@ const fields = [
 //   同时保留 AbortController: 快速输入时取消前序请求, 只保留最后一次 (避免响应错乱)
 const typeaheadControllers: Record<string, AbortController | null> = {}
 
-async function fetchSuggestions(fieldKey: string, typeaheadField: string, query: string, cb: (items: string[]) => void) {
+async function fetchSuggestions(fieldKey: string, typeaheadField: string, query: string, cb: (items: { value: string }[]) => void) {
   // 输入 < 2 字符不查 (与后端一致, 避免全表扫描)
   if (!query || query.trim().length < 2) {
     cb([])
@@ -84,13 +84,47 @@ async function fetchSuggestions(fieldKey: string, typeaheadField: string, query:
   typeaheadControllers[fieldKey] = ctrl
   try {
     const resp = await publicSearchApi.typeahead(typeaheadField, query.trim(), 20, ctrl.signal)
-    cb(resp.items || [])
+    // 🔧 fix(2026-08-23 走查): el-autocomplete 默认 value-key="value", 期望对象数组 [{value: 'xxx'}]
+    //   之前直接传字符串数组 → 下拉不渲染 (Element Plus 静默忽略非预期格式)
+    cb((resp.items || []).map((s) => ({ value: s })))
   } catch {
     cb([])
   } finally {
     if (typeaheadControllers[fieldKey] === ctrl) typeaheadControllers[fieldKey] = null
   }
 }
+
+// ===== 融合搜索 (2026-08-23 走查): 不区分字段, 随便输入自动查 =====
+const fuzzy = ref('')
+
+// ===== 关键词高亮工具 =====
+//   escape HTML 后把匹配子串包 <mark> (黄色底), 返回 v-html 字符串
+function highlight(text: string | null | undefined, keyword: string): string {
+  if (!text) return ''
+  const escaped = String(text).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string))
+  const kw = keyword?.trim()
+  if (!kw) return escaped
+  // 大小写不敏感: 用 lower 定位, 从原文按偏移切
+  const lower = escaped.toLowerCase()
+  const kl = kw.toLowerCase()
+  if (!lower.includes(kl)) return escaped
+  let out = ''
+  let i = 0
+  let idx = 0
+  while ((idx = lower.indexOf(kl, i)) !== -1) {
+    out += escaped.slice(i, idx) + `<mark class="bg-yellow-200 dark:bg-yellow-700/40 px-0.5 rounded">` + escaped.slice(idx, idx + kl.length) + '</mark>'
+    i = idx + kl.length
+  }
+  out += escaped.slice(i)
+  return out
+}
+// 融合搜索词优先级: fuzzy 框 > 8 字段任一非空 (高亮用户输入)
+// 高亮词: 优先 fuzzy 框; 否则 8 字段中任一非空值 (表单值)
+const highlightKeyword = computed(() => {
+  if (fuzzy.value.trim()) return fuzzy.value.trim()
+  const filled = fields.find(f => form[f.key])
+  return filled ? String(form[filled.key] ?? '') : ''
+})
 
 // ===== 搜索结果状态 =====
 const loading = ref(false)
@@ -169,6 +203,19 @@ watch(pageSize, () => {
   if (page.value === 1 && !allEmpty.value) doSearch()
 })
 
+// 🔧 fix(2026-08-23 走查): 融合搜索框 watch — 用户输入 AIR/G1312 等需自动搜索
+//   el-autocomplete 只有 @select 和 @keyup.enter, 用户只敲字符不回车时不会触发 doSearch
+//   → 用户误以为搜索失败。改为 v-model 绑定 + 500ms 防抖 watch (与 form watch 同源体验)
+let fuzzyDebounceTimer: number | null = null
+watch(fuzzy, (nv, ov) => {
+  if (syncing) return
+  if (nv === ov) return
+  if (fuzzyDebounceTimer) window.clearTimeout(fuzzyDebounceTimer)
+  fuzzyDebounceTimer = window.setTimeout(() => {
+    doSearch()
+  }, 500)
+})
+
 // 监听 route 变化 (浏览器后退/前进/分享链接打开) → 还原 form
 watch(() => route.query, () => {
   if (syncing) return
@@ -206,6 +253,8 @@ async function doSearch() {
       modelName: form.modelName || undefined,
       engineBrand: form.engineBrand || undefined,
       engineType: form.engineType || undefined,
+      // 🔧 fix(2026-08-23 走查): 融合搜索 — 不区分字段
+      fuzzy: fuzzy.value.trim() || undefined,
       page: page.value,
       pageSize: pageSize.value
     }, { signal: ctrl.signal })
@@ -255,6 +304,7 @@ watch(page, () => {
 
 function clearAll() {
   for (const f of fields) form[f.key] = ''
+  fuzzy.value = ''
   results.value = []
   total.value = 0
   page.value = 1
@@ -264,13 +314,14 @@ function clearAll() {
 // ===== 详情页跳转 =====
 function viewDetail(row: PublicSearchHit) {
   // V2 Task 4.4: 改用 SEO URL (PublicSearchHit 仅含 oemNoDisplay/oem2/productName1, 降级走 /product/{oem} 301)
+  // 🔧 fix(2026-08-23 走查): window.location.href 整页刷新 → router.push 无刷新跳转 (同 AggregateSearchView)
   const oem = row.oemNoDisplay || row.oem2
   if (oem) {
     const url = buildProductUrl({
       oemNoDisplay: oem,
       productName1: row.productName1
     })
-    window.location.href = url
+    router.push(url)
   }
 }
 
@@ -301,7 +352,9 @@ function addToCompare(row: PublicSearchHit, event?: Event) {
     return
   }
   if (compareIds.value.size >= MAX_COMPARE) {
-    ElMessage.warning(`最多对比 ${MAX_COMPARE} 个产品`)
+    // 🔧 fix(2026-08-23 走查): 上限提示带可操作指引 — 摘要条已显示清空按钮,
+    //   提示文案说明可清空, 消除"系统坏了"的误解
+    ElMessage.warning({ message: `最多对比 ${MAX_COMPARE} 个产品, 可点击上方提示条'清空对比'后重新添加`, duration: 4000 })
     return
   }
   // 创建新 Set 触发响应式更新
@@ -366,6 +419,10 @@ function moveCompare(idx: number, dir: -1 | 1) {
 
 function clearCompare() {
   compareProducts.value = []
+  // 🔧 fix(2026-08-23 走查): 清空对比需同时清 compareIds ref — 只清 products/存储时
+  //   摘要条 v-if=compareIds.size>0 仍显示, 且后续加入对比会误判已满 (上限提示)
+  compareIds.value = new Set()
+  compareOpen.value = false
   try {
     sessionStorage.removeItem('sakurafilter_compare_ids')
   } catch { /* 隐私模式等场景忽略 */ }
@@ -405,7 +462,9 @@ onUnmounted(() => {
 
 onMounted(() => {
   syncFormFromUrl()
-  // 🔧 fix(审查): 从详情页"加入对比"跳转 (/public/search?compare=id) 时自动勾选并打开对比抽屉
+  // 🔧 fix(2026-08-23 走查): 无 URL 参数时也恢复 sessionStorage 残留对比 — 否则
+  //   用户上次选满 6 个后手动进本页 (无 ?compare=), compareIds 为空, 不知道已有
+  //   6 个残留, 加新时触发 warn_040 以为系统 bug。摘要条也依赖 compareIds 显示。
   const cmp = route.query.compare
   if (typeof cmp === 'string' && cmp) {
     const ids = cmp.split(',').map(Number).filter((n) => Number.isInteger(n) && n > 0)
@@ -421,6 +480,15 @@ onMounted(() => {
         compareLoading.value = false
       })
     }
+  } else {
+    // 无 URL 参数: 恢复 sessionStorage 残留 (只恢复 id 集合, 摘要条显示; 不自动开抽屉)
+    try {
+      const raw = sessionStorage.getItem('sakurafilter_compare_ids')
+      if (raw) {
+        const ids = JSON.parse(raw).filter((n: number) => Number.isInteger(n) && n > 0)
+        if (ids.length > 0) compareIds.value = new Set(ids.slice(0, MAX_COMPARE))
+      }
+    } catch { /* 忽略损坏数据 */ }
   }
   // 进入页面拉一次 featured 明细表 (即使有搜索条件也拉, 用户清空后可看)
   loadFeatured()
@@ -455,6 +523,43 @@ onUnmounted(() => {
         </p>
       </div>
       <el-button @click="clearAll" size="small" :disabled="allEmpty">清空</el-button>
+    </div>
+
+    <!-- 🔧 fix(2026-08-23 走查): 融合搜索框 — 不区分 8 字段, 随便输入自动查 (全部字段 OR) -->
+    <div class="hairline p-3 mb-3">
+      <label class="block text-xs text-muted mb-1">融合搜索 (不区分字段)</label>
+      <el-autocomplete
+        v-model="fuzzy"
+        placeholder="输入任意值自动查: OEM / 品牌 / 型号 / 发动机 / 产品名 ..."
+        :fetch-suggestions="(q: any, cb: any) => fetchSuggestions('fuzzy', 'oem-brand', String(q ?? ''), cb as any)"
+        :trigger-on-focus="true"
+        clearable
+        size="large"
+        class="w-full"
+        data-testid="public-search-fuzzy"
+        @select="() => doSearch()"
+        @keyup.enter="doSearch"
+      />
+      <div class="mt-2 text-xs text-muted flex items-center gap-3">
+        <span>融合搜索对全部字段模糊匹配 (OEM/品牌/机型/发动机/产品名)</span>
+      </div>
+    </div>
+
+    <!-- 🔧 fix(2026-08-23 走查): 对比状态摘要条 — 选满 6 个后用户能看到/清空/跳转对比页 -->
+    <div
+      v-if="compareIds.size > 0"
+      class="hairline p-3 mb-3 flex items-center gap-3 border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20"
+      data-testid="compare-summary-bar"
+    >
+      <span class="text-amber-600 text-lg leading-none">⚠</span>
+      <span class="text-sm">
+        对比列表已有 <b>{{ compareIds.size }} / {{ MAX_COMPARE }}</b> 个产品
+      </span>
+      <span class="text-xs text-muted hidden sm:inline">— 加更多时会触发上限提示，可先清空</span>
+      <div class="ml-auto flex items-center gap-2">
+        <el-button size="small" @click="openCompare">查看对比</el-button>
+        <el-button size="small" type="danger" plain @click="clearCompare">清空对比</el-button>
+      </div>
     </div>
 
     <!-- 8 字段 2 行 4 列 grid 布局 (响应式) -->
@@ -518,14 +623,35 @@ onUnmounted(() => {
         <el-table-column prop="id" label="ID" width="70" />
         <el-table-column label="OEM" min-width="180" show-overflow-tooltip>
           <template #default="{ row }">
-            <span class="text-blue-600">{{ row.oemNoDisplay || row.oem2 || '—' }}</span>
+            <!-- 🔧 fix(2026-08-23 走查): 关键词高亮 -->
+            <span class="text-blue-600" v-html="highlight(row.oemNoDisplay || row.oem2, highlightKeyword)"></span>
           </template>
         </el-table-column>
         <el-table-column label="OEM 2" min-width="160" show-overflow-tooltip>
-          <template #default="{ row }">{{ row.oem2 || '—' }}</template>
+          <template #default="{ row }">
+            <span v-html="highlight(row.oem2, highlightKeyword) || '—'"></span>
+          </template>
+        </el-table-column>
+        <!-- 🔧 fix(2026-08-23 走查): 新增 3 列 — 用户能确认结果是否目标 (字段偏少) -->
+        <el-table-column label="OEM Brand" min-width="130" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span v-html="highlight(row.oemBrand, highlightKeyword) || '—'"></span>
+          </template>
+        </el-table-column>
+        <el-table-column label="Machine Brand" min-width="140" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span v-html="highlight(row.machineBrand, highlightKeyword) || '—'"></span>
+          </template>
+        </el-table-column>
+        <el-table-column label="Engine Brand" min-width="130" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span v-html="highlight(row.engineBrand, highlightKeyword) || '—'"></span>
+          </template>
         </el-table-column>
         <el-table-column label="Product Name 1" min-width="200" show-overflow-tooltip>
-          <template #default="{ row }">{{ row.productName1 || '—' }}</template>
+          <template #default="{ row }">
+            <span v-html="highlight(row.productName1, highlightKeyword) || '—'"></span>
+          </template>
         </el-table-column>
         <el-table-column prop="type" label="Type" width="100" />
         <el-table-column label="D1 (mm)" width="100" align="right">
