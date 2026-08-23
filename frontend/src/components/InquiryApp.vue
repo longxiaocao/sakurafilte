@@ -1,0 +1,129 @@
+<script setup lang="ts">
+// V2 Task 4.5.3: 产品详情页"询盘"子组件 (Vue client mount)
+//   - 显示询盘按钮, 点击弹窗表单 (ElDialog)
+//   - 表单: 联系人/电话/邮箱/留言
+//   - 必填校验: 联系人 + (电话|邮箱 至少一项)
+//   - 提交: 当前交付为 VITE_INQUIRY_EMAIL 配置的 mailto 方案，不在前端或后端保存客户信息
+//   - 注意: props.oemNo3 实际传值为 product.oemNoDisplay (产品 OEM 编号)
+import { ref, reactive, computed } from 'vue'
+import { ElMessage } from 'element-plus'
+
+interface InquiryProps {
+  oemNo3: string
+  brand?: string | null
+  productName1?: string | null
+}
+
+const props = defineProps<InquiryProps>()
+
+const dialogVisible = ref(false)
+const inquiryEmail = import.meta.env.VITE_INQUIRY_EMAIL?.trim() ?? ''
+
+interface InquiryForm {
+  contact: string
+  phone: string
+  email: string
+  message: string
+}
+
+const form = reactive<InquiryForm>({
+  contact: '',
+  phone: '',
+  email: '',
+  message: ''
+})
+
+const canSubmit = computed(() => {
+  return form.contact.trim() !== '' && (form.phone.trim() !== '' || form.email.trim() !== '')
+})
+
+function openDialog(): void {
+  // 预填留言: 产品基本信息
+  if (!form.message) {
+    form.message = `询盘: ${props.productName1 ?? ''} ${props.brand ?? ''} ${props.oemNo3}`.replace(/\s+/g, ' ').trim()
+  }
+  dialogVisible.value = true
+}
+
+function submit(): void {
+  if (!canSubmit.value) {
+    ElMessage.warning('请填写联系人, 并至少提供电话或邮箱')
+    return
+  }
+  if (!inquiryEmail) {
+    ElMessage.info('询盘邮箱尚未配置, 请通过联系页获取销售联系方式')
+    return
+  }
+  // 当前交付口径: 使用部署配置的收件邮箱打开邮件客户端，不落库存储客户信息。
+  const subject = encodeURIComponent(`[询盘] ${props.oemNo3} - ${props.productName1 ?? ''}`)
+  const body = encodeURIComponent(
+    `联系人: ${form.contact}\n` +
+    `电话: ${form.phone}\n` +
+    `邮箱: ${form.email}\n` +
+    `产品 OEM: ${props.oemNo3}\n` +
+    `品牌: ${props.brand ?? '-'}\n\n` +
+    `留言:\n${form.message}`
+  )
+  window.location.href = `mailto:${encodeURIComponent(inquiryEmail)}?subject=${subject}&body=${body}`
+  dialogVisible.value = false
+  ElMessage.success('已打开邮件客户端, 请发送询盘邮件')
+}
+</script>
+
+<template>
+  <div class="inquiry-app">
+    <p class="inquiry-hint">可咨询质量要求、目标价格、MOQ 与交期。</p>
+    <button type="button" class="inquiry-btn" @click="openDialog">
+      立即询盘
+    </button>
+    <el-dialog v-model="dialogVisible" title="产品询盘" width="500px">
+      <el-form label-width="80px">
+        <el-form-item label="联系人" required>
+          <el-input v-model="form.contact" placeholder="请输入您的姓名" maxlength="50" />
+        </el-form-item>
+        <el-form-item label="电话">
+          <el-input v-model="form.phone" placeholder="电话或邮箱至少填一项" maxlength="30" />
+        </el-form-item>
+        <el-form-item label="邮箱">
+          <el-input v-model="form.email" placeholder="电话或邮箱至少填一项" maxlength="80" />
+        </el-form-item>
+        <el-form-item label="产品">
+          <span class="product-info">
+            {{ props.oemNo3 }} / {{ props.brand ?? '-' }} / {{ props.productName1 ?? '-' }}
+          </span>
+        </el-form-item>
+        <el-form-item label="留言">
+          <el-input v-model="form.message" type="textarea" :rows="4" maxlength="500" show-word-limit />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="dialogVisible = false">取消</el-button>
+        <el-button type="primary" :disabled="!canSubmit" @click="submit">发送询盘</el-button>
+      </template>
+    </el-dialog>
+  </div>
+</template>
+
+<style scoped>
+.inquiry-btn {
+  padding: 8px 16px;
+  font-size: 14px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  border: 1px solid var(--color-text);
+  cursor: pointer;
+  border-radius: 4px;
+}
+.inquiry-btn:hover {
+  background: var(--color-bg-soft);
+}
+.inquiry-hint {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--color-muted);
+}
+.product-info {
+  font-size: 13px;
+  color: #666;
+}
+</style>

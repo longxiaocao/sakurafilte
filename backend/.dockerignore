@@ -1,0 +1,6 @@
+# Docker build 忽略文件 (减少 build context 体积)
+**/bin/
+**/obj/
+*.user
+.vs/
+*.suo

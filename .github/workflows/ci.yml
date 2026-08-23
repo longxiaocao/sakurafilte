@@ -1,0 +1,560 @@
+# SakuraFilter CI workflow
+#   3 个独立 job 并行执行 (最大化 speed):
+#     1. backend       — dotnet build + 启动 stack + 集成 smoke test
+#     2. frontend      — npm ci + type-check + build
+#     3. types-drift   — 启动 backend + Swagger 拉取 + 对比 generated-types.ts
+#
+#   设计原则 (源自 project_memory):
+#     - services 用 loop-based health check + 60s timeout,避免 5148 慢启动假阴性
+#     - 后端 health check 走认证端点 /api/etl/status (需 X-Admin-Token), 避免 401 误报
+#     - 失败诊断用 ::error:: 注解, GitHub UI 可见, 不依赖 admin 日志权限
+#     - working-directory 与 cd 路径显式标注, 避免 set -e 触发 0 秒失败
+#     - 后端编译用 Release 配置匹配 Docker 生产
+#
+#   关于服务:
+#     - 仅用 postgres (smoke test 不需要 minio/meili — 它们在 4b21d61 CI 失败, 容器初始化问题)
+#     - MeiliSearch + MinIO 留待 e2e.yml (Day 9.9 完整集成测试) 验证
+#     - 后端启动会尝试连接 minio/meili; 连接失败会被 Search.Storage 兜底, 不阻塞 API 启动
+
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+  workflow_dispatch:
+
+# WHY: 取消旧 run 避免冗余 (尤其 PR 频繁 push 时), 但保留 master 触发的最新 1 个
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' && github.ref != 'refs/heads/main' }}
+
+env:
+  # WHY: 与 docker-compose.yml / appsettings.json 对齐, 后端 auth 中间件校验
+  ADMIN_TOKEN: dev-admin-token-rotate-in-prod-MZK4R9P3X6V2N7Q1L5F0B8H3C
+  CURSOR_HMAC_KEY: dev-cursor-hmac-key-rotate-in-prod-XYZ7K3P9Q2M5V8N1B4D6F0G2H
+  # P1 修复 (v30-8): Jwt 配置缺失导致 backend job Start backend + types-drift job 启动崩溃
+  #   WHY: JwtTokenService 启动期校验 SigningKey >= 32 字符, 缺失直接抛 InvalidOperationException
+  #   与 e2e.yml L35-39 保持一致, 两 job (backend + types-drift) 共用
+  Jwt__SigningKey: 'dev-jwt-signing-key-not-for-prod-X7K9M2P5Q8R3T6V1W4Y7Z0A3B6C9D2E5F8'
+  Jwt__Issuer: 'SakuraFilter'
+  Jwt__Audience: 'SakuraFilter.Web'
+  Jwt__ExpireMinutes: '30'
+  Jwt__RefreshExpireDays: '7'
+  # 后端服务内部端口 (与 ASPNETCORE_URLS 一致)
+  BACKEND_PORT: 5148
+  DOTNET_VERSION: 8.0.x
+  NODE_VERSION: 20
+  PYTHON_VERSION: 3.12
+
+jobs:
+  # ============================================================
+  # Job 1: 后端编译 + 启动 + smoke test
+  # ============================================================
+  backend:
+    name: Backend Build & Smoke Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: spike_test_v3
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: 784533
+        ports:
+          - 5432:5432
+        # WHY: 4b21d61 失败发现 minio/meili 容器在 GH runner 上初始化失败
+        #   smoke test 不需要它们, 移除避免重复失败
+        #   GH runner 的容器初始化有时间限制, 单一 service 更稳定
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET ${{ env.DOTNET_VERSION }}
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore backend
+        working-directory: backend
+        run: dotnet restore SakuraFilter.sln
+
+      - name: Build backend (Release)
+        working-directory: backend
+        run: dotnet build SakuraFilter.sln -c Release --no-restore
+
+      # V24-F68 (spec 26.14.9 建议 4): 后端单元测试运行
+      #   WHY: 之前 CI 只跑 smoke test, 单元测试回归需本地手动 dotnet test
+      #        添加此步骤后, 每次 push/PR 自动运行 400+ 单元测试, 防止回归合入 master
+      #   --no-build: 上一步已 build, 避免重复编译
+      #   continue-on-error: false: 单元测试失败即阻塞合并 (CI 红线)
+      # V24-F70 (spec 26.15.7 建议 2): 添加覆盖率收集 (XPlat Code Coverage)
+      #   --collect:"XPlat Code Coverage": 生成 cobertura 覆盖率报告 (在 TestResults/*/coverage.cobertura.xml)
+      #   后续可用 reportgenerator 合并 + 阈值门禁, 当前仅收集不做门禁
+      - name: Run backend unit tests
+        working-directory: backend
+        run: dotnet test tests/SakuraFilter.Api.Tests/SakuraFilter.Api.Tests.csproj --no-build -c Release --logger "trx;LogFileName=test-results.trx" --collect:"XPlat Code Coverage"
+
+      # V24-F88 (v27-4, spec 27.1): PG 集成测试 CI 化
+      #   WHY: V24-F81/F82/F83 写了 22 个 PG 集成测试 (advisory lock / 23505 / xmin 乐观锁),
+      #        但 CI 未注入 PG_TEST_CONNECTION_STRING, 这些测试在 CI 全部 Skip (本地才跑)
+      #        改造后 CI 用独立测试库 sakurafilter_int_tests, 与 smoke test 库 spike_test_v3 隔离
+      #        避免 TRUNCATE CASCADE 干扰 smoke test
+      #   依赖: 上一步 build 已完成, 此处只跑 Category=Integration 的测试
+      #   --no-build: 复用 build 产物, 避免重复编译
+      #   --filter Category=Integration: 只跑集成测试 (单元测试已在上一步跑过)
+      #   continue-on-error: false: 集成测试失败即阻塞合并
+      - name: Create integration test database
+        env:
+          PGPASSWORD: 784533
+        run: |
+          # 创建独立测试库 (与 spike_test_v3 隔离, 避免 TRUNCATE 污染 smoke test 数据)
+          psql -h localhost -U postgres -c "DROP DATABASE IF EXISTS sakurafilter_int_tests;" || true
+          psql -h localhost -U postgres -c "CREATE DATABASE sakurafilter_int_tests;"
+
+      # P2-7.1 配套: 提前安装 dotnet-ef 工具, 供后续 Apply EF migrations + Detect EF Core migration conflicts 使用
+      #   WHY 修复 P1 bug: 原顺序 L116 Apply EF migrations 在 L144 Install dotnet-ef tool 之前,
+      #     导致 dotnet ef database update 命令不存在, CI 集成测试 job 直接失败
+      #   提前到 Apply EF migrations 之前, 两个 step 共用此工具
+      - name: Install dotnet-ef tool
+        run: dotnet tool install --global dotnet-ef --version 8.* || dotnet tool update --global dotnet-ef --version 8.*
+
+      - name: Apply EF migrations to integration test database
+        working-directory: backend/src/SakuraFilter.Api
+        env:
+          ConnectionStrings__Postgres: "Host=localhost;Port=5432;Database=sakurafilter_int_tests;Username=postgres;Password=784533"
+        run: |
+          export PATH="$HOME/.dotnet/tools:$PATH"
+          # P1 修复 (v30-8): 加 --configuration Release, 让 ef 用 Release 配置找 deps.json
+          #   WHY: 上一步 dotnet build -c Release, 但 dotnet ef 默认 Debug 配置,
+          #     报 "bin/Debug/net8.0/SakuraFilter.Api.deps.json does not exist"
+          #   注: dotnet ef 的 -c 是 --context (DbContext), --configuration 才是配置
+          dotnet ef database update --no-build --configuration Release \
+            --project ../SakuraFilter.Infrastructure/SakuraFilter.Infrastructure.csproj \
+            --startup-project .
+
+      - name: Run PG integration tests
+        working-directory: backend
+        env:
+          PG_TEST_CONNECTION_STRING: "Host=localhost;Port=5432;Database=sakurafilter_int_tests;Username=postgres;Password=784533"
+        run: dotnet test tests/SakuraFilter.Api.Tests/SakuraFilter.Api.Tests.csproj --no-build -c Release --filter "Category=Integration" --logger "trx;LogFileName=integration-test-results.trx"
+
+      # V24-F70: 上传后端覆盖率报告 (供 reportgenerator 合并/Codecov 上传, 当前仅归档)
+      - name: Upload backend coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage
+          path: backend/tests/SakuraFilter.Api.Tests/TestResults/*/coverage.cobertura.xml
+          if-no-files-found: ignore
+
+      # 🔧 feat(覆盖率门禁): 防回退门禁 — 阈值 5% (当前基线 7.12%), 覆盖率低于阈值阻塞合并
+      #   WHY: 之前仅收集归档无门禁, 新增大量未测代码可无感拉低覆盖率
+      #   脚本零依赖 (runner 自带 python), 无 nuget/网络脆弱性; 覆盖提升后阈值可上调
+      - name: Coverage gate
+        if: always()
+        # 🔧 fix(审查): 去掉 working-directory: backend — 相对路径 .github/scripts 在 backend 下不存在
+        #   → python exit 2 (CI 连续失败根因); glob 用 backend/tests/... (与 Upload coverage step 一致)
+        run: python .github/scripts/coverage_gate.py "backend/tests/SakuraFilter.Api.Tests/TestResults/*/coverage.cobertura.xml" 5
+
+      # P2-7.1: EF Core 迁移冲突检测 — 验证 idempotent SQL 可生成 + 一次性 SQL 脚本头注释完整
+      #   WHY: EF 迁移链与 backend/migrations/*.sql 共存, 迁移语法错误/手动脚本误标会导致生产启动失败
+      #   容错策略: continue-on-error=true, 失败仅警告不阻塞构建 (避免环境/工具问题误伤)
+      #   注: dotnet-ef 工具已在 Apply EF migrations 之前安装 (见上方 Install dotnet-ef tool step)
+      - name: Detect EF Core migration conflicts
+        working-directory: backend/src/SakuraFilter.Api
+        continue-on-error: true
+        run: |
+          echo "===== EF Core 迁移冲突检测 ====="
+          export PATH="$HOME/.dotnet/tools:$PATH"
+          
+          # 1) 生成 idempotent SQL — 验证迁移链无语法错误
+          #   WHY: --idempotent 生成可重复执行的 SQL, 迁移链有语法错误会直接失败
+          #   --no-build: 上一步已 build, 避免重复编译
+          #   --configuration Release: 与 Apply EF migrations 一致, 让 ef 用 Release 配置找 deps.json
+          #   --project: DbContext 所在项目 (SakuraFilter.Infrastructure)
+          #   --startup-project: 含 Program.cs / appsettings.json 的项目 (SakuraFilter.Api)
+          if dotnet ef migrations script --idempotent --no-build --configuration Release \
+              --project ../SakuraFilter.Infrastructure/SakuraFilter.Infrastructure.csproj \
+              --startup-project . \
+              --output /tmp/migration_idempotent.sql 2>/tmp/ef_err.log; then
+            SQL_LINES=$(wc -l < /tmp/migration_idempotent.sql)
+            echo "[PASS] EF idempotent SQL 生成成功, $SQL_LINES 行"
+          else
+            RC=$?
+            echo "::error::EF Core 迁移与一次性 SQL 脚本存在冲突 (rc=$RC)"
+            echo "::error::=== dotnet ef 错误日志 (末尾 50 行) ==="
+            tail -50 /tmp/ef_err.log | sed 's/^/::error::/' || true
+            exit $RC
+          fi
+          
+          # 2) 检查 backend/migrations/*.sql 文件头标注 (一次性脚本,不可重跑 或 idempotent 可重跑)
+          #   WHY: P2-7.1 规定保留的一次性脚本必须有此标记; 幂等脚本 (IF NOT EXISTS/ALTER 幂等)
+          #        用 'idempotent 可重跑' 标注 (019/020/021) — 同样合法, 检测一并放行
+          #   🔧 fix(审查): 原检测只认"一次性脚本,不可重跑", 019/020/021 (幂等) 被误判缺失头注释
+          MISSING_HEADER=""
+          for f in ../../migrations/*.sql; do
+            if [ -f "$f" ]; then
+              if ! head -1 "$f" | grep -qE "一次性脚本,不可重跑|idempotent"; then
+                echo "::warning::$f 缺少 '-- 一次性脚本,不可重跑' 或 'idempotent 可重跑' 头注释"
+                MISSING_HEADER="$MISSING_HEADER $f"
+              fi
+            fi
+          done
+          if [ -n "$MISSING_HEADER" ]; then
+            echo "::error::EF Core 迁移与一次性 SQL 脚本存在冲突: 以下脚本缺少头注释:$MISSING_HEADER"
+            exit 1
+          fi
+          SQL_COUNT=$(ls ../../migrations/*.sql 2>/dev/null | wc -l)
+          echo "[PASS] backend/migrations/ 下 $SQL_COUNT 个一次性脚本头注释完整"
+
+      - name: Publish backend
+        working-directory: backend
+        run: dotnet publish src/SakuraFilter.Api/SakuraFilter.Api.csproj -c Release --no-build -o /tmp/backend-publish
+
+      - name: Setup Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Start backend (no minio/meili — Resilient fallback covers)
+        working-directory: /tmp/backend-publish
+        env:
+          ASPNETCORE_ENVIRONMENT: Development
+          ASPNETCORE_URLS: http://localhost:${{ env.BACKEND_PORT }}
+          ConnectionStrings__Postgres: "Host=localhost;Port=5432;Database=spike_test_v3;Username=postgres;Password=784533"
+          # WHY: 关闭 minio/meili, 让 Resilient 兜底; smoke test 不依赖它们
+          MeiliSearch__Endpoint: "http://localhost:9999"
+          MeiliSearch__ApiKey: ""
+          MeiliSearch__TimeoutMs: "10"
+          Minio__Endpoint: "localhost:9998"
+          Minio__AccessKey: "minioadmin"
+          Minio__SecretKey: "minioadmin"
+          Minio__PublicEndpoint: "http://localhost:9998"
+          Storage__Provider: "minio"
+          Auth__DevStaticToken: ${{ env.ADMIN_TOKEN }}
+          Search__CursorHmacKey: ${{ env.CURSOR_HMAC_KEY }}
+          Cors__AllowedOrigins__0: "http://localhost"
+        run: |
+          nohup dotnet SakuraFilter.Api.dll > /tmp/backend.log 2>&1 &
+          echo "Backend PID: $!"
+
+      - name: Wait for backend health (loop-based, 60s timeout)
+        env:
+          ADMIN_TOKEN: ${{ env.ADMIN_TOKEN }}
+        run: |
+          # WHY: 5148 慢启动可能 30s+, 单次 curl 会 0s 失败; 循环重试 + ::error:: 暴露真实错误
+          for i in $(seq 1 30); do
+            if curl -sf -H "X-Admin-Token: $ADMIN_TOKEN" \
+                    http://localhost:${{ env.BACKEND_PORT }}/api/etl/status > /tmp/health.json 2>/dev/null; then
+              echo "Backend ready after ${i} attempts"
+              cat /tmp/health.json
+              exit 0
+            fi
+            echo "wait $i..."
+            sleep 2
+          done
+          echo "::error::Backend failed to start within 60s"
+          echo "::error::=== backend.log (last 50 lines) ==="
+          tail -50 /tmp/backend.log
+          exit 1
+
+      - name: Verify Swagger available
+        run: |
+          for i in $(seq 1 10); do
+            if curl -sf http://localhost:${{ env.BACKEND_PORT }}/swagger/v1/swagger.json > /tmp/swagger.json; then
+              echo "Swagger OK, $(wc -c < /tmp/swagger.json) bytes"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::Swagger unavailable"
+          exit 1
+
+      - name: Run static regression scans (P2 migration + P1/P2/P3 pattern)
+        # 🔧 fix(交付检查): 从 e2e.yml 合并到 ci.yml 快门禁 — 两脚本均为纯静态 grep 扫描,
+        #   无需 API/DB, 放 ci.yml 每次 push 都跑, 让 e2e.yml 专注运行时验证 (ADR #31)
+        working-directory: spike-test
+        run: |
+          echo "===== 静态回归扫描 1/2: P2 迁移安全防回归 ====="
+          if python _test_p2_migration.py; then
+            echo "[PASS] P2 migration regression"
+          else
+            RC=$?
+            echo "::error::P2 migration regression FAIL (rc=$RC)"
+            exit $RC
+          fi
+          echo "===== 静态回归扫描 2/2: P1/P2/P3 修复防回归 (15 修复模式) ====="
+          if python _test_regression.py --scan; then
+            echo "[PASS] P1/P2/P3 pattern scan 全绿"
+          else
+            RC=$?
+            echo "::error::P1/P2/P3 pattern scan FAIL (rc=$RC)"
+            exit $RC
+          fi
+
+      - name: Run CI smoke test
+        env:
+          ADMIN_TOKEN: ${{ env.ADMIN_TOKEN }}
+        run: |
+          # WHY: 用 _test_ci_smoke.py (跨平台 + 无数据依赖) 而非 _test_improvements.py
+          #   后者含 d:\\ 硬编码路径 + psycopg2 依赖 + gitignored jsonl 文件
+          cd spike-test
+          python _test_ci_smoke.py
+          TEST_EXIT=$?
+          if [ $TEST_EXIT -ne 0 ]; then
+            echo "::error::_test_ci_smoke.py exited $TEST_EXIT"
+            tail -100 /tmp/backend.log
+            exit $TEST_EXIT
+          fi
+          echo "::notice::All CI smoke tests passed"
+
+      - name: Upload backend log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-log
+          path: /tmp/backend.log
+          if-no-files-found: ignore
+
+  # ============================================================
+  # Job 2: 前端编译 + type-check + build
+  # ============================================================
+  frontend:
+    name: Frontend Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: npm ci
+        working-directory: frontend
+        run: npm ci --no-audit --no-fund
+
+      - name: Type check
+        working-directory: frontend
+        # WHY: vue-tsc --noEmit 比 vue-tsc -b 更轻, 直接捕获类型错误
+        run: npm run type-check
+        continue-on-error: false
+
+      # V24-F68 (spec 26.14.9 建议 4): 前端单元测试运行
+      #   WHY: 之前 CI 只跑 type-check + build, vitest 单元测试需本地手动运行
+      #        添加此步骤后, 每次 push/PR 自动运行 200+ 单元测试 (vitest run 退出码即结果)
+      #   依赖: vitest run 不启动 watch 模式, 单次运行后退出, 适合 CI
+      #   注: 只运行 tests/unit/, 不运行 tests/contract/ (契约测试需后端运行, 留待 e2e.yml)
+      # V24-F79 (spec 26.15.7 建议 2): 添加 --coverage 收集前端覆盖率
+      #   WHY: vitest.config.ts 已配置 coverage.provider='v8' + reporter='cobertura'
+      #        CI 添加 --coverage 后, 生成 frontend/coverage/cobertura-coverage.xml
+      #        后续 job 用 reportgenerator 合并前后端 cobertura 报告
+      - name: Run frontend unit tests with coverage
+        working-directory: frontend
+        run: npx vitest run tests/unit/ --coverage
+
+      # V24-F79: 上传前端覆盖率报告 (供 reportgenerator 合并)
+      - name: Upload frontend coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-coverage
+          path: frontend/coverage/cobertura-coverage.xml
+          if-no-files-found: ignore
+
+      - name: Build
+        working-directory: frontend
+        # WHY: build 内含 vue-tsc -b 二次校验, 防止 type-check 与 build 不一致
+        run: npm run build
+
+      - name: Verify dist artifacts
+        working-directory: frontend
+        run: |
+          test -d dist || (echo "::error::dist/ not generated" && exit 1)
+          test -f dist/index.html || (echo "::error::dist/index.html missing" && exit 1)
+          echo "dist/ OK: $(find dist -type f | wc -l) files"
+
+  # ============================================================
+  # Job 3: OpenAPI 契约漂移检查
+  #   WHY: 后端 DTO 改动后, 手工 types.ts 可能遗漏, 导致前端调用静默失败
+  #   做法: 启动 backend → 拉 Swagger → 生成 types → diff with committed
+  # ============================================================
+  types-drift:
+    name: OpenAPI Types Drift Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: spike_test_v3
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: 784533
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET ${{ env.DOTNET_VERSION }}
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Setup Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Restore & publish backend
+        working-directory: backend
+        run: |
+          dotnet restore SakuraFilter.sln
+          dotnet publish src/SakuraFilter.Api/SakuraFilter.Api.csproj -c Release -o /tmp/backend-publish
+
+      - name: Start backend (no minio/meili)
+        working-directory: /tmp/backend-publish
+        env:
+          ASPNETCORE_ENVIRONMENT: Development
+          ASPNETCORE_URLS: http://localhost:${{ env.BACKEND_PORT }}
+          ConnectionStrings__Postgres: "Host=localhost;Port=5432;Database=spike_test_v3;Username=postgres;Password=784533"
+          MeiliSearch__Endpoint: "http://localhost:9999"
+          MeiliSearch__ApiKey: ""
+          MeiliSearch__TimeoutMs: "10"
+          Minio__Endpoint: "localhost:9998"
+          Minio__AccessKey: "minioadmin"
+          Minio__SecretKey: "minioadmin"
+          Minio__PublicEndpoint: "http://localhost:9998"
+          Storage__Provider: "minio"
+          Auth__DevStaticToken: ${{ env.ADMIN_TOKEN }}
+          Search__CursorHmacKey: ${{ env.CURSOR_HMAC_KEY }}
+        run: |
+          nohup dotnet SakuraFilter.Api.dll > /tmp/backend-drift.log 2>&1 &
+          echo "Backend PID: $!"
+
+      - name: Wait for backend (60s loop)
+        env:
+          ADMIN_TOKEN: ${{ env.ADMIN_TOKEN }}
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf -H "X-Admin-Token: $ADMIN_TOKEN" \
+                    http://localhost:${{ env.BACKEND_PORT }}/api/etl/status > /dev/null 2>&1; then
+              echo "Backend ready (drift check)"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::Backend not ready for drift check"
+          tail -50 /tmp/backend-drift.log
+          exit 1
+
+      - name: Generate types from Swagger
+        run: |
+          python spike-test/_gen_types.py
+
+      - name: Diff against committed types
+        run: |
+          if git diff --exit-code frontend/src/api/generated-types.ts > /tmp/types-diff.txt; then
+            echo "OK: no drift detected"
+            exit 0
+          fi
+          echo "::error::OpenAPI types drift detected"
+          echo "::error::=== First 50 diff lines ==="
+          head -50 /tmp/types-diff.txt
+          echo "::error::Hint: run 'python spike-test/_gen_types.py' locally and commit the result"
+          exit 1
+
+      - name: Upload drift log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: types-drift-diff
+          path: /tmp/types-diff.txt
+          if-no-files-found: ignore
+
+  # ============================================================
+  # Job 4: 覆盖率聚合 (V24-F79, spec 26.15.7 建议 2)
+  #   WHY: 前后端各自生成 cobertura.xml, 需合并为统一报告供可视化
+  #   依赖: needs backend + frontend (并行 job, 此 job 等两者完成)
+  #   工具: ReportGenerator (dotnet 全局工具, 合并 cobertura 格式)
+  #   阈值: 当前不设硬门禁 (实际覆盖率 8% 前端 / 24% 后端, 远低于 spec 目标 60%)
+  #         仅输出报告 + 在 CI 日志打印覆盖率摘要, 后续逐步提升后再设阈值
+  # ============================================================
+  coverage:
+    name: Coverage Aggregation
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [backend, frontend]
+    # WHY always(): 即使前端/后端 job 失败也尝试聚合 (覆盖率仍有价值)
+    if: always() && (needs.backend.result == 'success' || needs.frontend.result == 'success')
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download backend coverage
+        if: needs.backend.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-coverage
+          path: coverage/backend
+
+      - name: Download frontend coverage
+        if: needs.frontend.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-coverage
+          path: coverage/frontend
+
+      - name: Install ReportGenerator
+        run: dotnet tool install -g dotnet-reportgenerator-globaltool --version 5.*
+
+      - name: Merge coverage reports
+        # WHY -reporttypes: Cobertura (合并后再次输出 cobertura 供上传) + Html (本地可视化) + TextSummary (CI 日志摘要)
+        # WHY -filefilters: +* 表示包含所有文件, -*/node_modules/* 排除 node_modules
+        run: |
+          mkdir -p coverage/merged
+          # 收集所有 cobertura 文件 (后端可能有多个 TestResults/*/coverage.cobertura.xml)
+          COBERTURA_FILES=$(find coverage -name "coverage.cobertura.xml" -o -name "cobertura-coverage.xml" | tr '\n' ';')
+          if [ -z "$COBERTURA_FILES" ]; then
+            echo "::warning::No cobertura coverage files found, skip merge"
+            exit 0
+          fi
+          echo "Merging: $COBERTURA_FILES"
+          reportgenerator \
+            -reports:"$COBERTURA_FILES" \
+            -targetdir:"coverage/merged" \
+            -reporttypes:"Cobertura;Html;TextSummary" \
+            -filefilters:"+*;-*/node_modules/*"
+          echo "===== Coverage Summary ====="
+          cat coverage/merged/Summary.txt || true
+
+      - name: Upload merged coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: merged-coverage
+          path: coverage/merged/
+          if-no-files-found: ignore

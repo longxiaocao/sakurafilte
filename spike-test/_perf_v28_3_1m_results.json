@@ -1,0 +1,383 @@
+{
+  "timestamp": "2026-07-19T19:57:02.188619",
+  "database": "sakurafilter_perf_tests",
+  "data_volume": {
+    "products": 950209,
+    "xrefs": 4751045,
+    "apps": 4751045
+  },
+  "scenario_a_baseline_vs_v28_2": [
+    {
+      "label": "高频 oil",
+      "q": "oil",
+      "baseline": {
+        "p50_ms": 22100.460000001476,
+        "p95_ms": 22847.91499999119,
+        "p99_ms": 22847.91499999119,
+        "plan_types": [
+          "Index Scan",
+          "Seq Scan"
+        ],
+        "exec_time": "Execution Time: 22733.627 ms"
+      },
+      "v28_2": {
+        "p50_ms": 4523.3103499995195,
+        "p95_ms": 5027.278800000204,
+        "p99_ms": 5027.278800000204,
+        "plan_types": [
+          "Bitmap Index Scan",
+          "Index Scan"
+        ],
+        "exec_time": "Execution Time: 4742.107 ms"
+      },
+      "speedup_p95": 4.544787728898239
+    },
+    {
+      "label": "高频 filter",
+      "q": "filter",
+      "baseline": {
+        "p50_ms": 7894.407349995163,
+        "p95_ms": 8175.792900001397,
+        "p99_ms": 8175.792900001397,
+        "plan_types": [
+          "Index Scan",
+          "Seq Scan"
+        ],
+        "exec_time": "Execution Time: 9125.468 ms"
+      },
+      "v28_2": {
+        "p50_ms": 4906.643449998228,
+        "p95_ms": 5346.1815000046045,
+        "p99_ms": 5346.1815000046045,
+        "plan_types": [
+          "Bitmap Index Scan",
+          "Index Scan",
+          "Seq Scan"
+        ],
+        "exec_time": "Execution Time: 6620.201 ms"
+      },
+      "speedup_p95": 1.5292770924433365
+    },
+    {
+      "label": "中频 CAT",
+      "q": "CAT",
+      "baseline": {
+        "p50_ms": 23556.642700001248,
+        "p95_ms": 24361.05009999301,
+        "p99_ms": 24361.05009999301,
+        "plan_types": [
+          "Index Scan",
+          "Seq Scan"
+        ],
+        "exec_time": "Execution Time: 24906.328 ms"
+      },
+      "v28_2": {
+        "p50_ms": 3481.992649998574,
+        "p95_ms": 3523.3620000071824,
+        "p99_ms": 3523.3620000071824,
+        "plan_types": [
+          "Bitmap Index Scan",
+          "Index Scan",
+          "Seq Scan"
+        ],
+        "exec_time": "Execution Time: 3752.446 ms"
+      },
+      "speedup_p95": 6.914149071240295
+    },
+    {
+      "label": "中频 bosch",
+      "q": "bosch",
+      "baseline": {
+        "p50_ms": 22552.88849999488,
+        "p95_ms": 22692.744400002994,
+        "p99_ms": 22692.744400002994,
+        "plan_types": [
+          "Index Scan",
+          "Seq Scan"
+        ],
+        "exec_time": "Execution Time: 24869.058 ms"
+      },
+      "v28_2": {
+        "p50_ms": 3214.814999999362,
+        "p95_ms": 3257.5032000022475,
+        "p99_ms": 3257.5032000022475,
+        "plan_types": [
+          "Bitmap Index Scan",
+          "Index Scan",
+          "Seq Scan"
+        ],
+        "exec_time": "Execution Time: 3497.822 ms"
+      },
+      "speedup_p95": 6.966299956355327
+    },
+    {
+      "label": "低频 kubota",
+      "q": "kubota",
+      "baseline": {
+        "p50_ms": 25610.252149999724,
+        "p95_ms": 26316.13120000111,
+        "p99_ms": 26316.13120000111,
+        "plan_types": [
+          "Index Scan",
+          "Seq Scan"
+        ],
+        "exec_time": "Execution Time: 26841.447 ms"
+      },
+      "v28_2": {
+        "p50_ms": 1807.4914999961038,
+        "p95_ms": 1863.5270000086166,
+        "p99_ms": 1863.5270000086166,
+        "plan_types": [
+          "Bitmap Index Scan",
+          "Index Scan",
+          "Seq Scan"
+        ],
+        "exec_time": "Execution Time: 1968.985 ms"
+      },
+      "speedup_p95": 14.121679589230222
+    }
+  ],
+  "scenario_b_multi_token_1_5": [
+    {
+      "label": "1 token",
+      "tokens": [
+        "oil"
+      ],
+      "token_count": 1,
+      "p50_ms": 3997.8828499952215,
+      "p95_ms": 4052.954300001147,
+      "p99_ms": 4052.954300001147,
+      "vs_1_token": "1.00x (基准)",
+      "plan_types": [
+        "Bitmap Index Scan",
+        "Index Scan"
+      ],
+      "exec_time": "Execution Time: 4104.762 ms",
+      "plan_lines": [
+        "Aggregate  (cost=412761.25..412761.26 rows=1 width=8) (actual time=4080.694..4104.636 rows=1 loops=1)",
+        "  ->  Finalize GroupAggregate  (cost=9363.27..401051.37 rows=936790 width=16) (actual time=260.159..4097.442 rows=236778 loops=1)",
+        "        Group Key: p.id",
+        "        ->  Gather Merge  (cost=9363.27..389731.83 rows=780658 width=8) (actual time=260.118..4069.123 rows=236778 loops=1)",
+        "              Workers Planned: 2",
+        "              Workers Launched: 2",
+        "              ->  Partial GroupAggregate  (cost=8363.25..298624.50 rows=390329 width=8) (actual time=16.025..3556.411 rows=78926 loops=3)",
+        "                    Group Key: p.id",
+        "                    ->  Nested Loop Left Join  (cost=8363.25..293745.39 rows=390329 width=8) (actual time=16.009..3527.056 rows=394630 loops=3)",
+        "                          ->  Nested Loop Semi Join  (cost=8362.81..221878.38 rows=78064 width=8) (actual time=16.001..3325.182 rows=78926 loops=3)",
+        "                                ->  Merge Join  (cost=8362.38..138105.70 rows=156128 width=16) (actual time=15.929..3143.665 rows=78926 loops=3)",
+        "                                      Merge Cond: (p.id = p_1.id)",
+        "                                      ->  Parallel Index Scan using idx_products_is_published_true on products p  (cost=0.42..51522.11 rows=395363 width=8) (actual time=0.100..100.155 rows=316053 loops=3)",
+        "                                            Filter: (NOT is_discontinued)",
+        "                                            Rows Removed by Filter: 6",
+        "                                      ->  Unique  (cost=8361.96..83095.85 rows=375221 width=8) (actual time=10.970..3010.769 rows=236778 loops=3)",
+        "                                            ->  Merge Append  (cost=8361.96..82157.80 rows=375221 width=8) (actual time=10.969..2987.512 rows=236778 loops=3)",
+        "                                                  Sort Key: p_1.id",
+        "                                                  ->  Index Scan using idx_products_is_published_true on products p_1  (cost=0.42..68941.89 rows=374277 width=8) (actual time=0.032..2965.700 rows=236778 loops=3)",
+        "                                                        Filter: ((NOT is_discontinued) AND (((product_name_1)::text ~~* '%oil%'::text) OR ((product_name_2)::text ~~* '%oil%'::text) OR ((oem_2)::text ~~* '%oil%'::text) OR ((mr_1)::text ~~* '%oil%'::text) OR (remark ~~* '%oil%'::text)))",
+        "                                                        Rows Removed by Filter: 713431",
+        "                                                  ->  Unique  (cost=4522.79..4525.17 rows=475 width=8) (actual time=6.814..6.816 rows=0 loops=3)",
+        "                                                        ->  Sort  (cost=4522.79..4523.98 rows=475 width=8) (actual time=6.814..6.816 rows=0 loops=3)",
+        "                                                              Sort Key: x_2.product_id",
+        "                                                              Sort Method: quicksort  Memory: 25kB"
+      ]
+    },
+    {
+      "label": "2 token",
+      "tokens": [
+        "oil",
+        "filter"
+      ],
+      "token_count": 2,
+      "p50_ms": 5954.675850000058,
+      "p95_ms": 6391.230100009125,
+      "p99_ms": 6391.230100009125,
+      "vs_1_token": "1.58x",
+      "plan_types": [
+        "Bitmap Index Scan",
+        "Index Scan"
+      ],
+      "exec_time": "Execution Time: 6694.794 ms",
+      "plan_lines": [
+        "Aggregate  (cost=182680.01..182680.02 rows=1 width=8) (actual time=6687.406..6687.424 rows=1 loops=1)",
+        "  ->  GroupAggregate  (cost=182666.26..182673.76 rows=500 width=16) (actual time=6554.814..6681.152 rows=236778 loops=1)",
+        "        Group Key: p.id",
+        "        ->  Sort  (cost=182666.26..182667.51 rows=500 width=8) (actual time=6554.804..6606.011 rows=1183890 loops=1)",
+        "              Sort Key: p.id",
+        "              Sort Method: external merge  Disk: 13912kB",
+        "              ->  Nested Loop Left Join  (cost=61618.80..182643.85 rows=500 width=8) (actual time=2989.873..6386.090 rows=1183890 loops=1)",
+        "                    ->  Nested Loop Semi Join  (cost=61618.37..182551.79 rows=100 width=8) (actual time=2989.868..5807.998 rows=236778 loops=1)",
+        "                          Join Filter: (q_match.product_id = x_1.product_id)",
+        "                          ->  Nested Loop  (cost=61617.93..182408.49 rows=200 width=16) (actual time=2989.825..4241.105 rows=236778 loops=1)",
+        "                                ->  Subquery Scan on q_match  (cost=61617.51..180747.99 rows=200 width=8) (actual time=2989.765..3025.238 rows=236778 loops=1)",
+        "                                      ->  HashSetOp Intersect  (cost=61617.51..180747.99 rows=200 width=12) (actual time=2989.764..3011.880 rows=236778 loops=1)",
+        "                                            ->  Append  (cost=61617.51..177436.49 rows=1324600 width=12) (actual time=551.474..2693.367 rows=1185106 loops=1)",
+        "                                                  ->  Subquery Scan on \"*SELECT* 1\"  (cost=61617.51..69121.93 rows=375221 width=12) (actual time=551.473..590.978 rows=236778 loops=1)",
+        "                                                        ->  HashAggregate  (cost=61617.51..65369.72 rows=375221 width=8) (actual time=551.472..581.285 rows=236778 loops=1)",
+        "                                                              Group Key: p_1.id",
+        "                                                              Batches: 1  Memory Usage: 22545kB",
+        "                                                              ->  Append  (cost=8587.69..60679.46 rows=375221 width=8) (actual time=58.174..484.315 rows=236778 loops=1)",
+        "                                                                    ->  Bitmap Heap Scan on products p_1  (cost=8587.69..50437.12 rows=374277 width=8) (actual time=58.173..460.678 rows=236778 loops=1)",
+        "                                                                          Recheck Cond: (((product_name_1)::text ~~* '%oil%'::text) OR ((product_name_2)::text ~~* '%oil%'::text) OR ((oem_2)::text ~~* '%oil%'::text) OR ((mr_1)::text ~~* '%oil%'::text) OR (remark ~~* '%oil%'::text))",
+        "                                                                          Filter: ((NOT is_discontinued) AND is_published)",
+        "                                                                          Heap Blocks: exact=16453",
+        "                                                                          ->  BitmapOr  (cost=8587.69..8587.69 rows=421575 width=0) (actual time=56.480..56.482 rows=0 loops=1)",
+        "                                                                                ->  Bitmap Index Scan on ix_products_product_name_1_trgm  (cost=0.00..2226.01 rows=210808 width=0) (actual time=22.270..22.270 rows=213560 loops=1)",
+        "                                                                                      Index Cond: ((product_name_1)::text ~~* '%oil%'::text)"
+      ]
+    },
+    {
+      "label": "3 token",
+      "tokens": [
+        "oil",
+        "filter",
+        "CAT"
+      ],
+      "token_count": 3,
+      "p50_ms": 5139.589850004995,
+      "p95_ms": 5336.948299998767,
+      "p99_ms": 5336.948299998767,
+      "vs_1_token": "1.32x",
+      "plan_types": [
+        "Bitmap Index Scan",
+        "Index Scan"
+      ],
+      "exec_time": "Execution Time: 5828.332 ms",
+      "plan_lines": [
+        "Aggregate  (cost=332701.62..332701.63 rows=1 width=8) (actual time=5811.503..5811.528 rows=1 loops=1)",
+        "  ->  GroupAggregate  (cost=332687.87..332695.37 rows=500 width=16) (actual time=5778.717..5809.671 rows=69126 loops=1)",
+        "        Group Key: p.id",
+        "        ->  Sort  (cost=332687.87..332689.12 rows=500 width=8) (actual time=5778.696..5787.619 rows=345630 loops=1)",
+        "              Sort Key: p.id",
+        "              Sort Method: quicksort  Memory: 12289kB",
+        "              ->  Nested Loop Left Join  (cost=61618.80..332665.46 rows=500 width=8) (actual time=4570.897..5728.054 rows=345630 loops=1)",
+        "                    ->  Nested Loop Semi Join  (cost=61618.37..332573.40 rows=100 width=8) (actual time=4570.893..5556.866 rows=69126 loops=1)",
+        "                          Join Filter: (q_match.product_id = x_1.product_id)",
+        "                          ->  Nested Loop  (cost=61617.93..332430.10 rows=200 width=16) (actual time=4570.825..5023.893 rows=69126 loops=1)",
+        "                                ->  Subquery Scan on q_match  (cost=61617.51..330769.60 rows=200 width=8) (actual time=4570.702..4584.245 rows=69126 loops=1)",
+        "                                      ->  HashSetOp Intersect  (cost=61617.51..330769.60 rows=200 width=12) (actual time=4570.701..4580.011 rows=69126 loops=1)",
+        "                                            ->  Append  (cost=61617.51..329850.33 rows=367706 width=12) (actual time=3036.573..4532.012 rows=514346 loops=1)",
+        "                                                  ->  Result  (cost=61617.51..180749.99 rows=200 width=12) (actual time=3036.572..3056.602 rows=236778 loops=1)",
+        "                                                        ->  HashSetOp Intersect  (cost=61617.51..180747.99 rows=200 width=12) (actual time=3036.569..3045.185 rows=236778 loops=1)",
+        "                                                              ->  Append  (cost=61617.51..177436.49 rows=1324600 width=12) (actual time=549.357..2735.897 rows=1185106 loops=1)",
+        "                                                                    ->  Subquery Scan on \"*SELECT* 1\"  (cost=61617.51..69121.93 rows=375221 width=12) (actual time=549.357..601.725 rows=236778 loops=1)",
+        "                                                                          ->  HashAggregate  (cost=61617.51..65369.72 rows=375221 width=8) (actual time=549.356..589.868 rows=236778 loops=1)",
+        "                                                                                Group Key: p_1.id",
+        "                                                                                Batches: 1  Memory Usage: 22545kB",
+        "                                                                                ->  Append  (cost=8587.69..60679.46 rows=375221 width=8) (actual time=40.896..481.293 rows=236778 loops=1)",
+        "                                                                                      ->  Bitmap Heap Scan on products p_1  (cost=8587.69..50437.12 rows=374277 width=8) (actual time=40.895..455.948 rows=236778 loops=1)",
+        "                                                                                            Recheck Cond: (((product_name_1)::text ~~* '%oil%'::text) OR ((product_name_2)::text ~~* '%oil%'::text) OR ((oem_2)::text ~~* '%oil%'::text) OR ((mr_1)::text ~~* '%oil%'::text) OR (remark ~~* '%oil%'::text))",
+        "                                                                                            Filter: ((NOT is_discontinued) AND is_published)",
+        "                                                                                            Heap Blocks: exact=16453"
+      ]
+    },
+    {
+      "label": "4 token",
+      "tokens": [
+        "oil",
+        "filter",
+        "CAT",
+        "bosch"
+      ],
+      "token_count": 4,
+      "p50_ms": 5448.046199999226,
+      "p95_ms": 5488.3704999956535,
+      "p99_ms": 5488.3704999956535,
+      "vs_1_token": "1.35x",
+      "plan_types": [
+        "Bitmap Index Scan",
+        "Index Scan"
+      ],
+      "exec_time": "Execution Time: 6048.181 ms",
+      "plan_lines": [
+        "Aggregate  (cost=429262.81..429262.82 rows=1 width=8) (actual time=6025.348..6025.380 rows=1 loops=1)",
+        "  ->  GroupAggregate  (cost=429249.06..429256.56 rows=500 width=16) (actual time=6014.274..6024.762 rows=25127 loops=1)",
+        "        Group Key: p.id",
+        "        ->  Sort  (cost=429249.06..429250.31 rows=500 width=8) (actual time=6014.267..6017.247 rows=125635 loops=1)",
+        "              Sort Key: p.id",
+        "              Sort Method: quicksort  Memory: 3073kB",
+        "              ->  Nested Loop Left Join  (cost=61618.80..429226.64 rows=500 width=8) (actual time=5497.349..6002.292 rows=125635 loops=1)",
+        "                    ->  Nested Loop Semi Join  (cost=61618.37..429134.58 rows=100 width=8) (actual time=5497.344..5940.358 rows=25127 loops=1)",
+        "                          Join Filter: (q_match.product_id = x_1.product_id)",
+        "                          ->  Nested Loop  (cost=61617.93..428991.28 rows=200 width=16) (actual time=5497.291..5713.114 rows=25127 loops=1)",
+        "                                ->  Subquery Scan on q_match  (cost=61617.51..427330.78 rows=200 width=8) (actual time=5497.141..5502.195 rows=25127 loops=1)",
+        "                                      ->  HashSetOp Intersect  (cost=61617.51..427330.78 rows=200 width=12) (actual time=5497.140..5500.645 rows=25127 loops=1)",
+        "                                            ->  Append  (cost=61617.51..426517.56 rows=325286 width=12) (actual time=4325.130..5476.160 rows=363705 loops=1)",
+        "                                                  ->  Result  (cost=61617.51..330771.60 rows=200 width=12) (actual time=4325.129..4334.309 rows=69126 loops=1)",
+        "                                                        ->  HashSetOp Intersect  (cost=61617.51..330769.60 rows=200 width=12) (actual time=4325.127..4330.962 rows=69126 loops=1)",
+        "                                                              ->  Append  (cost=61617.51..329850.33 rows=367706 width=12) (actual time=2826.453..4287.506 rows=514346 loops=1)",
+        "                                                                    ->  Result  (cost=61617.51..180749.99 rows=200 width=12) (actual time=2826.453..2845.831 rows=236778 loops=1)",
+        "                                                                          ->  HashSetOp Intersect  (cost=61617.51..180747.99 rows=200 width=12) (actual time=2826.451..2834.380 rows=236778 loops=1)",
+        "                                                                                ->  Append  (cost=61617.51..177436.49 rows=1324600 width=12) (actual time=503.216..2553.723 rows=1185106 loops=1)",
+        "                                                                                      ->  Subquery Scan on \"*SELECT* 1\"  (cost=61617.51..69121.93 rows=375221 width=12) (actual time=503.215..541.179 rows=236778 loops=1)",
+        "                                                                                            ->  HashAggregate  (cost=61617.51..65369.72 rows=375221 width=8) (actual time=503.214..531.295 rows=236778 loops=1)",
+        "                                                                                                  Group Key: p_1.id",
+        "                                                                                                  Batches: 1  Memory Usage: 22545kB",
+        "                                                                                                  ->  Append  (cost=8587.69..60679.46 rows=375221 width=8) (actual time=38.013..438.554 rows=236778 loops=1)",
+        "                                                                                                        ->  Bitmap Heap Scan on products p_1  (cost=8587.69..50437.12 rows=374277 width=8) (actual time=38.012..413.319 rows=236778 loops=1)"
+      ]
+    },
+    {
+      "label": "5 token",
+      "tokens": [
+        "oil",
+        "filter",
+        "CAT",
+        "bosch",
+        "kubota"
+      ],
+      "token_count": 5,
+      "p50_ms": 6004.438700001629,
+      "p95_ms": 6024.019500007853,
+      "p99_ms": 6024.019500007853,
+      "vs_1_token": "1.49x",
+      "plan_types": [
+        "Bitmap Index Scan",
+        "Index Scan"
+      ],
+      "exec_time": "Execution Time: 6553.355 ms",
+      "plan_lines": [
+        "Aggregate  (cost=511634.92..511634.93 rows=1 width=8) (actual time=6524.562..6524.600 rows=1 loops=1)",
+        "  ->  GroupAggregate  (cost=511621.17..511628.67 rows=500 width=16) (actual time=6522.315..6524.467 rows=5108 loops=1)",
+        "        Group Key: p.id",
+        "        ->  Sort  (cost=511621.17..511622.42 rows=500 width=8) (actual time=6522.310..6522.923 rows=25540 loops=1)",
+        "              Sort Key: p.id",
+        "              Sort Method: quicksort  Memory: 769kB",
+        "              ->  Nested Loop Left Join  (cost=61618.80..511598.75 rows=500 width=8) (actual time=6344.670..6519.946 rows=25540 loops=1)",
+        "                    ->  Nested Loop Semi Join  (cost=61618.37..511506.69 rows=100 width=8) (actual time=6344.665..6506.803 rows=5108 loops=1)",
+        "                          Join Filter: (q_match.product_id = x_1.product_id)",
+        "                          ->  Nested Loop  (cost=61617.93..511363.39 rows=200 width=16) (actual time=6344.605..6420.453 rows=5108 loops=1)",
+        "                                ->  Subquery Scan on q_match  (cost=61617.51..509702.89 rows=200 width=8) (actual time=6344.471..6345.687 rows=5108 loops=1)",
+        "                                      ->  HashSetOp Intersect  (cost=61617.51..509702.89 rows=200 width=12) (actual time=6344.470..6345.350 rows=5108 loops=1)",
+        "                                            ->  Append  (cost=61617.51..509205.15 rows=199094 width=12) (actual time=5440.949..6330.762 rows=239652 loops=1)",
+        "                                                  ->  Result  (cost=61617.51..427332.78 rows=200 width=12) (actual time=5440.948..5444.070 rows=25127 loops=1)",
+        "                                                        ->  HashSetOp Intersect  (cost=61617.51..427330.78 rows=200 width=12) (actual time=5440.946..5442.823 rows=25127 loops=1)",
+        "                                                              ->  Append  (cost=61617.51..426517.56 rows=325286 width=12) (actual time=4262.896..5419.894 rows=363705 loops=1)",
+        "                                                                    ->  Result  (cost=61617.51..330771.60 rows=200 width=12) (actual time=4262.895..4271.720 rows=69126 loops=1)",
+        "                                                                          ->  HashSetOp Intersect  (cost=61617.51..330769.60 rows=200 width=12) (actual time=4262.894..4268.302 rows=69126 loops=1)",
+        "                                                                                ->  Append  (cost=61617.51..329850.33 rows=367706 width=12) (actual time=2766.686..4225.463 rows=514346 loops=1)",
+        "                                                                                      ->  Result  (cost=61617.51..180749.99 rows=200 width=12) (actual time=2766.685..2786.881 rows=236778 loops=1)",
+        "                                                                                            ->  HashSetOp Intersect  (cost=61617.51..180747.99 rows=200 width=12) (actual time=2766.683..2775.298 rows=236778 loops=1)",
+        "                                                                                                  ->  Append  (cost=61617.51..177436.49 rows=1324600 width=12) (actual time=475.429..2492.409 rows=1185106 loops=1)",
+        "                                                                                                        ->  Subquery Scan on \"*SELECT* 1\"  (cost=61617.51..69121.93 rows=375221 width=12) (actual time=475.429..515.428 rows=236778 loops=1)",
+        "                                                                                                              ->  HashAggregate  (cost=61617.51..65369.72 rows=375221 width=8) (actual time=475.428..505.579 rows=236778 loops=1)",
+        "                                                                                                                    Group Key: p_1.id"
+      ]
+    }
+  ],
+  "summary": {
+    "avg_speedup_v28_2_vs_baseline": 6.815238687633483,
+    "multi_token_ratio_5_vs_1": 1.4863280101643752,
+    "v28_5_50k_baseline_p95": {
+      "1": 231,
+      "2": 312,
+      "3": 600,
+      "4": 682,
+      "5": 610
+    },
+    "decisions": [
+      "v28-2 在 1M 数据下加速比保持良好 (6.82x vs 50K 6.0x), CTE UNION 方案有效",
+      "1M 数据多 token 退化可控 (1.49x, 50K v28-5 为 2.64x), 无需限制 token 数量",
+      "PG 优化器在 1M 数据下仍选 GIN trgm Bitmap Index Scan (无 Seq Scan 退化)"
+    ]
+  }
+}

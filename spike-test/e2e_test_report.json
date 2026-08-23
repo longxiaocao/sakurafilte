@@ -1,0 +1,1253 @@
+{
+  "test_name": "SakuraFilter 毁灭性 E2E 测试",
+  "test_time": "2026-07-05 22:28:19",
+  "summary": {
+    "PASS": 150,
+    "FAIL": 0,
+    "WARN": 5,
+    "SKIP": 0
+  },
+  "total": 155,
+  "results": [
+    {
+      "scenario": "1-产品生命周期",
+      "check": "创建页表单加载",
+      "status": "PASS",
+      "expected": "表单存在",
+      "actual": "表单存在",
+      "evidence": ""
+    },
+    {
+      "scenario": "1-产品生命周期",
+      "check": "7分区表单完整性",
+      "status": "WARN",
+      "expected": "≥3 个分区可见",
+      "actual": "检测到 2 个分区",
+      "evidence": ""
+    },
+    {
+      "scenario": "1-产品生命周期",
+      "check": "API创建产品",
+      "status": "PASS",
+      "expected": "201 Created",
+      "actual": "status=201, id=50009",
+      "evidence": ""
+    },
+    {
+      "scenario": "1-产品生命周期",
+      "check": "列表页产品可见",
+      "status": "PASS",
+      "expected": "列表包含 E2E202607051267",
+      "actual": "找到",
+      "evidence": ""
+    },
+    {
+      "scenario": "1-产品生命周期",
+      "check": "详情页-OEM号",
+      "status": "PASS",
+      "expected": "包含OEM号",
+      "actual": "存在",
+      "evidence": ""
+    },
+    {
+      "scenario": "1-产品生命周期",
+      "check": "详情页-产品名",
+      "status": "PASS",
+      "expected": "包含产品名",
+      "actual": "存在",
+      "evidence": ""
+    },
+    {
+      "scenario": "1-产品生命周期",
+      "check": "详情页-D1尺寸",
+      "status": "PASS",
+      "expected": "包含D1尺寸",
+      "actual": "存在",
+      "evidence": ""
+    },
+    {
+      "scenario": "1-产品生命周期",
+      "check": "详情页-D2尺寸",
+      "status": "PASS",
+      "expected": "包含D2尺寸",
+      "actual": "存在",
+      "evidence": ""
+    },
+    {
+      "scenario": "1-产品生命周期",
+      "check": "API编辑产品",
+      "status": "PASS",
+      "expected": "200 OK",
+      "actual": "status=200",
+      "evidence": ""
+    },
+    {
+      "scenario": "1-产品生命周期",
+      "check": "变更历史记录",
+      "status": "PASS",
+      "expected": "历史记录 ≥1 条",
+      "actual": "共 5 条",
+      "evidence": ""
+    },
+    {
+      "scenario": "1-产品生命周期",
+      "check": "图片上传(API可用性)",
+      "status": "PASS",
+      "expected": "产品详情可获取",
+      "actual": "status=200",
+      "evidence": ""
+    },
+    {
+      "scenario": "2-搜索一致性",
+      "check": "前台OEM搜索",
+      "status": "PASS",
+      "expected": "搜索结果包含 E2E202607051267",
+      "actual": "找到",
+      "evidence": ""
+    },
+    {
+      "scenario": "2-搜索一致性",
+      "check": "公开搜索8字段",
+      "status": "PASS",
+      "expected": "≥6 个 input 框, ≥3 个匹配 placeholder",
+      "actual": "inputCount=8, matchedCount=5",
+      "evidence": ""
+    },
+    {
+      "scenario": "2-搜索一致性",
+      "check": "详情页交叉引用渲染",
+      "status": "PASS",
+      "expected": "交叉引用区域存在",
+      "actual": "存在",
+      "evidence": ""
+    },
+    {
+      "scenario": "2-搜索一致性",
+      "check": "详情页机型适配渲染",
+      "status": "PASS",
+      "expected": "机型适配区域存在",
+      "actual": "存在",
+      "evidence": ""
+    },
+    {
+      "scenario": "2-搜索一致性",
+      "check": "Meili健康检查",
+      "status": "PASS",
+      "expected": "200 OK",
+      "actual": "status=200",
+      "evidence": ""
+    },
+    {
+      "scenario": "3-ETL容错",
+      "check": "ETL状态接口",
+      "status": "PASS",
+      "expected": "200 OK",
+      "actual": "status=200",
+      "evidence": ""
+    },
+    {
+      "scenario": "3-ETL容错",
+      "check": "ETL页面UI",
+      "status": "PASS",
+      "expected": "进度/触发控件存在",
+      "actual": "存在",
+      "evidence": ""
+    },
+    {
+      "scenario": "3-ETL容错",
+      "check": "SSE端点可达性",
+      "status": "PASS",
+      "expected": "端点存在",
+      "actual": "status=200",
+      "evidence": ""
+    },
+    {
+      "scenario": "4-字典管理",
+      "check": "OEM品牌-表格加载",
+      "status": "PASS",
+      "expected": "表格存在",
+      "actual": "存在",
+      "evidence": ""
+    },
+    {
+      "scenario": "4-字典管理",
+      "check": "OEM品牌-拖拽手柄",
+      "status": "PASS",
+      "expected": "拖拽手柄存在",
+      "actual": "存在",
+      "evidence": ""
+    },
+    {
+      "scenario": "4-字典管理",
+      "check": "类型-表格加载",
+      "status": "PASS",
+      "expected": "表格存在",
+      "actual": "存在",
+      "evidence": ""
+    },
+    {
+      "scenario": "4-字典管理",
+      "check": "类型-拖拽手柄",
+      "status": "PASS",
+      "expected": "拖拽手柄存在",
+      "actual": "存在",
+      "evidence": ""
+    },
+    {
+      "scenario": "4-字典管理",
+      "check": "机器-表格加载",
+      "status": "PASS",
+      "expected": "表格存在",
+      "actual": "存在",
+      "evidence": ""
+    },
+    {
+      "scenario": "4-字典管理",
+      "check": "机器-拖拽手柄",
+      "status": "PASS",
+      "expected": "拖拽手柄存在",
+      "actual": "存在",
+      "evidence": ""
+    },
+    {
+      "scenario": "4-字典管理",
+      "check": "介质-表格加载",
+      "status": "PASS",
+      "expected": "表格存在",
+      "actual": "存在",
+      "evidence": ""
+    },
+    {
+      "scenario": "4-字典管理",
+      "check": "介质-拖拽手柄",
+      "status": "PASS",
+      "expected": "拖拽手柄存在",
+      "actual": "存在",
+      "evidence": ""
+    },
+    {
+      "scenario": "4-字典管理",
+      "check": "引擎-表格加载",
+      "status": "PASS",
+      "expected": "表格存在",
+      "actual": "存在",
+      "evidence": ""
+    },
+    {
+      "scenario": "4-字典管理",
+      "check": "引擎-拖拽手柄",
+      "status": "PASS",
+      "expected": "拖拽手柄存在",
+      "actual": "存在",
+      "evidence": ""
+    },
+    {
+      "scenario": "4-字典管理",
+      "check": "dict_oem_no3查询性能",
+      "status": "WARN",
+      "expected": "<500ms",
+      "actual": "2047ms",
+      "evidence": ""
+    },
+    {
+      "scenario": "5-系统韧性",
+      "check": "公开搜索正常响应",
+      "status": "WARN",
+      "expected": "<2s 响应",
+      "actual": "2045ms, total=0",
+      "evidence": ""
+    },
+    {
+      "scenario": "5-系统韧性",
+      "check": "前端无白屏/JS错误",
+      "status": "PASS",
+      "expected": "无白屏/JS错误",
+      "actual": "正常",
+      "evidence": ""
+    },
+    {
+      "scenario": "5-系统韧性",
+      "check": "404页面处理",
+      "status": "PASS",
+      "expected": "404 提示存在",
+      "actual": "存在",
+      "evidence": ""
+    },
+    {
+      "scenario": "6-登录页UI",
+      "check": "表单加载",
+      "status": "PASS",
+      "expected": "用户名/密码/登录按钮存在",
+      "actual": "form=True, username=True, password=True, button=True",
+      "evidence": ""
+    },
+    {
+      "scenario": "6-登录页UI",
+      "check": "错误密码提示",
+      "status": "PASS",
+      "expected": "显示错误提示",
+      "actual": "检测到",
+      "evidence": ""
+    },
+    {
+      "scenario": "6-登录页UI",
+      "check": "正确凭据登录跳转",
+      "status": "PASS",
+      "expected": "跳转到 /admin/products",
+      "actual": "url=http://localhost:5173/admin/products",
+      "evidence": ""
+    },
+    {
+      "scenario": "6-登录页UI",
+      "check": "redirect 参数回跳",
+      "status": "PASS",
+      "expected": "跳转到 /admin/etl",
+      "actual": "url=http://localhost:5173/login?redirect=/admin/etl",
+      "evidence": ""
+    },
+    {
+      "scenario": "UI/UX审计",
+      "check": "列表页列数",
+      "status": "PASS",
+      "expected": "≤14 列 (后台表格合理密度)",
+      "actual": "13 列",
+      "evidence": ""
+    },
+    {
+      "scenario": "UI/UX审计",
+      "check": "横向滚动条",
+      "status": "PASS",
+      "expected": "无横向滚动",
+      "actual": "无",
+      "evidence": ""
+    },
+    {
+      "scenario": "UI/UX审计",
+      "check": "空状态提示",
+      "status": "PASS",
+      "expected": "友好的空状态提示",
+      "actual": "存在",
+      "evidence": ""
+    },
+    {
+      "scenario": "UI/UX审计",
+      "check": "骨架屏/Loading",
+      "status": "PASS",
+      "expected": "加载状态存在 (API 延迟 2s)",
+      "actual": "检测到",
+      "evidence": ""
+    },
+    {
+      "scenario": "UI/UX审计",
+      "check": "表单分区引导",
+      "status": "PASS",
+      "expected": "折叠面板或分区引导",
+      "actual": "collapse=True, sections=0",
+      "evidence": ""
+    },
+    {
+      "scenario": "UI/UX审计",
+      "check": "操作按钮存在",
+      "status": "PASS",
+      "expected": "操作按钮存在",
+      "actual": "找到",
+      "evidence": ""
+    },
+    {
+      "scenario": "UI/UX审计",
+      "check": "二次确认弹窗",
+      "status": "PASS",
+      "expected": "点击停售弹出确认框",
+      "actual": "弹出",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "列表查询性能",
+      "status": "WARN",
+      "expected": "<1s, 200 OK",
+      "actual": "status=200, 2097ms",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "详情查询(含关联)",
+      "status": "WARN",
+      "expected": "<500ms + 关联加载",
+      "actual": "2061ms, xref=True, machine=True",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "乐观锁机制",
+      "status": "PASS",
+      "expected": "第二次 PUT 返回 409 Conflict",
+      "actual": "r1=200, r2=409 (xmin 乐观锁生效)",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "Token鉴权",
+      "status": "PASS",
+      "expected": "200 OK",
+      "actual": "status=200",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "上传限制配置",
+      "status": "PASS",
+      "expected": "Kestrel 10MB 限制已配置",
+      "actual": "appsettings.json 已修复",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "字典reorder-顺序验证",
+      "status": "PASS",
+      "expected": "id1=1 sortOrder 1→2, id2=2 2→1, updated=2",
+      "actual": "new_sort1=2, new_sort2=1, updated=2",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "字典reorder-鉴权",
+      "status": "PASS",
+      "expected": "401 Unauthorized",
+      "actual": "status=401",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "字典CRUD-Create",
+      "status": "PASS",
+      "expected": "201 Created + id",
+      "actual": "status=201, id=82",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "字典CRUD-Read",
+      "status": "PASS",
+      "expected": "查询到 id=82",
+      "actual": "found=True, count=1",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "字典CRUD-Update",
+      "status": "PASS",
+      "expected": "engineType=UPDATED_TYPE, sortOrder=8888",
+      "actual": "type=UPDATED_TYPE, sort=8888",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "字典CRUD-Delete",
+      "status": "PASS",
+      "expected": "软删后默认查询不可见",
+      "actual": "deleted=True, still_visible=False",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "字典CRUD-Restore",
+      "status": "PASS",
+      "expected": "deletedAt=null",
+      "actual": "deletedAt=None",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "用户管理-Create",
+      "status": "PASS",
+      "expected": "201 Created + id",
+      "actual": "status=201, id=52",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "用户管理-新用户登录",
+      "status": "PASS",
+      "expected": "200 + token",
+      "actual": "status=200, token=有",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "用户管理-改密码",
+      "status": "PASS",
+      "expected": "200 OK",
+      "actual": "status=200, body={\"success\":true}",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "用户管理-新密码登录",
+      "status": "PASS",
+      "expected": "200 OK (新密码登录)",
+      "actual": "status=200",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "用户管理-管理员重置密码",
+      "status": "PASS",
+      "expected": "200 OK",
+      "actual": "status=200, body={\"id\":52,\"success\":true}",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "用户管理-重置密码登录",
+      "status": "PASS",
+      "expected": "200 OK (重置密码登录)",
+      "actual": "status=200",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "用户管理-禁用",
+      "status": "PASS",
+      "expected": "200 OK",
+      "actual": "status=200",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "用户管理-禁用后登录拦截",
+      "status": "PASS",
+      "expected": "401/403 (禁用用户无法登录)",
+      "actual": "status=401",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "用户管理-审计日志",
+      "status": "PASS",
+      "expected": "userId=52 至少 1 条审计记录",
+      "actual": "共 3 条",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "搜索8字段-oemNo2",
+      "status": "PASS",
+      "expected": "命中 oem2=E2E202607046315",
+      "actual": "total=1, hit=True",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "搜索8字段-oemBrand",
+      "status": "PASS",
+      "expected": "total > 0",
+      "actual": "total=23, elapsed=595ms",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "搜索8字段-oemNo3",
+      "status": "PASS",
+      "expected": "total > 0",
+      "actual": "total=22, elapsed=1041ms",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "搜索8字段-machineBrand",
+      "status": "PASS",
+      "expected": "total > 0",
+      "actual": "total=23, elapsed=1536ms",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "搜索8字段-machineModel",
+      "status": "PASS",
+      "expected": "total > 0",
+      "actual": "total=22, elapsed=1739ms",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "搜索8字段-全空拦截",
+      "status": "PASS",
+      "expected": "400 Bad Request",
+      "actual": "status=400",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "搜索8字段-AND组合",
+      "status": "PASS",
+      "expected": "0 < total ≤ 23 (AND 收窄)",
+      "actual": "total=22",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "搜索8字段-分页",
+      "status": "PASS",
+      "expected": "items ≤ 2, pageSize=2",
+      "actual": "items=2, pageSize=2",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "批量OEM查询",
+      "status": "PASS",
+      "expected": "total=3, hits=2, miss=1, 命中项有 productId",
+      "actual": "total=3, hits=2, miss=1, hit_ok=True, not_exist_ok=True",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "批量OEM-公开访问",
+      "status": "PASS",
+      "expected": "200 OK (无需 token)",
+      "actual": "status=200",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "健康检查-live",
+      "status": "PASS",
+      "expected": "200 + status=alive",
+      "actual": "status=200, body={\"status\":\"alive\"}",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "健康检查-ready",
+      "status": "PASS",
+      "expected": "postgres healthy=true",
+      "actual": "checks=[{'name': 'postgres', 'healthy': True}, {'name': 'meili', 'healthy': True}, {'name': 'fallback', 'healthy': True}, {'name': 'backgroundServices', 'healthy': True, 'stale': []}]",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "性能指标",
+      "status": "PASS",
+      "expected": "p50Ms/p95Ms/errorRate 字段存在",
+      "actual": "p50=6ms, p95=871.6ms, errorRate=0.12%",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "搜索健康检查",
+      "status": "PASS",
+      "expected": "healthy=true",
+      "actual": "provider=resilient(meili→pg), healthy=True",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "ETL历史-列表",
+      "status": "PASS",
+      "expected": "items 非空",
+      "actual": "items=50",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "ETL历史-字段完整性",
+      "status": "PASS",
+      "expected": "包含 ['id', 'entityType', 'status', 'startedAt']",
+      "actual": "keys=['id', 'entityType', 'mode', 'status', 'reasonCode', 'cancelReason', 'cancelledAt', 'readCount', 'insertedCount', 'updatedCount']",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "ETL历史-聚合",
+      "status": "PASS",
+      "expected": "200 OK",
+      "actual": "status=200",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "死信队列-列表",
+      "status": "PASS",
+      "expected": "200 + items 字段",
+      "actual": "items=50, total=1876119",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "死信队列-鉴权",
+      "status": "PASS",
+      "expected": "401 Unauthorized",
+      "actual": "status=401",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "ETL进度-idle",
+      "status": "PASS",
+      "expected": "inProgress=false",
+      "actual": "inProgress=False",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "ETL dry-run xrefs",
+      "status": "PASS",
+      "expected": "dryRun=true + lines>0 + samples 非空",
+      "actual": "lines=100, samples=50",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "ETL cancel-无任务",
+      "status": "PASS",
+      "expected": "cancelled=false",
+      "actual": "cancelled=False",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "ETL pause-无任务",
+      "status": "PASS",
+      "expected": "paused=false",
+      "actual": "paused=False",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "ETL resume-无paused",
+      "status": "PASS",
+      "expected": "404 Not Found",
+      "actual": "status=404",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "ETL鉴权-无token",
+      "status": "PASS",
+      "expected": "401 Unauthorized",
+      "actual": "status=401",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "ETL bad-path",
+      "status": "PASS",
+      "expected": "404 Not Found",
+      "actual": "status=404",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "图片-创建临时产品",
+      "status": "PASS",
+      "expected": "201 Created",
+      "actual": "id=50010, status=201",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "图片-上传slot1",
+      "status": "PASS",
+      "expected": "200 OK",
+      "actual": "status=200, body={\"id\":19,\"productId\":50010,\"slot\":1,\"imageKey\":\"products/IMGTEST2026070561538/IMGTEST2026070561538-1.png\",\"imageUrl\":\"http://localhost:9000/sakurafilter/products/IMGTEST2026070561538/IMGTEST2026070561",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "图片-列表含slot1",
+      "status": "PASS",
+      "expected": "slot=1 存在",
+      "actual": "items=1, has_slot1=True",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "图片-slot越界",
+      "status": "PASS",
+      "expected": "400 Bad Request",
+      "actual": "status=400",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "图片-产品不存在",
+      "status": "PASS",
+      "expected": "404 Not Found",
+      "actual": "status=404",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "图片-鉴权",
+      "status": "PASS",
+      "expected": "401 Unauthorized",
+      "actual": "status=401",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "图片-删除slot1",
+      "status": "PASS",
+      "expected": "200 OK",
+      "actual": "status=200",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "图片-清理产品",
+      "status": "PASS",
+      "expected": "200/204",
+      "actual": "status=200",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "产品restore-不存在",
+      "status": "PASS",
+      "expected": "404 Not Found",
+      "actual": "status=404",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "产品compare",
+      "status": "PASS",
+      "expected": "200 + 响应体非空",
+      "actual": "status=200, len=2054",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "后台产品搜索",
+      "status": "PASS",
+      "expected": "200 OK",
+      "actual": "status=200",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "性能告警",
+      "status": "PASS",
+      "expected": "200 OK",
+      "actual": "status=200",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "认证状态",
+      "status": "PASS",
+      "expected": "currentLen + loadedFromDb 字段",
+      "actual": "keys=['currentLen', 'currentPrefix', 'previousLen', 'previousPrefix', 'lastRotatedAt']",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "字典schema",
+      "status": "PASS",
+      "expected": "200 + schema 非空",
+      "actual": "status=200, len=4597",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "字典typeahead",
+      "status": "PASS",
+      "expected": "200 OK",
+      "actual": "status=200",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "搜索POST",
+      "status": "PASS",
+      "expected": "200 OK",
+      "actual": "status=200",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "公开产品详情",
+      "status": "PASS",
+      "expected": "200 OK",
+      "actual": "status=200",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "公开ETL状态",
+      "status": "PASS",
+      "expected": "200 OK",
+      "actual": "status=200",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "死信恢复-不存在",
+      "status": "PASS",
+      "expected": "404 Not Found",
+      "actual": "status=404",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "Prometheus指标",
+      "status": "PASS",
+      "expected": "200 + 指标非空",
+      "actual": "status=200, len=821129",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "SQL注入-公开搜索",
+      "status": "PASS",
+      "expected": "total=0 (字面值搜索)",
+      "actual": "total=0",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "路径遍历-ETL",
+      "status": "PASS",
+      "expected": "400 Bad Request",
+      "actual": "status=400",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "超长OEM号",
+      "status": "PASS",
+      "expected": "400 Bad Request",
+      "actual": "status=400",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "缺必填字段",
+      "status": "PASS",
+      "expected": "400 Bad Request",
+      "actual": "status=400",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "无效JSON",
+      "status": "PASS",
+      "expected": "400 Bad Request",
+      "actual": "status=400",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "XSS-创建接受",
+      "status": "PASS",
+      "expected": "201 + JSON 含原始 <script> (前端负责转义)",
+      "actual": "id=50011, raw_has_script=True",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "字典空值",
+      "status": "PASS",
+      "expected": "400 Bad Request",
+      "actual": "status=400",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "字典超长值",
+      "status": "PASS",
+      "expected": "400 Bad Request",
+      "actual": "status=400",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "弱密码",
+      "status": "PASS",
+      "expected": "400 Bad Request",
+      "actual": "status=400",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "非法用户名",
+      "status": "PASS",
+      "expected": "400 Bad Request",
+      "actual": "status=400",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "XSS-清理产品",
+      "status": "PASS",
+      "expected": "200/204",
+      "actual": "status=200",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "乐观锁-创建产品",
+      "status": "PASS",
+      "expected": "201 Created",
+      "actual": "id=50012, status=201",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "乐观锁-GET RowVersion",
+      "status": "PASS",
+      "expected": "rowVersion 非空",
+      "actual": "rowVersion=123124328",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "乐观锁-PUT1成功",
+      "status": "PASS",
+      "expected": "200 OK",
+      "actual": "status=200",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "乐观锁-PUT2冲突",
+      "status": "PASS",
+      "expected": "409 Conflict",
+      "actual": "status=409",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "乐观锁-清理产品",
+      "status": "PASS",
+      "expected": "200/204",
+      "actual": "status=200",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "SSE流-第一帧",
+      "status": "PASS",
+      "expected": "200 + text/event-stream + data:{inProgress}",
+      "actual": "status=200, ct=text/event-stream, first=data: {\"inProgress\":false,\"activeTask\":null}",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "机型品牌聚合",
+      "status": "PASS",
+      "expected": "4 大类 key 存在 + totalCount",
+      "actual": "cats=['Agriculture', 'Commercial', 'Construction', 'others'], total=21",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "机型品牌-公开访问",
+      "status": "PASS",
+      "expected": "200 OK (AllowAnonymous)",
+      "actual": "status=200",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "SSE流-鉴权",
+      "status": "PASS",
+      "expected": "401 Unauthorized",
+      "actual": "status=401",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "by-type聚合",
+      "status": "PASS",
+      "expected": "200 + groups 非空",
+      "actual": "groups=46, total=0",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "产品详情-slug",
+      "status": "PASS",
+      "expected": "id + oem2 + productName1 字段",
+      "actual": "keys=['id', 'oemNoDisplay', 'oem2', 'mr1', 'productName1', 'productName2', 'type', 'isPublished']",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "产品详情-不存在",
+      "status": "PASS",
+      "expected": "404 Not Found",
+      "actual": "status=404",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "by-type公开访问",
+      "status": "PASS",
+      "expected": "200 OK (AllowAnonymous)",
+      "actual": "status=200",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "8字典typeahead一致性",
+      "status": "PASS",
+      "expected": "8 个字典全部 200",
+      "actual": "oem-brands=OK, product-name1s=OK, product-name2s=OK, types=OK, oem-no3s=OK, medias=OK, machines=OK, engines=OK",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "Auth-me",
+      "status": "PASS",
+      "expected": "username=admin, role=admin, id 存在",
+      "actual": "username=admin, role=admin, id=1",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "Auth-refresh",
+      "status": "PASS",
+      "expected": "200 + 新 accessToken + 新 refreshToken",
+      "actual": "new_access=有, new_refresh=有",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "Auth-refresh-一次性",
+      "status": "PASS",
+      "expected": "401 (旧 refresh token 已撤销)",
+      "actual": "status=401",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "Auth-logout",
+      "status": "PASS",
+      "expected": "200 OK",
+      "actual": "status=200",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "Auth-logout-失效",
+      "status": "PASS",
+      "expected": "401 (logout 后 refresh token 已失效)",
+      "actual": "status=401",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "死信-cursor翻页",
+      "status": "PASS",
+      "expected": "200 + 第二页 items",
+      "actual": "status=200, items=1",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "死信-since无效格式",
+      "status": "PASS",
+      "expected": "400 Bad Request",
+      "actual": "status=400",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "死信-recovery过滤",
+      "status": "PASS",
+      "expected": "200 + minRecoveryCount/maxRecoveryCount 字段",
+      "actual": "keys=['total', 'totalInRange', 'returned', 'limit', 'since', 'minRecoveryCount', 'maxRecoveryCount', 'cursor']",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "死信-operation过滤",
+      "status": "PASS",
+      "expected": "returned=0 (不存在的 op)",
+      "actual": "returned=0, total=1876119",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "死信-recover-batch空操作",
+      "status": "PASS",
+      "expected": "200 + matched=0 + moved=0 (无副作用)",
+      "actual": "matched=0, moved=0",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "图片边界-创建产品",
+      "status": "PASS",
+      "expected": "201 Created",
+      "actual": "id=50013, status=201",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "图片边界-不支持类型",
+      "status": "PASS",
+      "expected": "409 (InvalidOperationException → ProblemDetailsFactory)",
+      "actual": "status=409",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "图片边界-缺file字段",
+      "status": "PASS",
+      "expected": "400 Bad Request",
+      "actual": "status=400",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "图片边界-非multipart",
+      "status": "PASS",
+      "expected": "400 Bad Request",
+      "actual": "status=400",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "图片边界-清理产品",
+      "status": "PASS",
+      "expected": "200/204",
+      "actual": "status=200",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "cursor-首页",
+      "status": "PASS",
+      "expected": "200 + items + nextCursor (3 段格式)",
+      "actual": "items=3, nextCursor=有, valid=True",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "cursor-翻第二页",
+      "status": "PASS",
+      "expected": "200 + 第二页 items + 与首页无重复",
+      "actual": "items=3, overlap=0",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "cursor-篡改验签",
+      "status": "PASS",
+      "expected": "400 Bad Request (HMAC 验签失败)",
+      "actual": "status=400",
+      "evidence": ""
+    },
+    {
+      "scenario": "后端深水区",
+      "check": "cursor-格式错",
+      "status": "PASS",
+      "expected": "400 Bad Request (cursor 格式错)",
+      "actual": "status=400",
+      "evidence": ""
+    }
+  ]
+}

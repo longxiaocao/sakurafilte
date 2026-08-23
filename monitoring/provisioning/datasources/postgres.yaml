@@ -1,0 +1,21 @@
+apiVersion: 1
+
+# PostgreSQL 数据源 (供 ETL 运维面板使用)
+#   WHY: 现有 grafana-dashboard-etl.json 通过 rawSql 查询 search_index_dead_letter / etl_progress_log 等表
+#   凭据从 grafana 容器环境变量读取 (POSTGRES_DB / POSTGRES_USER / POSTGRES_PASSWORD)
+datasources:
+  - name: 'PostgreSQL-SakuraFilter'
+    type: postgres
+    uid: postgres-sakurafilter
+    access: proxy
+    url: postgres:5432
+    database: ${POSTGRES_DB}
+    user: ${POSTGRES_USER}
+    secureJsonData:
+      password: ${POSTGRES_PASSWORD}
+    isDefault: false
+    editable: true
+    jsonData:
+      sslmode: disable
+      postgresVersion: 1600
+      timescaledb: false

@@ -1,0 +1,33 @@
+using SakuraFilter.Api.Endpoints;
+
+namespace SakuraFilter.Api.Extensions;
+
+/// <summary>
+/// 统一端点映射扩展。按模块调用各 Endpoints 类的 Map 方法。
+/// </summary>
+public static class EndpointRouteBuilderExtensions
+{
+    public static IEndpointRouteBuilder MapSakuraFilterEndpoints(this IEndpointRouteBuilder app)
+    {
+        app.MapCommonEndpoints();
+        app.MapProductEndpoints();
+        app.MapEtlEndpoints();
+        app.MapAdminProductEndpoints();
+        app.MapAdminEtlEndpoints();
+        app.MapAdminAlertEndpoints();  // P2-1
+        app.MapAdminXrefReorderEndpoints();  // V2 Task 2.1: OEM 3 排序管理
+        app.MapAdminMachineBatchBindEndpoints();  // Task 2: 批量绑定 MR.1 到机型
+        app.MapDeadLetterEndpoints();
+        app.MapDictionaryEndpoints();
+        app.MapStorageEndpoints();  // 🔧 fix: 图片代理端点 (MinIO 容器内不可直连 → 裂图)
+        app.MapStorageConfigEndpoints();  // 🔧 fix: 存储配置 (运维中心: 查看/保存/连通测试)
+        app.MapAdminMachineTreeEndpoints();  // Task 1: 机型三级树查询
+        app.MapSiteContentEndpoints();  // 站点内容维护 (about/contact/news/站点名/logo)
+        app.MapPublicTypeaheadEndpoints();
+        // V2 Task 4.3: sitemap.xml 端点
+        app.MapSitemapEndpoints();
+        // P3.2 (Task 10): MVC 控制器路由 (PublicSearchController 等)
+        app.MapControllers();
+        return app;
+    }
+}

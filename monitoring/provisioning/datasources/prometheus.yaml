@@ -1,0 +1,12 @@
+apiVersion: 1
+
+# P3-10.3: Prometheus 数据源
+#   WHY backend:5148: backend 暴露 /metrics 端点 (P3-5.3), Grafana 直接读取
+#   后续若引入独立 Prometheus 服务, 改 url 即可
+datasources:
+  - name: 'Prometheus'
+    type: prometheus
+    access: proxy
+    url: http://backend:5148
+    isDefault: true
+    editable: true

@@ -1,0 +1,531 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "SakuraFilter Meili 主路径监控面板 — v30-20/v30-21\n涵盖: Meili P50/P95/P99/Max 延迟趋势、降级率、错误率、样本数\n数据源: Prometheus (backend /metrics 端点暴露 sakura_meili_* 指标)\n告警规则: PerfAlertService 通过 AlertCenter 推送 (meili_p99_error P0 / meili_p99_warn P1 / meili_fallback_rate_error P0)",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "P50 延迟",
+      "description": "Meili 主路径 P50 延迟 (ms, 仅 PrimarySuccess 样本, 最近 1000 条)\n指标: sakura_meili_p50_ms\n健康基线: < 100ms",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sakura_meili_p50_ms",
+          "legendFormat": "P50",
+          "range": true
+        }
+      ],
+      "options": {
+        "reduceOptions": { "values": false, "calcs": ["lastNotNull"], "fields": "" },
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "area"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": 0, "color": "green" },
+              { "value": 100, "color": "yellow" },
+              { "value": 500, "color": "red" }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "P95 延迟",
+      "description": "Meili 主路径 P95 延迟 (ms, 仅 PrimarySuccess 样本)\n指标: sakura_meili_p95_ms\n健康基线: < 300ms",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sakura_meili_p95_ms",
+          "legendFormat": "P95",
+          "range": true
+        }
+      ],
+      "options": {
+        "reduceOptions": { "values": false, "calcs": ["lastNotNull"], "fields": "" },
+        "colorMode": "background",
+        "graphMode": "area"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": 0, "color": "green" },
+              { "value": 300, "color": "yellow" },
+              { "value": 1000, "color": "red" }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "P99 延迟 (核心 SLO)",
+      "description": "Meili 主路径 P99 延迟 (ms, 仅 PrimarySuccess 样本)\n指标: sakura_meili_p99_ms\n告警阈值: WARN≥500ms (P1), ERROR≥1500ms (P0)\n说明: P99 仅基于 PrimarySuccess 样本, Fallback 不计入 (避免掩盖 Meili 真实问题)",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sakura_meili_p99_ms",
+          "legendFormat": "P99",
+          "range": true
+        }
+      ],
+      "options": {
+        "reduceOptions": { "values": false, "calcs": ["lastNotNull"], "fields": "" },
+        "colorMode": "background",
+        "graphMode": "area"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": 0, "color": "green" },
+              { "value": 500, "color": "yellow" },
+              { "value": 1500, "color": "red" }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "降级率",
+      "description": "Meili 主路径降级率 (%, FallbackCount/TotalSearchCount×100, 最近 1000 条样本)\n指标: sakura_meili_fallback_rate_pct\n告警阈值: ≥20% 触发 meili_fallback_rate_error (P0)\n说明: 降级率高 = Meili 频繁不可用, 系统依赖 PG fallback 兜底",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sakura_meili_fallback_rate_pct",
+          "legendFormat": "降级率",
+          "range": true
+        }
+      ],
+      "options": {
+        "reduceOptions": { "values": false, "calcs": ["lastNotNull"], "fields": "" },
+        "colorMode": "background",
+        "graphMode": "area"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": 0, "color": "green" },
+              { "value": 5, "color": "yellow" },
+              { "value": 20, "color": "red" }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Meili 延迟趋势 (P50/P95/P99/Max)",
+      "description": "Meili 主路径延迟趋势 (ms, 仅 PrimarySuccess 样本, 最近 1000 条滑动窗口)\n指标: sakura_meili_p50_ms / p95_ms / p99_ms / max_ms\n解读:\n  - P50 反映中位数用户体验\n  - P95 反映大多数用户体验 (SLO 基线)\n  - P99 反映尾部延迟 (告警规则核心)\n  - Max 含 Fallback 样本, 用于发现极端慢请求\n说明: ring buffer 1000 样本, P99 nearest-rank 算法, BusinessMetricsRefreshWorker 30s 刷新",
+      "gridPos": { "h": 10, "w": 16, "x": 0, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sakura_meili_p50_ms",
+          "legendFormat": "P50",
+          "range": true
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sakura_meili_p95_ms",
+          "legendFormat": "P95",
+          "range": true
+        },
+        {
+          "refId": "C",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sakura_meili_p99_ms",
+          "legendFormat": "P99 (核心)",
+          "range": true
+        },
+        {
+          "refId": "D",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sakura_meili_max_ms",
+          "legendFormat": "Max (含 Fallback)",
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "pointSize": 5,
+            "showPoints": "never"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": 0, "color": "green" },
+              { "value": 500, "color": "yellow" },
+              { "value": 1500, "color": "red" }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "P99 (核心)" },
+            "properties": [
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } },
+              { "id": "custom.lineWidth", "value": 3 }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Max (含 Fallback)" },
+            "properties": [
+              { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [10, 10] } }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max", "lastNotNull"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Meili 降级率 & 错误率趋势",
+      "description": "Meili 主路径降级率与错误率趋势 (%)\n指标:\n  - sakura_meili_fallback_rate_pct (降级率, FallbackCount/Total)\n  - sakura_meili_primary_error_rate_pct (错误率, PrimaryErrorCount/Total)\n告警阈值:\n  - 降级率 ≥ 20% → meili_fallback_rate_error (P0)\n  - 错误率高表示 Meili 调用本身抛异常 (非降级)",
+      "gridPos": { "h": 10, "w": 8, "x": 16, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sakura_meili_fallback_rate_pct",
+          "legendFormat": "降级率",
+          "range": true
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sakura_meili_primary_error_rate_pct",
+          "legendFormat": "主路径错误率",
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 20,
+            "pointSize": 5,
+            "showPoints": "never"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": 0, "color": "green" },
+              { "value": 5, "color": "yellow" },
+              { "value": 20, "color": "red" }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "降级率" },
+            "properties": [
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "主路径错误率" },
+            "properties": [
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max", "lastNotNull"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 20,
+      "type": "stat",
+      "title": "样本数 (ring buffer)",
+      "description": "Meili 主路径指标样本数 (0-1000)\n指标: sakura_meili_sample_count\n说明:\n  - 0: 启动初期或无搜索请求, P99 等指标为 0 (不刷新)\n  - 1000: ring buffer 已满, 指标反映最近 1000 条搜索\n  - 业务低峰期可能不到 1000, 高峰期维持 1000\n告警门槛: <10 时不评估 Meili 规则 (PerfAlertService.RunOnceAsync)",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 14 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sakura_meili_sample_count",
+          "legendFormat": "样本数",
+          "range": true
+        }
+      ],
+      "options": {
+        "reduceOptions": { "values": false, "calcs": ["lastNotNull"], "fields": "" },
+        "colorMode": "background",
+        "graphMode": "area"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": 0, "color": "red" },
+              { "value": 10, "color": "yellow" },
+              { "value": 100, "color": "green" }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 21,
+      "type": "stat",
+      "title": "主路径成功次数",
+      "description": "Meili 主路径成功次数 (最近 1000 条样本窗口内 PrimarySuccessCount)\n指标: sakura_meili_primary_success_count\n说明: ring buffer 满后该值接近 1000 - FallbackCount - PrimaryErrorCount",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 14 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sakura_meili_primary_success_count",
+          "legendFormat": "成功次数",
+          "range": true
+        }
+      ],
+      "options": {
+        "reduceOptions": { "values": false, "calcs": ["lastNotNull"], "fields": "" },
+        "colorMode": "background",
+        "graphMode": "area"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": 0, "color": "red" },
+              { "value": 800, "color": "yellow" },
+              { "value": 950, "color": "green" }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 22,
+      "type": "stat",
+      "title": "降级次数",
+      "description": "Meili 主路径降级次数 (最近 1000 条样本窗口内 FallbackCount)\n指标: sakura_meili_fallback_count\n说明: 超过 200 次 (20%) 触发 meili_fallback_rate_error P0 告警\n降级原因: Meili 不可用 / Polly 熔断 / 超时 / 其他异常, 全部走 PG fallback",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 14 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sakura_meili_fallback_count",
+          "legendFormat": "降级次数",
+          "range": true
+        }
+      ],
+      "options": {
+        "reduceOptions": { "values": false, "calcs": ["lastNotNull"], "fields": "" },
+        "colorMode": "background",
+        "graphMode": "area"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": 0, "color": "green" },
+              { "value": 50, "color": "yellow" },
+              { "value": 200, "color": "red" }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 23,
+      "type": "stat",
+      "title": "Max 延迟",
+      "description": "Meili 主路径最大延迟 (ms, 含 Fallback 样本, 用于发现极端慢请求)\n指标: sakura_meili_max_ms\n说明: MaxMs 含所有样本 (含 Fallback), 与 P99 (仅 PrimarySuccess) 互补\n异常基线: > 5000ms 需排查 (可能是 PG fallback 慢或 Meili 超时)",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 14 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sakura_meili_max_ms",
+          "legendFormat": "Max",
+          "range": true
+        }
+      ],
+      "options": {
+        "reduceOptions": { "values": false, "calcs": ["lastNotNull"], "fields": "" },
+        "colorMode": "background",
+        "graphMode": "area"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": 0, "color": "green" },
+              { "value": 2000, "color": "yellow" },
+              { "value": 5000, "color": "red" }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 30,
+      "type": "timeseries",
+      "title": "Meili 调用量 (主路径成功 / 降级 / 样本数)",
+      "description": "Meili 主路径调用量趋势\n指标:\n  - sakura_meili_primary_success_count (PrimarySuccess 次数)\n  - sakura_meili_fallback_count (Fallback 次数)\n  - sakura_meili_sample_count (ring buffer 当前容量)\n说明: 三个值在 ring buffer 满后接近 1000, 反映窗口内构成",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 18 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sakura_meili_primary_success_count",
+          "legendFormat": "主路径成功",
+          "range": true
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sakura_meili_fallback_count",
+          "legendFormat": "降级 (PG fallback)",
+          "range": true
+        },
+        {
+          "refId": "C",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sakura_meili_sample_count",
+          "legendFormat": "样本总数",
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "pointSize": 5,
+            "showPoints": "never"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "主路径成功" },
+            "properties": [
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "降级 (PG fallback)" },
+            "properties": [
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "样本总数" },
+            "properties": [
+              { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [10, 10] } },
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "blue" } }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max", "lastNotNull"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": ["sakurafilter", "meili", "v30-21"],
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "type": "datasource",
+        "label": "数据源",
+        "current": { "text": "Prometheus", "value": "prometheus" },
+        "query": "prometheus"
+      }
+    ]
+  },
+  "time": { "from": "now-6h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "SakuraFilter Meili 主路径监控",
+  "uid": "sakurafilter-meili-v30-21",
+  "version": 1,
+  "weekStart": ""
+}

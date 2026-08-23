@@ -1,0 +1,82 @@
+{
+  "timestamp": "2026-07-19T16:45:12.595491",
+  "test_qs": [
+    "oil",
+    "filter",
+    "CAT",
+    "bosch",
+    "kubota"
+  ],
+  "phase1_no_gin_trgm": [
+    {
+      "q": "oil",
+      "baseline_p95_ms": 2179.8069999931613,
+      "cte_split_p95_ms": 794.8406000068644,
+      "cte_inline_p95_ms": 1013.5913999984041
+    },
+    {
+      "q": "filter",
+      "baseline_p95_ms": 272.301899996819,
+      "cte_split_p95_ms": 2719.38670000236,
+      "cte_inline_p95_ms": 1234.5454000023892
+    },
+    {
+      "q": "CAT",
+      "baseline_p95_ms": 1909.376899988274,
+      "cte_split_p95_ms": 141.54860000417102,
+      "cte_inline_p95_ms": 1528.9067000121577
+    },
+    {
+      "q": "bosch",
+      "baseline_p95_ms": 1330.143599989242,
+      "cte_split_p95_ms": 153.34669999720063,
+      "cte_inline_p95_ms": 1691.5395999967586
+    },
+    {
+      "q": "kubota",
+      "baseline_p95_ms": 3174.18170000019,
+      "cte_split_p95_ms": 149.62690000538714,
+      "cte_inline_p95_ms": 1115.9648999891942
+    }
+  ],
+  "phase2_with_gin_trgm": [
+    {
+      "q": "oil",
+      "baseline_p95_ms": 1997.552300003008,
+      "cte_split_p95_ms": 667.2849999886239,
+      "cte_inline_p95_ms": 946.003600009135
+    },
+    {
+      "q": "filter",
+      "baseline_p95_ms": 235.93460000120103,
+      "cte_split_p95_ms": 2467.886999991606,
+      "cte_inline_p95_ms": 1118.6874999984866
+    },
+    {
+      "q": "CAT",
+      "baseline_p95_ms": 1336.1370000056922,
+      "cte_split_p95_ms": 1.6560999938519672,
+      "cte_inline_p95_ms": 1573.5949000081746
+    },
+    {
+      "q": "bosch",
+      "baseline_p95_ms": 1621.6818000102649,
+      "cte_split_p95_ms": 3.2494000042788684,
+      "cte_inline_p95_ms": 1787.4708000017563
+    },
+    {
+      "q": "kubota",
+      "baseline_p95_ms": 2865.683700001682,
+      "cte_split_p95_ms": 2.6419000059831887,
+      "cte_inline_p95_ms": 1238.1590000004508
+    }
+  ],
+  "avg_p95": {
+    "phase1_baseline": 1773.1622199935373,
+    "phase1_cte_split": 791.7499000031967,
+    "phase1_cte_inline": 1316.9095999997808,
+    "phase2_baseline": 1611.3978800043697,
+    "phase2_cte_split": 628.5438799968688,
+    "phase2_cte_inline": 1332.7831600036006
+  }
+}

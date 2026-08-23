@@ -1,0 +1,583 @@
+{
+  "timestamp": "2026-07-19T20:10:35.179863",
+  "results": {
+    "50K (spike_test_v3)": {
+      "label": "50K (spike_test_v3)",
+      "tokens": {
+        "filter": {
+          "hit_count": 49912,
+          "hit_pct": 99.95,
+          "type_exact_match_count": 25,
+          "is_high_freq": true,
+          "products_hit": 49912,
+          "xref_hit": 0,
+          "machine_hit": 0
+        },
+        "oil": {
+          "hit_count": 12462,
+          "hit_pct": 24.96,
+          "type_exact_match_count": 0,
+          "is_high_freq": false,
+          "products_hit": 12462,
+          "xref_hit": 0,
+          "machine_hit": 0
+        },
+        "air": {
+          "hit_count": 17359,
+          "hit_pct": 34.76,
+          "type_exact_match_count": 0,
+          "is_high_freq": false,
+          "products_hit": 17359,
+          "xref_hit": 0,
+          "machine_hit": 0
+        },
+        "fuel": {
+          "hit_count": 6335,
+          "hit_pct": 12.69,
+          "type_exact_match_count": 0,
+          "is_high_freq": false,
+          "products_hit": 6335,
+          "xref_hit": 0,
+          "machine_hit": 0
+        },
+        "water": {
+          "hit_count": 1320,
+          "hit_pct": 2.64,
+          "type_exact_match_count": 0,
+          "is_high_freq": false,
+          "products_hit": 1320,
+          "xref_hit": 0,
+          "machine_hit": 0
+        },
+        "cabin": {
+          "hit_count": 3467,
+          "hit_pct": 6.94,
+          "type_exact_match_count": 0,
+          "is_high_freq": false,
+          "products_hit": 3467,
+          "xref_hit": 0,
+          "machine_hit": 0
+        },
+        "hydraulic": {
+          "hit_count": 3426,
+          "hit_pct": 6.86,
+          "type_exact_match_count": 0,
+          "is_high_freq": false,
+          "products_hit": 3426,
+          "xref_hit": 0,
+          "machine_hit": 0
+        },
+        "diesel": {
+          "hit_count": 439,
+          "hit_pct": 0.88,
+          "type_exact_match_count": 0,
+          "is_high_freq": false,
+          "products_hit": 439,
+          "xref_hit": 0,
+          "machine_hit": 0
+        },
+        "separate": {
+          "hit_count": 0,
+          "hit_pct": 0.0,
+          "type_exact_match_count": 0,
+          "is_high_freq": false,
+          "products_hit": 0,
+          "xref_hit": 0,
+          "machine_hit": 0
+        },
+        "carbon": {
+          "hit_count": 1727,
+          "hit_pct": 3.46,
+          "type_exact_match_count": 0,
+          "is_high_freq": false,
+          "products_hit": 1727,
+          "xref_hit": 0,
+          "machine_hit": 0
+        },
+        "coolant": {
+          "hit_count": 875,
+          "hit_pct": 1.75,
+          "type_exact_match_count": 0,
+          "is_high_freq": false
+        },
+        "spin": {
+          "hit_count": 892,
+          "hit_pct": 1.79,
+          "type_exact_match_count": 0,
+          "is_high_freq": false
+        },
+        "cartridge": {
+          "hit_count": 823,
+          "hit_pct": 1.65,
+          "type_exact_match_count": 0,
+          "is_high_freq": false
+        },
+        "industrial": {
+          "hit_count": 3135,
+          "hit_pct": 6.28,
+          "type_exact_match_count": 0,
+          "is_high_freq": false
+        },
+        "marine": {
+          "hit_count": 422,
+          "hit_pct": 0.85,
+          "type_exact_match_count": 0,
+          "is_high_freq": false
+        },
+        "turbo": {
+          "hit_count": 403,
+          "hit_pct": 0.81,
+          "type_exact_match_count": 0,
+          "is_high_freq": false
+        },
+        "exhaust": {
+          "hit_count": 424,
+          "hit_pct": 0.85,
+          "type_exact_match_count": 0,
+          "is_high_freq": false
+        },
+        "breather": {
+          "hit_count": 422,
+          "hit_pct": 0.85,
+          "type_exact_match_count": 0,
+          "is_high_freq": false
+        },
+        "CAT": {
+          "hit_count": 42585,
+          "hit_pct": 85.28,
+          "type_exact_match_count": 0,
+          "is_high_freq": true
+        },
+        "bosch": {
+          "hit_count": 33709,
+          "hit_pct": 67.5,
+          "type_exact_match_count": 0,
+          "is_high_freq": true
+        },
+        "kubota": {
+          "hit_count": 21876,
+          "hit_pct": 43.81,
+          "type_exact_match_count": 0,
+          "is_high_freq": false
+        }
+      },
+      "data_volume": {
+        "products_published_not_discontinued": 49937,
+        "xrefs_published_not_discontinued": 623134,
+        "machine_applications": 775053
+      },
+      "type_distribution_top30": [
+        {
+          "type": "AIR FILTER",
+          "count": 10893,
+          "pct": 21.81
+        },
+        {
+          "type": "OIL FILTER",
+          "count": 9437,
+          "pct": 18.9
+        },
+        {
+          "type": "FUEL FILTER",
+          "count": 6335,
+          "pct": 12.69
+        },
+        {
+          "type": "CABIN AIR FILTER",
+          "count": 3467,
+          "pct": 6.94
+        },
+        {
+          "type": "HYDRAULIC FILTER",
+          "count": 3426,
+          "pct": 6.86
+        },
+        {
+          "type": "PETROL FILTER",
+          "count": 2575,
+          "pct": 5.16
+        },
+        {
+          "type": "AIR/OIL SEPARATOR",
+          "count": 2158,
+          "pct": 4.32
+        },
+        {
+          "type": "ACTIVATED CARBON FILTER",
+          "count": 1727,
+          "pct": 3.46
+        },
+        {
+          "type": "WATER SEPARATOR",
+          "count": 1320,
+          "pct": 2.64
+        },
+        {
+          "type": "SPIN-ON FILTER",
+          "count": 892,
+          "pct": 1.79
+        },
+        {
+          "type": "COOLANT FILTER",
+          "count": 875,
+          "pct": 1.75
+        },
+        {
+          "type": "OIL SEPARATOR",
+          "count": 867,
+          "pct": 1.74
+        },
+        {
+          "type": "INDUSTRIAL FILTER",
+          "count": 847,
+          "pct": 1.7
+        },
+        {
+          "type": "AIR DRYER",
+          "count": 841,
+          "pct": 1.68
+        },
+        {
+          "type": "CARTRIDGE FILTER",
+          "count": 823,
+          "pct": 1.65
+        },
+        {
+          "type": "POWER STEERING FILTER",
+          "count": 442,
+          "pct": 0.89
+        },
+        {
+          "type": "UREA FILTER",
+          "count": 440,
+          "pct": 0.88
+        },
+        {
+          "type": "DIESEL FILTER",
+          "count": 439,
+          "pct": 0.88
+        },
+        {
+          "type": "TRANSMISSION FILTER",
+          "count": 437,
+          "pct": 0.88
+        },
+        {
+          "type": "EXHAUST FILTER",
+          "count": 424,
+          "pct": 0.85
+        },
+        {
+          "type": "MARINE FILTER",
+          "count": 422,
+          "pct": 0.85
+        },
+        {
+          "type": "BREATHER FILTER",
+          "count": 422,
+          "pct": 0.85
+        },
+        {
+          "type": "TURBO FILTER",
+          "count": 403,
+          "pct": 0.81
+        },
+        {
+          "type": "filter",
+          "count": 25,
+          "pct": 0.05
+        }
+      ]
+    },
+    "1M (sakurafilter_perf_tests)": {
+      "label": "1M (sakurafilter_perf_tests)",
+      "tokens": {
+        "filter": {
+          "hit_count": 948328,
+          "hit_pct": 99.95,
+          "type_exact_match_count": 475,
+          "is_high_freq": true,
+          "products_hit": 948328,
+          "xref_hit": 0,
+          "machine_hit": 0
+        },
+        "oil": {
+          "hit_count": 236778,
+          "hit_pct": 24.96,
+          "type_exact_match_count": 0,
+          "is_high_freq": false,
+          "products_hit": 236778,
+          "xref_hit": 0,
+          "machine_hit": 0
+        },
+        "air": {
+          "hit_count": 329821,
+          "hit_pct": 34.76,
+          "type_exact_match_count": 0,
+          "is_high_freq": false,
+          "products_hit": 329821,
+          "xref_hit": 0,
+          "machine_hit": 0
+        },
+        "fuel": {
+          "hit_count": 120365,
+          "hit_pct": 12.69,
+          "type_exact_match_count": 0,
+          "is_high_freq": false,
+          "products_hit": 120365,
+          "xref_hit": 0,
+          "machine_hit": 0
+        },
+        "water": {
+          "hit_count": 25080,
+          "hit_pct": 2.64,
+          "type_exact_match_count": 0,
+          "is_high_freq": false,
+          "products_hit": 25080,
+          "xref_hit": 0,
+          "machine_hit": 0
+        },
+        "cabin": {
+          "hit_count": 65873,
+          "hit_pct": 6.94,
+          "type_exact_match_count": 0,
+          "is_high_freq": false,
+          "products_hit": 65873,
+          "xref_hit": 0,
+          "machine_hit": 0
+        },
+        "hydraulic": {
+          "hit_count": 65094,
+          "hit_pct": 6.86,
+          "type_exact_match_count": 0,
+          "is_high_freq": false,
+          "products_hit": 65094,
+          "xref_hit": 0,
+          "machine_hit": 0
+        },
+        "diesel": {
+          "hit_count": 8341,
+          "hit_pct": 0.88,
+          "type_exact_match_count": 0,
+          "is_high_freq": false,
+          "products_hit": 8341,
+          "xref_hit": 0,
+          "machine_hit": 0
+        },
+        "separate": {
+          "hit_count": 0,
+          "hit_pct": 0.0,
+          "type_exact_match_count": 0,
+          "is_high_freq": false,
+          "products_hit": 0,
+          "xref_hit": 0,
+          "machine_hit": 0
+        },
+        "carbon": {
+          "hit_count": 32813,
+          "hit_pct": 3.46,
+          "type_exact_match_count": 0,
+          "is_high_freq": false,
+          "products_hit": 32813,
+          "xref_hit": 0,
+          "machine_hit": 0
+        },
+        "coolant": {
+          "hit_count": 16625,
+          "hit_pct": 1.75,
+          "type_exact_match_count": 0,
+          "is_high_freq": false
+        },
+        "spin": {
+          "hit_count": 16948,
+          "hit_pct": 1.79,
+          "type_exact_match_count": 0,
+          "is_high_freq": false
+        },
+        "cartridge": {
+          "hit_count": 15637,
+          "hit_pct": 1.65,
+          "type_exact_match_count": 0,
+          "is_high_freq": false
+        },
+        "industrial": {
+          "hit_count": 59565,
+          "hit_pct": 6.28,
+          "type_exact_match_count": 0,
+          "is_high_freq": false
+        },
+        "marine": {
+          "hit_count": 8018,
+          "hit_pct": 0.85,
+          "type_exact_match_count": 0,
+          "is_high_freq": false
+        },
+        "turbo": {
+          "hit_count": 7657,
+          "hit_pct": 0.81,
+          "type_exact_match_count": 0,
+          "is_high_freq": false
+        },
+        "exhaust": {
+          "hit_count": 8056,
+          "hit_pct": 0.85,
+          "type_exact_match_count": 0,
+          "is_high_freq": false
+        },
+        "breather": {
+          "hit_count": 8018,
+          "hit_pct": 0.85,
+          "type_exact_match_count": 0,
+          "is_high_freq": false
+        },
+        "CAT": {
+          "hit_count": 277568,
+          "hit_pct": 29.25,
+          "type_exact_match_count": 0,
+          "is_high_freq": false
+        },
+        "bosch": {
+          "hit_count": 294579,
+          "hit_pct": 31.05,
+          "type_exact_match_count": 0,
+          "is_high_freq": false
+        },
+        "kubota": {
+          "hit_count": 214525,
+          "hit_pct": 22.61,
+          "type_exact_match_count": 0,
+          "is_high_freq": false
+        }
+      },
+      "data_volume": {
+        "products_published_not_discontinued": 948803,
+        "xrefs_published_not_discontinued": 4751045,
+        "machine_applications": 4751045
+      },
+      "type_distribution_top30": [
+        {
+          "type": "AIR FILTER",
+          "count": 206967,
+          "pct": 21.81
+        },
+        {
+          "type": "OIL FILTER",
+          "count": 179303,
+          "pct": 18.9
+        },
+        {
+          "type": "FUEL FILTER",
+          "count": 120365,
+          "pct": 12.69
+        },
+        {
+          "type": "CABIN AIR FILTER",
+          "count": 65873,
+          "pct": 6.94
+        },
+        {
+          "type": "HYDRAULIC FILTER",
+          "count": 65094,
+          "pct": 6.86
+        },
+        {
+          "type": "PETROL FILTER",
+          "count": 48925,
+          "pct": 5.16
+        },
+        {
+          "type": "AIR/OIL SEPARATOR",
+          "count": 41002,
+          "pct": 4.32
+        },
+        {
+          "type": "ACTIVATED CARBON FILTER",
+          "count": 32813,
+          "pct": 3.46
+        },
+        {
+          "type": "WATER SEPARATOR",
+          "count": 25080,
+          "pct": 2.64
+        },
+        {
+          "type": "SPIN-ON FILTER",
+          "count": 16948,
+          "pct": 1.79
+        },
+        {
+          "type": "COOLANT FILTER",
+          "count": 16625,
+          "pct": 1.75
+        },
+        {
+          "type": "OIL SEPARATOR",
+          "count": 16473,
+          "pct": 1.74
+        },
+        {
+          "type": "INDUSTRIAL FILTER",
+          "count": 16093,
+          "pct": 1.7
+        },
+        {
+          "type": "AIR DRYER",
+          "count": 15979,
+          "pct": 1.68
+        },
+        {
+          "type": "CARTRIDGE FILTER",
+          "count": 15637,
+          "pct": 1.65
+        },
+        {
+          "type": "POWER STEERING FILTER",
+          "count": 8398,
+          "pct": 0.89
+        },
+        {
+          "type": "UREA FILTER",
+          "count": 8360,
+          "pct": 0.88
+        },
+        {
+          "type": "DIESEL FILTER",
+          "count": 8341,
+          "pct": 0.88
+        },
+        {
+          "type": "TRANSMISSION FILTER",
+          "count": 8303,
+          "pct": 0.88
+        },
+        {
+          "type": "EXHAUST FILTER",
+          "count": 8056,
+          "pct": 0.85
+        },
+        {
+          "type": "MARINE FILTER",
+          "count": 8018,
+          "pct": 0.85
+        },
+        {
+          "type": "BREATHER FILTER",
+          "count": 8018,
+          "pct": 0.85
+        },
+        {
+          "type": "TURBO FILTER",
+          "count": 7657,
+          "pct": 0.81
+        },
+        {
+          "type": "filter",
+          "count": 475,
+          "pct": 0.05
+        }
+      ]
+    }
+  },
+  "high_freq_1m_count": 1,
+  "type_matchable_count": 1
+}

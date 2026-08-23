@@ -1,0 +1,10 @@
+import requests, json
+r = requests.get('http://localhost:5000/api/admin/products/search', params={'mediaName': 'Cellulose', 'pageSize': 200})
+data = r.json()
+print(f'total: {data["total"]}')
+print(f'countMode: {data["countMode"]}')
+print(f'countModeUsed: {data["countModeUsed"]}')
+print(f'items: {len(data["items"])}')
+print(f'hasMore: {data["hasMore"]}')
+print(f'first item id: {data["items"][0]["id"]}')
+print(f'last item id: {data["items"][-1]["id"]}')

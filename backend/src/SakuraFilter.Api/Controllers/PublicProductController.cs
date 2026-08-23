@@ -1,0 +1,311 @@
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using SakuraFilter.Api.Services;
+using SakuraFilter.Core.DTOs;
+using SakuraFilter.Infrastructure.Data;
+
+namespace SakuraFilter.Api.Controllers;
+
+/// <summary>
+/// 公开产品页端点 (无需 token)
+/// 设计:
+///   - P2.3 by-type: 按 dict_type.sort_order 分组聚合产品摘要
+///   - P3.3 by-slug: 单产品详情 (复用了 AdminProductService.GetByIdAsync 避免重写投影)
+///   - V2 Task 4.2: 旧 URL /product/{oem} 301 重定向到新 SEO URL /products/{pn1}/{pn2}/{brand}/{oem3}
+/// </summary>
+[ApiController]
+[AllowAnonymous]
+[Route("api/public")]
+public class PublicProductController : ControllerBase
+{
+    private readonly ProductDbContext _db;
+    private readonly AdminProductService _adminService;
+    private readonly IProductDetailService _detailService;  // V2 Task 4.7: 公共服务
+    private readonly IConfiguration _configuration;  // V2 Task 4.2: 读 Seo:UrlLegacyRedirectEnabled
+    private readonly ILogger<PublicProductController> _logger;
+
+    public PublicProductController(
+        ProductDbContext db,
+        AdminProductService adminService,
+        IProductDetailService detailService,
+        IConfiguration configuration,
+        ILogger<PublicProductController> logger)
+    {
+        _db = db;
+        _adminService = adminService;
+        _detailService = detailService;
+        _configuration = configuration;
+        _logger = logger;
+    }
+
+    /// <summary>
+    /// P3.3 (Task 11): 单产品详情 (公开, JSON 响应)
+    /// URL 格式: /api/public/product/{slug}
+    /// slug 格式 (按 R1 规格): {name1}-{name2}-{oemBrand}-{oemNo}
+    /// 解析策略: 取 slug 最后一段作为 oem (支持 OEM 自身含 - 的场景,如 "AB-123-X")
+    ///   - 1) OemNoDisplay 精确匹配
+    ///   - 2) Oem2 匹配 (alt OEM)
+    ///   - 3) Mr1 匹配
+    /// 排除 is_discontinued=true (前台不展示下架产品)
+    ///
+    /// V2 Task 4.7: 查询逻辑抽取到 IProductDetailService.GetByOemAsync
+    ///   V2 Task 4.2: 标记 [Obsolete], 由 Razor Pages /products/... 取代 (此 API 端点保留供 SPA/客户端 JSON 调用)
+    /// </summary>
+    [HttpGet("product/{slug}")]
+    [Obsolete("V2: 改用 Razor Pages /products/{pn1}/{pn2}/{brand}/{oem3} (Task 4.1); 此 API 端点保留供 JSON 客户端调用, 浏览器访问走 /product/{oem} 301 重定向")]
+    public async Task<IActionResult> GetBySlug(string slug, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(slug))
+            return BadRequest(new { error = "slug 不能为空" });
+        // P2-3 修复: slug 长度校验, 防止恶意超长输入浪费 DB 资源
+        if (slug.Length > 200)
+            return BadRequest(new { error = "slug 长度不能超过 200" });
+
+        // OEM3 可包含连字符（例如 DON-08332），必须优先按完整值查询。
+        // 仅当完整值未命中时，才兼容历史复合 slug 的最后一段。
+        var detail = await _detailService.GetByOemAsync(slug, ct);
+        var oem = slug;
+        if (detail == null && slug.Contains('-'))
+        {
+            oem = slug[(slug.LastIndexOf('-') + 1)..];
+            detail = await _detailService.GetByOemAsync(oem, ct);
+        }
+        if (detail == null)
+        {
+            _logger.LogInformation("GetBySlug: 404 slug={Slug} oem={Oem}", slug, oem);
+            // 🔧 fix(审查): NotFound 改 RFC7807 ProblemDetails — 前端拦截器 isProblemDetails 识别 title, 业务信息不再丢失
+            return NotFound(new ProblemDetails
+            {
+                Title = "产品不存在",
+                Detail = $"产品不存在: {slug}",
+                Status = StatusCodes.Status404NotFound,
+                Extensions = { ["errorCode"] = "PRODUCT_NOT_FOUND" },
+            });
+        }
+        _logger.LogInformation("GetBySlug: 200 slug={Slug}", slug);
+        return Ok(PublicProductDetailDto.From(detail));
+    }
+
+    /// <summary>
+    /// V2 Task 4.2: 旧 URL /product/{oem} 301 重定向到新 SEO URL /products/{pn1}/{pn2}/{brand}/{oem3}
+    ///
+    /// 触发场景:
+    ///   - 搜索引擎索引的旧 URL (/product/F000000001) 需要迁移到新 SEO URL
+    ///   - 用户书签中的旧 URL 需要重定向到新页面
+    ///   - 第三方网站外链的旧 URL 需要迁移链接权重
+    ///
+    /// 配置开关: Seo:UrlLegacyRedirectEnabled (默认 true)
+    ///   - true: 返回 301 永久重定向 (生产环境推荐, SEO 友好)
+    ///   - false: 返回 410 Gone 或 404 (用于彻底废弃旧 URL)
+    ///
+    /// 安全:
+    ///   - 开放重定向防御: 新 URL 由 BuildProductUrl 生成 (服务端拼接), 不接受用户输入作为 redirect target
+    ///   - 404 友好: 查不到产品时返回 404 (不创建新页, 也不重定向到首页, 避免软 404)
+    /// </summary>
+    /// <param name="oem">旧 URL 末段 OEM 字符串 (OemNoDisplay / Oem2 / Mr1 三级 fallback)</param>
+    /// <param name="ct">取消令牌</param>
+    /// <returns>301 Redirect 到新 SEO URL; 查不到返回 404</returns>
+    [HttpGet("/product/{oem}")]  // 绝对路由, 覆盖控制器级 [Route("api/public")]
+    public async Task<IActionResult> LegacyRedirect(string oem, CancellationToken ct)
+    {
+        // V2 Task 4.2: 检查配置开关
+        var redirectEnabled = _configuration.GetValue<bool?>("Seo:UrlLegacyRedirectEnabled") ?? true;
+        if (!redirectEnabled)
+        {
+            _logger.LogInformation("LegacyRedirect: 410 Gone (disabled) oem={Oem}", oem);
+            return StatusCode(410, new { error = "旧 URL 已废弃, 请使用新 SEO URL /products/{pn1}/{pn2}/{brand}/{oem3}" });
+        }
+
+        if (string.IsNullOrWhiteSpace(oem))
+            return BadRequest(new { error = "oem 不能为空" });
+        if (oem.Length > 200)
+            return BadRequest(new { error = "oem 长度不能超过 200" });
+
+        // 调公共 IProductDetailService.GetByOemAsync (三级 fallback)
+        var detail = await _detailService.GetByOemAsync(oem, ct);
+        if (detail == null)
+        {
+            _logger.LogInformation("LegacyRedirect: 404 oem={Oem}", oem);
+            // 🔧 fix(审查): ProblemDetails 化 (同 GetBySlug)
+            return NotFound(new ProblemDetails
+            {
+                Title = "产品不存在",
+                Detail = $"产品不存在: {oem}",
+                Status = StatusCodes.Status404NotFound,
+                Extensions = { ["errorCode"] = "PRODUCT_NOT_FOUND" },
+            });
+        }
+
+        // 🔧 fix(审查): 301 目标改 /seo/{oem} (SPA 详情页, 完整样式) —
+        //   原 /products/... 被 nginx 反代到 Razor SSR 页 (无 main.css), 浏览器跟随 301 后样式丢失 (用户实测)
+        //   /products/ SSR 路径保留给爬虫 (sitemap/canonical), 不受影响
+        var newUrl = $"/seo/{Uri.EscapeDataString(oem)}";
+
+        _logger.LogInformation("LegacyRedirect: 301 oem={Oem} -> {NewUrl}", oem, newUrl);
+        return RedirectPermanent(newUrl);
+    }
+
+    /// <summary>
+    /// 按 type 分组聚合, 顺序按 dict_type.sort_order 升序
+    /// 返: List&lt;TypeGroupDto&gt;:
+    ///   { type, sortOrder, productCount, products: [ProductSummaryDto...] }
+    /// 限制:
+    ///   - 每个 type 至多 50 个 product (避免单 type 撑爆响应)
+    ///   - 仅返回 dict_type 已定义的 5 类 (oil/fuel/air/cabin/others), 未定义 type 的产品不展示
+    /// </summary>
+    [HttpGet("by-type")]
+    public async Task<IActionResult> ByType(CancellationToken ct)
+    {
+        // 1) 拉 active dict_type, 按 sort_order 升序
+        var types = await _db.DictTypes.AsNoTracking()
+            .Where(t => t.DeletedAt == null)
+            .OrderBy(t => t.SortOrder)
+            .ThenBy(t => t.Type)
+            .Select(t => new { t.Type, t.SortOrder })
+            .ToListAsync(ct);
+        if (types.Count == 0)
+        {
+            return Ok(new ByTypeResponse(0, new List<TypeGroupDto>()));
+        }
+
+        // 2) 对每个 type 拉 active product 摘要 (至多 50)
+        const int perTypeLimit = 50;
+        var typeNames = types.Select(t => t.Type).ToList();
+        // 单次 SQL 拉所有 type 的 active product 摘要, 内存分组, 避免 N+1
+        var productRows = await _db.Products.AsNoTracking()
+            .Where(p => p.IsPublished && !p.IsDiscontinued && p.Type != null && typeNames.Contains(p.Type))
+            .OrderBy(p => p.Id)
+            .Select(p => new
+            {
+                p.Id,
+                p.Type,
+                // WHY: 按类型浏览属于公开产品入口，必须与详情/对比页使用相同的 OEM3 展示规则。
+                OemNoDisplay = _db.CrossReferences
+                    .Where(x => x.ProductId == p.Id && x.IsPublished && !x.IsDiscontinued
+                        && x.OemNo3 != null && x.OemNo3 != "")
+                    .OrderBy(x => _db.XrefOemBrands
+                        .Where(b => b.Brand == x.OemBrand && b.DeletedAt == null)
+                        .Select(b => (int?)b.SortOrder)
+                        .FirstOrDefault() ?? int.MaxValue)
+                    .ThenBy(x => x.SortOrder)
+                    .ThenBy(x => x.OemNo3)
+                    .Select(x => x.OemNo3!)
+                    .FirstOrDefault() ?? p.OemNoDisplay,
+                p.ProductName1,
+                p.D1Mm,
+                p.D2Mm,
+                p.H1Mm,
+                p.ImageKey,
+                p.ImageStatus
+            })
+            .Take(perTypeLimit * typeNames.Count)  // 防止极端情况下拖全表
+            .ToListAsync(ct);
+
+        // 3) 按 type 分组, 取前 50
+        var byType = productRows
+            .GroupBy(p => p.Type!)
+            .ToDictionary(g => g.Key, g => g.Take(perTypeLimit).ToList());
+
+        // 4) 组装 DTO (按 dict_type 顺序)
+        var groups = types.Select(t =>
+        {
+            var products = byType.TryGetValue(t.Type, out var list)
+                ? list.Select(p => new ProductSummaryDto(
+                    p.Id, p.OemNoDisplay, p.ProductName1,
+                    p.D1Mm, p.D2Mm, p.H1Mm, p.ImageKey, p.ImageStatus)).ToList()
+                : new List<ProductSummaryDto>();
+            return new TypeGroupDto(t.Type, t.SortOrder, products.Count, products);
+        }).ToList();
+
+        _logger.LogInformation("by-type: types={Types} products={Products}",
+            groups.Count, groups.Sum(g => g.ProductCount));
+        return Ok(new ByTypeResponse(groups.Count, groups));
+    }
+
+    /// <summary>
+    /// 同组其他 OEM 3 列表。路径只接收客户可见的 OEM3，MR1 聚合留在服务端。
+    /// URL: GET /api/public/products/{oem3}/sibling-oem3
+    /// 排序: brand_sort_order → sort_order (与 Meilisearch oem_list 数组排序一致, Task 2.3.1)
+    /// 过滤: is_published=true AND is_discontinued=false (前台不展示下架/未发布)
+    /// 返回: oemBrand / oemNo3 / oem2 / sortOrder / machineType / brandSortOrder
+    /// </summary>
+    [HttpGet("products/{oem3}/sibling-oem3")]
+    public async Task<IActionResult> GetSiblingOem3(string oem3, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(oem3))
+            return BadRequest(new { error = "oem3 不能为空" });
+        if (oem3.Length > 200)
+            return BadRequest(new { error = "oem3 长度不能超过 200" });
+
+        var current = await _detailService.GetByOemAsync(oem3, ct);
+        if (current?.Mr1 is not { Length: > 0 } mr1)
+            // 🔧 fix(审查): ProblemDetails 化 (同 GetBySlug)
+            return NotFound(new ProblemDetails
+            {
+                Title = "产品不存在",
+                Detail = $"产品不存在: {oem3}",
+                Status = StatusCodes.Status404NotFound,
+                Extensions = { ["errorCode"] = "PRODUCT_NOT_FOUND" },
+            });
+
+        // 查询同 MR.1 下所有上架 OEM 3 (含 brand_sort_order LEFT JOIN)
+        //   WHY LEFT JOIN: brand 软删除时 brand_sort_order 为 null, 排序时按 int.MaxValue 兜底
+        var items = await (
+            from x in _db.CrossReferences.AsNoTracking()
+            join p in _db.Products.AsNoTracking() on x.ProductId equals p.Id
+            where p.Mr1 == mr1
+                  && !p.IsDiscontinued
+                  && p.IsPublished
+                  && !x.IsDiscontinued
+                  && x.IsPublished
+            // V2 Task 2.3.1: 排序 brand_sort_order → sort_order → oem_no_3 (与 BuildMr1DocumentAsync 一致)
+            orderby (_db.XrefOemBrands
+                        .Where(b => b.Brand == x.OemBrand && b.DeletedAt == null)
+                        .Select(b => (int?)b.SortOrder)
+                        .FirstOrDefault() ?? int.MaxValue),
+                    x.SortOrder,
+                    x.OemNo3
+            select new
+            {
+                oemBrand = x.OemBrand,
+                oemNo3 = x.OemNo3,
+                oem2 = x.Oem2,
+                sortOrder = x.SortOrder,
+                machineType = x.MachineType,
+                // brand_sort_order 用于前端展示优先级标识 (null 表示品牌已软删除, 排末尾)
+                brandSortOrder = _db.XrefOemBrands
+                    .Where(b => b.Brand == x.OemBrand && b.DeletedAt == null)
+                    .Select(b => (int?)b.SortOrder)
+                    .FirstOrDefault()
+            }).ToListAsync(ct);
+
+        return Ok(new { total = items.Count, items });
+    }
+}
+
+/// <summary>P2.3: 单个 type 分组</summary>
+public record TypeGroupDto(
+    string Type,
+    int SortOrder,
+    int ProductCount,
+    List<ProductSummaryDto> Products
+);
+
+/// <summary>P2.3: 产品摘要 (前台 type 分组展示用, 字段精简)</summary>
+public record ProductSummaryDto(
+    long Id,
+    string OemNoDisplay,
+    string? ProductName1,
+    decimal? D1Mm,
+    decimal? D2Mm,
+    decimal? H1Mm,
+    string? ImageKey,
+    string ImageStatus
+);
+
+/// <summary>P2.3: by-type 响应</summary>
+public record ByTypeResponse(
+    int TotalTypes,
+    List<TypeGroupDto> Groups
+);

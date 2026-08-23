@@ -1,0 +1,1404 @@
+{
+  "frontend/src/views/admin/AdminCompareView.vue": [
+    {
+      "t": "t('admin.compareview.string.l56_')",
+      "orig": "\n\nconst route = useRoute()\nconst router = useRouter()\n\n// ===== 常量 =====\nconst MAX_COMPARE = 6\nconst ORDER_KEY = "
+    },
+    {
+      "t": "t('admin.compareview.string.l58_oem')",
+      "orig": "\n\n// ===== 字段定义 (6 大组) =====\ninterface FieldDef {\n  key: keyof ProductDetail | string\n  label: string\n  // 取值函数 (从 ProductDetail 提取展示值, 数组/对象类需自定义)\n  get: (p: ProductDetail) => string\n  // 字符串比较 (默认严格相等)\n  eq?: (a: string, b: string) => boolean\n}\n\nconst xrefSummary = (list: XrefInfo[] | undefined) => {\n  if (!list || list.length === 0) return "
+    },
+    {
+      "t": "t('admin.compareview.string.l63_')",
+      "orig": "\n  // 取前 3 个 oemBrand + oemNo3, 其余 ...\n  const head = list.slice(0, 3).map((x) => `${x.oemBrand || "
+    },
+    {
+      "t": "t('admin.compareview.string.l80_')",
+      "orig": "基础"
+    },
+    {
+      "t": "t('admin.compareview.string.l82_d7')",
+      "orig": "OEM 编号"
+    },
+    {
+      "t": "t('admin.compareview.string.l83_d8')",
+      "orig": "产品名 1"
+    },
+    {
+      "t": "t('admin.compareview.string.l84_')",
+      "orig": "产品名 2"
+    },
+    {
+      "t": "t('admin.compareview.string.l85_')",
+      "orig": "类型"
+    },
+    {
+      "t": "t('admin.compareview.string.l90_')",
+      "orig": "尺寸 (mm)"
+    },
+    {
+      "t": "t('admin.compareview.string.l92_')",
+      "orig": "性能"
+    },
+    {
+      "t": "t('admin.compareview.string.l93_')",
+      "orig": "D7 螺纹"
+    },
+    {
+      "t": "t('admin.compareview.string.l97_')",
+      "orig": "D8 螺纹"
+    },
+    {
+      "t": "t('admin.compareview.string.l99_')",
+      "orig": "单向阀数"
+    },
+    {
+      "t": "t('admin.compareview.string.l100_')",
+      "orig": "旁通阀数"
+    },
+    {
+      "t": "t('admin.compareview.string.l101_')",
+      "orig": "旁通 LR"
+    },
+    {
+      "t": "t('admin.compareview.string.l110_')",
+      "orig": "旁通 HR"
+    },
+    {
+      "t": "t('admin.compareview.string.l112_')",
+      "orig": "效率 1"
+    },
+    {
+      "t": "t('admin.compareview.string.l122_oem')",
+      "orig": "效率 2"
+    },
+    {
+      "t": "t('admin.compareview.string.l123_')",
+      "orig": "旁通压力"
+    },
+    {
+      "t": "t('admin.compareview.string.l188_')",
+      "orig": "耐压 (bar)"
+    },
+    {
+      "t": "t(',')",
+      "orig": "密封材料"
+    },
+    {
+      "t": "t('admin.compareview.success.l249_')",
+      "orig": "温度范围"
+    },
+    {
+      "t": "t('admin.compareview.warning.l260_')",
+      "orig": "包装"
+    },
+    {
+      "t": "t('admin.compareview.error.l276_')",
+      "orig": "介质"
+    },
+    {
+      "t": "t('admin.compareview.title.l376_')",
+      "orig": "介质型号"
+    },
+    {
+      "t": "t('admin.compareview.title.l384_')",
+      "orig": "箱/件"
+    },
+    {
+      "t": "t('admin.compareview.title.l393_')",
+      "orig": "重量 (kg)"
+    }
+  ],
+  "frontend/src/views/admin/AdminEnginesView.vue": [
+    {
+      "t": "t('admin.enginesview.error.l29_')",
+      "orig": "加载失败: "
+    },
+    {
+      "t": "t('admin.enginesview.warning.l50_')",
+      "orig": "发动机品牌不能为空"
+    },
+    {
+      "t": "t('admin.enginesview.warning.l51_200')",
+      "orig": "发动机品牌长度不能超过 200"
+    },
+    {
+      "t": "t('admin.enginesview.success.l55_')",
+      "orig": "已新增"
+    },
+    {
+      "t": "t('admin.enginesview.success.l58_')",
+      "orig": "已更新"
+    },
+    {
+      "t": "t('admin.enginesview.error.l61_')",
+      "orig": "操作失败"
+    },
+    {
+      "t": "t('admin.enginesview.warning.l65_')",
+      "orig": "}`\n  try { await ElMessageBox.confirm(`确定删除 \"${label}\" 吗? (软删除)`, "
+    },
+    {
+      "t": "t('admin.enginesview.success.l66_')",
+      "orig": "已删除"
+    },
+    {
+      "t": "t('admin.enginesview.error.l67_')",
+      "orig": "删除失败"
+    },
+    {
+      "t": "t('admin.enginesview.success.l70_')",
+      "orig": "已恢复"
+    },
+    {
+      "t": "t('admin.enginesview.error.l71_')",
+      "orig": "恢复失败"
+    },
+    {
+      "t": "t('admin.enginesview.success.l87_')",
+      "orig": "排序已保存"
+    },
+    {
+      "t": "t('admin.enginesview.error.l88_')",
+      "orig": "排序失败"
+    },
+    {
+      "t": "t('admin.enginesview.placeholder.l112_')",
+      "orig": ")\n}\nconst total = computed(() => items.value.length)\nconst activeCount = computed(() => items.value.filter((x) => !x.deletedAt).length)\nonMounted(load)\n</script>\n\n<template>\n  <div class=\"p-3 max-w-screen-xl mx-auto\">\n    <div class=\"flex items-center gap-2 mb-3 flex-wrap\">\n      <h1 class=\"text-lg font-medium\">发动机字典 (Engine)</h1>\n      <span class=\"text-xs text-muted\">P2.2 后台管理 · 2 字段: 品牌 + 型号 · 用于产品表单分区 7 发动机信息</span>\n      <div class=\"flex-1\" />\n      <el-input v-model=\"searchKw\" placeholder=\"搜索任一字段\" clearable size=\"small\" style=\"width: 200px\" @keyup.enter=\"onSearch\" />\n      <el-button size=\"small\" @click=\"onSearch\">搜索</el-button>\n      <el-checkbox v-model=\"includeDeleted\" @change=\"load\" size=\"small\">含已删</el-checkbox>\n      <el-button type=\"primary\" size=\"small\" @click=\"openCreate\">新增发动机</el-button>\n    </div>\n\n    <div class=\"hairline\" v-loading=\"loading\">\n      <div class=\"dict-head\">\n        <div class=\"cell-drag\"></div>\n        <div class=\"cell-id\">ID</div>\n        <div class=\"cell-brand\">品牌</div>\n        <div class=\"cell-type\">型号</div>\n        <div class=\"cell-sort\">排序</div>\n        <div class=\"cell-xref\">引用</div>\n        <div class=\"cell-updated\">更新</div>\n        <div class=\"cell-status\">状态</div>\n        <div class=\"cell-action\">操作</div>\n      </div>\n      <div v-for=\"row in items\" :key=\"row.id\"\n        :class=\"["
+    },
+    {
+      "t": "t('admin.enginesview.title.l156_dialogmode_create')",
+      "orig": " }}</div>\n        <div class=\"cell-sort\">{{ row.sortOrder }}</div>\n        <div class=\"cell-xref\">{{ row.xrefCount }}</div>\n        <div class=\"cell-updated\">{{ fmtDate(row.updatedAt) }}</div>\n        <div class=\"cell-status\">\n          <el-tag v-if=\"row.deletedAt\" type=\"info\" size=\"small\">已删</el-tag>\n          <el-tag v-else type=\"success\" size=\"small\">启用</el-tag>\n        </div>\n        <div class=\"cell-action\">\n          <el-button size=\"small\" text @click=\"openEdit(row)\" :disabled=\"!!row.deletedAt\">编辑</el-button>\n          <el-button v-if=\"!row.deletedAt\" size=\"small\" text type=\"warning\" @click=\"softDelete(row)\">删除</el-button>\n          <el-button v-else size=\"small\" text type=\"success\" @click=\"restore(row)\">恢复</el-button>\n        </div>\n      </div>\n      <div v-if=\"!loading && items.length === 0\" class=\"dict-empty\">暂无数据, 点击右上\"新增发动机\"开始</div>\n    </div>\n\n    <div class=\"mt-2 text-xs text-muted\">共 {{ total }} 条 (启用 {{ activeCount }}, 软删 {{ total - activeCount }}) · 拖动\"≡\"列重排</div>\n\n    <el-dialog v-model=\"dialogOpen\" :title=\"dialogMode === "
+    },
+    {
+      "t": "t('admin.enginesview.label.l158_')",
+      "orig": "新增发动机"
+    },
+    {
+      "t": "t('admin.enginesview.label.l161_')",
+      "orig": "编辑发动机"
+    },
+    {
+      "t": "t('admin.enginesview.label.l165_')",
+      "orig": ">\n// Day 10+ P2.2: Engine 字典管理页 (2 字段: engine_brand + engine_type)\nimport { ref, reactive, onMounted, computed } from 'vue'\nimport { ElMessage, ElMessageBox } from 'element-plus'\nimport { dictApi, type EngineItem, type EngineReorderItem } from '@/api'\n\nconst items = ref<EngineItem[]>([])\nconst loading = ref(false)\nconst includeDeleted = ref(false)\nconst searchKw = ref('')\n\nconst dialogOpen = ref(false)\nconst dialogMode = ref<'create' | 'edit'>('create')\nconst dialogForm = reactive<{ id?: number; engineBrand: string; engineType: string; sortOrder: number }>({\n  engineBrand: '', engineType: '', sortOrder: 0\n})\n\nconst draggingId = ref<number | null>(null)\nconst dragOverId = ref<number | null>(null)\n\nasync function load() {\n  loading.value = true\n  try {\n    const { items: list } = await dictApi.engines.list(searchKw.value || undefined, includeDeleted.value, 500)\n    items.value = list\n  } catch (e: any) { ElMessage.error('加载失败: ' + (e?.message || '')) }\n  finally { loading.value = false }\n}\nfunction onSearch() { load() }\n\nfunction openCreate() {\n  dialogMode.value = 'create'; dialogForm.id = undefined\n  dialogForm.engineBrand = ''; dialogForm.engineType = ''\n  const maxSort = items.value.filter((x) => !x.deletedAt).reduce((m, x) => Math.max(m, x.sortOrder), 0)\n  dialogForm.sortOrder = maxSort + 10\n  dialogOpen.value = true\n}\nfunction openEdit(row: EngineItem) {\n  dialogMode.value = 'edit'; dialogForm.id = row.id\n  dialogForm.engineBrand = row.engineBrand\n  dialogForm.engineType = row.engineType ?? ''\n  dialogForm.sortOrder = row.sortOrder\n  dialogOpen.value = true\n}\nasync function saveDialog() {\n  const b = dialogForm.engineBrand.trim()\n  if (!b) { ElMessage.warning('发动机品牌不能为空'); return }\n  if (b.length > 200) { ElMessage.warning('发动机品牌长度不能超过 200'); return }\n  const t = dialogForm.engineType.trim() || undefined\n  try {\n    if (dialogMode.value === 'create') {\n      await dictApi.engines.create(b, t, dialogForm.sortOrder); ElMessage.success('已新增')\n    } else if (dialogForm.id != null) {\n      await dictApi.engines.update(dialogForm.id, { engineBrand: b, engineType: t, sortOrder: dialogForm.sortOrder })\n      ElMessage.success('已更新')\n    }\n    dialogOpen.value = false; await load()\n  } catch (e: any) { ElMessage.error(e?.response?.data?.detail || e?.message || '操作失败') }\n}\nasync function softDelete(row: EngineItem) {\n  const label = `${row.engineBrand}${row.engineType ? ' / ' + row.engineType : ''}`\n  try { await ElMessageBox.confirm(`确定删除 "
+    }
+  ],
+  "frontend/src/views/admin/AdminEtlView.vue": [
+    {
+      "t": "t('admin.etlview.string.l99_')",
+      "orig": "\n\n// ===== 表单 =====\n// Day 11 Phase 1: cascade 默认 true (兼容旧行为), UI 可切换为 false 单独刷新主表\nconst form = reactive({\n  entity: "
+    },
+    {
+      "t": "t('admin.etlview.success.l114_dry_run')",
+      "orig": ",\n  dryRun: false,\n  cascade: true,  // 仅 products + full-load 生效\n  jsonlPath: "
+    },
+    {
+      "t": "t('admin.etlview.string.l222_sse')",
+      "orig": ") {\n  form.entity = v\n  form.jsonlPath = entityPaths[v]\n}\n\n// ===== 全局拖拽上传集成 (Day 14+: UX 偏好) =====\n//   拖动 .jsonl 到窗口 → 自动识别 entity + 填入路径\n//   浏览器安全: 拿不到绝对路径, 用默认基础目录 + file.name 拼出服务端路径\n//   用户可手动修改最终路径\nconst { register: registerDrag, unregister: unregisterDrag } = useGlobalDragDrop()\n\n// 服务端默认基础目录 (与后端 PgmDefaultConfig 对齐)\nconst SERVER_BASE_DIR = "
+    },
+    {
+      "t": "t('admin.etlview.success.l252_')",
+      "orig": "\n  return null\n}\n\nfunction handleFilesDropped(files: File[]) {\n  if (files.length === 0) return\n  // 取第一个文件\n  const f = files[0]\n  const inferred = inferEntityByName(f.name)\n  // 拼出服务端路径 (后端用 Path.Exists 校验)\n  const serverPath = `${SERVER_BASE_DIR}/${f.name}`\n  if (inferred) {\n    form.entity = inferred\n    form.jsonlPath = serverPath\n    ElMessage.success(`已自动识别 entity=${inferred}, 文件: ${f.name}`)\n  } else {\n    form.jsonlPath = serverPath\n    ElMessage.info(`已填入文件: ${f.name} (entity 需手动选择)`)\n  }\n  if (files.length > 1) {\n    ElMessage.warning(`本次拖入 ${files.length} 个文件, 仅采用第一个: ${f.name}`)\n  }\n}\n\nonMounted(() => {\n  // 注册全局拖拽 (admin 路径启用)\n  registerDrag({\n    onFilesDropped: handleFilesDropped,\n    acceptRoute: DEFAULT_ADMIN_ACCEPT,\n    hintText: "
+    },
+    {
+      "t": "t('admin.etlview.string.l259_')",
+      "orig": "\n  })\n})\n\nonBeforeUnmount(() => {\n  unregisterDrag()\n})\n\n// ===== 触发 =====\nconst submitting = ref(false)\nconst cancelling = ref(false)\n// P1.1 (Task 3): 暂停/恢复状态\nconst pausing = ref(false)\nconst resuming = ref(false)\nasync function doTrigger() {\n  try {\n    await ElMessageBox.confirm(\n      `即将触发 ${form.entity} ETL (${form.mode}${form.dryRun ? "
+    },
+    {
+      "t": "t('admin.etlview.string.l259__2')",
+      "orig": "}), 是否继续?`,\n      "
+    },
+    {
+      "t": "t('admin.etlview.string.l260_')",
+      "orig": " }\n    )\n  } catch {\n    return\n  }\n  submitting.value = true\n  try {\n    const r = await etlApi.trigger({\n      jsonlPath: form.jsonlPath,\n      mode: form.mode,\n      entityType: form.entity,  // Day 11 Phase 1 BUG FIX: 之前漏传, 后端硬编码 products\n      cascade: form.cascade,    // Day 11 Phase 1: cascade 安全锁\n      dryRun: form.dryRun\n    })\n    ElMessage.success(form.dryRun ? "
+    },
+    {
+      "t": "t('admin.etlview.string.l260__2')",
+      "orig": "已触发 ETL, 后台执行中"
+    },
+    {
+      "t": "t('admin.etlview.string.l261_')",
+      "orig": ")\n    ])\n    reasonCodeAgg.value = agg\n    historyItems.value = hist.items\n  } catch (e) {\n    // 已被拦截器处理\n  } finally {\n    historyLoading.value = false\n  }\n}\n\n// Day 9.1: 持久化最近一次完成结果到 localStorage (刷新页面不丢)\nconst LS_KEY_FINISHED = "
+    },
+    {
+      "t": "t('admin.etlview.string.l261__2')",
+      "orig": "\ntry {\n  const cached = localStorage.getItem(LS_KEY_FINISHED)\n  if (cached) lastFinished.value = JSON.parse(cached)\n} catch {\n  // 忽略解析失败\n}\n\nlet pollTimer: number | null = null\n\nasync function pollOnce() {\n  try {\n    const r = await etlApi.progress()\n    task.value = r\n    // 任务刚结束 (inProgress 由 true 变 false) → 拉一次 legacy status 拿到最终结果\n    if (!r.inProgress && r.activeTask && r.activeTask.status === "
+    },
+    {
+      "t": "t('admin.etlview.string.l262_')",
+      "orig": ") {\n        lastFinished.value = legacy\n        try {\n          localStorage.setItem(LS_KEY_FINISHED, JSON.stringify(legacy))\n        } catch {\n          // 忽略写入失败 (容量 / 隐私模式)\n        }\n      }\n    }\n  } catch (e: any) {\n    // 已被拦截器处理\n  }\n}\n\n// Day 9.4: SSE 替换 3s 轮询\n//   关闭 EventSource = 停止订阅, 不需要手动 clearInterval\nlet eventSource: EventSource | null = null\n\nfunction connectSSE() {\n  if (eventSource) eventSource.close()\n  const es = new EventSource(\"/api/admin/etl/progress/stream\")\n  es.onmessage = (e) => {\n    try {\n      const r = JSON.parse(e.data)\n      task.value = r\n      // 任务刚结束 (inProgress 由 true 变 false) → 拉一次 legacy status 拿到最终结果\n      if (!r.inProgress && r.activeTask && r.activeTask.status === "
+    },
+    {
+      "t": "t('admin.etlview.string.l262__2')",
+      "orig": ") {\n            lastFinished.value = legacy\n            try { localStorage.setItem(LS_KEY_FINISHED, JSON.stringify(legacy)) } catch {}\n          }\n        }).catch(() => {})\n      }\n      // Day 9.8: 任务进入终态 (completed/failed/cancelled) → 刷新审计饼图 + 历史列表\n      if (!r.inProgress && r.activeTask &&\n          ["
+    },
+    {
+      "t": "t('admin.etlview.string.l263_')",
+      "orig": "].includes(r.activeTask.status)) {\n        refreshAudit()\n      }\n      // P1.1 (Task 3): 任务进入 paused 状态 → 刷新\"恢复\"按钮可见性\n      if (r.activeTask && r.activeTask.status === "
+    },
+    {
+      "t": "t('admin.etlview.string.l263__2')",
+      "orig": ") {\n        checkPausedTask()\n      }\n    } catch {}\n  }\n  es.onerror = () => {\n    // 浏览器会自动重连, 这里只打印 (debug 级避免污染生产控制台)\n    // WHY console.debug: SSE 临时断开是常态 (代理/网络抖动), 不应被监控告警捕获\n    console.debug("
+    },
+    {
+      "t": "t('admin.etlview.buttontext.l293_')",
+      "orig": ")\n  }\n  eventSource = es\n}\n\nonMounted(() => {\n  connectSSE()\n  // Day 9.8: 进入页面立即拉一次审计 (避免要等下次 ETL 完结才显示)\n  refreshAudit()\n})\n\nonBeforeUnmount(() => {\n  if (eventSource) {\n    eventSource.close()\n    eventSource = null\n  }\n  if (pollTimer) {\n    clearInterval(pollTimer)\n    pollTimer = null\n  }\n})\n\n\nfunction clearLastFinished() {\n  lastFinished.value = null\n  try {\n    localStorage.removeItem(LS_KEY_FINISHED)\n  } catch {\n    // 忽略\n  }\n  ElMessage.success("
+    },
+    {
+      "t": "t('admin.etlview.buttontext.l294_')",
+      "orig": ")\n}\n\n// Day 9.6: 取消原因枚举白名单\n//   WHY 固定: 与后端 EtlProgress.AllowedReasonCodes 对齐, 避免传任意字符串\n//   运营审计按 reason_code 聚合 (USER_REQUEST/TIMEOUT/SYSTEM_SHUTDOWN/ADMIN_OVERRIDE/OTHER)\nconst reasonCodeOptions = [\n  { value: "
+    },
+    {
+      "t": "t('admin.etlview.info.l308_')",
+      "orig": "用户主动取消"
+    },
+    {
+      "t": "t('admin.etlview.info.l308__2')",
+      "orig": "用户主动取消"
+    },
+    {
+      "t": "t('admin.etlview.buttontext.l309_')",
+      "orig": "管理员强制取消"
+    },
+    {
+      "t": "t('admin.etlview.buttontext.l310_')",
+      "orig": "管理员强制取消"
+    },
+    {
+      "t": "t('admin.etlview.info.l326_')",
+      "orig": "任务超时"
+    },
+    {
+      "t": "t('admin.etlview.string.l354_etl_n_n_checkpoint_id_etl_progress_log')",
+      "orig": "任务执行超时"
+    },
+    {
+      "t": "t('admin.etlview.string.l354__2')",
+      "orig": "系统关闭/重启"
+    },
+    {
+      "t": "t('admin.etlview.buttontext.l356_')",
+      "orig": "服务关闭/重启"
+    },
+    {
+      "t": "t('admin.etlview.buttontext.l356__2')",
+      "orig": "其他原因"
+    },
+    {
+      "t": "t('admin.etlview.info.l365_')",
+      "orig": "其他原因"
+    },
+    {
+      "t": "t('admin.etlview.buttontext.l380_')",
+      "orig": "\n  let reason: string = reasonCodeOptions[0].defaultReason\n  try {\n    // 步骤 1: 选择 reason_code 枚举 (Element Plus ElMessageBox 自定义 HTML)\n    await ElMessageBox({\n      title: "
+    },
+    {
+      "t": "t('admin.etlview.buttontext.l380__2')",
+      "orig": ",\n      message: `\n        <div style=\"text-align:left;font-size:13px;line-height:1.6\">\n          <div style=\"margin-bottom:8px;color:#606266\">请选择取消原因 (会写入历史审计, 按此码聚合):</div>\n          <div id=\"cancel-reason-list\" style=\"display:flex;flex-direction:column;gap:6px\">\n            ${reasonCodeOptions.map((o, i) => `\n              <label style=\"display:flex;align-items:flex-start;gap:6px;cursor:pointer;padding:6px 8px;border:1px solid #ebeef5;border-radius:4px;${i === 0 ? "
+    },
+    {
+      "t": "t('admin.etlview.warning.l390_')",
+      "orig": "下一步"
+    },
+    {
+      "t": "t('admin.etlview.string.l422_copy')",
+      "orig": "不取消"
+    },
+    {
+      "t": "t('admin.etlview.string.l424_commit')",
+      "orig": ",\n      dangerouslyUseHTMLString: true\n    })\n    // 提取选中的 code\n    const checked = document.querySelector<HTMLInputElement>("
+    },
+    {
+      "t": "t('admin.etlview.string.l425_meili')",
+      "orig": "\n    const picked = reasonCodeOptions.find(o => o.value === reasonCode) || reasonCodeOptions[0]\n    reason = picked.defaultReason\n  } catch {\n    return\n  }\n  // 步骤 2: 询问是否填写更详细的描述 (可选, 留空则用默认)\n  try {\n    const r = await ElMessageBox.prompt("
+    },
+    {
+      "t": "t('admin.etlview.string.l426_')",
+      "orig": "取消原因说明"
+    },
+    {
+      "t": "t('admin.etlview.label.l453_')",
+      "orig": "确认取消"
+    },
+    {
+      "t": "t('admin.etlview.label.l461_')",
+      "orig": "不取消"
+    },
+    {
+      "t": "t('admin.etlview.label.l469_')",
+      "orig": ").trim()\n    if (v) reason = v\n  } catch {\n    return\n  }\n  cancelling.value = true\n  try {\n    const r = await etlApi.cancel(reason, reasonCode)\n    if (r.cancelled) {\n      ElMessage.warning(`已发送取消信号 (码: ${reasonCode}), 任务即将终止`)\n    } else {\n      ElMessage.info(r.reason || "
+    },
+    {
+      "t": "t('admin.etlview.templatetext.l495_')",
+      "orig": ")\n    }\n  } catch (e: any) {\n    // 已被拦截器处理\n  } finally {\n    cancelling.value = false\n  }\n}\n\n// ===== 计算 =====\nconst status = computed(() => task.value.activeTask?.status ?? (task.value.inProgress ? "
+    },
+    {
+      "t": "t('admin.etlview.label.l595_')",
+      "orig": ")\nconst progressPct = computed(() => task.value.activeTask?.progressPct ?? null)\n// P1.1 (Task 3): 是否有 paused 状态的 ETL (前端根据此显示\"恢复\"按钮)\nconst hasPausedTask = ref(false)\nasync function checkPausedTask() {\n  try {\n    const hist = await etlApi.history(20, "
+    },
+    {
+      "t": "t('admin.etlview.label.l596_')",
+      "orig": ")\n    hasPausedTask.value = (hist?.items?.length ?? 0) > 0\n  } catch (e) { hasPausedTask.value = false }\n}\nonMounted(() => { checkPausedTask() })\n\n// P1.1 (Task 3): 暂停当前活跃 ETL 任务\n//   与 Cancel 区别: Cancel 走 cts.Cancel() 抛异常, Pause 走 flag 标记, 当前批次跑完后优雅退出\nasync function doPause() {\n  try {\n    await ElMessageBox.confirm(\n      "
+    },
+    {
+      "t": "t('admin.etlview.label.l597_')",
+      "orig": "暂停 ETL 任务"
+    },
+    {
+      "t": "t('admin.etlview.label.l598_')",
+      "orig": "暂停"
+    },
+    {
+      "t": "t('admin.etlview.templatetext.l610_')",
+      "orig": "不暂停"
+    },
+    {
+      "t": "t('admin.etlview.label.l651_')",
+      "orig": "}, 当前批次跑完后退出`)\n    } else {\n      ElMessage.info(r.reason || "
+    },
+    {
+      "t": "t('admin.etlview.label.l652_')",
+      "orig": ")\n    }\n  } catch (e: any) {\n    // 已被拦截器处理\n  } finally {\n    pausing.value = false\n  }\n}\n\n// P1.1 (Task 3): 恢复暂停的 ETL 任务 — 从最近 paused 记录的 checkpoint_id 续读\nasync function doResume() {\n  try {\n    await ElMessageBox.confirm(\n      "
+    },
+    {
+      "t": "t('admin.etlview.label.l685_')",
+      "orig": "恢复 ETL 任务"
+    },
+    {
+      "t": "t('admin.etlview.label.l686_')",
+      "orig": "恢复"
+    },
+    {
+      "t": "t('admin.etlview.label.l693_')",
+      "orig": "不恢复"
+    },
+    {
+      "t": "t('admin.etlview.label.l698_')",
+      "orig": "恢复失败"
+    }
+  ],
+  "frontend/src/views/admin/AdminHelpView.vue": [
+    {
+      "t": "t('admin.helpview.string.l15_oem')",
+      "orig": "\n\n// 8 个字典 (P1.3 + P2.2)\nconst dictList = [\n  { name: "
+    },
+    {
+      "t": "t('admin.helpview.string.l17_of100')",
+      "orig": "替代品牌厂家名 (cross_references.oem_brand), 例: Mann, Bosch, Mahle"
+    },
+    {
+      "t": "t('admin.helpview.string.l20_2_cellulose_a020')",
+      "orig": "产品名 1"
+    },
+    {
+      "t": "t('admin.helpview.string.l21_4_agriculture_commercial_construction_ot')",
+      "orig": "产品主名称 (例: Oil Filter, Fuel Filter), 影响前台产品页"
+    },
+    {
+      "t": "t('admin.helpview.string.l22_')",
+      "orig": "产品名 2"
+    },
+    {
+      "t": "t('admin.helpview.string.l28_oem')",
+      "orig": "产品副名称/型号后缀 (例: OF100)"
+    },
+    {
+      "t": "t('admin.helpview.string.l29_oem2')",
+      "orig": "类型 (Type)"
+    },
+    {
+      "t": "t('admin.helpview.string.l33_value_typeahead_20_sort_orde')",
+      "orig": "5 固定分类: oil / fuel / air / cabin / others, sort_order 决定前台排序"
+    },
+    {
+      "t": "t('admin.helpview.string.l37_5mm_95_105_h1_110_h1_id')",
+      "orig": "替代品牌 OEM 编号 (5.27M distinct), 字典化便于 typeahead 联想"
+    },
+    {
+      "t": "t('admin.helpview.string.l40_etl_reading')",
+      "orig": "介质 (Media)"
+    },
+    {
+      "t": "t('admin.helpview.string.l41_port_md_sql')",
+      "orig": "滤材名称 + 型号 (2 字段字典), 例: Cellulose / A020"
+    },
+    {
+      "t": "t('admin.helpview.string.l44_')",
+      "orig": "机型 (Machine)"
+    },
+    {
+      "t": "t('admin.helpview.string.l45_is_discontinued_true_sq')",
+      "orig": "机器品牌 + 型号 + 名称, 按 4 大类聚合: Agriculture / Commercial / Construction / others"
+    },
+    {
+      "t": "t('admin.helpview.string.l48_')",
+      "orig": "发动机 (Engine)"
+    },
+    {
+      "t": "t('admin.helpview.string.l49_')",
+      "orig": "发动机品牌 + 型号"
+    },
+    {
+      "t": "t('admin.helpview.title.l74_')",
+      "orig": "为什么输入 OEM 编号后无法搜索?"
+    },
+    {
+      "t": "t('admin.helpview.title.l75_')",
+      "orig": "检查该 OEM 是否在产品表 oem2 字段里 (注意: 不是 cross_references.oem_brand)。前台公开页用 oemNoDisplay / oem2, 后台搜索用任意一个字段。"
+    },
+    {
+      "t": "t('admin.helpview.title.l76_')",
+      "orig": "为什么新增产品时 typeahead 联想不到想要的值?"
+    },
+    {
+      "t": "t('admin.helpview.title.l77_')",
+      "orig": "字典是后台维护的, 需先在 \"字典管理\" → 对应字典 → 新增 value. typeahead 只返回字典内已存在的值 (前 20 条按 sort_order 排)."
+    },
+    {
+      "t": "t('admin.helpview.title.l78_')",
+      "orig": "尺寸搜索 (H1=100) 返回 0 条结果, 但库里有这个产品?"
+    },
+    {
+      "t": "t('admin.helpview.string.l85_')",
+      "orig": "尺寸搜索默认容差 ±5mm (固定, 不可改), 即 95-105 之间。如果产品 H1=110, 不会命中。改用更小的 H1 值或精确 ID 查询。"
+    },
+    {
+      "t": "t('admin.helpview.string.l85_x_admin_token')",
+      "orig": "ETL 触发后卡在 reading 状态?"
+    },
+    {
+      "t": "t('admin.helpview.string.l85_x_admin_token_2')",
+      "orig": "reading 阶段是流式 COPY 暂存, 大文件 (1M 行) 可能 30-60s。如超过 5 分钟无进度, 检查后端日志 (output/SPIKE-REPORT-*.md) 看是否有 SQL 错误."
+    },
+    {
+      "t": "t('admin.helpview.string.l86_8_seed_spike_test_seed_dict_py_6')",
+      "orig": "怎么批量删除产品?"
+    },
+    {
+      "t": "t('admin.helpview.string.l87_etl')",
+      "orig": "后台产品列表勾选多行 → 顶部 \"批量停售\" 按钮。停售 = is_discontinued=true, 前台不展示, 历史数据保留. 如需物理删除, 走 SQL (慎用)."
+    },
+    {
+      "t": "t('admin.helpview.string.l87_full_load_insert_only_upsert')",
+      "orig": "上传图片后前台不显示?"
+    },
+    {
+      "t": "t('admin.helpview.string.l87_')",
+      "orig": "检查 (1) 产品 isPublished=true (上架) (2) slot 1-6 范围 (3) 浏览器 console 看 OSS 预签名 URL 1h 有效。如过期, 重新加载产品页。"
+    },
+    {
+      "t": "t('admin.helpview.string.l88_8_oem_')",
+      "orig": " }) })))\n</script>\n\n<template>\n  <div class=\"p-3 max-w-screen-xl mx-auto\">\n    <h1 class=\"text-lg font-medium mb-1\">后台操作指南</h1>\n    <p class=\"text-xs text-muted mb-3\">\n      Day 10+ P5.4 帮助页 — 5 模块: 快速开始 / 字典规范 / 批量导入 / 搜索容差 / FAQ\n    </p>\n\n    <el-anchor\n      :offset=\"60\"\n      class=\"help-anchor hairline p-2 mb-3 bg-[var(--color-bg-elevated)]\"\n    >\n      <el-anchor-link href=\"#quickstart\" title=\"快速开始\" />\n      <el-anchor-link href=\"#dict\" title=\"字典使用规范\" />\n      <el-anchor-link href=\"#import\" title=\"批量导入\" />\n      <el-anchor-link href=\"#search\" title=\"搜索容差\" />\n      <el-anchor-link href=\"#faq\" title=\"常见问题\" />\n    </el-anchor>\n\n    <!-- 1. 快速开始 -->\n    <section id=\"quickstart\" class=\"hairline p-4 mb-3\">\n      <h2 class=\"text-base font-medium mb-2\">1. 快速开始 (5 步入门)</h2>\n      <ol class=\"text-sm leading-7 list-decimal pl-5 text-[var(--color-text-muted)]\">\n        <li>点击右上 \"进入后台\", 输入 <code class=\"bg-[var(--color-bg-hover)] px-1\">X-Admin-Token</code> (与后端 <code>Auth:DevStaticToken</code> 一致)</li>\n        <li>字典管理 → 8 个字典先 seed 数据 (首次部署): 走 spike-test/_seed_dict_*.py 6 个脚本</li>\n        <li>ETL 触发 → 选择 \"products.xlsx\" / \"xrefs.xlsx\" / \"apps.xlsx\" + 模式 (full-load / insert-only / upsert), 点 \"触发\"</li>\n        <li>产品管理 → 用 8 字段 / OEM 查询 / 批量粘贴查询, 命中产品进入详情</li>\n        <li>产品详情页支持上传 6 张图 (slot 1-6) + 编辑 7 分区字段 (后台产品表单)</li>\n      </ol>\n    </section>\n\n    <!-- 2. 字典使用规范 -->\n    <section id=\"dict\" class=\"hairline p-4 mb-3\">\n      <h2 class=\"text-base font-medium mb-2\">2. 字典使用规范 (8 个)</h2>\n      <p class=\"text-xs text-muted mb-2\">\n        字典 = 后台可维护的标准值集合. 前台 typeahead / 后台表单 / 公开搜索均从字典取, 保证全站一致.\n      </p>\n      <table class=\"w-full text-sm\">\n        <thead>\n          <tr class=\"hairline-b text-left text-xs text-muted\">\n            <th class=\"py-1 pr-2\">字典</th>\n            <th class=\"py-1 pr-2\">引用字段</th>\n            <th class=\"py-1 pr-2\">说明</th>\n          </tr>\n        </thead>\n        <tbody>\n          <tr v-for=\"d in dictList\" :key=\"d.path\" class=\"hairline-b\">\n            <td class=\"py-1 pr-2 font-medium\">\n              <a :href=\"d.path\" class=\"text-blue-600 hover:underline\">{{ d.name }}</a>\n            </td>\n            <td class=\"py-1 pr-2\"><code class=\"text-xs\">{{ d.path }}</code></td>\n            <td class=\"py-1 pr-2 text-muted\">{{ d.desc }}</td>\n          </tr>\n        </tbody>\n      </table>\n      <p class=\"text-xs text-muted mt-2\">\n        💡 拖拽排序: 字典管理页每行的 ≡ 按钮, sort_order 持久化, 前台展示按 sort_order 升序.\n      </p>\n    </section>\n\n    <!-- 3. 批量导入 -->\n    <section id=\"import\" class=\"hairline p-4 mb-3\">\n      <h2 class=\"text-base font-medium mb-2\">3. 批量导入流程 (XLSX 拖拽)</h2>\n      <ol class=\"text-sm leading-7 list-decimal pl-5\">\n        <li>准备 Excel: products / xrefs / machine_applications 三张表 (列名见 ETL 触发页)</li>\n        <li>ETL 触发页 → \"拖拽 XLSX 到此\" → 自动识别 entity + 模式 (推荐 full-load 全量, insert-only 仅新增)</li>\n        <li>进度条 5 阶段: reading → staging → inserting → committing → meili-sync, 任一阶段失败可暂停/恢复</li>\n        <li>完成后会在 etl_progress_log 写一行 (含 read/stage/inserted/skipped/missing_oem/error 计数)</li>\n        <li>后台产品管理用 \"搜索\" 验证导入数据是否可查</li>\n      </ol>\n      <p class=\"text-xs text-muted mt-2\">\n        ⚠ 性能: 1M products 全量约 2-3 分钟, 5M xrefs 约 5-8 分钟, 1M apps 约 2 分钟 (PG 本地测试数据)\n      </p>\n    </section>\n\n    <!-- 4. 搜索容差 -->\n    <section id=\"search\" class=\"hairline p-4 mb-3\">\n      <h2 class=\"text-base font-medium mb-2\">4. 搜索容差 (±5mm 固定)</h2>\n      <p class=\"text-sm leading-6\">\n        尺寸字段 (H1-H4 / D1-D4) 搜索默认 <strong>±5mm</strong> 容差, 即 H1=100 命中 H1∈[95,105] 的所有产品。\n        后端 AdminProductService 已 hardcode <code>tolerance=5</code>, 前端不暴露切换.\n      </p>\n      <p class=\"text-sm leading-6 mt-1\">\n        多字段组合走 AND 关系 (收窄), 单字段命中即返回 (公开搜索 8 字段同时支持).\n      </p>\n\n      <h3 class=\"text-sm font-medium mt-3 mb-1\">字段说明 (常用 10 个)</h3>\n      <table class=\"w-full text-sm\">\n        <thead>\n          <tr class=\"hairline-b text-left text-xs text-muted\">\n            <th class=\"py-1 pr-2\">字段</th>\n            <th class=\"py-1 pr-2\">单位</th>\n            <th class=\"py-1 pr-2\">说明</th>\n            <th class=\"py-1 pr-2\">示例</th>\n          </tr>\n        </thead>\n        <tbody>\n          <tr v-for=\"h in helpPreview\" :key=\"h.key\" class=\"hairline-b\">\n            <td class=\"py-1 pr-2 font-medium\">{{ h.label }} <code class=\"text-xs text-muted\">({{ h.key }})</code></td>\n            <td class=\"py-1 pr-2 text-muted\">{{ h.unit || "
+    },
+    {
+      "t": "t('admin.helpview.string.l89_6_slot_1_6_7')",
+      "orig": ">\n// Day 10+ P5.4 (Task 15.4): 后台帮助/文档页\n//   - 5 个模块: 快速开始 / 字典使用规范 / 批量导入 / 搜索容差 / 常见问题\n//   - 字段帮助文案从 data/field-help.ts 复用, 单源真相\n//   - el-anchor 锚点导航 + 章节卡片\n//   - 整体 Musk 风格 (无阴影, 1px hairline, 8px 网格)\nimport { computed } from 'vue'\nimport { FIELD_HELP } from '@/data/field-help'\n\n// 8 个字典 (P1.3 + P2.2)\nconst dictList = [\n  { name: 'OEM 品牌', path: '/admin/dict/oem-brands', desc: '替代品牌厂家名 (cross_references.oem_brand), 例: Mann, Bosch, Mahle' },\n  { name: '产品名 1', path: '/admin/dict/product-name1s', desc: '产品主名称 (例: Oil Filter, Fuel Filter), 影响前台产品页' },\n  { name: '产品名 2', path: '/admin/dict/product-name2s', desc: '产品副名称/型号后缀 (例: OF100)' },\n  { name: '类型 (Type)', path: '/admin/dict/types', desc: '5 固定分类: oil / fuel / air / cabin / others, sort_order 决定前台排序' },\n  { name: 'OEM 3', path: '/admin/dict/oem-no3s', desc: '替代品牌 OEM 编号 (5.27M distinct), 字典化便于 typeahead 联想' },\n  { name: '介质 (Media)', path: '/admin/dict/medias', desc: '滤材名称 + 型号 (2 字段字典), 例: Cellulose / A020' },\n  { name: '机型 (Machine)', path: '/admin/dict/machines', desc: '机器品牌 + 型号 + 名称, 按 4 大类聚合: Agriculture / Commercial / Construction / others' },\n  { name: '发动机 (Engine)', path: '/admin/dict/engines', desc: '发动机品牌 + 型号' }\n]\n\n// FAQ 数据\nconst faqs = [\n  {\n    q: '为什么输入 OEM 编号后无法搜索?',\n    a: '检查该 OEM 是否在产品表 oem2 字段里 (注意: 不是 cross_references.oem_brand)。前台公开页用 oemNoDisplay / oem2, 后台搜索用任意一个字段。'\n  },\n  {\n    q: '为什么新增产品时 typeahead 联想不到想要的值?',\n    a: '字典是后台维护的, 需先在 "
+    },
+    {
+      "t": "t('admin.helpview.string.l130_')",
+      "orig": " → 对应字典 → 新增 value. typeahead 只返回字典内已存在的值 (前 20 条按 sort_order 排).'\n  },\n  {\n    q: '尺寸搜索 (H1=100) 返回 0 条结果, 但库里有这个产品?',\n    a: '尺寸搜索默认容差 ±5mm (固定, 不可改), 即 95-105 之间。如果产品 H1=110, 不会命中。改用更小的 H1 值或精确 ID 查询。'\n  },\n  {\n    q: 'ETL 触发后卡在 reading 状态?',\n    a: 'reading 阶段是流式 COPY 暂存, 大文件 (1M 行) 可能 30-60s。如超过 5 分钟无进度, 检查后端日志 (output/SPIKE-REPORT-*.md) 看是否有 SQL 错误.'\n  },\n  {\n    q: '怎么批量删除产品?',\n    a: '后台产品列表勾选多行 → 顶部 "
+    }
+  ],
+  "frontend/src/views/admin/AdminMachinesView.vue": [
+    {
+      "t": "t('admin.machinesview.error.l41_')",
+      "orig": ")\n\n// P2.3: 4 大类常量, 给 <el-select> 用\nconst CATEGORY_OPTIONS = ["
+    },
+    {
+      "t": "t('admin.machinesview.warning.l66_')",
+      "orig": "加载失败: "
+    },
+    {
+      "t": "t('admin.machinesview.warning.l67_200')",
+      "orig": "\n  // P2.3: 兜底 "
+    },
+    {
+      "t": "t('admin.machinesview.success.l73_')",
+      "orig": " (兼容老数据无 category 字段)\n  dialogForm.machineCategory = (row.machineCategory as Category) ?? "
+    },
+    {
+      "t": "t('admin.machinesview.success.l80_')",
+      "orig": "机型品牌不能为空"
+    },
+    {
+      "t": "t('admin.machinesview.error.l83_')",
+      "orig": "机型品牌长度不能超过 200"
+    },
+    {
+      "t": "t('admin.machinesview.warning.l87_')",
+      "orig": ") {\n      // Day 11 Phase 1 BUG FIX B: create 时也传 machineCategory (之前漏传, 后端默认 \"others\")\n      await dictApi.machines.create(b, model, name, dialogForm.sortOrder, dialogForm.machineCategory); ElMessage.success("
+    },
+    {
+      "t": "t('admin.machinesview.success.l88_')",
+      "orig": ")\n    } else if (dialogForm.id != null) {\n      // P2.3: 提交时把 machineCategory 一并 PUT\n      await dictApi.machines.update(dialogForm.id, {\n        machineBrand: b, machineModel: model, machineName: name,\n        sortOrder: dialogForm.sortOrder, machineCategory: dialogForm.machineCategory\n      })\n      ElMessage.success("
+    },
+    {
+      "t": "t('admin.machinesview.error.l89_')",
+      "orig": "操作失败"
+    },
+    {
+      "t": "t('admin.machinesview.success.l92_')",
+      "orig": "}`\n  try { await ElMessageBox.confirm(`确定删除 \"${label}\" 吗? (软删除)`, "
+    },
+    {
+      "t": "t('admin.machinesview.error.l93_')",
+      "orig": "已删除"
+    },
+    {
+      "t": "t('admin.machinesview.success.l109_')",
+      "orig": "删除失败"
+    },
+    {
+      "t": "t('admin.machinesview.error.l110_')",
+      "orig": "已恢复"
+    },
+    {
+      "t": "t('admin.machinesview.placeholder.l143_')",
+      "orig": "恢复失败"
+    },
+    {
+      "t": "t('admin.machinesview.title.l195_dialogmode_create')",
+      "orig": "排序已保存"
+    },
+    {
+      "t": "t('admin.machinesview.label.l197_')",
+      "orig": "排序失败"
+    },
+    {
+      "t": "t('admin.machinesview.label.l200_')",
+      "orig": ")\n}\n// P2.3: category 标签颜色 (4 大类各一色)\nfunction categoryTagType(cat?: string): "
+    },
+    {
+      "t": "t('admin.machinesview.label.l203_')",
+      "orig": "   // 绿 (农林)\n    case "
+    },
+    {
+      "t": "t('admin.machinesview.label.l208_')",
+      "orig": "   // 蓝 (商用)\n    case "
+    },
+    {
+      "t": "t('admin.machinesview.label.l214_')",
+      "orig": " // 橙 (工程)\n    default: return "
+    }
+  ],
+  "frontend/src/views/admin/AdminMediasView.vue": [
+    {
+      "t": "t('admin.mediasview.error.l31_')",
+      "orig": "加载失败: "
+    },
+    {
+      "t": "t('admin.mediasview.warning.l52_media')",
+      "orig": "Media 名称不能为空"
+    },
+    {
+      "t": "t('admin.mediasview.warning.l53_media_100')",
+      "orig": "Media 名称长度不能超过 100"
+    },
+    {
+      "t": "t('admin.mediasview.success.l57_')",
+      "orig": "已新增"
+    },
+    {
+      "t": "t('admin.mediasview.success.l60_')",
+      "orig": "已更新"
+    },
+    {
+      "t": "t('admin.mediasview.error.l63_')",
+      "orig": "操作失败"
+    },
+    {
+      "t": "t('admin.mediasview.warning.l66_')",
+      "orig": "}\" 吗? (软删除)`, "
+    },
+    {
+      "t": "t('admin.mediasview.success.l67_')",
+      "orig": "已删除"
+    },
+    {
+      "t": "t('admin.mediasview.error.l68_')",
+      "orig": "删除失败"
+    },
+    {
+      "t": "t('admin.mediasview.success.l71_')",
+      "orig": "已恢复"
+    },
+    {
+      "t": "t('admin.mediasview.error.l72_')",
+      "orig": "恢复失败"
+    },
+    {
+      "t": "t('admin.mediasview.success.l88_')",
+      "orig": "排序已保存"
+    },
+    {
+      "t": "t('admin.mediasview.error.l89_')",
+      "orig": "排序失败"
+    },
+    {
+      "t": "t('admin.mediasview.placeholder.l113_media')",
+      "orig": ")\n}\nconst total = computed(() => items.value.length)\nconst activeCount = computed(() => items.value.filter((x) => !x.deletedAt).length)\nonMounted(load)\n</script>\n\n<template>\n  <div class=\"p-3 max-w-screen-xl mx-auto\">\n    <div class=\"flex items-center gap-2 mb-3 flex-wrap\">\n      <h1 class=\"text-lg font-medium\">介质字典 (Media)</h1>\n      <span class=\"text-xs text-muted\">P2.2 后台管理 · 2 字段: Media 名称 + 型号 · 用于产品表单分区 4 media/media_model 二合一</span>\n      <div class=\"flex-1\" />\n      <el-input v-model=\"searchKw\" placeholder=\"搜索 Media 名称或型号\" clearable size=\"small\" style=\"width: 200px\" @keyup.enter=\"onSearch\" />\n      <el-button size=\"small\" @click=\"onSearch\">搜索</el-button>\n      <el-checkbox v-model=\"includeDeleted\" @change=\"load\" size=\"small\">含已删</el-checkbox>\n      <el-button type=\"primary\" size=\"small\" @click=\"openCreate\">新增 Media</el-button>\n    </div>\n\n    <div class=\"hairline\" v-loading=\"loading\">\n      <div class=\"dict-head\">\n        <div class=\"cell-drag\"></div>\n        <div class=\"cell-id\">ID</div>\n        <div class=\"cell-name\">Media 名称</div>\n        <div class=\"cell-model\">型号</div>\n        <div class=\"cell-sort\">排序</div>\n        <div class=\"cell-xref\">引用</div>\n        <div class=\"cell-updated\">更新</div>\n        <div class=\"cell-status\">状态</div>\n        <div class=\"cell-action\">操作</div>\n      </div>\n      <div v-for=\"row in items\" :key=\"row.id\"\n        :class=\"["
+    },
+    {
+      "t": "t('admin.mediasview.placeholder.l163_5_m_10_m')",
+      "orig": " }}</div>\n        <div class=\"cell-sort\">{{ row.sortOrder }}</div>\n        <div class=\"cell-xref\">{{ row.xrefCount }}</div>\n        <div class=\"cell-updated\">{{ fmtDate(row.updatedAt) }}</div>\n        <div class=\"cell-status\">\n          <el-tag v-if=\"row.deletedAt\" type=\"info\" size=\"small\">已删</el-tag>\n          <el-tag v-else type=\"success\" size=\"small\">启用</el-tag>\n        </div>\n        <div class=\"cell-action\">\n          <el-button size=\"small\" text @click=\"openEdit(row)\" :disabled=\"!!row.deletedAt\">编辑</el-button>\n          <el-button v-if=\"!row.deletedAt\" size=\"small\" text type=\"warning\" @click=\"softDelete(row)\">删除</el-button>\n          <el-button v-else size=\"small\" text type=\"success\" @click=\"restore(row)\">恢复</el-button>\n        </div>\n      </div>\n      <div v-if=\"!loading && items.length === 0\" class=\"dict-empty\">暂无数据, 点击右上\"新增 Media\"开始</div>\n    </div>\n\n    <div class=\"mt-2 text-xs text-muted\">共 {{ total }} 条 (启用 {{ activeCount }}, 软删 {{ total - activeCount }}) · 拖动\"≡\"列重排</div>\n\n    <el-dialog v-model=\"dialogOpen\" :title=\"dialogMode === "
+    },
+    {
+      "t": "t('admin.mediasview.label.l166_')",
+      "orig": "新增 Media"
+    }
+  ],
+  "frontend/src/views/admin/AdminOemBrandsView.vue": [
+    {
+      "t": "t('admin.oembrandsview.error.l40_')",
+      "orig": ")\n\n// 新增 / 编辑 弹窗\nconst dialogOpen = ref(false)\nconst dialogMode = ref<"
+    },
+    {
+      "t": "t('admin.oembrandsview.warning.l68_')",
+      "orig": ",\n  sortOrder: 0\n})\n\n// 拖拽状态 (HTML5 原生, 不引 Sortable.js)\nconst draggingId = ref<number | null>(null)\nconst dragOverId = ref<number | null>(null)\n\nasync function load() {\n  loading.value = true\n  try {\n    const { items: list } = await dictApi.oemBrands.list(searchKw.value || undefined, includeDeleted.value, 500)\n    items.value = list\n  } catch (e: any) {\n    ElMessage.error("
+    },
+    {
+      "t": "t('admin.oembrandsview.warning.l72_100')",
+      "orig": "\n  // 默认 sortOrder = max + 10 (与后端 CreateOemBrandAsync 一致)\n  const maxSort = items.value.filter((x) => !x.deletedAt).reduce((m, x) => Math.max(m, x.sortOrder), 0)\n  dialogForm.sortOrder = maxSort + 10\n  dialogOpen.value = true\n}\n\nfunction openEdit(row: OemBrandItem) {\n  dialogMode.value = "
+    },
+    {
+      "t": "t('admin.oembrandsview.success.l78_')",
+      "orig": "品牌名不能为空"
+    },
+    {
+      "t": "t('admin.oembrandsview.success.l84_')",
+      "orig": "品牌名长度不能超过 100"
+    },
+    {
+      "t": "t('admin.oembrandsview.string.l90_')",
+      "orig": "已新增"
+    },
+    {
+      "t": "t('admin.oembrandsview.string.l99_')",
+      "orig": "已更新"
+    },
+    {
+      "t": "t('admin.oembrandsview.success.l107_')",
+      "orig": "操作失败"
+    },
+    {
+      "t": "t('admin.oembrandsview.string.l110_')",
+      "orig": "确认"
+    },
+    {
+      "t": "t('admin.oembrandsview.success.l118_')",
+      "orig": " }\n    )\n  } catch {\n    return  // 用户取消\n  }\n  try {\n    await dictApi.oemBrands.delete(row.id)\n    ElMessage.success("
+    },
+    {
+      "t": "t('admin.oembrandsview.string.l121_')",
+      "orig": "删除失败"
+    },
+    {
+      "t": "t('admin.oembrandsview.success.l168_')",
+      "orig": "已恢复"
+    },
+    {
+      "t": "t('admin.oembrandsview.string.l170_')",
+      "orig": "恢复失败"
+    },
+    {
+      "t": "t('admin.oembrandsview.placeholder.l215_')",
+      "orig": "\n  if (draggingId.value !== id) dragOverId.value = id\n}\nfunction onDragLeave(_e: DragEvent, id: number) {\n  if (dragOverId.value === id) dragOverId.value = null\n}\nasync function onDrop(e: DragEvent, targetId: number) {\n  e.preventDefault()\n  const sourceId = draggingId.value\n  dragOverId.value = null\n  draggingId.value = null\n  if (sourceId == null || sourceId === targetId) return\n  const sourceIdx = items.value.findIndex((x) => x.id === sourceId)\n  const targetIdx = items.value.findIndex((x) => x.id === targetId)\n  if (sourceIdx < 0 || targetIdx < 0) return\n  // 1) 本地重排\n  const moved = items.value.splice(sourceIdx, 1)[0]\n  items.value.splice(targetIdx, 0, moved)\n  // 2) 重新分配 sortOrder (步长 10, 与后端默认一致; 已删的也分配, 保持连续)\n  const updates: OemBrandReorderItem[] = items.value.map((it, idx) => ({\n    id: it.id,\n    sortOrder: (idx + 1) * 10\n  }))\n  // 3) 先把 sortOrder 写回本地, 避免 UI 闪烁\n  items.value.forEach((it, idx) => { it.sortOrder = (idx + 1) * 10 })\n  // 4) 调 API\n  try {\n    await dictApi.oemBrands.reorder(updates)\n    ElMessage.success("
+    },
+    {
+      "t": "t('admin.oembrandsview.title.l252_')",
+      "orig": "排序失败"
+    },
+    {
+      "t": "t('admin.oembrandsview.string.l283_')",
+      "orig": ")\n}\n\n// 拖拽禁用已删项 (避免打乱含已删集合的视觉顺序)\nfunction isDraggable(row: OemBrandItem) {\n  return !row.deletedAt\n}\n\n// 表格行视觉态\nfunction rowClass(row: OemBrandItem): string {\n  const classes: string[] = []\n  if (row.deletedAt) classes.push("
+    },
+    {
+      "t": "t('admin.oembrandsview.label.l299_')",
+      "orig": ")\n}\n\nconst total = computed(() => items.value.length)\nconst activeCount = computed(() => items.value.filter((x) => !x.deletedAt).length)\n\nonMounted(load)\n</script>\n\n<template>\n  <div class=\"p-3 max-w-screen-xl mx-auto\">\n    <!-- 顶部工具条 -->\n    <div class=\"flex items-center gap-2 mb-3 flex-wrap\">\n      <h1 class=\"text-lg font-medium\">OEM 品牌字典</h1>\n      <span class=\"text-xs text-muted\">P1.3 后台管理 · 用于产品表单分区 2 自动补全</span>\n      <div class=\"flex-1\" />\n      <el-input\n        v-model=\"searchKw\"\n        placeholder=\"搜索品牌\"\n        clearable\n        size=\"small\"\n        style=\"width: 200px\"\n        @keyup.enter=\"onSearch\"\n      />\n      <el-button size=\"small\" @click=\"onSearch\">搜索</el-button>\n      <el-checkbox v-model=\"includeDeleted\" @change=\"load\" size=\"small\">含已删</el-checkbox>\n      <el-button type=\"primary\" size=\"small\" @click=\"openCreate\">新增品牌</el-button>\n    </div>\n\n    <!-- 自定义可拖拽列表 (不用 el-table, 因为 el-table 行事件绑定复杂) -->\n    <div class=\"hairline\" v-loading=\"loading\">\n      <!-- 表头 -->\n      <div class=\"dict-head\">\n        <div class=\"cell-drag\"></div>\n        <div class=\"cell-id\">ID</div>\n        <div class=\"cell-brand\">品牌</div>\n        <div class=\"cell-sort\">排序</div>\n        <div class=\"cell-xref\">xref 引用</div>\n        <div class=\"cell-updated\">更新</div>\n        <div class=\"cell-status\">状态</div>\n        <div class=\"cell-action\">操作</div>\n      </div>\n      <!-- 表体: v-for 自定义行, 每行 draggable -->\n      <div\n        v-for=\"row in items\"\n        :key=\"row.id\"\n        :class=\"["
+    },
+    {
+      "t": "t('admin.oembrandsview.label.l302_')",
+      "orig": ", rowClass(row)]\"\n        :draggable=\"isDraggable(row)\"\n        @dragstart=\"onDragStart($event, row.id)\"\n        @dragover=\"onDragOver($event, row.id)\"\n        @dragleave=\"onDragLeave($event, row.id)\"\n        @drop=\"onDrop($event, row.id)\"\n        @dragend=\"onDragEnd\"\n      >\n        <div class=\"cell-drag\">\n          <span v-if=\"isDraggable(row)\" class=\"drag-handle\" title=\"拖动以排序\">≡</span>\n        </div>\n        <div class=\"cell-id\">{{ row.id }}</div>\n        <div class=\"cell-brand\">{{ row.brand }}</div>\n        <div class=\"cell-sort\">{{ row.sortOrder }}</div>\n        <div class=\"cell-xref\">{{ row.xrefCount }}</div>\n        <div class=\"cell-updated\">{{ fmtDate(row.updatedAt) }}</div>\n        <div class=\"cell-status\">\n          <el-tag v-if=\"row.deletedAt\" type=\"info\" size=\"small\">已删</el-tag>\n          <el-tag v-else type=\"success\" size=\"small\">启用</el-tag>\n        </div>\n        <div class=\"cell-action\">\n          <el-button size=\"small\" text @click=\"openEdit(row)\" :disabled=\"!!row.deletedAt\">编辑</el-button>\n          <el-button\n            v-if=\"!row.deletedAt\"\n            size=\"small\"\n            text\n            type=\"warning\"\n            @click=\"softDelete(row)\"\n          >删除</el-button>\n          <el-button\n            v-else\n            size=\"small\"\n            text\n            type=\"success\"\n            @click=\"restore(row)\"\n          >恢复</el-button>\n        </div>\n      </div>\n      <!-- 空状态 -->\n      <div v-if=\"!loading && items.length === 0\" class=\"dict-empty\">\n        暂无数据, 点击右上\"新增品牌\"开始\n      </div>\n    </div>\n\n    <!-- 底部统计 -->\n    <div class=\"mt-2 text-xs text-muted\">\n      共 {{ total }} 条 (启用 {{ activeCount }}, 软删 {{ total - activeCount }}) · 拖动\"≡\"列重排, 释放后自动保存\n    </div>\n\n    <!-- 新增 / 编辑 弹窗 -->\n    <el-dialog\n      v-model=\"dialogOpen\"\n      :title=\"dialogMode === "
+    }
+  ],
+  "frontend/src/views/admin/AdminOemNo3sView.vue": [
+    {
+      "t": "t('admin.oemno3sview.error.l29_')",
+      "orig": "加载失败: "
+    },
+    {
+      "t": "t('admin.oemno3sview.warning.l46_oem_3')",
+      "orig": "OEM 3 不能为空"
+    },
+    {
+      "t": "t('admin.oemno3sview.success.l50_')",
+      "orig": "OEM 3 长度不能超过 200"
+    },
+    {
+      "t": "t('admin.oemno3sview.success.l53_')",
+      "orig": "已新增"
+    },
+    {
+      "t": "t('admin.oemno3sview.error.l56_')",
+      "orig": "已更新"
+    },
+    {
+      "t": "t('admin.oemno3sview.warning.l59_')",
+      "orig": "操作失败"
+    },
+    {
+      "t": "t('admin.oemno3sview.success.l60_')",
+      "orig": "确认"
+    },
+    {
+      "t": "t('admin.oemno3sview.error.l61_')",
+      "orig": "已删除"
+    },
+    {
+      "t": "t('admin.oemno3sview.success.l64_')",
+      "orig": "删除失败"
+    },
+    {
+      "t": "t('admin.oemno3sview.error.l65_')",
+      "orig": "已恢复"
+    },
+    {
+      "t": "t('admin.oemno3sview.success.l81_')",
+      "orig": "恢复失败"
+    },
+    {
+      "t": "t('admin.oemno3sview.error.l82_')",
+      "orig": "排序已保存"
+    },
+    {
+      "t": "t('admin.oemno3sview.placeholder.l106_oem_3')",
+      "orig": "排序失败"
+    },
+    {
+      "t": "t('admin.oemno3sview.label.l153_')",
+      "orig": ")\n}\nconst total = computed(() => items.value.length)\nconst activeCount = computed(() => items.value.filter((x) => !x.deletedAt).length)\nonMounted(load)\n</script>\n\n<template>\n  <div class=\"p-3 max-w-screen-xl mx-auto\">\n    <div class=\"flex items-center gap-2 mb-3 flex-wrap\">\n      <h1 class=\"text-lg font-medium\">OEM 3 字典</h1>\n      <span class=\"text-xs text-muted\">P2.2 后台管理 · 用于交叉引用分区 2 oem_no_3 自动补全</span>\n      <div class=\"flex-1\" />\n      <el-input v-model=\"searchKw\" placeholder=\"搜索 OEM 3\" clearable size=\"small\" style=\"width: 200px\" @keyup.enter=\"onSearch\" />\n      <el-button size=\"small\" @click=\"onSearch\">搜索</el-button>\n      <el-checkbox v-model=\"includeDeleted\" @change=\"load\" size=\"small\">含已删</el-checkbox>\n      <el-button type=\"primary\" size=\"small\" @click=\"openCreate\">新增 OEM 3</el-button>\n    </div>\n\n    <div class=\"hairline\" v-loading=\"loading\">\n      <div class=\"dict-head\">\n        <div class=\"cell-drag\"></div>\n        <div class=\"cell-id\">ID</div>\n        <div class=\"cell-name\">OEM 3</div>\n        <div class=\"cell-sort\">排序</div>\n        <div class=\"cell-xref\">引用</div>\n        <div class=\"cell-updated\">更新</div>\n        <div class=\"cell-status\">状态</div>\n        <div class=\"cell-action\">操作</div>\n      </div>\n      <div v-for=\"row in items\" :key=\"row.id\"\n        :class=\"["
+    }
+  ],
+  "frontend/src/views/admin/AdminPerfView.vue": [
+    {
+      "t": "t('admin.perfview.string.l87_')",
+      "orig": ")\n    perf.value = r.data\n  } catch {\n    // 拦截器处理\n  }\n}\n\nasync function fetchAuth() {\n  try {\n    const r = await http.get<AuthStatus>("
+    },
+    {
+      "t": "t('admin.perfview.string.l167_')",
+      "orig": ")\n    auth.value = r.data\n  } catch {\n    // 401 等已处理\n  }\n}\n\nasync function fetchHealth() {\n  try {\n    const r = await fetch("
+    },
+    {
+      "t": "t('admin.perfview.string.l168_')",
+      "orig": "刷新失败"
+    },
+    {
+      "t": "t('admin.perfview.string.l169_')",
+      "orig": "\n})\n\n// P5.5+: 告警计算 — P95>500ms 或 ErrorRate>5% 触发\n//   WHY 纯前端计算: 后端 /api/perf 已提供原始指标, 告警逻辑无状态, 前端算即可\n//   WHY 阈值 500ms/5%: 与 P5.5 中间件颜色分级一致, 运维直观\nconst alerts = computed<{ level: "
+    },
+    {
+      "t": "t('admin.perfview.string.l170_')",
+      "orig": ", msg: `P95 = ${p.p95Ms.toFixed(0)}ms (≥1000ms 严重)` })\n  } else if (p.p95Ms >= 500) {\n    list.push({ level: "
+    },
+    {
+      "t": "t('admin.perfview.label.l204_autorefresh')",
+      "orig": ", msg: `P95 = ${p.p95Ms.toFixed(0)}ms (≥500ms 警告)` })\n  }\n  if (p.errorRate >= 10) {\n    list.push({ level: "
+    },
+    {
+      "t": "t('admin.perfview.templatetext.l206_')",
+      "orig": ", msg: `错误率 = ${p.errorRate.toFixed(1)}% (≥10% 严重)` })\n  } else if (p.errorRate >= 5) {\n    list.push({ level: "
+    },
+    {
+      "t": "t('admin.perfview.templatetext.l203_')",
+      "orig": ", msg: `错误率 = ${p.errorRate.toFixed(1)}% (≥5% 警告)` })\n  }\n  return list\n})\n\nconst hasAlert = computed(() => alerts.value.length > 0)\nconst hasCritical = computed(() => alerts.value.some(a => a.level === "
+    },
+    {
+      "t": "t('admin.perfview.label.l212_')",
+      "orig": "检测中"
+    },
+    {
+      "t": "t('admin.perfview.templatetext.l224_')",
+      "orig": "就绪"
+    },
+    {
+      "t": "t('admin.perfview.templatetext.l224__2')",
+      "orig": "降级"
+    },
+    {
+      "t": "t('admin.perfview.templatetext.l243_')",
+      "orig": "故障"
+    },
+    {
+      "t": "t('admin.perfview.templatetext.l243__2')",
+      "orig": "\n})\n\n// 格式化时间\nfunction fmtTime(ts: string | null): string {\n  if (!ts) return "
+    },
+    {
+      "t": "t('admin.perfview.templatetext.l306_')",
+      "orig": ", { hour12: false })\n  } catch {\n    return ts\n  }\n}\n</script>\n\n<template>\n  <div class=\"p-3 max-w-screen-xl mx-auto\">\n    <div class=\"flex items-center justify-between mb-3\">\n      <div>\n        <h1 class=\"text-lg font-medium\">性能监控</h1>\n        <p class=\"text-xs text-muted\">\n          P5.5 后端性能埋点 — P50/P95/P99 + 错误率 + 健康探针 + Token 轮转状态\n        </p>\n      </div>\n      <div class=\"flex items-center gap-2\">\n        <button\n          @click=\"toggleAutoRefresh\"\n          class=\"px-2 py-1 text-sm hairline hover:bg-[var(--color-bg-hover)]\"\n          :aria-label=\"autoRefresh ? "
+    },
+    {
+      "t": "t('admin.perfview.templatetext.l306__2')",
+      "orig": "开启自动刷新"
+    },
+    {
+      "t": "t('admin.perfview.templatetext.l306__3')",
+      "orig": "⏸ 暂停"
+    },
+    {
+      "t": "t('admin.perfview.templatetext.l339_db')",
+      "orig": ") }}\n        </button>\n        <select\n          v-model=\"refreshSec\"\n          @change=\"changeInterval(refreshSec)\"\n          class=\"px-2 py-1 text-sm hairline bg-[var(--color-bg-elevated)]\"\n          aria-label=\"刷新间隔\"\n        >\n          <option :value=\"3\">3s</option>\n          <option :value=\"5\">5s</option>\n          <option :value=\"10\">10s</option>\n          <option :value=\"30\">30s</option>\n        </select>\n        <button\n          @click=\"refreshAll\"\n          :disabled=\"loading\"\n          class=\"px-3 py-1 text-sm hairline hover:bg-[var(--color-bg-hover)] disabled:opacity-50\"\n        >\n          {{ loading ? "
+    },
+    {
+      "t": "t('admin.perfview.templatetext.l339_appsettings_json')",
+      "orig": "↻ 刷新"
+    }
+  ],
+  "frontend/src/views/admin/AdminProductFormView.vue": [
+    {
+      "t": "t('admin.productformview.success.l151_')",
+      "orig": "])\n\n// P2-7 修复 v2: 保存乐观锁冲突后的 reload timer 引用, 卸载时清理\n//   WHY: 用户在 1.5s 内导航离开后, 旧 timer 仍会触发 window.location.reload() 造成意外跳转\nlet reloadTimer: ReturnType<typeof setTimeout> | null = null\n\nconst form = reactive<any>({\n  productName1: "
+    },
+    {
+      "t": "t('admin.productformview.success.l154_')",
+      "orig": ",\n  qtyPerCarton: null,\n  weightKgs: null,\n  cartonLengthMm: null,\n  cartonWidthMm: null,\n  cartonHeightMm: null,\n  volumePerCartonM3: null,  // P5.1 自动计算, 也可显式覆盖\n  masterBoxQty: null,\n  masterBoxWeightKgs: null,\n  masterBoxLengthMm: null,\n  masterBoxWidthMm: null,\n  masterBoxHeightMm: null,\n  crossReferences: [],\n  machineApplications: []\n})\n\n// E2E BD.3 修复 v2: 乐观锁并发令牌 (PG xmin), GET 时保存, PUT 时带回\n//   后端用此值覆盖实体加载时的 xmin, 检测\"先读后写\"并发丢失更新\nconst rowVersion = ref<number>(0)\n\nconst loading = ref(false)\nconst saving = ref(false)\nconst uploading = ref(false)\nconst removing = ref(false)\n\nconst images = ref<{ slot: number; imageKey: string; imageUrl: string }[]>([])\n\n// ===== P5.1: 包装/母箱体积自动计算 =====\n//   L * W * H / 1e9 m³ (mm → m → m³)\n//   任一为空 → null (不显示)\n//   后端 AdminProductService.DeriveVolume 是兜底, 这里只做实时预览\nfunction computeVolumeM3(l: number | null | undefined, w: number | null | undefined, h: number | null | undefined): number | null {\n  if (l == null || w == null || h == null) return null\n  if (l <= 0 || w <= 0 || h <= 0) return null\n  // 精度保留 6 位小数, 后端 decimal(18,6) 一致\n  return Math.round((l * w * h) / 1_000_000) / 1_000_000\n}\n\nconst cartonVolume = computed(() => computeVolumeM3(form.cartonLengthMm, form.cartonWidthMm, form.cartonHeightMm))\nconst masterBoxVolume = computed(() => computeVolumeM3(form.masterBoxLengthMm, form.masterBoxWidthMm, form.masterBoxHeightMm))\n\nconst cartonVolumeText = computed(() => cartonVolume.value == null ? "
+    },
+    {
+      "t": "t('admin.productformview.string.l167_')",
+      "orig": " : masterBoxVolume.value.toFixed(6))\n\n// 监听 L/W/H 变化, 同步到 form.volumePerCartonM3 (避免只读 el-input 提交时空字段)\nwatch(cartonVolume, (v) => {\n  form.volumePerCartonM3 = v == null ? null : v\n})\n\nasync function load() {\n  if (!isEdit.value) return\n  loading.value = true\n  try {\n    const p = await adminProductApi.get(productId.value)\n    Object.assign(form, {\n      productName1: p.productName1,\n      productName2: p.productName2,\n      type: p.type,\n      mr1: p.mr1,\n      oem2: p.oem2,\n      isPublished: p.isPublished,\n      remark: p.remark,\n      d1Mm: p.d1Mm, d2Mm: p.d2Mm, d3Mm: p.d3Mm, d4Mm: p.d4Mm,\n      h1Mm: p.h1Mm, h2Mm: p.h2Mm, h3Mm: p.h3Mm, h4Mm: p.h4Mm,\n      d7Thread: p.d7Thread, d8Thread: p.d8Thread,\n      noCheckValves: p.noCheckValves, noBypassValves: p.noBypassValves,\n      media: p.media, mediaModel: p.mediaModel,\n      bypassValveLr: p.bypassValveLr, bypassValveHr: p.bypassValveHr,\n      efficiency1: p.efficiency1, efficiency2: p.efficiency2,\n      bypassPressure: p.bypassPressure, collapsePressureBar: p.collapsePressureBar,\n      sealingMaterial: p.sealingMaterial, tempRange: p.tempRange,\n      qtyPerCarton: p.qtyPerCarton, weightKgs: p.weightKgs,\n      cartonLengthMm: p.cartonLengthMm, cartonWidthMm: p.cartonWidthMm, cartonHeightMm: p.cartonHeightMm,\n      masterBoxQty: p.masterBoxQty, masterBoxWeightKgs: p.masterBoxWeightKgs,\n      masterBoxLengthMm: p.masterBoxLengthMm, masterBoxWidthMm: p.masterBoxWidthMm, masterBoxHeightMm: p.masterBoxHeightMm\n    })\n    form.crossReferences = p.crossReferences.map((x) => ({ ...x }))\n    form.machineApplications = p.machineApplications.map((m) => ({ ...m }))\n    images.value = p.images || []\n    // E2E BD.3 修复 v2: 保存 GET 时的 RowVersion (xmin), PUT 时带回实现乐观锁\n    rowVersion.value = p.rowVersion ?? 0\n  } catch (e: any) {} finally {\n    loading.value = false\n  }\n}\n\nasync function save() {\n  saving.value = true\n  try {\n    if (isEdit.value) {\n      // E2E BD.3 修复 v2: 带回 GET 时的 RowVersion, 后端用此值检测并发冲突\n      await adminProductApi.update(productId.value, { ...form, rowVersion: rowVersion.value }, "
+    },
+    {
+      "t": "t('admin.productformview.string.l167__2')",
+      "orig": "已保存"
+    },
+    {
+      "t": "t('admin.productformview.error.l168_')",
+      "orig": "已创建"
+    },
+    {
+      "t": "t('admin.productformview.error.l278_slot')",
+      "orig": ")\n  } catch (e: any) {\n    // P0-1.3: 识别 409 (产品已存在), 给出用户友好提示\n    //   后端并发场景下 AnyAsync 检查与 SaveChangesAsync 之间有 TOCTOU 窗口,\n    //   第二个请求触发 23505 唯一约束冲突, 端点映射为 409 Conflict\n    //   拦截器已展示后端原始 title/detail, 这里补充更友好的行动指引\n    if (e?.response?.status === 409 || e?.problem?.status === 409) {\n      // E2E BD.3 修复: 区分两种 409 — OEM 重复 vs 乐观锁冲突 (数据已被他人修改)\n      //   后端 ProblemDetails.title 区分: \"产品已存在\" / \"数据已被修改\"\n      const title = e?.response?.data?.title || e?.problem?.title || "
+    },
+    {
+      "t": "t('admin.productformview.warning.l285_')",
+      "orig": "已被修改"
+    },
+    {
+      "t": "t('admin.productformview.error.l305_slot')",
+      "orig": "已被其他用户修改"
+    },
+    {
+      "t": "t('admin.productformview.templatetext.l341_')",
+      "orig": "数据已被其他管理员修改, 请刷新后重试"
+    },
+    {
+      "t": "t('admin.productformview.title.l346_')",
+      "orig": "产品已存在, 请检查 OEM 号"
+    },
+    {
+      "t": "t('admin.productformview.placeholder.l354_')",
+      "orig": " })\n}\nfunction removeApp(idx: number) {\n  form.machineApplications.splice(idx, 1)\n}\n\n// Day 10: P1.3 OEM 品牌 typeahead\n//   el-autocomplete 调用约定: 返回 Promise<Array<{value, [任意字段]}>>\n//   - 我们用 { brand } 作为 value, 因为 v-model 直接绑 oemBrand 字符串\n//   - 后端 typeahead 已按 sort_order 排, 取前 20 条\n//   - 字典为空时返回 [], el-autocomplete 自动降级为自由输入\nasync function queryOemBrands(q: string, cb: (items: { value: string; brand: string }[]) => void) {\n  try {\n    const { items } = await dictApi.oemBrands.typeahead(q || "
+    },
+    {
+      "t": "t('admin.productformview.placeholder.l358_')",
+      "orig": ", 20)\n    // 转成 el-autocomplete 期望的 { value } 格式\n    const mapped = items.map((it) => ({ value: it.brand, brand: it.brand }))\n    cb(mapped)\n  } catch (e) {\n    cb([])\n  }\n}\n\n// Day 10+ P2.2: 7 分区 typeahead (复用 queryOemBrands 模板, 适配单/多字段字典)\n//   - 单字段字典: ProductName1, ProductName2, Type, OemNo3\n//   - 多字段字典: Media (2 字段), Machine (3 字段), Engine (2 字段)\nasync function queryProductName1(q: string, cb: (items: { value: string }[]) => void) {\n  try {\n    const { items } = await dictApi.productName1s.typeahead(q || "
+    },
+    {
+      "t": "t('admin.productformview.label.l360_')",
+      "orig": ", 20)\n    cb(items.map((it) => ({ value: it.oemNo3 })))\n  } catch { cb([]) }\n}\n// Media: 显示 \"name (model)\" 让用户看清完整项\nasync function queryMedia(q: string, cb: (items: { value: string; mediaName: string; mediaModel: string | null }[]) => void) {\n  try {\n    const { items } = await dictApi.medias.typeahead(q || "
+    },
+    {
+      "t": "t('admin.productformview.label.l365_oem_2')",
+      "orig": ", 20)\n    cb(items.map((it) => ({\n      value: it.mediaModel ? `${it.mediaName} (${it.mediaModel})` : it.mediaName,\n      mediaName: it.mediaName,\n      mediaModel: it.mediaModel\n    })))\n  } catch { cb([]) }\n}\n// Machine: 显示 \"brand / model / name\"\nasync function queryMachineBrand(q: string, cb: (items: { value: string; machineBrand: string }[]) => void) {\n  try {\n    const { items } = await dictApi.machines.typeahead(q || "
+    },
+    {
+      "t": "t('admin.productformview.label.l366_')",
+      "orig": ", engineType: it.engineType })))\n  } catch { cb([]) }\n}\n\nasync function uploadImage(slot: number, e: Event) {\n  // Day 9.3: 前端 slot 范围校验, 与后端 AdminProductImageService.UploadAsync 一致\n  if (slot < 1 || slot > 6 || !Number.isInteger(slot)) {\n    ElMessage.error("
+    },
+    {
+      "t": "t('admin.productformview.label.l369_')",
+      "orig": ", 必须在 1-6 之间"
+    },
+    {
+      "t": "t('admin.productformview.placeholder.l382_')",
+      "orig": "请先保存产品再上传图片"
+    },
+    {
+      "t": "t('admin.productformview.placeholder.l395_oem_3')",
+      "orig": "\n}\n\nasync function removeImage(slot: number) {\n  // Day 9.3: 前端 slot 范围校验\n  if (slot < 1 || slot > 6 || !Number.isInteger(slot)) {\n    ElMessage.error("
+    },
+    {
+      "t": "t('admin.productformview.placeholder.l397_')",
+      "orig": ", 必须在 1-6 之间"
+    },
+    {
+      "t": "t('admin.productformview.label.l414_d7')",
+      "orig": "新增产品"
+    },
+    {
+      "t": "t('admin.productformview.label.l415_d8')",
+      "orig": ") name=\"1\">\n          <div class=\"grid grid-cols-3 gap-3\">\n            <!-- P2.2: productName1/2/type 全部 typeahead -->\n            <el-form-item label=\"产品名 1\">\n              <el-autocomplete v-model=\"form.productName1\" :fetch-suggestions=\"queryProductName1\"\n                placeholder=\"输入自动补全\" clearable size=\"small\" :trigger-on-focus=\"true\" :debounce=\"200\" />\n            </el-form-item>\n            <el-form-item label=\"产品名 2\">\n              <el-autocomplete v-model=\"form.productName2\" :fetch-suggestions=\"queryProductName2\"\n                placeholder=\"输入自动补全\" clearable size=\"small\" :trigger-on-focus=\"true\" :debounce=\"200\" />\n            </el-form-item>\n            <el-form-item label=\"类型\">\n              <el-autocomplete v-model=\"form.type\" :fetch-suggestions=\"queryType\"\n                placeholder=\"oil/fuel/air/cabin/others\" clearable size=\"small\" :trigger-on-focus=\"true\" :debounce=\"200\" />\n            </el-form-item>\n            <el-form-item label=\"MR.1\"><el-input v-model=\"form.mr1\" /></el-form-item>\n            <el-form-item label=\"OEM 2 (必填)\"><el-input v-model=\"form.oem2\" /></el-form-item>\n            <el-form-item label=\"发布\">\n              <el-switch v-model=\"form.isPublished\" />\n            </el-form-item>\n            <el-form-item label=\"备注\" class=\"col-span-3\">\n              <el-input v-model=\"form.remark\" type=\"textarea\" :rows=\"2\" />\n            </el-form-item>\n          </div>\n        </el-collapse-item>\n\n        <!-- 分区 2: 交叉引用 -->\n        <el-collapse-item :title=\"`② 交叉引用 (${form.crossReferences.length})`\" name=\"2\">\n          <div v-for=\"(x, i) in form.crossReferences\" :key=\"i\" class=\"flex gap-2 mb-2\">\n            <!-- Day 10: P1.3 自动补全 — 字典为空时降级为自由输入 -->\n            <el-autocomplete\n              v-model=\"x.oemBrand\"\n              :fetch-suggestions=\"queryOemBrands\"\n              placeholder=\"品牌 (输入自动补全)\"\n              style=\"width: 200px\"\n              clearable\n              size=\"small\"\n              :trigger-on-focus=\"true\"\n              :debounce=\"200\"\n            >\n              <template #default=\"{ item }\">\n                <span>{{ item.brand }}</span>\n              </template>\n            </el-autocomplete>\n            <!-- P2.2: OEM 3 typeahead -->\n            <el-autocomplete v-model=\"x.oemNo3\" :fetch-suggestions=\"queryOemNo3\"\n              placeholder=\"OEM 3 (输入自动补全)\" style=\"width: 240px\" clearable size=\"small\"\n              :trigger-on-focus=\"true\" :debounce=\"200\" />\n            <el-input v-model=\"x.productName1\" placeholder=\"产品名\" size=\"small\" />\n            <el-button text type=\"danger\" @click=\"removeXref(i)\">删除</el-button>\n          </div>\n          <el-button @click=\"addXref\" size=\"small\">+ 添加交叉引用</el-button>\n        </el-collapse-item>\n\n        <!-- 分区 3: 尺寸 -->\n        <el-collapse-item title=\"③ 尺寸 (mm)\" name=\"3\">\n          <div class=\"grid grid-cols-4 gap-3\">\n            <el-form-item label=\"D1\"><el-input-number v-model=\"form.d1Mm\" :min=\"0\" :precision=\"2\" /></el-form-item>\n            <el-form-item label=\"D2\"><el-input-number v-model=\"form.d2Mm\" :min=\"0\" :precision=\"2\" /></el-form-item>\n            <el-form-item label=\"D3\"><el-input-number v-model=\"form.d3Mm\" :min=\"0\" :precision=\"2\" /></el-form-item>\n            <el-form-item label=\"D4\"><el-input-number v-model=\"form.d4Mm\" :min=\"0\" :precision=\"2\" /></el-form-item>\n            <el-form-item label=\"H1\"><el-input-number v-model=\"form.h1Mm\" :min=\"0\" :precision=\"2\" /></el-form-item>\n            <el-form-item label=\"H2\"><el-input-number v-model=\"form.h2Mm\" :min=\"0\" :precision=\"2\" /></el-form-item>\n            <el-form-item label=\"H3\"><el-input-number v-model=\"form.h3Mm\" :min=\"0\" :precision=\"2\" /></el-form-item>\n            <el-form-item label=\"H4\"><el-input-number v-model=\"form.h4Mm\" :min=\"0\" :precision=\"2\" /></el-form-item>\n            <el-form-item label=\"D7 螺纹\"><el-input v-model=\"form.d7Thread\" /></el-form-item>\n            <el-form-item label=\"D8 螺纹\"><el-input v-model=\"form.d8Thread\" /></el-form-item>\n            <el-form-item label=\"单向阀数\"><el-input-number v-model=\"form.noCheckValves\" :min=\"0\" /></el-form-item>\n            <el-form-item label=\"旁通阀数\"><el-input-number v-model=\"form.noBypassValves\" :min=\"0\" /></el-form-item>\n          </div>\n        </el-collapse-item>\n\n        <!-- 分区 5: 性能 -->\n        <el-collapse-item title=t("
+    },
+    {
+      "t": "t('admin.productformview.label.l416_')",
+      "orig": ") name=\"5\">\n          <div class=\"grid grid-cols-3 gap-3\">\n            <!-- P2.2: Media 字段 typeahead (2 字段) -->\n            <el-form-item label=\"Media\">\n              <el-autocomplete v-model=\"form.media\" :fetch-suggestions=\"queryMedia\"\n                placeholder=\"输入自动补全 (name/model OR 匹配)\" clearable size=\"small\"\n                :trigger-on-focus=\"true\" :debounce=\"200\" value-key=\"value\" />\n            </el-form-item>\n            <el-form-item label=\"MediaModel\"><el-input v-model=\"form.mediaModel\" /></el-form-item>\n            <el-form-item label=\"效率 1\"><el-input v-model=\"form.efficiency1\" /></el-form-item>\n            <el-form-item label=\"效率 2\"><el-input v-model=\"form.efficiency2\" /></el-form-item>\n            <el-form-item label=\"旁通阀 LR\"><el-input-number v-model=\"form.bypassValveLr\" :min=\"0\" :precision=\"2\" /></el-form-item>\n            <el-form-item label=\"旁通阀 HR\"><el-input-number v-model=\"form.bypassValveHr\" :min=\"0\" :precision=\"2\" /></el-form-item>\n            <el-form-item label=\"旁通压力\"><el-input-number v-model=\"form.bypassPressure\" :min=\"0\" :precision=\"2\" /></el-form-item>\n            <el-form-item label=\"破裂压力 (bar)\"><el-input-number v-model=\"form.collapsePressureBar\" :min=\"0\" :precision=\"2\" /></el-form-item>\n            <el-form-item label=\"密封材料\"><el-input v-model=\"form.sealingMaterial\" /></el-form-item>\n            <el-form-item label=\"温度范围\"><el-input v-model=\"form.tempRange\" /></el-form-item>\n          </div>\n        </el-collapse-item>\n\n        <!-- 分区 6: 包装 -->\n        <el-collapse-item title=t("
+    },
+    {
+      "t": "t('admin.productformview.label.l417_')",
+      "orig": ") name=\"6\">\n          <div class=\"grid grid-cols-4 gap-3\">\n            <el-form-item label=\"箱/件\">\n              <el-input-number v-model=\"form.qtyPerCarton\" :min=\"0\" />\n              <FieldHelpPopover field-key=\"qtyPerCarton\" />\n            </el-form-item>\n            <el-form-item label=\"重量 (kg)\">\n              <el-input-number v-model=\"form.weightKgs\" :min=\"0\" :precision=\"3\" />\n              <FieldHelpPopover field-key=\"weightKgs\" />\n            </el-form-item>\n            <el-form-item label=\"箱长 (mm)\">\n              <el-input-number v-model=\"form.cartonLengthMm\" :min=\"0\" :precision=\"2\" />\n              <FieldHelpPopover field-key=\"cartonLengthMm\" />\n            </el-form-item>\n            <el-form-item label=\"箱宽 (mm)\">\n              <el-input-number v-model=\"form.cartonWidthMm\" :min=\"0\" :precision=\"2\" />\n              <FieldHelpPopover field-key=\"cartonWidthMm\" />\n            </el-form-item>\n            <el-form-item label=\"箱高 (mm)\">\n              <el-input-number v-model=\"form.cartonHeightMm\" :min=\"0\" :precision=\"2\" />\n              <FieldHelpPopover field-key=\"cartonHeightMm\" />\n            </el-form-item>\n            <!-- P5.1: 体积自动计算 (L*W*H/1e9 m³), 后端 DeriveVolume 兜底 -->\n            <el-form-item label=\"箱体积 (m³)\">\n              <el-input\n                :model-value=\"cartonVolumeText\"\n                readonly\n                placeholder=\"自动计算\"\n                class=\"!w-32\"\n              >\n                <template #append>只读</template>\n              </el-input>\n              <FieldHelpPopover field-key=\"volumePerCartonM3\" />\n            </el-form-item>\n            <el-form-item label=\"母箱数量\">\n              <el-input-number v-model=\"form.masterBoxQty\" :min=\"0\" />\n              <FieldHelpPopover field-key=\"masterBoxQty\" />\n            </el-form-item>\n            <el-form-item label=\"母箱重 (kg)\">\n              <el-input-number v-model=\"form.masterBoxWeightKgs\" :min=\"0\" :precision=\"3\" />\n              <FieldHelpPopover field-key=\"masterBoxWeightKgs\" />\n            </el-form-item>\n            <el-form-item label=\"母箱长 (mm)\">\n              <el-input-number v-model=\"form.masterBoxLengthMm\" :min=\"0\" :precision=\"2\" />\n              <FieldHelpPopover field-key=\"masterBoxLengthMm\" />\n            </el-form-item>\n            <el-form-item label=\"母箱宽 (mm)\">\n              <el-input-number v-model=\"form.masterBoxWidthMm\" :min=\"0\" :precision=\"2\" />\n              <FieldHelpPopover field-key=\"masterBoxWidthMm\" />\n            </el-form-item>\n            <el-form-item label=\"母箱高 (mm)\">\n              <el-input-number v-model=\"form.masterBoxHeightMm\" :min=\"0\" :precision=\"2\" />\n              <FieldHelpPopover field-key=\"masterBoxHeightMm\" />\n            </el-form-item>\n            <el-form-item label=\"母箱体积 (m³)\">\n              <el-input\n                :model-value=\"masterBoxVolumeText\"\n                readonly\n                placeholder=\"自动计算\"\n                class=\"!w-32\"\n              >\n                <template #append>只读</template>\n              </el-input>\n            </el-form-item>\n          </div>\n        </el-collapse-item>\n\n        <!-- 分区 7: 车型 (P2.2: machine/engine 字段全部 typeahead) -->\n        <el-collapse-item :title=\"`⑥ 适用车型 (${form.machineApplications.length})`\" name=\"7\">\n          <div v-for=\"(m, i) in form.machineApplications\" :key=\"i\" class=\"grid grid-cols-5 gap-2 mb-2\">\n            <!-- 机型品牌: typeahead -->\n            <el-autocomplete v-model=\"m.machineBrand\" :fetch-suggestions=\"queryMachineBrand\"\n              placeholder=\"品牌 (必填)\" size=\"small\" clearable :trigger-on-focus=\"true\" :debounce=\"200\"\n              :class=\"{ "
+    },
+    {
+      "t": "t('admin.productformview.title.l419_')",
+      "orig": ": isAppRowDirty(m) && !m.machineBrand?.trim() }\" />\n            <!-- 机型型号: typeahead (与 brand 联动共享查询) -->\n            <el-autocomplete v-model=\"m.machineModel\" :fetch-suggestions=\"queryMachineModel\"\n              placeholder=\"型号 (必填)\" size=\"small\" clearable :trigger-on-focus=\"true\" :debounce=\"200\"\n              :class=\"{ "
+    },
+    {
+      "t": "t('admin.productformview.label.l435_')",
+      "orig": ">\n// Day 9: 后台产品表单 (新增/编辑)\n//   - 7 分区布局 (与 ProductFormDto 一致)\n//   - 行内保存\n// Day 10: 分区 2 oemBrand 改为 el-autocomplete, 从 dictApi.oemBrands.typeahead 自动补全 (P1.3)\n// Day 10+ P2.2: 7 分区全部接入 typeahead (productName1/2/type/oemNo3/media/machine/engine)\n// Day 10+ P5.1: 包装尺寸 L/W/H → Volume 自动计算 (m³), 母箱同理\n// Day 10+ P5.2: 尺寸/性能字段后挂 ? 图标, 鼠标悬停显示字段说明 (FieldHelpPopover)\nimport { ref, reactive, onMounted, computed, watch, onBeforeUnmount } from 'vue'\nimport { useRoute, useRouter } from 'vue-router'\nimport { ElMessage } from 'element-plus'\nimport { adminProductApi, imageApi, dictApi } from '@/api'\nimport type { ProductDetail } from '@/api/types'\nimport FieldHelpPopover from '@/components/FieldHelpPopover.vue'  // P5.2\n\nconst route = useRoute()\nconst router = useRouter()\n\nconst isEdit = computed(() => !!route.params.id)\nconst productId = computed(() => (route.params.id ? Number(route.params.id) : 0))\nconst activeNames = ref(['1', '3', '5', '6'])\n\n// P2-7 修复 v2: 保存乐观锁冲突后的 reload timer 引用, 卸载时清理\n//   WHY: 用户在 1.5s 内导航离开后, 旧 timer 仍会触发 window.location.reload() 造成意外跳转\nlet reloadTimer: ReturnType<typeof setTimeout> | null = null\n\nconst form = reactive<any>({\n  productName1: '',\n  productName2: '',\n  type: '',\n  mr1: '',\n  oem2: '',\n  isPublished: true,\n  remark: '',\n  d1Mm: null,\n  d2Mm: null,\n  d3Mm: null,\n  d4Mm: null,\n  h1Mm: null,\n  h2Mm: null,\n  h3Mm: null,\n  h4Mm: null,\n  d7Thread: '',\n  d8Thread: '',\n  noCheckValves: null,\n  noBypassValves: null,\n  media: '',\n  mediaModel: '',\n  bypassValveLr: null,\n  bypassValveHr: null,\n  efficiency1: '',\n  efficiency2: '',\n  bypassPressure: null,\n  collapsePressureBar: null,\n  sealingMaterial: '',\n  tempRange: '',\n  qtyPerCarton: null,\n  weightKgs: null,\n  cartonLengthMm: null,\n  cartonWidthMm: null,\n  cartonHeightMm: null,\n  volumePerCartonM3: null,  // P5.1 自动计算, 也可显式覆盖\n  masterBoxQty: null,\n  masterBoxWeightKgs: null,\n  masterBoxLengthMm: null,\n  masterBoxWidthMm: null,\n  masterBoxHeightMm: null,\n  crossReferences: [],\n  machineApplications: []\n})\n\n// E2E BD.3 修复 v2: 乐观锁并发令牌 (PG xmin), GET 时保存, PUT 时带回\n//   后端用此值覆盖实体加载时的 xmin, 检测"
+    },
+    {
+      "t": "t('admin.productformview.label.l437_')",
+      "orig": "并发丢失更新\nconst rowVersion = ref<number>(0)\n\nconst loading = ref(false)\nconst saving = ref(false)\nconst uploading = ref(false)\nconst removing = ref(false)\n\nconst images = ref<{ slot: number; imageKey: string; imageUrl: string }[]>([])\n\n// ===== P5.1: 包装/母箱体积自动计算 =====\n//   L * W * H / 1e9 m³ (mm → m → m³)\n//   任一为空 → null (不显示)\n//   后端 AdminProductService.DeriveVolume 是兜底, 这里只做实时预览\nfunction computeVolumeM3(l: number | null | undefined, w: number | null | undefined, h: number | null | undefined): number | null {\n  if (l == null || w == null || h == null) return null\n  if (l <= 0 || w <= 0 || h <= 0) return null\n  // 精度保留 6 位小数, 后端 decimal(18,6) 一致\n  return Math.round((l * w * h) / 1_000_000) / 1_000_000\n}\n\nconst cartonVolume = computed(() => computeVolumeM3(form.cartonLengthMm, form.cartonWidthMm, form.cartonHeightMm))\nconst masterBoxVolume = computed(() => computeVolumeM3(form.masterBoxLengthMm, form.masterBoxWidthMm, form.masterBoxHeightMm))\n\nconst cartonVolumeText = computed(() => cartonVolume.value == null ? '' : cartonVolume.value.toFixed(6))\nconst masterBoxVolumeText = computed(() => masterBoxVolume.value == null ? '' : masterBoxVolume.value.toFixed(6))\n\n// 监听 L/W/H 变化, 同步到 form.volumePerCartonM3 (避免只读 el-input 提交时空字段)\nwatch(cartonVolume, (v) => {\n  form.volumePerCartonM3 = v == null ? null : v\n})\n\nasync function load() {\n  if (!isEdit.value) return\n  loading.value = true\n  try {\n    const p = await adminProductApi.get(productId.value)\n    Object.assign(form, {\n      productName1: p.productName1,\n      productName2: p.productName2,\n      type: p.type,\n      mr1: p.mr1,\n      oem2: p.oem2,\n      isPublished: p.isPublished,\n      remark: p.remark,\n      d1Mm: p.d1Mm, d2Mm: p.d2Mm, d3Mm: p.d3Mm, d4Mm: p.d4Mm,\n      h1Mm: p.h1Mm, h2Mm: p.h2Mm, h3Mm: p.h3Mm, h4Mm: p.h4Mm,\n      d7Thread: p.d7Thread, d8Thread: p.d8Thread,\n      noCheckValves: p.noCheckValves, noBypassValves: p.noBypassValves,\n      media: p.media, mediaModel: p.mediaModel,\n      bypassValveLr: p.bypassValveLr, bypassValveHr: p.bypassValveHr,\n      efficiency1: p.efficiency1, efficiency2: p.efficiency2,\n      bypassPressure: p.bypassPressure, collapsePressureBar: p.collapsePressureBar,\n      sealingMaterial: p.sealingMaterial, tempRange: p.tempRange,\n      qtyPerCarton: p.qtyPerCarton, weightKgs: p.weightKgs,\n      cartonLengthMm: p.cartonLengthMm, cartonWidthMm: p.cartonWidthMm, cartonHeightMm: p.cartonHeightMm,\n      masterBoxQty: p.masterBoxQty, masterBoxWeightKgs: p.masterBoxWeightKgs,\n      masterBoxLengthMm: p.masterBoxLengthMm, masterBoxWidthMm: p.masterBoxWidthMm, masterBoxHeightMm: p.masterBoxHeightMm\n    })\n    form.crossReferences = p.crossReferences.map((x) => ({ ...x }))\n    form.machineApplications = p.machineApplications.map((m) => ({ ...m }))\n    images.value = p.images || []\n    // E2E BD.3 修复 v2: 保存 GET 时的 RowVersion (xmin), PUT 时带回实现乐观锁\n    rowVersion.value = p.rowVersion ?? 0\n  } catch (e: any) {} finally {\n    loading.value = false\n  }\n}\n\nasync function save() {\n  saving.value = true\n  try {\n    if (isEdit.value) {\n      // E2E BD.3 修复 v2: 带回 GET 时的 RowVersion, 后端用此值检测并发冲突\n      await adminProductApi.update(productId.value, { ...form, rowVersion: rowVersion.value }, 'admin')\n      ElMessage.success('已保存')\n    } else {\n      await adminProductApi.create(form, 'admin')\n      ElMessage.success('已创建')\n    }\n    router.push('/admin/products')\n  } catch (e: any) {\n    // P0-1.3: 识别 409 (产品已存在), 给出用户友好提示\n    //   后端并发场景下 AnyAsync 检查与 SaveChangesAsync 之间有 TOCTOU 窗口,\n    //   第二个请求触发 23505 唯一约束冲突, 端点映射为 409 Conflict\n    //   拦截器已展示后端原始 title/detail, 这里补充更友好的行动指引\n    if (e?.response?.status === 409 || e?.problem?.status === 409) {\n      // E2E BD.3 修复: 区分两种 409 — OEM 重复 vs 乐观锁冲突 (数据已被他人修改)\n      //   后端 ProblemDetails.title 区分: "
+    },
+    {
+      "t": "t('admin.productformview.label.l438_')",
+      "orig": "数据已被修改"
+    },
+    {
+      "t": "t('admin.productformview.title.l440_')",
+      "orig": " 让用户看清完整项\nasync function queryMedia(q: string, cb: (items: { value: string; mediaName: string; mediaModel: string | null }[]) => void) {\n  try {\n    const { items } = await dictApi.medias.typeahead(q || '', 20)\n    cb(items.map((it) => ({\n      value: it.mediaModel ? `${it.mediaName} (${it.mediaModel})` : it.mediaName,\n      mediaName: it.mediaName,\n      mediaModel: it.mediaModel\n    })))\n  } catch { cb([]) }\n}\n// Machine: 显示 "
+    },
+    {
+      "t": "t('admin.productformview.label.l445_')",
+      "orig": "\nasync function queryMachineBrand(q: string, cb: (items: { value: string; machineBrand: string }[]) => void) {\n  try {\n    const { items } = await dictApi.machines.typeahead(q || '', 20)\n    cb(items.map((it) => ({ value: it.machineBrand, machineBrand: it.machineBrand })))\n  } catch { cb([]) }\n}\nasync function queryMachineModel(q: string, cb: (items: { value: string; machineModel: string | null }[]) => void) {\n  try {\n    const { items } = await dictApi.machines.typeahead(q || '', 20)\n    cb(items.map((it) => ({ value: it.machineModel || '', machineModel: it.machineModel })))\n  } catch { cb([]) }\n}\nasync function queryEngineBrand(q: string, cb: (items: { value: string; engineBrand: string }[]) => void) {\n  try {\n    const { items } = await dictApi.engines.typeahead(q || '', 20)\n    cb(items.map((it) => ({ value: it.engineBrand, engineBrand: it.engineBrand })))\n  } catch { cb([]) }\n}\nasync function queryEngineType(q: string, cb: (items: { value: string; engineType: string | null }[]) => void) {\n  try {\n    const { items } = await dictApi.engines.typeahead(q || '', 20)\n    cb(items.map((it) => ({ value: it.engineType || '', engineType: it.engineType })))\n  } catch { cb([]) }\n}\n\nasync function uploadImage(slot: number, e: Event) {\n  // Day 9.3: 前端 slot 范围校验, 与后端 AdminProductImageService.UploadAsync 一致\n  if (slot < 1 || slot > 6 || !Number.isInteger(slot)) {\n    ElMessage.error('Slot 非法: ' + slot + ', 必须在 1-6 之间')\n    return\n  }\n  const input = e.target as HTMLInputElement\n  const file = input.files?.[0]\n  if (!file) return\n  if (!isEdit.value) {\n    ElMessage.warning('请先保存产品再上传图片')\n    return\n  }\n  if (uploading.value) return\n  uploading.value = true\n  try {\n    const r = await imageApi.upload(productId.value, slot, file)\n    ElMessage.success(`Slot ${slot} 上传成功`)\n    images.value[slot - 1] = r\n  } catch {\n    // 已被拦截器\n  } finally {\n    uploading.value = false\n  }\n  input.value = ''\n}\n\nasync function removeImage(slot: number) {\n  // Day 9.3: 前端 slot 范围校验\n  if (slot < 1 || slot > 6 || !Number.isInteger(slot)) {\n    ElMessage.error('Slot 非法: ' + slot + ', 必须在 1-6 之间')\n    return\n  }\n  if (removing.value) return\n  removing.value = true\n  try {\n    await imageApi.remove(productId.value, slot)\n    images.value[slot - 1] = undefined as any\n    ElMessage.success(`Slot ${slot} 已删除`)\n  } catch {\n    // 已被拦截器\n  } finally {\n    removing.value = false\n  }\n}\n\nfunction isAppRowDirty(m: any): boolean {\n  // Day 9.4: 车型行只要填了一个字段就算 dirty, 必填 brand/model\n  return !!(m.machineBrand?.trim() || m.machineModel?.trim() || m.modelName?.trim() || m.engineBrand?.trim() || m.engineType?.trim())\n}\n\nonMounted(load)\n\n// P2-7 修复 v2: 组件卸载时清理 reloadTimer, 避免用户导航离开后意外 reload\nonBeforeUnmount(() => {\n  if (reloadTimer !== null) {\n    clearTimeout(reloadTimer)\n    reloadTimer = null\n  }\n})\n</script>\n\n<template>\n  <div class="
+    },
+    {
+      "t": "t('admin.productformview.placeholder.l470_')",
+      "orig": ">返回</el-button>\n      <h1 class="
+    },
+    {
+      "t": "t('admin.productformview.label.l477_')",
+      "orig": ">{{ isEdit ? `编辑产品 #${productId}` : '新增产品' }}</h1>\n      <div class="
+    },
+    {
+      "t": "t('admin.productformview.placeholder.l501_')",
+      "orig": ">保存</el-button>\n    </div>\n\n    <el-form :model="
+    },
+    {
+      "t": "t('admin.productformview.placeholder.l515_')",
+      "orig": ">\n        <!-- 分区 1: 基础信息 -->\n        <el-collapse-item title=t('admin.productformview.title.l346_') name="
+    },
+    {
+      "t": "t('admin.productformview.placeholder.l519_')",
+      "orig": ">\n            <!-- P2.2: productName1/2/type 全部 typeahead -->\n            <el-form-item label="
+    },
+    {
+      "t": "t('admin.productformview.placeholder.l521_')",
+      "orig": "输入自动补全"
+    },
+    {
+      "t": "t('admin.productformview.placeholder.l524_')",
+      "orig": "产品名 2"
+    },
+    {
+      "t": "t('admin.productformview.placeholder.l528_')",
+      "orig": "输入自动补全"
+    }
+  ],
+  "frontend/src/views/admin/AdminProductName1sView.vue": [
+    {
+      "t": "t('admin.productname1sview.error.l34_')",
+      "orig": "加载失败: "
+    },
+    {
+      "t": "t('admin.productname1sview.success.l66_')",
+      "orig": "产品名 1 不能为空"
+    },
+    {
+      "t": "t('admin.productname1sview.success.l71_')",
+      "orig": "产品名 1 长度不能超过 200"
+    },
+    {
+      "t": "t('admin.productname1sview.string.l76_')",
+      "orig": "已新增"
+    },
+    {
+      "t": "t('admin.productname1sview.string.l85_')",
+      "orig": "已更新"
+    },
+    {
+      "t": "t('admin.productname1sview.success.l90_')",
+      "orig": "操作失败"
+    },
+    {
+      "t": "t('admin.productname1sview.string.l93_')",
+      "orig": "确认"
+    },
+    {
+      "t": "t('admin.productname1sview.success.l101_')",
+      "orig": "已删除"
+    },
+    {
+      "t": "t('admin.productname1sview.string.l104_')",
+      "orig": "删除失败"
+    },
+    {
+      "t": "t('admin.productname1sview.success.l141_')",
+      "orig": "已恢复"
+    },
+    {
+      "t": "t('admin.productname1sview.string.l143_')",
+      "orig": "恢复失败"
+    },
+    {
+      "t": "t('admin.productname1sview.placeholder.l179_1')",
+      "orig": "排序已保存"
+    },
+    {
+      "t": "t('admin.productname1sview.title.l207_')",
+      "orig": "排序失败"
+    },
+    {
+      "t": "t('admin.productname1sview.string.l224_')",
+      "orig": ")\n}\n\nconst total = computed(() => items.value.length)\nconst activeCount = computed(() => items.value.filter((x) => !x.deletedAt).length)\n\nonMounted(load)\n</script>\n\n<template>\n  <div class=\"p-3 max-w-screen-xl mx-auto\">\n    <div class=\"flex items-center gap-2 mb-3 flex-wrap\">\n      <h1 class=\"text-lg font-medium\">产品名 1 字典</h1>\n      <span class=\"text-xs text-muted\">P2.2 后台管理 · 用于产品表单分区 1 product_name_1 自动补全</span>\n      <div class=\"flex-1\" />\n      <el-input v-model=\"searchKw\" placeholder=\"搜索产品名 1\" clearable size=\"small\"\n        style=\"width: 200px\" @keyup.enter=\"onSearch\" />\n      <el-button size=\"small\" @click=\"onSearch\">搜索</el-button>\n      <el-checkbox v-model=\"includeDeleted\" @change=\"load\" size=\"small\">含已删</el-checkbox>\n      <el-button type=\"primary\" size=\"small\" @click=\"openCreate\">新增产品名 1</el-button>\n    </div>\n\n    <div class=\"hairline\" v-loading=\"loading\">\n      <div class=\"dict-head\">\n        <div class=\"cell-drag\"></div>\n        <div class=\"cell-id\">ID</div>\n        <div class=\"cell-name\">产品名 1</div>\n        <div class=\"cell-sort\">排序</div>\n        <div class=\"cell-xref\">引用</div>\n        <div class=\"cell-updated\">更新</div>\n        <div class=\"cell-status\">状态</div>\n        <div class=\"cell-action\">操作</div>\n      </div>\n      <div v-for=\"row in items\" :key=\"row.id\"\n        :class=\"["
+    },
+    {
+      "t": "t('admin.productname1sview.label.l237_')",
+      "orig": ", rowClass(row)]\"\n        :draggable=\"isDraggable(row)\"\n        @dragstart=\"onDragStart($event, row.id)\"\n        @dragover=\"onDragOver($event, row.id)\"\n        @dragleave=\"onDragLeave($event, row.id)\"\n        @drop=\"onDrop($event, row.id)\"\n        @dragend=\"onDragEnd\"\n      >\n        <div class=\"cell-drag\">\n          <span v-if=\"isDraggable(row)\" class=\"drag-handle\" title=\"拖动以排序\">≡</span>\n        </div>\n        <div class=\"cell-id\">{{ row.id }}</div>\n        <div class=\"cell-name\">{{ row.productName1 }}</div>\n        <div class=\"cell-sort\">{{ row.sortOrder }}</div>\n        <div class=\"cell-xref\">{{ row.xrefCount }}</div>\n        <div class=\"cell-updated\">{{ fmtDate(row.updatedAt) }}</div>\n        <div class=\"cell-status\">\n          <el-tag v-if=\"row.deletedAt\" type=\"info\" size=\"small\">已删</el-tag>\n          <el-tag v-else type=\"success\" size=\"small\">启用</el-tag>\n        </div>\n        <div class=\"cell-action\">\n          <el-button size=\"small\" text @click=\"openEdit(row)\" :disabled=\"!!row.deletedAt\">编辑</el-button>\n          <el-button v-if=\"!row.deletedAt\" size=\"small\" text type=\"warning\" @click=\"softDelete(row)\">删除</el-button>\n          <el-button v-else size=\"small\" text type=\"success\" @click=\"restore(row)\">恢复</el-button>\n        </div>\n      </div>\n      <div v-if=\"!loading && items.length === 0\" class=\"dict-empty\">暂无数据, 点击右上\"新增产品名 1\"开始</div>\n    </div>\n\n    <div class=\"mt-2 text-xs text-muted\">\n      共 {{ total }} 条 (启用 {{ activeCount }}, 软删 {{ total - activeCount }}) · 拖动\"≡\"列重排, 释放后自动保存\n    </div>\n\n    <el-dialog v-model=\"dialogOpen\"\n      :title=\"dialogMode === "
+    }
+  ],
+  "frontend/src/views/admin/AdminProductName2sView.vue": [
+    {
+      "t": "t('admin.productname2sview.error.l29_')",
+      "orig": "加载失败: "
+    },
+    {
+      "t": "t('admin.productname2sview.success.l50_')",
+      "orig": "产品名 2 不能为空"
+    },
+    {
+      "t": "t('admin.productname2sview.success.l53_')",
+      "orig": "产品名 2 长度不能超过 200"
+    },
+    {
+      "t": "t('admin.productname2sview.error.l56_')",
+      "orig": "已新增"
+    },
+    {
+      "t": "t('admin.productname2sview.warning.l59_')",
+      "orig": "已更新"
+    },
+    {
+      "t": "t('admin.productname2sview.success.l60_')",
+      "orig": "操作失败"
+    },
+    {
+      "t": "t('admin.productname2sview.error.l61_')",
+      "orig": "确认"
+    },
+    {
+      "t": "t('admin.productname2sview.success.l64_')",
+      "orig": "已删除"
+    },
+    {
+      "t": "t('admin.productname2sview.error.l65_')",
+      "orig": "删除失败"
+    },
+    {
+      "t": "t('admin.productname2sview.success.l81_')",
+      "orig": "已恢复"
+    },
+    {
+      "t": "t('admin.productname2sview.error.l82_')",
+      "orig": "恢复失败"
+    },
+    {
+      "t": "t('admin.productname2sview.placeholder.l106_2')",
+      "orig": "排序已保存"
+    },
+    {
+      "t": "t('admin.productname2sview.label.l153_')",
+      "orig": "排序失败"
+    }
+  ],
+  "frontend/src/views/admin/AdminProductsView.vue": [
+    {
+      "t": "t('admin.productsview.label.l332_')",
+      "orig": ")\n\n// E2E UI.1 修复: 列设置 — 默认隐藏次要列, 降低信息密度 (24 列 → 13 列)\n//   WHY: 24 列超出运维一眼扫读上限 (≤8 列为佳), 次要列 (D3/D4/H3/H4/D7/D8/Media 等) 默认隐藏\n//   核心列 (13): selection/ID/OEM/OEM2/类型/D1/D2/H1/H2/发布/停售/更新/操作\n//   次要列 (11): MR1/D3/D4/H3/H4/D7/D8/Media/MediaModel/箱件/kg\nconst showAllColumns = ref(false)\n\n// 筛选条件 (精简版, 完整 17 字段版在抽屉)\nconst filter = reactive<AdminSearchRequest>({\n  page: 1,\n  pageSize: 50,\n  countMode: "
+    },
+    {
+      "t": "t('admin.productsview.warning.l152_')",
+      "orig": ",\n  sortDesc: true\n})\n\n// 抽屉筛选 (高级)\nconst drawerOpen = ref(false)\nconst advFilter = reactive<AdminSearchRequest>({})\n\n// 历史抽屉\nconst historyOpen = ref(false)\nconst historyItems = ref<ProductHistoryItem[]>([])\n// Day 9.4: cursor 累积 + 加载更多\nconst historyNextCursor = ref<string | null>(null)\nconst historyHasMore = ref(false)\n// Day 9.3: 历史分页响应 (含 total, 反映筛选后真实条数)\nconst historyTotal = ref(0)\n// Day 9.3: 筛选条件变化时存 localStorage (放在 historyFilter 定义之后)\n// Day 9.2: 历史抽屉筛选 (changeType / since / until / limit)\nconst historyFilter = reactive<{\n  changeType: string\n  since: string\n  until: string\n  limit: number\n}>({ changeType: "
+    },
+    {
+      "t": "t('admin.productsview.success.l160_')",
+      "orig": ", limit: 50 })\nconst historyLoading = ref(false)\n// Day 9.3: history 筛选条件 localStorage 持久化 (跨产品查看时保留)\nconst HISTORY_FILTER_KEY = "
+    },
+    {
+      "t": "t('admin.productsview.success.l174_')",
+      "orig": ") historyFilter.limit = saved.limit\n  } catch {}\n}\nloadHistoryFilter()\n// Day 9.3: 筛选条件变化时存 localStorage\nwatch(historyFilter, () => saveHistoryFilter(), { deep: true })\n// (上面这行是第 2 个 watch,删除后保留 1 个)\n\n// 批量选择\nconst selected = ref<ProductListItem[]>([])\n\n// P2.7: 产品状态变更 (停售/恢复) 统一 loading, 防止重复点击\nconst productMutating = ref(false)\n\n// P2-8.1: 列表请求取消控制器\n//   快速翻页/筛选切换时取消上一次未完成请求, 避免并发竞争导致旧结果覆盖新结果\nlet loadAbort: AbortController | null = null\n\nasync function load() {\n  // P2-8.1: 取消上一次未完成的列表请求\n  loadAbort?.abort()\n  const myAbort = new AbortController()\n  loadAbort = myAbort\n  loading.value = true\n  try {\n    const req = { ...filter, page: page.value, pageSize: pageSize.value }\n    const data = await adminProductApi.search(req, { signal: myAbort.signal })\n    items.value = data.items\n    total.value = data.total\n    hasMore.value = !!data.hasMore\n    countModeUsed.value = data.countModeUsed || "
+    },
+    {
+      "t": "t('admin.productsview.label.l445_')",
+      "orig": "\n  } catch (e: any) {\n    // P2-8.1: 请求被取消时静默返回 (用户主动翻页/筛选切换/卸载组件触发)\n    if (e?.code === "
+    },
+    {
+      "t": "t('admin.productsview.placeholder.l298_')",
+      "orig": ") return\n    // 其他错误已被拦截器处理\n  } finally {\n    // P2-8.1: 仅当前请求未被新请求取代时才重置 loading, 避免旧请求 finally 覆盖新请求的 loading 状态\n    if (loadAbort === myAbort) loading.value = false\n  }\n}\n\nfunction quickSearch() {\n  page.value = 1\n  load()\n}\n\nfunction openAdv() {\n  Object.assign(advFilter, filter)\n  drawerOpen.value = true\n}\n\nfunction applyAdv() {\n  Object.assign(filter, advFilter)\n  page.value = 1\n  drawerOpen.value = false\n  load()\n}\n\nfunction newProduct() {\n  router.push("
+    },
+    {
+      "t": "t('admin.productsview.placeholder.l299_')",
+      "orig": ")\n}\n\nfunction editProduct(row: ProductListItem) {\n  router.push(`/admin/products/${row.id}/edit`)\n}\n\nasync function discontinue(row: ProductListItem) {\n  try {\n    await ElMessageBox.confirm(`确定停售产品 \"${row.oemNoDisplay}\" 吗?`, "
+    },
+    {
+      "t": "t('admin.productsview.string.l312_')",
+      "orig": "已停售"
+    },
+    {
+      "t": "t('admin.productsview.string.l312__2')",
+      "orig": "已恢复"
+    },
+    {
+      "t": "t('admin.productsview.placeholder.l299_')",
+      "orig": "请选择 2-6 个产品"
+    },
+    {
+      "t": "t('admin.productsview.label.l345_')",
+      "orig": "最多对比 6 个"
+    },
+    {
+      "t": "t('admin.productsview.label.l347_')",
+      "orig": "\n  return v\n}\n\nfunction onPageChange(p: number) {\n  page.value = p\n  load()\n}\n\nfunction onSizeChange(s: number) {\n  pageSize.value = s\n  page.value = 1\n  load()\n}\n\nonMounted(load)\n\n// P2-8.1: 组件卸载时取消未完成的列表请求, 防止内存泄漏与卸载后状态写入\nonBeforeUnmount(() => {\n  loadAbort?.abort()\n})\n</script>\n\n<template>\n  <div class=\"p-3 max-w-screen-2xl mx-auto\">\n    <!-- 顶部工具条 -->\n    <!-- P1-4 修复: 工具条移动端折叠 - 次要控件 (countMode 标签, 全部列 switch) 在 sm 以下隐藏 -->\n    <div class=\"flex items-center gap-2 mb-3 flex-wrap\">\n      <el-input v-model=\"filter.oem2\" placeholder=\"OEM 2\" clearable size=\"small\" style=\"width: 160px\" @keyup.enter=\"quickSearch\" />\n      <el-input v-model=\"filter.mr1\" placeholder=\"MR.1\" clearable size=\"small\" style=\"width: 120px\" @keyup.enter=\"quickSearch\" />\n      <el-input v-model=\"filter.productName1\" placeholder=\"产品名\" clearable size=\"small\" style=\"width: 160px\" @keyup.enter=\"quickSearch\" />\n      <el-select v-model=\"filter.type\" placeholder=\"类型\" clearable size=\"small\" style=\"width: 100px\">\n        <el-option label=\"oil\" value=\"oil\" />\n        <el-option label=\"fuel\" value=\"fuel\" />\n        <el-option label=\"air\" value=\"air\" />\n        <el-option label=\"cabin\" value=\"cabin\" />\n        <el-option label=\"others\" value=\"others\" />\n      </el-select>\n      <el-input v-model=\"filter.oem3Batch\" placeholder=\"OEM 3 批量\" clearable size=\"small\" class=\"hidden sm:inline-block\" style=\"width: 220px\" @keyup.enter=\"quickSearch\" />\n      <el-button type=\"primary\" size=\"small\" @click=\"quickSearch\">搜索</el-button>\n      <el-button size=\"small\" @click=\"openAdv\" class=\"hidden sm:inline-flex\">高级筛选</el-button>\n      <span class=\"text-xs text-muted hidden sm:inline\">count: {{ countModeUsed }}</span>\n      <div class=\"flex-1\" />\n      <!-- E2E UI.1 修复: 列设置开关 — 默认隐藏次要列, 点击显示全部 24 列 -->\n      <el-switch v-model=\"showAllColumns\" size=\"small\" active-text=\"全部列\" inactive-text=\"核心列\" inline-prompt class=\"hidden sm:inline-flex\" />\n      <el-button size=\"small\" @click=\"batchCompare\" :disabled=\"selected.length < 2\">批量对比 ({{ selected.length }})</el-button>\n      <el-button type=\"primary\" size=\"small\" @click=\"newProduct\">新增产品</el-button>\n    </div>\n\n    <!-- 表格 -->\n    <!-- P1-5 修复: 表格容器加 overflow-x-auto - 13 列总宽 800+px, 移动端触发水平滚动而非列被裁切 -->\n    <div class=\"hairline overflow-x-auto\">\n      <el-table\n        :data=\"items\"\n        v-loading=\"loading\"\n        size=\"small\"\n        @selection-change=\"(rows: ProductListItem[]) => (selected = rows)\"\n        max-height=\"calc(100vh - 240px)\"\n      >\n        <el-table-column type=\"selection\" width=\"36\" />\n        <el-table-column prop=\"id\" label=\"ID\" width=\"60\" />\n        <el-table-column prop=\"oemNoDisplay\" label=\"OEM\" width=\"160\" fixed />\n        <el-table-column v-if=\"showAllColumns\" prop=\"mr1\" label=\"MR.1\" width=\"100\" show-overflow-tooltip />\n        <el-table-column prop=\"oem2\" label=\"OEM 2\" width=\"120\" show-overflow-tooltip />\n        <el-table-column prop=\"type\" label=\"类型\" width=\"60\" />\n        <el-table-column prop=\"d1Mm\" label=\"D1\" width=\"50\" align=\"right\" />\n        <el-table-column prop=\"d2Mm\" label=\"D2\" width=\"50\" align=\"right\" />\n        <el-table-column v-if=\"showAllColumns\" prop=\"d3Mm\" label=\"D3\" width=\"50\" align=\"right\" />\n        <el-table-column v-if=\"showAllColumns\" prop=\"d4Mm\" label=\"D4\" width=\"50\" align=\"right\" />\n        <el-table-column prop=\"h1Mm\" label=\"H1\" width=\"50\" align=\"right\" />\n        <el-table-column prop=\"h2Mm\" label=\"H2\" width=\"50\" align=\"right\" />\n        <el-table-column v-if=\"showAllColumns\" prop=\"h3Mm\" label=\"H3\" width=\"50\" align=\"right\" />\n        <el-table-column v-if=\"showAllColumns\" prop=\"h4Mm\" label=\"H4\" width=\"50\" align=\"right\" />\n        <el-table-column v-if=\"showAllColumns\" prop=\"d7Thread\" label=\"D7\" width=\"70\" />\n        <el-table-column v-if=\"showAllColumns\" prop=\"d8Thread\" label=\"D8\" width=\"70\" />\n        <el-table-column v-if=\"showAllColumns\" prop=\"media\" label=\"Media\" width=\"100\" show-overflow-tooltip />\n        <el-table-column v-if=\"showAllColumns\" prop=\"mediaModel\" label=\"MediaModel\" width=\"100\" show-overflow-tooltip />\n        <el-table-column v-if=\"showAllColumns\" prop=\"qtyPerCarton\" label=\"箱/件\" width=\"60\" align=\"right\" />\n        <el-table-column v-if=\"showAllColumns\" prop=\"weightKgs\" label=\"kg\" width=\"60\" align=\"right\" />\n        <el-table-column prop=\"isPublished\" label=\"发布\" width=\"50\">\n          <template #default=\"{ row }\">\n            <el-tag v-if=\"row.isPublished\" type=\"success\" size=\"small\">✓</el-tag>\n          </template>\n        </el-table-column>\n        <el-table-column prop=\"isDiscontinued\" label=\"停售\" width=\"50\">\n          <template #default=\"{ row }\">\n            <el-tag v-if=\"row.isDiscontinued\" type=\"info\" size=\"small\">已停</el-tag>\n          </template>\n        </el-table-column>\n        <el-table-column label=\"更新\" width=\"120\">\n          <template #default=\"{ row }\">{{ fmtDate(row.updatedAt) }}</template>\n        </el-table-column>\n        <el-table-column label=\"操作\" width=\"200\" fixed=\"right\">\n          <template #default=\"{ row }\">\n            <el-button size=\"small\" text @click=\"editProduct(row)\">编辑</el-button>\n            <el-button v-if=\"!row.isDiscontinued\" size=\"small\" text type=\"warning\" @click=\"discontinue(row)\">停售</el-button>\n            <el-button v-else size=\"small\" text type=\"success\" @click=\"restore(row)\">恢复</el-button>\n            <el-button size=\"small\" text @click=\"viewHistory(row)\">历史</el-button>\n            <!-- Day 9.2: history 打开后自动 reload, 避免先开再选筛选项空跑 -->\n\n          </template>\n        </el-table-column>\n      </el-table>\n    </div>\n\n    <!-- 分页 -->\n    <div class=\"flex items-center justify-between mt-3\">\n      <span class=\"text-xs text-muted\">共 {{ total }} 条</span>\n      <el-pagination\n        :current-page=\"page\"\n        :page-size=\"pageSize\"\n        :page-sizes=\"[20, 50, 100, 200]\"\n        :total=\"total\"\n        layout=\"sizes, prev, pager, next, jumper\"\n        @current-change=\"onPageChange\"\n        @size-change=\"onSizeChange\"\n      />\n    </div>\n\n    <!-- 高级筛选抽屉 -->\n    <el-drawer v-model=\"drawerOpen\" title=\"高级筛选\" size=\"640px\" direction=\"rtl\">\n      <div class=\"p-3 space-y-3\">\n        <div class=\"text-sm font-medium\">文本字段</div>\n        <div class=\"grid grid-cols-2 gap-2\">\n          <el-input v-model=\"advFilter.productName1\" placeholder=\"产品名 1\" size=\"small\" />\n          <el-input v-model=\"advFilter.productName2\" placeholder=\"产品名 2\" size=\"small\" />\n          <el-input v-model=\"advFilter.mr1\" placeholder=\"MR.1\" size=\"small\" />\n          <el-input v-model=\"advFilter.oem2\" placeholder=\"OEM 2\" size=\"small\" />\n          <el-input v-model=\"advFilter.oemBrand\" placeholder=\"OEM 品牌\" size=\"small\" />\n          <el-input v-model=\"advFilter.mediaName\" placeholder=\"Media\" size=\"small\" />\n          <el-input v-model=\"advFilter.mediaModel\" placeholder=\"MediaModel\" size=\"small\" />\n          <el-input v-model=\"advFilter.sealingMaterial\" placeholder=\"密封材料\" size=\"small\" />\n          <el-input v-model=\"advFilter.efficiency1\" placeholder=\"效率\" size=\"small\" />\n        </div>\n\n        <div class=\"text-sm font-medium\">尺寸范围 (mm)</div>\n        <div class=\"grid grid-cols-2 gap-2\">\n          <el-input-number v-model=\"advFilter.d1Min\" placeholder=\"D1 Min\" size=\"small\" :min=\"0\" />\n          <el-input-number v-model=\"advFilter.d1Max\" placeholder=\"D1 Max\" size=\"small\" :min=\"0\" />\n          <el-input-number v-model=\"advFilter.d2Min\" placeholder=\"D2 Min\" size=\"small\" :min=\"0\" />\n          <el-input-number v-model=\"advFilter.d2Max\" placeholder=\"D2 Max\" size=\"small\" :min=\"0\" />\n          <el-input-number v-model=\"advFilter.h1Min\" placeholder=\"H1 Min\" size=\"small\" :min=\"0\" />\n          <el-input-number v-model=\"advFilter.h1Max\" placeholder=\"H1 Max\" size=\"small\" :min=\"0\" />\n        </div>\n        <div class=\"flex items-center gap-2\">\n          <span class=\"text-xs text-muted\">容差 (mm):</span>\n          <el-radio-group v-model=\"advFilter.sizeTolerance\" size=\"small\">\n            <el-radio :value=\"1\">±1</el-radio>\n            <el-radio :value=\"5\">±5</el-radio>\n            <el-radio :value=\"10\">±10</el-radio>\n          </el-radio-group>\n        </div>\n\n        <div class=\"text-sm font-medium\">车型适配</div>\n        <div class=\"grid grid-cols-2 gap-2\">\n          <el-input v-model=\"advFilter.machineBrand\" placeholder=\"品牌\" size=\"small\" />\n          <el-input v-model=\"advFilter.machineModel\" placeholder=\"型号\" size=\"small\" />\n          <el-input v-model=\"advFilter.modelName\" placeholder=\"名称\" size=\"small\" />\n          <el-input v-model=\"advFilter.engineBrand\" placeholder=\"发动机品牌\" size=\"small\" />\n        </div>\n\n        <div class=\"flex justify-end gap-2 pt-3\">\n          <el-button @click=\"drawerOpen = false\">取消</el-button>\n          <el-button type=\"primary\" @click=\"applyAdv\">应用</el-button>\n        </div>\n      </div>\n    </el-drawer>\n\n    <!-- 历史抽屉 (Day 9.1: 解析 changedFields JSON, 按字段展示) -->\n    <!-- Day 9.2: 顶部加筛选 (changeType / since / until / limit) -->\n    <el-drawer v-model=\"historyOpen\" title=\"变更历史\" size=\"700px\" direction=\"rtl\" :close-on-click-modal=\"false\">\n      <!-- 筛选条 -->\n      <div class=\"px-3 py-2 hairline-b bg-[var(--color-bg-hover)]\">\n        <div class=\"grid grid-cols-4 gap-2 items-end\">\n          <div>\n            <div class=\"text-xs text-muted mb-1\">类型</div>\n            <el-select v-model=\"historyFilter.changeType\" placeholder=\"全部\" clearable size=\"small\" @change=\"reloadCurrentHistory\">\n              <el-option label=\"全部\" value=\"\" />\n              <el-option label=\"create\" value=\"create\" />\n              <el-option label=\"update\" value=\"update\" />\n              <el-option label=\"discontinue\" value=\"discontinue\" />\n              <el-option label=\"restore\" value=\"restore\" />\n            </el-select>\n          </div>\n          <div>\n            <div class=\"text-xs text-muted mb-1\">开始</div>\n            <el-date-picker\n              v-model=\"historyFilter.since\"\n              type=\"datetime\"\n              placeholder=\"不限\"\n              size=\"small\"\n              value-format=\"YYYY-MM-DDTHH:mm:ss\"\n              @change=\"reloadCurrentHistory\"\n            />\n          </div>\n          <div>\n            <div class=\"text-xs text-muted mb-1\">结束</div>\n            <el-date-picker\n              v-model=\"historyFilter.until\"\n              type=\"datetime\"\n              placeholder=\"不限\"\n              size=\"small\"\n              value-format=\"YYYY-MM-DDTHH:mm:ss\"\n              @change=\"reloadCurrentHistory\"\n            />\n          </div>\n          <div>\n            <div class=\"text-xs text-muted mb-1\">条数</div>\n            <el-select v-model.number=\"historyFilter.limit\" size=\"small\" @change=\"reloadCurrentHistory\">\n              <el-option :value=\"20\" label=\"20\" />\n              <el-option :value=\"50\" label=\"50\" />\n              <el-option :value=\"100\" label=\"100\" />\n              <el-option :value=\"200\" label=\"200\" />\n            </el-select>\n          </div>\n        </div>\n        <div class=\"mt-2 text-xs text-muted flex items-center gap-2\">\n          <!-- Day 9.3: total 反映筛选后真实总数, 不受 limit 影响 -->\n          <span>共 <b class=\"text-fg\">{{ historyTotal }}</b> 条\n            <span v-if=\"historyTotal > historyItems.length\" class=\"text-muted\">(本页 {{ historyItems.length }} / 限制 {{ historyFilter.limit }})</span>\n          </span>\n          <span v-if=\"historyLoading\">加载中...</span>\n          <el-button size=\"small\" text @click=\"resetHistoryFilter\">重置</el-button>\n        </div>\n      </div>\n\n      <div class=\"p-3\" v-loading=\"historyLoading\">\n        <div v-if=\"historyItems.length === 0\" class=\"text-center text-muted py-8\">暂无历史</div>\n        <el-timeline v-else>\n          <el-timeline-item\n            v-for=\"h in historyItems\"\n            :key=\"h.id\"\n            :timestamp=\"fmtDate(h.changedAt)\"\n            placement=\"top\"\n          >\n            <div class=\"text-sm mb-1\">\n              <el-tag size=\"small\" :type=\"h.changeType === "
+    },
+    {
+      "t": "t('admin.productsview.label.l352_')",
+      "orig": " }}</span>\n            </div>\n            <el-table\n              v-if=\"parseChangedFields(h.changedFields).length > 0\"\n              :data=\"parseChangedFields(h.changedFields)\"\n              size=\"small\"\n              border\n              max-height=\"240\"\n            >\n              <el-table-column prop=\"key\" label=\"字段\" width=\"160\" />\n              <el-table-column label=\"新值\">\n                <template #default=\"{ row }\">\n                  <code class=\"text-xs\">{{ row.newVal === null || row.newVal === undefined ? "
+    },
+    {
+      "t": "t('admin.productsview.label.l357_')",
+      "orig": ">\n// Day 9: 后台产品管理列表\n//   - 高级搜索 (17 字段 + 尺寸范围 + 批量 OEM)\n//   - 关键字段筛选 + 分页\n//   - 行操作: 编辑 / 软删 / 恢复 / 查看历史\n//   - 批量对比\nimport { ref, reactive, onMounted, onBeforeUnmount, watch } from 'vue'\nimport { useRouter } from 'vue-router'\nimport { ElMessage, ElMessageBox } from 'element-plus'\nimport { adminProductApi } from '@/api'\nimport type { AdminSearchRequest, ProductListItem, ProductHistoryItem } from '@/api/types'\n\nconst router = useRouter()\n\nconst loading = ref(false)\nconst items = ref<ProductListItem[]>([])\nconst total = ref(0)\nconst page = ref(1)\nconst pageSize = ref(50)\nconst hasMore = ref(false)\nconst countModeUsed = ref('exact')\n\n// E2E UI.1 修复: 列设置 — 默认隐藏次要列, 降低信息密度 (24 列 → 13 列)\n//   WHY: 24 列超出运维一眼扫读上限 (≤8 列为佳), 次要列 (D3/D4/H3/H4/D7/D8/Media 等) 默认隐藏\n//   核心列 (13): selection/ID/OEM/OEM2/类型/D1/D2/H1/H2/发布/停售/更新/操作\n//   次要列 (11): MR1/D3/D4/H3/H4/D7/D8/Media/MediaModel/箱件/kg\nconst showAllColumns = ref(false)\n\n// 筛选条件 (精简版, 完整 17 字段版在抽屉)\nconst filter = reactive<AdminSearchRequest>({\n  page: 1,\n  pageSize: 50,\n  countMode: 'exact',\n  pagingMode: 'offset',\n  sizeTolerance: 5,\n  sortBy: 'updated_at',\n  sortDesc: true\n})\n\n// 抽屉筛选 (高级)\nconst drawerOpen = ref(false)\nconst advFilter = reactive<AdminSearchRequest>({})\n\n// 历史抽屉\nconst historyOpen = ref(false)\nconst historyItems = ref<ProductHistoryItem[]>([])\n// Day 9.4: cursor 累积 + 加载更多\nconst historyNextCursor = ref<string | null>(null)\nconst historyHasMore = ref(false)\n// Day 9.3: 历史分页响应 (含 total, 反映筛选后真实条数)\nconst historyTotal = ref(0)\n// Day 9.3: 筛选条件变化时存 localStorage (放在 historyFilter 定义之后)\n// Day 9.2: 历史抽屉筛选 (changeType / since / until / limit)\nconst historyFilter = reactive<{\n  changeType: string\n  since: string\n  until: string\n  limit: number\n}>({ changeType: '', since: '', until: '', limit: 50 })\nconst historyLoading = ref(false)\n// Day 9.3: history 筛选条件 localStorage 持久化 (跨产品查看时保留)\nconst HISTORY_FILTER_KEY = 'sakura_admin_history_filter'\nconst resetHistoryFilter = () => {\n  historyFilter.changeType = ''\n  historyFilter.since = ''\n  historyFilter.until = ''\n  historyFilter.limit = 50\n  saveHistoryFilter()\n}\nfunction saveHistoryFilter() {\n  try { localStorage.setItem(HISTORY_FILTER_KEY, JSON.stringify({...historyFilter})) } catch {}\n}\nfunction loadHistoryFilter() {\n  try {\n    const raw = localStorage.getItem(HISTORY_FILTER_KEY)\n    if (!raw) return\n    const saved = JSON.parse(raw)\n    if (typeof saved.changeType === 'string') historyFilter.changeType = saved.changeType\n    if (typeof saved.since === 'string') historyFilter.since = saved.since\n    if (typeof saved.until === 'string') historyFilter.until = saved.until\n    if (typeof saved.limit === 'number') historyFilter.limit = saved.limit\n  } catch {}\n}\nloadHistoryFilter()\n// Day 9.3: 筛选条件变化时存 localStorage\nwatch(historyFilter, () => saveHistoryFilter(), { deep: true })\n// (上面这行是第 2 个 watch,删除后保留 1 个)\n\n// 批量选择\nconst selected = ref<ProductListItem[]>([])\n\n// P2.7: 产品状态变更 (停售/恢复) 统一 loading, 防止重复点击\nconst productMutating = ref(false)\n\n// P2-8.1: 列表请求取消控制器\n//   快速翻页/筛选切换时取消上一次未完成请求, 避免并发竞争导致旧结果覆盖新结果\nlet loadAbort: AbortController | null = null\n\nasync function load() {\n  // P2-8.1: 取消上一次未完成的列表请求\n  loadAbort?.abort()\n  const myAbort = new AbortController()\n  loadAbort = myAbort\n  loading.value = true\n  try {\n    const req = { ...filter, page: page.value, pageSize: pageSize.value }\n    const data = await adminProductApi.search(req, { signal: myAbort.signal })\n    items.value = data.items\n    total.value = data.total\n    hasMore.value = !!data.hasMore\n    countModeUsed.value = data.countModeUsed || 'exact'\n  } catch (e: any) {\n    // P2-8.1: 请求被取消时静默返回 (用户主动翻页/筛选切换/卸载组件触发)\n    if (e?.code === 'ERR_CANCELED' || e?.name === 'CanceledError') return\n    // 其他错误已被拦截器处理\n  } finally {\n    // P2-8.1: 仅当前请求未被新请求取代时才重置 loading, 避免旧请求 finally 覆盖新请求的 loading 状态\n    if (loadAbort === myAbort) loading.value = false\n  }\n}\n\nfunction quickSearch() {\n  page.value = 1\n  load()\n}\n\nfunction openAdv() {\n  Object.assign(advFilter, filter)\n  drawerOpen.value = true\n}\n\nfunction applyAdv() {\n  Object.assign(filter, advFilter)\n  page.value = 1\n  drawerOpen.value = false\n  load()\n}\n\nfunction newProduct() {\n  router.push('/admin/products/new')\n}\n\nfunction editProduct(row: ProductListItem) {\n  router.push(`/admin/products/${row.id}/edit`)\n}\n\nasync function discontinue(row: ProductListItem) {\n  try {\n    await ElMessageBox.confirm(`确定停售产品 "
+    },
+    {
+      "t": "t('admin.productsview.label.l360_')",
+      "orig": " 吗?`, '确认', { type: 'warning' })\n  } catch {\n    return\n  }\n  if (productMutating.value) return\n  productMutating.value = true\n  try {\n    await adminProductApi.discontinue(row.id, 'admin')\n    ElMessage.success('已停售')\n    load()\n  } catch {\n    // 错误已被拦截器\n  } finally {\n    productMutating.value = false\n  }\n}\n\nasync function restore(row: ProductListItem) {\n  if (productMutating.value) return\n  productMutating.value = true\n  try {\n    await adminProductApi.restore(row.id, 'admin')\n    ElMessage.success('已恢复')\n    load()\n  } catch {\n    // 错误已被拦截器\n  } finally {\n    productMutating.value = false\n  }\n}\n\n// 当前查看历史的产品 id (用于筛选条件变化时 reload)\nconst currentHistoryProductId = ref<number | null>(null)\n\nasync function viewHistory(row: ProductListItem) {\n  // Day 9.2: 用 historyFilter 调 API (支持 changeType/since/until/limit)\n  //   打开抽屉前先 load, 避免空闪烁\n  //   Day 9.4: 切换产品时重置 cursor, 不然下一页的 cursor 是上个产品的\n  currentHistoryProductId.value = row.id\n  historyNextCursor.value = null\n  historyHasMore.value = false\n  historyOpen.value = true\n  await loadHistory(row.id)\n}\n\nasync function reloadCurrentHistory() {\n  // Day 9.2: 筛选项 change 时自动 reload\n  if (currentHistoryProductId.value !== null) {\n    await loadHistory(currentHistoryProductId.value)\n  }\n}\n\nasync function loadHistory(productId: number, append = false) {\n  historyLoading.value = true\n  try {\n    const params: any = { limit: historyFilter.limit }\n    if (historyFilter.changeType) params.changeType = historyFilter.changeType\n    if (historyFilter.since) params.since = new Date(historyFilter.since).toISOString()\n    if (historyFilter.until) params.until = new Date(historyFilter.until).toISOString()\n    if (append && historyNextCursor.value) params.cursor = historyNextCursor.value\n    const result = await adminProductApi.history(productId, params)\n    if (append) {\n      historyItems.value = historyItems.value.concat(result.items)\n    } else {\n      historyItems.value = result.items\n    }\n    historyTotal.value = result.total\n    // Day 9.4: 翻页 cursor\n    historyNextCursor.value = result.nextCursor ?? null\n    historyHasMore.value = !!result.nextCursor\n  } catch (e: any) {\n    // 错误已被拦截器\n  } finally {\n    historyLoading.value = false\n  }\n}\n\nasync function loadMoreHistory() {\n  if (!historyHasMore.value || historyLoading.value) return\n  if (currentHistoryProductId.value == null) return\n  await loadHistory(currentHistoryProductId.value, true)\n}\n\nasync function batchCompare() {\n  if (selected.value.length < 2) {\n    ElMessage.warning('请选择 2-6 个产品')\n    return\n  }\n  if (selected.value.length > 6) {\n    ElMessage.warning('最多对比 6 个')\n    return\n  }\n  // P3.5 (Task 12): 跳转到 /admin/compare?ids=1,2,3,4,5,6\n  const ids = selected.value.slice(0, 6).map((p) => p.id).join(',')\n  router.push(`/admin/compare?ids=${ids}`)\n}\n\nfunction parseChangedFields(raw?: string): { key: string; oldVal: any; newVal: any }[] {\n  if (!raw) return []\n  try {\n    const obj = JSON.parse(raw)\n    if (obj && typeof obj === 'object' && !Array.isArray(obj)) {\n      return Object.entries(obj).map(([k, v]) => ({ key: k, oldVal: undefined, newVal: v }))\n    }\n    return []\n  } catch {\n    return []\n  }\n}\n\nfunction fmtDate(iso?: string) {\n  if (!iso) return ''\n  return iso.substring(0, 16).replace('T', ' ')\n}\n\nfunction numOrDash(v?: number | string) {\n  if (v === null || v === undefined || v === '') return '—'\n  return v\n}\n\nfunction onPageChange(p: number) {\n  page.value = p\n  load()\n}\n\nfunction onSizeChange(s: number) {\n  pageSize.value = s\n  page.value = 1\n  load()\n}\n\nonMounted(load)\n\n// P2-8.1: 组件卸载时取消未完成的列表请求, 防止内存泄漏与卸载后状态写入\nonBeforeUnmount(() => {\n  loadAbort?.abort()\n})\n</script>\n\n<template>\n  <div class="
+    },
+    {
+      "t": "t('admin.productsview.title.l388_')",
+      "orig": ">\n    <!-- 顶部工具条 -->\n    <!-- P1-4 修复: 工具条移动端折叠 - 次要控件 (countMode 标签, 全部列 switch) 在 sm 以下隐藏 -->\n    <div class="
+    },
+    {
+      "t": "t('admin.productsview.placeholder.l396_oem')",
+      "orig": "产品名"
+    },
+    {
+      "t": "t('admin.productsview.placeholder.l399_')",
+      "orig": "类型"
+    },
+    {
+      "t": "t('admin.productsview.placeholder.l400_')",
+      "orig": "OEM 3 批量"
+    },
+    {
+      "t": "t('admin.productsview.placeholder.l423_')",
+      "orig": ">搜索</el-button>\n      <el-button size="
+    },
+    {
+      "t": "t('admin.productsview.placeholder.l424_')",
+      "orig": ">高级筛选</el-button>\n      <span class="
+    },
+    {
+      "t": "t('admin.productsview.placeholder.l425_')",
+      "orig": " />\n      <!-- E2E UI.1 修复: 列设置开关 — 默认隐藏次要列, 点击显示全部 24 列 -->\n      <el-switch v-model="
+    },
+    {
+      "t": "t('admin.productsview.placeholder.l426_')",
+      "orig": "全部列"
+    },
+    {
+      "t": "t('admin.productsview.title.l438_')",
+      "orig": "核心列"
+    },
+    {
+      "t": "t('admin.productsview.placeholder.l444_')",
+      "orig": ">批量对比 ({{ selected.length }})</el-button>\n      <el-button type="
+    },
+    {
+      "t": "t('admin.productsview.placeholder.l444_')",
+      "orig": ">新增产品</el-button>\n    </div>\n\n    <!-- 表格 -->\n    <!-- P1-5 修复: 表格容器加 overflow-x-auto - 13 列总宽 800+px, 移动端触发水平滚动而非列被裁切 -->\n    <div class="
+    },
+    {
+      "t": "t('admin.productsview.placeholder.l457_')",
+      "orig": "类型"
+    },
+    {
+      "t": "t('admin.productsview.placeholder.l468_')",
+      "orig": "箱/件"
+    },
+    {
+      "t": "t('admin.productsview.label.l516_')",
+      "orig": "发布"
+    },
+    {
+      "t": "t('admin.productsview.label.l517_')",
+      "orig": "停售"
+    }
+  ],
+  "frontend/src/views/admin/AdminTypesView.vue": [
+    {
+      "t": "t('admin.typesview.error.l31_')",
+      "orig": "加载失败: "
+    },
+    {
+      "t": "t('admin.typesview.warning.l48_type')",
+      "orig": "Type 不能为空"
+    },
+    {
+      "t": "t('admin.typesview.success.l52_')",
+      "orig": "Type 长度不能超过 50"
+    },
+    {
+      "t": "t('admin.typesview.success.l55_')",
+      "orig": "已新增"
+    },
+    {
+      "t": "t('admin.typesview.error.l58_')",
+      "orig": "已更新"
+    },
+    {
+      "t": "t('admin.typesview.string.l67_')",
+      "orig": "操作失败"
+    },
+    {
+      "t": "t('admin.typesview.success.l70_')",
+      "orig": "]\n  try {\n    await ElMessageBox.confirm(\n      FIXED.includes(row.type)\n        ? `确定删除固定 Type \"${row.type}\" 吗? 建议保留 (作为 P2.3 兜底), 但仍支持软删恢复.`\n        : `确定删除 \"${row.type}\" 吗? (软删除)`, "
+    },
+    {
+      "t": "t('admin.typesview.error.l71_')",
+      "orig": "已删除"
+    },
+    {
+      "t": "t('admin.typesview.success.l74_')",
+      "orig": "删除失败"
+    },
+    {
+      "t": "t('admin.typesview.error.l75_')",
+      "orig": "已恢复"
+    },
+    {
+      "t": "t('admin.typesview.success.l91_p2_3')",
+      "orig": "恢复失败"
+    },
+    {
+      "t": "t('admin.typesview.error.l92_')",
+      "orig": "排序已保存, 前台产品页 P2.3 立即生效"
+    },
+    {
+      "t": "t('admin.typesview.placeholder.l116_type')",
+      "orig": "排序失败"
+    },
+    {
+      "t": "t('admin.typesview.label.l163_')",
+      "orig": ")\n}\nconst total = computed(() => items.value.length)\nconst activeCount = computed(() => items.value.filter((x) => !x.deletedAt).length)\nonMounted(load)\n</script>\n\n<template>\n  <div class=\"p-3 max-w-screen-xl mx-auto\">\n    <div class=\"flex items-center gap-2 mb-3 flex-wrap\">\n      <h1 class=\"text-lg font-medium\">类型字典 (Type)</h1>\n      <span class=\"text-xs text-muted\">P2.2 后台管理 · 固定 5 值: oil / fuel / air / cabin / others · P2.3 拖动排序后前台立即生效</span>\n      <div class=\"flex-1\" />\n      <el-input v-model=\"searchKw\" placeholder=\"搜索 Type\" clearable size=\"small\" style=\"width: 200px\" @keyup.enter=\"onSearch\" />\n      <el-button size=\"small\" @click=\"onSearch\">搜索</el-button>\n      <el-checkbox v-model=\"includeDeleted\" @change=\"load\" size=\"small\">含已删</el-checkbox>\n      <el-button type=\"primary\" size=\"small\" @click=\"openCreate\">新增 Type</el-button>\n    </div>\n\n    <div class=\"hairline\" v-loading=\"loading\">\n      <div class=\"dict-head\">\n        <div class=\"cell-drag\"></div>\n        <div class=\"cell-id\">ID</div>\n        <div class=\"cell-name\">Type</div>\n        <div class=\"cell-sort\">排序</div>\n        <div class=\"cell-xref\">引用</div>\n        <div class=\"cell-updated\">更新</div>\n        <div class=\"cell-status\">状态</div>\n        <div class=\"cell-action\">操作</div>\n      </div>\n      <div v-for=\"row in items\" :key=\"row.id\"\n        :class=\"["
+    }
+  ],
+  "frontend/src/views/admin/AdminUsersView.vue": [
+    {
+      "t": "t('admin.usersview.warning.l102_')",
+      "orig": ")\n\n// ===== 用户列表 =====\nconst users = ref<UserListItem[]>([])\nconst usersLoading = ref(false)\nconst usersTotal = ref(0)\nconst usersPage = ref(1)\nconst usersPageSize = ref(20)\n\n// P2.7: 用户管理 mutation 统一 loading, 防止重复点击触发并发写操作\nconst userSubmitting = ref(false)\n\n// 新增用户对话框\nconst createOpen = ref(false)\nconst createForm = reactive<UserCreateRequest>({\n  username: "
+    },
+    {
+      "t": "t('admin.usersview.success.l118_')",
+      "orig": "\n})\n\n// 编辑用户对话框\nconst editOpen = ref(false)\nconst editForm = reactive<UserUpdateRequest & { id?: number; username?: string }>({\n  id: undefined,\n  username: "
+    },
+    {
+      "t": "t('admin.usersview.success.l150_')",
+      "orig": ",\n  isActive: true\n})\n\n// 重置密码对话框\nconst resetOpen = ref(false)\nconst resetForm = reactive<{ id?: number; username?: string; newPassword: string }>({\n  id: undefined,\n  username: "
+    },
+    {
+      "t": "t('admin.usersview.string.l164_')",
+      "orig": "\n})\n\n// 角色选项 (与后端 UserRole enum 一致)\nconst ROLE_OPTIONS: { value: UserRole; label: string; tagType: "
+    },
+    {
+      "t": "t('admin.usersview.success.l174_')",
+      "orig": "管理员 (admin)"
+    },
+    {
+      "t": "t('admin.usersview.success.l255_')",
+      "orig": "操作员 (operator)"
+    },
+    {
+      "t": "t('admin.usersview.label.l287_')",
+      "orig": "只读 (viewer)"
+    },
+    {
+      "t": "t('admin.usersview.label.l345_')",
+      "orig": "\n}\n\nfunction roleLabel(role: UserRole): string {\n  return ROLE_OPTIONS.find((r) => r.value === role)?.label || role\n}\n\nasync function loadUsers() {\n  usersLoading.value = true\n  try {\n    const resp = await usersApi.list(usersPage.value, usersPageSize.value)\n    users.value = resp.items\n    usersTotal.value = resp.total\n  } catch {\n    // axios 拦截器已统一弹错误\n  } finally {\n    usersLoading.value = false\n  }\n}\n\nfunction onUsersPageChange(p: number) {\n  usersPage.value = p\n  loadUsers()\n}\n\nfunction openCreate() {\n  createForm.username = "
+    },
+    {
+      "t": "t('admin.usersview.title.l387_')",
+      "orig": "用户名不能为空"
+    },
+    {
+      "t": "t('admin.usersview.label.l389_')",
+      "orig": "密码至少 8 个字符"
+    },
+    {
+      "t": "t('admin.usersview.placeholder.l390_')",
+      "orig": "用户已创建"
+    },
+    {
+      "t": "t('admin.usersview.label.l392_')",
+      "orig": "用户已更新"
+    },
+    {
+      "t": "t('admin.usersview.label.l401_')",
+      "orig": "确认"
+    },
+    {
+      "t": "t('admin.usersview.label.l411_')",
+      "orig": "已删除"
+    },
+    {
+      "t": "t('admin.usersview.placeholder.l412_')",
+      "orig": "新密码至少 8 个字符"
+    },
+    {
+      "t": "t('admin.usersview.label.l414_')",
+      "orig": " && audit.value.length === 0 && !auditLoading.value) {\n    loadAudit()\n  }\n}\n\n// ===== 顶部用户菜单 (退出登录) =====\nasync function handleLogout() {\n  if (userSubmitting.value) return\n  userSubmitting.value = true\n  try {\n    if (auth.refreshToken) {\n      await authApi.logout(auth.refreshToken)\n    }\n  } catch {\n    // 即使后端 logout 失败也前端清场\n  } finally {\n    userSubmitting.value = false\n  }\n  auth.clearAuth()\n  ElMessage.success("
+    },
+    {
+      "t": "t('admin.usersview.placeholder.l415_')",
+      "orig": ")\n}\n\n// 当前用户是否为 admin (UI 守卫: 仅 admin 可见 CRUD 按钮)\nconst canManage = computed(() => auth.isAdmin())\n\n// WHY onMounted 同时预加载审计数据: el-tabs tab-change 事件在某些 Element Plus 版本下可能不触发,\n//   预加载避免用户切到审计 Tab 时看到空数据 (审计数据量小, 预加载成本可接受)\nonMounted(() => {\n  loadUsers()\n  loadAudit()\n})\n</script>\n\n<template>\n  <div class=\"p-3 max-w-screen-xl mx-auto\">\n    <!-- 顶部工具条 -->\n    <div class=\"flex items-center gap-2 mb-3 flex-wrap\">\n      <h1 class=\"text-lg font-medium\">用户管理</h1>\n      <span class=\"text-xs text-muted\">JWT 鉴权 · 仅 admin 角色可管理</span>\n      <div class=\"flex-1\" />\n      <el-button v-if=\"canManage\" type=\"primary\" size=\"small\" @click=\"openCreate\">新增用户</el-button>\n    </div>\n\n    <el-tabs v-model=\"activeTab\" @tab-change=\"onTabChange\">\n      <!-- ===== Tab 1: 用户列表 ===== -->\n      <el-tab-pane label=\"用户列表\" name=\"users\">\n        <div class=\"hairline\" v-loading=\"usersLoading\">\n          <!-- 表头 -->\n          <div class=\"user-head\">\n            <div class=\"cell-id\">ID</div>\n            <div class=\"cell-username\">用户名</div>\n            <div class=\"cell-role\">角色</div>\n            <div class=\"cell-email\">邮箱</div>\n            <div class=\"cell-status\">状态</div>\n            <div class=\"cell-last-login\">最后登录</div>\n            <div class=\"cell-created\">创建时间</div>\n            <div class=\"cell-action\">操作</div>\n          </div>\n          <!-- 表体 -->\n          <div v-for=\"row in users\" :key=\"row.id\" class=\"user-row\">\n            <div class=\"cell-id\">{{ row.id }}</div>\n            <div class=\"cell-username\" :title=\"row.username\">{{ row.username }}</div>\n            <div class=\"cell-role\">\n              <el-tag :type=\"roleTagType(row.role)\" size=\"small\">{{ roleLabel(row.role) }}</el-tag>\n            </div>\n            <div class=\"cell-email\" :title=\"row.email || "
+    },
+    {
+      "t": "t('admin.usersview.label.l427_')",
+      "orig": " }}</div>\n            <div class=\"cell-status\">\n              <el-tag v-if=\"row.isActive\" type=\"success\" size=\"small\">启用</el-tag>\n              <el-tag v-else type=\"danger\" size=\"small\">禁用</el-tag>\n            </div>\n            <div class=\"cell-last-login\">{{ fmtDate(row.lastLoginAt) || "
+    },
+    {
+      "t": "t('admin.usersview.label.l430_')",
+      "orig": " }}</div>\n            <div class=\"cell-created\">{{ fmtDate(row.createdAt) }}</div>\n            <div class=\"cell-action\">\n              <el-button size=\"small\" text @click=\"openEdit(row)\">编辑</el-button>\n              <el-button size=\"small\" text type=\"warning\" @click=\"openReset(row)\">重置密码</el-button>\n              <el-button\n                size=\"small\"\n                text\n                type=\"danger\"\n                :disabled=\"row.username === auth.user?.username\"\n                @click=\"softDelete(row)\"\n              >删除</el-button>\n            </div>\n          </div>\n          <!-- 空状态 -->\n          <div v-if=\"!usersLoading && users.length === 0\" class=\"user-empty\">\n            暂无用户数据\n          </div>\n        </div>\n\n        <div class=\"mt-2 flex justify-end\">\n          <el-pagination\n            background\n            layout=\"total, prev, pager, next\"\n            :total=\"usersTotal\"\n            :page-size=\"usersPageSize\"\n            :current-page=\"usersPage\"\n            @current-change=\"onUsersPageChange\"\n          />\n        </div>\n      </el-tab-pane>\n\n      <!-- ===== Tab 2: 登录审计 ===== -->\n      <el-tab-pane label=\"登录审计\" name=\"audit\">\n        <div class=\"hairline\" v-loading=\"auditLoading\">\n          <div class=\"audit-head\">\n            <div class=\"cell-id\">ID</div>\n            <div class=\"cell-username\">用户名</div>\n            <div class=\"cell-login-at\">登录时间</div>\n            <div class=\"cell-ip\">IP</div>\n            <div class=\"cell-ua\">User-Agent</div>\n            <div class=\"cell-status\">结果</div>\n            <div class=\"cell-reason\">失败原因</div>\n          </div>\n          <div v-for=\"row in audit\" :key=\"row.id\" class=\"audit-row\">\n            <div class=\"cell-id\">{{ row.id }}</div>\n            <div class=\"cell-username\" :title=\"row.username\">{{ row.username }}</div>\n            <div class=\"cell-login-at\">{{ fmtDate(row.loginAt) }}</div>\n            <div class=\"cell-ip\" :title=\"row.ip || "
+    },
+    {
+      "t": "t('admin.usersview.label.l440_')",
+      "orig": " }}</div>\n            <div class=\"cell-status\">\n              <el-tag v-if=\"row.success\" type=\"success\" size=\"small\">成功</el-tag>\n              <el-tag v-else type=\"danger\" size=\"small\">失败</el-tag>\n            </div>\n            <div class=\"cell-reason\" :title=\"row.failureReason || "
+    },
+    {
+      "t": "t('admin.usersview.placeholder.l441_')",
+      "orig": ">\n// 后台用户管理页 (JWT 改造版, 仅 admin 角色)\n//   Tab 1: 用户列表 — 分页表格 + CRUD + 重置密码 + 软删除\n//   Tab 2: 登录审计 — login_audit_logs 表展示\n//   风格: Musk 极简 hairline + el-tag 区分角色/状态\nimport { ref, reactive, onMounted, computed } from 'vue'\nimport { ElMessage, ElMessageBox } from 'element-plus'\nimport { authApi, usersApi } from '@/api'\nimport { useAdminAuthStore } from '@/composables/useAdminAuth'\nimport type { UserListItem, UserCreateRequest, UserUpdateRequest, UserRole, LoginAuditLog } from '@/api/types'\n\nconst auth = useAdminAuthStore()\nconst activeTab = ref<'users' | 'audit'>('users')\n\n// ===== 用户列表 =====\nconst users = ref<UserListItem[]>([])\nconst usersLoading = ref(false)\nconst usersTotal = ref(0)\nconst usersPage = ref(1)\nconst usersPageSize = ref(20)\n\n// P2.7: 用户管理 mutation 统一 loading, 防止重复点击触发并发写操作\nconst userSubmitting = ref(false)\n\n// 新增用户对话框\nconst createOpen = ref(false)\nconst createForm = reactive<UserCreateRequest>({\n  username: '',\n  password: '',\n  role: 'viewer',\n  email: '',\n  fullName: ''\n})\n\n// 编辑用户对话框\nconst editOpen = ref(false)\nconst editForm = reactive<UserUpdateRequest & { id?: number; username?: string }>({\n  id: undefined,\n  username: '',\n  role: 'viewer',\n  email: '',\n  fullName: '',\n  isActive: true\n})\n\n// 重置密码对话框\nconst resetOpen = ref(false)\nconst resetForm = reactive<{ id?: number; username?: string; newPassword: string }>({\n  id: undefined,\n  username: '',\n  newPassword: ''\n})\n\n// 角色选项 (与后端 UserRole enum 一致)\nconst ROLE_OPTIONS: { value: UserRole; label: string; tagType: 'danger' | 'primary' | 'info' }[] = [\n  { value: 'admin', label: '管理员 (admin)', tagType: 'danger' },\n  { value: 'operator', label: '操作员 (operator)', tagType: 'primary' },\n  { value: 'viewer', label: '只读 (viewer)', tagType: 'info' }\n]\n\nfunction roleTagType(role: UserRole): 'danger' | 'primary' | 'info' {\n  return ROLE_OPTIONS.find((r) => r.value === role)?.tagType || 'info'\n}\n\nfunction roleLabel(role: UserRole): string {\n  return ROLE_OPTIONS.find((r) => r.value === role)?.label || role\n}\n\nasync function loadUsers() {\n  usersLoading.value = true\n  try {\n    const resp = await usersApi.list(usersPage.value, usersPageSize.value)\n    users.value = resp.items\n    usersTotal.value = resp.total\n  } catch {\n    // axios 拦截器已统一弹错误\n  } finally {\n    usersLoading.value = false\n  }\n}\n\nfunction onUsersPageChange(p: number) {\n  usersPage.value = p\n  loadUsers()\n}\n\nfunction openCreate() {\n  createForm.username = ''\n  createForm.password = ''\n  createForm.role = 'viewer'\n  createForm.email = ''\n  createForm.fullName = ''\n  createOpen.value = true\n}\n\nasync function saveCreate() {\n  if (userSubmitting.value) return\n  if (!createForm.username.trim()) {\n    ElMessage.warning('用户名不能为空')\n    return\n  }\n  if (createForm.password.length < 8) {\n    ElMessage.warning('密码至少 8 个字符')\n    return\n  }\n  userSubmitting.value = true\n  try {\n    await usersApi.create({\n      username: createForm.username.trim(),\n      password: createForm.password,\n      role: createForm.role,\n      email: createForm.email || undefined,\n      fullName: createForm.fullName || undefined\n    })\n    ElMessage.success('用户已创建')\n    createOpen.value = false\n    await loadUsers()\n  } catch {\n    // axios 拦截器已统一弹错误\n  } finally {\n    userSubmitting.value = false\n  }\n}\n\nfunction openEdit(row: UserListItem) {\n  editForm.id = row.id\n  editForm.username = row.username\n  editForm.role = row.role\n  editForm.email = row.email || ''\n  editForm.fullName = row.fullName || ''\n  editForm.isActive = row.isActive\n  editOpen.value = true\n}\n\nasync function saveEdit() {\n  if (userSubmitting.value) return\n  if (editForm.id == null) return\n  userSubmitting.value = true\n  try {\n    const patch: UserUpdateRequest = {\n      role: editForm.role,\n      email: editForm.email || undefined,\n      fullName: editForm.fullName || undefined,\n      isActive: editForm.isActive\n    }\n    await usersApi.update(editForm.id, patch)\n    ElMessage.success('用户已更新')\n    editOpen.value = false\n    await loadUsers()\n  } catch {\n    // axios 拦截器已统一弹错误\n  } finally {\n    userSubmitting.value = false\n  }\n}\n\nasync function softDelete(row: UserListItem) {\n  try {\n    await ElMessageBox.confirm(\n      `确定删除用户 "
+    },
+    {
+      "t": "t('admin.usersview.label.l443_')",
+      "orig": " 吗? (软删除, 数据保留)`,\n      '确认',\n      { type: 'warning' }\n    )\n  } catch {\n    return\n  }\n  if (userSubmitting.value) return\n  userSubmitting.value = true\n  try {\n    await usersApi.remove(row.id)\n    ElMessage.success('已删除')\n    await loadUsers()\n  } catch {\n    // axios 拦截器已统一弹错误\n  } finally {\n    userSubmitting.value = false\n  }\n}\n\nfunction openReset(row: UserListItem) {\n  resetForm.id = row.id\n  resetForm.username = row.username\n  resetForm.newPassword = ''\n  resetOpen.value = true\n}\n\nasync function saveReset() {\n  if (userSubmitting.value) return\n  if (resetForm.id == null) return\n  if (resetForm.newPassword.length < 8) {\n    ElMessage.warning('新密码至少 8 个字符')\n    return\n  }\n  userSubmitting.value = true\n  try {\n    await usersApi.resetPassword(resetForm.id, resetForm.newPassword)\n    ElMessage.success(`已重置 ${resetForm.username} 的密码`)\n    resetOpen.value = false\n  } catch {\n    // axios 拦截器已统一弹错误\n  } finally {\n    userSubmitting.value = false\n  }\n}\n\n// ===== 登录审计 =====\nconst audit = ref<LoginAuditLog[]>([])\nconst auditLoading = ref(false)\nconst auditTotal = ref(0)\nconst auditPage = ref(1)\nconst auditPageSize = ref(20)\n\nasync function loadAudit() {\n  auditLoading.value = true\n  try {\n    const resp = await usersApi.auditLogin(auditPage.value, auditPageSize.value)\n    audit.value = resp.items\n    auditTotal.value = resp.total\n  } catch {\n    // axios 拦截器已统一弹错误\n  } finally {\n    auditLoading.value = false\n  }\n}\n\nfunction onAuditPageChange(p: number) {\n  auditPage.value = p\n  loadAudit()\n}\n\n// Tab 切换时按需加载审计数据 (兜底: onMounted 已预加载, 此处仅首次切换且未加载成功时重试)\nfunction onTabChange(tab: string) {\n  if (tab === 'audit' && audit.value.length === 0 && !auditLoading.value) {\n    loadAudit()\n  }\n}\n\n// ===== 顶部用户菜单 (退出登录) =====\nasync function handleLogout() {\n  if (userSubmitting.value) return\n  userSubmitting.value = true\n  try {\n    if (auth.refreshToken) {\n      await authApi.logout(auth.refreshToken)\n    }\n  } catch {\n    // 即使后端 logout 失败也前端清场\n  } finally {\n    userSubmitting.value = false\n  }\n  auth.clearAuth()\n  ElMessage.success('已退出登录')\n  window.location.href = '/login'\n}\n\nfunction fmtDate(iso?: string): string {\n  if (!iso) return ''\n  return iso.substring(0, 19).replace('T', ' ')\n}\n\n// 当前用户是否为 admin (UI 守卫: 仅 admin 可见 CRUD 按钮)\nconst canManage = computed(() => auth.isAdmin())\n\n// WHY onMounted 同时预加载审计数据: el-tabs tab-change 事件在某些 Element Plus 版本下可能不触发,\n//   预加载避免用户切到审计 Tab 时看到空数据 (审计数据量小, 预加载成本可接受)\nonMounted(() => {\n  loadUsers()\n  loadAudit()\n})\n</script>\n\n<template>\n  <div class="
+    },
+    {
+      "t": "t('admin.usersview.placeholder.l444_')",
+      "orig": ">\n    <!-- 顶部工具条 -->\n    <div class="
+    },
+    {
+      "t": "t('admin.usersview.label.l446_')",
+      "orig": ">用户管理</h1>\n      <span class="
+    },
+    {
+      "t": "t('admin.usersview.label.l459_')",
+      "orig": ">JWT 鉴权 · 仅 admin 角色可管理</span>\n      <div class="
+    }
+  ]
+}

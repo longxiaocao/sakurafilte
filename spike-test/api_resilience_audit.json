@@ -1,0 +1,456 @@
+{
+  "stats": {
+    "total_calls": 37,
+    "no_try_catch": 0,
+    "no_loading": 4,
+    "no_error_ui": 0
+  },
+  "summary": {
+    "fail": 0,
+    "warn": 4,
+    "exit_code": 1
+  },
+  "calls": [
+    {
+      "file": "frontend\\src\\components\\AppHeader.vue",
+      "line": 121,
+      "name": "authApi.logout",
+      "snippet": "await authApi.logout(refreshToken.value)",
+      "has_try": true,
+      "has_catch": true,
+      "has_loading": true,
+      "has_error": true,
+      "has_global_interceptor": true
+    },
+    {
+      "file": "frontend\\src\\views\\ChangePasswordView.vue",
+      "line": 39,
+      "name": "authApi.changePassword",
+      "snippet": "await authApi.changePassword(form.oldPassword, form.newPassword)",
+      "has_try": true,
+      "has_catch": true,
+      "has_loading": true,
+      "has_error": true,
+      "has_global_interceptor": true
+    },
+    {
+      "file": "frontend\\src\\views\\LoginView.vue",
+      "line": 43,
+      "name": "authApi.login",
+      "snippet": "const payload = await authApi.login(form.username, form.password)",
+      "has_try": true,
+      "has_catch": true,
+      "has_loading": true,
+      "has_error": true,
+      "has_global_interceptor": true
+    },
+    {
+      "file": "frontend\\src\\views\\SearchView.vue",
+      "line": 72,
+      "name": "searchApi.search",
+      "snippet": "const { provider: p, result } = await searchApi.search({",
+      "has_try": true,
+      "has_catch": true,
+      "has_loading": true,
+      "has_error": true,
+      "has_global_interceptor": true
+    },
+    {
+      "file": "frontend\\src\\views\\SearchView.vue",
+      "line": 177,
+      "name": "searchApi.batchOem",
+      "snippet": "const resp = await searchApi.batchOem({ oems })",
+      "has_try": true,
+      "has_catch": true,
+      "has_loading": true,
+      "has_error": true,
+      "has_global_interceptor": true
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 179,
+      "name": "adminProductApi.compare",
+      "snippet": "const data = await adminProductApi.compare(capped)",
+      "has_try": true,
+      "has_catch": true,
+      "has_loading": true,
+      "has_error": true,
+      "has_global_interceptor": true
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminCompareView.vue",
+      "line": 266,
+      "name": "adminProductApi.get",
+      "snippet": "const p = await adminProductApi.get(id)",
+      "has_try": true,
+      "has_catch": true,
+      "has_loading": true,
+      "has_error": true,
+      "has_global_interceptor": true
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 104,
+      "name": "etlApi.trigger",
+      "snippet": "const r = await etlApi.trigger({",
+      "has_try": true,
+      "has_catch": true,
+      "has_loading": true,
+      "has_error": true,
+      "has_global_interceptor": true
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 141,
+      "name": "etlApi.reasonCodeAggregate",
+      "snippet": "etlApi.reasonCodeAggregate(),",
+      "has_try": true,
+      "has_catch": true,
+      "has_loading": true,
+      "has_error": true,
+      "has_global_interceptor": true
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 142,
+      "name": "etlApi.history",
+      "snippet": "etlApi.history(20, 'cancelled')",
+      "has_try": true,
+      "has_catch": true,
+      "has_loading": true,
+      "has_error": true,
+      "has_global_interceptor": true
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 166,
+      "name": "etlApi.progress",
+      "snippet": "const r = await etlApi.progress()",
+      "has_try": true,
+      "has_catch": true,
+      "has_loading": false,
+      "has_error": true,
+      "has_global_interceptor": true
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 170,
+      "name": "etlApi.legacyStatus",
+      "snippet": "const legacy = await etlApi.legacyStatus()",
+      "has_try": true,
+      "has_catch": true,
+      "has_loading": false,
+      "has_error": true,
+      "has_global_interceptor": true
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 198,
+      "name": "etlApi.legacyStatus",
+      "snippet": "etlApi.legacyStatus().then((legacy) => {",
+      "has_try": true,
+      "has_catch": true,
+      "has_loading": false,
+      "has_error": true,
+      "has_global_interceptor": true
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 319,
+      "name": "etlApi.cancel",
+      "snippet": "const r = await etlApi.cancel(reason, reasonCode)",
+      "has_try": true,
+      "has_catch": true,
+      "has_loading": true,
+      "has_error": true,
+      "has_global_interceptor": true
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 340,
+      "name": "etlApi.history",
+      "snippet": "const hist = await etlApi.history(20, 'paused')",
+      "has_try": true,
+      "has_catch": true,
+      "has_loading": true,
+      "has_error": true,
+      "has_global_interceptor": true
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 358,
+      "name": "etlApi.pause",
+      "snippet": "const r = await etlApi.pause()",
+      "has_try": true,
+      "has_catch": true,
+      "has_loading": true,
+      "has_error": true,
+      "has_global_interceptor": true
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 382,
+      "name": "etlApi.resume",
+      "snippet": "const r = await etlApi.resume()",
+      "has_try": true,
+      "has_catch": true,
+      "has_loading": true,
+      "has_error": true,
+      "has_global_interceptor": true
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminProductFormView.vue",
+      "line": 109,
+      "name": "adminProductApi.get",
+      "snippet": "const p = await adminProductApi.get(productId.value)",
+      "has_try": true,
+      "has_catch": true,
+      "has_loading": true,
+      "has_error": true,
+      "has_global_interceptor": true
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminProductFormView.vue",
+      "line": 147,
+      "name": "adminProductApi.update",
+      "snippet": "await adminProductApi.update(productId.value, { ...form, rowVersion: rowVersion.value }, 'admin')",
+      "has_try": true,
+      "has_catch": true,
+      "has_loading": true,
+      "has_error": true,
+      "has_global_interceptor": true
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminProductFormView.vue",
+      "line": 150,
+      "name": "adminProductApi.create",
+      "snippet": "await adminProductApi.create(form, 'admin')",
+      "has_try": false,
+      "has_catch": true,
+      "has_loading": true,
+      "has_error": true,
+      "has_global_interceptor": true
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminProductFormView.vue",
+      "line": 288,
+      "name": "imageApi.upload",
+      "snippet": "const r = await imageApi.upload(productId.value, slot, file)",
+      "has_try": true,
+      "has_catch": true,
+      "has_loading": true,
+      "has_error": true,
+      "has_global_interceptor": true
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminProductFormView.vue",
+      "line": 308,
+      "name": "imageApi.remove",
+      "snippet": "await imageApi.remove(productId.value, slot)",
+      "has_try": true,
+      "has_catch": true,
+      "has_loading": false,
+      "has_error": true,
+      "has_global_interceptor": true
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminProductsView.vue",
+      "line": 107,
+      "name": "adminProductApi.search",
+      "snippet": "const data = await adminProductApi.search(req, { signal: myAbort.signal })",
+      "has_try": true,
+      "has_catch": true,
+      "has_loading": true,
+      "has_error": true,
+      "has_global_interceptor": true
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminProductsView.vue",
+      "line": 156,
+      "name": "adminProductApi.discontinue",
+      "snippet": "await adminProductApi.discontinue(row.id, 'admin')",
+      "has_try": true,
+      "has_catch": true,
+      "has_loading": true,
+      "has_error": true,
+      "has_global_interceptor": true
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminProductsView.vue",
+      "line": 170,
+      "name": "adminProductApi.restore",
+      "snippet": "await adminProductApi.restore(row.id, 'admin')",
+      "has_try": true,
+      "has_catch": true,
+      "has_loading": true,
+      "has_error": true,
+      "has_global_interceptor": true
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminProductsView.vue",
+      "line": 209,
+      "name": "adminProductApi.history",
+      "snippet": "const result = await adminProductApi.history(productId, params)",
+      "has_try": false,
+      "has_catch": true,
+      "has_loading": true,
+      "has_error": true,
+      "has_global_interceptor": true
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminUsersView.vue",
+      "line": 72,
+      "name": "usersApi.list",
+      "snippet": "const resp = await usersApi.list(usersPage.value, usersPageSize.value)",
+      "has_try": true,
+      "has_catch": true,
+      "has_loading": true,
+      "has_error": true,
+      "has_global_interceptor": true
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminUsersView.vue",
+      "line": 108,
+      "name": "usersApi.create",
+      "snippet": "await usersApi.create({",
+      "has_try": true,
+      "has_catch": true,
+      "has_loading": true,
+      "has_error": true,
+      "has_global_interceptor": true
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminUsersView.vue",
+      "line": 146,
+      "name": "usersApi.update",
+      "snippet": "await usersApi.update(editForm.id, patch)",
+      "has_try": true,
+      "has_catch": true,
+      "has_loading": true,
+      "has_error": true,
+      "has_global_interceptor": true
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminUsersView.vue",
+      "line": 170,
+      "name": "usersApi.remove",
+      "snippet": "await usersApi.remove(row.id)",
+      "has_try": true,
+      "has_catch": true,
+      "has_loading": true,
+      "has_error": true,
+      "has_global_interceptor": true
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminUsersView.vue",
+      "line": 196,
+      "name": "usersApi.resetPassword",
+      "snippet": "await usersApi.resetPassword(resetForm.id, resetForm.newPassword)",
+      "has_try": true,
+      "has_catch": true,
+      "has_loading": true,
+      "has_error": true,
+      "has_global_interceptor": true
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminUsersView.vue",
+      "line": 216,
+      "name": "usersApi.auditLogin",
+      "snippet": "const resp = await usersApi.auditLogin(auditPage.value, auditPageSize.value)",
+      "has_try": true,
+      "has_catch": true,
+      "has_loading": true,
+      "has_error": true,
+      "has_global_interceptor": true
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminUsersView.vue",
+      "line": 244,
+      "name": "authApi.logout",
+      "snippet": "await authApi.logout(auth.refreshToken)",
+      "has_try": true,
+      "has_catch": true,
+      "has_loading": true,
+      "has_error": true,
+      "has_global_interceptor": true
+    },
+    {
+      "file": "frontend\\src\\views\\public\\PublicCompareView.vue",
+      "line": 125,
+      "name": "publicCompareApi.compare",
+      "snippet": "const data = await publicCompareApi.compare(capped)",
+      "has_try": true,
+      "has_catch": true,
+      "has_loading": true,
+      "has_error": true,
+      "has_global_interceptor": true
+    },
+    {
+      "file": "frontend\\src\\views\\public\\PublicCompareView.vue",
+      "line": 213,
+      "name": "publicCompareApi.compare",
+      "snippet": "const data = await publicCompareApi.compare([id])",
+      "has_try": true,
+      "has_catch": true,
+      "has_loading": true,
+      "has_error": true,
+      "has_global_interceptor": true
+    },
+    {
+      "file": "frontend\\src\\views\\public\\PublicProductView.vue",
+      "line": 30,
+      "name": "productApi.getByOem",
+      "snippet": "data.value = await productApi.getByOem(slug.value)",
+      "has_try": true,
+      "has_catch": true,
+      "has_loading": true,
+      "has_error": true,
+      "has_global_interceptor": true
+    },
+    {
+      "file": "frontend\\src\\views\\public\\PublicSearchView.vue",
+      "line": 146,
+      "name": "publicSearchApi.eightField",
+      "snippet": "const resp: PublicEightResponse = await publicSearchApi.eightField({",
+      "has_try": true,
+      "has_catch": true,
+      "has_loading": true,
+      "has_error": true,
+      "has_global_interceptor": true
+    }
+  ],
+  "findings": [
+    {
+      "severity": "WARN",
+      "category": "no_loading",
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 166,
+      "message": "etlApi.progress() 无 loading 状态管理",
+      "snippet": "const r = await etlApi.progress()"
+    },
+    {
+      "severity": "WARN",
+      "category": "no_loading",
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 170,
+      "message": "etlApi.legacyStatus() 无 loading 状态管理",
+      "snippet": "const legacy = await etlApi.legacyStatus()"
+    },
+    {
+      "severity": "WARN",
+      "category": "no_loading",
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 198,
+      "message": "etlApi.legacyStatus() 无 loading 状态管理",
+      "snippet": "etlApi.legacyStatus().then((legacy) => {"
+    },
+    {
+      "severity": "WARN",
+      "category": "no_loading",
+      "file": "frontend\\src\\views\\admin\\AdminProductFormView.vue",
+      "line": 308,
+      "message": "imageApi.remove() 无 loading 状态管理",
+      "snippet": "await imageApi.remove(productId.value, slot)"
+    }
+  ]
+}

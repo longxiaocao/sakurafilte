@@ -1,0 +1,299 @@
+# SakuraFilter UX 审计报告
+
+**生成时间**: 2026-07-05T06:51:03.069961Z  
+**总检查项**: 78  
+**PASS**: 78 | **FAIL**: 0 | **WARN**: 0
+
+## 1. 功能性 (E2E 回归)
+
+- [✓] **用户旅程 E2E 全部通过** — PASS
+  - 预期: 0 FAIL
+  - 实际: 总计 23: PASS=23 FAIL=0 WARN=0 SKIP=0
+- [✓] **按钮契约 全部通过** — PASS
+  - 预期: 0 FAIL
+  - 实际: 汇总: 总 39 项, PASS=39 FAIL=0 WARN=0 SKIP=0
+
+## 2. 无障碍 (A11y)
+
+- [✓] **首页 跳到主内容链接** — PASS
+  - 预期: a[href='#main-content'] 存在
+  - 实际: 存在=True
+- [✓] **首页 main landmark** — PASS
+  - 预期: <main> 或 [role='main'] 存在
+  - 实际: 存在=True
+  - 方案: App.vue 已用 <main role='main'>
+- [✓] **首页 标题层级** — PASS
+  - 预期: 至少 1 个 h1-h6
+  - 实际: count=1
+- [✓] **首页 跳到主内容可键盘聚焦** — PASS
+  - 预期: 首次 Tab 跳到 skip link
+  - 实际: focused='skip-to-content'
+  - 方案: skip-to-content 元素需无 transform 阻挡 Tab 焦点
+- [✓] **首页 交互元素有可访问名** — PASS
+  - 预期: 所有 button/a 都有文本/aria-label/title/icon
+  - 实际: 无标签=0 
+  - 方案: 加 aria-label 或内嵌图标 (Element Plus 通用做法)
+- [✓] **首页 焦点可见样式** — PASS
+  - 预期: 全局 :focus-visible 样式存在
+  - 实际: 存在=True
+- [✓] **公开搜索 跳到主内容链接** — PASS
+  - 预期: a[href='#main-content'] 存在
+  - 实际: 存在=True
+- [✓] **公开搜索 main landmark** — PASS
+  - 预期: <main> 或 [role='main'] 存在
+  - 实际: 存在=True
+  - 方案: App.vue 已用 <main role='main'>
+- [✓] **公开搜索 标题层级** — PASS
+  - 预期: 至少 1 个 h1-h6
+  - 实际: count=1
+- [✓] **公开搜索 跳到主内容可键盘聚焦** — PASS
+  - 预期: 首次 Tab 跳到 skip link
+  - 实际: focused='skip-to-content'
+  - 方案: skip-to-content 元素需无 transform 阻挡 Tab 焦点
+- [✓] **公开搜索 交互元素有可访问名** — PASS
+  - 预期: 所有 button/a 都有文本/aria-label/title/icon
+  - 实际: 无标签=0 
+  - 方案: 加 aria-label 或内嵌图标 (Element Plus 通用做法)
+- [✓] **公开搜索 焦点可见样式** — PASS
+  - 预期: 全局 :focus-visible 样式存在
+  - 实际: 存在=True
+- [✓] **公开 8 字段搜索 跳到主内容链接** — PASS
+  - 预期: a[href='#main-content'] 存在
+  - 实际: 存在=True
+- [✓] **公开 8 字段搜索 main landmark** — PASS
+  - 预期: <main> 或 [role='main'] 存在
+  - 实际: 存在=True
+  - 方案: App.vue 已用 <main role='main'>
+- [✓] **公开 8 字段搜索 标题层级** — PASS
+  - 预期: 至少 1 个 h1-h6
+  - 实际: count=1
+- [✓] **公开 8 字段搜索 跳到主内容可键盘聚焦** — PASS
+  - 预期: 首次 Tab 跳到 skip link
+  - 实际: focused='skip-to-content'
+  - 方案: skip-to-content 元素需无 transform 阻挡 Tab 焦点
+- [✓] **公开 8 字段搜索 交互元素有可访问名** — PASS
+  - 预期: 所有 button/a 都有文本/aria-label/title/icon
+  - 实际: 无标签=0 
+  - 方案: 加 aria-label 或内嵌图标 (Element Plus 通用做法)
+- [✓] **公开 8 字段搜索 焦点可见样式** — PASS
+  - 预期: 全局 :focus-visible 样式存在
+  - 实际: 存在=True
+- [✓] **公开对比 跳到主内容链接** — PASS
+  - 预期: a[href='#main-content'] 存在
+  - 实际: 存在=True
+- [✓] **公开对比 main landmark** — PASS
+  - 预期: <main> 或 [role='main'] 存在
+  - 实际: 存在=True
+  - 方案: App.vue 已用 <main role='main'>
+- [✓] **公开对比 标题层级** — PASS
+  - 预期: 至少 1 个 h1-h6
+  - 实际: count=1
+- [✓] **公开对比 跳到主内容可键盘聚焦** — PASS
+  - 预期: 首次 Tab 跳到 skip link
+  - 实际: focused='skip-to-content'
+  - 方案: skip-to-content 元素需无 transform 阻挡 Tab 焦点
+- [✓] **公开对比 交互元素有可访问名** — PASS
+  - 预期: 所有 button/a 都有文本/aria-label/title/icon
+  - 实际: 无标签=0 
+  - 方案: 加 aria-label 或内嵌图标 (Element Plus 通用做法)
+- [✓] **公开对比 焦点可见样式** — PASS
+  - 预期: 全局 :focus-visible 样式存在
+  - 实际: 存在=True
+- [✓] **登录页 跳到主内容链接** — PASS
+  - 预期: a[href='#main-content'] 存在
+  - 实际: 存在=True
+- [✓] **登录页 main landmark** — PASS
+  - 预期: <main> 或 [role='main'] 存在
+  - 实际: 存在=True
+  - 方案: App.vue 已用 <main role='main'>
+- [✓] **登录页 标题层级** — PASS
+  - 预期: 至少 1 个 h1-h6
+  - 实际: count=1
+- [✓] **登录页 跳到主内容可键盘聚焦** — PASS
+  - 预期: 首次 Tab 跳到 skip link
+  - 实际: focused='skip-to-content'
+  - 方案: skip-to-content 元素需无 transform 阻挡 Tab 焦点
+- [✓] **登录页 交互元素有可访问名** — PASS
+  - 预期: 所有 button/a 都有文本/aria-label/title/icon
+  - 实际: 无标签=0 
+  - 方案: 加 aria-label 或内嵌图标 (Element Plus 通用做法)
+- [✓] **登录页 焦点可见样式** — PASS
+  - 预期: 全局 :focus-visible 样式存在
+  - 实际: 存在=True
+
+## 3. 性能 (Core Web Vitals)
+
+- [✓] **公开搜索 FCP** — PASS
+  - 预期: < 1800ms (Good)
+  - 实际: fcp=60ms
+- [✓] **公开搜索 LCP** — PASS
+  - 预期: < 2500ms (Good)
+  - 实际: lcp=0ms
+- [✓] **公开搜索 DOMContentLoaded** — PASS
+  - 预期: < 1500ms
+  - 实际: dom=56ms
+- [✓] **公开搜索 总耗时 (networkidle)** — PASS
+  - 预期: < 3.0s
+  - 实际: elapsed=0.56s
+- [✓] **公开 8 字段搜索 FCP** — PASS
+  - 预期: < 1800ms (Good)
+  - 实际: fcp=64ms
+- [✓] **公开 8 字段搜索 LCP** — PASS
+  - 预期: < 2500ms (Good)
+  - 实际: lcp=0ms
+- [✓] **公开 8 字段搜索 DOMContentLoaded** — PASS
+  - 预期: < 1500ms
+  - 实际: dom=56ms
+- [✓] **公开 8 字段搜索 总耗时 (networkidle)** — PASS
+  - 预期: < 3.0s
+  - 实际: elapsed=0.57s
+- [✓] **产品详情 FCP** — PASS
+  - 预期: < 1800ms (Good)
+  - 实际: fcp=60ms
+- [✓] **产品详情 LCP** — PASS
+  - 预期: < 2500ms (Good)
+  - 实际: lcp=0ms
+- [✓] **产品详情 DOMContentLoaded** — PASS
+  - 预期: < 1500ms
+  - 实际: dom=55ms
+- [✓] **产品详情 总耗时 (networkidle)** — PASS
+  - 预期: < 3.0s
+  - 实际: elapsed=0.66s
+- [✓] **公开对比 FCP** — PASS
+  - 预期: < 1800ms (Good)
+  - 实际: fcp=60ms
+- [✓] **公开对比 LCP** — PASS
+  - 预期: < 2500ms (Good)
+  - 实际: lcp=0ms
+- [✓] **公开对比 DOMContentLoaded** — PASS
+  - 预期: < 1500ms
+  - 实际: dom=57ms
+- [✓] **公开对比 总耗时 (networkidle)** — PASS
+  - 预期: < 3.0s
+  - 实际: elapsed=0.58s
+
+## 4. 跨浏览器 (Chromium/Firefox/WebKit)
+
+- [✓] **Chromium (Chrome/Edge) - 公开搜索 关键元素** — PASS
+  - 预期: 可见 input
+  - 实际: visible=True
+  - 方案: 检查 CSS 兼容性 (Safari/Firefox 差异)
+- [✓] **Chromium (Chrome/Edge) - 公开对比 关键元素** — PASS
+  - 预期: 可见 .el-button
+  - 实际: visible=True
+  - 方案: 检查 CSS 兼容性 (Safari/Firefox 差异)
+- [✓] **Chromium (Chrome/Edge) - 登录页 关键元素** — PASS
+  - 预期: 可见 input[autocomplete='username']
+  - 实际: visible=True
+  - 方案: 检查 CSS 兼容性 (Safari/Firefox 差异)
+- [✓] **Firefox - 公开搜索 关键元素** — PASS
+  - 预期: 可见 input
+  - 实际: visible=True
+  - 方案: 检查 CSS 兼容性 (Safari/Firefox 差异)
+- [✓] **Firefox - 公开对比 关键元素** — PASS
+  - 预期: 可见 .el-button
+  - 实际: visible=True
+  - 方案: 检查 CSS 兼容性 (Safari/Firefox 差异)
+- [✓] **Firefox - 登录页 关键元素** — PASS
+  - 预期: 可见 input[autocomplete='username']
+  - 实际: visible=True
+  - 方案: 检查 CSS 兼容性 (Safari/Firefox 差异)
+- [✓] **WebKit (Safari) - 公开搜索 关键元素** — PASS
+  - 预期: 可见 input
+  - 实际: visible=True
+  - 方案: 检查 CSS 兼容性 (Safari/Firefox 差异)
+- [✓] **WebKit (Safari) - 公开对比 关键元素** — PASS
+  - 预期: 可见 .el-button
+  - 实际: visible=True
+  - 方案: 检查 CSS 兼容性 (Safari/Firefox 差异)
+- [✓] **WebKit (Safari) - 登录页 关键元素** — PASS
+  - 预期: 可见 input[autocomplete='username']
+  - 实际: visible=True
+  - 方案: 检查 CSS 兼容性 (Safari/Firefox 差异)
+
+## 5. 跨设备 (响应式)
+
+- [✓] **Desktop 1280x800 - 公开搜索 关键元素** — PASS
+  - 预期: 可见 input
+  - 实际: visible=True
+  - 方案: 检查响应式断点 (sm/md/lg) 是否正确
+- [✓] **Desktop 1280x800 - 公开搜索 body 无水平溢出** — PASS
+  - 预期: scrollWidth - clientWidth <= 5px
+  - 实际: overflow=0px
+  - 方案: 排查宽于视口的元素 (含 fixed width 的图片/表格)
+- [✓] **Desktop 1280x800 - 公开对比 关键元素** — PASS
+  - 预期: 可见 .el-button
+  - 实际: visible=True
+  - 方案: 检查响应式断点 (sm/md/lg) 是否正确
+- [✓] **Desktop 1280x800 - 公开对比 body 无水平溢出** — PASS
+  - 预期: scrollWidth - clientWidth <= 5px
+  - 实际: overflow=0px
+  - 方案: 排查宽于视口的元素 (含 fixed width 的图片/表格)
+- [✓] **Desktop 1280x800 - 登录页 关键元素** — PASS
+  - 预期: 可见 input[autocomplete='username']
+  - 实际: visible=True
+  - 方案: 检查响应式断点 (sm/md/lg) 是否正确
+- [✓] **Desktop 1280x800 - 登录页 body 无水平溢出** — PASS
+  - 预期: scrollWidth - clientWidth <= 5px
+  - 实际: overflow=0px
+  - 方案: 排查宽于视口的元素 (含 fixed width 的图片/表格)
+- [✓] **Tablet 768x1024 - 公开搜索 关键元素** — PASS
+  - 预期: 可见 input
+  - 实际: visible=True
+  - 方案: 检查响应式断点 (sm/md/lg) 是否正确
+- [✓] **Tablet 768x1024 - 公开搜索 body 无水平溢出** — PASS
+  - 预期: scrollWidth - clientWidth <= 5px
+  - 实际: overflow=0px
+  - 方案: 排查宽于视口的元素 (含 fixed width 的图片/表格)
+- [✓] **Tablet 768x1024 - 公开对比 关键元素** — PASS
+  - 预期: 可见 .el-button
+  - 实际: visible=True
+  - 方案: 检查响应式断点 (sm/md/lg) 是否正确
+- [✓] **Tablet 768x1024 - 公开对比 body 无水平溢出** — PASS
+  - 预期: scrollWidth - clientWidth <= 5px
+  - 实际: overflow=0px
+  - 方案: 排查宽于视口的元素 (含 fixed width 的图片/表格)
+- [✓] **Tablet 768x1024 - 登录页 关键元素** — PASS
+  - 预期: 可见 input[autocomplete='username']
+  - 实际: visible=True
+  - 方案: 检查响应式断点 (sm/md/lg) 是否正确
+- [✓] **Tablet 768x1024 - 登录页 body 无水平溢出** — PASS
+  - 预期: scrollWidth - clientWidth <= 5px
+  - 实际: overflow=0px
+  - 方案: 排查宽于视口的元素 (含 fixed width 的图片/表格)
+- [✓] **Mobile 375x667 - 公开搜索 关键元素** — PASS
+  - 预期: 可见 input
+  - 实际: visible=True
+  - 方案: 检查响应式断点 (sm/md/lg) 是否正确
+- [✓] **Mobile 375x667 - 公开搜索 body 无水平溢出** — PASS
+  - 预期: scrollWidth - clientWidth <= 5px
+  - 实际: overflow=0px
+  - 方案: 排查宽于视口的元素 (含 fixed width 的图片/表格)
+- [✓] **Mobile 375x667 - 公开搜索 按钮可点尺寸** — PASS
+  - 预期: >= 32x24 px (WCAG 2.5.5 Target Size AAA)
+  - 实际: size=253x38px
+  - 方案: 加 min-width/min-height 保障移动端可点
+- [✓] **Mobile 375x667 - 公开对比 关键元素** — PASS
+  - 预期: 可见 .el-button
+  - 实际: visible=True
+  - 方案: 检查响应式断点 (sm/md/lg) 是否正确
+- [✓] **Mobile 375x667 - 公开对比 body 无水平溢出** — PASS
+  - 预期: scrollWidth - clientWidth <= 5px
+  - 实际: overflow=0px
+  - 方案: 排查宽于视口的元素 (含 fixed width 的图片/表格)
+- [✓] **Mobile 375x667 - 公开对比 按钮可点尺寸** — PASS
+  - 预期: >= 32x24 px (WCAG 2.5.5 Target Size AAA)
+  - 实际: size=48x24px
+  - 方案: 加 min-width/min-height 保障移动端可点
+- [✓] **Mobile 375x667 - 登录页 关键元素** — PASS
+  - 预期: 可见 input[autocomplete='username']
+  - 实际: visible=True
+  - 方案: 检查响应式断点 (sm/md/lg) 是否正确
+- [✓] **Mobile 375x667 - 登录页 body 无水平溢出** — PASS
+  - 预期: scrollWidth - clientWidth <= 5px
+  - 实际: overflow=0px
+  - 方案: 排查宽于视口的元素 (含 fixed width 的图片/表格)
+- [✓] **Mobile 375x667 - 登录页 按钮可点尺寸** — PASS
+  - 预期: >= 32x24 px (WCAG 2.5.5 Target Size AAA)
+  - 实际: size=193x38px
+  - 方案: 加 min-width/min-height 保障移动端可点

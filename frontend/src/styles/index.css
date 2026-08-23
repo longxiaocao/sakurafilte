@@ -1,0 +1,415 @@
+/* Day 9: 全局样式 — Musk 风格极简 */
+/*   - 无阴影, 1px hairline 边框, 8px 网格, Inter 字体 */
+/* Day 10+ P5.3: 主题切换 (light/dark) — CSS 变量驱动 */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-border: #e5e7eb;
+  --color-text: #111827;
+  --color-text-muted: #6b7280;
+  --color-accent: #2563eb;
+  --color-bg: #ffffff;
+  --color-bg-hover: #f9fafb;
+  --color-bg-elevated: #ffffff;
+  --color-bg-table-stripe: #fafafa;
+  --color-bg-diff: #fffbe6;
+  --color-bg-same: #f5f5f5;
+  --color-shadow: transparent;
+  /* 层级变量 (light 与 dark 同值或浅色值, 与 html.dark 块对齐) */
+  --color-bg-overlay: #ffffff;
+  --color-bg-input: #ffffff;
+  --color-border-strong: #9ca3af;
+  --color-border-subtle: #f3f4f6;
+}
+
+/* P5.3 dark 主题: <html class="dark"> 时覆盖 CSS 变量 */
+/* P2.7: Vercel 风格细腻梯度 — 三层背景 (bg / bg-elevated / bg-hover) 层次分明 */
+html.dark {
+  --color-border: #2a2d35;
+  --color-text: #f5f5f7;
+  --color-text-muted: #8b8d94;
+  --color-accent: #60a5fa;
+  /* P2.7: bg 最深 (#0a0a0c) - 主背景, 突出内容区 */
+  --color-bg: #0a0a0c;
+  /* P2.7: bg-hover 中间 (#18181b) - hover/分页/次要区域 */
+  --color-bg-hover: #18181b;
+  /* P2.7: bg-elevated 中间偏亮 (#131318) - 卡片/弹窗/表格 */
+  --color-bg-elevated: #131318;
+  /* P2.7: 表格条纹背景, 比 elevated 略亮一档 */
+  --color-bg-table-stripe: #16161a;
+  /* P2.7: 对比高亮 (diff 新增行) - 暖色调 */
+  --color-bg-diff: #3d3520;
+  /* P2.7: 对比相同行 - 略亮于 bg */
+  --color-bg-same: #1a1a1f;
+  --color-shadow: transparent;
+  /* P2.7: 新增层级变量 (用于下拉菜单/Tooltip/Modal 等更高层级) */
+  --color-bg-overlay: #1c1c22;
+  --color-bg-input: #0f0f12;
+  --color-border-strong: #3a3d45;
+  --color-border-subtle: #1f1f24;
+}
+
+html, body, #app {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-size: 14px;
+  line-height: 1.5;
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+/* 1px hairline 边框工具类 */
+@layer utilities {
+  .hairline {
+    border: 1px solid var(--color-border);
+  }
+  .hairline-t {
+    border-top: 1px solid var(--color-border);
+  }
+  .hairline-b {
+    border-bottom: 1px solid var(--color-border);
+  }
+  .hairline-r {
+    border-right: 1px solid var(--color-border);
+  }
+  .hairline-l {
+    border-left: 1px solid var(--color-border);
+  }
+  .text-muted {
+    color: var(--color-text-muted);
+  }
+  .bg-hover:hover {
+    background: var(--color-bg-hover);
+  }
+
+  /* P1.1 微交互动效工具类 (Vercel/Linear 风格) */
+  /* 用法: 在按钮/卡片/链接上加 .micro-hover 类, 自动获得 hover 反馈 */
+  .micro-hover {
+    transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .micro-hover:hover {
+    background: var(--color-bg-hover);
+    border-color: var(--color-accent);
+  }
+
+  /* 卡片悬浮效果 (轻微抬起, 不破坏 Musk 无阴影原则) */
+  .micro-card {
+    transition: border-color 0.15s ease, transform 0.15s ease;
+  }
+  .micro-card:hover {
+    border-color: var(--color-accent);
+    transform: translateY(-1px);
+  }
+
+  /* 按钮点击反馈 (轻微缩小) */
+  .micro-press {
+    transition: transform 0.1s ease;
+  }
+  .micro-press:active {
+    transform: scale(0.97);
+  }
+
+  /* 链接 hover 颜色过渡 */
+  .micro-link {
+    transition: color 0.15s ease;
+  }
+  .micro-link:hover {
+    color: var(--color-accent);
+  }
+
+  /* 列表项 hover 高亮 (左侧 1px 强调线) */
+  .micro-row {
+    transition: background 0.15s ease, border-color 0.15s ease;
+    border-left: 2px solid transparent;
+  }
+  .micro-row:hover {
+    background: var(--color-bg-hover);
+    border-left-color: var(--color-accent);
+  }
+
+  /* 数字字段过渡 (容差切换时数字变化柔和) */
+  .micro-num {
+    transition: color 0.2s ease;
+  }
+
+  /* 骨架屏块 (Day 14+: 比 spinner 更友好, 跟随主题) */
+  .skel-block {
+    background: var(--color-bg-hover);
+    animation: skel-pulse 1.6s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+  @keyframes skel-pulse {
+    0%, 100% { opacity: 0.6; }
+    50%      { opacity: 1; }
+  }
+  /* 屏幕阅读器专用 (视觉隐藏但 SR 可读) */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+  /* 尊重 prefers-reduced-motion: 关闭骨架屏动画 */
+  @media (prefers-reduced-motion: reduce) {
+    .skel-block {
+      animation: none;
+      opacity: 0.8;
+    }
+  }
+}
+
+/* P1.1 全局过渡: 让所有交互元素默认有过渡 (避免硬切换) */
+button,
+a,
+input,
+select,
+textarea,
+.el-button,
+.el-input__wrapper,
+.el-select .el-input__wrapper {
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 焦点可见性: 键盘导航时显示明确焦点环 (A11y) */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* Element Plus 按钮点击反馈增强 */
+.el-button:active {
+  transform: scale(0.98);
+}
+
+/* el-table 行 hover 效果 (Vercel 风格: 左侧强调线) */
+.el-table__row {
+  transition: background 0.15s ease;
+}
+
+/* prefers-reduced-motion: 尊重用户偏好, 关闭所有动画 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Element Plus 覆盖 — 去除圆角和阴影, 跟 Musk 风格一致 */
+.el-button,
+.el-input__wrapper,
+.el-card,
+.el-dialog,
+.el-message,
+.el-message-box,
+.el-drawer,
+.el-popper,
+.el-tag,
+.el-table,
+.el-table__inner-wrapper {
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+/* 🔧 fix: 补回 light 模式下 input 的 1px 边框 (EP 用 inset box-shadow 模拟边框, 上面的 box-shadow:none 会清除它)
+ *   WHY 不用 border: 1px solid: EP 的 .el-input__wrapper 已用 box-shadow: 0 0 0 1px var inset 作为边框
+ *   去掉 box-shadow 后 input 在 light 模式几乎无边框视觉, 用户反馈 "不知道从哪输入" */
+.el-input__wrapper {
+  box-shadow: 0 0 0 1px var(--color-border) inset !important;
+}
+.el-input__wrapper.is-focus {
+  box-shadow: 0 0 0 1px var(--color-accent) inset !important;
+}
+.el-input__wrapper:hover {
+  box-shadow: 0 0 0 1px var(--color-text-muted) inset !important;
+}
+
+.el-button--primary {
+  --el-button-bg-color: var(--color-accent);
+  --el-button-border-color: var(--color-accent);
+}
+
+.el-button--default {
+  --el-border-color: var(--color-border);
+  --el-color-border: var(--color-border);
+}
+
+/* P5.3 dark 模式: Element Plus 颜色变量覆盖 */
+html.dark {
+  --el-bg-color: var(--color-bg);
+  --el-bg-color-page: var(--color-bg);
+  --el-bg-color-overlay: var(--color-bg-elevated);
+  --el-text-color-primary: var(--color-text);
+  --el-text-color-regular: var(--color-text);
+  --el-text-color-secondary: var(--color-text-muted);
+  --el-text-color-placeholder: var(--color-text-muted);
+  --el-border-color: var(--color-border);
+  --el-border-color-light: var(--color-border);
+  --el-border-color-lighter: var(--color-border);
+  --el-fill-color: var(--color-bg-hover);
+  --el-fill-color-light: var(--color-bg-hover);
+  --el-fill-color-blank: var(--color-bg-elevated);
+  --el-color-primary: var(--color-accent);
+  --el-color-primary-light-3: var(--color-accent);
+  --el-color-primary-light-5: var(--color-accent);
+  --el-color-primary-light-7: var(--color-accent);
+  --el-color-primary-light-9: var(--color-bg-hover);
+  /* UX P0-2: dark 模式补全覆盖 - 之前只覆盖了 text/border/bg, 表格/分页/弹窗/消息仍用 EP 默认浅色 */
+  --el-table-bg-color: var(--color-bg-elevated);
+  --el-table-tr-bg-color: var(--color-bg-elevated);
+  --el-table-body-text-color: var(--color-text);
+  --el-table-header-text-color: var(--color-text);
+  --el-table-row-hover-bg-color: var(--color-bg-hover);
+  --el-pagination-bg-color: var(--color-bg-elevated);
+  --el-pagination-button-bg-color: var(--color-bg-elevated);
+  --el-pagination-button-color: var(--color-text);
+  --el-pagination-button-disabled-bg-color: var(--color-bg-hover);
+  --el-pagination-hover-color: var(--color-accent);
+  --el-dropdown-menu-bg-color: var(--color-bg-elevated);
+  --el-dropdown-menuItem-hover-fill: var(--color-bg-hover);
+  --el-dropdown-menuItem-hover-color: var(--color-accent);
+  --el-dropdown-menuItem-color: var(--color-text);
+  --el-message-bg-color: var(--color-bg-elevated);
+  --el-message-border-color: var(--color-border);
+  --el-message-text-color: var(--color-text);
+  --el-popover-bg-color: var(--color-bg-elevated);
+  --el-popover-border-color: var(--color-border);
+  --el-popover-title-text-color: var(--color-text);
+  --el-popover-text-color: var(--color-text);
+  --el-tooltip-bg-color: var(--color-bg-overlay);
+  --el-tooltip-text-color: var(--color-text);
+  --el-tag-bg-color: var(--color-bg-hover);
+  --el-tag-text-color: var(--color-text);
+  --el-tag-border-color: var(--color-border);
+  --el-switch-off-color: var(--color-border);
+  --el-switch-on-color: var(--color-accent);
+  /* P5.3: v-loading 遮罩深色化 (EP 默认半透明白, dark 下整页发白) */
+  --el-mask-color: rgba(0, 0, 0, 0.7);
+  /* tag/alert 各 type 的浅色背景 (EP 用 --el-color-*-light-9), dark 下覆盖为深色底 */
+  --el-color-danger-light-9: var(--color-bg-hover);
+  --el-color-success-light-9: var(--color-bg-hover);
+  --el-color-warning-light-9: var(--color-bg-hover);
+  --el-color-info-light-9: var(--color-bg-hover);
+  --el-color-error-light-9: var(--color-bg-hover);
+}
+
+html.dark .el-card,
+html.dark .el-dialog,
+html.dark .el-drawer,
+html.dark .el-popper,
+html.dark .el-message,
+html.dark .el-message-box,
+html.dark .el-table,
+html.dark .el-table__inner-wrapper,
+html.dark .el-input__wrapper,
+html.dark .el-button {
+  background-color: var(--color-bg-elevated) !important;
+  color: var(--color-text) !important;
+  border-color: var(--color-border) !important;
+}
+
+html.dark .el-input__wrapper.is-focus {
+  box-shadow: 0 0 0 1px var(--color-accent) inset !important;
+}
+
+html.dark .el-table tr,
+html.dark .el-table th.el-table__cell {
+  background-color: var(--color-bg-elevated) !important;
+  color: var(--color-text) !important;
+  border-color: var(--color-border) !important;
+}
+
+html.dark .el-table--striped .el-table__body tr.el-table__row--striped td {
+  background-color: var(--color-bg-table-stripe) !important;
+}
+
+/* 表格紧凑 (高密度) */
+.el-table {
+  font-size: 13px;
+  --el-table-border-color: var(--color-border);
+  --el-table-header-bg-color: var(--color-bg-table-stripe);
+  --el-table-row-hover-bg-color: var(--color-bg-hover);
+}
+
+/* P1-5 修复: 移动端表格水平滚动 - 13+ 列总宽 800+px, 强制 min-width 让 el-table 触发内部水平滚动 */
+@media (max-width: 640px) {
+  .el-table {
+    min-width: 800px;
+  }
+  .el-table .el-table__body-wrapper {
+    overflow-x: auto !important;
+  }
+}
+
+.el-table th.el-table__cell {
+  font-weight: 500;
+  color: var(--color-text);
+}
+
+/* ===== A11y axe-core 修复 (Day 14+ 改进) =====
+   - el-table 可滚动区域加 tabindex, 键盘可达 (scrollable-region-focusable)
+   - el-tag 危险/信息样式加深文字对比 (color-contrast)
+   - 锚点链接加深蓝色, 满足 WCAG AA 4.5:1
+   - el-radio-button 激活态文字加深 (color-contrast) */
+.el-table__body-wrapper {
+  outline: none;
+}
+.el-table__body-wrapper:focus-within {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+.el-tag--danger .el-tag__content {
+  color: #b91c1c !important;
+  font-weight: 500;
+}
+.el-tag--info .el-tag__content {
+  color: #1e40af !important;
+}
+.el-tag--warning .el-tag__content {
+  color: #92400e !important;
+}
+html.dark .el-tag--danger .el-tag__content { color: #fca5a5 !important; }
+html.dark .el-tag--info .el-tag__content { color: #93c5fd !important; }
+html.dark .el-tag--warning .el-tag__content { color: #fcd34d !important; }
+
+.el-switch__inner-wrapper > span {
+  color: var(--color-text);
+  font-weight: 500;
+}
+
+/* el-radio-button 激活态深色背景, 默认白字对比度不足, 改用 #fff + 加粗 */
+.el-radio-button.is-active > .el-radio-button__inner {
+  color: #fff !important;
+  font-weight: 500;
+  background-color: var(--color-accent) !important;
+  border-color: var(--color-accent) !important;
+}
+html.dark .el-radio-button.is-active > .el-radio-button__inner {
+  color: #0a0a0c !important;
+}
+
+a.el-anchor__link {
+  color: var(--color-accent);
+  text-decoration: none;
+}
+a.el-anchor__link:hover { text-decoration: underline; }
+html.dark a.el-anchor__link { color: #93c5fd; }
+
+
+
+/* Element Plus 中文 locale 提示 */
+.el-message {
+  min-width: 280px;
+}

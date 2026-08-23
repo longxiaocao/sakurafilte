@@ -1,0 +1,314 @@
+// Day 9: 路由
+//   /search                  — 前台产品搜索
+//   /products/:pn1/:pn2/:brand/:oem3 — V2 SEO URL (主要走后端 Razor SSR, SPA 路由仅作预览兜底)
+//   /admin/products          — 后台产品管理列表
+//   /admin/products/new      — 后台新增产品
+//   /admin/products/:id/edit — 后台编辑产品
+//   /admin/etl               — 后台 ETL 触发 + 进度
+//
+// V2 Task 4.4: 移除 /product/:oem 路由 (交由后端 Razor SSR 处理 + /product/{oem} 301 重定向)
+//   浏览器访问 /product/{oem} 时, 后端 PublicProductController.LegacyRedirect 301 到新 SEO URL
+import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
+import i18n from '@/i18n'
+import { useAdminAuthStore } from '@/composables/useAdminAuth'
+import { ElMessage } from 'element-plus'
+
+const routes: RouteRecordRaw[] = [
+  {
+    path: '/',
+    redirect: '/search'
+  },
+  {
+    path: '/search',
+    // 公开入口统一走 MR.1 聚合后的 OEM3 列表，保留既有链接携带的查询参数。
+    // 旧 SearchView 仅保留为内部历史实现，不再作为游客可访问的产品目录。
+    redirect: (to) => ({ path: '/search/aggregate', query: to.query })
+  },
+  {
+    path: '/about',
+    name: 'About',
+    component: () => import('@/views/public/PublicInfoView.vue'),
+    props: { page: 'about' },
+    meta: { title: 'About us' }
+  },
+  {
+    path: '/news',
+    name: 'News',
+    component: () => import('@/views/public/PublicInfoView.vue'),
+    props: { page: 'news' },
+    meta: { title: 'News' }
+  },
+  {
+    path: '/contact',
+    name: 'Contact',
+    component: () => import('@/views/public/PublicInfoView.vue'),
+    props: { page: 'contact' },
+    meta: { title: 'Contact us' }
+  },
+  // ===== P3.4 (Task 11.5): 公开搜索页 8 字段多框 (公开, 无需 token) =====
+  {
+    path: '/public/search',
+    name: 'PublicSearch',
+    component: () => import('@/views/public/PublicSearchView.vue'),
+    meta: { title: '产品搜索 (8 字段)' }
+  },
+  // ===== V2 Task 1.3.7: 聚合搜索页 (需求 5, 文档级返回 + 高亮) =====
+  //   URL: /search/aggregate?q=CAT 320D&page=1
+  //   公开路由 (无 requireAuth, 游客可访问)
+  //   与 /public/search 区别: 聚合搜索走 Meilisearch (typo 容错 + 高亮), 8 字段走 PG ILIKE
+  {
+    path: '/search/aggregate',
+    name: 'AggregateSearch',
+    component: () => import('@/views/public/AggregateSearchView.vue'),
+    meta: { title: '聚合搜索' }
+  },
+  // ===== V2 Task 2.2.5: OEM 3 排序管理页 (后台, 需登录) =====
+  //   URL: /admin/xrefs/reorder
+  //   左侧 Brand 列表 + 右侧 vuedraggable 拖拽 OEM 3 排序
+  {
+    path: '/admin/xrefs/reorder',
+    name: 'AdminXrefReorder',
+    component: () => import('@/views/admin/AdminXrefReorderView.vue'),
+    meta: { title: 'OEM 排序管理', requireAuth: true }
+  },
+  // ===== V2 Task 4.4: /products/:pn1/:pn2/:brand/:oem3 (SEO URL, SPA 预览兜底) =====
+  //   主要走后端 Razor SSR (/products/... 由 Pages/Products/Detail.cshtml 渲染)
+  //   此 SPA 路由仅作开发预览/SSR 不可用时的兜底, 不影响 SEO (搜索引擎抓到的是后端 HTML)
+  //   旧 /product/:oem 路由已移除, 改由后端 PublicProductController.LegacyRedirect 301 处理
+  {
+    path: '/products/:pn1/:pn2/:brand/:oem3',
+    name: 'ProductDetail',
+    component: () => import('@/views/public/PublicProductView.vue'),
+    meta: { title: '产品详情' }
+  },
+  // 🔧 fix(审查): /seo/:oem 详情路由 (buildProductUrl 统一跳转目标) —
+  //   缺失导致 OEM 查询/搜索结果点击全部 404 (用户实测 "不管访问什么页面点击后都是 404")
+  //   PublicProductView 已兼容 route.params.oem (slug computed: oem3 ?? oem)
+  {
+    path: '/seo/:oem',
+    name: 'SeoProductDetail',
+    component: () => import('@/views/public/PublicProductView.vue'),
+    meta: { title: '产品详情' }
+  },
+  // ===== 需求 4: 后台登录页 (替换 TOKEN 直接输入弹窗) =====
+  //   - 公开路由 (requireAuth 不设置, 默认 falsy)
+  //   - 登录页内本地映射验证, 成功后写入 useAdminAuthStore.token
+  //   - 支持 redirect 查询参数回跳
+  {
+    path: '/login',
+    name: 'Login',
+    component: () => import('@/views/LoginView.vue'),
+    meta: { title: '后台登录' }
+  },
+  {
+    path: '/admin',
+    redirect: '/admin/products'
+  },
+  {
+    path: '/admin/products',
+    name: 'AdminProducts',
+    component: () => import('@/views/admin/AdminProductsView.vue'),
+    meta: { title: '后台产品管理', requireAuth: true }
+  },
+  {
+    path: '/admin/products/new',
+    name: 'AdminProductNew',
+    component: () => import('@/views/admin/AdminProductFormView.vue'),
+    meta: { title: '新增产品', requireAuth: true }
+  },
+  {
+    path: '/admin/products/:id/edit',
+    name: 'AdminProductEdit',
+    component: () => import('@/views/admin/AdminProductFormView.vue'),
+    meta: { title: '编辑产品', requireAuth: true }
+  },
+  {
+    path: '/admin/etl',
+    name: 'AdminEtl',
+    // 🔧 fix(审查): 旧路由保留, 重定向到运维合并页 (ETL/性能/错误/API 文档)
+    redirect: '/admin/ops?tab=etl'
+  },
+  // ===== P2-1 告警系统: 历史与配置页 (admin 角色) =====
+  {
+    path: '/admin/alerts',
+    name: 'AdminAlerts',
+    component: () => import('@/views/admin/AdminAlertsView.vue'),
+    meta: { title: '告警中心', requireAuth: true }
+  },
+  // ===== JWT 改造: 用户管理页 (仅 admin 角色) =====
+  //   - requireRole='admin' 由路由守卫强制检查
+  //   - UI 在 AppHeader 中仅 admin 角色显示入口
+  {
+    path: '/admin/users',
+    name: 'AdminUsers',
+    component: () => import('@/views/admin/AdminUsersView.vue'),
+    meta: { title: '用户管理', requireAuth: true, requireRole: 'admin' }
+  },
+  // ===== JWT 改造: 修改密码页 (登录用户均可访问) =====
+  {
+    path: '/change-password',
+    name: 'ChangePassword',
+    component: () => import('@/views/ChangePasswordView.vue'),
+    meta: { title: '修改密码', requireAuth: true }
+  },
+  {
+    path: '/admin/dict/oem-brands',
+    name: 'AdminOemBrands',
+    component: () => import('@/views/admin/AdminOemBrandsView.vue'),
+    meta: { title: 'OEM 品牌字典', requireAuth: true }
+  },
+  // ===== Day 10+ P2.2: 7 个新字典管理页 =====
+  {
+    path: '/admin/dict/product-name1s',
+    name: 'AdminProductName1s',
+    component: () => import('@/views/admin/AdminProductName1sView.vue'),
+    meta: { title: '产品名 1 字典', requireAuth: true }
+  },
+  {
+    path: '/admin/dict/product-name2s',
+    name: 'AdminProductName2s',
+    component: () => import('@/views/admin/AdminProductName2sView.vue'),
+    meta: { title: '产品名 2 字典', requireAuth: true }
+  },
+  {
+    path: '/admin/dict/types',
+    name: 'AdminTypes',
+    component: () => import('@/views/admin/AdminTypesView.vue'),
+    meta: { title: '类型字典 (Type)', requireAuth: true }
+  },
+  {
+    path: '/admin/dict/oem-no3s',
+    name: 'AdminOemNo3s',
+    component: () => import('@/views/admin/AdminOemNo3sView.vue'),
+    meta: { title: 'OEM 3 字典', requireAuth: true }
+  },
+  {
+    path: '/admin/dict/medias',
+    name: 'AdminMedias',
+    component: () => import('@/views/admin/AdminMediasView.vue'),
+    meta: { title: '介质字典 (Media)', requireAuth: true }
+  },
+  {
+    path: '/admin/dict/machines',
+    name: 'AdminMachines',
+    component: () => import('@/views/admin/AdminMachinesView.vue'),
+    meta: { title: '机型字典 (Machine)', requireAuth: true }
+  },
+  {
+    path: '/admin/dict/engines',
+    name: 'AdminEngines',
+    component: () => import('@/views/admin/AdminEnginesView.vue'),
+    meta: { title: '发动机字典 (Engine)', requireAuth: true }
+  },
+  // ===== P3.5 (Task 12): 产品对比 UI 完整版 =====
+  //   URL: /admin/compare?ids=1,2,3,4,5,6
+  //   最多 6 个产品, 列可调序 (持久化到 localStorage), 打印友好
+  {
+    path: '/admin/compare',
+    name: 'AdminCompare',
+    component: () => import('@/views/admin/AdminCompareView.vue'),
+    meta: { title: '产品对比', requireAuth: true }
+  },
+  // ===== P5.4 (Task 15.4): 后台帮助/文档页 =====
+  //   5 模块: 快速开始 / 字典规范 / 批量导入 / 搜索容差 / FAQ
+  //   字段说明文案从 data/field-help.ts 复用
+  {
+    path: '/admin/help',
+    name: 'AdminHelp',
+    component: () => import('@/views/admin/AdminHelpView.vue'),
+    meta: { title: '后台帮助', requireAuth: true }
+  },
+  // ===== P5.5+: 后端性能监控面板 =====
+  //   P50/P95/P99/ErrorRate + 健康探针 + Token 轮转状态
+  //   调 /api/perf (v30-19 改需 token) + /api/admin/auth/status (需 token) + /health/* (公开)
+  {
+    path: '/admin/perf',
+    name: 'AdminPerf',
+    component: () => import('@/views/admin/AdminPerfView.vue'),
+    meta: { title: '性能监控', requireAuth: true }
+  },
+  // ===== 运维合并页 (ETL / 性能 / 错误 / API 文档) =====
+  //   🔧 fix(审查): 用户反馈 4 个独立菜单意义不大 — 合并为单页 el-tabs, 旧路由重定向保留
+  {
+    path: '/admin/ops',
+    name: 'AdminOps',
+    component: () => import('@/views/admin/AdminOpsView.vue'),
+    meta: { title: '运维', requireAuth: true }
+  },
+  // ===== 批次 6c: 前端错误日志管理 =====
+  //   展示 errorMonitor 捕获的本地事件, 支持搜索/筛选/导出/清空
+  //   触发测试错误验证监控链路
+  {
+    path: '/admin/errors',
+    name: 'AdminErrors',
+    component: () => import('@/views/admin/AdminErrorView.vue'),
+    meta: { title: '错误日志', requireAuth: true }
+  },
+  // ===== 批次 6d: API 文档浏览器 (OpenAPI 3.0) =====
+  //   实时拉取 /swagger/v1/swagger.json, 按模块分组展示
+  //   失败回退到 openapi.json 离线副本
+  {
+    path: '/admin/api-docs',
+    name: 'AdminApiDocs',
+    component: () => import('@/views/admin/AdminApiDocsView.vue'),
+    meta: { title: 'API 文档', requireAuth: true }
+  },
+  // ===== 站点内容维护 (About/News/Contact/站点名/logo) =====
+  //   🔧 fix(审查): 用户反馈前台 About/News/Contact 无内容且后台无维护入口
+  {
+    path: '/admin/site-content',
+    name: 'AdminSiteContent',
+    component: () => import('@/views/admin/AdminSiteContentView.vue'),
+    meta: { title: '站点内容', requireAuth: true }
+  },
+  // ===== 需求 6: 前端优化 Demo 演示页 =====
+  //   - 整合展示需求 1-5 的所有优化点
+  //   - 提供产品详情页 3 种布局方案对比 (A/B/C)
+  //   - 公开路由 (无需 token), 用于演示和决策参考
+  {
+    path: '/demo',
+    name: 'Demo',
+    component: () => import('@/views/DemoView.vue'),
+    meta: { title: '前端优化 Demo' }
+  },
+  // ===== 404 catch-all 兜底路由 =====
+  //   - 必须放在最后, 匹配所有未命中的路径
+  //   - 提供返回搜索/上一页的引导按钮, 避免白屏
+  {
+    path: '/:pathMatch(.*)*',
+    name: 'NotFound',
+    component: () => import('@/views/NotFoundView.vue'),
+    meta: { title: '页面不存在' }
+  }
+]
+
+const router = createRouter({
+  history: createWebHistory(),
+  routes
+})
+
+// 鉴权守卫 (JWT 改造版)
+//   - 未登录访问 requireAuth 路由: 跳 /login?redirect=xxx
+//   - token 已过期但 refreshToken 仍在: 允许进入, 由 axios 拦截器在首个 401 时自动 refresh
+//     (避免在守卫里同步触发 refresh, 复杂度高且阻塞导航)
+//   - requireRole='admin' 但当前用户非 admin: 跳 /admin/products + warning
+router.beforeEach((to, _from, next) => {
+  if (to.meta.requireAuth) {
+    const auth = useAdminAuthStore()
+    // token 完全缺失 → 未登录
+    if (!auth.token) {
+      ElMessage.warning(i18n.global.t('common.feedback.info_042'))
+      next({ path: '/login', query: { redirect: to.fullPath } })
+      return
+    }
+    // 角色检查 (仅当 store 已加载 user 时生效; 旧 dev token 无 user 时跳过, 由后端 403 兜底)
+    if (to.meta.requireRole === 'admin' && auth.user && !auth.isAdmin()) {
+      ElMessage.warning(i18n.global.t('common.feedback.info_005'))
+      next({ path: '/admin/products' })
+      return
+    }
+  }
+  next()
+})
+
+export default router

@@ -1,0 +1,40 @@
+{
+  "summary": {
+    "ts": "2026-07-05T18:33:51.023425",
+    "total": 5,
+    "ok": 5,
+    "fail": 0,
+    "console_issues": 0,
+    "exit_code": 0
+  },
+  "results": [
+    {
+      "name": "empty_search",
+      "ok": true,
+      "has_empty_state": false
+    },
+    {
+      "name": "long_oem_200",
+      "ok": true,
+      "has_error_overlay": false
+    },
+    {
+      "name": "special_chars",
+      "ok": true,
+      "xss_attempt_blocked": true,
+      "no_error": true
+    },
+    {
+      "name": "offline",
+      "ok": true,
+      "has_offline_msg": false,
+      "not_white_screen": true
+    },
+    {
+      "name": "not_found_404",
+      "ok": true,
+      "has_404_ui": true
+    }
+  ],
+  "console_issues": []
+}

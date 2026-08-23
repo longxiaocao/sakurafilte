@@ -1,0 +1,331 @@
+using System.Security.Claims;
+using FluentValidation;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
+using SakuraFilter.Api.Services;
+using SakuraFilter.Api.Services.Validators;
+
+namespace SakuraFilter.Api.Controllers;
+
+/// <summary>
+/// 认证控制器 (JWT 登录/刷新/登出/当前用户/修改密码)
+/// 路由前缀: /api/auth
+/// 设计:
+///   - login/refresh: [AllowAnonymous] (登录前无 token)
+///   - logout/me/change-password: [Authorize] (需登录)
+///   - 登录失败统一返回 401 (不区分"用户不存在"和"密码错", 防止枚举用户)
+///   - refresh 端点: 旧 token 撤销 + 签发新 token (一次性使用, 防重放)
+/// </summary>
+[ApiController]
+[Route("api/auth")]
+public class AuthController : ControllerBase
+{
+    private readonly UserService _userService;
+    private readonly JwtTokenService _jwt;
+    private readonly ILogger<AuthController> _logger;
+    private readonly IValidator<LoginRequest> _loginValidator;
+    private readonly IValidator<ChangePasswordRequest> _changePasswordValidator;
+    private readonly IConfiguration _config;
+    private readonly IHttpClientFactory _httpClientFactory;
+
+    public AuthController(
+        UserService userService,
+        JwtTokenService jwt,
+        ILogger<AuthController> logger,
+        IValidator<LoginRequest> loginValidator,
+        IValidator<ChangePasswordRequest> changePasswordValidator,
+        IConfiguration config,
+        IHttpClientFactory httpClientFactory)
+    {
+        _userService = userService;
+        _jwt = jwt;
+        _logger = logger;
+        _loginValidator = loginValidator;
+        _changePasswordValidator = changePasswordValidator;
+        _config = config;
+        _httpClientFactory = httpClientFactory;
+    }
+
+    /// <summary>
+    /// 登录
+    /// 入参: { Username, Password }
+    /// 出参: { accessToken, refreshToken, expiresIn, user: { id, username, role } }
+    /// 失败返回 401 (统一错误信息, 不暴露具体原因)
+    /// </summary>
+    /// <remarks>
+    /// 示例请求:
+    ///
+    ///     POST /api/auth/login
+    ///     {
+    ///       "username": "&lt;your_username&gt;",
+    ///       "password": "&lt;your_password&gt;"
+    ///     }
+    ///
+    /// 成功响应 (200):
+    ///
+    ///     {
+    ///       "accessToken": "eyJhbGciOiJIUzI1NiIs...",
+    ///       "refreshToken": "3F0fPsvbU4c05XvxVBU1...",
+    ///       "expiresIn": 1800,
+    ///       "user": { "id": 1, "username": "admin", "role": "admin" }
+    ///     }
+    ///
+    /// 失败响应:
+    /// - 401: 用户名或密码错误 (统一错误码 ERR_AUTH_FAILED)
+    /// - 423: 账户已锁定 (ERR_USER_LOCKED, 5 次失败后锁 15 分钟)
+    /// - 429: 请求过于频繁 (限流 5 次/分钟/IP)
+    /// </remarks>
+    [HttpPost("login")]
+    [AllowAnonymous]
+    [EnableRateLimiting("auth")]  // 安全加固阶段4: 登录防暴力破解 (5 次/分钟/IP)
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status423Locked)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
+    public async Task<IActionResult> Login([FromBody] LoginRequest req, CancellationToken ct)
+    {
+        // 安全加固阶段4: FluentValidation 输入校验 (在业务逻辑前执行)
+        var validation = await _loginValidator.ValidateAsync(req, ct);
+        if (!validation.IsValid)
+        {
+            return BadRequest(new
+            {
+                error = "输入参数校验失败",
+                details = validation.Errors.Select(e => new { field = e.PropertyName, message = e.ErrorMessage })
+            });
+        }
+
+        var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+        var ua = Request.Headers.UserAgent.ToString();
+        // 截断 User-Agent 防止超长 (列定义 255)
+        if (ua.Length > 255) ua = ua[..255];
+
+        // 🔧 fix(审查): Cloudflare Turnstile 人机验证 (Turnstile:SecretKey 配置后强制; 未配置=跳过, 开发/演示不阻塞)
+        var turnstileSecret = _config["Turnstile:SecretKey"];
+        if (!string.IsNullOrEmpty(turnstileSecret))
+        {
+            if (string.IsNullOrEmpty(req.TurnstileToken))
+                return BadRequest(new ProblemDetails
+                {
+                    Title = "人机验证未完成, 请重试",
+                    Status = StatusCodes.Status400BadRequest,
+                    Extensions = { ["errorCode"] = "ERR_TURNSTILE_REQUIRED" }
+                });
+            var ok = await VerifyTurnstileAsync(turnstileSecret, req.TurnstileToken, ip, ct);
+            if (!ok)
+                return BadRequest(new ProblemDetails
+                {
+                    Title = "人机验证失败, 请重试",
+                    Status = StatusCodes.Status400BadRequest,
+                    Extensions = { ["errorCode"] = "ERR_TURNSTILE_FAILED" }
+                });
+        }
+
+        var user = await _userService.AuthenticateAsync(req.Username, req.Password, ip, ua, ct);
+        if (user == null)            // 🔧 fix(审查): 统一 ProblemDetails + errorCode — 原 { error } 旧格式前端无法映射,
+            //   登录失败被兜底成误导的 "登录失败, 请稍后重试" (用户实测误以为登录功能被破坏)
+            return Unauthorized(new ProblemDetails
+            {
+                Title = "用户名或密码错误, 或账号已被禁用/锁定",
+                Status = StatusCodes.Status401Unauthorized,
+                Extensions = { ["errorCode"] = "ERR_AUTH_FAILED" }
+            });
+
+        var accessToken = _jwt.GenerateAccessToken(user);
+        var refresh = await _userService.IssueRefreshTokenAsync(user.Id, ip, ct);
+
+        return Ok(new
+        {
+            accessToken,
+            refreshToken = refresh.TokenHash,  // 实际是原文 (IssueRefreshTokenAsync 内部约定)
+            expiresIn = _jwt.ExpireMinutes * 60,
+            user = new { id = user.Id, username = user.Username, role = user.Role }
+        });
+    }
+
+    /// <summary>
+    /// 刷新 token
+    /// 入参: { refreshToken }
+    /// 出参: 新 { accessToken, refreshToken, expiresIn }
+    /// 流程: 验证旧 token → 撤销旧 token + 签发新 token (一次性)
+    /// 失败返回 401 (refresh token 无效/过期/已撤销)
+    /// </summary>
+    /// <remarks>
+    /// 示例请求:
+    ///
+    ///     POST /api/auth/refresh
+    ///     { "refreshToken": "3F0fPsvbU4c05XvxVBU1..." }
+    ///
+    /// 成功响应 (200): 新 token 三件套 (同 login)
+    /// 失败响应:
+    /// - 401: refresh token 无效/过期/已撤销
+    /// </remarks>
+    [HttpPost("refresh")]
+    [AllowAnonymous]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> Refresh([FromBody] RefreshRequest req, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(req.RefreshToken))
+            return BadRequest(new { error = "refreshToken 不能为空" });
+
+        var existing = await _userService.ValidateRefreshTokenAsync(req.RefreshToken, ct);
+        if (existing == null)
+            return Unauthorized(new { error = "refresh token 无效或已过期" });
+
+        // 撤销旧 token + 签发新 token (记录 ReplacedByTokenId 链)
+        var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+        var newRefresh = await _userService.RevokeAndIssueAsync(existing.Id, existing.UserId, ip, ct);
+
+        // 取用户生成新 access token
+        var user = await _userService.GetByIdAsync(existing.UserId, ct);
+        if (user == null)
+            return Unauthorized(new { error = "用户不存在或已被删除" });
+
+        var accessToken = _jwt.GenerateAccessToken(user);
+        return Ok(new
+        {
+            accessToken,
+            refreshToken = newRefresh.TokenHash,
+            expiresIn = _jwt.ExpireMinutes * 60
+        });
+    }
+
+    /// <summary>
+    /// 登出 (撤销当前 refresh token)
+    /// 需登录: 从 JWT claims 取 userId
+    /// 入参: { refreshToken } (客户端传当前持有的 refresh token)
+    /// </summary>
+    [HttpPost("logout")]
+    [Authorize]
+    public async Task<IActionResult> Logout([FromBody] RefreshRequest req, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(req.RefreshToken))
+            return BadRequest(new { error = "refreshToken 不能为空" });
+
+        var existing = await _userService.ValidateRefreshTokenAsync(req.RefreshToken, ct);
+        if (existing != null)
+        {
+            await _userService.RevokeRefreshTokenAsync(existing.Id, ct);
+        }
+        return Ok(new { success = true });
+    }
+
+
+
+    /// <summary>
+    /// 获取当前登录用户信息
+    /// 需登录: 从 JWT claims 取 userId
+    /// </summary>
+    [HttpGet("me")]
+    [Authorize]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetMe(CancellationToken ct)
+    {
+        var user = await _userService.GetCurrentUserAsync(User, ct);
+        if (user == null)
+            return Unauthorized(new { error = "用户不存在或已被删除" });
+
+        return Ok(new
+        {
+            id = user.Id,
+            username = user.Username,
+            role = user.Role,
+            email = user.Email,
+            fullName = user.FullName,
+            isActive = user.IsActive,
+            lastLoginAt = user.LastLoginAt
+        });
+    }
+
+    /// <summary>
+    /// 修改密码
+    /// 需登录: 从 JWT claims 取 userId
+    /// 入参: { oldPassword, newPassword }
+    /// 失败返回 400 (旧密码错误)
+    /// </summary>
+    [HttpPost("change-password")]
+    [Authorize]
+    public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest req, CancellationToken ct)
+    {
+        // 安全加固阶段4: FluentValidation 输入校验 (密码强度 + 长度)
+        var validation = await _changePasswordValidator.ValidateAsync(req, ct);
+        if (!validation.IsValid)
+        {
+            return BadRequest(new
+            {
+                error = "输入参数校验失败",
+                details = validation.Errors.Select(e => new { field = e.PropertyName, message = e.ErrorMessage })
+            });
+        }
+
+        var userIdStr = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? User.FindFirst("sub")?.Value;
+        if (!long.TryParse(userIdStr, out var userId))
+            return Unauthorized(new { error = "无法识别用户身份" });
+
+        var ok = await _userService.ChangePasswordAsync(userId, req.OldPassword, req.NewPassword, ct);
+        if (!ok)
+            return BadRequest(new { error = "旧密码错误" });
+
+        return Ok(new { success = true });
+    }
+
+    /// <summary>Turnstile 站点配置 (前端判断是否渲染验证码; 未配置返回空 siteKey)</summary>
+    [HttpGet("turnstile-config")]
+    [AllowAnonymous]
+    public IActionResult TurnstileConfig()
+        => Ok(new { siteKey = _config["Turnstile:SiteKey"] ?? "" });
+
+    private async Task<bool> VerifyTurnstileAsync(string secret, string token, string? ip, CancellationToken ct)
+    {
+        try
+        {
+            using var http = _httpClientFactory.CreateClient();
+            var form = new FormUrlEncodedContent(new[]
+            {
+                new KeyValuePair<string, string>("secret", secret),
+                new KeyValuePair<string, string>("response", token),
+                new KeyValuePair<string, string>("remoteip", ip ?? ""),
+            });
+            var resp = await http.PostAsync("https://challenges.cloudflare.com/turnstile/v0/siteverify", form, ct);
+            var json = await resp.Content.ReadFromJsonAsync<TurnstileVerifyResponse>(cancellationToken: ct);
+            return json is { Success: true };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Turnstile verify 调用失败 (按通过处理, 避免验证码服务故障阻断登录)");
+            return true;
+        }
+    }
+}
+
+    public sealed class TurnstileVerifyResponse
+    {
+        public bool Success { get; set; }
+        public string[]? ErrorCodes { get; set; }
+    }
+
+// ========== 请求 DTO (内嵌, 与 Controller 同文件, 避免散落) ==========
+
+public class LoginRequest
+{
+    public string Username { get; set; } = "";
+    public string Password { get; set; } = "";
+
+    /// <summary>Cloudflare Turnstile 人机验证 token (Turnstile:SiteKey 配置后必填)</summary>
+    public string? TurnstileToken { get; set; }
+}
+
+public class RefreshRequest
+{
+    public string RefreshToken { get; set; } = "";
+}
+
+public class ChangePasswordRequest
+{
+    public string OldPassword { get; set; } = "";
+    public string NewPassword { get; set; } = "";
+}

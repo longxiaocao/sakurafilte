@@ -1,0 +1,303 @@
+{
+  "test_name": "主题切换端到端测试",
+  "test_time": "2026-07-04 22:12:05",
+  "summary": {
+    "PASS": 17,
+    "FAIL": 0,
+    "WARN": 0,
+    "ERROR": 0,
+    "SKIP": 0
+  },
+  "total": 17,
+  "results": [
+    {
+      "name": "01-login",
+      "url": "/login",
+      "group": "public",
+      "light_mode": {
+        "screenshot": "D:\\projects\\sakurafilter\\spike-test\\theme-screenshots\\01-login-light.png",
+        "white_components": 0,
+        "contrast_issues": 0
+      },
+      "dark_mode": {
+        "screenshot": "D:\\projects\\sakurafilter\\spike-test\\theme-screenshots\\01-login-dark.png",
+        "white_components": [],
+        "contrast_issues": []
+      },
+      "status": "PASS",
+      "issues": []
+    },
+    {
+      "name": "02-search",
+      "url": "/search",
+      "group": "public",
+      "light_mode": {
+        "screenshot": "D:\\projects\\sakurafilter\\spike-test\\theme-screenshots\\02-search-light.png",
+        "white_components": 0,
+        "contrast_issues": 0
+      },
+      "dark_mode": {
+        "screenshot": "D:\\projects\\sakurafilter\\spike-test\\theme-screenshots\\02-search-dark.png",
+        "white_components": [],
+        "contrast_issues": []
+      },
+      "status": "PASS",
+      "issues": []
+    },
+    {
+      "name": "03-public-search",
+      "url": "/public/search",
+      "group": "public",
+      "light_mode": {
+        "screenshot": "D:\\projects\\sakurafilter\\spike-test\\theme-screenshots\\03-public-search-light.png",
+        "white_components": 0,
+        "contrast_issues": 0
+      },
+      "dark_mode": {
+        "screenshot": "D:\\projects\\sakurafilter\\spike-test\\theme-screenshots\\03-public-search-dark.png",
+        "white_components": [],
+        "contrast_issues": []
+      },
+      "status": "PASS",
+      "issues": []
+    },
+    {
+      "name": "04-product-detail",
+      "url": "/product/P00050000",
+      "group": "public",
+      "light_mode": {
+        "screenshot": "D:\\projects\\sakurafilter\\spike-test\\theme-screenshots\\04-product-detail-light.png",
+        "white_components": 0,
+        "contrast_issues": 0
+      },
+      "dark_mode": {
+        "screenshot": "D:\\projects\\sakurafilter\\spike-test\\theme-screenshots\\04-product-detail-dark.png",
+        "white_components": [],
+        "contrast_issues": []
+      },
+      "status": "PASS",
+      "issues": []
+    },
+    {
+      "name": "05-demo",
+      "url": "/demo",
+      "group": "public",
+      "light_mode": {
+        "screenshot": "D:\\projects\\sakurafilter\\spike-test\\theme-screenshots\\05-demo-light.png",
+        "white_components": 0,
+        "contrast_issues": 0
+      },
+      "dark_mode": {
+        "screenshot": "D:\\projects\\sakurafilter\\spike-test\\theme-screenshots\\05-demo-dark.png",
+        "white_components": [],
+        "contrast_issues": []
+      },
+      "status": "PASS",
+      "issues": []
+    },
+    {
+      "name": "06-admin-products",
+      "url": "/admin/products",
+      "group": "admin",
+      "light_mode": {
+        "screenshot": "D:\\projects\\sakurafilter\\spike-test\\theme-screenshots\\06-admin-products-light.png",
+        "white_components": 0,
+        "contrast_issues": 0
+      },
+      "dark_mode": {
+        "screenshot": "D:\\projects\\sakurafilter\\spike-test\\theme-screenshots\\06-admin-products-dark.png",
+        "white_components": [],
+        "contrast_issues": []
+      },
+      "status": "PASS",
+      "issues": []
+    },
+    {
+      "name": "07-admin-etl",
+      "url": "/admin/etl",
+      "group": "admin",
+      "light_mode": {
+        "screenshot": "D:\\projects\\sakurafilter\\spike-test\\theme-screenshots\\07-admin-etl-light.png",
+        "white_components": 0,
+        "contrast_issues": 0
+      },
+      "dark_mode": {
+        "screenshot": "D:\\projects\\sakurafilter\\spike-test\\theme-screenshots\\07-admin-etl-dark.png",
+        "white_components": [],
+        "contrast_issues": []
+      },
+      "status": "PASS",
+      "issues": []
+    },
+    {
+      "name": "08-admin-users",
+      "url": "/admin/users",
+      "group": "admin",
+      "light_mode": {
+        "screenshot": "D:\\projects\\sakurafilter\\spike-test\\theme-screenshots\\08-admin-users-light.png",
+        "white_components": 0,
+        "contrast_issues": 0
+      },
+      "dark_mode": {
+        "screenshot": "D:\\projects\\sakurafilter\\spike-test\\theme-screenshots\\08-admin-users-dark.png",
+        "white_components": [],
+        "contrast_issues": []
+      },
+      "status": "PASS",
+      "issues": []
+    },
+    {
+      "name": "09-admin-compare",
+      "url": "/admin/compare",
+      "group": "admin",
+      "light_mode": {
+        "screenshot": "D:\\projects\\sakurafilter\\spike-test\\theme-screenshots\\09-admin-compare-light.png",
+        "white_components": 0,
+        "contrast_issues": 0
+      },
+      "dark_mode": {
+        "screenshot": "D:\\projects\\sakurafilter\\spike-test\\theme-screenshots\\09-admin-compare-dark.png",
+        "white_components": [],
+        "contrast_issues": []
+      },
+      "status": "PASS",
+      "issues": []
+    },
+    {
+      "name": "10-admin-help",
+      "url": "/admin/help",
+      "group": "admin",
+      "light_mode": {
+        "screenshot": "D:\\projects\\sakurafilter\\spike-test\\theme-screenshots\\10-admin-help-light.png",
+        "white_components": 0,
+        "contrast_issues": 0
+      },
+      "dark_mode": {
+        "screenshot": "D:\\projects\\sakurafilter\\spike-test\\theme-screenshots\\10-admin-help-dark.png",
+        "white_components": [],
+        "contrast_issues": []
+      },
+      "status": "PASS",
+      "issues": []
+    },
+    {
+      "name": "11-admin-perf",
+      "url": "/admin/perf",
+      "group": "admin",
+      "light_mode": {
+        "screenshot": "D:\\projects\\sakurafilter\\spike-test\\theme-screenshots\\11-admin-perf-light.png",
+        "white_components": 0,
+        "contrast_issues": 0
+      },
+      "dark_mode": {
+        "screenshot": "D:\\projects\\sakurafilter\\spike-test\\theme-screenshots\\11-admin-perf-dark.png",
+        "white_components": [],
+        "contrast_issues": []
+      },
+      "status": "PASS",
+      "issues": []
+    },
+    {
+      "name": "12-admin-oem-brands",
+      "url": "/admin/dict/oem-brands",
+      "group": "admin",
+      "light_mode": {
+        "screenshot": "D:\\projects\\sakurafilter\\spike-test\\theme-screenshots\\12-admin-oem-brands-light.png",
+        "white_components": 0,
+        "contrast_issues": 0
+      },
+      "dark_mode": {
+        "screenshot": "D:\\projects\\sakurafilter\\spike-test\\theme-screenshots\\12-admin-oem-brands-dark.png",
+        "white_components": [],
+        "contrast_issues": []
+      },
+      "status": "PASS",
+      "issues": []
+    },
+    {
+      "name": "13-admin-types",
+      "url": "/admin/dict/types",
+      "group": "admin",
+      "light_mode": {
+        "screenshot": "D:\\projects\\sakurafilter\\spike-test\\theme-screenshots\\13-admin-types-light.png",
+        "white_components": 0,
+        "contrast_issues": 0
+      },
+      "dark_mode": {
+        "screenshot": "D:\\projects\\sakurafilter\\spike-test\\theme-screenshots\\13-admin-types-dark.png",
+        "white_components": [],
+        "contrast_issues": []
+      },
+      "status": "PASS",
+      "issues": []
+    },
+    {
+      "name": "14-admin-machines",
+      "url": "/admin/dict/machines",
+      "group": "admin",
+      "light_mode": {
+        "screenshot": "D:\\projects\\sakurafilter\\spike-test\\theme-screenshots\\14-admin-machines-light.png",
+        "white_components": 0,
+        "contrast_issues": 0
+      },
+      "dark_mode": {
+        "screenshot": "D:\\projects\\sakurafilter\\spike-test\\theme-screenshots\\14-admin-machines-dark.png",
+        "white_components": [],
+        "contrast_issues": []
+      },
+      "status": "PASS",
+      "issues": []
+    },
+    {
+      "name": "15-admin-medias",
+      "url": "/admin/dict/medias",
+      "group": "admin",
+      "light_mode": {
+        "screenshot": "D:\\projects\\sakurafilter\\spike-test\\theme-screenshots\\15-admin-medias-light.png",
+        "white_components": 0,
+        "contrast_issues": 0
+      },
+      "dark_mode": {
+        "screenshot": "D:\\projects\\sakurafilter\\spike-test\\theme-screenshots\\15-admin-medias-dark.png",
+        "white_components": [],
+        "contrast_issues": []
+      },
+      "status": "PASS",
+      "issues": []
+    },
+    {
+      "name": "16-admin-engines",
+      "url": "/admin/dict/engines",
+      "group": "admin",
+      "light_mode": {
+        "screenshot": "D:\\projects\\sakurafilter\\spike-test\\theme-screenshots\\16-admin-engines-light.png",
+        "white_components": 0,
+        "contrast_issues": 0
+      },
+      "dark_mode": {
+        "screenshot": "D:\\projects\\sakurafilter\\spike-test\\theme-screenshots\\16-admin-engines-dark.png",
+        "white_components": [],
+        "contrast_issues": []
+      },
+      "status": "PASS",
+      "issues": []
+    },
+    {
+      "name": "17-change-password",
+      "url": "/change-password",
+      "group": "admin",
+      "light_mode": {
+        "screenshot": "D:\\projects\\sakurafilter\\spike-test\\theme-screenshots\\17-change-password-light.png",
+        "white_components": 0,
+        "contrast_issues": 0
+      },
+      "dark_mode": {
+        "screenshot": "D:\\projects\\sakurafilter\\spike-test\\theme-screenshots\\17-change-password-dark.png",
+        "white_components": [],
+        "contrast_issues": []
+      },
+      "status": "PASS",
+      "issues": []
+    }
+  ]
+}

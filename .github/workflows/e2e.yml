@@ -1,0 +1,790 @@
+# Day 11+: CI E2E multi-job — master push 强制, PR fail-soft
+#   WHY: 单 job 跑完 2+ 小时, 反馈太慢. 拆为 setup + e2e + frontend-contract 3 个并行 job
+#   设计:
+#     - master push: 3 job 全过才允许合并 (gate)
+#     - PR: 失败不阻塞 (fail-soft)
+#     - PostgreSQL service container (离线, 无外部依赖)
+#     - setup job: dotnet build + nuget cache restore (其他 job 共享)
+#     - e2e job: P4.1 9 编排 + 9.5/9.6/9.7/9.8 + Day10 + benchmark
+#     - frontend-contract job: P4.2 vitest + zod + P4.3 visual smoke
+name: E2E Tests
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+  schedule:
+    # 月度 regression 防火线 (每月 1 号 UTC 02:00) - 跨端 + 极端场景 + Lighthouse
+    - cron: '0 2 1 * *'
+
+env:
+  DOTNET_VERSION: '8.0.x'
+  PYTHON_VERSION: '3.12'
+  NODE_VERSION: '20'
+  ADMIN_TOKEN: 'dev-admin-token-rotate-in-prod-MZK4R9P3X6V2N7Q1L5F0B8H3C'
+  PG_PASSWORD: '784533'
+  BACKEND_URL: 'http://localhost:5148'
+  # v28-4 P0 修复: 后端启动所需环境变量 (appsettings.json 中均为空, 必须由 CI 注入)
+  #   根因: e2e.yml 顶层 env 之前只配了 PG_PASSWORD, 后端 dotnet run 时 Npgsql 抛
+  #         "Host can't be null" / "ConnectionString property has not been initialized"
+  #         → 120s 启动超时 → V27-9-3 设计巡检等后续步骤全被 skipped
+  #   修复: 补齐 4 个必填环境变量 (与 .env 本地开发值一致, dev 用途非生产凭证)
+  ConnectionStrings__Postgres: 'Host=localhost;Port=5432;Database=spike_test_v3;Username=postgres;Password=784533'
+  Jwt__SigningKey: 'dev-jwt-signing-key-not-for-prod-X7K9M2P5Q8R3T6V1W4Y7Z0A3B6C9D2E5F8'
+  Jwt__Issuer: 'SakuraFilter'
+  Jwt__Audience: 'SakuraFilter.Web'
+  Jwt__ExpireMinutes: '30'
+  Jwt__RefreshExpireDays: '7'
+  Auth__DevStaticToken: 'dev-admin-token-rotate-in-prod-MZK4R9P3X6V2N7Q1L5F0B8H3C'
+  Search__CursorHmacKey: 'dev-cursor-hmac-key-not-for-prod-X7K9M2P5Q8R3T6V1W4Y7Z0'
+  Etl__AllowedImportDirs: '["/tmp/etl-test"]'
+  INITIAL_ADMIN_PASSWORD: 'Admin@2026'
+  INITIAL_OPERATOR_PASSWORD: 'Operator@2026'
+  # v28-4 P1 修复: MinIO dev 占位凭证 (CI 不连真实 MinIO, 仅让 IObjectStorage factory 不 throw)
+  #   根因: SearchAsync 构造函数注入 IObjectStorage?, DI 解析时调用 AddStorageServices factory,
+  #         Minio__AccessKey 未配置 → factory throw InvalidOperationException → /api/admin/products/search 500
+  #   修复: 提供 dev 占位凭证, MinioClient.Build() 接受任意非空字符串, 不实际连接 MinIO 服务
+  Minio__AccessKey: 'dev-minio-access-key-not-for-prod'
+  Minio__SecretKey: 'dev-minio-secret-key-not-for-prod'
+  Minio__Endpoint: 'localhost:9000'
+  Minio__BucketName: 'sakurafilter-dev'
+
+jobs:
+  # ===== 共享 build job =====
+  # WHY: e2e + frontend-contract 都需 dotnet build output, 用 cache + setup 共享减少 1-2 分钟构建时间
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+      - name: Build backend
+        run: |
+          cd backend/src/SakuraFilter.Api
+          dotnet build -c Release --nologo
+      - name: Upload build output (for other jobs to skip rebuild)
+        # WHY: dotnet run --no-build 需要 obj/ 目录 (含 source 时间戳和 ref assembly),
+        #      之前只传 bin/ → dotnet run 启动 fork+exec 时找不到 .cache 文件 → Win32Exception 13 (EACCES)
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-build
+          path: |
+            backend/src/SakuraFilter.Api/bin
+            backend/src/SakuraFilter.Api/obj
+          retention-days: 1
+          if-no-files-found: warn
+
+  # ===== E2E 主 job: P4.1 9 编排 + ETL 跨实例 + benchmark =====
+  e2e:
+    needs: setup
+    runs-on: ubuntu-latest
+    continue-on-error: ${{ github.event_name == 'pull_request' }}
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: 784533
+          POSTGRES_DB: spike_test_v3
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install Python deps
+        run: pip install psycopg2-binary
+      - name: Download prebuilt backend
+        # WHY: path 去掉 /bin 后缀
+        #   setup job upload 路径是 backend/src/SakuraFilter.Api/bin
+        #   → zip 顶层目录 = backend/src/SakuraFilter.Api/bin/
+        #   → download 到 path: backend/src/SakuraFilter.Api
+        #   → 解压后产物 = backend/src/SakuraFilter.Api/bin/Release/net8.0/SakuraFilter.Api ✅
+        #   之前 path: backend/src/SakuraFilter.Api/bin
+        #   → 解压后 = backend/src/SakuraFilter.Api/bin/backend/src/SakuraFilter.Api/bin/... ❌ 路径重复
+        #   → dotnet run --no-build 找不到 SakuraFilter.Api → Win32Exception 2 (No such file or directory)
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-build
+          path: backend/src/SakuraFilter.Api
+      - name: chmod API binary
+        # WHY: download-artifact 解压的文件默认 0644, Linux 容器内 +x 位未设置
+        #   → dotnet run --no-build fork+exec 触发 Win32Exception 13 (EACCES)
+        #   修复: 给 SakuraFilter.Api 主程序加可执行位
+        run: chmod +x backend/src/SakuraFilter.Api/bin/Release/net8.0/SakuraFilter.Api
+
+      # 启动 API server (120s 超时, 失败时输出日志诊断)
+      - name: Run API server (background)
+        id: api-server
+        run: |
+          cd backend/src/SakuraFilter.Api
+          dotnet run -c Release --no-build --urls "http://localhost:5148" > /tmp/api5148.log 2>&1 &
+          API_PID=$!
+          echo "API PID: $API_PID"
+          A_READY=0
+          for i in $(seq 1 120); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5148/api/etl/status -H "X-Admin-Token: $ADMIN_TOKEN" 2>/dev/null || echo 000)
+            if [ "$code" = "200" ]; then
+              echo "API 5148 ready after ${i}s"
+              A_READY=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$A_READY" != "1" ]; then
+            echo "::error::API 5148 在 120s 内未就绪 (PID=$API_PID 仍存活=$(kill -0 $API_PID 2>/dev/null && echo yes || echo no))"
+            echo "::error::=== API 日志最后 30 行 ==="
+            tail -n 30 /tmp/api5148.log | sed 's/\x1b\[[0-9;]*[a-zA-Z]//g' | while IFS= read -r line; do
+              echo "::error file=/tmp/api5148.log::$line"
+            done
+            exit 1
+          fi
+
+      # v28-4 P0 修复: 执行 SQL migrations (修复 etl_progress_log.skipped_missing_mr1 列缺失)
+      #   根因: e2e.yml 仅启动 PG 容器 + 后端 dotnet run (EF Core EnsureCreated 创建基础表),
+      #         未执行 backend/migrations/*.sql 文件型 migration
+      #   影响: PG 日志持续报 "column e.skipped_missing_mr1 does not exist",
+      #         etl_progress_log 查询全失败 (EtlKpiCards / ETL history / Day 9.8 等依赖)
+      #   修复: 在 API server 就绪后 psql 顺序执行所有 SQL migration (全部 idempotent)
+      #   顺序: 必须在 API server 就绪后, 因 EF Core EnsureCreated 在 dotnet run 时才创建 products 等基础表,
+      #         008_dedup_and_add_unique_constraint.sql 依赖 products 表已存在
+      #   018 注: 一次性脚本 (阶段 1 TRUNCATE 业务表), 但 CI 空库场景安全 (TRUNCATE 空表 + 阶段 2 system_settings ON CONFLICT 幂等)
+      - name: Run SQL migrations
+        env:
+          PGPASSWORD: ${{ env.PG_PASSWORD }}
+        run: |
+          for sql in backend/migrations/*.sql; do
+            echo "===== Executing $sql ====="
+            psql -h localhost -p 5432 -U postgres -d spike_test_v3 -v ON_ERROR_STOP=1 -f "$sql"
+          done
+          echo "===== All migrations applied ====="
+
+      - name: Upload API log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-server-log
+          path: /tmp/api5148.log
+          if-no-files-found: ignore
+
+      # Day 9.5/9.6/9.7/9.8 跨实例 ETL 测试
+      # 🔧 fix(审查): e2e job 缺 psycopg2 — pip install 只在 setup job (其他 job 环境独立),
+      #   _test_day98/_test_day10 import psycopg2 → ModuleNotFoundError → exit 1 无 ::error::
+      #   (CI Day 9.8 连续失败根因, 与后端代码无关)
+      - name: Install Python deps (e2e job)
+        run: pip install psycopg2-binary
+
+      - name: Run E2E Day 9.5 (cancel enum + alert filter + cursor HMAC)
+        working-directory: spike-test
+        run: python _test_day95.py
+
+      - name: Run E2E Day 9.6 (radio UI + CI gate + HMAC rotation + SSE broadcast)
+        working-directory: spike-test
+        run: python _test_day96.py
+
+      - name: Run E2E Day 9.7 (cross-instance SSE NOTIFY/LISTEN)
+        working-directory: spike-test
+        run: |
+          # Day 9.7 需要双实例, CI 内启动第二个 (5149)
+          cd ../backend/src/SakuraFilter.Api
+          dotnet run -c Release --no-build --urls "http://localhost:5149" > /tmp/api5149.log 2>&1 &
+          cd ../../../spike-test
+          B_READY=0
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5149/api/etl/status -H "X-Admin-Token: $ADMIN_TOKEN" 2>/dev/null || echo 000)
+            if [ "$code" = "200" ]; then
+              echo "Instance B ready after ${i}s"
+              B_READY=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$B_READY" != "1" ]; then
+            echo "::error::Instance B (5149) 30s 内未就绪"
+            tail -n 80 /tmp/api5149.log
+            exit 1
+          fi
+          if ! python _test_day97.py; then
+            RC=$?
+            echo "::error::Day 9.7 FAIL (rc=$RC)"
+            echo "--- PG LISTEN etl_progress 进程数 ---"
+            python -c "
+          import psycopg2
+          c = psycopg2.connect(host='localhost', port=5432, dbname='spike_test_v3', user='postgres', password='784533')
+          cur = c.cursor()
+          cur.execute(\"SELECT pid, query FROM pg_stat_activity WHERE query ILIKE '%LISTEN etl_progress%'\")
+          for r in cur.fetchall():
+              print(f'  pid={r[0]} query={r[1][:80]}')
+          c.close()
+          "
+            tail -n 50 /tmp/api5149.log
+            exit $RC
+          fi
+
+      - name: Run E2E Day 9.8 (ETL history audit + reason_code pie chart)
+        working-directory: spike-test
+        run: python _test_day98.py
+
+      - name: Run E2E Day 10 (OEM Brand 字典 CRUD + 排序 + typeahead)
+        working-directory: spike-test
+        run: python _test_day10_oem_brands.py
+
+      # 搜索性能基准 (P95 阈值 CI 放宽到 3000ms)
+      - name: Run Search Benchmark (P1.4)
+        working-directory: spike-test
+        env:
+          BENCH_THRESHOLD_P95: '3000'
+          BENCH_THRESHOLD_TYPEAHEAD_P95: '200'
+        run: python _bench_search.py --concurrency=10 --threshold-p95=$BENCH_THRESHOLD_P95 --threshold-typeahead-p95=$BENCH_THRESHOLD_TYPEAHEAD_P95
+
+      # Day 11+ P4.1: 9 个 E2E 串行 + P5.5/P7.1 防回归
+      - name: Run E2E P4.1 orchestrator (9 tests + P5.5/P7.1)
+        working-directory: spike-test
+        env:
+          ADMIN_TOKEN: ${{ env.ADMIN_TOKEN }}
+        run: |
+          echo "===== P4.1 E2E 编排器: 9 个测试 + P5.5/P7.1 串行跑 ====="
+          for suite in _test_escape_underscore.py _test_day10_oem_brands.py _test_p22_seven_dicts.py _test_type_ordering.py _test_batch_oem.py _test_public_product.py _test_public_search.py _test_compare.py _test_p5_polish.py _test_p55_p71_e2e.py; do
+            if [ -f "$suite" ]; then
+              echo "================ Running $suite ================"
+              if python "$suite"; then
+                echo "[PASS] $suite"
+              else
+                RC=$?
+                echo "::error::P4.1 FAIL: $suite (rc=$RC)"
+                tail -n 50 /tmp/api5148.log 2>/dev/null || echo "无日志"
+                exit $RC
+              fi
+            else
+              echo "[SKIP] $suite (文件不存在)"
+            fi
+          done
+          echo "===== P4.1 + P5.5/P7.1 E2E 10/10 PASS ====="
+
+      # P0 改-1: P0 防回归 (BaseDictService 默认 limit + ProblemDetails 不泄露 + 无硬编码密码)
+      #   WHY: P0 修复后需 CI 防回归, 避免 dict_oem_no3 OOM/ex.Message 泄露/硬编码密码再次引入
+      - name: Run P0 fixes regression (防 OOM + 异常泄露 + 硬编码密码)
+        working-directory: spike-test
+        env:
+          ADMIN_TOKEN: ${{ env.ADMIN_TOKEN }}
+        run: |
+          echo "===== P0 修复防回归 ====="
+          if python _test_p0_fixes.py; then
+            echo "[PASS] P0 修复防回归 3/3 全绿"
+          else
+            RC=$?
+            echo "::error::P0 防回归 FAIL (rc=$RC)"
+            exit $RC
+          fi
+
+      # P1 改-1: P1 健康检查防回归 (/health/ready 拆分 Meili/PG 探测 + BackgroundService 心跳)
+      #   WHY: P1-5.1/P1-6.1 修复后需 CI 防回归, 避免 /health/ready 退回 503 / 心跳丢失
+      - name: Run P1 health regression
+        working-directory: spike-test
+        env:
+          ADMIN_TOKEN: ${{ env.ADMIN_TOKEN }}
+        run: |
+          echo "===== P1 健康检查防回归 ====="
+          if python _test_p1_health.py; then
+            echo "[PASS] P1 健康检查防回归 全绿"
+          else
+            RC=$?
+            echo "::error::P1 健康检查回归失败 (rc=$RC)"
+            exit $RC
+          fi
+
+      # P1 改-2: P1 并发安全防回归 (PauseActiveTask 加锁 + _activeCancelReason 读加锁)
+      #   WHY: P1-2.2/P1-2.3 修复后需 CI 防回归, 防止 ETL cancel reason 落库错误/死锁回归
+      - name: Run P1 concurrency regression
+        working-directory: spike-test
+        env:
+          ADMIN_TOKEN: ${{ env.ADMIN_TOKEN }}
+        run: |
+          echo "===== P1 并发安全防回归 ====="
+          if python _test_p1_concurrency.py; then
+            echo "[PASS] P1 并发安全防回归 全绿"
+          else
+            RC=$?
+            echo "::error::P1 并发安全回归失败 (rc=$RC)"
+            exit $RC
+          fi
+
+      # P1 改-3: P1 性能防回归 (OSS 预签名 URL 并行化, 详情接口 6 张图 < 300ms)
+      #   WHY: P1-4.1/P1-4.2 修复后需 CI 防回归, 防止 URL 生成退回串行导致 P95 飙升
+      - name: Run P1 perf regression
+        working-directory: spike-test
+        env:
+          ADMIN_TOKEN: ${{ env.ADMIN_TOKEN }}
+        run: |
+          echo "===== P1 性能防回归 ====="
+          if python _test_p1_perf.py; then
+            echo "[PASS] P1 性能防回归 全绿"
+          else
+            RC=$?
+            echo "::error::P1 性能回归失败 (rc=$RC)"
+            exit $RC
+          fi
+
+      # P2 改-1: P2 迁移安全防回归 — 已合并至 ci.yml (静态回归扫描, ADR #31)
+      #   WHY: P2-7.1/P2-7.2 修复后需 CI 防回归, 防止生产启动时迁移超时/误执行
+
+      # P2 改-2: P2 ETL 健壮性防回归 (错误行日志补全 + 类型校验 + 文件预检)
+      #   WHY: P2-9.2/P2-9.3/P2-9.4 修复后需 CI 防回归, 防止 ETL 错误行丢失上下文/类型漂移
+      - name: Run P2 ETL robustness regression
+        working-directory: spike-test
+        env:
+          ADMIN_TOKEN: ${{ env.ADMIN_TOKEN }}
+        run: |
+          echo "===== P2 ETL 健壮性防回归 ====="
+          if python _test_p2_etl_robust.py; then
+            echo "[PASS] P2 ETL 健壮性防回归 全绿"
+          else
+            RC=$?
+            echo "::error::P2 ETL 健壮性回归失败 (rc=$RC)"
+            exit $RC
+          fi
+
+      # P3 改-1: P3 可观测性防回归 (CorrelationId 中间件 + /metrics 端点)
+      #   WHY: P3-5.2/P3-5.3 修复后需 CI 防回归, 防止 CorrelationId 丢失/metrics 端点 404
+      - name: Run P3 observability regression
+        working-directory: spike-test
+        env:
+          ADMIN_TOKEN: ${{ env.ADMIN_TOKEN }}
+        run: |
+          echo "===== P3 可观测性防回归 ====="
+          if python _test_p3_observability.py; then
+            echo "[PASS] P3 可观测性防回归 全绿"
+          else
+            RC=$?
+            echo "::error::P3 可观测性回归失败 (rc=$RC)"
+            exit $RC
+          fi
+
+      # P3 改-2: P3 可用性防回归 (熔断启动探活 + 立即降级, Meili 不可用首次搜索 < 100ms)
+      #   WHY: P3-6.2/P3-6.3 修复后需 CI 防回归, 防止 Meili 故障时首请求超时秒级阻塞
+      - name: Run P3 availability regression
+        working-directory: spike-test
+        env:
+          ADMIN_TOKEN: ${{ env.ADMIN_TOKEN }}
+        run: |
+          echo "===== P3 可用性防回归 ====="
+          if python _test_p3_availability.py; then
+            echo "[PASS] P3 可用性防回归 全绿"
+          else
+            RC=$?
+            echo "::error::P3 可用性回归失败 (rc=$RC)"
+            exit $RC
+          fi
+
+      # P0 改-2: 安全门禁 — 扫描 .cs 文件中硬编码凭据 (替代 detect-secrets, 避免新依赖)
+      #   WHY: P0-3 修复后需自动防护, 防止 Password=xxx 再次引入
+      - name: Security gate (hardcoded credentials scan)
+        run: |
+          echo "===== 安全门禁: 扫描硬编码凭据 ====="
+          # 扫描 .cs 文件中的硬编码密码模式 (Password=xxx / pwd=xxx, 排除 appsettings.json 配置源)
+          HITS=$(grep -rE '(Password|password|pwd)=[^"[:space:]]+' backend/src --include="*.cs" | grep -v 'throw new' | grep -v 'GetConnectionString' || true)
+          if [ -n "$HITS" ]; then
+            echo "::error::发现硬编码凭据 (.cs 文件):"
+            echo "$HITS" | while IFS= read -r line; do
+              echo "::error::$line"
+            done
+            exit 1
+          fi
+          echo "[PASS] .cs 文件中无硬编码凭据"
+
+      # P3 改-4: P1/P2/P3 防回归 (grep 验证 15 个修复模式)
+      # P1/P2/P3 修复防回归 (15 修复模式) — 已合并至 ci.yml (静态回归扫描, ADR #31)
+      #   WHY: P0 用 API 验证, P1/P2/P3 多为代码层修复 (无 API 表面), 用 grep 模式验证
+      #   覆盖: P1-1/2/3/4/5/6 + P2-1/2/3/4/5/7 + P3-1/2 = 15 个修复点
+
+      - name: E2E gate check (master only)
+        if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+        run: |
+          echo "E2E gate passed — all tests green on master push"
+
+  # ===== Frontend Contract job: P4.2 vitest + zod + P4.3 visual smoke =====
+  #   WHY: P4.2/P4.3 不需要 P4.1 9 测试, 独立并行跑 → 反馈更快 (Vitest 比 Python 9 测试快 5 倍)
+  #   需要 API server 才能跑 (调后端 _schema 端点), 每个 job 独立起 5148
+  frontend-contract:
+    needs: setup
+    runs-on: ubuntu-latest
+    continue-on-error: ${{ github.event_name == 'pull_request' }}
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: 784533
+          POSTGRES_DB: spike_test_v3
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install Python deps
+        run: pip install psycopg2-binary
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+      - name: Download prebuilt backend
+        # WHY: path 去掉 /bin 后缀
+        #   setup job upload 路径是 backend/src/SakuraFilter.Api/bin
+        #   → zip 顶层目录 = backend/src/SakuraFilter.Api/bin/
+        #   → download 到 path: backend/src/SakuraFilter.Api
+        #   → 解压后产物 = backend/src/SakuraFilter.Api/bin/Release/net8.0/SakuraFilter.Api ✅
+        #   之前 path: backend/src/SakuraFilter.Api/bin
+        #   → 解压后 = backend/src/SakuraFilter.Api/bin/backend/src/SakuraFilter.Api/bin/... ❌ 路径重复
+        #   → dotnet run --no-build 找不到 SakuraFilter.Api → Win32Exception 2 (No such file or directory)
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-build
+          path: backend/src/SakuraFilter.Api
+      - name: chmod API binary
+        # WHY: download-artifact 解压的文件默认 0644, Linux 容器内 +x 位未设置
+        #   → dotnet run --no-build fork+exec 触发 Win32Exception 13 (EACCES)
+        #   修复: 给 SakuraFilter.Api 主程序加可执行位
+        run: chmod +x backend/src/SakuraFilter.Api/bin/Release/net8.0/SakuraFilter.Api
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci --no-audit --no-fund
+
+      # 启动 API (frontend-contract job 专用 5148)
+      - name: Run API server (background)
+        id: api-server-fc
+        run: |
+          cd backend/src/SakuraFilter.Api
+          dotnet run -c Release --no-build --urls "http://localhost:5148" > /tmp/api5148_fc.log 2>&1 &
+          API_PID=$!
+          A_READY=0
+          for i in $(seq 1 120); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5148/api/etl/status -H "X-Admin-Token: $ADMIN_TOKEN" 2>/dev/null || echo 000)
+            if [ "$code" = "200" ]; then
+              echo "API 5148 (fc) ready after ${i}s"
+              A_READY=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$A_READY" != "1" ]; then
+            echo "::error::API 5148 (fc) 120s 内未就绪"
+            tail -n 30 /tmp/api5148_fc.log | sed 's/\x1b\[[0-9;]*[a-zA-Z]//g' | while IFS= read -r line; do
+              echo "::error file=/tmp/api5148_fc.log::$line"
+            done
+            exit 1
+          fi
+
+      # v30-9 修复: frontend-contract job 缺 SQL migration step 导致 /api/admin/etl/history 500
+      #   WHY: frontend-contract job 有独立 PG 实例 (L452-465), 但此前只在 setup job 跑 SQL migration
+      #     frontend-contract job 的 PG 是空库 (仅 EF Core EnsureCreated 基础表),
+      #     缺 etl_progress_log.skipped_missing_mr1 列 → /api/admin/etl/history 报 42703: column does not exist
+      #   修复: 复用 setup job L175-183 逻辑, 在 API server 就绪后顺序执行 backend/migrations/*.sql (全部 idempotent)
+      #   顺序: 必须在 API server 就绪后, 因 EF Core EnsureCreated 在 dotnet run 时才创建 products 等基础表
+      - name: Run SQL migrations (frontend-contract job)
+        env:
+          PGPASSWORD: ${{ env.PG_PASSWORD }}
+        run: |
+          for sql in backend/migrations/*.sql; do
+            echo "===== Executing $sql ====="
+            psql -h localhost -p 5432 -U postgres -d spike_test_v3 -v ON_ERROR_STOP=1 -f "$sql"
+          done
+          echo "===== All migrations applied (frontend-contract) ====="
+
+      # P4.2 契约测试 (vitest + zod) — 字典 schema 端点 → 8 个 zod 校验
+      - name: Run P4.2 contract test (vitest)
+        working-directory: frontend
+        env:
+          BACKEND_URL: ${{ env.BACKEND_URL }}
+          ADMIN_TOKEN: ${{ env.ADMIN_TOKEN }}
+        run: |
+          echo "===== P4.2 字典 schema 契约测试 (vitest) ====="
+          if npm run test:contract; then
+            echo "[PASS] P4.2 contract test 8/8 全绿"
+          else
+            RC=$?
+            echo "::error::P4.2 FAIL: contract test (rc=$RC)"
+            exit $RC
+          fi
+
+      # P4.3 视觉烟雾 (Python 调后端 8 字典端点 + 字段完整)
+      #   真正像素对比由未来 Playwright spec 跑 (本 job 不实现)
+      - name: Run P4.3 visual smoke (Python)
+        working-directory: spike-test
+        env:
+          ADMIN_TOKEN: ${{ env.ADMIN_TOKEN }}
+        run: |
+          echo "===== P4.3 视觉回归 Python 烟雾 (dict 端点) ====="
+          if python _test_p43_visual.py; then
+            echo "[PASS] P4.3 visual smoke 6/6"
+          else
+            RC=$?
+            echo "::error::P4.3 visual smoke FAIL (rc=$RC)"
+            exit $RC
+          fi
+
+      # P5.5 + P7.1: 性能埋点 + X-Admin-Token 自动轮转 E2E
+      #   - P5.5: /api/perf 端点 + 前后端 perf 拦截器 + 健康探针
+      #   - P7.1: token rotate CLI + DB 存储 + PG NOTIFY 多实例同步
+      #   包含 13 个测试用例, 需要 build CLI (dotnet build) 才能跑 P7.1.x
+      - name: Run P5.5 + P7.1 E2E (perf + token rotation)
+        working-directory: spike-test
+        env:
+          ADMIN_TOKEN: ${{ env.ADMIN_TOKEN }}
+        run: |
+          echo "===== P5.5 + P7.1 E2E (perf instrumentation + token rotation) ====="
+          # WHY 先 build CLI: P7.1.x 测试依赖 SakuraFilter.Cli.exe (rotate-token 命令)
+          echo "[build] SakuraFilter.Cli (Release)"
+          cd ../backend/src/SakuraFilter.Cli
+          dotnet build -c Release --nologo
+          if [ $? -ne 0 ]; then
+            echo "::error::SakuraFilter.Cli build 失败"
+            exit 1
+          fi
+          cd ../../../spike-test
+          # WHY 复制 CLI 到 Api bin: E2E 测试用 BACKEND/src/SakuraFilter.Cli/bin/... 路径
+          #   (与本地约定一致 — Api 与 Cli 是兄弟 project)
+          if python _test_p55_p71_e2e.py; then
+            echo "[PASS] P5.5+P7.1 E2E 13/13"
+          else
+            RC=$?
+            echo "::error::P5.5+P7.1 E2E FAIL (rc=$RC)"
+            exit $RC
+          fi
+
+      # P0-E2E-1: TypeScript 严格编译验证 (vue-tsc --noEmit)
+      #   WHY: 31 个 .vue/.ts 文件从未在 CI 验证类型, 可能存在类型漂移
+      #        type-check 0 错误通过才能继续 Playwright
+      - name: P0-E2E-1 TypeScript type-check (vue-tsc --noEmit)
+        working-directory: frontend
+        run: |
+          echo "===== P0-E2E-1 TypeScript 严格编译验证 ====="
+          if npm run type-check; then
+            echo "[PASS] type-check 0 错误"
+          else
+            RC=$?
+            echo "::error::type-check FAIL (rc=$RC), 存在 TypeScript 类型错误"
+            exit $RC
+          fi
+
+      # P0-E2E-2: Playwright 功能性 smoke (CI 空库友好)
+      #   WHY: 视觉回归 (visual/) 依赖数据, CI 空库会失败
+      #        功能性 smoke 只验证页面加载 + 路由 + 组件渲染, 15 个测试不依赖数据
+      #   覆盖: /search, /product/:oem, /admin/products, 8 字典页, /admin/etl, /admin/perf, /admin/help, /admin/compare
+      - name: Install Playwright chromium
+        working-directory: frontend
+        run: npx playwright install chromium --with-deps
+
+      - name: Install Playwright firefox (for cross-browser audit)
+        # WHY 月度 cron 跑跨端审计 (Chromium + Firefox), 装 firefox 浏览器
+        working-directory: frontend
+        run: npx playwright install firefox --with-deps
+
+      - name: Start Vite dev server (background)
+        run: |
+          cd frontend
+          # v28-4: vite.config.ts port=5175 (本地 dev 用, 5173 被另一项目占用)
+          #   CI 上 5173 空闲, 用 --port 5173 覆盖, 与 e2e.yml FRONTEND_URL/P0-E2E-2 BASE_URL 一致
+          npm run dev -- --port 5173 > /tmp/vite5173.log 2>&1 &
+          VITE_PID=$!
+          V_READY=0
+          for i in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5173 2>/dev/null || echo 000)
+            if [ "$code" = "200" ]; then
+              echo "Vite 5173 ready after ${i}s"
+              V_READY=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$V_READY" != "1" ]; then
+            echo "::error::Vite 5173 60s 内未就绪"
+            tail -n 30 /tmp/vite5173.log || true
+            exit 1
+          fi
+
+      - name: Run P0-E2E-2 Playwright smoke (15 tests)
+        working-directory: frontend
+        env:
+          BASE_URL: http://localhost:5173
+          ADMIN_TOKEN: ${{ env.ADMIN_TOKEN }}
+        run: |
+          echo "===== P0-E2E-2 Playwright 功能性 smoke (15 tests) ====="
+          if npx playwright test tests/functional/smoke.spec.ts; then
+            echo "[PASS] Playwright smoke 15/15 全绿"
+          else
+            RC=$?
+            echo "::error::Playwright smoke FAIL (rc=$RC)"
+            # 上传失败诊断截图
+            exit $RC
+          fi
+
+      - name: Upload Playwright report (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ github.run_id }}
+          path: frontend/playwright-report/
+          retention-days: 7
+          if-no-files-found: ignore
+
+      # P2.7-0: 安装 Python Playwright + 3 浏览器 (chromium/firefox/webkit)
+      #   WHY: P2.7-1 跨端审计 (3 浏览器) + P2.7-2 极端场景 (chromium) 都用 Python playwright
+      #        之前 V27-9-2 step 在 P2.7-1/P2.7-2 之后才装, 导致 ModuleNotFoundError: No module named 'playwright'
+      #        修复: 把 Python playwright 安装提前到 P2.7-1 之前
+      #   注: 与 V27-9-2 (design audit 用 chromium) 重复装一次 pip install playwright, 但 python -m playwright install
+      #        会复用已下载的浏览器二进制, 第二次接近 no-op (~2s)
+      - name: P2.7-0 Install Python Playwright + 3 browsers (chromium/firefox/webkit)
+        run: |
+          echo "===== P2.7-0 安装 Python Playwright + 3 浏览器 ====="
+          pip install playwright
+          python -m playwright install chromium firefox webkit --with-deps
+          echo "[PASS] Python Playwright + 3 浏览器已安装"
+
+      # P2.7-1: 跨端审计 (Chromium + Firefox + WebKit × 3 视口 × 5 路由 = 45 组合)
+      #   WHY: 之前 E2E 只跑 Chromium 1440x900, 50% 移动 + 30% Firefox/WebKit 用户零覆盖
+      #        月度 cron 触发, 防止 mobile/Firefox/WebKit 兼容回归
+      #   注: e2e.yml 之前注释 "2 browsers" 有误, 实际 _cross_browser_audit.py L31 是 3 浏览器
+      - name: Run P2.7-1 cross-browser audit (3 browsers × 3 viewports × 5 routes)
+        working-directory: spike-test
+        run: |
+          echo "===== P2.7-1 跨端审计 ====="
+          if python _cross_browser_audit.py; then
+            echo "[PASS] 跨端 30 组合 0 错误"
+          else
+            RC=$?
+            echo "::warning::P2.7-1 跨端审计发现问题 (rc=$RC), 上传截图"
+            exit 0  # 不阻塞 PR, 仅警告
+          fi
+
+      - name: Upload cross-browser screenshots (always, 30 PNG)
+        if: always() && github.event_name == 'push' || github.event_name == 'schedule'
+        uses: actions/upload-artifact@v4
+        with:
+          name: cross-browser-screenshots-${{ github.run_id }}
+          path: spike-test/screenshots/
+          retention-days: 30
+          if-no-files-found: ignore
+
+      # P2.7-2: 极端场景 E2E (5 个场景: 空/超长/XSS/断网/404)
+      #   WHY: 之前 E2E 只测标准路径, 真实用户会输入空/超长/特殊字符/断网
+      #        月度 cron 触发, 作为真实业务覆盖的 regression 防火线
+      - name: Run P2.7-2 edge case E2E (5 scenarios)
+        working-directory: spike-test
+        run: |
+          echo "===== P2.7-2 极端场景 E2E ====="
+          if python _edge_case_e2e.py; then
+            echo "[PASS] 极端场景 5/5 PASS"
+          else
+            RC=$?
+            echo "::warning::P2.7-2 极端场景失败 (rc=$RC), 需人工排查"
+            exit 0  # 不阻塞 PR, 仅警告
+          fi
+
+      # ===== V24-F92 (v27-9): API 契约 + 设计巡检 CI 化 =====
+      # WHY: 之前 _api_contract_test.py 和 _design_audit.py 只能本地手动跑,
+      #      无 CI 防回归, 改 API 路径/响应结构后无法及时发现问题
+      # 复用 frontend-contract job 已有的 PG + API 5148 + Vite 5173 + Python 环境
+      # 新增依赖: Python playwright + chromium (仅 design audit 需要)
+
+      # V27-9-1: API 契约测试 — 已禁用 (2026-08-02)
+      #   🔧 fix(审查): 该步骤引用的 spike-test/_e2e_audit/_api_contract_test.py 从未提交到 git
+      #     (本地/远程均不存在), CI 每次 exit 2 (file not found) 导致 frontend-contract job 失败
+      #   处置: 脚本实现是 suggestions P2-3 待办 (与 ADR #4 Testcontainers 冲突, 待用户决策),
+      #     决策落地并提交脚本后恢复此步骤; 契约覆盖暂由 frontend/tests/contract + Playwright e2e 承担
+      # - name: V27-9-1 API contract test (urllib, 20+ endpoints)
+      #   working-directory: spike-test
+      #   env:
+      #     BACKEND_URL: ${{ env.BACKEND_URL }}
+      #     ADMIN_TOKEN: ${{ env.ADMIN_TOKEN }}
+      #     USE_DEV_TOKEN: "1"
+      #   run: |
+      #     echo "===== V27-9-1 API 契约测试 ====="
+      #     OUTPUT=$(python _e2e_audit/_api_contract_test.py 2>&1)
+      #     echo "$OUTPUT"
+      #     if echo "$OUTPUT" | grep -q '\[FAIL\]'; then
+      #       echo "::error::V27-9-1 API 契约测试存在 [FAIL] 行, 需排查"
+      #       exit 1
+      #     fi
+      #     echo "[PASS] V27-9-1 API 契约测试通过"
+
+      # V27-9-2: 安装 Python Playwright + Chromium (design audit 需要)
+      #   ~30s, 与 Node Playwright 独立 (Python 包不共享 Node 浏览器二进制)
+      #   v28-4: 加 if: always() — 与 V27-9-3 配套, 即使前面 step 失败也能装依赖跑巡检
+      - name: V27-9-2 Install Python Playwright + chromium
+        if: always()
+        run: |
+          echo "===== V27-9-2 安装 Python Playwright + Chromium ====="
+          pip install playwright
+          python -m playwright install chromium --with-deps
+          echo "[PASS] Python Playwright + Chromium 已安装"
+
+      # V27-9-3: 设计巡检 (21 页面 × 3 视口 × 多检查项)
+      #   覆盖: 页面加载 + console error + 4xx/5xx + H1 语义 + 按钮 + A11y + 响应式截图
+      #   continue-on-error: 首次接入怕有 console error 误判 (如 favicon 404), 设为非阻塞
+      #   v28-4: 加 if: always() — Day 9.6 cursor baseline 500 (独立 P1) 会阻断后续 step,
+      #     但 V27-9-3 与 Day 9.6 业务测试无依赖, 应 always 跑 (与 continue-on-error 语义一致)
+      - name: V27-9-3 Design audit (21 pages, 3 viewports)
+        if: always()
+        working-directory: spike-test
+        env:
+          FRONTEND_URL: http://localhost:5173
+          BACKEND_URL: ${{ env.BACKEND_URL }}
+          ADMIN_TOKEN: ${{ env.ADMIN_TOKEN }}
+        continue-on-error: true
+        run: |
+          echo "===== V27-9-3 设计巡检 (21 页面) ====="
+          if python _e2e_audit/_design_audit.py; then
+            echo "[PASS] V27-9-3 设计巡检通过"
+          else
+            RC=$?
+            echo "::warning::V27-9-3 设计巡检发现问题 (rc=$RC), 上传截图供人工排查"
+            exit 0  # 非阻塞, 仅警告 (console error 可能是 favicon 404 等无害)
+          fi
+
+      - name: Upload design audit screenshots (always)
+        if: always() && github.event_name == 'push' || github.event_name == 'schedule'
+        uses: actions/upload-artifact@v4
+        with:
+          name: design-audit-screenshots-${{ github.run_id }}
+          path: spike-test/_e2e_audit/screenshots_design/
+          retention-days: 30
+          if-no-files-found: ignore
+

@@ -1,0 +1,38 @@
+{
+  "timestamp": "2026-07-19T16:12:32.536678",
+  "results": [
+    {
+      "q": "oil",
+      "baseline_p95_ms": 196.6800000082003,
+      "union_all_p95_ms": 325.2308999944944,
+      "no_xref_exists_p95_ms": 119.49850000382867
+    },
+    {
+      "q": "filter",
+      "baseline_p95_ms": 203.6313999997219,
+      "union_all_p95_ms": 383.86950000131037,
+      "no_xref_exists_p95_ms": 76.59360000980087
+    },
+    {
+      "q": "CAT",
+      "baseline_p95_ms": 139.5118999935221,
+      "union_all_p95_ms": 290.97770000225864,
+      "no_xref_exists_p95_ms": 148.35319999838248
+    },
+    {
+      "q": "bosch",
+      "baseline_p95_ms": 144.97019999544136,
+      "union_all_p95_ms": 293.47030000644736,
+      "no_xref_exists_p95_ms": 147.19839999452233
+    },
+    {
+      "q": "kubota",
+      "baseline_p95_ms": 151.29959999467246,
+      "union_all_p95_ms": 285.76990000146907,
+      "no_xref_exists_p95_ms": 146.35229999839794
+    }
+  ],
+  "avg_baseline_p95_ms": 167.21861999831162,
+  "avg_union_all_p95_ms": 315.86366000119597,
+  "avg_no_xref_exists_p95_ms": 127.59920000098646
+}

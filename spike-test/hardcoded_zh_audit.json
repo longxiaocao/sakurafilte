@@ -1,0 +1,79 @@
+{
+  "stats": {
+    "files_scanned": 15,
+    "total_hardcoded": 8,
+    "files_with_zh": 2,
+    "by_context": {
+      "string": 7,
+      "ElMessage.success": 1
+    }
+  },
+  "by_file_top": [
+    {
+      "file": "frontend\\src\\views\\admin\\AdminHelpView.vue",
+      "count": 5
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "count": 3
+    }
+  ],
+  "findings": [
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 354,
+      "context": "string",
+      "text": "恢复",
+      "key_suggestion": "admin.etlview.line354"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 354,
+      "context": "string",
+      "text": "取消",
+      "key_suggestion": "admin.etlview.line354"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminEtlView.vue",
+      "line": 387,
+      "context": "ElMessage.success",
+      "text": "已触发 Resume: entity=${r.entity} checkpoint=${r.checkpointId} (从第 ${r.nextLineNo} ",
+      "key_suggestion": "admin.etlview.line387"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminHelpView.vue",
+      "line": 29,
+      "context": "string",
+      "text": "检查该 OEM 是否在产品表 oem2 字段里 (注意: 不是 cross_references.oem_brand). 前台公开页用 oemNoDisplay",
+      "key_suggestion": "admin.helpview.line29"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminHelpView.vue",
+      "line": 33,
+      "context": "string",
+      "text": "字典管理",
+      "key_suggestion": "admin.helpview.line33"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminHelpView.vue",
+      "line": 41,
+      "context": "string",
+      "text": "reading 阶段是流式 COPY 暂存, 大文件 (1M 行) 可能 30-60s. 如超过 5 分钟无进度, 检查后端日志 (output/SPIKE-R",
+      "key_suggestion": "admin.helpview.line41"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminHelpView.vue",
+      "line": 45,
+      "context": "string",
+      "text": "批量停售",
+      "key_suggestion": "admin.helpview.line45"
+    },
+    {
+      "file": "frontend\\src\\views\\admin\\AdminHelpView.vue",
+      "line": 49,
+      "context": "string",
+      "text": "检查 (1) 产品 isPublished=true (上架) (2) slot 1-6 范围 (3) 浏览器 console 看 OSS 预签名 URL 1 ",
+      "key_suggestion": "admin.helpview.line49"
+    }
+  ]
+}
