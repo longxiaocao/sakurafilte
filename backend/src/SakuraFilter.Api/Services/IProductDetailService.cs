@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
+using SakuraFilter.Api.Extensions;
 using SakuraFilter.Core.DTOs;
 using SakuraFilter.Infrastructure.Data;
 
@@ -57,15 +59,18 @@ public class ProductDetailService : IProductDetailService
     private readonly ProductDbContext _db;
     private readonly AdminProductService _adminService;
     private readonly ILogger<ProductDetailService> _logger;
+    private readonly IMemoryCache _cache;
 
     public ProductDetailService(
         ProductDbContext db,
         AdminProductService adminService,
-        ILogger<ProductDetailService> logger)
+        ILogger<ProductDetailService> logger,
+        IMemoryCache cache)
     {
         _db = db;
         _adminService = adminService;
         _logger = logger;
+        _cache = cache;
     }
 
     public async Task<ProductDetailDto?> GetByOemAsync(string oem, CancellationToken ct = default)
@@ -73,6 +78,18 @@ public class ProductDetailService : IProductDetailService
         if (string.IsNullOrWhiteSpace(oem)) return null;
         // 长度防御: 列长 50, 拒绝超长输入避免无效 DB 查询
         if (oem.Length > 200) return null;
+
+        // 🔧 fix(2026-08-23 走查实测): 公开详情 IMemoryCache 30 秒 — 详情 API 从 ~1000ms → 缓存命中 <10ms
+        //   WHY: GetByOemAsync → GetByIdAsync 4 串行查询 (产品+xrefs+apps+images) ≈ 1000ms (用户实测 966ms),
+        //   单 DbContext 无法真正并发 (EF Core DbContext 非线程安全, 共享锁保护),
+        //   最稳妥方案是缓存整个 DTO — 重复点击/列表预取都秒进, ETL 间变更容忍 30 秒延迟。
+        //   仅公开入口缓存, 管理端点仍实时 (管理员写后立即看到新数据)。
+        var cacheKey = $"product-detail:oem:{oem}";
+        if (_cache.TryGetValue<ProductDetailDto?>(cacheKey, out var cached))
+        {
+            _logger.LogDebug("GetByOemAsync: 缓存命中 oem={Oem}", oem);
+            return cached;
+        }
 
         // P3-2 修复: fallback 合并为 1 次 OR 查询 + ORDER BY priority。
         // 公开入口优先匹配已上架 OEM3；随后兼容产品主表 OEM、OEM2 与内部 MR1。
@@ -96,7 +113,10 @@ public class ProductDetailService : IProductDetailService
             return null;
         }
         // 复用 AdminProductService.GetByIdAsync: 投影逻辑统一, 避免重复字段映射
-        return await _adminService.GetByIdAsync(matched.Id.Value, ct);
+        var detail = await _adminService.GetByIdAsync(matched.Id.Value, ct);
+        // 缓存命中点: 30 秒, 产品数据 ETL 间变更可容忍 (管理员写入路径不读此缓存)
+        _cache.SetWithSize(cacheKey, detail, TimeSpan.FromSeconds(30));
+        return detail;
     }
 
     public async Task<ProductDetailDto?> GetBySlugSegmentsAsync(
