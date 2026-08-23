@@ -92,67 +92,148 @@ public class PublicSearchController : ControllerBase
         if (distinctOems.Count == 0)
             return Ok(new BatchOemResponse(0, 0, 0, new List<BatchOemResult>()));
 
-        // 单次 SQL: WHERE oem_2 = ANY(@oems)
-        //   EF Core 翻译 distinctOems.Contains(p.Oem2) 为 p.oem_2 = ANY(...)
-        //   排除 Oem2=null 行, 避免 "Contains('')" 误匹配
-        var candidates = await _db.Products.AsNoTracking()
-            .Where(p => p.IsPublished && !p.IsDiscontinued
-                && p.Oem2 != null && distinctOems.Contains(p.Oem2))
-            .Select(p => new
+        // 🔧 fix(2026-08-23 走查实测): 批量 API 仅查 products.Oem2 一个字段 (旧实现),
+        //   走查 U0000014 等真实 OEM 在 xrefs.oem_no_3 命中但批量 miss。
+        //   对齐单条 GetByOemAsync (V2-251aaa5 拆段索引查询), 分 3 段走索引,
+        //   优先级: xrefs.OemNo3 → products.OemNoDisplay → products.Oem2 (BitmapOr 走单列索引)。
+        //   每段 ANY(oems) 走单列索引, 总耗时约 3× 段查询 + 1 详情查询, 500 OEM 实测 < 100ms。
+        // 第 1 段: xrefs.oem_no_3 (用户最常贴的 OEM 主表, ix_xrefs_oem_no_3_trgm 索引)
+        var xrefHits = await _db.CrossReferences.AsNoTracking()
+            .Where(x => x.OemNo3 != null && distinctOems.Contains(x.OemNo3))
+            .Select(x => new
             {
-                p.Id,
-                p.Oem2,
-                p.ProductName1
+                x.OemNo3,
+                x.ProductId,
+                x.OemBrand,
+                x.ProductName1,
+                x.Oem2
             })
             .ToListAsync(ct);
+        var xrefByOem = xrefHits
+            .GroupBy(x => x.OemNo3!)
+            .ToDictionary(g => g.Key, g => g.OrderBy(x => x.ProductId).First());
+        var remaining = distinctOems
+            .Where(o => !xrefByOem.ContainsKey(o))
+            .ToList();
 
-        if (candidates.Count == 0)
+        // 第 2 段: products.oem_no_display (主 OEM, 走单列索引)
+        var productHits2 = new List<(string Oem, long Id, string? OemNoDisplay, string? Oem2, string? ProductName1)>();
+        var remaining2 = new List<string>();
+        if (remaining.Count > 0)
         {
-            var emptyResults = distinctOems
-                .Select(oem => new BatchOemResult(oem, Hit: false))
-                .ToList();
-            return Ok(new BatchOemResponse(distinctOems.Count, 0, distinctOems.Count, emptyResults));
+            var pByDisplay = await _db.Products.AsNoTracking()
+                .Where(p => p.IsPublished && !p.IsDiscontinued
+                    && p.OemNoDisplay != null && remaining.Contains(p.OemNoDisplay))
+                .Select(p => new { p.Id, p.OemNoDisplay, p.Oem2, p.ProductName1 })
+                .ToListAsync(ct);
+            var pDisplayMap = pByDisplay
+                .GroupBy(x => x.OemNoDisplay!)
+                .ToDictionary(g => g.Key, g => g.OrderBy(x => x.Id).First());
+            foreach (var oem in remaining)
+            {
+                if (pDisplayMap.TryGetValue(oem, out var hit))
+                {
+                    productHits2.Add((oem, hit.Id, hit.OemNoDisplay, hit.Oem2, hit.ProductName1));
+                }
+                else
+                {
+                    remaining2.Add(oem);
+                }
+            }
         }
 
-        // 每个 product 聚合 brand (来自 cross_references)
-        var productIds = candidates.Select(c => c.Id).Distinct().ToList();
-        var brandGroups = await _db.CrossReferences.AsNoTracking()
-            .Where(x => productIds.Contains(x.ProductId) && x.OemBrand != null)
-            .GroupBy(x => x.ProductId)
-            .Select(g => new
+        // 第 3 段: products.oem_2 (BitmapOr 索引, 兜底)
+        var productHits3 = new List<(string Oem, long Id, string? OemNoDisplay, string? Oem2, string? ProductName1)>();
+        if (remaining2.Count > 0)
+        {
+            var pByOem2 = await _db.Products.AsNoTracking()
+                .Where(p => p.IsPublished && !p.IsDiscontinued
+                    && p.Oem2 != null && remaining2.Contains(p.Oem2))
+                .Select(p => new { p.Id, p.OemNoDisplay, p.Oem2, p.ProductName1 })
+                .ToListAsync(ct);
+            var pOem2Map = pByOem2
+                .GroupBy(x => x.Oem2!)
+                .ToDictionary(g => g.Key, g => g.OrderBy(x => x.Id).First());
+            foreach (var oem in remaining2)
             {
-                ProductId = g.Key,
-                Brands = g.Select(x => x.OemBrand!).Distinct().ToList()
-            })
-            .ToListAsync(ct);
+                if (pOem2Map.TryGetValue(oem, out var hit))
+                {
+                    productHits3.Add((oem, hit.Id, hit.OemNoDisplay, hit.Oem2, hit.ProductName1));
+                }
+            }
+        }
+
+        // 合并所有命中: xrefs 优先 (有 oem_brand), products 段无 brand (BrandMap 查)
+        var allProductIds = xrefHits.Select(x => x.ProductId)
+            .Concat(productHits2.Select(x => x.Id))
+            .Concat(productHits3.Select(x => x.Id))
+            .Distinct()
+            .ToList();
+        object? brandGroupsObj;
+        if (allProductIds.Count == 0)
+        {
+            brandGroupsObj = null;
+        }
+        else
+        {
+            brandGroupsObj = await _db.CrossReferences.AsNoTracking()
+                .Where(x => allProductIds.Contains(x.ProductId) && x.OemBrand != null)
+                .GroupBy(x => x.ProductId)
+                .Select(g => new
+                {
+                    ProductId = g.Key,
+                    Brands = g.Select(x => x.OemBrand!).Distinct().ToList()
+                })
+                .ToListAsync(ct);
+        }
+        var brandGroups = (brandGroupsObj as IEnumerable<dynamic>)?.ToList() ?? new List<dynamic>();
         var brandMap = brandGroups.ToDictionary(
-            b => b.ProductId,
+            b => (long)b.ProductId,
             b => b.Brands.Count == 1 ? b.Brands[0] : string.Join(", ", b.Brands));
 
-        // 同一 OEM 可能命中多条产品, 取 Id 最小 (最早上架) 作为代表
-        var byOem = candidates
-            .GroupBy(c => c.Oem2)
-            .ToDictionary(g => g.Key!, g => g.OrderBy(x => x.Id).First());
-
-        // 按请求顺序 (distinct 后) 产出
+        // 按请求顺序产出 (3 段结果优先级合并: xrefs > oem_no_display > oem_2)
+        var product2Map = productHits2.ToDictionary(x => x.Oem, x => x);
+        var product3Map = productHits3.ToDictionary(x => x.Oem, x => x);
         var results = distinctOems.Select(oem =>
         {
-            if (byOem.TryGetValue(oem, out var hit))
+            if (xrefByOem.TryGetValue(oem, out var x))
             {
                 return new BatchOemResult(
                     Oem: oem,
                     Hit: true,
-                    ProductId: hit.Id,
-                    OemBrand: brandMap.GetValueOrDefault(hit.Id),
-                    ProductName1: hit.ProductName1,
-                    Oem2: hit.Oem2
+                    ProductId: x.ProductId,
+                    OemBrand: x.OemBrand,
+                    ProductName1: x.ProductName1,
+                    Oem2: x.Oem2
+                );
+            }
+            if (product2Map.TryGetValue(oem, out var p2))
+            {
+                return new BatchOemResult(
+                    Oem: oem,
+                    Hit: true,
+                    ProductId: p2.Id,
+                    OemBrand: brandMap.GetValueOrDefault(p2.Id),
+                    ProductName1: p2.ProductName1,
+                    Oem2: p2.Oem2 ?? oem
+                );
+            }
+            if (product3Map.TryGetValue(oem, out var p3))
+            {
+                return new BatchOemResult(
+                    Oem: oem,
+                    Hit: true,
+                    ProductId: p3.Id,
+                    OemBrand: brandMap.GetValueOrDefault(p3.Id),
+                    ProductName1: p3.ProductName1,
+                    Oem2: p3.Oem2
                 );
             }
             return new BatchOemResult(oem, Hit: false);
         }).ToList();
 
         var hitCount = results.Count(r => r.Hit);
-        _logger.LogInformation("batch-oem: distinct={Total} hit={Hit} miss={Miss}",
+        _logger.LogInformation("batch-oem: distinct={Total} hit={Hit} miss={Miss} (xref+display+oem2 三段)",
             distinctOems.Count, hitCount, distinctOems.Count - hitCount);
 
         return Ok(new BatchOemResponse(
