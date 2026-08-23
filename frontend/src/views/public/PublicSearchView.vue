@@ -264,13 +264,14 @@ function clearAll() {
 // ===== 详情页跳转 =====
 function viewDetail(row: PublicSearchHit) {
   // V2 Task 4.4: 改用 SEO URL (PublicSearchHit 仅含 oemNoDisplay/oem2/productName1, 降级走 /product/{oem} 301)
+  // 🔧 fix(2026-08-23 走查): window.location.href 整页刷新 → router.push 无刷新跳转 (同 AggregateSearchView)
   const oem = row.oemNoDisplay || row.oem2
   if (oem) {
     const url = buildProductUrl({
       oemNoDisplay: oem,
       productName1: row.productName1
     })
-    window.location.href = url
+    router.push(url)
   }
 }
 

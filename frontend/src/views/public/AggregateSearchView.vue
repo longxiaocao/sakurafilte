@@ -200,6 +200,9 @@ function usePlaceholder(event: Event): void {
 
 // V2 Task 4.4: 跳转产品详情 SEO URL
 //   AggregateSearchHit 含产品名和 OEM3，可拼完整 SEO URL。
+// 🔧 fix(2026-08-23 走查): window.location.href 整页刷新 → router.push 无刷新跳转。
+//   /seo/{oem} 是 SPA 路由 (ProductDetailView), 整页刷新会白屏重载 (用户感知"半秒多");
+//   router.push 同一 URL 无刷新, 详情进入感知瞬间 (URL 不变, SEO/分享不受影响)。
 function viewDetail(hit: AggregateSearchHit) {
   const firstOem = getPrimaryOem(hit)
   const url = buildProductUrl({
@@ -209,7 +212,7 @@ function viewDetail(hit: AggregateSearchHit) {
     oemNo3: firstOem?.oemNo3,
     oemNoDisplay: firstOem?.oemNo3 || hit.oem2
   })
-  window.location.href = url
+  router.push(url)
 }
 
 // 清空搜索
