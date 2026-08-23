@@ -331,7 +331,7 @@ onBeforeUnmount(() => {
           </el-button>
           <div v-for="brand in category.brands" :key="brand.brand" class="mt-1 text-xs">
             <el-button text size="small" class="!h-auto !px-0" @click="toggleBrand(brand.brand); selectMachine(category.category, brand.brand)">
-              {{ brand.brand }} <span v-if="brand.models.length">({{ brand.models.length }})</span>
+              {{ brand.brand }}
             </el-button>
             <div v-if="brand.models.length && expandedBrands.has(brand.brand)" class="ml-2 mt-1 space-y-1">
               <el-button
