@@ -1,4 +1,5 @@
 -- 025: products 表 trgm GIN 索引 (融合搜索 fuzzy 性能)
+-- 一次性脚本, 不可重跑 (CREATE INDEX IF NOT EXISTS 自身幂等, 但仍标一次性)
 -- WHY (2026-08-23 走查): fuzzy 融合搜索 (全字段 ILIKE %kw%) 段1 (products 5 字段 OR)
 --   在 1M 行上 Parallel Seq Scan 810ms → 加 trgm GIN 索引走 BitmapOr (目标 <50ms)。
 --   oem_2 已有 ix_products_oem_2_trgm; 补齐 oem_no_display / product_name_1 / product_name_2 / type。

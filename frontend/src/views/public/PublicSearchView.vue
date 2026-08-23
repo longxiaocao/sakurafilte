@@ -203,6 +203,19 @@ watch(pageSize, () => {
   if (page.value === 1 && !allEmpty.value) doSearch()
 })
 
+// 🔧 fix(2026-08-23 走查): 融合搜索框 watch — 用户输入 AIR/G1312 等需自动搜索
+//   el-autocomplete 只有 @select 和 @keyup.enter, 用户只敲字符不回车时不会触发 doSearch
+//   → 用户误以为搜索失败。改为 v-model 绑定 + 500ms 防抖 watch (与 form watch 同源体验)
+let fuzzyDebounceTimer: number | null = null
+watch(fuzzy, (nv, ov) => {
+  if (syncing) return
+  if (nv === ov) return
+  if (fuzzyDebounceTimer) window.clearTimeout(fuzzyDebounceTimer)
+  fuzzyDebounceTimer = window.setTimeout(() => {
+    doSearch()
+  }, 500)
+})
+
 // 监听 route 变化 (浏览器后退/前进/分享链接打开) → 还原 form
 watch(() => route.query, () => {
   if (syncing) return

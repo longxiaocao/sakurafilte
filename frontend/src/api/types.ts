@@ -629,6 +629,10 @@ export interface PublicSearchHit {
   id: number
   oemNoDisplay: string
   oem2?: string | null
+  // 🔧 fix(2026-08-23 走查): 新增 3 列 — 用户能确认结果是否目标
+  oemBrand?: string | null
+  machineBrand?: string | null
+  engineBrand?: string | null
   productName1?: string | null
   type?: string | null
   d1Mm?: string | null
