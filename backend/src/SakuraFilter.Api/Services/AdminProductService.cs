@@ -26,17 +26,21 @@ public class AdminProductService
     private readonly ILogger<AdminProductService> _logger;
     private readonly CursorHmac _cursorHmac;
     private readonly IObjectStorage? _storage;  // P3.3: 用于图片预签名 URL (前台 + 后台详情)
+    // 🔧 fix(2026-08-23 走查): DbContextFactory 用于详情 4 查询并发 (独立上下文真正并行)
+    private readonly IDbContextFactory<ProductDbContext>? _dbFactory;
 
     public AdminProductService(
         ProductDbContext db,
         ILogger<AdminProductService> logger,
         CursorHmac cursorHmac,
-        IObjectStorage? storage = null)
+        IObjectStorage? storage = null,
+        IDbContextFactory<ProductDbContext>? dbFactory = null)
     {
         _db = db;
         _logger = logger;
         _cursorHmac = cursorHmac;
         _storage = storage;
+        _dbFactory = dbFactory;
     }
 
     // ========== 新增产品 ==========
@@ -624,46 +628,71 @@ public class AdminProductService
     // ========== 详情 ==========
     public async Task<ProductDetailDto> GetByIdAsync(long id, CancellationToken ct = default)
     {
-        var p = await _db.Products.AsNoTracking()
-            .FirstOrDefaultAsync(x => x.Id == id, ct)
-            ?? throw new KeyNotFoundException($"产品 id={id} 不存在");
+        // 🔧 fix(2026-08-23 走查): 详情 4 查询并发 — 首次加载 ~1s → ~300ms
+        //   WHY: 单 scoped DbContext 非线程安全 (共享锁使 Task.WhenAll 退化为串行);
+        //   注入 IDbContextFactory 后用 4 个独立上下文真正并行 (max(单查询) ≈ 250ms)。
+        //   未注入 factory (测试/旧构造) 时回退串行, 行为不变。
+        Product p;
+        List<XrefInfo> xrefs;
+        List<MachineAppInfo> apps;
+        List<ProductImage> imageRows;
 
-        // V2 Task 2.3.5: xrefs 按 brand_sort_order → sort_order → oem_no_3 排序
-        //   WHY: 详情页 crossReferences 表格直接展示, 前端不再二次排序
-        //   与 MeiliSearchProvider.BuildMr1DocumentAsync / PublicProductController.GetSiblingOem3 排序口径一致
-        var xrefs = await (
-            from x in _db.CrossReferences.AsNoTracking()
-            where x.ProductId == id
-            // V2: brand_sort_order LEFT JOIN (brand 软删除时按 int.MaxValue 兜底排末尾)
-            orderby (_db.XrefOemBrands
-                        .Where(b => b.Brand == x.OemBrand && b.DeletedAt == null)
-                        .Select(b => (int?)b.SortOrder)
-                        .FirstOrDefault() ?? int.MaxValue),
-                    x.SortOrder,
-                    x.OemNo3
-            select new XrefInfo(x.Id, x.ProductName1, x.OemBrand, x.OemNo3, x.Oem2, x.SortOrder, x.MachineType, x.IsPublished, x.RowVersion)
-        ).ToListAsync(ct);
+        if (_dbFactory is not null)
+        {
+            // 4 个查询各用独立 DbContext, 真正并发
+            var pTask = QueryProductAsync(id, ct);
+            var xrefsTask = QueryXrefsAsync(id, ct);
+            var appsTask = QueryAppsAsync(id, ct);
+            var imageRowsTask = QueryImageRowsAsync(id, ct);
+            await Task.WhenAll(pTask, xrefsTask, appsTask, imageRowsTask);
+            p = await pTask;
+            xrefs = await xrefsTask;
+            apps = await appsTask;
+            imageRows = await imageRowsTask;
+        }
+        else
+        {
+            p = await _db.Products.AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Id == id, ct)
+                ?? throw new KeyNotFoundException($"产品 id={id} 不存在");
 
-        var apps = await _db.MachineApplications.AsNoTracking()
-            .Where(m => m.ProductId == id)
-            .Select(m => new MachineAppInfo(
-                m.Id, m.MachineBrand, m.MachineModel, m.ModelName,
-                m.EngineBrand, m.EngineType, m.EngineEnergy,
-                m.ProductionDateStart, m.ProductionDateEnd,
-                m.Power, m.SerialNumberFrom, m.SerialNumberTo,
-                m.CarBodyType, m.Series,
-                m.Co2EmissionStandard, m.TransmissionType,
-                m.EngineDisplacement, m.NumberOfCylinders,
-                m.Gvwr, m.Tonnage, m.GeographicArea,
-                m.ChassisType, m.EngineModel,
-                m.CabinType, m.Capacity, m.EngineSerialNumber))
-            .ToListAsync(ct);
+            // V2 Task 2.3.5: xrefs 按 brand_sort_order → sort_order → oem_no_3 排序
+            //   WHY: 详情页 crossReferences 表格直接展示, 前端不再二次排序
+            //   与 MeiliSearchProvider.BuildMr1DocumentAsync / PublicProductController.GetSiblingOem3 排序口径一致
+            xrefs = await (
+                from x in _db.CrossReferences.AsNoTracking()
+                where x.ProductId == id
+                // V2: brand_sort_order LEFT JOIN (brand 软删除时按 int.MaxValue 兜底排末尾)
+                orderby (_db.XrefOemBrands
+                            .Where(b => b.Brand == x.OemBrand && b.DeletedAt == null)
+                            .Select(b => (int?)b.SortOrder)
+                            .FirstOrDefault() ?? int.MaxValue),
+                        x.SortOrder,
+                        x.OemNo3
+                select new XrefInfo(x.Id, x.ProductName1, x.OemBrand, x.OemNo3, x.Oem2, x.SortOrder, x.MachineType, x.IsPublished, x.RowVersion)
+            ).ToListAsync(ct);
 
-        // P3.3 (Task 11): 加载产品图片 (主图 slot 1 + 副图 slot 2-6)
-        var imageRows = await _db.ProductImages.AsNoTracking()
-            .Where(i => i.ProductId == id)
-            .OrderBy(i => i.Slot)
-            .ToListAsync(ct);
+            apps = await _db.MachineApplications.AsNoTracking()
+                .Where(m => m.ProductId == id)
+                .Select(m => new MachineAppInfo(
+                    m.Id, m.MachineBrand, m.MachineModel, m.ModelName,
+                    m.EngineBrand, m.EngineType, m.EngineEnergy,
+                    m.ProductionDateStart, m.ProductionDateEnd,
+                    m.Power, m.SerialNumberFrom, m.SerialNumberTo,
+                    m.CarBodyType, m.Series,
+                    m.Co2EmissionStandard, m.TransmissionType,
+                    m.EngineDisplacement, m.NumberOfCylinders,
+                    m.Gvwr, m.Tonnage, m.GeographicArea,
+                    m.ChassisType, m.EngineModel,
+                    m.CabinType, m.Capacity, m.EngineSerialNumber))
+                .ToListAsync(ct);
+
+            // P3.3 (Task 11): 加载产品图片 (主图 slot 1 + 副图 slot 2-6)
+            imageRows = await _db.ProductImages.AsNoTracking()
+                .Where(i => i.ProductId == id)
+                .OrderBy(i => i.Slot)
+                .ToListAsync(ct);
+        }
         var imageInfos = new List<ProductImageInfo>(imageRows.Count);
         // P1-4.1: 并行生成预签名 URL (Task.WhenAll), 6 张图从串行 600ms+ 降到并行 200ms 内
         //   WHY: 原 foreach 串行 await, 单张 ~100ms × 6 = 600ms+; 并行后总耗时 ≈ max(单张) ≈ 100-200ms
@@ -715,6 +744,61 @@ public class AdminProductService
             p.IsDiscontinued, p.CreatedAt, p.UpdatedAt,
             xrefs, apps, imageInfos
         );
+    }
+
+    // ========== 详情并发查询 (IDbContextFactory 独立上下文, 真正并行) ==========
+
+    private async Task<Product> QueryProductAsync(long id, CancellationToken ct)
+    {
+        await using var ctx = await _dbFactory!.CreateDbContextAsync(ct);
+        return await ctx.Products.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == id, ct)
+            ?? throw new KeyNotFoundException($"产品 id={id} 不存在");
+    }
+
+    private async Task<List<XrefInfo>> QueryXrefsAsync(long id, CancellationToken ct)
+    {
+        await using var ctx = await _dbFactory!.CreateDbContextAsync(ct);
+        // 与 GetByIdAsync 串行分支同口径 (brand_sort_order → sort_order → oem_no_3)
+        return await (
+            from x in ctx.CrossReferences.AsNoTracking()
+            where x.ProductId == id
+            orderby (ctx.XrefOemBrands
+                        .Where(b => b.Brand == x.OemBrand && b.DeletedAt == null)
+                        .Select(b => (int?)b.SortOrder)
+                        .FirstOrDefault() ?? int.MaxValue),
+                    x.SortOrder,
+                    x.OemNo3
+            select new XrefInfo(x.Id, x.ProductName1, x.OemBrand, x.OemNo3, x.Oem2, x.SortOrder, x.MachineType, x.IsPublished, x.RowVersion)
+        ).ToListAsync(ct);
+    }
+
+    private async Task<List<MachineAppInfo>> QueryAppsAsync(long id, CancellationToken ct)
+    {
+        await using var ctx = await _dbFactory!.CreateDbContextAsync(ct);
+        return await ctx.MachineApplications.AsNoTracking()
+            .Where(m => m.ProductId == id)
+            .Select(m => new MachineAppInfo(
+                m.Id, m.MachineBrand, m.MachineModel, m.ModelName,
+                m.EngineBrand, m.EngineType, m.EngineEnergy,
+                m.ProductionDateStart, m.ProductionDateEnd,
+                m.Power, m.SerialNumberFrom, m.SerialNumberTo,
+                m.CarBodyType, m.Series,
+                m.Co2EmissionStandard, m.TransmissionType,
+                m.EngineDisplacement, m.NumberOfCylinders,
+                m.Gvwr, m.Tonnage, m.GeographicArea,
+                m.ChassisType, m.EngineModel,
+                m.CabinType, m.Capacity, m.EngineSerialNumber))
+            .ToListAsync(ct);
+    }
+
+    private async Task<List<ProductImage>> QueryImageRowsAsync(long id, CancellationToken ct)
+    {
+        await using var ctx = await _dbFactory!.CreateDbContextAsync(ct);
+        return await ctx.ProductImages.AsNoTracking()
+            .Where(i => i.ProductId == id)
+            .OrderBy(i => i.Slot)
+            .ToListAsync(ct);
     }
 
     // ========== 列表分页 (Day 8.1 简单入口, 保持向后兼容) ==========

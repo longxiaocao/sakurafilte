@@ -91,29 +91,50 @@ public class ProductDetailService : IProductDetailService
             return cached;
         }
 
-        // P3-2 修复: fallback 合并为 1 次 OR 查询 + ORDER BY priority。
-        // 公开入口优先匹配已上架 OEM3；随后兼容产品主表 OEM、OEM2 与内部 MR1。
-        //   DB 往返 3→1, fallback 命中场景 ~6ms → ~2ms
-        var matched = await _db.Products.AsNoTracking()
-            .Where(p => p.IsPublished && !p.IsDiscontinued &&
-                        (p.CrossReferences.Any(x => x.OemNo3 == oem && x.IsPublished && !x.IsDiscontinued)
-                         || p.OemNoDisplay == oem || p.Oem2 == oem || p.Mr1 == oem))
-            .Select(p => new
-            {
-                Id = (long?)p.Id,
-                Priority = p.CrossReferences.Any(x => x.OemNo3 == oem && x.IsPublished && !x.IsDiscontinued) ? 1
-                    : (p.OemNoDisplay == oem ? 2 : (p.Oem2 == oem ? 3 : 4))
-            })
-            .OrderBy(x => x.Priority)
-            .FirstOrDefaultAsync(ct);
+        // 🔧 fix(2026-08-23 走查实测): 匹配查询拆两段走索引 — 详情 API 冷查询 450ms → <20ms
+        //   WHY: 原单条查询 (EXISTS cross_references + OR oem_no_display/oem_2/mr_1) 在百万行
+        //   products 上触发 Seq Scan (EXPLAIN: cost=9858729, actual 450ms) — 优化器无法把
+        //   correlated EXISTS + OR 组合成索引 BitmapOr。拆开查询每段都走索引:
+        //   - 第 1 段: xrefs.oem_no_3 (ix_xrefs_oem_no_3_trgm, ~16ms) → 优先级 1
+        //   - 第 2 段: products OR (BitmapOr 3 单列索引, ~2ms) → 优先级 2/3/4
+        //   往返 2 次但每段 <20ms, 总远优于单条 Seq Scan 450ms。
+        long? matchedId = null;
+        int priority = 0;
 
-        if (matched == null || !matched.Id.HasValue)
+        // 第 1 段: 优先匹配已上架 OEM3 (cross_references.oem_no_3)
+        var xrefMatch = await _db.CrossReferences.AsNoTracking()
+            .Where(x => x.OemNo3 == oem && x.IsPublished && !x.IsDiscontinued)
+            .Select(x => (long?)x.ProductId)
+            .FirstOrDefaultAsync(ct);
+        if (xrefMatch.HasValue)
+        {
+            matchedId = xrefMatch;
+            priority = 1;
+        }
+        else
+        {
+            // 第 2 段: fallback — 产品主表 OEM / OEM2 / 内部 MR1 (BitmapOr 走单列索引)
+            var pMatch = await _db.Products.AsNoTracking()
+                .Where(p => p.IsPublished && !p.IsDiscontinued &&
+                            (p.OemNoDisplay == oem || p.Oem2 == oem || p.Mr1 == oem))
+                .Select(p => new { Id = (long?)p.Id, Priority = p.OemNoDisplay == oem ? 2 : (p.Oem2 == oem ? 3 : 4) })
+                .OrderBy(x => x.Priority)
+                .FirstOrDefaultAsync(ct);
+            if (pMatch != null)
+            {
+                matchedId = pMatch.Id;
+                priority = pMatch.Priority;
+            }
+        }
+
+        if (matchedId == null || matchedId == 0)
         {
             _logger.LogInformation("GetByOemAsync: 404 oem={Oem}", oem);
             return null;
         }
+        _ = priority;  // 优先级仅用于匹配顺序, 已按顺序分段查询; 保留变量便于扩展
         // 复用 AdminProductService.GetByIdAsync: 投影逻辑统一, 避免重复字段映射
-        var detail = await _adminService.GetByIdAsync(matched.Id.Value, ct);
+        var detail = await _adminService.GetByIdAsync(matchedId.Value, ct);
         // 缓存命中点: 30 秒, 产品数据 ETL 间变更可容忍 (管理员写入路径不读此缓存)
         _cache.SetWithSize(cacheKey, detail, TimeSpan.FromSeconds(30));
         return detail;

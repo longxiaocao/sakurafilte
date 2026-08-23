@@ -211,6 +211,10 @@ public static class ServiceCollectionExtensions
         services.AddSingleton(dataSource);
 
         services.AddDbContext<ProductDbContext>(opt => opt.UseNpgsql(dataSource));
+        // 🔧 fix(2026-08-23 走查): 注册 DbContextFactory — GetByIdAsync 详情 4 查询用独立上下文并发
+        //   WHY: 单 scoped DbContext 非线程安全 (共享锁使 Task.WhenAll 退化为串行 ~1s);
+        //   factory 创建独立上下文可真正并行 (首次详情 ~1s → ~300ms)。与 AddDbContext 可共存。
+        services.AddDbContextFactory<ProductDbContext>(opt => opt.UseNpgsql(dataSource));
         return services;
     }
 
