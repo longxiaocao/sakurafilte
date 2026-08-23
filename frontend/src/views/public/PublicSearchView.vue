@@ -84,7 +84,9 @@ async function fetchSuggestions(fieldKey: string, typeaheadField: string, query:
   typeaheadControllers[fieldKey] = ctrl
   try {
     const resp = await publicSearchApi.typeahead(typeaheadField, query.trim(), 20, ctrl.signal)
-    cb(resp.items || [])
+    // 🔧 fix(2026-08-23 走查): el-autocomplete 默认 value-key="value", 期望对象数组 [{value: 'xxx'}]
+    //   之前直接传字符串数组 → 下拉不渲染 (Element Plus 静默忽略非预期格式)
+    cb((resp.items || []).map((s) => ({ value: s })))
   } catch {
     cb([])
   } finally {
