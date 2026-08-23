@@ -122,6 +122,8 @@ public class TypeaheadDictRebuildService
     /// </summary>
     public async Task RequestRebuildAsync(CancellationToken ct = default)
     {
+        var releaseRunningInFinally = true;
+
         // WHY 使用同一把锁完成 pending/running 的交接，避免执行者检查 pending 后、
         // 释放 running 前出现新请求，导致 pending 永久无人处理。
         lock (_coalesceLock)
@@ -155,6 +157,7 @@ public class TypeaheadDictRebuildService
                         if (_rebuildPending == 0)
                         {
                             _rebuildRunning = 0;
+                            releaseRunningInFinally = false;
                             break;
                         }
                     }
@@ -167,9 +170,12 @@ public class TypeaheadDictRebuildService
         }
         finally
         {
-            lock (_coalesceLock)
+            if (releaseRunningInFinally)
             {
-                _rebuildRunning = 0;
+                lock (_coalesceLock)
+                {
+                    _rebuildRunning = 0;
+                }
             }
         }
     }
