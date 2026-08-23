@@ -34,6 +34,7 @@ public class TypeaheadDictRebuildService
     /// 进程内 SemaphoreSlim 串行化 (单实例部署足够; 多实例需叠加 pg advisory lock)。
     /// </summary>
     private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly object _coalesceLock = new();
 
     /// <summary>ETL 合并式触发状态: 1=有重建在执行 (RequestRebuildAsync 路径)</summary>
     private int _rebuildRunning;
@@ -121,12 +122,20 @@ public class TypeaheadDictRebuildService
     /// </summary>
     public async Task RequestRebuildAsync(CancellationToken ct = default)
     {
-        // 已有重建在执行 → 标记 pending, 由执行者完成后补跑 (自身立即返回)
-        if (Interlocked.CompareExchange(ref _rebuildRunning, 1, 0) != 0)
+        // WHY 使用同一把锁完成 pending/running 的交接，避免执行者检查 pending 后、
+        // 释放 running 前出现新请求，导致 pending 永久无人处理。
+        lock (_coalesceLock)
         {
-            Interlocked.Exchange(ref _rebuildPending, 1);
-            return;
+            // 已有重建在执行 -> 标记 pending, 由执行者完成后补跑 (自身立即返回)
+            if (_rebuildRunning != 0)
+            {
+                _rebuildPending = 1;
+                return;
+            }
+
+            _rebuildRunning = 1;
         }
+
         try
         {
             await _gate.WaitAsync(ct);
@@ -134,9 +143,22 @@ public class TypeaheadDictRebuildService
             {
                 do
                 {
-                    Interlocked.Exchange(ref _rebuildPending, 0);
+                    lock (_coalesceLock)
+                    {
+                        _rebuildPending = 0;
+                    }
+
                     await RebuildCoreAsync(ct);
-                } while (Volatile.Read(ref _rebuildPending) != 0);
+
+                    lock (_coalesceLock)
+                    {
+                        if (_rebuildPending == 0)
+                        {
+                            _rebuildRunning = 0;
+                            break;
+                        }
+                    }
+                } while (true);
             }
             finally
             {
@@ -145,7 +167,10 @@ public class TypeaheadDictRebuildService
         }
         finally
         {
-            Interlocked.Exchange(ref _rebuildRunning, 0);
+            lock (_coalesceLock)
+            {
+                _rebuildRunning = 0;
+            }
         }
     }
 
