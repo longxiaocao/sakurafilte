@@ -143,9 +143,10 @@ const featuredLoading = ref(false)
 const compareIds = ref<Set<number>>(new Set())
 const MAX_COMPARE = 6  // 与 PublicCompareView 一致
 
-// 8 字段是否全部空 — 用于禁用搜索按钮 + 提示文案
+// 8 字段 + 融合搜索框 是否全部空 — 用于禁用搜索按钮 + 提示文案
+//   V24-F103-1: 融合框 fuzzy 输入也算"非空" (用户单输 fuzzy 时不应触发空表单警告)
 const allEmpty = computed(() =>
-  !form.oemBrand && !form.oemNo2 && !form.oemNo3
+  !fuzzy.value.trim() && !form.oemBrand && !form.oemNo2 && !form.oemNo3
   && !form.machineBrand && !form.machineModel
   && !form.modelName && !form.engineBrand && !form.engineType
 )
@@ -235,7 +236,8 @@ watch(() => route.query, () => {
 let searchAbort: AbortController | null = null
 async function doSearch() {
   if (allEmpty.value) {
-    ElMessage.warning(t('common.feedback.warn_040'))
+    // V24-F103-1: 之前误用 warn_040 ("已选满 6 个对比"), 应为"空表单"提示
+    ElMessage.warning(t('common.feedback.warn_empty_form'))
     return
   }
   searchAbort?.abort()
