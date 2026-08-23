@@ -61,6 +61,11 @@ function toggleBrand(brand: string) {
   expandedBrands.value = new Set(expandedBrands.value)
 }
 
+// 🔧 fix(2026-08-23 走查): 目录选中态 — 之前点击品牌/机型无任何视觉反馈
+//   (el-button text 无 active 样式), 用户不知道当前选中了什么。
+//   selectedCatalog 记录最近一次目录选择, 模板按钮按需高亮 (暗色底 + 主题色文字)。
+const selectedCatalog = ref<{ category: string; brand?: string; model?: string } | null>(null)
+
 // 🔧 fix(2026-08-23 走查): 加载更多 — page++ 后调 doSearch, 因 _loadMoreInFlight 累积结果
 async function loadMore() {
   if (!hasMore.value || loading.value) return
@@ -289,6 +294,8 @@ function selectMachine(category: string, brand?: string, model?: string) {
   }
   advancedForm.machineCategory = categoryMap[category] || 'others'
   q.value = [brand, model].filter(Boolean).join(' ')
+  // 🔧 fix(2026-08-23 走查): 记录目录选中态供按钮高亮
+  selectedCatalog.value = { category, brand, model }
   page.value = 1
   syncUrl()
   doSearch()
@@ -326,11 +333,24 @@ onBeforeUnmount(() => {
       >
         <div class="text-sm font-medium pb-2 mb-2 border-b border-gray-200 dark:border-[var(--color-border)]">机型目录</div>
         <section v-for="category in machineCatalog.categories" :key="category.category" class="py-2 border-b border-gray-100 last:border-b-0 dark:border-[var(--color-border-subtle)]">
-          <el-button text size="small" class="!px-0 !font-medium" @click="selectMachine(category.category)">
+          <!-- 🔧 fix(2026-08-23 走查): 选中态高亮 — 选中分类/品牌/机型时按钮暗色底 + 主题色文字 -->
+          <el-button
+            text
+            size="small"
+            class="!px-0 !font-medium catalog-node"
+            :class="{ 'is-selected': selectedCatalog?.category === category.category && !selectedCatalog?.brand }"
+            @click="selectMachine(category.category)"
+          >
             {{ category.category }}
           </el-button>
           <div v-for="brand in category.brands" :key="brand.brand" class="mt-1 text-xs">
-            <el-button text size="small" class="!h-auto !px-0" @click="toggleBrand(brand.brand); selectMachine(category.category, brand.brand)">
+            <el-button
+              text
+              size="small"
+              class="!h-auto !px-0 catalog-node"
+              :class="{ 'is-selected': selectedCatalog?.brand === brand.brand }"
+              @click="toggleBrand(brand.brand); selectMachine(category.category, brand.brand)"
+            >
               {{ brand.brand }}
             </el-button>
             <div v-if="brand.models.length && expandedBrands.has(brand.brand)" class="ml-2 mt-1 space-y-1">
@@ -339,7 +359,8 @@ onBeforeUnmount(() => {
                 :key="model"
                 text
                 size="small"
-                class="!h-auto !px-0 block text-left text-gray-500 dark:text-[var(--color-text-muted)]"
+                class="!h-auto !px-0 block text-left text-gray-500 dark:text-[var(--color-text-muted)] catalog-node"
+                :class="{ 'is-selected': selectedCatalog?.model === model }"
                 @click="selectMachine(category.category, brand.brand, model)"
               >
                 {{ model }}
@@ -590,3 +611,17 @@ onBeforeUnmount(() => {
 import { Loading } from '@element-plus/icons-vue'
 export default { components: { Loading } }
 </script>
+
+<style scoped>
+/* 🔧 fix(2026-08-23 走查): 目录选中态 — 暗色底 + 主题色文字, 用户明确看到当前选中项 */
+.catalog-node.is-selected {
+  background-color: var(--el-color-primary-light-9);
+  color: var(--el-color-primary);
+  font-weight: 600;
+  border-radius: 4px;
+}
+html.dark .catalog-node.is-selected {
+  background-color: rgba(64, 158, 255, 0.15);
+  color: var(--el-color-primary-light-3);
+}
+</style>
