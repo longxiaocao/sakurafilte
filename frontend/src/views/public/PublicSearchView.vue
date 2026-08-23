@@ -352,7 +352,9 @@ function addToCompare(row: PublicSearchHit, event?: Event) {
     return
   }
   if (compareIds.value.size >= MAX_COMPARE) {
-    ElMessage.warning(`最多对比 ${MAX_COMPARE} 个产品`)
+    // 🔧 fix(2026-08-23 走查): 上限提示带可操作指引 — 摘要条已显示清空按钮,
+    //   提示文案说明可清空, 消除"系统坏了"的误解
+    ElMessage.warning({ message: `最多对比 ${MAX_COMPARE} 个产品, 可点击上方提示条'清空对比'后重新添加`, duration: 4000 })
     return
   }
   // 创建新 Set 触发响应式更新
@@ -417,6 +419,10 @@ function moveCompare(idx: number, dir: -1 | 1) {
 
 function clearCompare() {
   compareProducts.value = []
+  // 🔧 fix(2026-08-23 走查): 清空对比需同时清 compareIds ref — 只清 products/存储时
+  //   摘要条 v-if=compareIds.size>0 仍显示, 且后续加入对比会误判已满 (上限提示)
+  compareIds.value = new Set()
+  compareOpen.value = false
   try {
     sessionStorage.removeItem('sakurafilter_compare_ids')
   } catch { /* 隐私模式等场景忽略 */ }
@@ -456,7 +462,9 @@ onUnmounted(() => {
 
 onMounted(() => {
   syncFormFromUrl()
-  // 🔧 fix(审查): 从详情页"加入对比"跳转 (/public/search?compare=id) 时自动勾选并打开对比抽屉
+  // 🔧 fix(2026-08-23 走查): 无 URL 参数时也恢复 sessionStorage 残留对比 — 否则
+  //   用户上次选满 6 个后手动进本页 (无 ?compare=), compareIds 为空, 不知道已有
+  //   6 个残留, 加新时触发 warn_040 以为系统 bug。摘要条也依赖 compareIds 显示。
   const cmp = route.query.compare
   if (typeof cmp === 'string' && cmp) {
     const ids = cmp.split(',').map(Number).filter((n) => Number.isInteger(n) && n > 0)
@@ -472,6 +480,15 @@ onMounted(() => {
         compareLoading.value = false
       })
     }
+  } else {
+    // 无 URL 参数: 恢复 sessionStorage 残留 (只恢复 id 集合, 摘要条显示; 不自动开抽屉)
+    try {
+      const raw = sessionStorage.getItem('sakurafilter_compare_ids')
+      if (raw) {
+        const ids = JSON.parse(raw).filter((n: number) => Number.isInteger(n) && n > 0)
+        if (ids.length > 0) compareIds.value = new Set(ids.slice(0, MAX_COMPARE))
+      }
+    } catch { /* 忽略损坏数据 */ }
   }
   // 进入页面拉一次 featured 明细表 (即使有搜索条件也拉, 用户清空后可看)
   loadFeatured()
@@ -525,6 +542,23 @@ onUnmounted(() => {
       />
       <div class="mt-2 text-xs text-muted flex items-center gap-3">
         <span>融合搜索对全部字段模糊匹配 (OEM/品牌/机型/发动机/产品名)</span>
+      </div>
+    </div>
+
+    <!-- 🔧 fix(2026-08-23 走查): 对比状态摘要条 — 选满 6 个后用户能看到/清空/跳转对比页 -->
+    <div
+      v-if="compareIds.size > 0"
+      class="hairline p-3 mb-3 flex items-center gap-3 border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20"
+      data-testid="compare-summary-bar"
+    >
+      <span class="text-amber-600 text-lg leading-none">⚠</span>
+      <span class="text-sm">
+        对比列表已有 <b>{{ compareIds.size }} / {{ MAX_COMPARE }}</b> 个产品
+      </span>
+      <span class="text-xs text-muted hidden sm:inline">— 加更多时会触发上限提示，可先清空</span>
+      <div class="ml-auto flex items-center gap-2">
+        <el-button size="small" @click="openCompare">查看对比</el-button>
+        <el-button size="small" type="danger" plain @click="clearCompare">清空对比</el-button>
       </div>
     </div>
 
