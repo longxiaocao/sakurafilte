@@ -1,0 +1,190 @@
+using System.Collections.Concurrent;
+using System.Text;
+using Npgsql;
+using SakuraFilter.Etl;
+
+namespace SakuraFilter.Api.Services;
+
+/// <summary>
+/// Day 9.6: ETL 进度跨实例广播器 (PG NOTIFY/LISTEN 实现)
+/// 详见 SakuraFilter.Etl.IEtlProgressBroadcaster
+/// </summary>
+public class EtlProgressBroadcaster : IEtlProgressBroadcaster, IAsyncDisposable
+{
+    public const string Channel = "etl_progress";
+    private readonly string _connectionString;
+    private readonly ILogger<EtlProgressBroadcaster> _logger;
+    private readonly NpgsqlDataSource _dataSource;  // v30-25: 注入全局单例 (原 Day 9.7 自建独立池已移除)
+    private NpgsqlConnection? _listenConn;
+    private CancellationTokenSource? _listenCts;
+    private Task? _listenTask;
+    // 连续失败计数, 驱动指数退避重连 (3s -> 6s -> 12s -> 24s -> 60s 封顶)
+    private int _consecutiveFailures;
+    private readonly ConcurrentDictionary<Guid, Func<string, Task>> _subscribers = new();
+
+    public bool IsListening => _listenConn?.State == System.Data.ConnectionState.Open && _listenTask?.IsCompleted == false;
+
+    // v30-25 P0 修复: 注入全局 NpgsqlDataSource 单例 (由 AddDatabaseServices 注册)
+    //   根因: 原 NpgsqlDataSource.Create() 自建独立池 (100 槽位) 与 AddDbContext 主池隔离,
+    //         进程内总连接上限 200, PG max_connections=100 时主池借连接被拒 → 500 pool exhausted
+    //   修复: 改为注入共享 DataSource, 与 AddDbContext + AuthTokenStore 等复用同一池
+    public EtlProgressBroadcaster(IConfiguration config, NpgsqlDataSource dataSource, ILogger<EtlProgressBroadcaster> logger)
+    {
+        _connectionString = config.GetConnectionString("Postgres")
+            ?? throw new InvalidOperationException("Postgres 连接串未配置");
+        _logger = logger;
+        _dataSource = dataSource;
+    }
+
+    /// <summary>
+    /// 启动 LISTEN 监听,通常在应用启动时调一次
+    /// </summary>
+    public async Task InitAsync(CancellationToken ct = default)
+    {
+        if (_listenTask != null) return;
+        _listenCts = new CancellationTokenSource();
+        _listenTask = Task.Run(() => ListenLoopAsync(_listenCts.Token), _listenCts.Token);
+        _logger.LogInformation("EtlProgressBroadcaster 启动 LISTEN channel={Channel}", Channel);
+        // 等 0.5s 看是否连上 (失败也不抛,降级为轮询)
+        try
+        {
+            await Task.Delay(500, ct);
+            if (!IsListening) _logger.LogWarning("EtlProgressBroadcaster LISTEN 未就绪, SSE 将退化为本地轮询");
+        }
+        catch { }
+    }
+
+    private async Task ListenLoopAsync(CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            // 重连延迟 (秒): 正常断开 3s, 异常时指数退避 3s->6s->12s->24s->60s 封顶
+            var delaySec = 3;
+            try
+            {
+                // 🔧 fix(P1): LISTEN 长连接禁用连接池 (同 AuthTokenBroadcaster, 防 WaitAsync 竞争 busy)
+                var listenBuilder = new NpgsqlConnectionStringBuilder(_connectionString) { Pooling = false };
+                _listenConn = new NpgsqlConnection(listenBuilder.ConnectionString);
+                await _listenConn.OpenAsync(ct);
+                _listenConn.Notification += OnNotification;
+                using (var cmd = new NpgsqlCommand($"LISTEN {Channel}", _listenConn))
+                {
+                    await cmd.ExecuteNonQueryAsync(ct);
+                }
+                _logger.LogInformation("LISTEN {Channel} 已建立连接", Channel);
+                _consecutiveFailures = 0;  // 重连成功重置计数, 让退避从 3s 重新开始
+                // 阻塞等待, Notification 事件回调触发
+                while (!ct.IsCancellationRequested && _listenConn.State == System.Data.ConnectionState.Open)
+                {
+                    try
+                    {
+                        await _listenConn.WaitAsync(ct);
+                    }
+                    catch (NpgsqlException nex) when (!ct.IsCancellationRequested)
+                    {
+                        _logger.LogWarning(nex, "LISTEN WaitAsync 异常, 重连");
+                        break;
+                    }
+                }
+            }
+            catch (OperationCanceledException) { return; }
+            catch (Exception ex)
+            {
+                // 指数退避: 3s -> 6s -> 12s -> 24s -> 60s 封顶
+                //   WHY: PG 长时间不可用时固定 3s 重连会产生大量失败日志, 退避减少无效重试
+                delaySec = Math.Min(60, 3 * (int)Math.Pow(2, _consecutiveFailures));
+                _consecutiveFailures++;
+                _logger.LogWarning(ex, "LISTEN 循环异常, {Delay}s 后重连 (第 {N} 次)", delaySec, _consecutiveFailures);
+            }
+            finally
+            {
+                try { _listenConn?.Close(); } catch { }
+                _listenConn?.Dispose();
+                _listenConn = null;
+            }
+            // 重连前指数退避 (避免 PG 抖动时狂打日志)
+            try { await Task.Delay(delaySec * 1000, ct); } catch { return; }
+        }
+    }
+
+    private void OnNotification(object sender, NpgsqlNotificationEventArgs e)
+    {
+        if (e.Channel != Channel) return;
+        var payload = e.Payload;
+        if (string.IsNullOrEmpty(payload)) return;
+        // 异步通知所有本地订阅者
+        foreach (var kv in _subscribers.ToArray())
+        {
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await kv.Value(payload);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "EtlProgress 订阅者回调异常");
+                }
+            });
+        }
+    }
+
+    public void Publish(string payload)
+    {
+        if (string.IsNullOrEmpty(payload)) return;
+        // 异步发布, 失败静默 (ETL 不应被广播失败影响)
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                // Day 9.7: 复用 _dataSource 连接池, 避免每次 NOTIFY 新开 TCP
+                await using var conn = await _dataSource.OpenConnectionAsync();
+                // PG NOTIFY payload 限 8KB, 大消息应被截断
+                var safe = payload.Length > 7900 ? payload[..7900] : payload;
+                // P3-1 修复: 改用参数化 pg_notify(channel, payload), 由驱动负责引号/转义
+                //   WHY 不用 NOTIFY channel, 'payload' 字符串拼接:
+                //     - payload 内含单引号时即使 Replace("'","''") 仍可能在某些 PG 字符集下出错
+                //     - 与 AuthTokenStore/Cli 的 pg_notify 参数化方式保持一致
+                //     - 8KB 截断逻辑保留, 但参数化后无需手动转义
+                await using var cmd = new NpgsqlCommand("SELECT pg_notify(@channel, @payload)", conn);
+                cmd.Parameters.AddWithValue("channel", Channel);
+                cmd.Parameters.AddWithValue("payload", safe);
+                await cmd.ExecuteNonQueryAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Publish 失败 (忽略, SSE 将走本地轮询兜底)");
+            }
+        });
+    }
+
+    public IDisposable Subscribe(Func<string, Task> callback)
+    {
+        var id = Guid.NewGuid();
+        _subscribers[id] = callback;
+        return new Subscription(() => _subscribers.TryRemove(id, out _));
+    }
+
+    private class Subscription : IDisposable
+    {
+        private readonly Action _onDispose;
+        private int _disposed;
+        public Subscription(Action onDispose) { _onDispose = onDispose; }
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _disposed, 1) == 0) _onDispose();
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _listenCts?.Cancel();
+        try { _listenConn?.Close(); } catch { }
+        _listenConn?.Dispose();
+        if (_listenTask != null)
+        {
+            try { await _listenTask; } catch { }
+        }
+        // v30-25: 不再释放 _dataSource (全局单例由 DI 容器管理, 应用退出时统一释放)
+    }
+}

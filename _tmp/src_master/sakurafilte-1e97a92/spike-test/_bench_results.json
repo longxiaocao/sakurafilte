@@ -1,0 +1,36 @@
+{
+  "meta": {
+    "base": "http://localhost:5148",
+    "queries": 50,
+    "typeahead_queries": 7,
+    "concurrency_list": [
+      10
+    ],
+    "thresholds": {
+      "search_p95_ms": 200.0,
+      "typeahead_p95_ms": 100.0
+    },
+    "timestamp": "2026-07-02T19:48:36+0800"
+  },
+  "concurrency": {
+    "concurrency_10": {
+      "p50_ms": 1495.6,
+      "p95_ms": 6973.6,
+      "p99_ms": 7811.0,
+      "min_ms": 5.2,
+      "max_ms": 7811.0,
+      "count": 50,
+      "errors": 0
+    }
+  },
+  "typeahead": {
+    "p50_ms": 3.4,
+    "p95_ms": 4.4,
+    "p99_ms": 5.3,
+    "min_ms": 1.9,
+    "max_ms": 5.3,
+    "count": 49,
+    "errors": 0,
+    "concurrency": 10
+  }
+}

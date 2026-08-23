@@ -1,0 +1,303 @@
+# P1-2: Docker Compose 生产编排
+#   包含: API + Web(Nginx) + Postgres + MeiliSearch + MinIO + Prometheus + Grafana
+#   启动: docker-compose -f docker-compose.prod.yml --env-file .env.prod up -d
+#
+#   网络: sakura-net (bridge)
+#   存储: postgres-data / minio-data / grafana-data (named volumes)
+#   端口: 80(Web) / 9090(Prometheus) / 3000(Grafana) — PG/Meili/MinIO 不对外暴露
+
+version: "3.9"
+
+networks:
+  sakura-net:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  meili-data:
+  minio-data:
+  grafana-data:
+  prometheus-data:
+  data-protection-keys:
+
+services:
+  # ===== 应用层 =====
+  api:
+    build:
+      context: ./backend
+      dockerfile: ../docker/Dockerfile.api
+    image: sakurafilter-api:1.0.0
+    container_name: sakura-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
+      meilisearch:
+        condition: service_started
+      data-protection-init:
+        condition: service_completed_successfully
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
+      MeiliSearch__Endpoint: "http://meilisearch:7700"
+      MeiliSearch__ApiKey: "${MEILI_MASTER_KEY}"
+      MeiliSearch__IndexName: products
+      Jwt__SigningKey: "${JWT_SIGNING_KEY}"
+      Jwt__Issuer: "${JWT_ISSUER}"
+      Jwt__Audience: "${JWT_AUDIENCE}"
+      Jwt__ExpireMinutes: "60"
+      Jwt__RefreshExpireDays: "7"
+      Auth__DevStaticToken: "${ADMIN_DEV_TOKEN}"
+      # 首次启动 seed 默认用户 (Users 表为空时创建 admin/operator, 密码来自 .env.prod)
+      INITIAL_ADMIN_PASSWORD: "${INITIAL_ADMIN_PASSWORD}"
+      INITIAL_OPERATOR_PASSWORD: "${INITIAL_OPERATOR_PASSWORD}"
+      # 🔧 fix(审查): Cloudflare Turnstile 人机验证 — 配置后登录页强制验证, 留空跳过 (开发/演示)
+      Turnstile__SiteKey: "${TURNSTILE_SITE_KEY:-}"
+      Turnstile__SecretKey: "${TURNSTILE_SECRET_KEY:-}"
+      # 对象存储可在 MinIO / Cloudflare R2 间切换；R2 凭证仅由部署环境注入。
+      Storage__Provider: "${STORAGE_PROVIDER:-minio}"
+      Minio__Endpoint: "minio:9000"
+      Minio__AccessKey: "${MINIO_ROOT_USER}"
+      Minio__SecretKey: "${MINIO_ROOT_PASSWORD}"
+      Minio__BucketName: "sakurafilter"
+      Minio__PublicEndpoint: "http://localhost:9000"
+      Minio__UseSSL: "false"
+      R2__Endpoint: "${R2_ENDPOINT:-}"
+      R2__AccessKeyId: "${R2_ACCESS_KEY_ID:-}"
+      R2__AccessKeySecret: "${R2_ACCESS_KEY_SECRET:-}"
+      R2__BucketName: "${R2_BUCKET_NAME:-}"
+      R2__PublicEndpoint: "${R2_PUBLIC_ENDPOINT:-}"
+      Etl__RecentErrorBuffer: "10"
+      Etl__IndexReplayPollSeconds: "10"
+      Etl__IndexReplayBatchSize: "500"
+    volumes:
+      # 持久化 ASP.NET Core DataProtection 密钥；容器重建后登录 Cookie/防伪令牌仍可验证。
+      - data-protection-keys:/home/sakura/.aspnet/DataProtection-Keys
+      # 数据迁移演练: 宿主机 jsonl 数据挂载到容器只读目录 (生产可挂载 ETL 数据卷或走上传)
+      - ./spike-test/output/cleaned_customer:/tmp/etl:ro
+    networks:
+      - sakura-net
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health/live"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2G
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # named volume 初始属主为 root；API 使用 uid 1000 运行，需先授予其写入密钥环权限。
+  data-protection-init:
+    image: alpine:3.20
+    container_name: sakura-data-protection-init
+    restart: "no"
+    command: ["sh", "-c", "mkdir -p /keys && chown -R 1000:1000 /keys"]
+    volumes:
+      - data-protection-keys:/keys
+    networks:
+      - sakura-net
+
+  web:
+    build:
+      # 🔧 fix(部署演练): context 改为项目根 — 原 ./frontend 上下文不含 docker/nginx.conf,
+      #   Dockerfile.web 的 COPY docker/nginx.conf 超出上下文报 not-found (prod 预存缺陷)
+      context: .
+      dockerfile: docker/Dockerfile.web
+      args:
+        VITE_INQUIRY_EMAIL: ${VITE_INQUIRY_EMAIL:-}
+        VITE_PUBLIC_ABOUT_TEXT: ${VITE_PUBLIC_ABOUT_TEXT:-}
+        VITE_PUBLIC_NEWS_TEXT: ${VITE_PUBLIC_NEWS_TEXT:-}
+        VITE_PUBLIC_CONTACT_TEXT: ${VITE_PUBLIC_CONTACT_TEXT:-}
+    image: sakurafilter-web:1.0.0
+    container_name: sakura-web
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      # Nginx 配置卷挂载 (改配置免重建镜像: docker compose exec web nginx -s reload)
+      - ./docker/nginx.conf:/etc/nginx/conf.d/sakurafilter.conf:ro
+      - ./docker/security-headers.conf:/etc/nginx/conf.d/security-headers.conf:ro
+      # Cloudflare 真实访客 IP 白名单；Nginx 仅对白名单来源信任 CF-Connecting-IP。
+      - ./docker/cloudflare-realip.conf:/etc/nginx/cloudflare-realip.conf:ro
+      # TLS 证书 (自签名演练; 生产挂载 Let's Encrypt 全链, 路径不变; 证书不入库)
+      - ./docker/certs:/etc/nginx/certs:ro
+    networks:
+      - sakura-net
+    healthcheck:
+      # 🔧 fix(部署演练): 用 127.0.0.1 而非 localhost — busybox wget 解析 localhost 优先 ::1 (IPv6),
+      #   nginx 仅监听 IPv4 → healthcheck 误判 connection refused (unhealthy)
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+
+  # ===== 数据层 =====
+  # 🔧 fix(部署演练): 新增 db-init (EF 迁移) + db-migrate (SQL 增量) 一次性服务
+  #   原编排无迁移步骤, prod 空库启动即崩 (42P01 relation "users" does not exist)
+  #   顺序: postgres → db-init (EF 34 迁移建全表) → db-migrate (002-019 SQL 增量) → api → web
+  db-init:
+    image: sakurafilter-api:1.0.0
+    container_name: sakura-db-init
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
+    command: ["--migrate-db"]
+    networks:
+      - sakura-net
+
+  db-migrate:
+    image: postgres:16-alpine
+    container_name: sakura-db-migrate
+    restart: "no"
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    volumes:
+      - ./backend/migrations:/migrations:ro
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    command: >
+      sh -c 'for f in /migrations/*.sql; do
+        echo "===== Executing $$f =====";
+        psql -h postgres -U ${POSTGRES_USER} -d ${POSTGRES_DB} -v ON_ERROR_STOP=1 -f "$$f" || exit 1;
+      done;
+      echo "===== All SQL migrations applied ====="'
+    networks:
+      - sakura-net
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: sakura-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - sakura-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4G
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.12
+    container_name: sakura-meili
+    restart: unless-stopped
+    environment:
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY}
+      MEILI_NO_ANALYTICS: "true"
+      MEILI_ENV: production
+    volumes:
+      - meili-data:/meili_data
+    networks:
+      - sakura-net
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+
+  minio:
+    image: minio/minio:latest
+    container_name: sakura-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - minio-data:/data
+    networks:
+      - sakura-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+
+  # ===== 监控层 =====
+  prometheus:
+    image: prom/prometheus:v2.55.0
+    container_name: sakura-prometheus
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=30d"
+      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+      - "--web.console.templates=/usr/share/prometheus/consoles"
+    volumes:
+      - ./docker/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    depends_on:
+      - api
+    networks:
+      - sakura-net
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: sakura-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    networks:
+      - sakura-net
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M

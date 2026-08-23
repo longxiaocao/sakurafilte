@@ -1,0 +1,108 @@
+import { createApp } from 'vue'
+import { createPinia } from 'pinia'
+import ElementPlus from 'element-plus'
+import 'element-plus/dist/index.css'
+// P5.3 dark 主题: 引入 Element Plus 官方暗色变量 (弹窗/日期面板/消息等深色细节跟随)
+//   WHY: 项目用 html.dark class 驱动主题, EP 官方 dark css-vars 基于该 class 生效
+import 'element-plus/theme-chalk/dark/css-vars.css'
+import * as ElementPlusIconsVue from '@element-plus/icons-vue'
+
+import App from './App.vue'
+import router from './router'
+import { installPerfInterceptor } from './utils/perf'
+import { initMonitor, installVueErrorHandler, addBreadcrumb } from './utils/errorMonitor'
+import i18n from './i18n'
+import './styles/index.css'
+
+// P5.5: 启动前端性能埋点 (axios 拦截器, 批量上报到 /api/perf/ingest)
+installPerfInterceptor()
+
+// 批次 6c: 启动前端错误监控 (离线优先, 默认无网络开销)
+//   - 自动捕获: window.onerror / unhandledrejection / Vue errorHandler
+//   - 持久化: localStorage 200 条, 跨会话保留
+//   - 远程上报: 仅当 VITE_ERROR_REPORT_URL 配置时启用
+initMonitor()
+
+const app = createApp(App)
+installVueErrorHandler(app)
+
+// 全局注册 Element Plus 图标 (Musk 风格简洁, 不滥用)
+for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
+  app.component(key, component as any)
+}
+
+app.use(createPinia())
+app.use(router)
+app.use(i18n)
+// P2.6: Element Plus locale 通过 App.vue 的 ElConfigProvider 响应式切换, 无需在此固定
+app.use(ElementPlus)
+
+app.mount('#app')
+
+// V24-F46 (spec Task 4.5.26): 路由切换后重置 __fallbackMounted 标志
+//   WHY: Detail.cshtml error 处理器用 window.__fallbackMounted 全局去重, 避免重复渲染 fallback
+//        但路由切换到新页面后, 旧 fallback 已被卸载, 需重置标志以允许新页面 error 处理
+//   WHY 延迟 1000ms: SPA 路由切换期间可能触发短暂的资源加载错误 (chunk 切换),
+//                    延迟重置避免误清; 1000ms 后新页面 chunk 加载完成, 可安全重置
+router.afterEach(() => {
+  setTimeout(() => {
+    ;(window as any).__fallbackMounted = false
+  }, 1000)
+})
+
+// A11y: 给所有 el-table 可滚动区域加 tabindex=0, 满足 WCAG scrollable-region-focusable
+//   axe-core 检查的是 .el-scrollbar__wrap (真正的滚动容器), 必须在该元素上设 tabindex
+//   给 el-pagination 内部的 el-select (每页条数) 加 aria-label, 满足 WCAG label
+//   给 el-switch 内部的 input 加 aria-label (默认无 label, 触发 axe 'label' violation)
+//   监听动态渲染: 用 MutationObserver 兜底
+function enhanceA11yOnDom() {
+  // 1) el-table 可滚动区域: tabindex=0
+  document.querySelectorAll<HTMLElement>('.el-table__body-wrapper .el-scrollbar__wrap').forEach((el) => {
+    if (el.getAttribute('tabindex') !== '0') {
+      el.setAttribute('tabindex', '0')
+      el.setAttribute('aria-label', '可滚动表格区域, 使用方向键浏览')
+      el.style.outline = 'none'
+    }
+  })
+
+  // 2) el-pagination 内部 el-select: 选每页条数 (默认无 label)
+  //   Element Plus 渲染为 .el-pagination .el-pagination__sizes .el-select input
+  document.querySelectorAll<HTMLInputElement>('.el-pagination .el-pagination__sizes .el-select input').forEach((input) => {
+    if (!input.getAttribute('aria-label')) {
+      input.setAttribute('aria-label', '每页显示条数')
+    }
+  })
+
+  // 3) el-switch 内部 input: 默认无 label
+  //   aria-label 缺省时, 沿用外层 switch 的 active-text/inactive-text 拼接
+  //   若外层也无文字, 兜底为 '开关'
+  document.querySelectorAll<HTMLInputElement>('.el-switch__input').forEach((input) => {
+    if (!input.getAttribute('aria-label')) {
+      const wrap = input.closest('.el-switch') as HTMLElement | null
+      const text = (wrap?.querySelector('.el-switch__label')?.textContent || '').trim()
+      input.setAttribute('aria-label', text || '开关')
+    }
+  })
+}
+function makeTablesKeyboardAccessible() {
+  const init = () => enhanceA11yOnDom()
+  init()
+  // 🔧 fix(审查): rAF 节流 — 高频 DOM 变化 (表格/列表渲染) 时合并为每帧一次扫描,
+  //   避免每次 mutation 都全量 querySelectorAll (长列表/弱网下的性能开销)
+  let rafId = 0
+  const obs = new MutationObserver(() => {
+    if (rafId) return
+    rafId = requestAnimationFrame(() => {
+      rafId = 0
+      init()
+    })
+  })
+  obs.observe(document.body, { childList: true, subtree: true })
+}
+if (typeof window !== 'undefined') {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', makeTablesKeyboardAccessible)
+  } else {
+    makeTablesKeyboardAccessible()
+  }
+}

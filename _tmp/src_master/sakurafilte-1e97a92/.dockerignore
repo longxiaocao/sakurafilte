@@ -1,0 +1,23 @@
+# 根 .dockerignore — 生产 compose 构建上下文 (项目根) 排除项
+# 🔧 fix(部署演练): web context 改为项目根后需要, 防止复制 node_modules/bin/obj 到构建上下文
+**/node_modules
+**/bin
+**/obj
+**/dist
+**/.git
+**/.ai
+frontend/test-results
+frontend/playwright-report
+frontend/coverage
+*.log
+.dsv
+.env
+.env.*
+!*.example
+!*.prod.example
+spike-test
+docs
+monitoring
+.trae
+.codex
+.reasonix

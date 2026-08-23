@@ -1,0 +1,696 @@
+<script setup lang="ts">
+import { computed, ref, nextTick, watch, onMounted, onBeforeUnmount } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox, ElLoading } from 'element-plus'
+import { useAdminAuth } from '@/composables/useAdminAuth'
+import { useThemeStore } from '@/stores/theme'  // P5.3
+import { authApi, publicSearchApi, siteContentApi, productApi } from '@/api'
+import type { AggregateSearchHit } from '@/api/types'
+import { useI18n } from 'vue-i18n'  // P2.6
+import { setLocale } from '@/i18n'  // P2.6
+import { buildProductUrl } from '@/utils/build-product-url'  // V2 Task 4.4
+
+// UX P0-1: 移动端汉堡菜单 drawer 状态
+const mobileNavOpen = ref(false)
+function closeMobileNav() { mobileNavOpen.value = false }
+
+const route = useRoute()
+const router = useRouter()
+const { isAdmin, user, token, refreshToken, clearAuth } = useAdminAuth()
+const theme = useThemeStore()  // P5.3
+// 🔧 fix(审查): 站点名从后端读取 (后台 AdminSiteContentView 可维护), 兜底 SakuraFilter
+const siteName = ref('SakuraFilter')
+const { locale, t } = useI18n()  // P2.6
+
+const isAdminPath = computed(() => route.path.startsWith('/admin'))
+
+// Day 10: 字典管理下拉菜单 (P1.3 OEM 品牌 + P2.2 7 个新字典)
+// V24-F103 i18n 残留修复: label 改为 i18n key, 模板内用 t() 渲染
+const dictItems = [
+  { labelKey: 'nav.dictItems.oemBrand', path: '/admin/dict/oem-brands' },
+  { labelKey: 'nav.dictItems.productName1', path: '/admin/dict/product-name1s' },
+  { labelKey: 'nav.dictItems.productName2', path: '/admin/dict/product-name2s' },
+  { labelKey: 'nav.dictItems.type', path: '/admin/dict/types' },
+  { labelKey: 'nav.dictItems.oem3', path: '/admin/dict/oem-no3s' },
+  { labelKey: 'nav.dictItems.media', path: '/admin/dict/medias' },
+  { labelKey: 'nav.dictItems.machine', path: '/admin/dict/machines' },
+  { labelKey: 'nav.dictItems.engine', path: '/admin/dict/engines' }
+]
+
+// Day 9.2: 修复 - "产品详情" 路由是 /product/:oem, 单独一个 nav 项无法满足参数化路径
+//   改方案: nav 中 "产品详情" 改为 "OEM 查询", 点击后弹 ElMessageBox.prompt 收 oem, 再跳详情
+//   避免之前直接 router.push('/product') 触发 "No match found" 警告
+//
+// P-Admin-UX v4: 顶栏动态收纳 — 解决 v3 admin 路径跳公开页 admin 入口全部消失问题
+//   v3 错: admin 6 按钮仅 isAdminPath 时渲染, 跳公开页后全部消失
+//   v4 对: 公共 3 按钮始终在; admin 6 按钮 + 低优 5 按钮在"已登录用户"任意路径都在
+//     - 已登录用户在公开页 (产品搜索 / 高级搜索 / OEM 查询 / 产品对比) 仍能看到 admin 入口, 体验一致
+//     - 未登录用户只看到公共 3 按钮 (最精简, 不暴露 admin 入口)
+//   优先级 (数字越小越靠前): 公共 3 (1-3) → admin 高优 5 (4-8) → 低优 5 (9-13)
+//   动态收纳: ResizeObserver 监听 nav 容器宽度, 贪心决定哪些进 "更多"
+const allNavItems = computed(() => {
+  // V24-F103 i18n 残留修复: label 改为 i18n key, 模板内用 t() 渲染
+  const items: Array<{ key: string; labelKey: string; icon: string; path?: string; action?: string; dropdown?: string; priority: number }> = [
+    // 公共区 (始终在池子里, 不论路径不论登录)
+    { key: 'about', labelKey: 'nav.about', path: '/about', icon: 'OfficeBuilding', priority: 1 },
+    { key: 'product', labelKey: 'nav.product', path: '/search', icon: 'Search', priority: 2 },
+    { key: 'news', labelKey: 'nav.news', path: '/news', icon: 'Document', priority: 3 },
+    { key: 'contact', labelKey: 'nav.contact', path: '/contact', icon: 'Message', priority: 4 },
+    { key: 'oem', labelKey: 'nav.oemLookup', action: 'oemLookup', icon: 'Document', priority: 5 },
+  ]
+  // 已登录用户: 在任何路径都看到 admin 入口, 解决 v3 跳公开页丢 admin 体验问题
+  // 🔧 fix(审查): admin 菜单以 token 为准 (旧 token 迁移场景 user 为 null 时导航仍完整)
+  //   原 if (user.value): 旧 localStorage 纯 token (LEGACY key 迁移) user=null → 已登录但导航只显示公共 5 项 (用户实测反馈)
+  if (token.value) {
+    // admin 高优 (必显示, 不可收纳)
+    items.push(
+      { key: 'products', labelKey: 'nav.productManage', path: '/admin/products', icon: 'Goods', priority: 4 },
+      { key: 'adv-search', labelKey: 'nav.advSearch', path: '/public/search', icon: 'Filter', priority: 5 },
+      { key: 'dict', labelKey: 'nav.dictManage', dropdown: 'dict', icon: 'Collection', priority: 6 },
+    // 🔧 fix(审查): 独立对比页移除, '产品对比'菜单入口删除 — 对比内嵌高级搜索页 (结果勾选 + 详情页按钮),
+      // V2 Task 2.2.6: OEM 排序管理入口 (priority 6.5, 在字典和 ETL 之间)
+      { key: 'xref-reorder', labelKey: 'nav.xrefReorder', path: '/admin/xrefs/reorder', icon: 'Sort', priority: 6.5 }
+      // 🔧 fix(审查): ETL 高优独立项移除 — 与 perf/errors/api 合并为 "运维中心" (/admin/ops el-tabs)
+    )
+    if (isAdmin()) {
+      items.push({ key: 'users', labelKey: 'nav.userManage', path: '/admin/users', icon: 'User', priority: 8 })
+    }
+    // admin 低优 (可收纳, 宽度不够时进 "更多" 下拉)
+    // 🔧 fix(审查): ETL/性能/错误/API 文档 4 项合并为 1 项 "运维中心" (/admin/ops el-tabs) —
+    //   用户反馈: 更多里仍分开显示 4 项, 且整合页信息密度低; 合并后菜单只露 1 入口, 更简洁
+    //   adv-compare 已移除 (对比内嵌高级搜索页, 独立页冗余)
+    items.push(
+      { key: 'ops', labelKey: 'nav.opsCenter', path: '/admin/ops', icon: 'Setting', priority: 9 },
+      { key: 'site', labelKey: 'nav.siteContent', path: '/admin/site-content', icon: 'Document', priority: 12.5 },
+      { key: 'help', labelKey: 'nav.help', path: '/admin/help', icon: 'QuestionFilled', priority: 13 }
+    )
+  }
+  return items
+})
+
+// 已显示的 nav 容器引用 + 实际测量
+const navContainerRef = ref<HTMLElement | null>(null)
+// "更多" 里收纳的 keys (低优先级 + 已被挤出主顶栏的)
+const overflowKeys = ref<Set<string>>(new Set())
+
+// 测量每个按钮宽度, 贪心决定是否进 "更多"
+// 注意: DOM 必须已经渲染才能读 offsetWidth, 流程:
+//   1) 全部按钮先渲染 (v-show 不参与计算), 拿到 offsetWidth
+//   2) 计算哪些超出, 设 overflowKeys
+//   3) 模板内 v-if 隐藏溢出项
+const BUTTON_WIDTHS: Record<string, number> = {}
+let resizeObserver: ResizeObserver | null = null
+// V24-F54: 防抖 timer 提到 setup 顶层, onBeforeUnmount 才能清理 (避免内存泄漏)
+//   WHY: 原 onMounted 内 let 是局部变量, onBeforeUnmount 闭包访问不到, 卸载后最后一次 50ms 触发仍会执行 measureButtons
+let resizeDebounceTimer: number | null = null
+
+function recalcOverflow() {
+  if (!navContainerRef.value) return
+  const containerW = navContainerRef.value.clientWidth
+  // P-Admin-UX v3.1: nav 是 flex-1 占据 logo + 工具按钮之间的所有空间, RESERVED 只需预留给 "更多" 按钮自身 + 一点 gap
+  const RESERVED = 80
+  const GAP = 4
+  const available = containerW - RESERVED
+  const newOverflow = new Set<string>()
+  if (available <= 0) {
+    for (const i of allNavItems.value) newOverflow.add(i.key)
+  } else {
+    let used = 0
+    for (const item of allNavItems.value) {
+      const w = BUTTON_WIDTHS[item.key] ?? 90
+      if (used + w + GAP > available) {
+        newOverflow.add(item.key)
+      } else {
+        used += w + GAP
+      }
+    }
+    // 至少保留 1 个低优先级项可见 (避免 "更多" 是唯一按钮)
+    if (newOverflow.size === allNavItems.value.length && allNavItems.value.length > 0) {
+      newOverflow.delete(allNavItems.value[allNavItems.value.length - 1].key)
+    }
+  }
+  // P-Admin-UX v3.1: 仅在新集合与当前不同时才更新, 避免 reactive 触发循环
+  if (
+    newOverflow.size !== overflowKeys.value.size ||
+    [...newOverflow].some((k) => !overflowKeys.value.has(k))
+  ) {
+    overflowKeys.value = newOverflow
+  }
+}
+
+function measureButtons() {
+  if (!navContainerRef.value) return
+  const buttons = navContainerRef.value.querySelectorAll('[data-nav-key]')
+  buttons.forEach((el) => {
+    const key = (el as HTMLElement).dataset.navKey
+    if (key) {
+      // P-Admin-UX v3.1: 每次都更新宽度 (去掉 !BUTTON_WIDTHS[key] 守卫),
+      //   避免首次测量时按钮尚未完全渲染 (i18n 文本未加载) 导致缓存值偏小
+      const w = (el as HTMLElement).offsetWidth
+      if (w > 0) BUTTON_WIDTHS[key] = w
+    }
+  })
+  recalcOverflow()
+}
+
+// 实际渲染到主顶栏的项 (排除溢出, 但如果有溢出项, 末尾追加 "更多" 按钮)
+const visibleNavItems = computed(() => {
+  const visible = allNavItems.value.filter((i) => !overflowKeys.value.has(i.key))
+  // 如果有溢出项, 在主顶栏末尾插入 "更多" 按钮 (虚拟项)
+  // V24-F103 i18n 残留修复: labelKey 改为 i18n key (nav.more)
+  if (overflowKeys.value.size > 0 && allNavItems.value.length > 0) {
+    visible.push({ key: '__more__', labelKey: 'nav.more', icon: 'More', priority: 99 } as any)
+  }
+  return visible
+})
+// 收纳到 "更多" 的项
+const overflowItems = computed(() => allNavItems.value.filter((i) => overflowKeys.value.has(i.key)))
+
+// 监听窗口变化 + 路由变化 (路由变化时按钮可能增减, 需重测)
+onMounted(() => {
+  // 站点名 (后台可维护, 失败静默兜底)
+  siteContentApi.publicGet().then((d) => {
+    if (d['site.name']?.trim()) siteName.value = d['site.name']!.trim()
+  }).catch(() => {})
+  // 首次渲染后再测 (DOM 已就绪)
+  nextTick(() => {
+    measureButtons()
+  })
+  // P-Admin-UX v3.1: ResizeObserver 回调里加防抖 (50ms) + 仅在结果变化时才更新 overflowKeys,
+  //   避免 "改 overflowKeys → 模板更新 → ResizeObserver 触发 → 改 overflowKeys" 反馈循环
+  // V24-F54: 防抖 timer 改用 setup 顶层变量, 便于 onBeforeUnmount 清理
+  resizeObserver = new ResizeObserver(() => {
+    if (resizeDebounceTimer !== null) window.clearTimeout(resizeDebounceTimer)
+    resizeDebounceTimer = window.setTimeout(() => {
+      measureButtons()
+    }, 50)
+  })
+  if (navContainerRef.value) {
+    resizeObserver.observe(navContainerRef.value)
+  }
+})
+onBeforeUnmount(() => {
+  resizeObserver?.disconnect()
+  resizeObserver = null
+  // V24-F54: 清理最后一次未触发的防抖回调, 防止卸载后访问已销毁的 ref/DOM
+  if (resizeDebounceTimer !== null) {
+    window.clearTimeout(resizeDebounceTimer)
+    resizeDebounceTimer = null
+  }
+  globalSuggestionAbortCtrl?.abort()
+})
+// 路由变化 → 重新计算
+watch(() => route.path, () => {
+  nextTick(() => measureButtons())
+})
+watch(() => isAdminPath.value, () => {
+  nextTick(() => measureButtons())
+})
+// P-Admin-UX v4: 用户登录/登出时按钮池数量从 3→11 或 11→3, 需重算
+watch(() => user.value, () => {
+  nextTick(() => measureButtons())
+})
+
+function goDict(path: string) {
+  router.push(path)
+}
+
+async function go(item: { path?: string; action?: string }) {
+  if (item.action === 'oemLookup') {
+    // Day 9.2: 用 ElMessageBox.prompt 取代原生 prompt() (后者在嵌入式浏览器/受限环境不支持)
+    // 修复: 友好提示 + 占位符示例, 避免用户输入不完整 OEM 后跳详情页 404
+    try {
+      const { value: oem } = await ElMessageBox.prompt('请输入完整 OEM 编号', 'OEM 查询', {
+        inputPattern: /^.+$/,
+        inputErrorMessage: 'OEM 不能为空',
+        inputPlaceholder: '请输入完整 OEM 编号 (如 P00050000 或 11427622448)',
+        confirmButtonText: '查询',
+        cancelButtonText: '取消'
+      })
+      if (oem && oem.trim()) {
+        const kw = oem.trim()
+        // 🔧 fix(审查): 先验证存在性 — 原实现直接整页跳 /product/{oem}, 不存在时后端 404
+        //   → 浏览器渲染 raw JSON (用户实测: "搜什么都找不到 + json 输出")
+        try {
+          await productApi.getByOem(kw)
+        } catch {
+          ElMessage.warning(`未找到 OEM 编号: ${kw}`)
+          return
+        }
+        // V2 Task 4.4: 仅有 OEM 编号, buildProductUrl 自动降级为 /product/{oem} 触发后端 301 → SEO URL
+        window.location.href = buildProductUrl({ oemNoDisplay: kw })
+      }
+    } catch {
+      // 用户取消
+    }
+    return
+  }
+  if (item.path) {
+    router.push(item.path)
+    return
+  }
+  // 🔧 fix(审查): dropdown 类型项 (如"字典管理", 无 path) 被收纳到"更多"后点击无反应 (用户实测反馈)
+  //   跳转该下拉的默认子页 (字典管理 → OEM 品牌字典页)
+  if ((item as { dropdown?: string }).dropdown === 'dict') {
+    router.push('/admin/dict/oem-brands')
+  }
+}
+
+// JWT 改造: 已登录显示用户菜单, 未登录跳 /login
+function toggleAdmin() {
+  if (isAdminPath.value) {
+    // 退出后台: 跳前台搜索页 (不清除 token, 用户仍处于登录态)
+    router.push('/search')
+  } else {
+    // 进入后台: 跳转登录页 (路由守卫会处理已登录用户的回跳)
+    router.push('/login')
+  }
+}
+
+// 用户下拉菜单 command 路由
+function onUserCommand(cmd: string) {
+  if (cmd === 'changePassword') {
+    router.push('/change-password')
+  } else if (cmd === 'logout') {
+    handleLogout()
+  }
+}
+
+async function handleLogout() {
+  try {
+    await ElMessageBox.confirm('确定退出登录吗?', '确认', { type: 'warning' })
+  } catch {
+    return
+  }
+  // WHY ElLoading: 全屏遮罩, 防止用户点击其他导航项导致路由跳转到需要登录的页面
+  const loading = ElLoading.service({ lock: true, text: '退出中...' })
+  try {
+    if (refreshToken.value) {
+      await authApi.logout(refreshToken.value)
+    }
+  } catch (e) {
+    // V24-F101 (P2-2, 规则 8): 即使后端 logout 失败也前端清场, console.warn 便于排查
+    console.warn('[AppHeader] handleLogout 后端 logout 失败 (前端继续清场):', e)
+  } finally {
+    loading.close()
+  }
+  clearAuth()
+  ElMessage.success(t('common.feedback.success_019'))
+  router.push('/login')
+}
+
+// el-dropdown 触发方式: hover / click
+const dictTrigger = 'click'
+const userTrigger = 'click'
+
+// P2.6: 语言切换 (中英双语, ElConfigProvider 响应式跟随, 无需刷新)
+function toggleLocale() {
+  const next = locale.value === 'zh-CN' ? 'en-US' : 'zh-CN'
+  setLocale(next)
+  ElMessage.success(next === 'zh-CN' ? '已切换到中文' : 'Switched to English')
+}
+
+// 改进 1.1: 全局搜索框 — 回车跳转聚合搜索页 (V2 /search/aggregate?q=)
+//   WHY 顶栏搜索: 用户在任意页面 (admin/产品详情/对比) 都能一键搜索, 无需先跳到 /search
+//   设计: 输入 → 回车 → router.push({ path: '/search/aggregate', query: { q } })
+//   边界: 空输入不跳转, 避免空查询触发后端聚合
+const globalSearchQ = ref('')
+let globalSuggestionAbortCtrl: AbortController | null = null
+
+interface GlobalSearchSuggestion {
+  value: string
+  query: string
+}
+
+function getSuggestionOem(hit: AggregateSearchHit): string {
+  return hit.oemList?.find((item) => item.oemNo3)?.oemNo3
+    ?? hit.oem2
+    ?? ''
+}
+
+async function queryGlobalSuggestions(
+  queryString: string,
+  cb: (items: GlobalSearchSuggestion[]) => void
+) {
+  const query = queryString.trim()
+  if (globalSuggestionAbortCtrl) globalSuggestionAbortCtrl.abort()
+  if (!query) {
+    cb([])
+    return
+  }
+
+  globalSuggestionAbortCtrl = new AbortController()
+  try {
+    const response = await publicSearchApi.aggregate(
+      { q: query, page: 1, pageSize: 6 },
+      { signal: globalSuggestionAbortCtrl.signal }
+    )
+    const seen = new Set<string>()
+    const suggestions = response.hits.reduce<GlobalSearchSuggestion[]>((items, hit) => {
+      const oem = getSuggestionOem(hit)
+      const label = [oem, hit.productName1, hit.productName2]
+        .filter((part): part is string => Boolean(part?.trim()))
+        .join(' - ')
+      if (label && !seen.has(label)) {
+        seen.add(label)
+        items.push({ value: label, query })
+      }
+      return items
+    }, [])
+    cb(suggestions)
+  } catch (error: any) {
+    if (error?.name !== 'CanceledError' && error?.code !== 'ERR_CANCELED') {
+      console.warn('[AppHeader] 全局搜索联想失败', error)
+    }
+    cb([])
+  }
+}
+
+function selectGlobalSuggestion(item: GlobalSearchSuggestion) {
+  globalSearchQ.value = item.query
+  doGlobalSearch()
+}
+
+function doGlobalSearch() {
+  const q = globalSearchQ.value.trim()
+  if (!q) {
+    ElMessage.warning('请输入搜索关键词')
+    return
+  }
+  router.push({ path: '/search/aggregate', query: { q } })
+  // 移动端: 触发搜索后关闭 drawer
+  closeMobileNav()
+}
+</script>
+
+<template>
+  <header
+    class="app-header hairline-b bg-[var(--color-bg)] flex items-center px-3 h-12 gap-3"
+    role="banner"
+  >
+    <!-- UX P0-1: 移动端汉堡按钮 (sm 以下显示, 桌面端隐藏) -->
+    <button
+      class="sm:hidden -ml-1 p-2 hover:bg-[var(--color-bg-hover)] flex items-center"
+      @click="mobileNavOpen = true"
+      :aria-label="t('common.aria.openNav')"
+      :aria-expanded="mobileNavOpen"
+    >
+      <el-icon aria-hidden="true"><Menu /></el-icon>
+    </button>
+    <div class="font-medium text-base tracking-tight">{{ siteName }}</div>
+    <!-- 改进 1.1: 全局搜索框 (桌面端 md 以上显示, 移动端由 drawer 接管) -->
+    <!--   Musk 风格: 1px 细线 + 240px 窄宽度 + Search 前缀图标 -->
+    <el-autocomplete
+      v-model="globalSearchQ"
+      :fetch-suggestions="queryGlobalSuggestions"
+      :trigger-on-focus="false"
+      :debounce="300"
+      :placeholder="t('common.aria.searchPlaceholder')"
+      size="small"
+      class="hidden md:block w-60 ml-3"
+      @keyup.enter="doGlobalSearch"
+      @select="selectGlobalSuggestion"
+      clearable
+      :aria-label="t('common.aria.searchBox')"
+    >
+      <template #prefix>
+        <el-icon aria-hidden="true"><Search /></el-icon>
+      </template>
+      <template #default="{ item }">
+        <span class="font-mono text-xs">{{ item.value }}</span>
+      </template>
+    </el-autocomplete>
+    <!-- UX P0-1: 桌面端 nav (sm 以上显示, 移动端隐藏) -->
+    <!-- P-Admin-UX v3.1: flex-1 + min-w-0 让 nav 占据 logo 和工具按钮之间的所有可用空间, -->
+    <!--   这样 clientWidth 才是真实的"可用宽度"而非"内容宽度", 避免 v3 死循环 (nav 收窄 → 更多塞入 → nav 收窄) -->
+    <nav
+      ref="navContainerRef"
+      class="hidden sm:flex items-center gap-1 ml-3 flex-1 min-w-0 overflow-hidden"
+      :aria-label="t('common.aria.mainNav')"
+    >
+      <template v-for="item in visibleNavItems" :key="item.key">
+        <!-- 字典管理下拉 (P1.3 + P2.2 共 8 个) -->
+        <el-dropdown
+          v-if="item.dropdown === 'dict'"
+          :trigger="dictTrigger"
+          @command="(cmd: string) => goDict(cmd)"
+        >
+          <button
+            :data-nav-key="item.key"
+            :class="[
+              'px-1.5 py-1 text-xs hover:bg-[var(--color-bg-hover)] whitespace-nowrap flex items-center',
+              route.path.startsWith('/admin/dict/') ? 'text-accent font-medium' : 'text-neutral-700'
+            ]"
+            :aria-label="t(item.labelKey)"
+            :aria-expanded="false"
+          >
+            <el-icon class="mr-1" aria-hidden="true"><component :is="item.icon" /></el-icon>
+            {{ t(item.labelKey) }}
+            <el-icon class="ml-1" aria-hidden="true"><ArrowDown /></el-icon>
+          </button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item
+                v-for="d in dictItems"
+                :key="d.path"
+                :command="d.path"
+                :disabled="route.path === d.path"
+                :class="route.path === d.path ? 'opacity-50 cursor-not-allowed' : ''"
+              >
+                {{ t(d.labelKey) }}
+              </el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
+        <!-- P-Admin-UX v3: "更多"按钮 (条件渲染, 仅 overflowItems 非空时出现) -->
+        <el-dropdown
+          v-else-if="item.key === '__more__'"
+          :trigger="dictTrigger"
+        >
+          <button
+            :data-nav-key="item.key"
+            class="px-1.5 py-1 text-xs hover:bg-[var(--color-bg-hover)] whitespace-nowrap flex items-center"
+            :aria-label="t('common.aria.expandMore')"
+            :aria-expanded="false"
+          >
+            <el-icon class="mr-1" aria-hidden="true"><More /></el-icon>
+            {{ t('nav.more') }}
+            <el-tag
+              v-if="overflowItems.length > 0"
+              size="small"
+              type="info"
+              class="ml-1"
+            >{{ overflowItems.length }}</el-tag>
+            <el-icon class="ml-1" aria-hidden="true"><ArrowDown /></el-icon>
+          </button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item
+                v-for="m in overflowItems"
+                :key="m.key"
+                @click="go(m as any)"
+                :disabled="m.path && route.path === m.path"
+              >
+                <el-icon class="mr-2" aria-hidden="true"><component :is="m.icon" /></el-icon>
+                {{ t(m.labelKey) }}
+              </el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
+        <button
+          v-else
+          :data-nav-key="item.key"
+          @click="go(item as any)"
+          :class="[
+            'px-1.5 py-1 text-xs hover:bg-[var(--color-bg-hover)] whitespace-nowrap flex items-center',
+            item.path && route.path === item.path ? 'text-accent font-medium' : 'text-neutral-700'
+          ]"
+          :aria-label="t(item.labelKey)"
+          :aria-current="item.path && route.path === item.path ? 'page' : undefined"
+        >
+          <el-icon class="mr-1" aria-hidden="true"><component :is="item.icon" /></el-icon>
+          {{ t(item.labelKey) }}
+        </button>
+      </template>
+    </nav>
+    <!-- P-Admin-UX v3.1: 原本 <div class="flex-1" /> spacer 已由 nav.flex-1 接管, 删除避免布局冲突 -->
+    <!-- P5.3 主题切换按钮 (桌面端显示, 移动端由 drawer 接管) -->
+    <button
+      @click="theme.toggle()"
+      class="hidden sm:flex px-2 py-1 text-sm hairline hover:bg-[var(--color-bg-hover)] items-center gap-1"
+      :title="theme.mode === 'dark' ? t('common.aria.switchToLight') : t('common.aria.switchToDark')"
+      :aria-label="t('common.aria.themeToggle')"
+      :aria-pressed="theme.mode === 'dark'"
+    >
+      <el-icon aria-hidden="true"><Moon v-if="theme.mode === 'light'" /><Sunny v-else /></el-icon>
+      <span class="hidden sm:inline">{{ t(`theme.${theme.mode}`) }}</span>
+    </button>
+    <!-- P2.6: 语言切换按钮 (中英双语, 移动端由 drawer 接管) -->
+    <button
+      data-testid="locale-toggle"
+      @click="toggleLocale"
+      class="hidden sm:flex px-2 py-1 text-sm hairline hover:bg-[var(--color-bg-hover)] items-center gap-1"
+      :aria-label="t('common.aria.switchLang', { lang: locale === 'zh-CN' ? '中文' : 'English' })"
+      :title="t('common.aria.switchLang', { lang: locale === 'zh-CN' ? '中文' : 'English' })"
+    >
+      <el-icon aria-hidden="true"><Promotion /></el-icon>
+      <span class="hidden sm:inline">{{ locale === 'zh-CN' ? '中' : 'EN' }}</span>
+    </button>
+    <!-- JWT 改造: 用户菜单 (已登录显示 el-dropdown, 未登录显示进入后台按钮; 移动端由 drawer 接管) -->
+    <!-- P-Admin-UX v4: 用户菜单改为 v-if=user (任何路径已登录都显示), 与 v4 admin 入口保留一致 -->
+    <el-dropdown
+      v-if="user"
+      :trigger="userTrigger"
+      @command="onUserCommand"
+      class="hidden sm:inline-block"
+    >
+      <button
+        class="px-2 py-1 text-sm hairline hover:bg-[var(--color-bg-hover)] flex items-center gap-1"
+        :aria-label="t('common.aria.userMenu', { username: user.username, role: user.role })"
+        :aria-expanded="false"
+      >
+        <el-icon aria-hidden="true"><User /></el-icon>
+        <span>{{ user.username }}</span>
+        <el-tag
+          size="small"
+          :type="user.role === 'admin' ? 'danger' : user.role === 'operator' ? 'primary' : 'info'"
+          class="ml-1"
+        >
+          {{ user.role }}
+        </el-tag>
+        <el-icon class="ml-1" aria-hidden="true"><ArrowDown /></el-icon>
+      </button>
+      <template #dropdown>
+        <el-dropdown-menu>
+          <el-dropdown-item command="changePassword">{{ t('auth.changePassword') }}</el-dropdown-item>
+          <el-dropdown-item command="logout" divided>{{ t('auth.logout') }}</el-dropdown-item>
+        </el-dropdown-menu>
+      </template>
+    </el-dropdown>
+    <!-- P-Admin-UX v4: 移除 v3 的"已登录 admin 角标"按钮, 因为 v4 admin 6 入口在任意路径都保留, 此按钮冗余 -->
+    <button
+      v-else
+      @click="toggleAdmin"
+      class="hidden sm:flex px-2 py-1 text-sm hairline hover:bg-[var(--color-bg-hover)] items-center gap-1"
+      :aria-label="isAdminPath ? t('nav.exitAdmin') : t('common.aria.enterAdminLogin')"
+    >
+      <el-icon aria-hidden="true"><Lock v-if="!isAdminPath" /><Unlock v-else /></el-icon>
+      {{ isAdminPath ? t('nav.exitAdmin') : t('nav.enterAdmin') }}
+    </button>
+  </header>
+
+  <!-- UX P0-1: 移动端导航抽屉 (sm 以下显示, 桌面端不渲染) -->
+  <!-- WHY: 9 个 nav 按钮 + 3 个工具按钮在 390px 移动端溢出 701px (1.8x 视口宽度), -->
+  <!--   用 drawer 收纳全部 nav, 桌面端 <nav> 完全不受影响 -->
+  <el-drawer
+    v-model="mobileNavOpen"
+    direction="rtl"
+    size="85%"
+    :with-header="false"
+    class="sm:hidden"
+    :aria-label="t('common.aria.mobileNav')"
+  >
+    <div
+      class="h-full flex flex-col p-4"
+      style="background: var(--color-bg-elevated); color: var(--color-text);"
+    >
+      <div class="font-medium text-base tracking-tight mb-4">SakuraFilter</div>
+      <!-- 改进 1.1: 移动端 drawer 内全局搜索框 (与桌面端保持一致体验) -->
+      <el-autocomplete
+        v-model="globalSearchQ"
+        :fetch-suggestions="queryGlobalSuggestions"
+        :trigger-on-focus="false"
+        :debounce="300"
+        :placeholder="t('common.aria.searchPlaceholder')"
+        size="default"
+        class="mb-4"
+        @keyup.enter="doGlobalSearch"
+        @select="selectGlobalSuggestion"
+        clearable
+        :aria-label="t('common.aria.searchBox')"
+      >
+        <template #prefix>
+          <el-icon aria-hidden="true"><Search /></el-icon>
+        </template>
+        <template #default="{ item }">
+          <span class="font-mono text-xs">{{ item.value }}</span>
+        </template>
+      </el-autocomplete>
+      <nav class="flex flex-col gap-1 flex-1" :aria-label="t('common.aria.mobileNav')">
+        <!-- P-Admin-UX v3: 移动端 drawer 展示全部按钮 (无视 overflow), 简化交互 -->
+        <template v-for="item in allNavItems" :key="'m-' + item.key">
+          <!-- 字典管理: drawer 内展开为分组列表, 避免嵌套 dropdown -->
+          <div v-if="item.dropdown === 'dict'" class="flex flex-col">
+            <div class="text-xs uppercase px-2 py-1 text-muted">{{ t('nav.dictGroup') }}</div>
+            <button
+              v-for="d in dictItems"
+              :key="d.path"
+              @click="goDict(d.path); closeMobileNav()"
+              class="px-2 py-2 text-left text-sm flex items-center hover:bg-[var(--color-bg-hover)]"
+              :class="route.path === d.path ? 'text-accent font-medium' : ''"
+              :aria-label="t(d.labelKey)"
+              :aria-current="route.path === d.path ? 'page' : undefined"
+            >
+              {{ t(d.labelKey) }}
+            </button>
+          </div>
+          <button
+            v-else
+            @click="go(item); closeMobileNav()"
+            class="px-2 py-2 text-left text-sm flex items-center hover:bg-[var(--color-bg-hover)]"
+            :class="item.path && route.path === item.path ? 'text-accent font-medium' : ''"
+            :aria-label="t(item.labelKey)"
+            :aria-current="item.path && route.path === item.path ? 'page' : undefined"
+          >
+            <el-icon class="mr-2" aria-hidden="true"><component :is="item.icon" /></el-icon>
+            {{ t(item.labelKey) }}
+          </button>
+        </template>
+      </nav>
+      <!-- drawer 底部: 主题 + 语言 + 用户/进入后台 -->
+      <div class="hairline-t pt-3 flex flex-col gap-1">
+        <button
+          @click="theme.toggle(); closeMobileNav()"
+          class="px-2 py-2 text-left text-sm flex items-center hover:bg-[var(--color-bg-hover)]"
+          :aria-label="theme.mode === 'dark' ? t('common.aria.switchToLight') : t('common.aria.switchToDark')"
+        >
+          <el-icon class="mr-2" aria-hidden="true"><Moon v-if="theme.mode === 'light'" /><Sunny v-else /></el-icon>
+          {{ theme.mode === 'dark' ? t('theme.light') : t('theme.dark') }}
+        </button>
+        <button
+          @click="toggleLocale(); closeMobileNav()"
+          class="px-2 py-2 text-left text-sm flex items-center hover:bg-[var(--color-bg-hover)]"
+          :aria-label="t('common.aria.switchLang', { lang: locale === 'zh-CN' ? '中文' : 'English' })"
+        >
+          <el-icon class="mr-2" aria-hidden="true"><Promotion /></el-icon>
+          {{ locale === 'zh-CN' ? 'English' : '中文' }}
+        </button>
+        <div v-if="user" class="px-2 py-2 text-sm flex items-center gap-2">
+          <el-icon aria-hidden="true"><User /></el-icon>
+          {{ user.username }}
+          <el-tag size="small" :type="user.role === 'admin' ? 'danger' : user.role === 'operator' ? 'primary' : 'info'">
+            {{ user.role }}
+          </el-tag>
+        </div>
+        <button
+          v-if="user"
+          @click="handleLogout(); closeMobileNav()"
+          class="px-2 py-2 text-left text-sm flex items-center text-red-500 hover:bg-[var(--color-bg-hover)]"
+          :aria-label="t('auth.logout')"
+        >
+          <el-icon class="mr-2" aria-hidden="true"><SwitchButton /></el-icon>
+          {{ t('auth.logout') }}
+        </button>
+        <button
+          v-else
+          @click="toggleAdmin(); closeMobileNav()"
+          class="px-2 py-2 text-left text-sm flex items-center hover:bg-[var(--color-bg-hover)]"
+          :aria-label="isAdminPath ? t('nav.exitAdmin') : t('common.aria.enterAdminLogin')"
+        >
+          <el-icon class="mr-2" aria-hidden="true"><Lock v-if="!isAdminPath" /><Unlock v-else /></el-icon>
+          {{ isAdminPath ? t('nav.exitAdmin') : t('nav.enterAdmin') }}
+        </button>
+      </div>
+    </div>
+  </el-drawer>
+</template>

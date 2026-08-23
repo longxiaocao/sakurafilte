@@ -1,0 +1,671 @@
+<script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+const { t } = useI18n()
+// P3.4 (Task 11.5): 公开搜索页 8 字段多框模糊搜索
+//   URL 格式: /public/search?oemBrand=...&oemNo2=...&oemNo3=...&machineBrand=...&machineModel=...&modelName=...&engineBrand=...&engineType=...
+//   规格 (新思路.xlsx R2): 8 字段同时支持模糊搜索,任一字段命中即返回
+//   - 8 字段全部 optional, 全部空 → 提示 "至少输入 1 个搜索字段"
+//   - 多字段 = AND 关系 (收窄范围)
+//   - 全部走 P0.1 ILIKE ESCAPE (后端负责转义)
+//   - URL 同步: 改字段 → 自动更新 URL, 浏览器后退/前进 → 还原字段
+//   - SEO: <title> + meta description 反映当前搜索条件
+//   - 设计: Musk 风格极简专业 (纯黑白, 1px 细线, 无阴影, 8px 网格)
+import { ref, computed, onMounted, watch, onUnmounted, reactive } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import { publicSearchApi } from '@/api'
+import type { PublicSearchHit, PublicEightResponse } from '@/api/types'
+import { buildProductUrl } from '@/utils/build-product-url'
+// V24-F33 (spec F5-4/Task 4.5.22.4): 401 重定向时跳过 URL 同步, 避免 sync loop
+//   WHY: 401 时 router.replace 触发 watch route.query, 若继续执行 syncUrlFromForm + doSearch
+//        会再次发请求 → 再次 401 → 循环
+import { isHttpRedirecting } from '@/utils/http'
+
+const route = useRoute()
+const router = useRouter()
+
+// ===== 8 字段状态 (与 URL query 双向同步) =====
+interface SearchForm {
+  oemBrand: string
+  oemNo2: string
+  oemNo3: string
+  machineBrand: string
+  machineModel: string
+  modelName: string
+  engineBrand: string
+  engineType: string
+}
+
+function emptyForm(): SearchForm {
+  return {
+    oemBrand: '',
+    oemNo2: '',
+    oemNo3: '',
+    machineBrand: '',
+    machineModel: '',
+    modelName: '',
+    engineBrand: '',
+    engineType: ''
+  }
+}
+
+const form = reactive<SearchForm>(emptyForm())
+const page = ref(1)
+const pageSize = ref(20)
+
+// 字段定义 — 集中维护 label / placeholder / key / typeaheadField, 模板循环用
+//   typeaheadField: 后端 /api/public/typeahead/{field} 的 field 名 (kebab-case)
+const fields = [
+  { key: 'oemBrand',     label: 'OEM Brand',      placeholder: 'e.g. MANN, Bosch, CAT',  typeaheadField: 'oem-brand' },
+  { key: 'oemNo2',       label: 'OEM 2 NO.',      placeholder: '产品自身 OEM 2 编号',     typeaheadField: 'oem-no2' },
+  { key: 'oemNo3',       label: 'OEM 3 NO.',      placeholder: 'e.g. 207-60... (交叉引用)', typeaheadField: 'oem-no3' },
+  { key: 'machineBrand', label: 'Machine Brand',  placeholder: 'e.g. Caterpillar, JCB',  typeaheadField: 'machine-brand' },
+  { key: 'machineModel', label: 'Machine Model',  placeholder: '机型',                   typeaheadField: 'machine-model' },
+  { key: 'modelName',    label: 'Model Name',     placeholder: '型号名',                 typeaheadField: 'model-name' },
+  { key: 'engineBrand',  label: 'Engine Brand',   placeholder: '发动机品牌',             typeaheadField: 'engine-brand' },
+  { key: 'engineType',   label: 'Engine Type',    placeholder: '发动机型号',             typeaheadField: 'engine-type' }
+] as const
+
+// ===== typeahead 候选项 (快速输入优化: 取消 300ms debounce, 改为立即查) =====
+//   WHY: 用户体验优先 — 输入即下拉, 不再等 300ms
+//   同时保留 AbortController: 快速输入时取消前序请求, 只保留最后一次 (避免响应错乱)
+const typeaheadControllers: Record<string, AbortController | null> = {}
+
+async function fetchSuggestions(fieldKey: string, typeaheadField: string, query: string, cb: (items: string[]) => void) {
+  // 输入 < 2 字符不查 (与后端一致, 避免全表扫描)
+  if (!query || query.trim().length < 2) {
+    cb([])
+    return
+  }
+  // 取消上一次同字段的请求 (快速输入时只保留最后一次)
+  const prev = typeaheadControllers[fieldKey]
+  if (prev) prev.abort()
+  const ctrl = new AbortController()
+  typeaheadControllers[fieldKey] = ctrl
+  try {
+    const resp = await publicSearchApi.typeahead(typeaheadField, query.trim(), 20, ctrl.signal)
+    cb(resp.items || [])
+  } catch {
+    cb([])
+  } finally {
+    if (typeaheadControllers[fieldKey] === ctrl) typeaheadControllers[fieldKey] = null
+  }
+}
+
+// ===== 搜索结果状态 =====
+const loading = ref(false)
+const results = ref<PublicSearchHit[]>([])
+const total = ref(0)
+const totalPages = ref(0)
+const elapsedMs = ref(0)
+const countMode = ref<string>('exact')
+const lastError = ref('')
+
+// P-Demo: 页面进入时展示的"最新产品"明细表 (未输入搜索条件时显示)
+const featuredItems = ref<PublicSearchHit[]>([])
+const featuredLoading = ref(false)
+
+// P-Demo: 对比功能 — 已加入对比的产品 ID 集合 (Set 用于 O(1) 查重)
+const compareIds = ref<Set<number>>(new Set())
+const MAX_COMPARE = 6  // 与 PublicCompareView 一致
+
+// 8 字段是否全部空 — 用于禁用搜索按钮 + 提示文案
+const allEmpty = computed(() =>
+  !form.oemBrand && !form.oemNo2 && !form.oemNo3
+  && !form.machineBrand && !form.machineModel
+  && !form.modelName && !form.engineBrand && !form.engineType
+)
+
+// 当前填了几个字段 — 显示在结果区顶部 "8 字段中 N 项有值"
+const filledCount = computed(() =>
+  fields.reduce((acc, f) => acc + (form[f.key] ? 1 : 0), 0)
+)
+
+// ===== URL 双向同步 =====
+//   WHY: 分享链接 (R8 规格 "/search?oemBrand=CAT" 可直接发给客户), 浏览器后退能回到上次的搜索
+//   策略: form → router.replace 同步 (不污染 history); route.query → form 还原 (用户分享/后退)
+function syncFormFromUrl() {
+  const q = route.query
+  form.oemBrand = String(q.oemBrand ?? '')
+  form.oemNo2 = String(q.oemNo2 ?? '')
+  form.oemNo3 = String(q.oemNo3 ?? '')
+  form.machineBrand = String(q.machineBrand ?? '')
+  form.machineModel = String(q.machineModel ?? '')
+  form.modelName = String(q.modelName ?? '')
+  form.engineBrand = String(q.engineBrand ?? '')
+  form.engineType = String(q.engineType ?? '')
+  page.value = Math.max(1, Number(q.page ?? 1) || 1)
+  pageSize.value = Math.max(1, Math.min(100, Number(q.pageSize ?? 20) || 20))
+}
+
+function syncUrlFromForm() {
+  const q: Record<string, string> = {}
+  for (const f of fields) {
+    if (form[f.key]) q[f.key] = form[f.key]
+  }
+  if (page.value > 1) q.page = String(page.value)
+  if (pageSize.value !== 20) q.pageSize = String(pageSize.value)
+  // 用 replace 不入栈, 避免每个按键都新增 history entry
+  router.replace({ path: '/public/search', query: q })
+}
+
+// 监听 form 变化 → 同步到 URL (用 nextTick 避免重入)
+let syncing = false
+watch(form, () => {
+  if (syncing) return
+  syncUrlFromForm()
+}, { deep: true })
+
+watch(page, () => {
+  if (syncing) return
+  syncUrlFromForm()
+})
+
+watch(pageSize, () => {
+  if (syncing) return
+  syncUrlFromForm()
+  // 🔧 fix(审查): 已在第 1 页时切换每页条数, el-pagination 重置 current-page 为 1 但值不变,
+  //   watch(page) 不触发 → 列表不刷新; 显式刷新
+  if (page.value === 1 && !allEmpty.value) doSearch()
+})
+
+// 监听 route 变化 (浏览器后退/前进/分享链接打开) → 还原 form
+watch(() => route.query, () => {
+  if (syncing) return
+  // V24-F33 (spec F5-4): 401 重定向过程中跳过 URL 同步, 避免 sync loop
+  //   WHY: router.replace('/login?return=...') 触发此 watch, 若执行 doSearch 会再次 401 → 循环
+  if (isHttpRedirecting()) return
+  syncing = true
+  syncFormFromUrl()
+  syncing = false
+  // 🔧 fix(审查): 移除此处立即 doSearch — 输入时 watch(form) 同步 URL 会触发本 watch,
+  //   与下方 500ms debounce watch(form) 叠加, 造成每按键 2 次请求 (1 次立即 + 1 次防抖)
+  //   表单还原后的搜索由 debounce watch 自动承担, 初始分享链接搜索由 onMounted 处理
+})
+
+// ===== 搜索执行 =====
+// 取消前序未完成请求, 防止旧响应后到覆盖新结果 (快速输入竞态)
+let searchAbort: AbortController | null = null
+async function doSearch() {
+  if (allEmpty.value) {
+    ElMessage.warning(t('common.feedback.warn_040'))
+    return
+  }
+  searchAbort?.abort()
+  const ctrl = new AbortController()
+  searchAbort = ctrl
+  loading.value = true
+  lastError.value = ''
+  try {
+    const resp: PublicEightResponse = await publicSearchApi.eightField({
+      oemBrand: form.oemBrand || undefined,
+      oemNo2: form.oemNo2 || undefined,
+      oemNo3: form.oemNo3 || undefined,
+      machineBrand: form.machineBrand || undefined,
+      machineModel: form.machineModel || undefined,
+      modelName: form.modelName || undefined,
+      engineBrand: form.engineBrand || undefined,
+      engineType: form.engineType || undefined,
+      page: page.value,
+      pageSize: pageSize.value
+    }, { signal: ctrl.signal })
+    results.value = resp.items
+    total.value = resp.total
+    totalPages.value = resp.totalPages
+    elapsedMs.value = resp.elapsedMs
+    countMode.value = resp.countMode
+    applySeo()
+  } catch (e: any) {
+    // 被新请求取消 (AbortError): 静默, 不覆盖 loading/结果
+    if (e?.name === 'CanceledError' || e?.code === 'ERR_CANCELED') return
+    lastError.value = e?.problem?.detail || e?.response?.data?.detail || e?.response?.data?.error || e?.message || '搜索失败'
+    results.value = []
+    total.value = 0
+    totalPages.value = 0
+  } finally {
+    // 仅当前请求负责关闭 loading (被取消的旧请求不干扰新请求状态)
+    if (searchAbort === ctrl) {
+      loading.value = false
+      searchAbort = null
+    }
+  }
+}
+
+// 任意字段输入 → 自动搜索 (debounce 500ms, 与 Day 9 SearchView 体验一致)
+let debounceTimer: number | null = null
+watch(form, () => {
+  if (allEmpty.value) {
+    // 全部清空 → 重置结果
+    results.value = []
+    total.value = 0
+    return
+  }
+  if (debounceTimer) window.clearTimeout(debounceTimer)
+  debounceTimer = window.setTimeout(() => {
+    page.value = 1  // 改条件回到第 1 页
+    doSearch()
+  }, 500)
+}, { deep: true })
+
+// 翻页
+watch(page, () => {
+  if (allEmpty.value) return
+  doSearch()
+})
+
+function clearAll() {
+  for (const f of fields) form[f.key] = ''
+  results.value = []
+  total.value = 0
+  page.value = 1
+  ElMessage.info(t('common.feedback.success_016'))
+}
+
+// ===== 详情页跳转 =====
+function viewDetail(row: PublicSearchHit) {
+  // V2 Task 4.4: 改用 SEO URL (PublicSearchHit 仅含 oemNoDisplay/oem2/productName1, 降级走 /product/{oem} 301)
+  const oem = row.oemNoDisplay || row.oem2
+  if (oem) {
+    const url = buildProductUrl({
+      oemNoDisplay: oem,
+      productName1: row.productName1
+    })
+    window.location.href = url
+  }
+}
+
+// P-Demo: 拉取最新 20 条产品 (页面进入时调用, 用于"明细表"展示)
+async function loadFeatured() {
+  featuredLoading.value = true
+  try {
+    const resp = await publicSearchApi.featured(20)
+    featuredItems.value = resp.items || []
+  } catch (e) {
+    // 静默失败 — featured 失败不影响搜索功能
+    featuredItems.value = []
+  } finally {
+    featuredLoading.value = false
+  }
+}
+
+// 🔧 fix(审查): 对比功能内嵌 — 移除独立 /compare 页 (用户反馈与高级搜索重复), 勾选后在页内抽屉展示对比
+//   行为: 累加而非替换, 已加入的禁用按钮; 达 MAX_COMPARE 给提示
+import { publicCompareApi } from '@/api'
+import type { PublicProductDetail, PublicXrefInfo, MachineAppInfo } from '@/api/types'
+import PublicComparePanel from '@/components/PublicComparePanel.vue'
+
+function addToCompare(row: PublicSearchHit, event?: Event) {
+  if (event) event.stopPropagation()  // 阻止冒泡到 row-click (查看详情)
+  if (compareIds.value.has(row.id)) {
+    ElMessage.info('已在对比列表中')
+    return
+  }
+  if (compareIds.value.size >= MAX_COMPARE) {
+    ElMessage.warning(`最多对比 ${MAX_COMPARE} 个产品`)
+    return
+  }
+  // 创建新 Set 触发响应式更新
+  const next = new Set(compareIds.value)
+  next.add(row.id)
+  compareIds.value = next
+  ElMessage.success(`已加入对比 (${next.size}/${MAX_COMPARE})`)
+}
+
+// 对比抽屉 (内嵌)
+const compareOpen = ref(false)
+const compareProducts = ref<PublicProductDetail[]>([])
+const compareLoading = ref(false)
+
+async function openCompare() {
+  if (compareIds.value.size === 0) {
+    ElMessage.warning('请先在结果中点击"加入对比"')
+    return
+  }
+  compareOpen.value = true
+  compareLoading.value = true
+  try {
+    const ids = Array.from(compareIds.value).slice(0, MAX_COMPARE)
+    const data = await publicCompareApi.compare(ids)
+    const map = new Map(data.items.map((p) => [p.id, p]))
+    compareProducts.value = ids.map((id) => map.get(id)).filter((p): p is PublicProductDetail => !!p)
+  } catch (e: any) {
+    ElMessage.error(e?.problem?.detail || e?.response?.data?.error || e?.message || '对比加载失败')
+  } finally {
+    compareLoading.value = false
+  }
+}
+
+function closeCompare() {
+  compareOpen.value = false
+}
+
+function removeFromCompare(idx: number) {
+  const p = compareProducts.value[idx]
+  if (p) {
+    const next = new Set(compareIds.value)
+    next.delete(p.id)
+    compareIds.value = next
+    compareProducts.value = compareProducts.value.filter((_item, i) => i !== idx)
+  }
+}
+
+function moveCompare(idx: number, dir: -1 | 1) {
+  const target = idx + dir
+  if (target < 0 || target >= compareProducts.value.length) return
+  const arr = [...compareProducts.value]
+  ;[arr[idx], arr[target]] = [arr[target], arr[idx]]
+  compareProducts.value = arr
+  // 🔧 fix(审查): 列调序持久化 (与 AdminCompareView 对齐) — URL compare 参数 + sessionStorage
+  //   此前只交换数组, 刷新后顺序丢失 (用户/测试实测: 调序后刷新恢复原序)
+  const ids = arr.map((p) => p.id).join(',')
+  try {
+    sessionStorage.setItem('sakurafilter_compare_ids', JSON.stringify(arr.map((p) => p.id)))
+  } catch { /* 隐私模式等场景忽略 */ }
+  router.replace({ query: { ...route.query, compare: ids } })
+}
+
+function clearCompare() {
+  compareProducts.value = []
+  try {
+    sessionStorage.removeItem('sakurafilter_compare_ids')
+  } catch { /* 隐私模式等场景忽略 */ }
+  // 移除 URL compare 参数
+  const q = { ...route.query }
+  delete q.compare
+  router.replace({ query: q })
+}
+
+// ===== SEO meta =====
+let ogTags: HTMLMetaElement[] = []
+function applySeo() {
+  const filled = fields.filter(f => form[f.key]).map(f => `${f.label}=${form[f.key]}`).join(', ')
+  const title = filled
+    ? `搜索: ${filled.slice(0, 60)} - SakuraFilter`
+    : '产品搜索 - SakuraFilter'
+  document.title = title
+  ensureMeta('description', filled
+    ? `共 ${total.value} 条结果 (${elapsedMs.value}ms). ${filled}`
+    : '8 字段多框模糊搜索 1M+ 滤芯产品')
+}
+function ensureMeta(name: string, content: string) {
+  let el = document.head.querySelector<HTMLMetaElement>(`meta[name="${name}"]`)
+  if (!el) {
+    el = document.createElement('meta')
+    el.setAttribute('name', name)
+    document.head.appendChild(el)
+    ogTags.push(el)
+  }
+  el.setAttribute('content', content)
+}
+onUnmounted(() => {
+  for (const el of ogTags) el.remove()
+  ogTags = []
+  document.title = 'SakuraFilter'
+})
+
+onMounted(() => {
+  syncFormFromUrl()
+  // 🔧 fix(审查): 从详情页"加入对比"跳转 (/public/search?compare=id) 时自动勾选并打开对比抽屉
+  const cmp = route.query.compare
+  if (typeof cmp === 'string' && cmp) {
+    const ids = cmp.split(',').map(Number).filter((n) => Number.isInteger(n) && n > 0)
+    if (ids.length > 0) {
+      compareIds.value = new Set(ids.slice(0, MAX_COMPARE))
+      compareOpen.value = true
+      compareLoading.value = true
+      publicCompareApi.compare(ids.slice(0, MAX_COMPARE)).then((data) => {
+        compareProducts.value = data.items
+      }).catch(() => {
+        ElMessage.warning('对比产品加载失败, 可重新搜索添加')
+      }).finally(() => {
+        compareLoading.value = false
+      })
+    }
+  }
+  // 进入页面拉一次 featured 明细表 (即使有搜索条件也拉, 用户清空后可看)
+  loadFeatured()
+  if (filledCount.value > 0) doSearch()
+})
+
+// P1-4 修复: 组件卸载时清理 debounceTimer, 防止内存泄漏 (规则 5.2 副作用清理)
+//   WHY: watch 内 setTimeout 若未清理, 组件卸载后仍会触发 doSearch, 访问已销毁的响应式状态
+//   同时清理 typeahead 未完成请求的 AbortController (debounce 已移除, 无 timer)
+onUnmounted(() => {
+  if (debounceTimer) {
+    window.clearTimeout(debounceTimer)
+    debounceTimer = null
+  }
+  searchAbort?.abort()
+  searchAbort = null
+  for (const key in typeaheadControllers) {
+    typeaheadControllers[key]?.abort()
+    typeaheadControllers[key] = null
+  }
+})
+</script>
+
+<template>
+  <div class="p-3 max-w-screen-2xl mx-auto">
+    <!-- 标题 + 清空按钮 -->
+    <div class="flex items-center justify-between mb-3">
+      <div>
+        <h1 class="text-lg font-medium">产品搜索 (8 字段多框)</h1>
+        <p class="text-xs text-muted mt-1">
+          规格: OEM Brand / OEM 2 / OEM 3 / Machine Brand / Machine Model / Model Name / Engine Brand / Engine Type
+        </p>
+      </div>
+      <el-button @click="clearAll" size="small" :disabled="allEmpty">清空</el-button>
+    </div>
+
+    <!-- 8 字段 2 行 4 列 grid 布局 (响应式) -->
+    <div class="hairline p-3 mb-3">
+      <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+        <div v-for="f in fields" :key="f.key">
+          <label class="block text-xs text-muted mb-1">{{ f.label }}</label>
+          <el-autocomplete
+            v-model="form[f.key]"
+            :placeholder="`${f.placeholder} (输入 ≥2 字符联想)`"
+            :fetch-suggestions="(q: any, cb: any) => fetchSuggestions(f.key, f.typeaheadField, String(q ?? ''), cb as any)"
+            :trigger-on-focus="true"
+            clearable
+            size="default"
+            class="w-full"
+            :data-testid="`public-search-${f.key}`"
+            @select="() => doSearch()"
+            @keyup.enter="doSearch"
+          />
+        </div>
+      </div>
+      <div class="mt-2 text-xs text-muted flex items-center gap-3">
+        <span>已填 {{ filledCount }} / 8 字段</span>
+        <span v-if="filledCount > 0" class="text-blue-600">500ms 防抖自动搜索</span>
+        <span v-else>输入任意字段开始搜索</span>
+      </div>
+    </div>
+
+    <!-- 错误提示 -->
+    <div v-if="lastError" class="text-red-600 text-sm mb-2">{{ lastError }}</div>
+
+    <!-- 全部空 → 显示最新产品明细表 (用户可点行查看/点按钮加入对比) -->
+    <div v-if="allEmpty">
+      <div class="flex items-center justify-between mb-2">
+        <div class="text-xs text-muted">
+          <el-icon class="mr-1 align-middle"><InfoFilled /></el-icon>
+          请输入搜索条件 (≥2 字符), 或浏览下方最新 20 条产品
+        </div>
+        <div class="flex items-center gap-2">
+          <span v-if="compareIds.size > 0" class="text-xs text-blue-600">
+            已选 {{ compareIds.size }} / {{ MAX_COMPARE }} 个对比
+          </span>
+          <el-button
+            v-if="compareIds.size > 0"
+            @click="openCompare"
+            type="primary"
+            size="small"
+            plain
+          >查看对比</el-button>
+        </div>
+      </div>
+      <el-table
+        v-loading="featuredLoading"
+        :data="featuredItems"
+        stripe
+        size="small"
+        :row-style="{ cursor: 'pointer' }"
+        @row-click="viewDetail"
+        max-height="calc(100vh - 320px)"
+      >
+        <el-table-column prop="id" label="ID" width="70" />
+        <el-table-column label="OEM" min-width="180" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span class="text-blue-600">{{ row.oemNoDisplay || row.oem2 || '—' }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="OEM 2" min-width="160" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.oem2 || '—' }}</template>
+        </el-table-column>
+        <el-table-column label="Product Name 1" min-width="200" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.productName1 || '—' }}</template>
+        </el-table-column>
+        <el-table-column prop="type" label="Type" width="100" />
+        <el-table-column label="D1 (mm)" width="100" align="right">
+          <template #default="{ row }">{{ row.d1Mm || '—' }}</template>
+        </el-table-column>
+        <el-table-column label="H1 (mm)" width="100" align="right">
+          <template #default="{ row }">{{ row.h1Mm || '—' }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="110" fixed="right">
+          <template #default="{ row }">
+            <el-button
+              @click="(e: any) => addToCompare(row, e)"
+              :disabled="compareIds.has(row.id)"
+              size="small"
+              plain
+              type="primary"
+            >{{ compareIds.has(row.id) ? '已加入' : '加入对比' }}</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </div>
+
+    <!-- 结果区 -->
+    <div v-else>
+      <!-- 结果头: 数量 + 耗时 + countMode + 翻页 -->
+      <div class="hairline-b px-2 py-1 bg-[var(--color-bg-hover)] text-xs text-muted flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <span>
+            共 <strong class="text-[var(--color-text)]">{{ total.toLocaleString() }}</strong> 条结果
+            <span v-if="countMode === 'estimated'" class="text-orange-500 ml-1">(估计值, 实际可能更少)</span>
+          </span>
+          <span>耗时 {{ elapsedMs }} ms</span>
+          <span>显示第 {{ (page - 1) * pageSize + 1 }}-{{ Math.min(page * pageSize, total) }} 条</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span v-if="compareIds.size > 0" class="text-blue-600">
+            已选 {{ compareIds.size }} / {{ MAX_COMPARE }} 个对比
+          </span>
+          <el-button
+            v-if="compareIds.size > 0"
+            @click="openCompare"
+            size="small"
+            plain
+            type="primary"
+          >查看对比</el-button>
+          <el-pagination
+            v-model:current-page="page"
+            v-model:page-size="pageSize"
+            :total="total"
+            :page-sizes="[10, 20, 50, 100]"
+            layout="sizes, prev, pager, next"
+            small
+            background
+          />
+        </div>
+      </div>
+
+      <!-- 结果表格 -->
+      <el-table
+        v-loading="loading"
+        :data="results"
+        stripe
+        size="small"
+        :row-style="{ cursor: 'pointer' }"
+        @row-click="viewDetail"
+        max-height="calc(100vh - 320px)"
+      >
+        <el-table-column prop="id" label="ID" width="70" />
+        <el-table-column label="OEM" min-width="180" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span class="text-blue-600">{{ row.oemNoDisplay || row.oem2 || '—' }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="OEM 2" min-width="160" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.oem2 || '—' }}</template>
+        </el-table-column>
+        <el-table-column label="Product Name 1" min-width="200" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.productName1 || '—' }}</template>
+        </el-table-column>
+        <el-table-column prop="type" label="Type" width="100" />
+        <el-table-column label="D1 (mm)" width="100" align="right">
+          <template #default="{ row }">{{ row.d1Mm || '—' }}</template>
+        </el-table-column>
+        <el-table-column label="H1 (mm)" width="100" align="right">
+          <template #default="{ row }">{{ row.h1Mm || '—' }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="110" fixed="right">
+          <template #default="{ row }">
+            <el-button
+              @click="(e: any) => addToCompare(row, e)"
+              :disabled="compareIds.has(row.id)"
+              size="small"
+              plain
+              type="primary"
+            >{{ compareIds.has(row.id) ? '已加入' : '加入对比' }}</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+
+      <!-- 底部翻页 -->
+      <div class="mt-3 flex justify-end">
+        <el-pagination
+          v-model:current-page="page"
+          v-model:page-size="pageSize"
+          :total="total"
+          :page-sizes="[10, 20, 50, 100]"
+          layout="sizes, prev, pager, next, total"
+          background
+        />
+      </div>
+    </div>
+  </div>
+
+  <!-- 🔧 fix(审查): 产品对比抽屉 (内嵌, 替代独立 /compare 页) -->
+  <el-drawer v-model="compareOpen" title="产品对比" size="80%" direction="rtl">
+    <div v-loading="compareLoading" class="p-3">
+      <div class="flex items-center justify-between mb-2">
+        <span v-if="compareProducts.length > 0" class="text-xs text-muted">{{ compareProducts.length }} 个产品</span>
+        <el-button v-if="compareProducts.length > 0" size="small" data-testid="clear-compare-btn" @click="clearCompare">清空对比</el-button>
+      </div>
+      <div v-if="compareProducts.length === 0 && !compareLoading" class="text-sm text-muted py-8 text-center">
+        暂无对比产品 — 在搜索结果中点击"加入对比"添加产品
+      </div>
+      <PublicComparePanel
+        v-if="compareProducts.length > 0"
+        :products="compareProducts"
+        @move-left="(i: number) => moveCompare(i, -1)"
+        @move-right="(i: number) => moveCompare(i, 1)"
+        @remove="removeFromCompare"
+      />
+      <div v-if="compareProducts.length > 0" class="mt-3 flex justify-end">
+        <el-button size="small" @click="closeCompare">关闭</el-button>
+      </div>
+    </div>
+  </el-drawer>
+</template>
+
+<style scoped>
+/* 8 字段 grid 在窄屏 (mobile) 折叠为 1 列, 桌面 4 列 */
+@media (max-width: 640px) {
+  .grid-cols-1 { grid-template-columns: repeat(1, minmax(0, 1fr)) !important; }
+}
+</style>

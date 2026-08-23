@@ -1444,8 +1444,8 @@ public class EtlImportService
             // 4. 清空 search_index_pending (旧 payload 可能与新 schema 不兼容)
             await TruncateSearchIndexPendingAsync(db, ct);
 
-            // 5. 全量重建 (不按 UpdatedAt 筛选)
-            var (direct, queued) = await SyncAllSearchIndexAsync(meili, db, ct);
+            // 5. 全量重建 (不按 UpdatedAt 筛选, 从头开始)
+            var (direct, queued) = await SyncAllSearchIndexAsync(meili, db, null, null, ct);
 
             await tx.CommitAsync(ct);
 
@@ -1476,16 +1476,91 @@ public class EtlImportService
     }
 
     /// <summary>
+    /// 断点续传式全量重建 (不清空索引, 从 fromId 之后 keyset 接着补)
+    ///   WHY 必要: 压测机频繁冻结, 原生 ReindexAllAsync 每次 DeleteAll 从头来, 冻结一次白干数十万文档。
+    ///        本方法跳过清空, 从指定 fromId 之后继续分页, 已提交文档保留。
+    ///        冻结恢复后, 用 Meili 当前文档数 (留少量余量覆盖边界缺口) 作为新的 fromId 重新调用即可续传。
+    ///   互斥: 复用同一 advisory lock (7740005), 但改用会话级锁 (pg_try_advisory_lock) 而非事务级,
+    ///        避免 50 分钟长事务持有锁/膨胀 WAL。释放由 finally 中 pg_advisory_unlock 保证。
+    /// </summary>
+    public async Task<ReindexResult> ReindexFromIdAsync(long fromId, int? limit = null, CancellationToken ct = default)
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var cts = AcquireActiveCts("reindex-resume", ct);
+        BroadcastCtx? broadcastCtx = null;
+        const long reindexLockKey = 7740005L;
+        try
+        {
+            broadcastCtx = StartSnapshotTimerIfNeeded();
+            using var scope = _sp.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<ProductDbContext>();
+            var meili = scope.ServiceProvider.GetRequiredService<MeiliSearchProvider>();
+
+            await using var conn = new Npgsql.NpgsqlConnection(_pgConn);
+            await conn.OpenAsync(ct);
+
+            // 会话级 advisory lock: 跨整个续传过程持有, 不依赖长事务
+            bool lockAcquired = false;
+            {
+                await using var cmd = new Npgsql.NpgsqlCommand("SELECT pg_try_advisory_lock(@k)", conn);
+                cmd.Parameters.AddWithValue("k", reindexLockKey);
+                var r = await cmd.ExecuteScalarAsync(ct);
+                lockAcquired = r is bool b && b;
+            }
+            if (!lockAcquired)
+            {
+                return new ReindexResult("已有全量重建任务在运行", 0, 0, sw.ElapsedMilliseconds, null);
+            }
+
+            try
+            {
+                // 不清空, 从 fromId 之后续传
+                var (direct, queued) = await SyncAllSearchIndexAsync(meili, db, fromId, limit, ct);
+                sw.Stop();
+                var msg = $"续传重建完成 (fromId={fromId}, limit={limit}): 直接={direct}, 入队={queued}";
+                _logger.LogInformation("ReindexFromIdAsync: {Message}, elapsed={ElapsedMs}ms", msg, sw.ElapsedMilliseconds);
+                return new ReindexResult(msg, direct, queued, sw.ElapsedMilliseconds, null);
+            }
+            finally
+            {
+                // 释放会话级锁 (CANCELLED/异常路径也保证释放)
+                await using var unlock = new Npgsql.NpgsqlCommand("SELECT pg_advisory_unlock(@k)", conn);
+                unlock.Parameters.AddWithValue("k", reindexLockKey);
+                await unlock.ExecuteScalarAsync(CancellationToken.None);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            sw.Stop();
+            _logger.LogWarning("ReindexFromIdAsync 被取消, elapsed={ElapsedMs}ms", sw.ElapsedMilliseconds);
+            return new ReindexResult("续传重建被取消", 0, 0, sw.ElapsedMilliseconds, "CANCELLED");
+        }
+        catch (Exception ex)
+        {
+            sw.Stop();
+            _logger.LogError(ex, "ReindexFromIdAsync 异常, elapsed={ElapsedMs}ms", sw.ElapsedMilliseconds);
+            return new ReindexResult("续传重建失败", 0, 0, sw.ElapsedMilliseconds, ex.Message);
+        }
+        finally
+        {
+            StopSnapshotTimer(broadcastCtx);
+            ReleaseActiveCts(cts);
+        }
+    }
+
+    /// <summary>
     /// V2 Task V17-2.4: 全量同步搜索索引 (不按 UpdatedAt 筛选)
     ///   与 SyncSearchIndexAsync 区别: 查询所有产品 (含 UpdatedAt=null),用于全量重建场景
     ///   分批 1000, keyset 分页 (按 Id 升序),避免一次性加载百万级数据
     /// </summary>
     private async Task<(long direct, long queued)> SyncAllSearchIndexAsync(
-        MeiliSearchProvider meili, ProductDbContext db, CancellationToken ct)
+        MeiliSearchProvider meili, ProductDbContext db, long? startId, int? limit, CancellationToken ct)
     {
         const int batchSize = 1000;
         long direct = 0, queued = 0;
-        long? lastId = null;
+        // 续传: 从指定 Id 之后开始 (原 ReindexAllAsync 传 null 即从头)
+        long? lastId = startId;
+        long processed = 0;
 
         while (true)
         {
@@ -1520,8 +1595,16 @@ public class EtlImportService
                 await EnqueuePendingBatchAsync(db, docs, ct);
                 queued += docs.Count;
             }
+
+            processed += docs.Count;
+            // 限流模式 (压测机 SSD 不稳): 每批后短暂休眠, 把持续 I/O 拆成小段, 避免拖垮系统
+            if (limit.HasValue)
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(400), ct);
+                if (processed >= limit.Value) break;
+            }
         }
-        _logger.LogInformation("SyncAllSearchIndexAsync 完成: 直接={Direct}, 入队={Queued}", direct, queued);
+        _logger.LogInformation("SyncAllSearchIndexAsync 完成: 直接={Direct}, 入队={Queued}, limit={Limit}", direct, queued, limit);
         return (direct, queued);
     }
 

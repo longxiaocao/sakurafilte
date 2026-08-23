@@ -1,0 +1,44 @@
+# P1-2: Prometheus 配置 (采集 SakuraFilter API 指标)
+#   抓取间隔: 15s (与默认对齐)
+#   保留期: 30 天 (在 docker-compose.prod.yml 命令行设置)
+#   告警规则: 后续 PR 添加 (alerts.yml)
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: "sakurafilter-prod"
+    monitor: "sakurafilter"
+
+# 告警管理器 (可选)
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets: ["alertmanager:9093"]
+
+# 抓取配置
+scrape_configs:
+  # API 业务指标 (P1-3)
+  - job_name: "sakurafilter-api"
+    metrics_path: /metrics
+    scheme: http
+    static_configs:
+      - targets: ["api:8080"]
+        labels:
+          service: "sakurafilter-api"
+          tier: "backend"
+
+  # Prometheus 自身
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # Node Exporter (主机指标, 需单独部署)
+  # - job_name: "node"
+  #   static_configs:
+  #     - targets: ["node-exporter:9100"]
+
+  # Postgres Exporter (数据库指标, 需单独部署)
+  # - job_name: "postgres"
+  #   static_configs:
+  #     - targets: ["postgres-exporter:9187"]

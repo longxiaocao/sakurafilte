@@ -1,0 +1,21 @@
+# SakuraFilter 独立性能测试环境 Prometheus 抓取配置
+# 由 docker-compose.perf.yml 的 prometheus 服务挂载使用
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # 后端业务/进程指标（/metrics 端点, prometheus-net.AspNetCore）
+  - job_name: "sakurafilter-api"
+    metrics_path: /metrics
+    scheme: http
+    static_configs:
+      - targets: ["backend:5148"]
+        labels:
+          service: "sakurafilter-api"
+          tier: "backend"
+
+  # Prometheus 自身
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]

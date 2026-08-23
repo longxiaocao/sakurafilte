@@ -1,0 +1,184 @@
+## .NET 编译产物
+bin/
+obj/
+*.user
+*.suo
+.vs/
+
+## IDE
+.vscode/
+.idea/
+*.swp
+
+## Trae IDE
+.trae/
+
+## 环境变量 (含密钥/Token/连接串, 严禁提交)
+#   WHY: .env 包含 DB 密码/JWT SigningKey/Admin Token 等敏感信息, 泄露会导致系统被攻破
+#   使用 .env.example 提供占位符模板, 实际值由部署环境注入
+.env
+.env.local
+.env.*.local
+.env.*-backup
+!.env.example
+!.env.prod.example
+# 生产环境敏感配置 (P1-2 Docker 化)
+.env.prod
+docker/*.env
+
+## 临时调试文件 (SQL/JSON 快照, 不应提交)
+spike-test/_check_*.sql
+
+## 测试产物 / 本地截图 / 覆盖率报告 (交付检查收尾, 2026-08-06)
+backend/coverage-report/
+frontend/_*.png
+frontend/_shot.mjs
+spike-test/output/
+spike-test/spike-test/
+spike-test/*.log
+*.log
+
+## 本机工具配置 (Reasonix 本地状态, 不提交)
+.reasonix/
+reasonix.toml
+spike-test/_login.json
+spike-test/_*.tmp
+# v30-26: 扩展临时 commit msg 规则 (覆盖 _v30_*_commit_msg.txt 等所有版本)
+spike-test/_*_commit_msg.txt
+spike-test/_*_commit*.txt
+
+## .ai/ 临时调试产物 (commit msg / ci log / api log 快照, 不应提交)
+#   WHY: decisions.md + suggestions.md 团队共享 (已纳入版本控制), 其余 _*.txt/_*.json/_*.zip 是临时调试产物
+#   context.md 已在下方单独忽略 (个人会话状态)
+.ai/_*.txt
+.ai/_*.json
+.ai/_*.zip
+.ai/api-log.*
+.ai/ci-*.txt
+
+## 根目录临时产物 (可重建, 不提交)
+/test-results/
+/metrics-dump.txt
+
+## E2E / 主题测试截图 (可重建, 不提交)
+#   WHY: 每次 E2E 跑都会重新生成, 提交会污染历史
+spike-test/e2e-screenshots/
+spike-test/theme-screenshots/
+spike-test/ux-review/
+
+## Python
+__pycache__/
+*.pyc
+*.pyo
+
+## 临时文件
+*.tmp
+*.log
+!spike-test/etl_clean.log
+!spike-test/pg_log.txt
+!spike-test/meili_*.log
+
+## 本地开发缓存 (D盘重定向, 不提交)
+.dev-cache/
+
+## CI 临时文件
+fc_jobs.json
+runs.json
+jobs.json
+annotations.json
+job_log.bin
+job_meta.json
+
+# Day 10+ P5 修复: spike-test/backend.out/err 是后端运行日志,不应 commit
+spike-test/backend.out
+spike-test/backend.err
+spike-test/backend_perf.err
+
+# Day 14+ P0 修复: 后端运行日志 (out/err), debug 脚本, 临时 commit msg
+backend/backend.out
+backend/backend.err
+kill_stuck.ps1
+check_backend.ps1
+start-backend.ps1
+start-backend-emergency.bat
+test_api.ps1
+spike-test/_commit_msg.txt
+spike-test/_debug_*.py
+
+# Vite 开发服务器运行日志 (可重建, 不提交)
+frontend/vite.err
+frontend/vite.out
+
+# 临时调试 / 中间产物
+**/_temp_*
+**/_scratch_*
+# UX 审计中间产物 (raw), 最终 ux_audit_report.md 仍 commit
+spike-test/_ux_audit_*.png
+spike-test/_ux_audit_*.html
+# 临时 app 响应快照 (Vite HMR / 调试用)
+spike-test/_app_resp.txt
+spike-test/_app_*.txt
+# V24-F77 E2E 巡检截图 (根目录, 可重建, 不提交)
+# WHY: 21 个前端页面快照, 每次巡检都重新生成, 提交会污染历史
+/_verify_*.png
+/_verify_*.json
+
+## 操作系统
+.DS_Store
+Thumbs.db
+
+## Node 依赖 (不应提交,体积大且可重建)
+frontend/node_modules/
+
+## 前端构建产物 (npm run build 生成, 可重建)
+# WHY: dist/ 含 hash 命名的 JS/CSS, 每次 build 都变, 提交会污染历史
+frontend/dist/
+frontend/tsconfig.tsbuildinfo
+
+## 测试覆盖率产物 (V24-F79, 可重建, 不提交)
+# WHY: frontend/coverage/ 是 vitest --coverage 生成的 cobertura + html 报告
+#      backend/tests/*/TestResults/ 是 dotnet test --collect 生成的 cobertura + trx
+#      CI 通过 upload-artifact 归档, 本地无需提交
+frontend/coverage/
+backend/tests/**/TestResults/
+
+## .ai/ 个人会话状态 (V24-F80 规则 v2.4 要求)
+# WHY: context.md 是个人会话状态, 不共享; decisions.md + suggestions.md 团队共享, 纳入版本控制
+.ai/context.md
+
+## Playwright 临时产物 (可重建, 不提交)
+# WHY: test-results/ 是失败时的诊断截图, playwright-report/ 是 HTML 报告
+#      current/ 是本次截图, *.diff.png 是差异图, 都可重建
+#      baselines/ 是视觉回归基准, 必须提交 (用于 CI 比对)
+frontend/test-results/
+frontend/playwright-report/
+frontend/tests/visual/__screenshots__/current/
+frontend/tests/visual/__screenshots__/*.diff.png
+
+## 大型测试数据 (避免污染仓库)
+# WHY: synthetic_*.jsonl 是合成压测数据 (100k 行 67-360MB),可由 generate_synthetic_data.py 重建
+# _test_*.jsonl 是临时测试数据,无需版本控制
+# products_*.jsonl 是 Day 9.7 SSE 测试 5K 行 ETL 数据,可由测试脚本重建
+# cleaned/ 是 ETL 清洗输出,体积大
+spike-test/output/synthetic_*.jsonl
+spike-test/output/_test_*.jsonl
+spike-test/output/products_*.jsonl
+spike-test/output/cleaned/
+spike-test/output/synthetic_*_1000k.*
+
+## k6 二进制 (可在 https://github.com/grafana/k6/releases 重新下载, 不提交)
+# WHY: 二进制文件 ~50MB, 跨平台, 团队成员各自下载本地版本
+spike-test/perf/k6-bin/
+
+## 性能压测结果 (可重建, 不提交)
+# WHY: 压测报告由 perf 脚本生成, 含时间戳, 每次跑都不同
+spike-test/perf/results/
+spike-test/perf/stress_search.py
+
+## 静态/运行时审计输出 (可重建, 不提交)
+# WHY: 前端审计脚本输出, 含时间戳, 每次跑都不同
+spike-test/frontend_static_audit.json
+spike-test/frontend_runtime_audit.json
+spike-test/security_scan_report.json
+docker/certs/
+backup-drill/

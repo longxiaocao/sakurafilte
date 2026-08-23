@@ -2,6 +2,8 @@ using System.Net;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Meilisearch;
+using Npgsql;
+using NpgsqlTypes;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -43,6 +45,10 @@ public class MeiliSearchProvider : ISearchProvider
     private readonly MeiliSearchOptions _opts;
     private readonly ILogger<MeiliSearchProvider> _logger;
     private readonly ProductDbContext _db;
+    /// <summary>2026-08 性能优化: 富化结果缓存 (可空, 测试/降级场景不注入则走原 PG 查询)</summary>
+    private readonly EnrichmentCache? _enrichCache;
+    /// <summary>2026-08 性能优化: 搜索响应缓存 (热点查询跳过 Meili+富化+Sanitize, 可空降级)</summary>
+    private readonly SearchResponseCache? _searchCache;
     /// <summary>V2 (S4-21): volatile 保证多线程可见性,RefreshWriteTargets 重建时同步</summary>
     private volatile Meilisearch.Index _index;
     /// <summary>V2 (S4-21): volatile 写入目标列表,支持运行时热切换</summary>
@@ -58,16 +64,29 @@ public class MeiliSearchProvider : ISearchProvider
     private const string MarkOpenStash = "\uFDD0";
     private const string MarkCloseStash = "\uFDD1";
 
+    // 2026-08 性能优化: 高亮字段从 "*"(全 20+ 字段) 收窄为前端实际展示字段
+    //   WHY: Meili 1M 文档 × 全字段高亮在并发下是最大开销 (直连实测: hl=* 比 hl=展示字段慢 ~70-100ms P95)
+    //   SearchAsync 实际只消费 product_name_1/type/remark 等字段的高亮 (ExtractFieldValue),
+    //   收窄后 Meili 高亮计算量从 ~20 字段降到 6 字段, 且不影响展示 (字段全集覆盖)
+    private static readonly string[] SearchHighlightFields =
+    {
+        "product_name_1", "product_name_2", "oem_2", "remark", "type", "media"
+    };
+
     public string Name => "meilisearch";
 
     public MeiliSearchProvider(
         IOptions<MeiliSearchOptions> opts,
         ILogger<MeiliSearchProvider> logger,
-        ProductDbContext db)
+        ProductDbContext db,
+        EnrichmentCache? enrichmentCache = null,
+        SearchResponseCache? searchCache = null)
     {
         _opts = opts.Value;
         _logger = logger;
         _db = db;
+        _enrichCache = enrichmentCache;
+        _searchCache = searchCache;
         _client = new MeilisearchClient(_opts.Endpoint, _opts.ApiKey);
         _index = _client.Index(_opts.IndexName);
         _writeTargets = _opts.WriteTargets.Select(name => _client.Index(name)).ToList();
@@ -101,6 +120,13 @@ public class MeiliSearchProvider : ISearchProvider
     public async Task<SearchResult> SearchAsync(SearchRequest req, CancellationToken ct = default)
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
+
+        // 2026-08 优化: 响应缓存 — 热点查询直接命中, 跳过 Meili+Sanitize (目录数据低频变化, TTL 30s)
+        var cacheKey = BuildSearchCacheKey(req);
+        if (_searchCache != null && _searchCache.TryGet<SearchResult>(cacheKey, out var cachedResult) && cachedResult != null)
+        {
+            return cachedResult;
+        }
 
         // V2: 默认 filter 排除下架 + 要求至少一个上架 OEM 3
         var filters = new List<string>
@@ -169,10 +195,13 @@ public class MeiliSearchProvider : ISearchProvider
             Offset = (Math.Max(1, req.Page) - 1) * Math.Clamp(req.PageSize, 1, 100),
             Filter = string.Join(" AND ", filters),
             // V2 (S4-16): 高亮标签用 BMP 私用区占位符,后端 SanitizeFormatted 还原
-            AttributesToHighlight = new[] { "*" },
+            // 2026-08 优化: 高亮字段收窄为展示字段 (原 "*" 全字段高亮是 Meili 并发最大开销)
+            AttributesToHighlight = SearchHighlightFields,
             HighlightPreTag = MarkOpen,
             HighlightPostTag = MarkClose,
-            ShowRankingScore = true,
+            // 2026-08 优化: SearchAsync 响应不含 _rankingScore (SearchResultItem 无此字段),
+            // 关掉让 Meili 少算一步 (AggregateSearchAsync 有独立 query 仍开)
+            ShowRankingScore = false,
             // 三层排序 (spec L953):
             //   1. brand_sort_order_min ASC (品牌优先级, null 排末尾)
             //   2. oem_list_sort_order_min ASC (品牌内 OEM 3 优先级, null 排末尾, sort_order=0 视为未维护=null)
@@ -215,12 +244,14 @@ public class MeiliSearchProvider : ISearchProvider
 
         sw.Stop();
         var pageSize = Math.Clamp(req.PageSize, 1, 100);
-        return new SearchResult(
+        var result = new SearchResult(
             total, Math.Max(1, req.Page), pageSize,
             (int)Math.Ceiling(total / (double)pageSize),
             (int)sw.ElapsedMilliseconds,
             items
         );
+        _searchCache?.Set(cacheKey, result);
+        return result;
     }
 
     /// <summary>
@@ -235,12 +266,19 @@ public class MeiliSearchProvider : ISearchProvider
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
 
+        // 2026-08 优化: 响应缓存 — 前台主路径热点查询直接命中, 跳过 Meili+富化+Sanitize (TTL 30s)
+        var cacheKey = BuildAggregateCacheKey(req);
+        if (_searchCache != null && _searchCache.TryGet<AggregateSearchResponse>(cacheKey, out var cachedResponse) && cachedResponse != null)
+        {
+            return cachedResponse;
+        }
+
         // V2: 默认 filter 排除下架 + 要求至少一个上架 OEM 3 (与 SearchAsync 一致)
         var filters = new List<string>
         {
             "is_published = true",
             "is_discontinued = false",
-            "oem_list.is_published = true"  // 文档级: 至少一个 OEM 3 上架
+            "oem_list_published_brands IS NOT EMPTY"  // ① P0 缩索引: 文档级至少一个上架 OEM 3 (原 oem_list.is_published 嵌套字段已移除)
         };
 
         if (!string.IsNullOrWhiteSpace(req.Type))
@@ -251,9 +289,9 @@ public class MeiliSearchProvider : ISearchProvider
             //   catalog 归一化 null→others 但过滤只精确匹配 others → 点击目录 0 结果 (用户实测)
             if (req.MachineCategory == "others")
                 // 🔧 fix(实证): 导入数据 machine_category 字段缺失(值为 null) — 用 IS NULL 而非 = ""
-                filters.Add("(machine_list.machine_category = \"others\" OR machine_list.machine_category IS NULL)");
+                filters.Add("(machine_categories IS EMPTY OR machine_categories = \"others\")");  // ① P0 缩索引: 原 machine_list.machine_category 嵌套字段已移除
             else
-                filters.Add($"machine_list.machine_category = \"{EscapeFilter(req.MachineCategory)}\"");
+                filters.Add($"machine_categories = \"{EscapeFilter(req.MachineCategory)}\"");  // ① P0 缩索引: 标量 machine_categories
         }
 
         // 尺寸范围 filter
@@ -282,7 +320,8 @@ public class MeiliSearchProvider : ISearchProvider
             Offset = (page - 1) * pageSize,
             Filter = string.Join(" AND ", filters),
             // V2 (S4-16): 高亮标签用 BMP 私用区占位符, SanitizeFormatted 还原
-            AttributesToHighlight = new[] { "*" },
+            // 2026-08 优化: 高亮字段收窄为展示字段 (前端仅消费 product_name_1 等, 原 "*" 全字段高亮是并发最大开销)
+            AttributesToHighlight = SearchHighlightFields,
             HighlightPreTag = MarkOpen,
             HighlightPostTag = MarkClose,
             ShowRankingScore = true,
@@ -295,6 +334,25 @@ public class MeiliSearchProvider : ISearchProvider
         var query = req.Q?.Trim() ?? "";
         var rawResult = await _index.SearchAsync<JsonObject>(query, searchQuery, ct);
         var total = (rawResult as SearchResult<JsonObject>)?.EstimatedTotalHits ?? rawResult.Hits.Count;
+
+        // ① P0 缩索引: oem_list/machine_list 已移出 Meili 索引体, 检索后按 mr_1 从 PG 批量回填 (仅当前页)
+        var pageMr1s = rawResult.Hits
+            .Select(h => h.TryGetPropertyValue("mr_1", out var n) ? n?.GetValue<string>() : null)
+            .Where(m => !string.IsNullOrWhiteSpace(m))
+            .Select(m => m!)
+            .Distinct()
+            .ToList();
+        // ① P0 缩索引: oem/machine 列表由 PG 回填。PG 不可用时降级为空列表,
+        //   不阻断 Meili 检索主流程 (保持 ResilientSearchProvider 的韧性设计: 搜索不依赖 PG 在线)。
+        Dictionary<string, (List<AggregateOemItem> OemList, List<AggregateMachineItem> MachineList)> enrichMap = new();
+        try
+        {
+            enrichMap = await EnrichFromPgAsync(pageMr1s, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "PG 回填 oem/machine 列表失败, 降级为空 (搜索结果仍可用)");
+        }
 
         // 映射 hits → AggregateSearchHit (含完整 oem_list + machine_list + _formatted + _rankingScore)
         var hits = new List<AggregateSearchHit>(rawResult.Hits.Count);
@@ -318,44 +376,10 @@ public class MeiliSearchProvider : ISearchProvider
             var isPublished = hit.TryGetPropertyValue("is_published", out var pubNode) && pubNode?.GetValue<bool>() == true;
             var isDiscontinued = hit.TryGetPropertyValue("is_discontinued", out var discNode) && discNode?.GetValue<bool>() == true;
 
-            // 嵌套数组 oem_list
-            var oemList = new List<AggregateOemItem>();
-            if (hit.TryGetPropertyValue("oem_list", out var oemListNode) && oemListNode is JsonArray oemArr)
-            {
-                foreach (var item in oemArr)
-                {
-                    if (item is JsonObject oemObj)
-                    {
-                        oemList.Add(new AggregateOemItem(
-                            OemBrand: oemObj.TryGetPropertyValue("oem_brand", out var b) ? b?.GetValue<string>() : null,
-                            OemNo3: oemObj.TryGetPropertyValue("oem_no_3", out var n) ? n?.GetValue<string>() : null,
-                            Oem2: oemObj.TryGetPropertyValue("oem_2", out var o2) ? o2?.GetValue<string>() : null,
-                            SortOrder: oemObj.TryGetPropertyValue("sort_order", out var so) && so != null ? so.GetValue<int>() : 0,
-                            MachineType: oemObj.TryGetPropertyValue("machine_type", out var mt) ? mt?.GetValue<string>() : null,
-                            IsPublished: oemObj.TryGetPropertyValue("is_published", out var ip) && ip?.GetValue<bool>() == true,
-                            BrandSortOrder: oemObj.TryGetPropertyValue("brand_sort_order", out var bso) && bso != null ? bso.GetValue<int?>() : null
-                        ));
-                    }
-                }
-            }
-
-            // 嵌套数组 machine_list
-            var machineList = new List<AggregateMachineItem>();
-            if (hit.TryGetPropertyValue("machine_list", out var mlNode) && mlNode is JsonArray mlArr)
-            {
-                foreach (var item in mlArr)
-                {
-                    if (item is JsonObject mlObj)
-                    {
-                        machineList.Add(new AggregateMachineItem(
-                            MachineBrand: mlObj.TryGetPropertyValue("machine_brand", out var mb) ? mb?.GetValue<string>() : null,
-                            MachineModel: mlObj.TryGetPropertyValue("machine_model", out var mm) ? mm?.GetValue<string>() : null,
-                            MachineCategory: mlObj.TryGetPropertyValue("machine_category", out var mc) ? mc?.GetValue<string>() : null,
-                            EngineBrand: mlObj.TryGetPropertyValue("engine_brand", out var eb) ? eb?.GetValue<string>() : null
-                        ));
-                    }
-                }
-            }
+            // ① P0 缩索引: oem_list/machine_list 由 PG 回填 (见循环前 EnrichFromPgAsync), 不再从 Meili hit 解析
+            enrichMap.TryGetValue(mr1 ?? "", out var enrichPair);
+            var oemList = enrichPair.OemList ?? new List<AggregateOemItem>();
+            var machineList = enrichPair.MachineList ?? new List<AggregateMachineItem>();
 
             // _rankingScore (Meilisearch 0-1)
             double? rankingScore = null;
@@ -393,7 +417,7 @@ public class MeiliSearchProvider : ISearchProvider
         }
 
         sw.Stop();
-        return new AggregateSearchResponse(
+        var response = new AggregateSearchResponse(
             Total: total,
             Page: page,
             PageSize: pageSize,
@@ -402,6 +426,143 @@ public class MeiliSearchProvider : ISearchProvider
             Provider: "meilisearch",
             Hits: hits
         );
+        _searchCache?.Set(cacheKey, response);
+        return response;
+    }
+
+    /// <summary>2026-08 优化: 摘要搜索缓存键 (全参数规范化, 命中即同结果)</summary>
+    private static string BuildSearchCacheKey(SearchRequest req) => "srch:" + string.Join('|',
+        req.Q?.Trim() ?? "", req.Type ?? "",
+        req.D1, req.D2, req.D3, req.H1, req.H2, req.H3,
+        req.Tolerance, req.IncludeDiscontinued, req.Page, req.PageSize,
+        req.D7Thread ?? "", req.D8Thread ?? "");
+
+    /// <summary>2026-08 优化: 聚合搜索缓存键</summary>
+    private static string BuildAggregateCacheKey(AggregateSearchRequest req) => "aggr:" + string.Join('|',
+        req.Q?.Trim() ?? "", req.MachineCategory ?? "", req.Type ?? "",
+        req.D1, req.D2, req.D3, req.H1, req.H2, req.H3,
+        req.Tolerance, req.IncludeDiscontinued, req.Page, req.PageSize,
+        req.D7Thread ?? "", req.D8Thread ?? "");
+
+    /// <summary>
+    /// ① P0 缩索引: Meili 索引体已移出 oem_list/machine_list 嵌套数组 (27GB 主因),
+    ///   聚合检索响应所需的完整 oem_list/machine_list 改在检索后按 mr_1 批量从 PG 回填。
+    ///   仅回填当前页 hits 对应的 mr_1,避免在全量结果上展开大数组。
+    ///   聚合口径与 PostgresSearchProvider 的 LATERAL JOIN 一致 (oem_list_json / machine_list_json)。
+    /// </summary>
+    private async Task<Dictionary<string, (List<AggregateOemItem> OemList, List<AggregateMachineItem> MachineList)>> EnrichFromPgAsync(
+        IEnumerable<string> mr1s, CancellationToken ct)
+    {
+        var result = new Dictionary<string, (List<AggregateOemItem>, List<AggregateMachineItem>)>();
+        var list = mr1s.Where(m => !string.IsNullOrWhiteSpace(m)).Distinct().ToList();
+        if (list.Count == 0) return result;
+
+        // 2026-08 性能优化: 先查富化缓存, 命中直取 (高并发 c50/c100 瓶颈 = 每次搜索回 PG 富化)
+        //   miss 的 mr1 才走 PG 批量查询; 缓存永不作为正确性依赖 (miss → 原查询逻辑)
+        var missList = new List<string>();
+        if (_enrichCache != null)
+        {
+            foreach (var mr1 in list)
+            {
+                if (_enrichCache.TryGet(mr1, out var cached) && cached != null)
+                    result[mr1] = (cached.OemList, cached.MachineList);
+                else
+                    missList.Add(mr1);
+            }
+        }
+        else
+        {
+            missList.AddRange(list);
+        }
+        if (missList.Count == 0) return result;
+        list = missList;
+
+        const string sql = @"
+            SELECT p.mr_1,
+                COALESCE((SELECT json_agg(row_to_json(t)) FROM (
+                    SELECT x.oem_brand, x.oem_no_3, x.oem_2, x.sort_order, x.machine_type, x.is_published,
+                           (SELECT xb.sort_order FROM xref_oem_brand xb WHERE xb.brand = x.oem_brand AND xb.deleted_at IS NULL LIMIT 1) AS brand_sort_order
+                    FROM cross_references x
+                    WHERE x.product_id = p.id AND x.is_discontinued = false
+                    ORDER BY (SELECT xb.sort_order FROM xref_oem_brand xb WHERE xb.brand = x.oem_brand AND xb.deleted_at IS NULL LIMIT 1) NULLS LAST, x.sort_order ASC, x.oem_brand, x.oem_no_3
+                    LIMIT 50) t), '[]'::json) AS oem_list_json,
+                COALESCE((SELECT json_agg(row_to_json(t)) FROM (
+                SELECT DISTINCT m.machine_brand, m.machine_model, m.machine_category, m.engine_brand
+                FROM machine_applications m
+                WHERE m.product_id = p.id
+                ORDER BY m.machine_brand, m.machine_model   -- ① P0 缩索引: 对齐旧版 machine_list 展示顺序
+                LIMIT 50) t), '[]'::json) AS machine_list_json
+            FROM products p
+            WHERE p.mr_1 = ANY(@mr1s)";
+
+        var conn = (NpgsqlConnection)_db.Database.GetDbConnection();
+        var opened = false;
+        try
+        {
+            if (conn.State != System.Data.ConnectionState.Open)
+            {
+                await conn.OpenAsync(ct);
+                opened = true;
+            }
+            await using var cmd = new NpgsqlCommand(sql, conn);
+            cmd.CommandTimeout = 30;
+            cmd.Parameters.Add(new NpgsqlParameter("@mr1s", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = list.ToArray() });
+            await using var reader = await cmd.ExecuteReaderAsync(ct);
+            while (await reader.ReadAsync(ct))
+            {
+                var mr1 = reader.IsDBNull(reader.GetOrdinal("mr_1")) ? "" : reader.GetString(reader.GetOrdinal("mr_1"));
+                var oemListJson = reader.IsDBNull(reader.GetOrdinal("oem_list_json")) ? "[]" : reader.GetFieldValue<string>(reader.GetOrdinal("oem_list_json"));
+                var machineListJson = reader.IsDBNull(reader.GetOrdinal("machine_list_json")) ? "[]" : reader.GetFieldValue<string>(reader.GetOrdinal("machine_list_json"));
+                var oemList = ParseEnrichedOemList(oemListJson);
+                var machineList = ParseEnrichedMachineList(machineListJson);
+                result[mr1] = (oemList, machineList);
+                // 回填缓存 (仅本批 miss 的 mr1; 缓存内 List 视为只读)
+                _enrichCache?.Set(mr1, oemList, machineList);
+            }
+        }
+        finally
+        {
+            if (opened && conn.State == System.Data.ConnectionState.Open)
+                await conn.CloseAsync();
+        }
+        return result;
+    }
+
+    /// <summary>① P0 缩索引: 解析 PG 回填的 oem_list_json (对齐 AggregateOemItem 形状)</summary>
+    private static List<AggregateOemItem> ParseEnrichedOemList(string json)
+    {
+        var list = new List<AggregateOemItem>();
+        using var doc = JsonDocument.Parse(json);
+        foreach (var item in doc.RootElement.EnumerateArray())
+        {
+            list.Add(new AggregateOemItem(
+                OemBrand: item.TryGetProperty("oem_brand", out var b) ? b.GetString() : null,
+                OemNo3: item.TryGetProperty("oem_no_3", out var n) ? n.GetString() : null,
+                Oem2: item.TryGetProperty("oem_2", out var o2) ? o2.GetString() : null,
+                SortOrder: item.TryGetProperty("sort_order", out var so) && so.ValueKind == JsonValueKind.Number ? so.GetInt32() : 0,
+                MachineType: item.TryGetProperty("machine_type", out var mt) ? mt.GetString() : null,
+                IsPublished: item.TryGetProperty("is_published", out var ip) && ip.ValueKind == JsonValueKind.True,
+                BrandSortOrder: item.TryGetProperty("brand_sort_order", out var bso) && bso.ValueKind == JsonValueKind.Number ? bso.GetInt32() : null
+            ));
+        }
+        return list;
+    }
+
+    /// <summary>① P0 缩索引: 解析 PG 回填的 machine_list_json (对齐 AggregateMachineItem 形状)</summary>
+    private static List<AggregateMachineItem> ParseEnrichedMachineList(string json)
+    {
+        var list = new List<AggregateMachineItem>();
+        using var doc = JsonDocument.Parse(json);
+        foreach (var item in doc.RootElement.EnumerateArray())
+        {
+            list.Add(new AggregateMachineItem(
+                MachineBrand: item.TryGetProperty("machine_brand", out var mb) ? mb.GetString() : null,
+                MachineModel: item.TryGetProperty("machine_model", out var mm) ? mm.GetString() : null,
+                MachineCategory: item.TryGetProperty("machine_category", out var mc) ? mc.GetString() : null,
+                EngineBrand: item.TryGetProperty("engine_brand", out var eb) ? eb.GetString() : null
+            ));
+        }
+        return list;
     }
 
     /// <summary>
@@ -508,35 +669,39 @@ public class MeiliSearchProvider : ISearchProvider
             })
             .ToListAsync(ct);
 
-        // S4-11: oem_list 数组按 (brand_sort_order, sort_order, oem_brand, oem_no_3) 排序
-        //   软删除 brand 排末尾 (BrandSortOrder 为 null 时用 int.MaxValue)
-        var oemList = oemListRaw
-            .OrderBy(x => x.BrandDeletedAt == null ? (x.BrandSortOrder ?? int.MaxValue) : int.MaxValue)
-            .ThenBy(x => x.SortOrder)
-            .ThenBy(x => x.OemBrand)
-            .ThenBy(x => x.OemNo3)
-            .Select(x => new OemListItem(
-                x.OemBrand, x.OemNo3, x.Oem2, x.SortOrder,
-                x.MachineType, x.IsPublished,
-                x.BrandDeletedAt == null ? x.BrandSortOrder : null  // 软删除 brand 排序为 null
-            ))
-            .ToList();
+        // ① P0 缩索引: 不再构建完整 OemListItem/MachineListItem 嵌套数组 (随交叉引用数膨胀, 是 27GB 主因)。
+        //   仅基于原始查询计算标量冗余字段 (machine_categories / machine_brands_str), 供 Meili 过滤/检索;
+        //   完整 oem_list/machine_list 由检索后从 PG 按 mr_1 回填 (EnrichFromPgAsync)。
 
-        // 机型列表 (去重 + 排序)
-        var machineList = await _db.MachineApplications
+        // 机型标量 (去重): machine_categories 过滤 + machine_brands_str 检索
+        var machineRows = await _db.MachineApplications
             .AsNoTracking()
             .Where(m => m.ProductId == p.Id)
             .Select(m => new { m.MachineBrand, m.MachineModel, m.MachineCategory, m.EngineBrand })
             .Distinct()
-            .OrderBy(m => m.MachineBrand)
-            .ThenBy(m => m.MachineModel)
-            .Take(50)
-            .Select(m => new MachineListItem(m.MachineBrand, m.MachineModel, m.MachineCategory, m.EngineBrand))
             .ToListAsync(ct);
+        var machineCategories = machineRows
+            .Select(m => m.MachineCategory)
+            .Where(c => !string.IsNullOrWhiteSpace(c))
+            .Select(c => c!)
+            .Distinct()
+            .ToList();
+        var machineBrandsStr = string.Join(" ", machineRows
+            .Select(m => m.MachineBrand)
+            .Where(b => !string.IsNullOrWhiteSpace(b))
+            .Distinct());
+        var machineModelsStr = string.Join(" ", machineRows
+            .Select(m => m.MachineModel)
+            .Where(m => !string.IsNullOrWhiteSpace(m))
+            .Distinct());
+        var engineBrandsStr = string.Join(" ", machineRows
+            .Select(m => m.EngineBrand)
+            .Where(b => !string.IsNullOrWhiteSpace(b))
+            .Distinct());
 
         // ===== 扁平化冗余字段计算 =====
         // S3-7: 仅含上架 OEM 3 的 brand/oem_no_3 去重列表
-        var publishedOemList = oemList.Where(x => x.IsPublished).ToList();
+        var publishedOemList = oemListRaw.Where(x => x.IsPublished).ToList();
         var publishedBrands = publishedOemList
             .Select(x => x.OemBrand)
             .Where(b => !string.IsNullOrEmpty(b))
@@ -551,8 +716,8 @@ public class MeiliSearchProvider : ISearchProvider
             .ToList();
 
         // S4-13: 分隔符改空格 (对齐 separatorTokens 配置)
-        var oemBrandsStr = string.Join(" ", oemList.Select(x => x.OemBrand).Where(b => !string.IsNullOrEmpty(b)).Distinct());
-        var oemNo3sStr = string.Join(" ", oemList.Select(x => x.OemNo3).Where(n => !string.IsNullOrEmpty(n)).Distinct());
+        var oemBrandsStr = string.Join(" ", oemListRaw.Select(x => x.OemBrand).Where(b => !string.IsNullOrEmpty(b)).Distinct());
+        var oemNo3sStr = string.Join(" ", oemListRaw.Select(x => x.OemNo3).Where(n => !string.IsNullOrEmpty(n)).Distinct());
 
         // S3-8/S4-25: brand_sort_order_min 只取未软删除 brand 的 sort_order MIN,无品牌时为 null (排末尾)
         // 修复: 原 DefaultIfEmpty() 对 IEnumerable<int> 返回 0,导致无品牌产品排在最前 (违背品牌优先设计)
@@ -599,8 +764,10 @@ public class MeiliSearchProvider : ISearchProvider
             D8Thread: p.D8Thread,
             IsPublished: p.IsPublished,
             IsDiscontinued: p.IsDiscontinued,
-            OemList: oemList,
-            MachineList: machineList,
+            MachineCategories: machineCategories,
+            MachineBrandsStr: machineBrandsStr,
+            MachineModelsStr: machineModelsStr,
+            EngineBrandsStr: engineBrandsStr,
             OemListPublishedBrands: publishedBrands,
             OemListPublishedNo3s: publishedNo3s,
             OemBrandsStr: oemBrandsStr,
@@ -669,9 +836,38 @@ public class MeiliSearchProvider : ISearchProvider
         return node;
     }
 
+    /// <summary>
+    /// 2026-08 性能优化: 单次扫描判断字符串是否需要慢路径处理
+    /// 覆盖慢路径全部变更点 (与 SanitizeString 步骤 0-4 语义一致):
+    ///   - 高亮标记 \uE000/\uE001 (步骤 1 暂存 → 步骤 4 还原为 &lt;mark&gt;)
+    ///   - 暂存字符 \uFDD0/\uFDD1 (步骤 0 移除字面量)
+    ///   - HTML 特殊字符 &lt;&gt;&amp;&quot;' (步骤 2 HtmlEncode)
+    ///   - C0 控制字符 / BMP 私用区 / 非字符 / U+FFFE·U+FFFF (步骤 3 移除)
+    /// </summary>
+    private static bool NeedsSanitize(string s)
+    {
+        foreach (var c in s)
+        {
+            if (c == '\uE000' || c == '\uE001' || c == '\uFDD0' || c == '\uFDD1') return true;
+            if (c == '<' || c == '>' || c == '&' || c == '"' || c == '\'') return true;
+            if (c < 0x20 && c != '\t' && c != '\n' && c != '\r') return true;
+            if (c >= 0xE000 && c <= 0xF8FF) return true;
+            if (c >= 0xFDD0 && c <= 0xFDEF) return true;
+            if (c == 0xFFFE || c == 0xFFFF) return true;
+        }
+        return false;
+    }
+
     private static string SanitizeString(string s)
     {
         if (string.IsNullOrEmpty(s)) return s;
+
+        // 2026-08 性能优化: 快速路径 — 单次扫描无任何需处理字符时直接返回
+        //   WHY: 绝大多数字段是纯 OEM 号/型号/品牌 (字母数字), 慢路径(3×Replace + HtmlEncode + 逐字符 StringBuilder)
+        //        在并发下是 backend CPU 大头 (直连实测 backend 比 Meili 慢 80-190ms P95)
+        //   等价性: 慢路径对无特殊字符的字符串输出原串 (HtmlEncode 不改变纯字母数字, 扫描不移除, Replace 无匹配)
+        //   注意: 覆盖慢路径所有变更点 — 高亮标记/暂存字符/HTML 特殊字符(含 ') 均触发慢路径
+        if (!NeedsSanitize(s)) return s;
 
         // V24-F20 步骤 0: 过滤用户输入字面量中的 U+E000/U+E001 (spec S6-1, 修复 XSS 绕过)
         //   WHY: 用户在产品名/Remark 中输入字面量 \uE000, 会被步骤 1 误识别为 <mark> 起始标签暂存
@@ -767,9 +963,9 @@ public class MeiliSearchProvider : ISearchProvider
                     "h1_mm", "h2_mm", "h3_mm", "h4_mm",
                     // v24 修复: 螺纹规格 (文本精确匹配)
                     "d7_thread", "d8_thread",
-                    // 嵌套数组字段 (V2 新增)
-                    "oem_list.oem_brand", "oem_list.oem_no_3", "oem_list.is_published", "oem_list.machine_type",
-                    "machine_list.machine_brand", "machine_list.machine_model", "machine_list.machine_category",
+                    // ① P0 缩索引: 原嵌套 oem_list/machine_list 数组已移出索引体, 改标量过滤
+                    //   oem 品牌/编号过滤走 oem_list_published_brands/no3s; 机型分类走 machine_categories
+                    "machine_categories", "machine_brands_str",
                     // 扁平化冗余字段 (S3-7/S3-8)
                     "oem_list_published_brands", "oem_list_published_no3s",
                     "brand_sort_order_min", "oem_list_sort_order_min"
@@ -797,9 +993,8 @@ public class MeiliSearchProvider : ISearchProvider
                     "product_name_1", "product_name_2", "oem_2", "type", "remark", "media",
                     // 扁平化冗余字段 (S4-13: 空格分隔,可被分词器切分)
                     "oem_brands_str", "oem_no3s_str",
-                    // 嵌套数组字段 (支持 OEM 3 / 机型搜索)
-                    "oem_list.oem_brand", "oem_list.oem_no_3", "oem_list.oem_2",
-                    "machine_list.machine_brand", "machine_list.machine_model", "machine_list.engine_brand"
+                    // ① P0 缩索引: 标量字符串保留原机型/发动机全文搜索能力。
+                    "machine_brands_str", "machine_models_str", "engine_brands_str"
                 };
                 var searchTask = await target.UpdateSearchableAttributesAsync(searchable, ct);
                 await target.WaitForTaskAsync(searchTask.TaskUid, schemaTaskTimeoutMs);

@@ -1,0 +1,202 @@
+# SakuraFilter 一键部署 docker-compose
+#   用法:
+#     1. cp .env.example .env && 编辑 .env 填入生产密钥
+#     2. docker compose up -d --build
+#     3. 访问 http://localhost (前端) / http://localhost:5148 (后端 API)
+#
+#   服务:
+#     - postgres    PostgreSQL 16 数据库
+#     - minio       MinIO 对象存储 (图片)
+#     - meilisearch  Meilisearch 搜索引擎
+#     - backend     .NET 8 后端 API
+#     - frontend    Vue 3 前端 (nginx)
+#     - grafana     Grafana 监控面板 (P3-10.3)
+#
+#   离线部署:
+#     1. 在有网环境 docker compose pull + docker compose build
+#     2. docker save > sakurafilter-images.tar
+#     3. 目标机器 docker load < sakurafilter-images.tar
+#     4. docker compose up -d (不需要网络)
+
+version: '3.8'
+
+# P1-10.1: 日志持久化配置锚点 (json-file 驱动 + 轮转, 防止日志撑爆磁盘)
+#   WHY 锚点: 5 个服务复用同一份配置, 避免重复
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "5"
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ${DB_NAME:-spike_test_v3}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-784533}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    logging: *default-logging
+
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    logging: *default-logging
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.12
+    # P1-1 S15: 限制索引内存 8GB, 防止全量重建时 OOM (生产环境容器内存通常 16GB, 留 8GB 给查询/系统)
+    command: ["--max-indexing-memory", "8192"]
+    environment:
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-}
+      MEILI_NO_ANALYTICS: "true"
+    ports:
+      - "7700:7700"
+    volumes:
+      - meili_data:/meili_data
+    restart: unless-stopped
+    logging: *default-logging
+    # P1-10.2: 健康检查 (Meilisearch 内置 /health 端点)
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7700/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    # P3-10.4: image 字段供 Docker Swarm 模式部署使用 (docker stack deploy 需要 image, 不能用 build)
+    image: sakurafilter-backend:latest
+    environment:
+      - ConnectionStrings__Postgres=Host=postgres;Port=5432;Database=${DB_NAME:-spike_test_v3};Username=${DB_USER:-postgres};Password=${DB_PASSWORD:-784533}
+      - MeiliSearch__Endpoint=http://meilisearch:7700
+      - MeiliSearch__ApiKey=${MEILI_MASTER_KEY:-}
+      - Minio__Endpoint=minio:9000
+      - Minio__AccessKey=${MINIO_ACCESS_KEY:-minioadmin}
+      - Minio__SecretKey=${MINIO_SECRET_KEY:-minioadmin}
+      - Minio__PublicEndpoint=${MINIO_PUBLIC_ENDPOINT:-http://localhost:9000}
+      - Storage__Provider=${STORAGE_PROVIDER:-minio}
+      - Auth__DevStaticToken=${ADMIN_TOKEN:-dev-admin-token-rotate-in-prod-MZK4R9P3X6V2N7Q1L5F0B8H3C}
+      - Search__CursorHmacKey=${CURSOR_HMAC_KEY:-dev-cursor-hmac-key-rotate-in-prod-XYZ7K3P9Q2M5V8N1B4D6F0G2H}
+      - Cors__AllowedOrigins__0=http://localhost
+      - Cors__AllowedOrigins__1=http://localhost:80
+      - ASPNETCORE_ENVIRONMENT=Production
+    ports:
+      - "5148:5148"
+    # P1-10.1: 日志持久化卷 (容器重启后日志不丢失)
+    volumes:
+      - backend_logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      meilisearch:
+        condition: service_healthy
+    restart: unless-stopped
+    logging: *default-logging
+    # P1-10.2: 健康检查 (liveness probe, start_period 60s 给 EF Core Migration 留时间)
+    #   WHY 5148: ASPNETCORE_URLS=http://+:5148 (见 backend/Dockerfile)
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5148/health/live"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    # P3-10.4: 滚动更新配置 (需 Docker Swarm 模式生效, 单机 compose 不生效)
+    #   WHY start-first: 新实例先启动再停旧实例, 实现零停机
+    #   WHY failure_action rollback: healthcheck 失败自动回滚, 依赖 P1-10.2 健康检查
+    deploy:
+      replicas: 2
+      update_config:
+        order: start-first
+        failure_action: rollback
+        parallelism: 1
+        delay: 10s
+      rollback_config:
+        parallelism: 1
+        order: start-first
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "80:80"
+    # P1-10.1: nginx 日志持久化卷
+    volumes:
+      - frontend_logs:/var/log/nginx
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    logging: *default-logging
+    # P1-10.2: 健康检查 (nginx 根路径)
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # P3-10.3: Grafana 监控面板 (自动导入 dashboard + datasource)
+  #   首次启动后通过 provisioning 自动加载:
+  #     - datasources: Prometheus(backend /metrics) + PostgreSQL(ETL dashboard)
+  #     - dashboards: ETL 运维面板 (sakurafilter-etl-day710)
+  grafana:
+    image: grafana/grafana:11.0.0
+    container_name: sakurafilter-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      # PostgreSQL 数据源凭据 (供 ETL dashboard provisioning 使用)
+      - POSTGRES_DB=${DB_NAME:-spike_test_v3}
+      - POSTGRES_USER=${DB_USER:-postgres}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-784533}
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/provisioning:/etc/grafana/provisioning
+      - ./monitoring/dashboards:/var/lib/grafana/dashboards
+    depends_on:
+      - backend
+    logging: *default-logging
+    restart: unless-stopped
+
+volumes:
+  pg_data:
+  minio_data:
+  meili_data:
+  # P1-10.1: 日志持久化卷
+  backend_logs:
+  frontend_logs:
+  # P3-10.3: Grafana 数据持久化
+  grafana_data:

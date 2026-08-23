@@ -1,0 +1,15 @@
+{
+  "xf1_codes": {
+    "200": 250
+  },
+  "xf2_codes": {
+    "200": 250
+  },
+  "two_xff_total_429": 0,
+  "single_xff_400_codes": {
+    "200": 50,
+    "429": 350
+  },
+  "single_xff_429": 350,
+  "interpretation": "PASS_XFF_KEYING"
+}

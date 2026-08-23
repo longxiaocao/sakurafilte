@@ -1,0 +1,194 @@
+[
+  {
+    "name": "002_create_system_settings_table.sql",
+    "path": "backend/migrations/002_create_system_settings_table.sql",
+    "sha": "0d9c67a4cf0b62e580efdb016357edc3fcccdb6d",
+    "size": 1540,
+    "url": "https://api.github.com/repos/longxiaocao/sakurafilte/contents/backend/migrations/002_create_system_settings_table.sql?ref=1e97a92",
+    "html_url": "https://github.com/longxiaocao/sakurafilte/blob/1e97a92/backend/migrations/002_create_system_settings_table.sql",
+    "git_url": "https://api.github.com/repos/longxiaocao/sakurafilte/git/blobs/0d9c67a4cf0b62e580efdb016357edc3fcccdb6d",
+    "download_url": "https://raw.githubusercontent.com/longxiaocao/sakurafilte/1e97a92/backend/migrations/002_create_system_settings_table.sql",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/longxiaocao/sakurafilte/contents/backend/migrations/002_create_system_settings_table.sql?ref=1e97a92",
+      "git": "https://api.github.com/repos/longxiaocao/sakurafilte/git/blobs/0d9c67a4cf0b62e580efdb016357edc3fcccdb6d",
+      "html": "https://github.com/longxiaocao/sakurafilte/blob/1e97a92/backend/migrations/002_create_system_settings_table.sql"
+    }
+  },
+  {
+    "name": "008_dedup_and_add_unique_constraint.sql",
+    "path": "backend/migrations/008_dedup_and_add_unique_constraint.sql",
+    "sha": "251099bf7c0b0a4ea847a9fe6823000c57f5f27f",
+    "size": 971,
+    "url": "https://api.github.com/repos/longxiaocao/sakurafilte/contents/backend/migrations/008_dedup_and_add_unique_constraint.sql?ref=1e97a92",
+    "html_url": "https://github.com/longxiaocao/sakurafilte/blob/1e97a92/backend/migrations/008_dedup_and_add_unique_constraint.sql",
+    "git_url": "https://api.github.com/repos/longxiaocao/sakurafilte/git/blobs/251099bf7c0b0a4ea847a9fe6823000c57f5f27f",
+    "download_url": "https://raw.githubusercontent.com/longxiaocao/sakurafilte/1e97a92/backend/migrations/008_dedup_and_add_unique_constraint.sql",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/longxiaocao/sakurafilte/contents/backend/migrations/008_dedup_and_add_unique_constraint.sql?ref=1e97a92",
+      "git": "https://api.github.com/repos/longxiaocao/sakurafilte/git/blobs/251099bf7c0b0a4ea847a9fe6823000c57f5f27f",
+      "html": "https://github.com/longxiaocao/sakurafilte/blob/1e97a92/backend/migrations/008_dedup_and_add_unique_constraint.sql"
+    }
+  },
+  {
+    "name": "009_add_xrefs_unique_constraint.sql",
+    "path": "backend/migrations/009_add_xrefs_unique_constraint.sql",
+    "sha": "aca752600c2c0dc70131b136bffa4c764ae50696",
+    "size": 1021,
+    "url": "https://api.github.com/repos/longxiaocao/sakurafilte/contents/backend/migrations/009_add_xrefs_unique_constraint.sql?ref=1e97a92",
+    "html_url": "https://github.com/longxiaocao/sakurafilte/blob/1e97a92/backend/migrations/009_add_xrefs_unique_constraint.sql",
+    "git_url": "https://api.github.com/repos/longxiaocao/sakurafilte/git/blobs/aca752600c2c0dc70131b136bffa4c764ae50696",
+    "download_url": "https://raw.githubusercontent.com/longxiaocao/sakurafilte/1e97a92/backend/migrations/009_add_xrefs_unique_constraint.sql",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/longxiaocao/sakurafilte/contents/backend/migrations/009_add_xrefs_unique_constraint.sql?ref=1e97a92",
+      "git": "https://api.github.com/repos/longxiaocao/sakurafilte/git/blobs/aca752600c2c0dc70131b136bffa4c764ae50696",
+      "html": "https://github.com/longxiaocao/sakurafilte/blob/1e97a92/backend/migrations/009_add_xrefs_unique_constraint.sql"
+    }
+  },
+  {
+    "name": "010_add_apps_unique_constraint.sql",
+    "path": "backend/migrations/010_add_apps_unique_constraint.sql",
+    "sha": "37f6680dd07f0b5b89e556b1c7c495380200e2af",
+    "size": 1010,
+    "url": "https://api.github.com/repos/longxiaocao/sakurafilte/contents/backend/migrations/010_add_apps_unique_constraint.sql?ref=1e97a92",
+    "html_url": "https://github.com/longxiaocao/sakurafilte/blob/1e97a92/backend/migrations/010_add_apps_unique_constraint.sql",
+    "git_url": "https://api.github.com/repos/longxiaocao/sakurafilte/git/blobs/37f6680dd07f0b5b89e556b1c7c495380200e2af",
+    "download_url": "https://raw.githubusercontent.com/longxiaocao/sakurafilte/1e97a92/backend/migrations/010_add_apps_unique_constraint.sql",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/longxiaocao/sakurafilte/contents/backend/migrations/010_add_apps_unique_constraint.sql?ref=1e97a92",
+      "git": "https://api.github.com/repos/longxiaocao/sakurafilte/git/blobs/37f6680dd07f0b5b89e556b1c7c495380200e2af",
+      "html": "https://github.com/longxiaocao/sakurafilte/blob/1e97a92/backend/migrations/010_add_apps_unique_constraint.sql"
+    }
+  },
+  {
+    "name": "015_dead_letter_status.sql",
+    "path": "backend/migrations/015_dead_letter_status.sql",
+    "sha": "8f4bdf9b1e711b6cd1e70dd66dbfb76044bdef0f",
+    "size": 2628,
+    "url": "https://api.github.com/repos/longxiaocao/sakurafilte/contents/backend/migrations/015_dead_letter_status.sql?ref=1e97a92",
+    "html_url": "https://github.com/longxiaocao/sakurafilte/blob/1e97a92/backend/migrations/015_dead_letter_status.sql",
+    "git_url": "https://api.github.com/repos/longxiaocao/sakurafilte/git/blobs/8f4bdf9b1e711b6cd1e70dd66dbfb76044bdef0f",
+    "download_url": "https://raw.githubusercontent.com/longxiaocao/sakurafilte/1e97a92/backend/migrations/015_dead_letter_status.sql",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/longxiaocao/sakurafilte/contents/backend/migrations/015_dead_letter_status.sql?ref=1e97a92",
+      "git": "https://api.github.com/repos/longxiaocao/sakurafilte/git/blobs/8f4bdf9b1e711b6cd1e70dd66dbfb76044bdef0f",
+      "html": "https://github.com/longxiaocao/sakurafilte/blob/1e97a92/backend/migrations/015_dead_letter_status.sql"
+    }
+  },
+  {
+    "name": "016_add_history_paging_index.sql",
+    "path": "backend/migrations/016_add_history_paging_index.sql",
+    "sha": "5ff1f0747c8c436b5b08d347e0b2edb773d58aa2",
+    "size": 572,
+    "url": "https://api.github.com/repos/longxiaocao/sakurafilte/contents/backend/migrations/016_add_history_paging_index.sql?ref=1e97a92",
+    "html_url": "https://github.com/longxiaocao/sakurafilte/blob/1e97a92/backend/migrations/016_add_history_paging_index.sql",
+    "git_url": "https://api.github.com/repos/longxiaocao/sakurafilte/git/blobs/5ff1f0747c8c436b5b08d347e0b2edb773d58aa2",
+    "download_url": "https://raw.githubusercontent.com/longxiaocao/sakurafilte/1e97a92/backend/migrations/016_add_history_paging_index.sql",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/longxiaocao/sakurafilte/contents/backend/migrations/016_add_history_paging_index.sql?ref=1e97a92",
+      "git": "https://api.github.com/repos/longxiaocao/sakurafilte/git/blobs/5ff1f0747c8c436b5b08d347e0b2edb773d58aa2",
+      "html": "https://github.com/longxiaocao/sakurafilte/blob/1e97a92/backend/migrations/016_add_history_paging_index.sql"
+    }
+  },
+  {
+    "name": "017_add_trgm_indexes.sql",
+    "path": "backend/migrations/017_add_trgm_indexes.sql",
+    "sha": "eb0c8b06cf9da11386889e48858756d0f703a04d",
+    "size": 2246,
+    "url": "https://api.github.com/repos/longxiaocao/sakurafilte/contents/backend/migrations/017_add_trgm_indexes.sql?ref=1e97a92",
+    "html_url": "https://github.com/longxiaocao/sakurafilte/blob/1e97a92/backend/migrations/017_add_trgm_indexes.sql",
+    "git_url": "https://api.github.com/repos/longxiaocao/sakurafilte/git/blobs/eb0c8b06cf9da11386889e48858756d0f703a04d",
+    "download_url": "https://raw.githubusercontent.com/longxiaocao/sakurafilte/1e97a92/backend/migrations/017_add_trgm_indexes.sql",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/longxiaocao/sakurafilte/contents/backend/migrations/017_add_trgm_indexes.sql?ref=1e97a92",
+      "git": "https://api.github.com/repos/longxiaocao/sakurafilte/git/blobs/eb0c8b06cf9da11386889e48858756d0f703a04d",
+      "html": "https://github.com/longxiaocao/sakurafilte/blob/1e97a92/backend/migrations/017_add_trgm_indexes.sql"
+    }
+  },
+  {
+    "name": "018_v2_legacy_data_cleanup.sql",
+    "path": "backend/migrations/018_v2_legacy_data_cleanup.sql",
+    "sha": "19b1b7f0875ac76ce8ca7a4f6e3faec5ff0eda1b",
+    "size": 6504,
+    "url": "https://api.github.com/repos/longxiaocao/sakurafilte/contents/backend/migrations/018_v2_legacy_data_cleanup.sql?ref=1e97a92",
+    "html_url": "https://github.com/longxiaocao/sakurafilte/blob/1e97a92/backend/migrations/018_v2_legacy_data_cleanup.sql",
+    "git_url": "https://api.github.com/repos/longxiaocao/sakurafilte/git/blobs/19b1b7f0875ac76ce8ca7a4f6e3faec5ff0eda1b",
+    "download_url": "https://raw.githubusercontent.com/longxiaocao/sakurafilte/1e97a92/backend/migrations/018_v2_legacy_data_cleanup.sql",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/longxiaocao/sakurafilte/contents/backend/migrations/018_v2_legacy_data_cleanup.sql?ref=1e97a92",
+      "git": "https://api.github.com/repos/longxiaocao/sakurafilte/git/blobs/19b1b7f0875ac76ce8ca7a4f6e3faec5ff0eda1b",
+      "html": "https://github.com/longxiaocao/sakurafilte/blob/1e97a92/backend/migrations/018_v2_legacy_data_cleanup.sql"
+    }
+  },
+  {
+    "name": "019_v2_etl_progress_log_add_skipped_missing_mr1.sql",
+    "path": "backend/migrations/019_v2_etl_progress_log_add_skipped_missing_mr1.sql",
+    "sha": "6ddfc9608e8c442e6da5cafa68a57506fc5b3f1d",
+    "size": 1973,
+    "url": "https://api.github.com/repos/longxiaocao/sakurafilte/contents/backend/migrations/019_v2_etl_progress_log_add_skipped_missing_mr1.sql?ref=1e97a92",
+    "html_url": "https://github.com/longxiaocao/sakurafilte/blob/1e97a92/backend/migrations/019_v2_etl_progress_log_add_skipped_missing_mr1.sql",
+    "git_url": "https://api.github.com/repos/longxiaocao/sakurafilte/git/blobs/6ddfc9608e8c442e6da5cafa68a57506fc5b3f1d",
+    "download_url": "https://raw.githubusercontent.com/longxiaocao/sakurafilte/1e97a92/backend/migrations/019_v2_etl_progress_log_add_skipped_missing_mr1.sql",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/longxiaocao/sakurafilte/contents/backend/migrations/019_v2_etl_progress_log_add_skipped_missing_mr1.sql?ref=1e97a92",
+      "git": "https://api.github.com/repos/longxiaocao/sakurafilte/git/blobs/6ddfc9608e8c442e6da5cafa68a57506fc5b3f1d",
+      "html": "https://github.com/longxiaocao/sakurafilte/blob/1e97a92/backend/migrations/019_v2_etl_progress_log_add_skipped_missing_mr1.sql"
+    }
+  },
+  {
+    "name": "020_machine_apps_is_discontinued_default.sql",
+    "path": "backend/migrations/020_machine_apps_is_discontinued_default.sql",
+    "sha": "c53e3c03201dd5076d617d73db0830971d04fb7f",
+    "size": 633,
+    "url": "https://api.github.com/repos/longxiaocao/sakurafilte/contents/backend/migrations/020_machine_apps_is_discontinued_default.sql?ref=1e97a92",
+    "html_url": "https://github.com/longxiaocao/sakurafilte/blob/1e97a92/backend/migrations/020_machine_apps_is_discontinued_default.sql",
+    "git_url": "https://api.github.com/repos/longxiaocao/sakurafilte/git/blobs/c53e3c03201dd5076d617d73db0830971d04fb7f",
+    "download_url": "https://raw.githubusercontent.com/longxiaocao/sakurafilte/1e97a92/backend/migrations/020_machine_apps_is_discontinued_default.sql",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/longxiaocao/sakurafilte/contents/backend/migrations/020_machine_apps_is_discontinued_default.sql?ref=1e97a92",
+      "git": "https://api.github.com/repos/longxiaocao/sakurafilte/git/blobs/c53e3c03201dd5076d617d73db0830971d04fb7f",
+      "html": "https://github.com/longxiaocao/sakurafilte/blob/1e97a92/backend/migrations/020_machine_apps_is_discontinued_default.sql"
+    }
+  },
+  {
+    "name": "021_products_mr1_varchar50.sql",
+    "path": "backend/migrations/021_products_mr1_varchar50.sql",
+    "sha": "48a1d27f88f347af964c2448115572d304234565",
+    "size": 1157,
+    "url": "https://api.github.com/repos/longxiaocao/sakurafilte/contents/backend/migrations/021_products_mr1_varchar50.sql?ref=1e97a92",
+    "html_url": "https://github.com/longxiaocao/sakurafilte/blob/1e97a92/backend/migrations/021_products_mr1_varchar50.sql",
+    "git_url": "https://api.github.com/repos/longxiaocao/sakurafilte/git/blobs/48a1d27f88f347af964c2448115572d304234565",
+    "download_url": "https://raw.githubusercontent.com/longxiaocao/sakurafilte/1e97a92/backend/migrations/021_products_mr1_varchar50.sql",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/longxiaocao/sakurafilte/contents/backend/migrations/021_products_mr1_varchar50.sql?ref=1e97a92",
+      "git": "https://api.github.com/repos/longxiaocao/sakurafilte/git/blobs/48a1d27f88f347af964c2448115572d304234565",
+      "html": "https://github.com/longxiaocao/sakurafilte/blob/1e97a92/backend/migrations/021_products_mr1_varchar50.sql"
+    }
+  },
+  {
+    "name": "022_add_products_updated_at_id_idx.sql",
+    "path": "backend/migrations/022_add_products_updated_at_id_idx.sql",
+    "sha": "9658b5da8251e12e3fe39d6d7495b5677b8f823a",
+    "size": 1419,
+    "url": "https://api.github.com/repos/longxiaocao/sakurafilte/contents/backend/migrations/022_add_products_updated_at_id_idx.sql?ref=1e97a92",
+    "html_url": "https://github.com/longxiaocao/sakurafilte/blob/1e97a92/backend/migrations/022_add_products_updated_at_id_idx.sql",
+    "git_url": "https://api.github.com/repos/longxiaocao/sakurafilte/git/blobs/9658b5da8251e12e3fe39d6d7495b5677b8f823a",
+    "download_url": "https://raw.githubusercontent.com/longxiaocao/sakurafilte/1e97a92/backend/migrations/022_add_products_updated_at_id_idx.sql",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/longxiaocao/sakurafilte/contents/backend/migrations/022_add_products_updated_at_id_idx.sql?ref=1e97a92",
+      "git": "https://api.github.com/repos/longxiaocao/sakurafilte/git/blobs/9658b5da8251e12e3fe39d6d7495b5677b8f823a",
+      "html": "https://github.com/longxiaocao/sakurafilte/blob/1e97a92/backend/migrations/022_add_products_updated_at_id_idx.sql"
+    }
+  }
+]

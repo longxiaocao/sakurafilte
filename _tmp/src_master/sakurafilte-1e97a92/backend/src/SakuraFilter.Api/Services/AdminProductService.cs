@@ -1,0 +1,1423 @@
+using Microsoft.EntityFrameworkCore;
+using SakuraFilter.Core.DTOs;
+using SakuraFilter.Core.Entities;
+using SakuraFilter.Core.Extensions;
+using SakuraFilter.Core.Interfaces;
+using SakuraFilter.Core.Validation;
+using SakuraFilter.Infrastructure.Data;
+using System.Globalization;
+using System.Text.Json;
+using System.Text.RegularExpressions;
+
+namespace SakuraFilter.Api.Services;
+
+/// <summary>
+/// 后台产品管理服务 (Day 8.1)
+/// 用途: 支撑后台产品 CRUD (规格 后台新增产品格式 7 分区表单)
+/// 设计:
+///   - 单事务: Product + xref + machine_application 三表一起写
+///   - 软删除: 走 is_discontinued=true (历史产品保留)
+///   - OEM 归一化: 大写 + 去空格 + 去特殊字符, 保证 oem_no_normalized 唯一
+///   - Type 派生: 从 product_name_3 自动取, 后台可手动覆盖
+/// </summary>
+public class AdminProductService
+{
+    private readonly ProductDbContext _db;
+    private readonly ILogger<AdminProductService> _logger;
+    private readonly CursorHmac _cursorHmac;
+    private readonly IObjectStorage? _storage;  // P3.3: 用于图片预签名 URL (前台 + 后台详情)
+
+    public AdminProductService(
+        ProductDbContext db,
+        ILogger<AdminProductService> logger,
+        CursorHmac cursorHmac,
+        IObjectStorage? storage = null)
+    {
+        _db = db;
+        _logger = logger;
+        _cursorHmac = cursorHmac;
+        _storage = storage;
+    }
+
+    // ========== 新增产品 ==========
+    public async Task<ProductDetailDto> CreateAsync(ProductFormDto form, string? createdBy, CancellationToken ct = default)
+    {
+        ValidateForm(form);
+
+        // V24-F16: 删除 NormalizeOem (spec Task 0.3.10), 派生规则改为 mr_1 原值 (spec D3-1)
+        //   WHY: 之前按 Oem2 派生 oem_no_normalized, 与 ETL 的 mr_1 派生形成双轨写入数据不一致
+        //   修复后: oem_no_normalized = mr_1?.Trim() ?? "", 不做大小写转换, 不去特殊字符
+        var oemNormalized = form.Mr1?.Trim() ?? "";
+        var oemDisplay = form.Oem2.Trim();
+
+        // P0-1.3: 开启事务, 保证 Product + xref + machine_application + history 四表原子写入
+        //   WHY: 之前 3 次 SaveChangesAsync 之间任一失败会留孤儿数据 (e.g. product 已写但 xref 失败)
+        //   并发场景下 AnyAsync 检查与 SaveChangesAsync 之间有 TOCTOU 窗口, 第二个请求触发 23505 唯一约束冲突
+        //   → 端点层 catch DbUpdateException + 23505 → 返回 409 Conflict (见 Program.cs)
+        //   业务异常 (InvalidOperationException/ArgumentException) 还未写数据, 直接抛出无需显式回滚
+        //   (await using 会自动 rollback 未 commit 的事务)
+        await using var tx = await _db.Database.BeginTransactionAsync(ct);
+        try
+        {
+            // V24-F21: pg_try_advisory_xact_lock(7740001) 防止与 ETL TRUNCATE 冲突 (spec Task 0.3.18)
+            //   WHY: ETL ImportProductsAsync 用 advisory lock 7740001, AdminProductService 也需获取同一锁
+            //        避免管理员编辑产品时 ETL TRUNCATE 导致 23505 唯一约束冲突或表级锁等待 504
+            //   失败处理: 锁被 ETL 占用时返回 409 ETL_IN_PROGRESS, 让前端提示用户稍后重试
+            if (!await TryAcquireAdvisoryLockAsync(7740001L, ct))
+                throw new InvalidOperationException("ETL_IN_PROGRESS: ETL 导入进行中, 请稍后重试");
+
+            // 唯一性检查 (oem_no_normalized 唯一索引) - 仍保留, 提供业务友好错误
+            //   注意: READ COMMITTED 下此检查不能消除并发竞态, 仅为常见路径提供 409 而非 500
+            var exists = await _db.Products.AnyAsync(p => p.OemNoNormalized == oemNormalized, ct);
+            if (exists)
+                throw new InvalidOperationException($"产品已存在 (oem_no_normalized={oemNormalized})");
+
+            // V2: MR.1 唯一性检查(部分唯一索引,WHERE mr_1 IS NOT NULL)
+            var mr1Exists = await _db.Products.AnyAsync(p => p.Mr1 == form.Mr1!.Trim(), ct);
+            if (mr1Exists)
+                throw new InvalidOperationException($"MR1_ALREADY_EXISTS: MR.1 已存在 (mr1={form.Mr1})");
+
+            // V2: OEM 3 唯一性检查(同 Brand 下未下架 OEM 3)
+            // V24-F55: 批量预拉消除 N+1 (原 foreach 内 AnyAsync, N 条 xref 触发 N 次 SQL)
+            //   参考 IndexReplayWorker.cs L245-264 批量预拉模板: 1 次 SQL 拉所有候选 → 内存按复合 key 查找
+            //   场景: form.CrossReferences 通常 1-5 条, 但批次导入或 API 自动化可放大
+            var oem3PairsToCheck = form.CrossReferences
+                .Where(x => !string.IsNullOrEmpty(x.OemBrand) && !string.IsNullOrEmpty(x.OemNo3))
+                .Select(x => (Brand: x.OemBrand!.Trim(), Oem3: x.OemNo3!.Trim()))
+                .Distinct()
+                .ToList();
+            if (oem3PairsToCheck.Count > 0)
+            {
+                var brands = oem3PairsToCheck.Select(p => p.Brand).Distinct().ToList();
+                var oem3s = oem3PairsToCheck.Select(p => p.Oem3).Distinct().ToList();
+                // 1 次 SQL 拉所有候选 (brand IN (...) AND oem_no_3 IN (...) AND NOT is_discontinued)
+                //   注意: 此查询是超集 (brand × oem3 笛卡尔积), 内存内再精确匹配 (Brand, Oem3) 对
+                var existingOem3 = await _db.CrossReferences
+                    .Where(c => brands.Contains(c.OemBrand!) && oem3s.Contains(c.OemNo3!) && !c.IsDiscontinued)
+                    .Select(c => new { c.OemBrand, c.OemNo3 })
+                    .ToListAsync(ct);
+                var existingOem3Set = existingOem3
+                    .Select(c => (c.OemBrand!, c.OemNo3!))
+                    .ToHashSet();  // ValueTuple 默认用 Ordinal 比较 string
+                foreach (var pair in oem3PairsToCheck)
+                {
+                    if (existingOem3Set.Contains((pair.Brand, pair.Oem3)))
+                        throw new InvalidOperationException($"OEM3_ALREADY_EXISTS: OEM 3 已存在 (brand={pair.Brand}, oem3={pair.Oem3})");
+                }
+            }
+
+            var noCheckValves = NormalizeRawInt(form.NoCheckValvesRaw, form.NoCheckValves);
+            var noBypassValves = NormalizeRawInt(form.NoBypassValvesRaw, form.NoBypassValves);
+            var bypassValveLr = NormalizeRawDecimal(form.BypassValveLrRaw, form.BypassValveLr);
+            var bypassValveHr = NormalizeRawDecimal(form.BypassValveHrRaw, form.BypassValveHr);
+            var bypassPressure = NormalizeRawDecimal(form.BypassPressureRaw, form.BypassPressure);
+            var collapsePressure = NormalizeRawDecimal(form.CollapsePressureBarRaw, form.CollapsePressureBar);
+
+            var product = new Product
+            {
+                OemNoDisplay = oemDisplay,
+                OemNoNormalized = oemNormalized,
+                // 分区 1
+                ProductName1 = form.ProductName1?.Trim(),
+                ProductName2 = form.ProductName2?.Trim(),
+                Type = string.IsNullOrWhiteSpace(form.Type) ? DeriveTypeFromName(form.ProductName1) : form.Type.Trim(),
+                Mr1 = form.Mr1?.Trim(),
+                Oem2 = form.Oem2?.Trim(),
+                IsPublished = form.IsPublished,
+                Remark = form.Remark?.Trim(),
+                // 分区 3
+                D1Mm = form.D1Mm, D2Mm = form.D2Mm, D3Mm = form.D3Mm, D4Mm = form.D4Mm,
+                H1Mm = form.H1Mm, H2Mm = form.H2Mm, H3Mm = form.H3Mm, H4Mm = form.H4Mm,
+                D7Thread = form.D7Thread?.Trim(), D8Thread = form.D8Thread?.Trim(),
+                NoCheckValves = noCheckValves.Value, NoBypassValves = noBypassValves.Value,
+                NoCheckValvesRaw = noCheckValves.Raw, NoBypassValvesRaw = noBypassValves.Raw,
+                // 分区 5
+                Media = form.Media?.Trim(), MediaModel = form.MediaModel?.Trim(),
+                BypassValveLr = bypassValveLr.Value, BypassValveHr = bypassValveHr.Value,
+                Efficiency1 = form.Efficiency1?.Trim(), Efficiency2 = form.Efficiency2?.Trim(),
+                BypassPressure = bypassPressure.Value, CollapsePressureBar = collapsePressure.Value,
+                BypassValveLrRaw = bypassValveLr.Raw, BypassValveHrRaw = bypassValveHr.Raw,
+                BypassPressureRaw = bypassPressure.Raw, CollapsePressureBarRaw = collapsePressure.Raw,
+                SealingMaterial = form.SealingMaterial?.Trim(), TempRange = form.TempRange?.Trim(),
+                // 分区 6
+                QtyPerCarton = form.QtyPerCarton, WeightKgs = form.WeightKgs,
+                CartonLengthMm = form.CartonLengthMm, CartonWidthMm = form.CartonWidthMm, CartonHeightMm = form.CartonHeightMm,
+                MasterBoxQty = form.MasterBoxQty, MasterBoxWeightKgs = form.MasterBoxWeightKgs,
+                MasterBoxLengthMm = form.MasterBoxLengthMm, MasterBoxWidthMm = form.MasterBoxWidthMm, MasterBoxHeightMm = form.MasterBoxHeightMm,
+                VolumePerCartonM3 = DeriveVolume(form.CartonLengthMm, form.CartonWidthMm, form.CartonHeightMm),
+                // 元数据
+                CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow
+            };
+            _db.Products.Add(product);
+            await _db.SaveChangesAsync(ct);  // 拿到 product.Id
+
+            // V24-F21: xref 写入前加 advisory_xact_lock(7740002) 防止与 ETL DELETE+INSERT 冲突 (spec Task 0.3.19)
+            if (form.CrossReferences.Count > 0 && !await TryAcquireAdvisoryLockAsync(7740002L, ct))
+                throw new InvalidOperationException("ETL_IN_PROGRESS: ETL xrefs 导入进行中, 请稍后重试");
+
+            // 分区 2: xref (V2: 加 Oem2/SortOrder/MachineType/IsPublished)
+            foreach (var x in form.CrossReferences)
+            {
+                _db.CrossReferences.Add(new CrossReference
+                {
+                    ProductId = product.Id,
+                    ProductName1 = x.ProductName1?.Trim(),
+                    OemBrand = x.OemBrand?.Trim(),
+                    OemNo3 = x.OemNo3?.Trim(),
+                    Oem2 = x.Oem2?.Trim(),               // V2
+                    SortOrder = x.SortOrder,               // V2
+                    MachineType = string.IsNullOrEmpty(x.MachineType) ? "others" : x.MachineType,  // V2
+                    IsPublished = x.IsPublished,           // V2
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
+            // 分区 7: 车型
+            foreach (var m in form.MachineApplications)
+            {
+                _db.MachineApplications.Add(MapToMachineApp(product.Id, m));
+            }
+            if (form.CrossReferences.Count > 0 || form.MachineApplications.Count > 0)
+                await _db.SaveChangesAsync(ct);
+
+            // V24-F17: 反向更新 products.oem_2 (spec Task 5.1.9 / 0.3.15, 修复 D8)
+            //   WHY: products.oem_2 应代表"第一个有效 xref 的 oem_2", 与 xrefs 联动
+            //   规则: 按 sort_order + oem_brand + oem_no_3 排序后取第一个非空 oem_2
+            //   空列表或全部为空时置 null (允许 NULL)
+            //   注意: CreateAsync 无 changed 字典, 不调用 Track, oem_2 直接赋值
+            if (form.CrossReferences.Count > 0)
+            {
+                product.Oem2 = form.CrossReferences
+                    .OrderBy(x => x.SortOrder)
+                    .ThenBy(x => x.OemBrand, StringComparer.Ordinal)
+                    .ThenBy(x => x.OemNo3, StringComparer.Ordinal)
+                    .FirstOrDefault(x => !string.IsNullOrEmpty(x.Oem2))?.Oem2?.Trim();
+                await _db.SaveChangesAsync(ct);
+            }
+
+            // 历史
+            _db.ProductHistory.Add(new ProductHistory
+            {
+                ProductId = product.Id,
+                ChangeType = "create",
+                ChangedBy = createdBy,
+                ChangedAt = DateTime.UtcNow,
+                ChangedFields = JsonSerializer.Serialize(new { action = "manual_create", oem = oemDisplay })
+            });
+            await _db.SaveChangesAsync(ct);
+
+            await tx.CommitAsync(ct);
+
+            _logger.LogInformation("产品创建成功 id={Id} oem={Oem} xref={Xref} apps={Apps}",
+                product.Id, oemDisplay, form.CrossReferences.Count, form.MachineApplications.Count);
+            return await GetByIdAsync(product.Id, ct);
+        }
+        catch (Exception ex) when (ex is not InvalidOperationException && ex is not ArgumentException)
+        {
+            // 业务异常 (产品已存在 / 校验失败) 直接抛出: await using 会自动 rollback 未 commit 的事务
+            // 其他异常 (含 DbUpdateException 23505) 显式回滚 + 记日志 + 重抛, 由端点层映射为合适 HTTP 状态码
+            await tx.RollbackAsync(ct);
+            _logger.LogError(ex, "产品创建事务回滚 oem={Oem}", oemDisplay);
+            throw;
+        }
+    }
+
+    // ========== 更新产品 ==========
+    public async Task<ProductDetailDto> UpdateAsync(long id, ProductFormDto form, string? updatedBy, CancellationToken ct = default)
+    {
+        // P0-1.3: 开启事务, 保证 products + xref + machine_application + history 四表原子更新
+        //   WHY: 之前 2 次 SaveChangesAsync 之间任一失败会导致部分字段更新 + 子表数据丢失
+        //   并发场景下若 xref 唯一索引冲突也会触发 23505, 由端点层映射为 409
+        await using var tx = await _db.Database.BeginTransactionAsync(ct);
+        try
+        {
+            // V24-F21: pg_try_advisory_xact_lock(7740001) 防止与 ETL TRUNCATE 冲突 (spec Task 0.3.18)
+            if (!await TryAcquireAdvisoryLockAsync(7740001L, ct))
+                throw new InvalidOperationException("ETL_IN_PROGRESS: ETL 导入进行中, 请稍后重试");
+
+            var product = await _db.Products.FirstOrDefaultAsync(p => p.Id == id, ct)
+                ?? throw new KeyNotFoundException($"产品 id={id} 不存在");
+
+            // E2E BD.3 修复 v2: 用前端带回的 RowVersion 覆盖 EF Core 的 OriginalValue
+            //   WHY: EF Core IsRowVersion() 在 UPDATE 时用 OriginalValue["RowVersion"] 做 WHERE 条件
+            //        但 FirstOrDefaultAsync 加载的是当前最新 xmin, 永远不会冲突
+            //        用前端 GET 时的 RowVersion (可能过期) 覆盖 OriginalValue, 才能检测"先读后写"并发
+            //   注意: 必须用 Entry().OriginalValues 而非直接赋值 product.RowVersion
+            //        直接赋值会被 Change Tracker 视为 Modified, 导致 SET 中包含 xmin (PG 不允许 UPDATE xmin)
+            //        OriginalValues 只影响 WHERE 条件, 不影响 SET
+            if (form.RowVersion.HasValue)
+            {
+                _db.Entry(product).OriginalValues["RowVersion"] = form.RowVersion.Value;
+            }
+
+            var changed = new Dictionary<string, object>();
+            void Track<T>(string key, T oldVal, T? newVal)
+            {
+                // 🔧 fix(审查): 存 {Old, New} 双值 — 此前只存新值, 变更历史无法追溯"原来是什么" (用户实测反馈)
+                //   前端 parseChangedFields 兼容: 新格式 {Old,New} / 旧格式平铺新值
+                if (!EqualityComparer<T?>.Default.Equals(oldVal, newVal)) changed[key] = new { Old = oldVal, New = newVal };
+            }
+
+            // 分区 1
+            Track(nameof(product.ProductName1), product.ProductName1, form.ProductName1?.Trim());
+            product.ProductName1 = form.ProductName1?.Trim();
+            Track(nameof(product.ProductName2), product.ProductName2, form.ProductName2?.Trim());
+            product.ProductName2 = form.ProductName2?.Trim();
+            if (!string.IsNullOrWhiteSpace(form.Type))
+            {
+                Track(nameof(product.Type), product.Type, form.Type.Trim());
+                product.Type = form.Type.Trim();
+            }
+            Track(nameof(product.Mr1), product.Mr1, form.Mr1?.Trim());
+            product.Mr1 = form.Mr1?.Trim();
+            // V24-F16: UpdateAsync 同步更新 OemNoNormalized = Mr1 (spec Task 0.3.13, 修复 D3-4)
+            //   WHY: 之前 Mr1 修改后 OemNoNormalized 仍是旧值, 公共搜索查询 p.OemNoNormalized == normalized 漏掉此产品
+            Track(nameof(product.OemNoNormalized), product.OemNoNormalized, form.Mr1?.Trim() ?? "");
+            product.OemNoNormalized = form.Mr1?.Trim() ?? "";
+            if (!string.IsNullOrWhiteSpace(form.Oem2))
+            {
+                Track(nameof(product.Oem2), product.Oem2, form.Oem2.Trim());
+                product.Oem2 = form.Oem2.Trim();
+            }
+            Track(nameof(product.IsPublished), product.IsPublished, form.IsPublished);
+            product.IsPublished = form.IsPublished;
+            Track(nameof(product.Remark), product.Remark, form.Remark?.Trim());
+            product.Remark = form.Remark?.Trim();
+
+            // 分区 3
+            Track(nameof(product.D1Mm), product.D1Mm, form.D1Mm); product.D1Mm = form.D1Mm;
+            Track(nameof(product.D2Mm), product.D2Mm, form.D2Mm); product.D2Mm = form.D2Mm;
+            Track(nameof(product.D3Mm), product.D3Mm, form.D3Mm); product.D3Mm = form.D3Mm;
+            Track(nameof(product.D4Mm), product.D4Mm, form.D4Mm); product.D4Mm = form.D4Mm;
+            Track(nameof(product.H1Mm), product.H1Mm, form.H1Mm); product.H1Mm = form.H1Mm;
+            Track(nameof(product.H2Mm), product.H2Mm, form.H2Mm); product.H2Mm = form.H2Mm;
+            Track(nameof(product.H3Mm), product.H3Mm, form.H3Mm); product.H3Mm = form.H3Mm;
+            Track(nameof(product.H4Mm), product.H4Mm, form.H4Mm); product.H4Mm = form.H4Mm;
+            Track(nameof(product.D7Thread), product.D7Thread, form.D7Thread?.Trim()); product.D7Thread = form.D7Thread?.Trim();
+            Track(nameof(product.D8Thread), product.D8Thread, form.D8Thread?.Trim()); product.D8Thread = form.D8Thread?.Trim();
+            var noCheckValves = NormalizeRawInt(form.NoCheckValvesRaw, form.NoCheckValves);
+            var noBypassValves = NormalizeRawInt(form.NoBypassValvesRaw, form.NoBypassValves);
+            Track(nameof(product.NoCheckValves), product.NoCheckValves, noCheckValves.Value); product.NoCheckValves = noCheckValves.Value;
+            Track(nameof(product.NoBypassValves), product.NoBypassValves, noBypassValves.Value); product.NoBypassValves = noBypassValves.Value;
+            Track(nameof(product.NoCheckValvesRaw), product.NoCheckValvesRaw, noCheckValves.Raw); product.NoCheckValvesRaw = noCheckValves.Raw;
+            Track(nameof(product.NoBypassValvesRaw), product.NoBypassValvesRaw, noBypassValves.Raw); product.NoBypassValvesRaw = noBypassValves.Raw;
+
+            // 分区 5
+            Track(nameof(product.Media), product.Media, form.Media?.Trim()); product.Media = form.Media?.Trim();
+            Track(nameof(product.MediaModel), product.MediaModel, form.MediaModel?.Trim()); product.MediaModel = form.MediaModel?.Trim();
+            var bypassValveLr = NormalizeRawDecimal(form.BypassValveLrRaw, form.BypassValveLr);
+            var bypassValveHr = NormalizeRawDecimal(form.BypassValveHrRaw, form.BypassValveHr);
+            var bypassPressure = NormalizeRawDecimal(form.BypassPressureRaw, form.BypassPressure);
+            var collapsePressure = NormalizeRawDecimal(form.CollapsePressureBarRaw, form.CollapsePressureBar);
+            Track(nameof(product.BypassValveLr), product.BypassValveLr, bypassValveLr.Value); product.BypassValveLr = bypassValveLr.Value;
+            Track(nameof(product.BypassValveHr), product.BypassValveHr, bypassValveHr.Value); product.BypassValveHr = bypassValveHr.Value;
+            Track(nameof(product.Efficiency1), product.Efficiency1, form.Efficiency1?.Trim()); product.Efficiency1 = form.Efficiency1?.Trim();
+            Track(nameof(product.Efficiency2), product.Efficiency2, form.Efficiency2?.Trim()); product.Efficiency2 = form.Efficiency2?.Trim();
+            Track(nameof(product.BypassPressure), product.BypassPressure, bypassPressure.Value); product.BypassPressure = bypassPressure.Value;
+            Track(nameof(product.CollapsePressureBar), product.CollapsePressureBar, collapsePressure.Value); product.CollapsePressureBar = collapsePressure.Value;
+            Track(nameof(product.BypassValveLrRaw), product.BypassValveLrRaw, bypassValveLr.Raw); product.BypassValveLrRaw = bypassValveLr.Raw;
+            Track(nameof(product.BypassValveHrRaw), product.BypassValveHrRaw, bypassValveHr.Raw); product.BypassValveHrRaw = bypassValveHr.Raw;
+            Track(nameof(product.BypassPressureRaw), product.BypassPressureRaw, bypassPressure.Raw); product.BypassPressureRaw = bypassPressure.Raw;
+            Track(nameof(product.CollapsePressureBarRaw), product.CollapsePressureBarRaw, collapsePressure.Raw); product.CollapsePressureBarRaw = collapsePressure.Raw;
+            Track(nameof(product.SealingMaterial), product.SealingMaterial, form.SealingMaterial?.Trim()); product.SealingMaterial = form.SealingMaterial?.Trim();
+            Track(nameof(product.TempRange), product.TempRange, form.TempRange?.Trim()); product.TempRange = form.TempRange?.Trim();
+
+            // 分区 6
+            Track(nameof(product.QtyPerCarton), product.QtyPerCarton, form.QtyPerCarton); product.QtyPerCarton = form.QtyPerCarton;
+            Track(nameof(product.WeightKgs), product.WeightKgs, form.WeightKgs); product.WeightKgs = form.WeightKgs;
+            Track(nameof(product.CartonLengthMm), product.CartonLengthMm, form.CartonLengthMm); product.CartonLengthMm = form.CartonLengthMm;
+            Track(nameof(product.CartonWidthMm), product.CartonWidthMm, form.CartonWidthMm); product.CartonWidthMm = form.CartonWidthMm;
+            Track(nameof(product.CartonHeightMm), product.CartonHeightMm, form.CartonHeightMm); product.CartonHeightMm = form.CartonHeightMm;
+            Track(nameof(product.MasterBoxQty), product.MasterBoxQty, form.MasterBoxQty); product.MasterBoxQty = form.MasterBoxQty;
+            Track(nameof(product.MasterBoxWeightKgs), product.MasterBoxWeightKgs, form.MasterBoxWeightKgs); product.MasterBoxWeightKgs = form.MasterBoxWeightKgs;
+            Track(nameof(product.MasterBoxLengthMm), product.MasterBoxLengthMm, form.MasterBoxLengthMm); product.MasterBoxLengthMm = form.MasterBoxLengthMm;
+            Track(nameof(product.MasterBoxWidthMm), product.MasterBoxWidthMm, form.MasterBoxWidthMm); product.MasterBoxWidthMm = form.MasterBoxWidthMm;
+            Track(nameof(product.MasterBoxHeightMm), product.MasterBoxHeightMm, form.MasterBoxHeightMm); product.MasterBoxHeightMm = form.MasterBoxHeightMm;
+            var newVol = DeriveVolume(product.CartonLengthMm, product.CartonWidthMm, product.CartonHeightMm);
+            Track(nameof(product.VolumePerCartonM3), product.VolumePerCartonM3, newVol);
+            product.VolumePerCartonM3 = newVol;
+
+            product.UpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync(ct);
+
+            // xref: 增量更新 (修复 D3-21, 按 (oem_brand, oem_no_3) 匹配 + xref 级 xmin 乐观锁)
+            //   WHY 全量替换: 两个管理员并发编辑同一产品的不同 OEM 3 时, 后提交者静默覆盖前者, 不触发 409
+            //   方案: 按 (oem_brand, oem_no_3) 业务键匹配, 计算 新增/更新/删除 三类; 更新类设 OriginalValues["RowVersion"] 触发乐观锁
+            if (form.CrossReferences != null)
+            {
+                // V24-F21: xref 写入前加 advisory_xact_lock(7740002) 防止与 ETL DELETE+INSERT 冲突 (spec Task 0.3.19)
+                if (form.CrossReferences.Count > 0 && !await TryAcquireAdvisoryLockAsync(7740002L, ct))
+                    throw new InvalidOperationException("ETL_IN_PROGRESS: ETL xrefs 导入进行中, 请稍后重试");
+
+                var oldXrefs = await _db.CrossReferences.Where(x => x.ProductId == id).ToListAsync(ct);
+                var oldXrefMap = oldXrefs.ToDictionary(x => $"{(x.OemBrand ?? "").Trim()}|{(x.OemNo3 ?? "").Trim()}");
+                var formKeys = new HashSet<string>();
+
+                foreach (var x in form.CrossReferences)
+                {
+                    var key = $"{(x.OemBrand ?? "").Trim()}|{(x.OemNo3 ?? "").Trim()}";
+                    formKeys.Add(key);
+
+                    if (oldXrefMap.TryGetValue(key, out var existing))
+                    {
+                        // 更新: 用前端带回的 RowVersion (xmin) 覆盖 OriginalValues, 触发乐观锁
+                        //   WHY: 与产品级乐观锁同机制 (L235-238), xmin 不匹配时 SaveChangesAsync 抛 DbUpdateConcurrencyException
+                        if (x.RowVersion.HasValue)
+                        {
+                            _db.Entry(existing).OriginalValues["RowVersion"] = x.RowVersion.Value;
+                        }
+                        existing.ProductName1 = x.ProductName1?.Trim();
+                        existing.Oem2 = x.Oem2?.Trim();
+                        existing.SortOrder = x.SortOrder;
+                        existing.MachineType = string.IsNullOrEmpty(x.MachineType) ? "others" : x.MachineType;
+                        existing.IsPublished = x.IsPublished;
+                    }
+                    else
+                    {
+                        // 新增
+                        _db.CrossReferences.Add(new CrossReference
+                        {
+                            ProductId = id,
+                            ProductName1 = x.ProductName1?.Trim(),
+                            OemBrand = x.OemBrand?.Trim(),
+                            OemNo3 = x.OemNo3?.Trim(),
+                            Oem2 = x.Oem2?.Trim(),               // V2
+                            SortOrder = x.SortOrder,               // V2
+                            MachineType = string.IsNullOrEmpty(x.MachineType) ? "others" : x.MachineType,  // V2
+                            IsPublished = x.IsPublished,           // V2
+                            CreatedAt = DateTime.UtcNow
+                        });
+                    }
+                }
+
+                // 删除: form 中不存在的旧 xref
+                var toRemove = oldXrefs.Where(o => !formKeys.Contains($"{(o.OemBrand ?? "").Trim()}|{(o.OemNo3 ?? "").Trim()}")).ToList();
+                if (toRemove.Count > 0) _db.CrossReferences.RemoveRange(toRemove);
+            }
+            // machine_application: 全量替换
+            if (form.MachineApplications != null)
+            {
+                var oldApps = await _db.MachineApplications.Where(m => m.ProductId == id).ToListAsync(ct);
+                if (oldApps.Count > 0) _db.MachineApplications.RemoveRange(oldApps);
+                foreach (var m in form.MachineApplications)
+                {
+                    _db.MachineApplications.Add(MapToMachineApp(id, m));
+                }
+            }
+
+            // 历史
+            if (changed.Count > 0 || form.CrossReferences?.Count > 0 || form.MachineApplications?.Count > 0)
+            {
+                _db.ProductHistory.Add(new ProductHistory
+                {
+                    ProductId = id,
+                    ChangeType = "update",
+                    ChangedBy = updatedBy,
+                    ChangedAt = DateTime.UtcNow,
+                    ChangedFields = JsonSerializer.Serialize(changed)
+                });
+            }
+
+            // V24-F17: 反向更新 products.oem_2 (spec Task 5.1.9 / 0.3.15, 修复 D8)
+            //   xref 全量替换后, products.oem_2 也需同步更新为代表值
+            if (form.CrossReferences != null && form.CrossReferences.Count > 0)
+            {
+                var representativeOem2 = form.CrossReferences
+                    .OrderBy(x => x.SortOrder)
+                    .ThenBy(x => x.OemBrand, StringComparer.Ordinal)
+                    .ThenBy(x => x.OemNo3, StringComparer.Ordinal)
+                    .FirstOrDefault(x => !string.IsNullOrEmpty(x.Oem2))?.Oem2?.Trim();
+                if (product.Oem2 != representativeOem2)
+                {
+                    Track(nameof(product.Oem2), product.Oem2, representativeOem2);
+                    product.Oem2 = representativeOem2;
+                }
+            }
+
+            await _db.SaveChangesAsync(ct);
+
+            await tx.CommitAsync(ct);
+
+            _logger.LogInformation("产品更新 id={Id} 变更字段 {Count}", id, changed.Count);
+            return await GetByIdAsync(id, ct);
+        }
+        catch (DbUpdateConcurrencyException ex)
+        {
+            // E2E BD.3 修复: 乐观锁冲突 — 产品已被其他管理员修改, 当前请求的 RowVersion 已过期
+            //   WHY: EF Core [Timestamp] + IsRowVersion() 在 UPDATE 时检查 row_version, 不匹配抛此异常
+            //        映射为 InvalidOperationException 让端点层 catch 返回 409 Conflict (而非 500)
+            await tx.RollbackAsync(ct);
+            _logger.LogWarning(ex, "产品更新乐观锁冲突 id={Id} (数据已被其他管理员修改)", id);
+            throw new InvalidOperationException($"产品 id={id} 已被其他用户修改, 请刷新后重试 (lost update prevented)");
+        }
+        catch (Exception ex) when (ex is not KeyNotFoundException && ex is not ArgumentException && ex is not InvalidOperationException)
+        {
+            // 业务异常 (产品不存在 / 校验失败) 直接抛出: await using 会自动 rollback 未 commit 的事务
+            // 其他异常 (含 DbUpdateException 23505) 显式回滚 + 记日志 + 重抛, 由端点层映射为合适 HTTP 状态码
+            await tx.RollbackAsync(ct);
+            _logger.LogError(ex, "产品更新事务回滚 id={Id}", id);
+            throw;
+        }
+    }
+
+    // ========== 软删除 ==========
+    public async Task DeleteAsync(long id, string? deletedBy, CancellationToken ct = default)
+    {
+        var p = await _db.Products.FirstOrDefaultAsync(x => x.Id == id, ct)
+            ?? throw new KeyNotFoundException($"产品 id={id} 不存在");
+        if (p.IsDiscontinued)
+            throw new InvalidOperationException("产品已下架, 无需重复操作");
+
+        p.IsDiscontinued = true;
+        p.DiscontinuedAt = DateTime.UtcNow;
+        p.UpdatedAt = DateTime.UtcNow;
+        _db.ProductHistory.Add(new ProductHistory
+        {
+            ProductId = id, ChangeType = "discontinue", ChangedBy = deletedBy, ChangedAt = DateTime.UtcNow
+        });
+        await _db.SaveChangesAsync(ct);
+        _logger.LogInformation("产品下架 id={Id} by={By}", id, deletedBy);
+    }
+
+    // ========== 恢复 (从下架恢复) ==========
+    public async Task RestoreAsync(long id, string? restoredBy, CancellationToken ct = default)
+    {
+        var p = await _db.Products.FirstOrDefaultAsync(x => x.Id == id, ct)
+            ?? throw new KeyNotFoundException($"产品 id={id} 不存在");
+        if (!p.IsDiscontinued)
+            throw new InvalidOperationException("产品未下架, 无需恢复");
+
+        p.IsDiscontinued = false;
+        p.DiscontinuedAt = null;
+        p.UpdatedAt = DateTime.UtcNow;
+        _db.ProductHistory.Add(new ProductHistory
+        {
+            ProductId = id, ChangeType = "restore", ChangedBy = restoredBy, ChangedAt = DateTime.UtcNow
+        });
+        await _db.SaveChangesAsync(ct);
+        _logger.LogInformation("产品恢复 id={Id} by={By}", id, restoredBy);
+    }
+
+    // ========== 变更历史 (Day 8.4) ==========
+    /// <summary>
+    /// 获取产品变更历史, 倒序返回 (最新变更在前)
+    /// </summary>
+    // Day 9.2: GetHistoryAsync 加可选筛选参数 (changeType / since / until)
+    // Day 9.3: 返回 ProductHistoryPageDto, 包含 total (筛选后总数, 不受 limit 影响)
+    //   WHY: 前端 "共 N 条" 需要真实总数, 之前 items.Count 会被 limit 截断
+    //   实现: 一次查询, CountAsync(filtered) + ToListAsync(filtered.Take(limit))
+    //   优化: EF Core 会翻译成单条 SQL (SELECT ... ORDER BY ... LIMIT N), count 走另一条聚合
+    // Day 9.4: cursor 字段 (PageCursor DTO), 前端用它翻下一页
+    // Day 9.5: cursor HMAC 签名 (复用 CursorHmac, 防止客户端篡改 (changedAt, id) 越权访问其他产品)
+    public record PageCursor(DateTime ChangedAt, long Id);
+    /// Day 9.5: 解码 cursor (base64url → PageCursor), 验签失败返回 null
+    public PageCursor? DecodeCursor(string? cursor)
+    {
+        if (string.IsNullOrEmpty(cursor)) return null;
+        try
+        {
+            // base64url → base64 (浏览器/URL 安全)
+            var s64 = cursor.Replace('-', '+').Replace('_', '/');
+            switch (s64.Length % 4) { case 2: s64 += "=="; break; case 3: s64 += "="; break; }
+            var bytes = Convert.FromBase64String(s64);
+            var s = System.Text.Encoding.UTF8.GetString(bytes);
+            var parts = s.Split('|');
+            if (parts.Length != 3) return null;  // Day 9.5: 多一段 sig
+            if (!long.TryParse(parts[0], out var ticks)) return null;
+            if (!long.TryParse(parts[1], out var id)) return null;
+            var sig = parts[2];
+            // Day 9.5: 验签 — CursorHmac.VerifyAndExtract 失败抛 ArgumentException
+            //   重要: 编码端 DateTime.Kind 不可控 (Npgsql legacy 模式可能 Utc/Local/Unspecified)
+            //         ISO "o" 格式因 Kind 不同会带 +08:00 / Z / 无后缀, 导致签名不匹配
+            //   解决: 用 raw ticks (Kind 无关) 作为签名输入
+            try
+            {
+                _cursorHmac.VerifyAndExtract($"{ticks}|{id}|{sig}");
+            }
+            catch (ArgumentException ex)
+            {
+                // V24-F99 (P2-3, 规则 6.3): cursor 是签名令牌, 不应大量暴露原文
+                //   仅记录长度 + 前 8 字符前缀 (V2 cursor 格式 "v2:" 开头, 不含敏感数据但属于签名令牌)
+                var cursorPreview = cursor.Length > 8 ? cursor[..8] : cursor;
+                _logger.LogWarning("DecodeCursor 验签失败: cursorPrefix={Prefix} len={Len} err={Err}",
+                    cursorPreview, cursor.Length, ex.Message);
+                return null;
+            }
+            // 还原 DateTime (Kind=Unspecified, 与 Npgsql 读出时一致; Query 内 EF 会正确处理)
+            return new PageCursor(new DateTime(ticks, DateTimeKind.Unspecified), id);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "DecodeCursor 异常: cursor={Cursor}", cursor);
+            return null;
+        }
+    }
+    /// Day 9.5: 编码 cursor (PageCursor → base64url), 附带 HMAC 签名
+    public string EncodeCursor(DateTime changedAt, long id)
+    {
+        // WHY 用 raw ticks 不用 ToString("o"): ISO "o" 格式对 Kind 敏感
+        //   (Local/Utc/Unspecified 输出不同, +08:00 vs Z vs 无后缀)
+        //   raw ticks 唯一标识一个时间点, 跨 Kind 稳定
+        var sig = _cursorHmac.Sign(changedAt.Ticks.ToString(), id.ToString());
+        var s = string.Format("{0}|{1}|{2}", changedAt.Ticks, id, sig);
+        return Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(s))
+            .TrimEnd('=').Replace('+', '-').Replace('/', '_');
+    }
+
+    public async Task<ProductHistoryPageDto> GetHistoryAsync(
+        long productId,
+        int limit = 50,
+        string? changeType = null,
+        DateTime? since = null,
+        DateTime? until = null,
+        string? cursor = null,
+        CancellationToken ct = default)
+    {
+        _logger.LogInformation("GetHistoryAsync 入口 id={Id} limit={Limit} type={Type} since={Since} until={Until} cursor={Cursor}",
+            productId, limit, changeType, since, until, cursor);
+        // 验证产品存在 (避免对已删除产品查询历史)
+        var exists = await _db.Products.AsNoTracking()
+            .AnyAsync(x => x.Id == productId, ct);
+        if (!exists)
+            throw new KeyNotFoundException($"产品 id={productId} 不存在");
+        // Day 9.4: cursor → keyset 谓词 (changed_at, id) 严格小于上一批末尾
+        //   keyset pagination 优势: O(1) 深度翻页, 不受 OFFSET 性能下降影响
+        //   倒序排列用 "(changed_at, id) < (cursorChangedAt, cursorId)"
+        var cursorPos = DecodeCursor(cursor);
+        // 累积式查询链, 用返回值接住 query = query.Where(...) 让 EF 翻译正确
+        IQueryable<ProductHistory> query = _db.ProductHistory.AsNoTracking()
+            .Where(h => h.ProductId == productId);
+        if (!string.IsNullOrWhiteSpace(changeType))
+            query = query.Where(h => h.ChangeType == changeType);
+        if (since.HasValue)
+            query = query.Where(h => h.ChangedAt >= since.Value);
+        if (until.HasValue)
+            query = query.Where(h => h.ChangedAt <= until.Value);
+        if (cursorPos != null)
+            query = query.Where(h => h.ChangedAt < cursorPos.ChangedAt
+                || (h.ChangedAt == cursorPos.ChangedAt && h.Id < cursorPos.Id));
+        // Day 9.3: total 在 Take 前计算 (不受 limit 影响)
+        //   EF 8 + Npgsql: CountAsync + ToListAsync 可并行执行 (无共享状态)
+        var total = await query.CountAsync(ct);
+        // Day 9.4: 多取 1 条, 判断是否有下一页
+        var items = await query
+            .OrderByDescending(h => h.ChangedAt).ThenByDescending(h => h.Id)
+            .Take(limit + 1)
+            .Select(h => new ProductHistoryItemDto(
+                h.Id,
+                h.ProductId,
+                h.ChangeType,
+                h.ChangedBy,
+                h.ChangedAt,
+                h.ChangedFields
+            ))
+            .ToListAsync(ct);
+        string? nextCursor = null;
+        if (items.Count > limit)
+        {
+            items.RemoveAt(items.Count - 1);
+            var last = items[^1];
+            nextCursor = EncodeCursor(last.ChangedAt, last.Id);
+        }
+        return new ProductHistoryPageDto(total, limit, changeType, since, until, items, nextCursor);
+    }
+
+    // ========== 详情 ==========
+    public async Task<ProductDetailDto> GetByIdAsync(long id, CancellationToken ct = default)
+    {
+        var p = await _db.Products.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == id, ct)
+            ?? throw new KeyNotFoundException($"产品 id={id} 不存在");
+
+        // V2 Task 2.3.5: xrefs 按 brand_sort_order → sort_order → oem_no_3 排序
+        //   WHY: 详情页 crossReferences 表格直接展示, 前端不再二次排序
+        //   与 MeiliSearchProvider.BuildMr1DocumentAsync / PublicProductController.GetSiblingOem3 排序口径一致
+        var xrefs = await (
+            from x in _db.CrossReferences.AsNoTracking()
+            where x.ProductId == id
+            // V2: brand_sort_order LEFT JOIN (brand 软删除时按 int.MaxValue 兜底排末尾)
+            orderby (_db.XrefOemBrands
+                        .Where(b => b.Brand == x.OemBrand && b.DeletedAt == null)
+                        .Select(b => (int?)b.SortOrder)
+                        .FirstOrDefault() ?? int.MaxValue),
+                    x.SortOrder,
+                    x.OemNo3
+            select new XrefInfo(x.Id, x.ProductName1, x.OemBrand, x.OemNo3, x.Oem2, x.SortOrder, x.MachineType, x.IsPublished, x.RowVersion)
+        ).ToListAsync(ct);
+
+        var apps = await _db.MachineApplications.AsNoTracking()
+            .Where(m => m.ProductId == id)
+            .Select(m => new MachineAppInfo(
+                m.Id, m.MachineBrand, m.MachineModel, m.ModelName,
+                m.EngineBrand, m.EngineType, m.EngineEnergy,
+                m.ProductionDateStart, m.ProductionDateEnd,
+                m.Power, m.SerialNumberFrom, m.SerialNumberTo,
+                m.CarBodyType, m.Series,
+                m.Co2EmissionStandard, m.TransmissionType,
+                m.EngineDisplacement, m.NumberOfCylinders,
+                m.Gvwr, m.Tonnage, m.GeographicArea,
+                m.ChassisType, m.EngineModel,
+                m.CabinType, m.Capacity, m.EngineSerialNumber))
+            .ToListAsync(ct);
+
+        // P3.3 (Task 11): 加载产品图片 (主图 slot 1 + 副图 slot 2-6)
+        var imageRows = await _db.ProductImages.AsNoTracking()
+            .Where(i => i.ProductId == id)
+            .OrderBy(i => i.Slot)
+            .ToListAsync(ct);
+        var imageInfos = new List<ProductImageInfo>(imageRows.Count);
+        // P1-4.1: 并行生成预签名 URL (Task.WhenAll), 6 张图从串行 600ms+ 降到并行 200ms 内
+        //   WHY: 原 foreach 串行 await, 单张 ~100ms × 6 = 600ms+; 并行后总耗时 ≈ max(单张) ≈ 100-200ms
+        //   per-image try-catch 保留: 单张 OSS 失败不影响其他图, 与原 foreach 语义一致
+        //   空集合安全: Task.WhenAll(空 IEnumerable) 返回空数组, 不抛 NRE
+        Task<string> GetUrlSafe(string? key)
+        {
+            if (_storage == null || string.IsNullOrEmpty(key)) return Task.FromResult("");
+            // 🔧 fix(审查): 统一代理路径 (同 AdminProductImageService — MinIO 预签名 URL 浏览器不可达 → 裂图)
+            try { return Task.FromResult($"/api/public/images/{key}"); }
+            catch (Exception ex) { _logger.LogWarning(ex, "image proxy url failed: key={Key}", key); return Task.FromResult(""); }
+        }
+        var urls = await Task.WhenAll(imageRows.Select(img => GetUrlSafe(img.ImageKey)));
+        for (int i = 0; i < imageRows.Count; i++)
+        {
+            var img = imageRows[i];
+            imageInfos.Add(new ProductImageInfo(
+                img.Id, img.ProductId, img.Slot, img.ImageKey, urls[i],
+                img.FileSize, img.ContentType, img.Width, img.Height,
+                img.IsPrimary, img.UploadedAt, img.UploadedBy,
+                img.OemNo3, img.ImageRole));
+        }
+
+        return new ProductDetailDto(
+            p.Id, p.OemNoDisplay, p.Oem2, p.Mr1,
+            p.ProductName1, p.ProductName2, p.Type, p.IsPublished, p.Remark,
+            p.RowVersion,  // E2E BD.3 修复 v2: 暴露 xmin 给前端, PUT 时带回实现乐观锁
+            p.D1Mm, p.D2Mm, p.D3Mm, p.D4Mm,
+            p.H1Mm, p.H2Mm, p.H3Mm, p.H4Mm,
+            p.D7Thread, p.D8Thread, p.NoCheckValves, p.NoBypassValves,
+            p.NoCheckValvesRaw, p.NoBypassValvesRaw,
+            p.Media, p.MediaModel,
+            p.BypassValveLr, p.BypassValveHr,
+            p.Efficiency1, p.Efficiency2, p.BypassPressure,
+            p.CollapsePressureBar,
+            p.BypassValveLrRaw, p.BypassValveHrRaw, p.BypassPressureRaw, p.CollapsePressureBarRaw,
+            p.SealingMaterial, p.TempRange,
+            p.QtyPerCarton, p.WeightKgs,
+            p.CartonLengthMm, p.CartonWidthMm, p.CartonHeightMm,
+            p.MasterBoxQty, p.MasterBoxWeightKgs,
+            p.MasterBoxLengthMm, p.MasterBoxWidthMm, p.MasterBoxHeightMm,
+            p.VolumePerCartonM3,
+            p.IsDiscontinued, p.CreatedAt, p.UpdatedAt,
+            xrefs, apps, imageInfos
+        );
+    }
+
+    // ========== 列表分页 (Day 8.1 简单入口, 保持向后兼容) ==========
+    public async Task<(List<ProductListItem> items, long total)> ListAsync(
+        int page, int pageSize, string? type, string? keyword, bool includeDiscontinued, CancellationToken ct = default)
+    {
+        // Day 8.2: 委托给 SearchAsync 走统一管线, 避免逻辑双轨
+        var req = new AdminProductSearchRequest
+        {
+            Page = page,
+            PageSize = pageSize,
+            Type = type,
+            // keyword 拆给 Oem2/Mr1 模糊匹配 (历史行为)
+            Oem2 = keyword,
+            Mr1 = keyword,
+            IncludeDiscontinued = includeDiscontinued
+        };
+        // Day 8.2.2 + Day 8.3: ListAsync 旧 API 不暴露 cursor 和 countModeUsed
+        var (items, total, _, _) = await SearchAsync(req, ct);
+        return (items, total);
+    }
+
+    // ========== 高级搜索 (Day 8.2, 17 字段 + 尺寸范围 + 批量 OEM) ==========
+    //   设计:
+    //     - 文本字段走 ILIKE '%kw%' (PostgreSQL 不区分大小写, 1M 数据下索引可用)
+    //     - 尺寸字段走目标值 ± SizeTolerance, 同时支持 Min/Max 区间
+    //     - 批量 OEM 走 OR 匹配 (任一命中)
+    //     - 排序走白名单 (防 SQL 注入)
+    //     - 机型字段走 EXISTS 子查询, 避免 N+1
+    public async Task<(List<ProductListItem> items, long total, string? nextCursor, string countModeUsed)> SearchAsync(
+        AdminProductSearchRequest req, CancellationToken ct = default)
+    {
+        var page = Math.Max(1, req.Page ?? 1);
+        var pageSize = Math.Clamp(req.PageSize ?? 50, 1, 200);
+        var tol = Math.Clamp(req.SizeTolerance ?? 5m, 0m, 50m);
+        var includeDiscontinued = req.IncludeDiscontinued ?? false;
+        var sortDesc = req.SortDesc ?? true;
+        // Day 8.2.1: count 模式 (exact 默认, estimated/none 走 PG 统计 + 跳过 COUNT)
+        //   归一化走 DTO 扩展方法, Service + Endpoint 共享同一逻辑 (避免降级行为不一致)
+        var countMode = req.NormalizeCountMode();
+        // Day 8.2.2: paging 模式 (offset 默认, cursor 走 keyset 二元组)
+        var pagingMode = req.NormalizePagingMode();
+        DateTime? cursorUpdatedAt = null;
+        long? cursorId = null;          // keyset 排序仍用 Id (数据库主键, 数值排序稳定)
+        string? cursorMr1 = null;       // V2 Task 4.6: cursor 签名载荷改用 mr1 (不暴露内部 Id)
+        if (pagingMode == "cursor")
+        {
+            // cursor 模式强制 sortBy=updated_at DESC (keyset 要求有序键, 忽略客户端 sortBy)
+            // cursor 解析: "<ISO8601 updatedAt>|<id>|<sig16>", 空 = 首页
+            //   Day 8.3: sig16 = HMAC-SHA256(secret, "<ISO8601>|<id>") 截断 16 字符
+            //   验证失败 → 抛 ArgumentException (Endpoint 转 400)
+            //
+            //   ⚠️ Npgsql EnableLegacyTimestampBehavior 怪癖 (实测验证):
+            //     Npgsql 收到 DateTime {Kind=Utc, value=T UTC} 时, 直接用 value 部分 (T),
+            //     **序列化为无时区字符串 'T'** 发给 PG, PG 按 session 时区 (CST=UTC+8) 解释为 timestamptz.
+            //     实际存储 = T Local 解释 - 8h.
+            //   影响: 整个项目 DateTime.UtcNow 写入 DB 都差 8h (e.g. 写 05:15 UTC, DB 存 21:15 UTC)
+            //   抵消策略: cursor 解析后调 .ToLocalTime() 把 Kind 改 Local, value 同步加 8h,
+            //     这样 Npgsql 序列化的字符串 + PG CST 解释 = 抵消回到原 UTC 值
+            //
+            //   示例: cursor 字符串 "2026-06-30T21:22:17Z" (21:22 UTC)
+            //     DateTime.TryParse + RoundtripKind → DateTime {Kind=Utc, value=21:22:17 UTC}
+            //     .ToLocalTime() → DateTime {Kind=Local, value=05:22:17 +08:00}
+            //     Npgsql 发 '2026-07-01 05:22:17' (无时区)
+            //     PG CST 解释 → 2026-07-01 05:22:17 CST = 2026-06-30 21:22:17 UTC ✓
+            if (!string.IsNullOrEmpty(req.Cursor))
+            {
+                // Day 8.3: HMAC 验签 + 提取 updatedAt/mr1
+                // V2 Task 4.6: cursor 载荷从 id 改为 mr1, 验签返回 (iso, mr1)
+                //   仍需 id 用于 keyset 排序: 通过 mr1 反查 Product.Id (单次查询, O(1) 索引)
+                // V24-F24 (spec S3-13/S3-14): 公开搜索 cursor 升级到 V2 格式
+                //   - VerifyAndExtractV2: 5 段格式 + v2: 前缀 + 24h TTL + Base64Url + pageNum
+                //   - 旧格式 (无 v2: 前缀) 直接拒绝 (LEGACY_CUTOFF_TS=2025-07-25 已过)
+                //   - pageNum 用于防深翻页 DoS (> 1000 拒绝), 此处忽略返回值 (keyset 不需要页码)
+                var (iso, cmr1, _) = _cursorHmac.VerifyAndExtractV2(req.Cursor);
+                if (!DateTime.TryParse(iso, null,
+                    System.Globalization.DateTimeStyles.RoundtripKind,
+                    out var cdt))
+                {
+                    throw new ArgumentException($"cursor ISO8601 段解析失败, 实际: {iso}");
+                }
+                // 强制按 UTC 解释: 客户端传的 cursor 字符串总是带 Z (UTC) 后缀
+                if (cdt.Kind == DateTimeKind.Local)
+                    cdt = cdt.ToUniversalTime();
+                else if (cdt.Kind == DateTimeKind.Unspecified)
+                    cdt = DateTime.SpecifyKind(cdt, DateTimeKind.Utc);
+                // 抵消 Npgsql legacy 行为的 8h 偏差
+                cdt = cdt.ToLocalTime();
+                cursorUpdatedAt = cdt;
+                cursorMr1 = cmr1;
+                // V2 Task 4.6: 通过 mr1 反查 Product.Id 用于 keyset 排序
+                //   WHY: keyset 二元组 (UpdatedAt, Id) 数值排序稳定, mr1 字符串字典序在变长 mr1 下不稳定
+                //   O(1) 索引查询: mr1 已有 unique 索引, 1 次单行查找
+                var pid = await _db.Products.AsNoTracking()
+                    .Where(p => p.Mr1 == cmr1)
+                    .Select(p => (long?)p.Id)
+                    .FirstOrDefaultAsync(ct);
+                if (pid == null)
+                    throw new ArgumentException($"cursor mr1={cmr1} 对应产品不存在, 可能已被删除");
+                cursorId = pid.Value;
+            }
+        }
+
+        var query = _db.Products.AsNoTracking().AsQueryable();
+
+        // 软删除
+        if (!includeDiscontinued)
+            query = query.Where(p => !p.IsDiscontinued);
+
+        // 发布状态
+        if (req.IsPublished.HasValue)
+            query = query.Where(p => p.IsPublished == req.IsPublished.Value);
+
+        // 文本字段 (单值 ILIKE)
+        //   Day 10+ P0.1: 3 参重载 + ESCAPE '\\' 防止下划线/百分号被当通配符, 用 EscapeLikePattern 统一转义
+        if (!string.IsNullOrWhiteSpace(req.ProductName1))
+            query = query.Where(p => p.ProductName1 != null && EF.Functions.ILike(p.ProductName1, $"%{req.ProductName1.EscapeLikePattern()}%", "\\"));
+        if (!string.IsNullOrWhiteSpace(req.ProductName2))
+            query = query.Where(p => p.ProductName2 != null && EF.Functions.ILike(p.ProductName2, $"%{req.ProductName2.EscapeLikePattern()}%", "\\"));
+        if (!string.IsNullOrWhiteSpace(req.Type))
+            query = query.Where(p => p.Type == req.Type);
+        if (!string.IsNullOrWhiteSpace(req.Mr1))
+            query = query.Where(p => p.Mr1 != null && EF.Functions.ILike(p.Mr1, $"%{req.Mr1.EscapeLikePattern()}%", "\\"));
+        if (!string.IsNullOrWhiteSpace(req.Oem2))
+        {
+            // P2-1 修复: Contains → ILike + EscapeLikePattern, 防止 _ 和 % 被当通配符
+            //   WHY: string.Contains 翻译为 LIKE '%x%' 无 ESCAPE, 用户输入 100_ 会误命中 100A/100B
+            var kwOem2 = req.Oem2.EscapeLikePattern();
+            query = query.Where(p =>
+                EF.Functions.ILike(p.OemNoDisplay, $"%{kwOem2}%", "\\")
+                || (p.Oem2 != null && EF.Functions.ILike(p.Oem2, $"%{kwOem2}%", "\\")));
+        }
+        // Day 8.2.2: 合并 xref 2 个 EXISTS (OemBrand + Oem3Batch) → 1 个 EXISTS
+        //   性能依据: 1M 数据下 6 个独立 EXISTS → 2-5s, 合并后 1 个 EXISTS 走同一索引扫描
+        //   1M xref 行 OemBrand 等值 + Oem3 等值 + product_id = p.id 索引覆盖
+        //   合并后 1 个 EXISTS 利用 (product_id, oem_brand, oem_no_3) 联合索引
+        //   对比: 5 个 EXISTS 走 5 次嵌套循环, 合并后 1 次循环内 5 个条件短路求值
+        var oemBrand = req.OemBrand;
+        string[]? oem3List = null;
+        if (!string.IsNullOrWhiteSpace(req.Oem3Batch))
+        {
+            oem3List = req.Oem3Batch.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (oem3List.Length == 0) oem3List = null;
+        }
+        if (!string.IsNullOrWhiteSpace(oemBrand) || oem3List != null)
+        {
+            var brand = oemBrand;
+            var oems3 = oem3List;
+            query = query.Where(p => _db.CrossReferences.Any(x =>
+                x.ProductId == p.Id
+                && (brand == null || x.OemBrand == brand)
+                && (oems3 == null || oems3.Any(o => x.OemNo3 == o))));
+        }
+        if (!string.IsNullOrWhiteSpace(req.MediaName))
+            query = query.Where(p => p.Media != null && EF.Functions.ILike(p.Media, $"%{req.MediaName.EscapeLikePattern()}%", "\\"));
+        if (!string.IsNullOrWhiteSpace(req.MediaModel))
+            query = query.Where(p => p.MediaModel != null && EF.Functions.ILike(p.MediaModel, $"%{req.MediaModel.EscapeLikePattern()}%", "\\"));
+        // Day 8.2.1: 补齐规格"前端展示内容"分区 5 文本字段
+        if (!string.IsNullOrWhiteSpace(req.SealingMaterial))
+            query = query.Where(p => p.SealingMaterial != null && EF.Functions.ILike(p.SealingMaterial, $"%{req.SealingMaterial.EscapeLikePattern()}%", "\\"));
+        if (!string.IsNullOrWhiteSpace(req.Efficiency1))
+            query = query.Where(p => p.Efficiency1 != null && EF.Functions.ILike(p.Efficiency1, $"%{req.Efficiency1.EscapeLikePattern()}%", "\\"));
+
+        // 批量 OEM (Excel 多行复制黏贴)
+        if (!string.IsNullOrWhiteSpace(req.Oem2Batch))
+        {
+            var oems = req.Oem2Batch.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (oems.Length > 0)
+            {
+                // V24-F16: 删除 NormalizeOem 调用, 直接用原始 OEM 值查询 (spec Task 0.3.10)
+                //   派生规则已统一为 mr_1 原值, 此处查询改用 OemNoDisplay (原 OEM 2 原值)
+                query = query.Where(p => oems.Contains(p.OemNoDisplay));
+            }
+        }
+
+        // 尺寸范围 (D1-D4, H1-H4) + 螺纹 (D7/D8)
+        // WHY 接收返回值: ApplySizeFilter 内部 query = query.Where(...) 重新赋值, 必须接收回新 IQueryable 才生效
+        query = ApplySizeFilter(query, "D1Mm", req.D1Min, req.D1Max, tol);
+        query = ApplySizeFilter(query, "D2Mm", req.D2Min, req.D2Max, tol);
+        query = ApplySizeFilter(query, "D3Mm", req.D3Min, req.D3Max, tol);
+        query = ApplySizeFilter(query, "D4Mm", req.D4Min, req.D4Max, tol);
+        query = ApplySizeFilter(query, "H1Mm", req.H1Min, req.H1Max, tol);
+        query = ApplySizeFilter(query, "H2Mm", req.H2Min, req.H2Max, tol);
+        query = ApplySizeFilter(query, "H3Mm", req.H3Min, req.H3Max, tol);
+        query = ApplySizeFilter(query, "H4Mm", req.H4Min, req.H4Max, tol);
+        if (!string.IsNullOrWhiteSpace(req.D7Thread))
+            query = query.Where(p => p.D7Thread != null && EF.Functions.ILike(p.D7Thread, $"%{req.D7Thread.EscapeLikePattern()}%", "\\"));
+        if (!string.IsNullOrWhiteSpace(req.D8Thread))
+            query = query.Where(p => p.D8Thread != null && EF.Functions.ILike(p.D8Thread, $"%{req.D8Thread.EscapeLikePattern()}%", "\\"));
+
+        // Day 8.2.2: 合并 machine_application 5 个 EXISTS → 1 个 EXISTS
+        //   性能依据: 5M machine_application 行下 5 个 EXISTS 走 5 次 product_id 索引扫描
+        //   合并后 1 次扫描, 5 个条件短路求值 (任一条件 NULL 跳过该判断)
+        //   注意点: EF Core 表达式树翻译: NULL 字段比较走 `mb == null || m.MachineBrand == mb` 三元短路
+        var mb = req.MachineBrand;
+        var mm = req.MachineModel;
+        var mn = req.ModelName;
+        var eb = req.EngineBrand;
+        var et = req.EngineType;
+        if (!string.IsNullOrWhiteSpace(mb) || !string.IsNullOrWhiteSpace(mm)
+            || !string.IsNullOrWhiteSpace(mn) || !string.IsNullOrWhiteSpace(eb)
+            || !string.IsNullOrWhiteSpace(et))
+        {
+            query = query.Where(p => _db.MachineApplications.Any(m =>
+                m.ProductId == p.Id
+                && (mb == null || m.MachineBrand == mb)
+                && (mm == null || m.MachineModel == mm)
+                && (mn == null || m.ModelName == mn)
+                && (eb == null || m.EngineBrand == eb)
+                && (et == null || m.EngineType == et)));
+        }
+
+        // 排序 (白名单, 防 SQL 注入)
+        //   WHY 强制加 Id 次级排序:
+        //     历史数据 updated_at 时区错乱 (Npgsql legacy 模式 + 老 ETL Unspecified 时间
+        //     与新 DateTime.UtcNow 混存), 单按 updated_at 排序新数据可能排到末位
+        //     加 Id DESC 次级排序保证新数据 (id 更大) 总排前, 提升测试稳定性 + 翻页体验
+        //   Day 8.2.2: cursor 模式强制 sortBy=updated_at DESC (keyset 要求有序键)
+        string sortBy;
+        if (pagingMode == "cursor")
+        {
+            sortBy = "updated_at";
+            sortDesc = true;  // cursor 模式固定 DESC
+        }
+        else
+        {
+            sortBy = ProductListColumns.SortWhitelist.Contains(req.SortBy ?? "")
+                ? req.SortBy!.ToLowerInvariant()
+                : "updated_at";
+        }
+        query = sortBy switch
+        {
+            "id" => sortDesc
+                ? query.OrderByDescending(p => p.Id)
+                : query.OrderBy(p => p.Id),
+            "oem_no_display" => sortDesc
+                ? query.OrderByDescending(p => p.OemNoDisplay).ThenByDescending(p => p.Id)
+                : query.OrderBy(p => p.OemNoDisplay).ThenByDescending(p => p.Id),
+            "type" => sortDesc
+                ? query.OrderByDescending(p => p.Type).ThenByDescending(p => p.Id)
+                : query.OrderBy(p => p.Type).ThenByDescending(p => p.Id),
+            "mr1" => sortDesc
+                ? query.OrderByDescending(p => p.Mr1).ThenByDescending(p => p.Id)
+                : query.OrderBy(p => p.Mr1).ThenByDescending(p => p.Id),
+            _ => sortDesc
+                ? query.OrderByDescending(p => p.UpdatedAt).ThenByDescending(p => p.Id)
+                : query.OrderBy(p => p.UpdatedAt).ThenByDescending(p => p.Id)
+        };
+
+        // Day 8.2.2: cursor 模式 keyset 二元组 (updated_at, id) 严格小于游标
+        //   等价于 SQL: WHERE (updated_at, id) < (cursor.UpdatedAt, cursor.Id) 按 DESC 排序
+        if (pagingMode == "cursor" && cursorUpdatedAt.HasValue && cursorId.HasValue)
+        {
+            var cdt = cursorUpdatedAt.Value;
+            var cid = cursorId.Value;
+            // EF 翻译: updated_at < @cdt OR (updated_at = @cdt AND id < @cid)
+            query = query.Where(p => p.UpdatedAt < cdt || (p.UpdatedAt == cdt && p.Id < cid));
+        }
+
+        // Day 8.2.1 + Day 8.3: count 模式分支 + 自动降级
+        //   - exact: LongCountAsync 准确值 (默认, 兼容老调用)
+        //   - estimated: 取 PG reltuples 统计, 跳过 17 字段 EXISTS 的 COUNT 代价
+        //     误差 ±20% 适合"约 N 条"提示, 1M 数据下 50ms vs 5s
+        //   - none: total=-1, 前端用 hasMore 提示
+        //   Day 8.3 自动降级:
+        //     exact 模式 LongCountAsync 走 17 字段 EXISTS 嵌套, 慢查询可能 2-5s
+        //     用 Task.WhenAny + Task.Delay 触发超时, 超时后切到 estimated
+        //     countModeUsed 返回前端实际用的模式 (用于埋点 + UI 提示 "约 N 条")
+        var countTimeoutMs = Math.Clamp(req.CountTimeoutMs ?? 500, 0, 10_000);
+        long total;
+        string countModeUsed = countMode;
+        if (countMode == "none")
+        {
+            total = -1;
+        }
+        else if (countMode == "estimated")
+        {
+            total = await GetEstimatedCountAsync(ct);
+        }
+        else
+        {
+            // exact 模式: 超时降级
+            //   WHY 不传 ct 给 countTask: 超时后 LongCountAsync 还在跑, 不要让它跟着请求取消
+            //   (强制 cancel 会让 PG 中断查询, 浪费已经投入的资源)
+            //   实际效果: 超时后请求立刻返回 estimated 值, LongCountAsync 在后台跑完丢弃
+            if (countTimeoutMs == 0)
+            {
+                total = await query.LongCountAsync(ct);
+            }
+            else
+            {
+                // Day 8.3 修复: 用独立 CancellationTokenSource 让超时后主动 cancel EF query,
+                //   否则后台 LongCountAsync 继续跑占 PG 连接 (会拖垮生产连接池)
+                //   竞态无害: countTask 正好完成 → await 拿结果走 exact; 超时触发 → 抛 OCE 走 estimated
+                using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                cts.CancelAfter(countTimeoutMs);
+                try
+                {
+                    total = await query.LongCountAsync(cts.Token);
+                }
+                catch (OperationCanceledException) when (cts.IsCancellationRequested && !ct.IsCancellationRequested)
+                {
+                    _logger.LogWarning("exact count 超时 {TimeoutMs}ms → 降级 estimated, type={Type} mb={Mb} oem={Oem}",
+                        countTimeoutMs, req.Type, req.MachineBrand, req.Oem2);
+                    total = await GetEstimatedCountAsync(ct);
+                    countModeUsed = "estimated";
+                }
+            }
+        }
+        // Day 8.2.2: 顺序很关键 - Skip 必须放在 Take 之前
+        //   错误顺序: Take(pageSize+1) 然后 Skip((page-1)*pageSize) 会导致 page>1 时跳过 pageSize 条
+        //     拿 pageSize+1 - (page-1)*pageSize 条, page=2 pageSize=100 时只剩 1 条
+        //   正确顺序: 先 Skip 再 Take, EF 翻译成 SQL: LIMIT (pageSize+1) OFFSET (page-1)*pageSize
+        //   注意: cursor 模式不需要 Skip (keyset 已经用 updated_at < cdt 跳过)
+        if (pagingMode == "offset" && page > 1)
+        {
+            query = query.Skip((page - 1) * pageSize);
+        }
+        var items = await query
+            .Take(pageSize + 1)  // 多取 1 条用于探测下一页 (cursor/offset 模式都可用)
+            .Select(p => new ProductListItem(
+                p.Id, p.OemNoDisplay, p.Oem2, p.Mr1,
+                p.ProductName1, p.ProductName2, p.Type, p.IsPublished, p.IsDiscontinued,
+                p.ImageKey, null, p.UpdatedAt))
+            .ToListAsync(ct);
+
+        // Day 8.2.2: 探测下一页 + 构造 nextCursor
+        //   拿 pageSize+1 条, 如果 > pageSize 表示还有下一页, 弹出末条 + 构造 cursor
+        //   注意: ListProductItem 是 record, 取最后一条的 (UpdatedAt, Id) 作为下一页起点
+        string? nextCursor = null;
+        if (items.Count > pageSize)
+        {
+            items.RemoveAt(items.Count - 1);
+            if (pagingMode == "cursor")
+            {
+                var last = items[^1];
+                // BD.24 修复: Day 9.9 的 SpecifyKind 假设错误
+                //   实际: PG 列类型 = timestamptz, Npgsql.EnableLegacyTimestampBehavior 读取后
+                //         Kind=Local, value 是 session timezone (CST) 字面值, 不是真正的 UTC
+                //   修复: 用 ToUniversalTime() 把 CST 字面值转换为真正的 UTC (减 8h)
+                //   验证: 修复前 cursor iso=01:39:42Z (CST 字面值+Z), 解码 ToLocalTime 加 8h=09:39:42
+                //         keyset p.UpdatedAt(01:39:42) < cdt(09:39:42) 永远 TRUE → 翻页返回相同数据
+                //         修复后 cursor iso=17:39:42Z (真正 UTC), 解码 ToLocalTime 加 8h=01:39:42
+                //         keyset p.UpdatedAt(01:39:42) < cdt(01:39:42) = FALSE → 正确翻页
+                var lastUtc = last.UpdatedAt.ToUniversalTime();
+                // Day 8.2.2 修复: PG timestamptz 是微秒精度 (6 位), .fff 毫秒精度会丢精度导致下一页漏数据
+                // 同一毫秒内多次写入 (e.g. 5 个产品间隔 0.05s) 会命中同一毫秒, .fff 截断后游标"跳过"这些行
+                // Day 8.3: cursor 末尾追加 HMAC 签名, 防止客户端篡改 updatedAt/id 越权访问
+                var iso = $"{new DateTimeOffset(lastUtc, TimeSpan.Zero):yyyy-MM-ddTHH:mm:ss.ffffffZ}";
+                // V2 Task 4.6: cursor 载荷从 long Id 改为 string Mr1 (不暴露内部自增 Id)
+                //   WHY: mr1 是 V2 对外主键, 客户端可见; Id 是内部自增, 暴露会泄露产品创建顺序/数量
+                //   keyset 排序仍用 Id (查询内通过 mr1 反查), 但 cursor 字符串只含 mr1
+                var lastMr1 = last.Mr1 ?? throw new InvalidOperationException($"产品 id={last.Id} 的 Mr1 为空, 无法生成 cursor (V2 要求 Mr1 必填)");
+                // V24-F24 (spec S3-14): 公开搜索 cursor 升级到 V2 格式
+                //   - SignV2 返回完整 cursor 字符串 (v2:exp|tsB64|mr1B64|pageNum|sig)
+                //   - pageNum = 当前页 + 1 (cursor 用于加载下一页, 携带下一页页码用于防深翻页)
+                //   - 旧 Sign + 手动拼接 3 段格式已废弃
+                var nextPageNum = (req.Page ?? 1) + 1;
+                nextCursor = _cursorHmac.SignV2(iso, lastMr1, nextPageNum);
+            }
+        }
+        return (items, total, nextCursor, countModeUsed);
+    }
+
+    // ========== 估算 count (Day 8.3 重构) ==========
+    //   用 PG reltuples 统计, O(1), 误差 ±20% 适合"约 N 条"提示
+    //   兜底: reltuples 不可用时退到 COUNT(*)
+    private async Task<long> GetEstimatedCountAsync(CancellationToken ct)
+    {
+        try
+        {
+            // 优先用基础表的 reltuples (无过滤, O(1))
+            return await _db.Database
+                .SqlQueryRaw<long>("SELECT COALESCE(c.reltuples::bigint, 0) FROM pg_class c WHERE c.relname = 'products'")
+                .FirstOrDefaultAsync(ct);
+        }
+        catch
+        {
+            // 兜底: reltuples 不可用时退到 COUNT(*) 准确值
+            return await _db.Products.LongCountAsync(ct);
+        }
+    }
+
+    // ========== 尺寸范围应用 (Day 8.2, 表达式树拼接, EF 可翻译) ==========
+    //   规则:
+    //     - 同时给 Min+Max: 区间 [Min-Tol, Max+Tol] 命中
+    //     - 只给 Min: [Min-Tol, +∞) 命中
+    //     - 只给 Max: (-∞, Max+Tol] 命中
+    //   WHY 显式 HasValue && Value 比较:
+    //     EF Core 8 对 nullable decimal 的直接比较翻译不稳定 (实测 silently 丢掉 WHERE 条件),
+    //     拆成 HasValue 检查 + Value 比较是官方推荐方式, 保证生成 IS NOT NULL 守卫
+    //   WHY 用字符串属性名 + 反射: 8 个尺寸字段共用同一逻辑, 反射拼装 Expression
+    //     避免 8 处重复代码
+    private static IQueryable<Product> ApplySizeFilter(
+        IQueryable<Product> query,
+        string propName,
+        decimal? min, decimal? max, decimal tol)
+    {
+        if (!min.HasValue && !max.HasValue) return query;
+        var p = System.Linq.Expressions.Expression.Parameter(typeof(Product), "p");
+        var prop = System.Linq.Expressions.Expression.Property(p, propName);
+        if (min.HasValue)
+        {
+            var lo = min.Value - tol;
+            var hasValue = System.Linq.Expressions.Expression.Property(prop, "HasValue");
+            var value = System.Linq.Expressions.Expression.Property(prop, "Value");
+            var ge = System.Linq.Expressions.Expression.GreaterThanOrEqual(value, System.Linq.Expressions.Expression.Constant(lo, typeof(decimal)));
+            var body = System.Linq.Expressions.Expression.AndAlso(hasValue, ge);
+            query = query.Where(System.Linq.Expressions.Expression.Lambda<Func<Product, bool>>(body, p));
+        }
+        if (max.HasValue)
+        {
+            var hi = max.Value + tol;
+            var hasValue = System.Linq.Expressions.Expression.Property(prop, "HasValue");
+            var value = System.Linq.Expressions.Expression.Property(prop, "Value");
+            var le = System.Linq.Expressions.Expression.LessThanOrEqual(value, System.Linq.Expressions.Expression.Constant(hi, typeof(decimal)));
+            var body = System.Linq.Expressions.Expression.AndAlso(hasValue, le);
+            query = query.Where(System.Linq.Expressions.Expression.Lambda<Func<Product, bool>>(body, p));
+        }
+        return query;
+    }
+
+    // ========== 批量对比 (Day 8.2, 规格 对比界面 6 个产品) ==========
+    //   设计:
+    //     - 接受 1-6 个产品 id, 按传入顺序返回 (不按 id 排序)
+    //     - 找不到的 id 跳过, 不抛异常 (前端用空白卡片占位)
+    //     - 字段按规格 R27 顺序: MR.1 | OEM 2/3 | H1-H4 | D1-D4 | D7/D8 | Media | 包装 | 体积
+    //   WHY 走单次 query + InMemory 分组: 1-6 个 id 用 EF 一句 SQL 解决, 避免 N+1
+    public async Task<List<ProductDetailDto>> CompareAsync(
+        IReadOnlyList<long> ids, AdminProductImageService? imgSvc, CancellationToken ct = default)
+    {
+        if (ids.Count == 0) return new List<ProductDetailDto>();
+        if (ids.Count > 6) throw new ArgumentException("对比最多 6 个产品");
+
+        // 单次查 products
+        var products = await _db.Products.AsNoTracking()
+            .Where(p => ids.Contains(p.Id))
+            .ToListAsync(ct);
+        // 保持传入顺序
+        var ordered = ids
+            .Select(id => products.FirstOrDefault(p => p.Id == id))
+            .Where(p => p != null)
+            .Cast<Product>()
+            .ToList();
+
+        // 单次查 xref + apps
+        var idList = ordered.Select(p => p.Id).ToList();
+        // V2 Task 2.3.5: xrefs 按 brand_sort_order → sort_order → oem_no_3 排序 (列表页批量)
+        var xrefs = await (
+            from x in _db.CrossReferences.AsNoTracking()
+            where idList.Contains(x.ProductId)
+            orderby (_db.XrefOemBrands
+                        .Where(b => b.Brand == x.OemBrand && b.DeletedAt == null)
+                        .Select(b => (int?)b.SortOrder)
+                        .FirstOrDefault() ?? int.MaxValue),
+                    x.SortOrder,
+                    x.OemNo3
+            select new { x.ProductId, x.Id, x.ProductName1, x.OemBrand, x.OemNo3, x.Oem2, x.SortOrder, x.MachineType, x.IsPublished, x.RowVersion }
+        ).ToListAsync(ct);
+        var apps = await _db.MachineApplications.AsNoTracking()
+            .Where(m => idList.Contains(m.ProductId))
+            .ToListAsync(ct);
+
+        var result = new List<ProductDetailDto>();
+        foreach (var p in ordered)
+        {
+            var pXrefs = xrefs.Where(x => x.ProductId == p.Id)
+                .Select(x => new XrefInfo(x.Id, x.ProductName1, x.OemBrand, x.OemNo3, x.Oem2, x.SortOrder, x.MachineType, x.IsPublished, x.RowVersion))
+                .ToList();
+            var pApps = apps.Where(m => m.ProductId == p.Id)
+                .Select(m => new MachineAppInfo(
+                    m.Id, m.MachineBrand, m.MachineModel, m.ModelName,
+                    m.EngineBrand, m.EngineType, m.EngineEnergy,
+                    m.ProductionDateStart, m.ProductionDateEnd,
+                    m.Power, m.SerialNumberFrom, m.SerialNumberTo,
+                    m.CarBodyType, m.Series,
+                    m.Co2EmissionStandard, m.TransmissionType,
+                    m.EngineDisplacement, m.NumberOfCylinders,
+                    m.Gvwr, m.Tonnage, m.GeographicArea,
+                    m.ChassisType, m.EngineModel,
+                    m.CabinType, m.Capacity, m.EngineSerialNumber))
+                .ToList();
+            result.Add(new ProductDetailDto(
+                p.Id, p.OemNoDisplay, p.Oem2, p.Mr1,
+                p.ProductName1, p.ProductName2, p.Type, p.IsPublished, p.Remark,
+                p.RowVersion,  // E2E BD.3 修复 v2: 暴露 xmin 给前端
+                p.D1Mm, p.D2Mm, p.D3Mm, p.D4Mm,
+                p.H1Mm, p.H2Mm, p.H3Mm, p.H4Mm,
+                p.D7Thread, p.D8Thread, p.NoCheckValves, p.NoBypassValves,
+                p.NoCheckValvesRaw, p.NoBypassValvesRaw,
+                p.Media, p.MediaModel,
+                p.BypassValveLr, p.BypassValveHr,
+                p.Efficiency1, p.Efficiency2, p.BypassPressure,
+                p.CollapsePressureBar,
+                p.BypassValveLrRaw, p.BypassValveHrRaw, p.BypassPressureRaw, p.CollapsePressureBarRaw,
+                p.SealingMaterial, p.TempRange,
+                p.QtyPerCarton, p.WeightKgs,
+                p.CartonLengthMm, p.CartonWidthMm, p.CartonHeightMm,
+                p.MasterBoxQty, p.MasterBoxWeightKgs,
+                p.MasterBoxLengthMm, p.MasterBoxWidthMm, p.MasterBoxHeightMm,
+                p.VolumePerCartonM3,
+                p.IsDiscontinued, p.CreatedAt, p.UpdatedAt,
+                pXrefs, pApps, new List<ProductImageInfo>()
+            ));
+        }
+        return result;
+    }
+
+    // ========== 辅助 ==========
+    private static void ValidateForm(ProductFormDto form)
+    {
+        // V24-F23: StripControlChars 过滤控制字符 (spec Task 0.3.16, 修复 D3-12)
+        //   WHY: MR.1 / Oem2 / 产品名等字段若含控制字符或 BMP 私用区字符,
+        //        会破坏 Meilisearch 高亮占位符 \uE000/\uE001, 导致 XSS 防御绕过
+        //   规则: 移除 U+0000-U+001F (保留 \t\n\r) + U+007F-U+009F + BMP 私用区 + 非字符
+        //   注意: ProductFormDto 是 record (init-only), 无法重新赋值;
+        //         这里仅校验是否含非法字符, 含则抛 ArgumentException (映射为 400)
+        //         实际清理在 CreateAsync/UpdateAsync 的 ?.Trim() 之前由调用方决定是否替换
+        //   实现策略: 对所有字符串字段做 StripControlChars, 若结果与原值不同则抛异常提示用户输入非法字符
+        ValidateNoControlChars(form.Mr1, nameof(form.Mr1));
+        ValidateNoControlChars(form.Oem2, nameof(form.Oem2));
+        ValidateNoControlChars(form.ProductName1, nameof(form.ProductName1));
+        ValidateNoControlChars(form.ProductName2, nameof(form.ProductName2));
+        ValidateNoControlChars(form.Type, nameof(form.Type));
+        ValidateNoControlChars(form.Remark, nameof(form.Remark));
+        ValidateNoControlChars(form.Media, nameof(form.Media));
+        ValidateNoControlChars(form.MediaModel, nameof(form.MediaModel));
+        ValidateNoControlChars(form.D7Thread, nameof(form.D7Thread));
+        ValidateNoControlChars(form.D8Thread, nameof(form.D8Thread));
+        ValidateNoControlChars(form.Efficiency1, nameof(form.Efficiency1));
+        ValidateNoControlChars(form.Efficiency2, nameof(form.Efficiency2));
+        ValidateNoControlChars(form.SealingMaterial, nameof(form.SealingMaterial));
+        ValidateNoControlChars(form.TempRange, nameof(form.TempRange));
+        ValidateNoControlChars(form.NoCheckValvesRaw, nameof(form.NoCheckValvesRaw));
+        ValidateNoControlChars(form.NoBypassValvesRaw, nameof(form.NoBypassValvesRaw));
+        ValidateNoControlChars(form.BypassValveLrRaw, nameof(form.BypassValveLrRaw));
+        ValidateNoControlChars(form.BypassValveHrRaw, nameof(form.BypassValveHrRaw));
+        ValidateNoControlChars(form.BypassPressureRaw, nameof(form.BypassPressureRaw));
+        ValidateNoControlChars(form.CollapsePressureBarRaw, nameof(form.CollapsePressureBarRaw));
+        foreach (var x in form.CrossReferences)
+        {
+            ValidateNoControlChars(x.ProductName1, "CrossReferences.ProductName1");
+            ValidateNoControlChars(x.OemBrand, "CrossReferences.OemBrand");
+            ValidateNoControlChars(x.OemNo3, "CrossReferences.OemNo3");
+            ValidateNoControlChars(x.Oem2, "CrossReferences.Oem2");
+            ValidateNoControlChars(x.MachineType, "CrossReferences.MachineType");
+        }
+
+        // V2 Task V17-1.3: MR.1 校验抽取到 Mr1Validator (复用 ETL/Admin 双路径)
+        //   WHY 抽取: 之前内联 regex 在 AdminProductService 和 ETL 重复,规则变更易漏改
+        //   Mr1Validator.Normalize 内部完成: 必填校验 + 格式校验 + Trim
+        //   校验失败抛 ArgumentException (与原语义一致,Endpoint 转 400)
+        //   注意: ProductFormDto.Mr1 是 init-only,无法重新赋值 Trim 后的值;
+        //         调用方 (CreateAsync/UpdateAsync) 取 form.Mr1?.Trim() 时已做 Trim,这里仅校验
+        Mr1Validator.Normalize(form.Mr1);
+
+        if (string.IsNullOrWhiteSpace(form.Oem2))
+            throw new ArgumentException("Oem2 (主号) 必填");
+        // P2-2 修复: 补充关键字段长度校验, 防止超长输入触发 PG 22001 而非 400
+        //   WHY: 之前仅校验 Oem2, 其他字段超长时 PG 报 string_data_right_truncation 返回 500
+        //   校验范围与 ProductDbContext HasMaxLength 对齐
+        var checks = new (string Label, string? Value, int Max)[]
+        {
+            ("Oem2", form.Oem2, 50),
+            ("ProductName1", form.ProductName1, 100),
+            ("ProductName2", form.ProductName2, 100),
+            ("Type", form.Type, 50),
+            // V2: MR.1 最大长度 10(非 100)
+            ("Mr1", form.Mr1, 10),
+            ("Media", form.Media, 100),
+            ("MediaModel", form.MediaModel, 100),
+            ("D7Thread", form.D7Thread, 100),
+            ("D8Thread", form.D8Thread, 100),
+            ("Efficiency1", form.Efficiency1, 100),
+            ("Efficiency2", form.Efficiency2, 100),
+            ("SealingMaterial", form.SealingMaterial, 100),
+            ("TempRange", form.TempRange, 100),
+            ("NoCheckValvesRaw", form.NoCheckValvesRaw, 100),
+            ("NoBypassValvesRaw", form.NoBypassValvesRaw, 100),
+            ("BypassValveLrRaw", form.BypassValveLrRaw, 100),
+            ("BypassValveHrRaw", form.BypassValveHrRaw, 100),
+            ("BypassPressureRaw", form.BypassPressureRaw, 100),
+            ("CollapsePressureBarRaw", form.CollapsePressureBarRaw, 100),
+        };
+        foreach (var (label, value, max) in checks)
+        {
+            if (!string.IsNullOrEmpty(value) && value.Length > max)
+                throw new ArgumentException($"{label} 不能超过 {max} 字符 (当前 {value.Length})");
+        }
+
+        // V2: machine_type 枚举校验
+        var validMachineTypes = new[] { "agriculture", "commercial", "construction", "industrial", "others" };
+        foreach (var x in form.CrossReferences)
+        {
+            if (!string.IsNullOrEmpty(x.MachineType) && !validMachineTypes.Contains(x.MachineType))
+                throw new ArgumentException($"MACHINE_TYPE_INVALID: machine_type 必须为 {string.Join("/", validMachineTypes)} 之一");
+        }
+    }
+
+    // V24-F16: NormalizeOem 方法已删除 (spec Task 0.3.10)
+    //   WHY: V2 主键改为 mr_1, oem_no_normalized 派生规则统一为 mr_1 原值, 不再做大小写转换 + 去特殊字符
+    //   历史调用点已全部替换: CreateAsync 用 form.Mr1?.Trim() ?? "", 批量搜索用 OemNoDisplay 原值
+
+    // V24-F23: ValidateNoControlChars 辅助方法 (spec Task 0.3.16, 修复 D3-12)
+    //   WHY: ValidateForm 调用, 对单个字段做 StripControlChars, 含非法字符则抛 ArgumentException
+    //   策略: 选择"抛异常"而非"静默清理", 因为产品录入是人工操作, 应提示用户输入了非法字符
+    //   null/空字符串直接通过 (nullable 字段允许)
+    private static void ValidateNoControlChars(string? value, string fieldName)
+    {
+        if (string.IsNullOrEmpty(value)) return;
+        var cleaned = SakuraFilter.Core.Validation.StringSanitizer.StripControlChars(value);
+        if (cleaned!.Length != value.Length)
+            throw new ArgumentException(
+                $"CONTROL_CHAR_DETECTED: {fieldName} 含非法控制字符/私用区字符 (原长度 {value.Length}, 清理后 {cleaned.Length})");
+    }
+
+    // 规划 V2: 原值用于展示，只有单一数值（可附单位）才派生检索数值，避免把 "1/2" 等复合表达式误判为 1。
+    private static readonly Regex ScalarWithOptionalUnit = new(
+        @"^\s*([+-]?\d+(?:[\.,]\d+)?)\s*(?:[a-zA-Z°%]+)?\s*$",
+        RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
+    private static (string? Raw, decimal? Value) NormalizeRawDecimal(string? rawInput, decimal? numericInput)
+    {
+        var raw = string.IsNullOrWhiteSpace(rawInput) ? null : rawInput.Trim();
+        if (numericInput.HasValue || raw is null) return (raw, numericInput);
+
+        var match = ScalarWithOptionalUnit.Match(raw);
+        if (!match.Success) return (raw, null);
+        var candidate = match.Groups[1].Value.Replace(',', '.');
+        return decimal.TryParse(candidate, NumberStyles.Number, CultureInfo.InvariantCulture, out var value)
+            ? (raw, value)
+            : (raw, null);
+    }
+
+    private static (string? Raw, int? Value) NormalizeRawInt(string? rawInput, int? numericInput)
+    {
+        var (raw, parsed) = NormalizeRawDecimal(rawInput, numericInput);
+        if (numericInput.HasValue || parsed is null || parsed != decimal.Truncate(parsed.Value) ||
+            parsed < int.MinValue || parsed > int.MaxValue)
+            return (raw, numericInput);
+        return (raw, decimal.ToInt32(parsed.Value));
+    }
+
+    // V24-F21: pg_try_advisory_xact_lock 辅助方法 (spec Task 0.3.18/0.3.19)
+    //   WHY: 与 ETL ImportProductsAsync (7740001) / ImportXrefsAsync (7740002) 共享 advisory lock key
+    //        防止管理员编辑产品时 ETL TRUNCATE/DELETE+INSERT 导致 23505 唯一约束冲突或 504 锁等待
+    //   实现: 通过 EF Core Database.GetDbConnection() 执行 raw SQL, 事务结束时自动释放 advisory_xact_lock
+    //   返回 false: 锁被 ETL 占用, 调用方抛 InvalidOperationException (映射为 409 ETL_IN_PROGRESS)
+    private async Task<bool> TryAcquireAdvisoryLockAsync(long key, CancellationToken ct)
+    {
+        var conn = _db.Database.GetDbConnection();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT pg_try_advisory_xact_lock(@key)";
+        var p = cmd.CreateParameter();
+        p.ParameterName = "key";
+        p.Value = key;
+        cmd.Parameters.Add(p);
+        var result = await cmd.ExecuteScalarAsync(ct);
+        return result is bool b && b;
+    }
+
+    private static string DeriveTypeFromName(string? productName3)
+    {
+        if (string.IsNullOrWhiteSpace(productName3)) return "others";
+        var n = productName3.Trim().ToLower();
+        if (n.Contains("oil")) return "oil";
+        if (n.Contains("fuel")) return "fuel";
+        if (n.Contains("air")) return "air";
+        if (n.Contains("cabin")) return "cabin";
+        return "others";
+    }
+
+    private static decimal? DeriveVolume(decimal? l, decimal? w, decimal? h)
+    {
+        // 规格: "根据长宽高自动计算体积", 单位 m³
+        if (l is null || w is null || h is null) return null;
+        // mm³ → m³: / 1_000_000_000
+        return Math.Round((l.Value * w.Value * h.Value) / 1_000_000_000m, 6);
+    }
+
+    private static MachineApplication MapToMachineApp(long productId, MachineAppInput m) => new()
+    {
+        ProductId = productId,
+        MachineBrand = m.MachineBrand?.Trim(),
+        MachineModel = m.MachineModel?.Trim(),
+        ModelName = m.ModelName?.Trim(),
+        EngineBrand = m.EngineBrand?.Trim(),
+        EngineType = m.EngineType?.Trim(),
+        EngineEnergy = m.EngineEnergy?.Trim(),
+        ProductionDateStart = m.ProductionDateStart,
+        ProductionDateEnd = m.ProductionDateEnd,
+        Power = m.Power?.Trim(),
+        SerialNumberFrom = m.SerialNumberFrom?.Trim(),
+        SerialNumberTo = m.SerialNumberTo?.Trim(),
+        CarBodyType = m.CarBodyType?.Trim(),
+        Series = m.Series?.Trim(),
+        Co2EmissionStandard = m.Co2EmissionStandard?.Trim(),
+        TransmissionType = m.TransmissionType?.Trim(),
+        EngineDisplacement = m.EngineDisplacement?.Trim(),
+        NumberOfCylinders = m.NumberOfCylinders,
+        Gvwr = m.Gvwr?.Trim(),
+        Tonnage = m.Tonnage?.Trim(),
+        GeographicArea = m.GeographicArea?.Trim(),
+        ChassisType = m.ChassisType?.Trim(),
+        EngineModel = m.EngineModel?.Trim(),
+        CabinType = m.CabinType?.Trim(),
+        Capacity = m.Capacity?.Trim(),
+        EngineSerialNumber = m.EngineSerialNumber?.Trim(),
+        IsOngoing = m.ProductionDateEnd is null,
+        CreatedAt = DateTime.UtcNow
+    };
+}

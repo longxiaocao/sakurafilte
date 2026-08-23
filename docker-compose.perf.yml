@@ -1,0 +1,109 @@
+# SakuraFilter 独立性能测试环境 override（与 docker-compose.yml 叠加使用）
+#
+# 用法（在 F:\sakurafilter-perf 项目根目录执行）:
+#   docker compose -p sakurafilter-perf ^
+#     -f docker-compose.yml -f docker-compose.perf.yml ^
+#     --env-file .env.perf up -d --build
+#
+# 隔离设计原则:
+#   1. 独立项目名 sakurafilter-perf → 容器/网络/卷自动加前缀, 与任何现有环境零冲突
+#   2. 所有宿主机端口重映射到独立段, 且必须用 !override 强制替换 base 的 ports
+#      （Compose 对 ports 列表默认是"追加"合并, 不加 !override 会同时绑定 base 的
+#        5432/7700/9000/9001/80/3000, 从而占用宿主端口, 破坏隔离）
+#   3. 端口必须避开 Windows/Hyper-V 保留段（netsh int ipv4 show excludedportrange tcp）
+#      本机保留段: 50000-50059, 53424-53828, 58659-58758, 58932-59431
+#      故选用: PG=55432  Meili=57700  MinIO-API=55900  MinIO-Console=55901
+#              Backend=55148  Frontend=58080  Grafana=53000  Prometheus=55909
+#   4. 对象存储用本地 MinIO, 不连接 Cloudflare R2
+#   5. 数据库自动迁移开启（base 的 Production 配置默认关闭, 会导致表未建 → ETL 全失败）
+#   6. 合成数据通过只读挂载进入 backend:/app/etl-data, 供 ETL API 导入（不连宿主 DB）
+#   7. Prometheus 不在 base compose 中, 此处补充; 抓 backend:5148/metrics 与自身
+
+services:
+  postgres:
+    ports: !override
+      - "55432:5432"
+    # 性能压测关键: Docker 默认 /dev/shm 仅 64MB, 百万级并发查询时
+    # PostgreSQL 并行排序/哈希的共享内存段会被撑爆 -> "No space left on device"
+    # -> 查询失败(后端转 409) + P95 飙升。放大到 4GB 消除该环境瓶颈。
+    shm_size: "4gb"
+    # 2026-08-17 冷缓存压测暴露: max_connections=100 = Npgsql 池上限(100),
+    # c100 并发时池占满服务端槽位 -> 新连接排队 15s 雪崩。提到 200 留余量。
+    # (每连接约 5-10MB, 本机 40GB+ 空闲, 200 连接无压力)
+    command: ["postgres", "-c", "max_connections=200"]
+
+  minio:
+    ports: !override
+      - "55900:9000"
+      - "55901:9001"
+
+  meilisearch:
+    ports: !override
+      - "57700:7700"
+    # 修正 base 的 command: 镜像 Entrypoint 是 ["tini","--"], Cmd 是 ["/bin/sh","-c","/bin/meilisearch"]
+    # base 写 ["--max-indexing-memory","8192"] 会让 tini 直接执行 "--max-indexing-memory" → exit 127
+    # 必须显式带上可执行文件路径。索引内存 4096MB（本机 47.9GB 物理内存, 留足余量给 PG/查询）
+    command: ["/bin/meilisearch", "--max-indexing-memory", "4096"]
+    # 2026-08 压测调优: 搜索并发槽位 = 核数 × NB_SEARCHES_PER_CORE (默认 4/核 → 6核仅 24 槽, c50/c100 全排队)
+    # 调高到 16/核 → 96 槽, c100 不再因槽位排队 (实验性参数, 搜索 CPU 密集, 本机 6 核可扛)
+    # 2026-08-17 实验: 32/核(192槽) 实测更慢 (c100 P95 369→467, CPU 饱和下排队反而高效) → 维持 16/核
+    environment:
+      - MEILI_EXPERIMENTAL_NB_SEARCHES_PER_CORE=16
+
+  backend:
+    # 覆盖 base 的 deploy.replicas:2（base 为 Swarm 高可用设计; 单机 compose 下会创建 2 实例抢同端口）
+    deploy:
+      replicas: 1
+    ports: !override
+      - "55148:5148"
+    environment:
+      - ConnectionStrings__Postgres=Host=postgres;Port=5432;Database=${DB_NAME};Username=${DB_USER};Password=${DB_PASSWORD};Maximum Pool Size=120;Connection Idle Lifetime=60
+      - MeiliSearch__Endpoint=http://meilisearch:7700
+      - MeiliSearch__ApiKey=${MEILI_MASTER_KEY}
+      - Minio__Endpoint=minio:9000
+      - Minio__AccessKey=${MINIO_ACCESS_KEY}
+      - Minio__SecretKey=${MINIO_SECRET_KEY}
+      - Minio__PublicEndpoint=${MINIO_PUBLIC_ENDPOINT}
+      - Storage__Provider=${STORAGE_PROVIDER}
+      - Auth__DevStaticToken=${ADMIN_TOKEN}
+      - Search__CursorHmacKey=${CURSOR_HMAC_KEY}
+      # 压测隔离开关: 默认 true (生产限流); 压测前设 RATELIMIT_ENABLED=false 关闭以隔离搜索引擎延迟
+      - RateLimit__Enabled=${RATELIMIT_ENABLED:-true}
+      # typeahead 基数守卫阈值: distinct 超过此值的字段 (oem-no3/engine-type) 短路返回空
+      - Typeahead__MaxCardinality=${Typeahead__MaxCardinality:-1000000}
+      - Cors__AllowedOrigins__0=http://localhost:58080
+      - Cors__AllowedOrigins__1=http://localhost
+      - ASPNETCORE_ENVIRONMENT=Production
+      # 关键: 打开自动迁移（base 的 Production 配置默认关闭, 会导致表未建）
+      - Db__AutoMigrateOnStartup=true
+      # ETL 导入白名单目录（合成数据只读挂载点）
+      - Etl__AllowedImportDirs=/app/etl-data
+      # JWT 签名密钥（代码强制要求 >=32 字符, 缺失则启动即崩溃）
+      - Jwt__SigningKey=${JWT_SIGNING_KEY}
+      - Jwt__Issuer=${JWT_ISSUER}
+      - Jwt__Audience=${JWT_AUDIENCE}
+    volumes:
+      - backend_logs:/app/logs
+      - ./spike-test/data:/app/etl-data:ro
+
+  frontend:
+    # 显式镜像标签: 构建产物固定 tag, 便于复用与离线 load
+    image: sakurafilter-frontend:latest
+    ports: !override
+      - "58080:80"
+
+  grafana:
+    # 中和 base 写死的未加前缀容器名, 避免与其它环境冲突
+    container_name: sakurafilter-perf-grafana
+    ports: !override
+      - "53000:3000"
+
+  # Prometheus（base 未包含, 此处补充）
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: sakurafilter-perf-prometheus
+    ports:
+      - "55909:9090"
+    volumes:
+      - ./prometheus.perf.yml:/etc/prometheus/prometheus.yml:ro
+    restart: unless-stopped

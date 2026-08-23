@@ -1,0 +1,179 @@
+# SakuraFilter Docker Build & Push
+#   构建 + 推送 backend/frontend 镜像到 GitHub Container Registry (ghcr.io)
+#   触发: master push + tag (v*)
+#   缓存: GitHub Actions cache (按 commit/branch 区分)
+#   多架构: amd64 + arm64 (匹配 dev/prod 部署场景)
+#
+#   注意: 不与 ci.yml 并行, 因为 docker build 需要 dotnet sdk 镜像 (~1.5GB)
+#     → 拆为独立 workflow, master push 后立即跑
+#
+#   设计要点:
+#     1) 多阶段构建: 已存在 Dockerfile, 直接 docker build
+#     2) cache-from type=gha: 利用 GH Actions 缓存层
+#     3) tags: latest + commit-sha + branch-name
+#     4) labels: org.opencontainers.image.* (符合 OCI 规范)
+
+name: docker
+
+on:
+  push:
+    branches: [master, main]
+    tags: ['v*']
+  pull_request:
+    branches: [master, main]
+  workflow_dispatch:
+
+# 避免同时多次构建: master 立即取消旧, PR 等完成
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' && github.ref != 'refs/heads/main' }}
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: longxiaocao/sakurafilter
+  # 镜像构建时版本标签来源: tag > sha > branch
+  VERSION: ${{ github.ref_type == 'tag' && github.ref_name || github.sha }}
+
+jobs:
+  # ============================================================
+  # Job 1: Backend (ASP.NET 8 API) 镜像构建
+  # ============================================================
+  backend:
+    name: Backend Image
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-backend
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix=
+            type=raw,value=${{ env.VERSION }}
+            type=raw,value=latest,enable={{is_default_branch}}
+          labels: |
+            org.opencontainers.image.title=SakuraFilter Backend
+            org.opencontainers.image.description=ASP.NET 8 滤清器产品管理 API
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.version=${{ env.VERSION }}
+
+      - name: Build and push backend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,scope=backend,mode=max
+          build-args: |
+            BUILDKIT_INLINE_CACHE=1
+
+  # ============================================================
+  # Job 2: Frontend (Vue3 + Vite) 镜像构建
+  # ============================================================
+  frontend:
+    name: Frontend Image
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-frontend
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix=
+            type=raw,value=${{ env.VERSION }}
+            type=raw,value=latest,enable={{is_default_branch}}
+          labels: |
+            org.opencontainers.image.title=SakuraFilter Frontend
+            org.opencontainers.image.description=Vue 3 滤清器产品搜索与管理 UI
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.version=${{ env.VERSION }}
+
+      - name: Build and push frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,scope=frontend,mode=max
+
+  # ============================================================
+  # Job 3: 多架构 manifest 摘要验证 (push 后)
+  #   WHY: 多架构镜像推送后, 用 crane 验证 manifest 完整性, 避免镜像损坏
+  # ============================================================
+  verify:
+    name: Verify Image Manifest
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
+    timeout-minutes: 5
+    steps:
+      - name: Install crane
+        run: |
+          curl -sL "https://github.com/google/go-containerregistry/releases/latest/download/go-containerregistry_Linux_x86_64.tar.gz" \
+            | tar -xz -C /tmp
+          sudo mv /tmp/crane /usr/local/bin/
+
+      - name: Verify backend manifest
+        run: |
+          crane manifest ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-backend:${{ env.VERSION }} \
+            | jq -e '.manifests | length >= 2' \
+            || (echo "::error::backend manifest missing multi-arch"; exit 1)
+          echo "[OK] backend manifest multi-arch verified"
+
+      - name: Verify frontend manifest
+        run: |
+          crane manifest ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-frontend:${{ env.VERSION }} \
+            | jq -e '.manifests | length >= 2' \
+            || (echo "::error::frontend manifest missing multi-arch"; exit 1)
+          echo "[OK] frontend manifest multi-arch verified"

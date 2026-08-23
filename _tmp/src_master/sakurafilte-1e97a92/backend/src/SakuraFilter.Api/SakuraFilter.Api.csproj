@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <NuGetAudit>false</NuGetAudit>
+    <!-- 批次 6d: 启用 XML 文档生成, Swagger 自动读取 /// 注释作为 endpoint 描述 -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.10" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.10" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.10">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="8.0.10" />
+    <PackageReference Include="prometheus-net.AspNetCore" Version="8.2.1" />
+    <!-- Day 8.4: 暂用 Swashbuckle Swagger (有缓存),生产部署时换 Scalar.AspNetCore -->
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
+    <!-- JWT 认证体系: BCrypt 密码哈希 + JwtBearer 令牌验证 -->
+    <PackageReference Include="BCrypt.Net-Next" Version="4.0.3" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.10" />
+    <!-- 安全加固阶段4: FluentValidation 输入校验 + HtmlSanitizer (Ganss.Xss) HTML 消毒 -->
+    <PackageReference Include="FluentValidation.AspNetCore" Version="11.3.0" />
+    <PackageReference Include="HtmlSanitizer" Version="8.0.601" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SakuraFilter.Core\SakuraFilter.Core.csproj" />
+    <ProjectReference Include="..\SakuraFilter.Infrastructure\SakuraFilter.Infrastructure.csproj" />
+    <ProjectReference Include="..\SakuraFilter.Etl\SakuraFilter.Etl.csproj" />
+    <ProjectReference Include="..\SakuraFilter.Search\SakuraFilter.Search.csproj" />
+  </ItemGroup>
+
+</Project>
