@@ -20,6 +20,10 @@ const DEDUPE_WINDOW_MS = 5 * 60 * 1000
 const MAX_BREADCRUMBS = 20
 const REMOTE_FLUSH_INTERVAL_MS = 30 * 1000
 const REMOTE_BATCH_SIZE = 20
+// 🔧 fix(2026-08-23 走查): 浏览器内部通知循环警告 (不影响功能) — 不视为 ERROR
+const RESIZE_OBSERVER_NOISE = [
+  'ResizeObserver loop completed with undelivered notifications'
+]
 
 /** 严重级别 (与 Sentry 一致) */
 export type Severity = 'fatal' | 'error' | 'warning' | 'info' | 'debug'
@@ -214,6 +218,9 @@ export function initMonitor(options?: { release?: string; environment?: string }
   // 1) 同步 JS 错误
   window.addEventListener('error', (ev) => {
     if (!ev.message && !ev.error) return  // 资源加载错误走 error 事件但无 message
+    // 🔧 fix(2026-08-23 走查): 过滤浏览器内部通知循环警告 — ResizeObserver loop 是
+    //   Chrome 已知警告 (不影响功能), 不应作 ERROR 上报 (/admin/ops 误报 6 条)
+    if (RESIZE_OBSERVER_NOISE.some((kw) => ev.message?.includes(kw))) return
     captureException(ev.error || ev.message, {
       level: 'error',
       tags: { source: 'window.onerror' },
@@ -227,6 +234,9 @@ export function initMonitor(options?: { release?: string; environment?: string }
 
   // 2) 未处理的 Promise 拒绝
   window.addEventListener('unhandledrejection', (ev) => {
+    // 同上过滤 ResizeObserver 警告 (可能通过 unhandledrejection 路径出现)
+    const reason = typeof ev.reason === 'string' ? ev.reason : (ev.reason?.message ?? '')
+    if (RESIZE_OBSERVER_NOISE.some((kw) => reason?.includes?.(kw))) return
     captureException(ev.reason, {
       level: 'error',
       tags: { source: 'unhandledrejection' },

@@ -12,8 +12,8 @@ import { ElMessage } from 'element-plus'
 // V24-F38: 改用 searchWithFallback (封装聚合 API 404 降级逻辑)
 //   保留 publicSearchApi 导入: clearSearch 等其他函数可能用到 (此处仅类型兼容)
 // V24-F40: shouldShowLegacyFallbackWarn 5 秒去重, 避免连续搜索刷屏
-import { publicSearchApi, searchWithFallback, wasLastSearchLegacyFallback, shouldShowLegacyFallbackWarn } from '@/api'
-import type { AggregateSearchHit, AggregateSearchResponse, MachineCatalogResponse } from '@/api/types'
+import { publicSearchApi, searchApi, searchWithFallback, wasLastSearchLegacyFallback, shouldShowLegacyFallbackWarn } from '@/api'
+import type { AggregateSearchHit, AggregateSearchResponse, MachineCatalogResponse, BatchOemResult } from '@/api/types'
 import { sanitizeFormatted } from '@/utils/html-sanitizer'
 import { buildProductUrl } from '@/utils/build-product-url'
 
@@ -65,6 +65,67 @@ function toggleBrand(brand: string) {
 //   (el-button text 无 active 样式), 用户不知道当前选中了什么。
 //   selectedCatalog 记录最近一次目录选择, 模板按钮按需高亮 (暗色底 + 主题色文字)。
 const selectedCatalog = ref<{ category: string; brand?: string; model?: string } | null>(null)
+
+// 🔧 fix(2026-08-23 走查): 批量粘贴对话框 — 旧 SearchView 含此功能 (P3.2 Task 10),
+//   重构成 AggregateSearchView 时未迁移, /search 又重定向到 /search/aggregate → 用户报"批量查询界面没了"。
+//   修复: 顶部搜索框旁加"批量粘贴"按钮 → 弹 el-dialog, 复用 SearchView 的批量粘贴逻辑 (textarea 解析 + 进度条 + 命中表)。
+const batchDialogOpen = ref(false)
+const batchInput = ref('')
+const batchLoading = ref(false)
+const batchError = ref('')
+const batchResults = ref<BatchOemResult[]>([])
+const batchTotal = ref(0)
+const batchHits = ref(0)
+const batchMiss = ref(0)
+const batchElapsedMs = ref(0)
+const batchParsedPreview = computed(() => {
+  const oems = batchInput.value
+    .split(/[\t\n,;]+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+  const unique = [...new Set(oems)]
+  return { raw: oems.length, unique: unique.length, duplicates: oems.length - unique.length }
+})
+function openBatchSearch() {
+  batchDialogOpen.value = true
+}
+async function doBatchSearch() {
+  batchError.value = ''
+  const oems = [...new Set(
+    batchInput.value.split(/[\t\n,;]+/).map((s) => s.trim()).filter(Boolean)
+  )]
+  if (oems.length === 0) { ElMessage.warning('请粘贴 OEM 编号'); return }
+  if (oems.length > 500) { ElMessage.error(`最多 500 个 OEM, 当前 ${oems.length}`); return }
+  batchLoading.value = true
+  const t0 = performance.now()
+  try {
+    const resp = await searchApi.batchOem({ oems })
+    batchResults.value = resp.results
+    batchTotal.value = resp.total
+    batchHits.value = resp.hits
+    batchMiss.value = resp.miss
+    batchElapsedMs.value = Math.round(performance.now() - t0)
+  } catch (e: any) {
+    batchError.value = e?.message || '批量查询失败'
+    batchResults.value = []
+    batchTotal.value = 0; batchHits.value = 0; batchMiss.value = 0
+  } finally { batchLoading.value = false }
+}
+function clearBatch() {
+  batchInput.value = ''
+  batchResults.value = []
+  batchError.value = ''
+  batchTotal.value = 0; batchHits.value = 0; batchMiss.value = 0; batchElapsedMs.value = 0
+}
+function viewBatchProduct(row: BatchOemResult) {
+  const url = buildProductUrl({
+    productName1: row.productName1,
+    oemBrand: row.oemBrand,
+    oemNo3: row.oem2,
+    oemNoDisplay: row.oem2 ?? row.oem
+  })
+  router.push(url)
+}
 
 // 🔧 fix(2026-08-23 走查): 加载更多 — page++ 后调 doSearch, 因 _loadMoreInFlight 累积结果
 async function loadMore() {
@@ -387,6 +448,8 @@ onBeforeUnmount(() => {
           搜索
         </el-button>
         <el-button size="large" @click="clearSearch">清空</el-button>
+        <!-- 🔧 fix(2026-08-23 走查): 恢复批量粘贴入口 — 见 openBatchSearch/batchDialogOpen -->
+        <el-button size="large" @click="openBatchSearch">批量粘贴</el-button>
       </div>
       <div class="flex flex-wrap gap-2 mt-3" aria-label="产品类型快捷筛选">
         <el-button
@@ -605,6 +668,103 @@ onBeforeUnmount(() => {
       </div>
     </div>
   </div>
+
+  <!-- 🔧 fix(2026-08-23 走查): 批量粘贴对话框 — 完整 UI (textarea + 解析预览 + 进度条 + 命中表) -->
+  <el-dialog
+    v-model="batchDialogOpen"
+    title="批量粘贴 OEM 查询 (Excel 多行)"
+    width="900px"
+    :close-on-click-modal="false"
+    destroy-on-close
+  >
+    <div class="mb-3">
+      <el-input
+        v-model="batchInput"
+        type="textarea"
+        :rows="10"
+        placeholder="粘贴 OEM 编号, 每行一个 (支持 tab/换行/逗号/分号分隔)&#10;例如:&#10;OEN-123&#10;AB/CD/456&#10;滤清器 1142"
+        :disabled="batchLoading"
+      />
+      <div class="mt-2 text-xs text-muted flex items-center gap-3">
+        <span>已识别 {{ batchParsedPreview.unique }} 条</span>
+        <span v-if="batchParsedPreview.duplicates > 0" class="text-orange-500">
+          (含 {{ batchParsedPreview.duplicates }} 条重复, 将自动去重)
+        </span>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-2 mb-3">
+      <el-button type="primary" :loading="batchLoading" :disabled="batchParsedPreview.unique === 0" @click="doBatchSearch">
+        查询
+      </el-button>
+      <el-button :disabled="batchLoading" @click="clearBatch">清空</el-button>
+      <span v-if="batchTotal > 0" class="text-xs text-muted">
+        共 {{ batchTotal }} 个 OEM, 命中 {{ batchHits }} / 未命中 {{ batchMiss }}, 耗时 {{ batchElapsedMs }} ms
+      </span>
+    </div>
+
+    <div v-if="batchError" class="text-red-600 text-sm mb-2">{{ batchError }}</div>
+
+    <div v-if="batchTotal > 0" class="mb-2">
+      <el-progress
+        :percentage="batchTotal > 0 ? Math.round((batchHits / batchTotal) * 100) : 0"
+        :status="batchHits === batchTotal ? 'success' : (batchHits === 0 ? 'exception' : '')"
+        :stroke-width="14"
+            :text-inside="true"
+      />
+    </div>
+
+    <el-table
+      v-if="batchResults.length > 0"
+      :data="batchResults"
+      stripe
+      size="small"
+      border
+      :row-style="{ cursor: 'pointer' }"
+      @row-click="viewBatchProduct"
+      v-loading="batchLoading"
+      max-height="calc(100vh - 320px)"
+    >
+      <el-table-column type="index" label="#" width="50" />
+      <el-table-column prop="oem" label="OEM 编号" min-width="180" show-overflow-tooltip />
+      <el-table-column label="命中" width="80">
+        <template #default="{ row }">
+          <span v-if="row.hit" class="text-green-600 font-semibold">✓</span>
+          <span v-else class="text-red-500 font-semibold">✗</span>
+        </template>
+      </el-table-column>
+      <el-table-column prop="productId" label="产品 ID" width="100">
+        <template #default="{ row }">
+          <span v-if="row.productId" class="text-blue-600">{{ row.productId }}</span>
+          <span v-else class="text-muted">-</span>
+        </template>
+      </el-table-column>
+      <el-table-column prop="oemBrand" label="OEM Brand" min-width="160" show-overflow-tooltip>
+        <template #default="{ row }">
+          <span v-if="row.oemBrand">{{ row.oemBrand }}</span>
+          <span v-else class="text-muted">-</span>
+        </template>
+      </el-table-column>
+      <el-table-column prop="productName1" label="Product Name 1" min-width="200" show-overflow-tooltip>
+        <template #default="{ row }">
+          <span v-if="row.productName1">{{ row.productName1 }}</span>
+          <span v-else class="text-muted">-</span>
+        </template>
+      </el-table-column>
+      <el-table-column prop="oem2" label="备用 OEM 2" min-width="180" show-overflow-tooltip>
+        <template #default="{ row }">
+          <span v-if="row.oem2">{{ row.oem2 }}</span>
+          <span v-else class="text-muted">-</span>
+        </template>
+      </el-table-column>
+    </el-table>
+
+    <div v-else-if="!batchLoading && batchTotal === 0" class="py-12 text-center text-muted">
+      <div class="text-4xl mb-2">📋</div>
+      <div>粘贴 OEM 编号后点击"查询"</div>
+      <div class="text-xs mt-2">支持每行一个 / tab 分列 / 逗号 / 分号, 自动 trim + 去重</div>
+    </div>
+  </el-dialog>
 </template>
 
 <script lang="ts">
