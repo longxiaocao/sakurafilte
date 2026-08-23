@@ -50,6 +50,17 @@ const totalPages = ref(0)
 const hasMore = computed(() => results.value.length < total.value)
 const lastError = ref('')
 
+// 🔧 fix(2026-08-23 走查): 目录默认收起品牌, 避免 1000 机型 DOM 首次渲染卡顿
+//   WHY: 之前 v-for 默认展开全部 brand.models.slice(0,8) = ~1000 DOM 节点
+//   进搜索页时主线程渲染卡顿明显。改为默认收起, 点品牌按钮再展开。
+const expandedBrands = ref<Set<string>>(new Set())
+function toggleBrand(brand: string) {
+  if (expandedBrands.value.has(brand)) expandedBrands.value.delete(brand)
+  else expandedBrands.value.add(brand)
+  // 触发响应式 (Set 的 add/delete 不自动触发 ref 更新, 需重新赋值)
+  expandedBrands.value = new Set(expandedBrands.value)
+}
+
 // 🔧 fix(2026-08-23 走查): 加载更多 — page++ 后调 doSearch, 因 _loadMoreInFlight 累积结果
 async function loadMore() {
   if (!hasMore.value || loading.value) return
@@ -319,10 +330,10 @@ onBeforeUnmount(() => {
             {{ category.category }}
           </el-button>
           <div v-for="brand in category.brands" :key="brand.brand" class="mt-1 text-xs">
-            <el-button text size="small" class="!h-auto !px-0" @click="selectMachine(category.category, brand.brand)">
-              {{ brand.brand }}
+            <el-button text size="small" class="!h-auto !px-0" @click="toggleBrand(brand.brand); selectMachine(category.category, brand.brand)">
+              {{ brand.brand }} <span v-if="brand.models.length">({{ brand.models.length }})</span>
             </el-button>
-            <div v-if="brand.models.length" class="ml-2 mt-1 space-y-1">
+            <div v-if="brand.models.length && expandedBrands.has(brand.brand)" class="ml-2 mt-1 space-y-1">
               <el-button
                 v-for="model in brand.models.slice(0, 8)"
                 :key="model"
