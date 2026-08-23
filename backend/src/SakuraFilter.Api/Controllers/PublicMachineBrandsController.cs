@@ -126,13 +126,20 @@ public class PublicMachineBrandsController : ControllerBase
             var brands = rows
                 .Where(row => NormalizeCategory(row.MachineCategory) == category)
                 .GroupBy(row => row.MachineBrand, StringComparer.OrdinalIgnoreCase)
-                .Select(group => new MachineCatalogBrandDto(
-                    group.First().MachineBrand,
-                    group.Select(row => row.MachineModel)
+                .Select(group =>
+                {
+                    var brand = group.First().MachineBrand;
+                    // 🔧 fix(2026-08-23 走查): 截断 models 列表为 8 个 — 之前全量返回 ~200 万机型 = 15.5MB JSON,
+                    //   首次解析 + sessionStorage 缓存都耗时长 (用户实测"目录半秒才显示")。
+                    //   与前端 .slice(0,8) 截断对齐, 后端就别给那么多 (用户展开更多场景低频)。
+                    var models = group.Select(row => row.MachineModel)
                         .Where(model => !string.IsNullOrWhiteSpace(model))
                         .Select(model => model!)
                         .Distinct(StringComparer.OrdinalIgnoreCase)
-                        .ToList()))
+                        .Take(8)
+                        .ToList();
+                    return new MachineCatalogBrandDto(brand, models);
+                })
                 .ToList();
             return new MachineCatalogCategoryDto(category, brands);
         }).ToList();
