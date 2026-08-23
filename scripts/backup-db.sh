@@ -54,7 +54,10 @@ echo "✅ 备份完成: $OUT_FILE ($SIZE)"
 
 if [ -n "$VERIFY" ]; then
     echo "==> 校验归档可读 (pg_restore -l)..."
-    OBJS=$(docker run --rm -v "F:/sakurafilter-real/${BACKUP_DIR}:/backup:ro" \
+    # 🔧 fix(2026-08-24 审核): 原硬编码 "F:/sakurafilter-real/${BACKUP_DIR}" 换目录/机器即挂载失败,
+    #   备份可恢复门禁失效。脚本已 cd 到仓库根, 用 $(pwd) 动态推导, 兼容任意安装位置。
+    BACKUP_ABS="$(pwd)/${BACKUP_DIR}"
+    OBJS=$(docker run --rm -v "${BACKUP_ABS}:/backup:ro" \
         postgres:16-alpine pg_restore -l "/backup/$(basename "$OUT_FILE")" 2>/dev/null | wc -l)
     echo "✅ 归档校验通过: $OBJS 个对象"
 fi

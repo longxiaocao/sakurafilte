@@ -87,23 +87,39 @@ docker compose down
 | `postgres` | PostgreSQL 16（容器名 sakura-postgres，数据卷 postgres-data） |
 | `meilisearch` | 主搜索引擎（数据卷 meili-data） |
 | `minio` | 图片对象存储 |
-| `prometheus` / `grafana` | 监控 |
-| `db-init` / `db-migrate` | 一次性迁移容器（SQL 脚本 + EF migrate） |
+| `prometheus` / `grafana` | 监控（仅绑定 127.0.0.1，SSH Tunnel 访问） |
+| ~~`db-init` / `db-migrate`~~ | 已禁用（2026-08-22，防 compose up 重建重跑迁移清库）；空库初始化改手动一次性流程，见下 |
 | `data-protection-init` | 数据保护密钥初始化 |
 
-**首次部署**：
+**首次部署（空库初始化）**：
+
+> ⚠️ 2026-08-22 起 db-init/db-migrate 服务已禁用——每次 `compose up` 都会重建容器并重跑迁移，导致数据全清。
+> **已有数据的库**直接执行第 5 步 `up -d` 即可；**全新空库**必须先手动执行第 2-4 步一次性迁移：
 
 ```bash
 # 1. 准备环境变量（参考 .env.prod.example，严禁提交 .env）
-cp .env.prod.example .env   # 填入真实密钥
+cp .env.prod.example .env   # 填入真实密钥（含 INITIAL_ADMIN_PASSWORD / INITIAL_OPERATOR_PASSWORD）
 
-# 2. 起全部服务（db-init/db-migrate 自动执行迁移后退出）
+# 2. 仅起 postgres（等待 healthy）
+docker compose -f docker-compose.prod.yml --env-file .env up -d postgres
+
+# 3. 一次性 EF 迁移（建全部表；api 镜像入口支持 --migrate-db，复用 api 服务连接串环境变量）
+docker compose -f docker-compose.prod.yml --env-file .env run --rm --no-deps api --migrate-db
+
+# 4. 一次性 SQL 增量迁移（backend/migrations/*.sql，按文件名顺序执行，任一失败即中止）
+docker compose -f docker-compose.prod.yml --env-file .env run --rm --no-deps \
+  -v "$(pwd)/backend/migrations:/migrations:ro" -e PGPASSWORD="$POSTGRES_PASSWORD" \
+  postgres sh -c 'for f in /migrations/*.sql; do echo "== $f"; psql -h postgres -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -f "$f" || exit 1; done'
+
+# 5. 起全部服务（迁移已就绪，此步不会再跑任何迁移）
 docker compose -f docker-compose.prod.yml --env-file .env up -d
 
-# 3. 验证
+# 6. 验证
 curl http://localhost:5148/health/ready      # {"status":"healthy",...}
 docker exec sakura-postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SHOW max_connections;"   # 200
 ```
+
+> 注：`--no-deps` 防止 run 时连带拉起其它服务；第 3/4 步只跑一次，之后日常 `up -d` 不会重跑迁移。
 
 **日常更新部署**（⚠️ 连接池参数变更必须重建容器，`restart` 不生效）：
 

@@ -652,3 +652,13 @@ v30-14 1M OFFSET 深分页专项压测验证数据 (2026-07-21, sakurafilter_per
 理由: E2E 全量 (编排 9 测试 + Playwright 跨浏览器) 耗时 ~10min, 每次 push 全跑性价比低; master 为保护分支, 每次提交 = 可发布候选, gate 全开合理 (用户曾连环收 CI 失败邮件)
 经验: CI 快机器 vs 本地慢机器时序敏感测试 (ETL cancel 验证) 不可靠 → 宽容 SKIP + 慢环境可验证; 静态扫描类 (P0 fixes/P1 health/P2 migration/pattern scan) 可合并进 ci.yml 降 E2E 时长 (建议项)
 关联文件: .github/workflows/ci.yml, .github/workflows/e2e.yml
+
+#32 codex 上线审核 6 项问题处置 (2026-08-24)
+决策: 修 3/4/5/6, 留 1/2 但补文档/ADR。①fuzzy 截断: 合并加 OrderBy 保证确定性 + 达 5000 上限时 CountMode="truncated" 显式告知 (前端 types 注释同步); ②backup-db.sh --verify 挂载路径改 $(pwd) 动态推导; ③prometheus/grafana 端口绑 127.0.0.1 + GRAFANA_PASSWORD 去 admin 回退 (fail-fast); ④.env.prod.example 补 INITIAL_ADMIN_PASSWORD/INITIAL_OPERATOR_PASSWORD; ⑤db-init/db-migrate 保持注释禁用, 空库初始化改一次性手动流程 (ops-manual 文档化); ⑥机型目录 Take(8) 保持现状 (与前端 slice(0,8) 对齐)
+理由: 审核基于远端 master 4e37901 逐行核验 6 项全属实。①原无 OrderBy 每次取哪 5000 不确定 → 随机漏结果, 且响应声称 exact 无截断告知; ②原硬编码 "F:/sakurafilter-real/${BACKUP_DIR}" 换目录/机器即挂载失败 → 备份可恢复门禁失效; ③9090/3000 裸绑 0.0.0.0 + 密码回退 admin, 漏配即弱口令裸奔公网; ④compose :54-55 引用 INITIAL_* 而样例缺失 → 漏配时空值, 默认用户创建失败; ⑤db-migrate 每次 compose up 重建会重跑迁移清库 (2026-08-22 实证), 禁用是正确运维决策, 问题在"空库无初始化路径"而非注释本身 → 文档化一次性流程; ⑥全量型号 = 200 万机型 15.5MB JSON 拖垮目录 (2026-08-23 实测), 截断 8 与前端对齐是性能必需, "展开更多"低频场景, 维持现状; 如产品要求目录可达全部型号, 另立需求做按品牌分页端点
+排除方案:
+  - fuzzy 移除 5000 上限: 1M 行 ILIKE 全表扫描 10s+ 超时 (8/23 走查实证), 不可行
+  - fuzzy 改深度分页: 需 keyset/游标 + 前端配合, 超出本次门禁修复范围, 留待产品需求
+  - 恢复 db-init/db-migrate 服务: 任何 compose up 都会重建并重跑迁移 → 数据全清, 危险
+  - Take(8) 加"加载更多"端点: 前端需联动改造 + 后端新端点, 低频场景不值, 留 P2
+关联文件: backend/src/SakuraFilter.Api/Controllers/PublicSearchController.cs, docker-compose.prod.yml, .env.prod.example, scripts/backup-db.sh, docs/ops-manual.md, frontend/src/api/types.ts

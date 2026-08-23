@@ -645,7 +645,7 @@ export interface PublicEightResponse {
   pageSize: number
   totalPages: number
   elapsedMs: number
-  countMode: string  // 'exact' | 'estimated'
+  countMode: string  // 'exact' | 'estimated' | 'truncated'(fuzzy 候选超 5000 上限)
   items: PublicSearchHit[]
 }
 
