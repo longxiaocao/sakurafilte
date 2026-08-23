@@ -6,7 +6,7 @@ import { test, expect, request } from '@playwright/test'
 const BASE = process.env.BASE_URL || 'http://localhost:5173'
 // 用户管理页是 JWT 专属 (仅 admin 角色可管理) — 旧 dev-admin-token (sakura_admin_token
 // 兼容 key) 的 user 为 null → canManage=false → 无"新增用户"按钮。必须真实 JWT 登录。
-const BACKEND = process.env.BACKEND_URL || 'https://localhost'
+const BACKEND = process.env.BACKEND_URL || 'http://localhost:5148'  // CI e2e.yml 同端口; 本地用生产容器跑时显式 BACKEND_URL=https://localhost 覆盖
 const ADMIN_USER = 'admin'
 const ADMIN_PWD = process.env.INITIAL_ADMIN_PASSWORD || 'Sakura#be1281'
 

@@ -6,7 +6,7 @@ import { test, expect, request } from '@playwright/test'
 
 const BASE = process.env.BASE_URL || 'http://localhost:5173'
 // 字典页按钮可能受 canManage 权限控制 (JWT user.role) — 用真实 JWT 登录保证 admin 角色
-const BACKEND = process.env.BACKEND_URL || 'https://localhost'
+const BACKEND = process.env.BACKEND_URL || 'http://localhost:5148'  // CI e2e.yml 同端口; 本地用生产容器跑时显式 BACKEND_URL=https://localhost 覆盖
 const ADMIN_USER = 'admin'
 const ADMIN_PWD = process.env.INITIAL_ADMIN_PASSWORD || 'Sakura#be1281'
 

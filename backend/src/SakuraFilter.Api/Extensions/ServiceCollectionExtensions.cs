@@ -212,9 +212,15 @@ public static class ServiceCollectionExtensions
 
         services.AddDbContext<ProductDbContext>(opt => opt.UseNpgsql(dataSource));
         // 🔧 fix(2026-08-23 走查): 注册 DbContextFactory — GetByIdAsync 详情 4 查询用独立上下文并发
-        //   WHY: 单 scoped DbContext 非线程安全 (共享锁使 Task.WhenAll 退化为串行 ~1s);
-        //   factory 创建独立上下文可真正并行 (首次详情 ~1s → ~300ms)。与 AddDbContext 可共存。
-        services.AddDbContextFactory<ProductDbContext>(opt => opt.UseNpgsql(dataSource));
+        // 🔧 fix(2026-08-23 CI 失败): 改用 AddDbContextFactory + lifetime: Scoped — 之前 default Singleton
+        //   factory 消费 Scoped DbContextOptions 容器验证失败 ("Cannot consume scoped service
+        //   'DbContextOptions' from singleton 'IDbContextFactory'"), API 启动异常 → CI 全部 fail。
+        //   改 Scoped 后 factory 与 options 同 scope, 容器验证通过。
+        //   保留 bc04a06 GetByIdAsync 4 查询并发的设计 (factory.CreateDbContextAsync() 每次取
+        //   独立 DbContext, 即使 Scoped factory 本身, 也保证 4 上下文不共享)。
+        services.AddDbContextFactory<ProductDbContext>(
+            opt => opt.UseNpgsql(dataSource),
+            lifetime: ServiceLifetime.Scoped);
         return services;
     }
 
