@@ -102,6 +102,54 @@ public class TypeaheadDictRebuildConcurrencyTests : PgIntegrationTestBase
         tmpCount.Should().Be(0, "重建完成后不应残留 typeahead_dict_new 临时表");
     }
 
+    [Fact]
+    public async Task StressMixedRebuildRequests_Converges_NoDeadlock_Integration()
+    {
+        if (!IsEnabled) { _output.WriteLine("Skip: PG_TEST_CONNECTION_STRING 未配置"); return; }
+
+        // 🔧 fix(2026-08-23 Codex 审查 #11 回归防护): 交接窗口压力测试 —
+        //   Codex 发现 RequestRebuildAsync 在 pending 检查与 running 释放之间存在丢触发窗口
+        //   (执行者读到 pending=0 后、清 running 前新请求只置 pending 无人接手)。该窗口极窄,
+        //   精确时序难以确定性复现, 用高并发随机交替调用 RebuildAsync/RequestRebuildAsync
+        //   压力暴露 (锁内原子交接后应无死锁/无异常/无残留/状态收敛)。
+        await EnsureTypeaheadDictTableAsync();
+        await SeedSourceRowsAsync();
+
+        var ds = new NpgsqlDataSourceBuilder(ConnectionString).Build();
+        var rebuild = new TypeaheadDictRebuildService(ds);
+
+        // Act: 12 线程 × 随机调用 (手动端点 + ETL 合并式混用), 全部并发
+        var rnd = new Random(42);
+        var tasks = Enumerable.Range(0, 12).Select(t =>
+            Task.Run(async () =>
+            {
+                for (var i = 0; i < 5; i++)
+                {
+                    if (rnd.Next(2) == 0)
+                        await rebuild.RebuildAsync(CancellationToken.None);
+                    else
+                        await rebuild.RequestRebuildAsync(CancellationToken.None);
+                    await Task.Yield();
+                }
+            }));
+        await Task.WhenAll(tasks);
+
+        // Assert: 无死锁 (Task.WhenAll 完成即证明) + 最终状态正确
+        _output.WriteLine("12 线程 × 5 次混合并发调用全部收敛 (无死锁/无竞态崩溃)");
+
+        await using var conn = new NpgsqlConnection(ConnectionString);
+        await conn.OpenAsync();
+        await using var countCmd = conn.CreateCommand();
+        countCmd.CommandText = "SELECT count(*) FROM typeahead_dict";
+        var rowCount = Convert.ToInt32(await countCmd.ExecuteScalarAsync());
+        rowCount.Should().BeGreaterThanOrEqualTo(3, "typeahead_dict 应包含重建结果");
+
+        await using var tmpCmd = conn.CreateCommand();
+        tmpCmd.CommandText = "SELECT count(*) FROM pg_tables WHERE tablename = 'typeahead_dict_new'";
+        var tmpCount = Convert.ToInt32(await tmpCmd.ExecuteScalarAsync());
+        tmpCount.Should().Be(0, "重建完成后不应残留 typeahead_dict_new 临时表");
+    }
+
     /// <summary>
     /// 确保 typeahead_dict 线上表存在 + pg_trgm 扩展可用 (与 023_typeahead_dict.sql 幂等语义一致)。
     /// WHY: CI 集成测试库由 EF migrations 创建, 不含手工 SQL 023/024 的 typeahead_dict 表,
