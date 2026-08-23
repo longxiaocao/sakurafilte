@@ -68,9 +68,11 @@ public class TypeaheadDictRebuildConcurrencyTests : PgIntegrationTestBase
     }
 
     /// <summary>
-    /// 确保 typeahead_dict 线上表存在 (与 023_typeahead_dict.sql 幂等建表一致)。
-    /// WHY: CI 集成测试库由 EF migrations 创建, 不含手工 SQL 023/024 的 typeahead_dict;
-    ///    RebuildAsync 第 4 步 DROP TABLE typeahead_dict 会因表不存在报错 → 测试自包含建表。
+    /// 确保 typeahead_dict 线上表存在 + pg_trgm 扩展可用 (与 023_typeahead_dict.sql 幂等语义一致)。
+    /// WHY: CI 集成测试库由 EF migrations 创建, 不含手工 SQL 023/024 的 typeahead_dict 表,
+    ///    且 postgres service 未启用 pg_trgm 扩展 — RebuildAsync 第 3 步建 GIN trgm 索引会报
+    ///    42704 (operator class gin_trgm_ops does not exist), 第 4 步 DROP typeahead_dict 会
+    ///    报 relation does not exist → 测试自包含建扩展+建表。
     /// </summary>
     private async Task EnsureTypeaheadDictTableAsync()
     {
@@ -78,6 +80,7 @@ public class TypeaheadDictRebuildConcurrencyTests : PgIntegrationTestBase
         await conn.OpenAsync();
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = """
+            CREATE EXTENSION IF NOT EXISTS pg_trgm;
             CREATE TABLE IF NOT EXISTS typeahead_dict (
                 field  TEXT NOT NULL,
                 value  TEXT NOT NULL,
