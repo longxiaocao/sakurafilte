@@ -402,6 +402,10 @@ export interface SearchRequest {
   pageSize?: number | null
 }
 
+export interface SetDimensionRequest {
+  showDimension?: boolean | null
+}
+
 export interface StorageConfigDto {
   provider?: string | null
   minio?: StorageEndpointConfig | null
@@ -489,4 +493,4 @@ export interface XrefReorderRequest {
   oemBrand?: string | null
   items?: XrefReorderItem[] | null
 }
-// 共生成 67 个 interface (跳过 1 个框架内置 schema)
+// 共生成 68 个 interface (跳过 1 个框架内置 schema)
