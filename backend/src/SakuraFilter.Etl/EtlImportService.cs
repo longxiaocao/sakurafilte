@@ -1353,9 +1353,10 @@ public class EtlImportService
         var db = scope.ServiceProvider.GetRequiredService<ProductDbContext>();
         var meili = scope.ServiceProvider.GetRequiredService<MeiliSearchProvider>();
 
-        // 2) 流式分批:每批 1000 个 MR.1 -> 从 products 查 (用 updated_at 时间窗)
+        // 2) 流式分批:每批 300 个 MR.1 -> 从 products 查 (用 updated_at 时间窗)
+        //    V3(2026-08-24): 1000 → 300 — 与全量重建一致, 降低 Meili 写入/内存峰值防硬件过载
         //    不再依赖 _affectedOems,避免 COPY 阶段加 lock
-        const int batchSize = 1000;
+        const int batchSize = 300;
         int directOk = 0, queuedFail = 0;
         long? lastId = null;  // keyset 分页 (updated_at + id 组合保证稳定)
         try
@@ -1547,7 +1548,11 @@ public class EtlImportService
     private async Task<(long direct, long queued)> SyncAllSearchIndexAsync(
         MeiliSearchProvider meili, ProductDbContext db, CancellationToken ct)
     {
-        const int batchSize = 1000;
+        // V3(2026-08-24): batchSize 1000 → 300 — 用户反馈全量重建期间电脑死机 (资源耗尽)
+        //   1000 批 = 一次构建 1000 个文档(每个含 oem_list/machine_list 数组) + Meili 写入 1000 文档
+        //   21GB 索引写入峰值, 叠加 api 容器无内存限制 → 硬件过载. 300 批峰值降 ~70%,
+        //   重建总时长约 1.5-2h (可接受, 后台跑不阻塞业务)
+        const int batchSize = 300;
         long direct = 0, queued = 0;
         long? lastId = null;
 
