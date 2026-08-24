@@ -286,8 +286,17 @@ function stripSearchHighlight(value: string | null | undefined): string | undefi
 const placeholderImage = '/images/product-placeholder.svg'
 
 function getPrimaryImageUrl(hit: AggregateSearchHit): string {
+  // 🔧 fix(2026-08-24): 优先用后端回填的 R2 主图 (经 /api/public/images 代理);
+  //   旧 /oem2/{oem3}.jpg 静态路径仅作降级 (nginx 静态目录, 容器重建会丢图)
+  if (hit.primaryImageUrl) return hit.primaryImageUrl
   const oemNo3 = getPrimaryOem(hit)?.oemNo3
   return oemNo3 ? `/oem2/${encodeURIComponent(oemNo3)}.jpg` : placeholderImage
+}
+
+// 🔧 fix(2026-08-24): 无主图产品的占位块缩写 (OIL FILTER → OIL), 未配图产品全覆盖
+function getTypeAbbrev(hit: AggregateSearchHit): string {
+  const t = (hit.type || hit.productName1 || 'FILTER').trim().toUpperCase()
+  return t.split(/\s+/)[0]?.slice(0, 4) || 'FILTER'
 }
 
 function usePlaceholder(event: Event): void {
@@ -561,12 +570,21 @@ onBeforeUnmount(() => {
       >
         <div class="flex items-start gap-3">
           <img
+            v-if="hit.primaryImageUrl"
             :src="getPrimaryImageUrl(hit)"
             :alt="`${getPublicOemLabel(hit)} 产品主图`"
             class="h-20 w-20 shrink-0 border border-gray-100 object-contain bg-white"
             loading="lazy"
             @error="usePlaceholder"
           />
+          <!-- 🔧 fix(2026-08-24): 无主图产品显示类型缩写占位块 (替代空白占位图, 100 万产品视觉一致) -->
+          <div
+            v-else
+            class="h-20 w-20 shrink-0 border border-gray-100 bg-gray-50 flex items-center justify-center text-xs font-medium text-gray-400 dark:bg-[var(--color-bg-secondary)] dark:text-[var(--color-text-muted)]"
+            :title="`${getPublicOemLabel(hit)} 暂无产品图`"
+          >
+            {{ getTypeAbbrev(hit) }}
+          </div>
           <!-- 右侧内容区: 垂直分层 (主信息行 + 操作行), 避免三块混排 -->
           <div class="flex-1 min-w-0 flex flex-col gap-2">
             <!-- 第一行: 物品型号主信息 -->
