@@ -1,3 +1,4 @@
+-- **idempotent 脚本, 可重复执行** (ADD COLUMN IF NOT EXISTS + DEFAULT false)
 -- 027: cross_references 白名单标记 (V3 2026-08-24)
 --   WHY: sort_order 是源数据自带的优先级值(0~100 小整数, 92% 记录 >0),
 --        同时承担搜索排序(BrandSortOrderMin/OemListSortOrderMin)。
@@ -5,7 +6,6 @@
 --   V3 方案: 新增 is_whitelisted 区分"白名单"(管理员手动维护, 少量) 与 "源排序"。
 --        白名单判定改 is_whitelisted=true; sort_order 保留用于搜索排序。
 --        现有数据默认 false → 白名单清空, 由管理员重新手工添加。
--- **idempotent 脚本, 可重复执行** (ADD COLUMN IF NOT EXISTS + DEFAULT false)
 
 ALTER TABLE cross_references
     ADD COLUMN IF NOT EXISTS is_whitelisted boolean NOT NULL DEFAULT false;
