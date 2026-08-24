@@ -335,11 +335,25 @@ public class MeiliSearchProvider : ISearchProvider
         var rawResult = await _index.SearchAsync<JsonObject>(query, searchQuery, ct);
         var total = (rawResult as SearchResult<JsonObject>)?.EstimatedTotalHits ?? rawResult.Hits.Count;
 
+        // V3(2026-08-24): Hybrid 白名单补位 — Meili 命中集上限 1000, 白名单产品(竞价排名)
+        //   可能被 ranking 挤出命中集 (如搜品牌缩写时 oem_brands_str 单 token 匹配分数低).
+        //   二次重排只能排"命中集内"顺序, 集外产品必须从 PG 单独取并强制排最前.
+        //   补位条件: 搜索词非空 且 白名单产品的 品牌/OEM3/OEM2/产品名 含搜索词 (大小写不敏感)
+        //   白名单数量级 < 100, 构造成本可忽略; 查询失败降级为空 (不阻塞主搜索)
+        var boostHits = new List<AggregateSearchHit>();
+        var boostMr1s = new HashSet<string>();
+        if (!string.IsNullOrWhiteSpace(query))
+        {
+            boostHits = await LoadWhitelistBoostHitsAsync(query.ToLowerInvariant(), ct);
+            boostMr1s = boostHits.Select(h => h.Mr1).ToHashSet();
+        }
+
         // ① P0 缩索引: oem_list/machine_list 已移出 Meili 索引体, 检索后按 mr_1 从 PG 批量回填 (仅当前页)
         var pageMr1s = rawResult.Hits
             .Select(h => h.TryGetPropertyValue("mr_1", out var n) ? n?.GetValue<string>() : null)
             .Where(m => !string.IsNullOrWhiteSpace(m))
             .Select(m => m!)
+            .Where(m => !boostMr1s.Contains(m))  // 白名单补位产品不重复回填
             .Distinct()
             .ToList();
         // ① P0 缩索引: oem/machine 列表由 PG 回填。PG 不可用时降级为空列表,
@@ -355,9 +369,14 @@ public class MeiliSearchProvider : ISearchProvider
         }
 
         // 映射 hits → AggregateSearchHit (含完整 oem_list + machine_list + _formatted + _rankingScore)
-        var hits = new List<AggregateSearchHit>(rawResult.Hits.Count);
+        // V3(2026-08-24): 暂存白名单/品牌 sort 值, 用于二次重排 (白名单优先, 不依赖 Meili inverted index 索引时延)
+        var indexed = new List<(AggregateSearchHit Hit, int? OemSort, int? BrandSort, int OriginalIdx)>(rawResult.Hits.Count);
         foreach (var hit in rawResult.Hits)
         {
+            // V3: 跳过已由白名单补位覆盖的产品 (避免重复)
+            if (hit.TryGetPropertyValue("mr_1", out var hitMr1) && hitMr1?.GetValue<string>() is string hm1 && boostMr1s.Contains(hm1))
+                continue;
+
             // XSS 防御: 递归处理 _formatted
             var formatted = hit.ContainsKey("_formatted") ? hit["_formatted"] : null;
             if (formatted is JsonObject formattedObj)
@@ -375,6 +394,10 @@ public class MeiliSearchProvider : ISearchProvider
             var media = ExtractFieldValue(hit, formatted, "media");
             var isPublished = hit.TryGetPropertyValue("is_published", out var pubNode) && pubNode?.GetValue<bool>() == true;
             var isDiscontinued = hit.TryGetPropertyValue("is_discontinued", out var discNode) && discNode?.GetValue<bool>() == true;
+
+            // 提取白名单/品牌 sort 值 (用于二次重排)
+            int? oemSort = TryGetInt(hit, "oem_list_sort_order_min");
+            int? brandSort = TryGetInt(hit, "brand_sort_order_min");
 
             // WHY: 兼容 P0 缩索引上线前已存在的旧文档。旧文档仍带嵌套列表，PG 暂时不可用时不能丢失公开 OEM/机型。
             enrichMap.TryGetValue(mr1 ?? "", out var enrichPair);
@@ -406,22 +429,37 @@ public class MeiliSearchProvider : ISearchProvider
                 }
             }
 
-            hits.Add(new AggregateSearchHit(
-                Mr1: mr1 ?? "",
-                ProductName1: productName1,
-                ProductName2: productName2,
-                Oem2: oem2,
-                Type: type,
-                Remark: remark,
-                Media: media,
-                IsPublished: isPublished,
-                IsDiscontinued: isDiscontinued,
-                OemList: oemList,
-                MachineList: machineList,
-                Formatted: formattedDict,
-                RankingScore: rankingScore
+            indexed.Add((
+                new AggregateSearchHit(
+                    Mr1: mr1 ?? "",
+                    ProductName1: productName1,
+                    ProductName2: productName2,
+                    Oem2: oem2,
+                    Type: type,
+                    Remark: remark,
+                    Media: media,
+                    IsPublished: isPublished,
+                    IsDiscontinued: isDiscontinued,
+                    OemList: oemList,
+                    MachineList: machineList,
+                    Formatted: formattedDict,
+                    RankingScore: rankingScore
+                ),
+                oemSort, brandSort, indexed.Count
             ));
         }
+
+        // V3(2026-08-24): Hybrid 补位 + 二次重排
+        //   1. 白名单补位产品 (boostHits) 无条件最前 — 竞价排名语义 (Meili 命中集外也保证可见)
+        //   2. Meili 命中集内: 白名单 (oemSort != null) 排前, 非白名单保持 Meili 原相对位置
+        var finalHits = boostHits
+            .Concat(indexed
+                .OrderBy(t => t.OemSort.HasValue ? 0 : 1)
+                .ThenBy(t => t.OemSort ?? int.MaxValue)
+                .ThenBy(t => t.BrandSort ?? int.MaxValue)
+                .ThenBy(t => t.OriginalIdx)
+                .Select(t => t.Hit))
+            .ToList();
 
         sw.Stop();
         var response = new AggregateSearchResponse(
@@ -431,7 +469,7 @@ public class MeiliSearchProvider : ISearchProvider
             TotalPages: (int)Math.Ceiling(total / (double)pageSize),
             ProcessingTimeMs: (int)sw.ElapsedMilliseconds,
             Provider: "meilisearch",
-            Hits: hits
+            Hits: finalHits
         );
         _searchCache?.Set(cacheKey, response);
         return response;
@@ -598,6 +636,88 @@ public class MeiliSearchProvider : ISearchProvider
             return s2;
         }
         return null;
+    }
+
+    /// <summary>V3(2026-08-24): 从 Meili hit 安全读取 int 字段 (sort 字段), 失败返回 null</summary>
+    private static int? TryGetInt(JsonObject hit, string fieldName)
+    {
+        if (!hit.TryGetPropertyValue(fieldName, out var node) || node == null) return null;
+        if (node is JsonValue val)
+        {
+            if (val.TryGetValue<int>(out var i)) return i;
+            if (val.TryGetValue<long>(out var l)) return (int)l;
+            if (val.TryGetValue<double>(out var d)) return (int)d;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// V3(2026-08-24): Hybrid 搜索 — 白名单(竞价排名)产品强制补位
+    ///   WHY: Meili 命中集上限 1000 + ranking 规则可能把白名单产品挤出命中集
+    ///        (搜品牌缩写时 oem_brands_str 单 token 匹配分数低于 typo 匹配),
+    ///        二次重排只能排命中集内顺序. 本方法从 PG 直接取白名单产品,
+    ///        搜索词匹配 (品牌/OEM3/OEM2/产品名 含 q) 时构造成结果排最前.
+    ///   白名单数量级 &lt; 100, 构造成本可忽略; 查询失败降级为空 (不阻塞主搜索).
+    /// </summary>
+    private async Task<List<AggregateSearchHit>> LoadWhitelistBoostHitsAsync(string queryLower, CancellationToken ct)
+    {
+        try
+        {
+            var rows = await _db.CrossReferences.AsNoTracking()
+                .Where(x => x.IsWhitelisted && !x.IsDiscontinued && x.IsPublished)
+                .OrderBy(x => x.SortOrder)
+                .Select(x => new { x.ProductId, x.SortOrder, x.OemBrand, x.OemNo3, x.Oem2, x.MachineType, x.ProductName1 })
+                .ToListAsync(ct);
+            if (rows.Count == 0) return new List<AggregateSearchHit>();
+
+            // 同一产品多品牌白名单: 取最小 sortOrder 的一条 (避免重复展示)
+            var best = rows.GroupBy(r => r.ProductId).Select(g => g.First()).ToList();
+
+            // 批量取 mr_1 (白名单产品主键)
+            var ids = best.Select(r => r.ProductId).ToList();
+            var mr1Map = await _db.Products.AsNoTracking()
+                .Where(p => ids.Contains(p.Id))
+                .Select(p => new { p.Id, p.Mr1 })
+                .ToDictionaryAsync(p => p.Id, p => p.Mr1, ct);
+
+            var result = new List<AggregateSearchHit>(best.Count);
+            foreach (var r in best)
+            {
+                // 搜索词匹配判断: 品牌/OEM3/OEM2/产品名 任一包含 (大小写不敏感)
+                var haystacks = new[] { r.OemBrand, r.OemNo3, r.Oem2, r.ProductName1 };
+                if (!haystacks.Any(h => h != null && h.ToLowerInvariant().Contains(queryLower, StringComparison.OrdinalIgnoreCase)))
+                    continue;  // 与搜索词不相关, 不补位 (避免污染无关搜索)
+
+                if (!mr1Map.TryGetValue(r.ProductId, out var mr1) || string.IsNullOrWhiteSpace(mr1))
+                    continue;
+
+                var oemList = new List<AggregateOemItem>
+                {
+                    new(r.OemBrand, r.OemNo3, r.Oem2, r.SortOrder, r.MachineType, true, null)
+                };
+                result.Add(new AggregateSearchHit(
+                    Mr1: mr1,
+                    ProductName1: r.ProductName1,
+                    ProductName2: null,
+                    Oem2: r.Oem2,
+                    Type: r.ProductName1 ?? "UNKNOWN",
+                    Remark: null,
+                    Media: null,
+                    IsPublished: true,
+                    IsDiscontinued: false,
+                    OemList: oemList,
+                    MachineList: new List<AggregateMachineItem>(),
+                    Formatted: null,
+                    RankingScore: null
+                ));
+            }
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "白名单补位查询失败, 降级为空 (主搜索不受影响)");
+            return new List<AggregateSearchHit>();
+        }
     }
 
     public async Task IndexAsync(IEnumerable<Mr1IndexDoc> docs, CancellationToken ct = default)
