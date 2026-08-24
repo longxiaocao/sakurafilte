@@ -216,6 +216,34 @@ public static class AdminEtlEndpoints
         })
         .WithName("AdminReindexAll");
 
+        // V3(2026-08-24): 断点续传重建 (掉盘/冻结恢复后不清空续传) — 从 perf 分支移植
+        //   WHY: 该机磁盘/WSL2 不稳定, 全量重建每次清空从头来, 中断白干; 续传从 fromId 继续, 已提交文档保留
+        //   用法: fromId = Meili 当前文档数 - 2000 (留余量覆盖边界缺口); limit 可选 (分批触发, 防硬件过载)
+        group.MapPost("/reindex-resume", async (
+            EtlImportService etl,
+            ILogger<Program> logger,
+            [FromQuery] long fromId,
+            [FromQuery] int? limit,
+            CancellationToken ct) =>
+        {
+            logger.LogInformation("触发 Meilisearch 续传重建 fromId={FromId} limit={Limit}", fromId, limit);
+            try
+            {
+                // 与 /reindex-all 同模式: 后台 fire-and-forget, 避免 HTTP 超时取消
+                _ = Task.Run(async () =>
+                {
+                    try { await etl.ReindexFromIdAsync(fromId, limit, CancellationToken.None); }
+                    catch (Exception ex) { logger.LogError(ex, "后台 ReindexFromIdAsync 失败"); }
+                });
+                return Results.Ok(new { message = $"Meilisearch 续传重建已触发 (fromId={fromId}, limit={limit}, 后台执行)", hint = "通过 /api/admin/etl/progress 查询进度" });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.Conflict(new { error = ex.Message });
+            }
+        })
+        .WithName("AdminReindexResume");
+
         // 进度 SSE 流
         // v30-17 P0 安全修复: SSE 端点脱离 group 鉴权, 未认证用户可获取 ETL 进度
         //   WHY 脱离 group: V24-F78 时期为兼容 EventSource (不能带 header) 故意脱离, ADR #1 已改用 fetch + Bearer, 后端鉴权可恢复
