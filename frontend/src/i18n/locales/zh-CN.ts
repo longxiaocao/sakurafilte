@@ -108,12 +108,13 @@ export default {
     },
     etlview: {
       page_title: 'ETL 触发与监控',
-      guide_title: '使用步骤',
-      guide_step1: '1. 选择数据实体：产品 / OEM 交叉引用 / 机型适配',
-      guide_step2: '2. 选择导入模式：全量重建（清空后重导）· 仅新增（跳过已存在）· 增量更新（存在则覆盖）',
-      guide_step3: '3. 输入数据文件路径（容器内可访问的绝对路径，如 /tmp/etl/products.jsonl），或直接拖拽 XLSX 文件',
-      guide_step4: '4. 点击"触发 ETL"后台执行；可先点"执行 dry-run"只校验不导入',
-      guide_step5: '5. 在"数据流程"与"最近错误"查看实时进度与失败原因',
+      guide_title: 'ETL 是什么与使用步骤',
+      guide_intro: 'ETL 是产品数据的批量导入工具：把产品资料文件（XLSX 或 JSONL）导入数据库。首次上线灌数据、拿到新目录更新、或数据订正后重灌时使用；日常查询无需操作此页。',
+      guide_step1: '① 选择数据实体：产品 (products) / OEM 交叉引用 (xrefs) / 机型适配 (apps)',
+      guide_step2: '② 选择导入模式：全量重建（清空后重导）· 仅新增（跳过已有）· 增量更新（存在则覆盖）',
+      guide_step3: '③ 提供数据文件：拖拽 XLSX，或输入容器内可访问的 JSONL 路径（如 /tmp/etl/products.jsonl）',
+      guide_step4: '④ 点击"触发 ETL"后台执行；可先点"执行 dry-run"只校验不导入',
+      guide_step5: '⑤ 在下方"数据流程"与"最近错误"查看进度与失败原因',
       entity: {
         products: '产品',
         xrefs: 'OEM 交叉引用',
@@ -149,6 +150,7 @@ export default {
         status_paused: '已暂停',
         status_cancelled: '已取消',
         status_idle: '空闲',
+        empty_hint: '当前无运行中任务 (空闲属正常状态)。在顶部配置并触发 ETL 后, 此处显示导入流程进度。',
         elapsed_label: '已耗时',
         errors_label: '错误'
       },
