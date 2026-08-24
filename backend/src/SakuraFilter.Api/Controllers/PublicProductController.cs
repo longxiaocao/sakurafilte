@@ -54,6 +54,9 @@ public class PublicProductController : ControllerBase
     /// </summary>
     [HttpGet("product/{slug}")]
     [Obsolete("V2: 改用 Razor Pages /products/{pn1}/{pn2}/{brand}/{oem3} (Task 4.1); 此 API 端点保留供 JSON 客户端调用, 浏览器访问走 /product/{oem} 301 重定向")]
+    // 🔧 fix(2026-08-24): 禁缓存 — 详情含动态配置(图片/标注线 show_dimension), 无 Cache-Control 头时
+    //   浏览器启发式缓存旧 JSON 导致配置变更不生效 (用户实测: 关闭标注线仍显示)
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     public async Task<IActionResult> GetBySlug(string slug, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(slug))
