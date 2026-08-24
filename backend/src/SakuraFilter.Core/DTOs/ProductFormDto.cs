@@ -1,5 +1,8 @@
 namespace SakuraFilter.Core.DTOs;
 
+/// <summary>V2(2026-08-24): 图片尺寸标注开关请求 (详情页主图叠加长宽高标注线)</summary>
+public record SetDimensionRequest(bool ShowDimension);
+
 /// <summary>
 /// 产品表单 DTO (Day 8.1)
 /// 用途: 后台产品录入表单 (规格 新思路.xlsx - 后台新增产品格式 7 个分区)
@@ -137,7 +140,8 @@ public record ProductImageInfo(
     DateTime UploadedAt,
     string? UploadedBy,
     string? OemNo3,         // V2: 主图关联的 OEM 3
-    string? ImageRole       // V2: "primary" / "detail"
+    string? ImageRole,       // V2: "primary" / "detail"
+    bool ShowDimension       // V2(2026-08-24): 是否在主图上叠加尺寸标注线
 );
 
 /// <summary>产品列表查询响应 (Day 8.1: 后台产品列表分页)</summary>
@@ -256,7 +260,7 @@ public record PublicProductDetailDto(
             .ToList(),
         source.MachineApplications,
         source.Images.Select(x => new PublicProductImageInfo(
-            x.Slot, x.ImageKey, x.ImageUrl, x.IsPrimary, x.OemNo3, x.ImageRole)).ToList());
+            x.Slot, x.ImageKey, x.ImageUrl, x.IsPrimary, x.OemNo3, x.ImageRole, x.ShowDimension)).ToList());
     }
 }
 
@@ -275,7 +279,8 @@ public record PublicProductImageInfo(
     string ImageUrl,
     bool IsPrimary,
     string? OemNo3,
-    string? ImageRole);
+    string? ImageRole,
+    bool ShowDimension);
 
 public record XrefInfo(long Id, string? ProductName1, string? OemBrand, string? OemNo3, string? Oem2, int SortOrder, string? MachineType, bool IsPublished, uint RowVersion);
 
