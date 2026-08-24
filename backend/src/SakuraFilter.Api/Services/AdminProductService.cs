@@ -719,7 +719,7 @@ public class AdminProductService
                 img.Id, img.ProductId, img.Slot, img.ImageKey, urls[i],
                 img.FileSize, img.ContentType, img.Width, img.Height,
                 img.IsPrimary, img.UploadedAt, img.UploadedBy,
-                img.OemNo3, img.ImageRole));
+                img.OemNo3, img.ImageRole, img.ShowDimension));
         }
 
         return new ProductDetailDto(
