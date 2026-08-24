@@ -273,6 +273,9 @@ function onUserCommand(cmd: string) {
     router.push('/change-password')
   } else if (cmd === 'logout') {
     handleLogout()
+  } else if (cmd === 'goAdmin') {
+    // V3(2026-08-24): 已登录用户后台入口 (未登录按钮已降权为"登录", 后台入口移至用户菜单)
+    router.push('/admin/xrefs/reorder')
   }
 }
 
@@ -562,19 +565,23 @@ function doGlobalSearch() {
       </button>
       <template #dropdown>
         <el-dropdown-menu>
-          <el-dropdown-item command="changePassword">{{ t('auth.changePassword') }}</el-dropdown-item>
+          <!-- V3(2026-08-24): 已登录用户后台入口 (原"进入后台"按钮已降权为"登录") -->
+          <el-dropdown-item command="goAdmin">
+            <el-icon class="mr-1"><Setting /></el-icon>{{ t('nav.enterAdminArea') }}
+          </el-dropdown-item>
+          <el-dropdown-item command="changePassword" divided>{{ t('auth.changePassword') }}</el-dropdown-item>
           <el-dropdown-item command="logout" divided>{{ t('auth.logout') }}</el-dropdown-item>
         </el-dropdown-menu>
       </template>
     </el-dropdown>
-    <!-- P-Admin-UX v4: 移除 v3 的"已登录 admin 角标"按钮, 因为 v4 admin 6 入口在任意路径都保留, 此按钮冗余 -->
+    <!-- V3(2026-08-24): 未登录按钮降权 — 文案"登录"(不再叫"进入后台"), 去锁图标, 缩小+中性色,
+        避免向访客暴露"内部后台"语义; 已登录用户从用户菜单进后台 -->
     <button
       v-else
       @click="toggleAdmin"
-      class="hidden sm:flex px-2 py-1 text-sm hairline hover:bg-[var(--color-bg-hover)] items-center gap-1"
+      class="hidden sm:flex px-1.5 py-0.5 text-xs text-gray-500 hover:text-[var(--color-text)] hover:bg-[var(--color-bg-hover)] rounded items-center gap-1"
       :aria-label="isAdminPath ? t('nav.exitAdmin') : t('common.aria.enterAdminLogin')"
     >
-      <el-icon aria-hidden="true"><Lock v-if="!isAdminPath" /><Unlock v-else /></el-icon>
       {{ isAdminPath ? t('nav.exitAdmin') : t('nav.enterAdmin') }}
     </button>
   </header>
