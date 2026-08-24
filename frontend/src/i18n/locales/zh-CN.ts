@@ -115,15 +115,25 @@ export default {
       guide_step3: '③ 提供数据文件：拖拽 XLSX，或输入容器内可访问的 JSONL 路径（如 /tmp/etl/products.jsonl）',
       guide_step4: '④ 点击"触发 ETL"后台执行；可先点"执行 dry-run"只校验不导入',
       guide_step5: '⑤ 在下方"数据流程"与"最近错误"查看进度与失败原因',
+      // V3(2026-08-25): P0 导入向导 (模板下载 + 文件上传)
+      template_download: '下载模板',
+      uploading: '上传中...',
+      upload_hint: '点击或拖拽文件到此处上传 (XLSX / JSONL)',
+      upload_tip: '上传后自动填入服务器路径；也可手动输入容器内 JSONL 路径（高级）',
+      err: {
+        template_download_failed: '模板下载失败',
+        upload_failed: '文件上传失败'
+      },
       entity: {
         products: '产品',
         xrefs: 'OEM 交叉引用',
         apps: '机型适配'
       },
       mode: {
-        full_load: '全量重建 (清空后导入)',
-        insert_only: '仅新增 (跳过已存在)',
-        upsert: '增量更新 (存在则覆盖)'
+        // V3(2026-08-25): P1 策略口语化 — 客户可理解的语言
+        full_load: '全量重建（清空后重新导入）',
+        insert_only: '仅新增（跳过已存在的）',
+        upsert: '有则更新、无则新增（推荐）'
       },
       dry_run_check: '预检 (仅校验文件, 不导入)',
       section: {
@@ -133,6 +143,7 @@ export default {
         last_finished: '最近一次完成结果',
         dry_run: '最近 dry-run 校验',
         recent_errors: '最近错误 (最多 10 条)',
+        row_errors: '导入失败明细 (行号定位, 最多 100 条)',
         audit: '取消审计 (按 reason_code 聚合)'
       ,reindex_confirm: '执行全量重建', total_cancelled: '总取消数', no_cancelled_records: '暂无取消记录'
       },
@@ -230,6 +241,10 @@ export default {
         phrase_63454: '已读/插/改',
         en_v3: '耗时',
         cancel_timestamp: '取消时间',
+        // V3(2026-08-25): P2 行级错误
+        row_no: '行号',
+        field: '字段',
+        reason: '原因',
       },
       placeholder: {
         jsonl_absolute_path: 'JSONL 绝对路径',
@@ -279,6 +294,9 @@ export default {
         dry_run_validation_completed: 'dry-run 校验完成',
         triggered_etl_background_execute: '已触发 ETL, 后台执行中',
         phrase_21459: '已清除',
+        // V3(2026-08-25): P0 导入向导
+        template_downloaded: '模板已下载 ({entity})',
+        file_uploaded: '文件 {name} 上传成功, 已填入路径'
       },
       templatetext: {
         immediately_import: '立即导入',
