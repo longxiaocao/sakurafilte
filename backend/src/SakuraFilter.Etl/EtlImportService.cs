@@ -1448,6 +1448,12 @@ public class EtlImportService
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
         var cts = AcquireActiveCts("reindex-all", ct);
+        // V3(2026-08-24): 让 ETL 监控页看到 reindex 进度 — Progress.Start 置 running
+        //   WHY: 原实现不更新单例 EtlProgress, /api/admin/etl/progress 恒返回 inProgress=false,
+        //        监控页"无任何数据" (用户反馈)。Start/SetRowsTotal/SetStage/IncrIndexed/Finish 均为
+        //        线程安全 API, 后台 Task.Run 与 SSE 轮询可并发。
+        Progress.Start("reindex-all");
+        Progress.SetStage("meili-sync");
         // v24 修复: broadcastCtx 在 try 外声明为 null, 确保 finally 始终能 StopSnapshotTimer
         //   WHY: 之前 StartSnapshotTimerIfNeeded / CreateScope / conn.OpenAsync 都在 try 块外,
         //        若其中任一抛异常, finally 不执行, _activeCts 不释放 (资源泄漏)
@@ -1469,6 +1475,14 @@ public class EtlImportService
             using var scope = _sp.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<ProductDbContext>();
             var meili = scope.ServiceProvider.GetRequiredService<MeiliSearchProvider>();
+
+            // V3: 进度条分母 = 总产品数 (约 100 万)
+            try
+            {
+                var totalProducts = await db.Products.AsNoTracking().LongCountAsync(ct);
+                Progress.SetRowsTotal(totalProducts);
+            }
+            catch { /* 统计失败不阻塞重建 */ }
 
             await using var conn = new Npgsql.NpgsqlConnection(_pgConn);
             await conn.OpenAsync(ct);
@@ -1498,18 +1512,22 @@ public class EtlImportService
             sw.Stop();
             var msg = $"全量重建完成: 直接={direct}, 入队={queued}";
             _logger.LogInformation("ReindexAllAsync: {Message}, elapsed={ElapsedMs}ms", msg, sw.ElapsedMilliseconds);
+            // V3: 完结状态落库 (history 端点可见 reindex 记录)
+            Progress.Finish("reindex-all", "full-reindex");
             return new ReindexResult(msg, direct, queued, sw.ElapsedMilliseconds, null);
         }
         catch (OperationCanceledException)
         {
             sw.Stop();
             _logger.LogWarning("ReindexAllAsync 被取消, elapsed={ElapsedMs}ms", sw.ElapsedMilliseconds);
+            Progress.Fail("全量重建被取消", "reindex-all", "full-reindex");
             return new ReindexResult("全量重建被取消", 0, 0, sw.ElapsedMilliseconds, "CANCELLED");
         }
         catch (Exception ex)
         {
             sw.Stop();
             _logger.LogError(ex, "ReindexAllAsync 异常, elapsed={ElapsedMs}ms", sw.ElapsedMilliseconds);
+            Progress.Fail($"全量重建失败: {ex.Message}", "reindex-all", "full-reindex");
             return new ReindexResult("全量重建失败", 0, 0, sw.ElapsedMilliseconds, ex.Message);
         }
         finally
@@ -1554,6 +1572,8 @@ public class EtlImportService
                     _logger.LogWarning(docEx, "BuildMr1DocumentAsync 失败 mr1={Mr1},跳过", p.Mr1);
                 }
             }
+            // V3: 进度分子 = 已写入文档数 (前端进度条显示 reindex 进展)
+            if (docs.Count > 0) Progress.IncrIndexedBy(docs.Count);
 
             try
             {
