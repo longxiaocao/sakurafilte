@@ -430,6 +430,8 @@ export interface EtlProgress {
   finishedAt?: string
   lastError?: string
   recentErrors?: { at: string; message: string }[]
+  // V3(2026-08-25): P2 行级错误明细
+  rowErrors?: { lineNo: number; field: string; reason: string }[]
 }
 
 export interface EtlActiveTaskInfo {
