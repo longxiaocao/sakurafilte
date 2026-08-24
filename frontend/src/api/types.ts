@@ -735,6 +735,9 @@ export interface AggregateSearchHit {
   type: string
   remark?: string | null
   media?: string | null
+  // 🔧 fix(2026-08-24): 搜索卡片主图 (R2 经后端代理) — 优先于旧 /oem2/{oem3}.jpg 静态路径
+  primaryImageKey?: string | null
+  primaryImageUrl?: string | null
   oemList: AggregateOemItem[]
   machineList: AggregateMachineItem[]
   // _formatted 高亮字段 (后端已做 XSS 防御, 前端 sanitizeFormatted 双保险)
