@@ -156,6 +156,10 @@ public class CrossReference
     [Column("machine_type")] public string? MachineType { get; set; } = "others";  // V2: 机型类型双轨
     [Column("is_published")] public bool IsPublished { get; set; } = true;  // V2: 是否发布
     [Column("is_discontinued")] public bool IsDiscontinued { get; set; }
+    // V3(2026-08-24): 白名单标记 — 与 sort_order(源数据优先级/搜索排序)解耦
+    //   sort_order>0 仅表示源数据带排序值(92% 记录均有), 不代表"白名单内";
+    //   白名单 = 管理员手动"添加到白名单"的少量 OEM (is_whitelisted=true)
+    [Column("is_whitelisted")] public bool IsWhitelisted { get; set; }
     [Column("created_at")] public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     // V2: xmin 乐观锁令牌(复用 PostgreSQL 系统列,与 Product.RowVersion 同机制)
