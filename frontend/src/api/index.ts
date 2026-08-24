@@ -559,17 +559,19 @@ export const imageApi = {
   },
   // V2 Task 3.3.3: 上传主图 (slot=1, 按 OEM 3 命名)
   //   改进 3.1: onUploadProgress 回调由调用方传入, 用于 UI 进度条更新
+  //   V2(2026-08-24): showDimension 参数 — 上传即指定是否叠加尺寸标注线
   uploadPrimary(
     mr1: string,
     oemNo3: string,
     file: File,
-    onProgress?: (progress: number) => void
+    onProgress?: (progress: number) => void,
+    showDimension = false
   ): Promise<import('./types').ProductImageV2> {
     const fd = new FormData()
     fd.append('file', file)
     return http
       .post(`/admin/products/${encodeURIComponent(mr1)}/images/primary`, fd, {
-        params: { oemNo3 },
+        params: { oemNo3, showDimension },
         headers: { 'Content-Type': 'multipart/form-data' },
         onUploadProgress: onProgress
           ? (e: any) => {
@@ -587,13 +589,14 @@ export const imageApi = {
     mr1: string,
     slot: number,
     file: File,
-    onProgress?: (progress: number) => void
+    onProgress?: (progress: number) => void,
+    showDimension = false
   ): Promise<import('./types').ProductImageV2> {
     const fd = new FormData()
     fd.append('file', file)
     return http
       .post(`/admin/products/${encodeURIComponent(mr1)}/images/detail`, fd, {
-        params: { slot },
+        params: { slot, showDimension },
         headers: { 'Content-Type': 'multipart/form-data' },
         onUploadProgress: onProgress
           ? (e: any) => {
@@ -602,6 +605,12 @@ export const imageApi = {
             }
           : undefined
       })
+      .then((r) => r.data)
+  },
+  // V2(2026-08-24): 切换图片尺寸标注开关 (不重传文件)
+  setDimension(mr1: string, imageRole: 'primary' | 'detail', slot: number, showDimension: boolean): Promise<import('./types').ProductImageV2> {
+    return http
+      .post(`/admin/products/${encodeURIComponent(mr1)}/images/${imageRole}/${slot}/dimension`, { showDimension })
       .then((r) => r.data)
   },
   // V2: 删除图片 (按 mr1 + imageRole + slot)
