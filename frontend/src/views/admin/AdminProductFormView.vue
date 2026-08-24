@@ -139,7 +139,7 @@ const uploadProgress = ref<number>(0)
 //   images[0] 为主图 (slot=1, imageRole=primary)
 //   images[1..5] 为详情图 (slot=2-6, imageRole=detail)
 //   WHY 复用数组: 旧 UI 6 slot 网格布局保留, 仅语义分层
-const images = ref<Record<number, { slot: number; imageKey: string; imageUrl: string; oemNo3?: string | null; imageRole?: string }>>({})
+const images = ref<Record<number, { slot: number; imageKey: string; imageUrl: string; oemNo3?: string | null; imageRole?: string; showDimension?: boolean }>>({})
 // 🔧 fix(审查): 详情图动态槽位 — 只显示已占用槽 + 1 个可添加槽 (用户反馈: 6 个空槽很丑)
 //   上传成功后自动出现下一个空槽, 最多 5 张 (slot 2-6)
 const detailSlots = computed(() => {
@@ -576,6 +576,18 @@ async function removeDetailImage(slot: number) {
   }
 }
 
+// V2(2026-08-24): 切换图片尺寸标注开关 (不重传文件, 详情页据此渲染尺寸线)
+async function toggleDimension(slot: number, imageRole: 'primary' | 'detail', show: boolean) {
+  if (!form.mr1) return
+  try {
+    const r = await imageApi.setDimension(form.mr1, imageRole, slot, !!show)
+    if (images.value[slot]) images.value[slot].showDimension = !!r.showDimension
+    ElMessage.success(show ? '已开启尺寸标注线' : '已关闭尺寸标注线')
+  } catch {
+    // 已被拦截器
+  }
+}
+
 function isAppRowDirty(m: any): boolean {
   // Day 9.4: 车型行只要填了一个字段就算 dirty, 必填 brand/model
   return !!(m.machineBrand?.trim() || m.machineModel?.trim() || m.modelName?.trim() || m.engineBrand?.trim() || m.engineType?.trim())
@@ -842,6 +854,15 @@ onBeforeUnmount(() => {
             <div v-if="images[1]" class="mb-2">
               <img :src="images[1].imageUrl" class="w-full h-32 object-contain bg-[var(--color-bg-hover)]" />
               <div class="text-xs text-muted mt-1">OEM 3: {{ images[1].oemNo3 || '-' }}</div>
+              <!-- V2(2026-08-24): 主图尺寸标注开关 — 开启后详情页在该图上叠加 D1 x H1 标注线 -->
+              <div class="flex items-center justify-between mt-1">
+                <span class="text-xs text-muted">叠加尺寸标注线 (D1 × H1)</span>
+                <el-switch
+                  :model-value="!!images[1].showDimension"
+                  size="small"
+                  @change="(v: any) => toggleDimension(1, 'primary', v)"
+                />
+              </div>
               <el-button text type="danger" size="small" @click="removePrimaryImage" class="mt-1 w-full">删除主图</el-button>
             </div>
             <div v-else>
@@ -866,6 +887,15 @@ onBeforeUnmount(() => {
                 <div class="text-xs text-muted mb-1">Slot {{ slot }}</div>
                 <div v-if="images[slot]" class="mb-2">
                   <img :src="images[slot].imageUrl" class="w-full h-24 object-contain bg-[var(--color-bg-hover)]" />
+                  <!-- V2(2026-08-24): 详情图尺寸标注开关 (预留, 主图生效) -->
+                  <div class="flex items-center justify-between mt-1">
+                    <span class="text-xs text-muted">标注线</span>
+                    <el-switch
+                      :model-value="!!images[slot].showDimension"
+                      size="small"
+                      @change="(v: any) => toggleDimension(slot, 'detail', v)"
+                    />
+                  </div>
                   <el-button text type="danger" size="small" @click="removeDetailImage(slot)" class="mt-1 w-full">删除</el-button>
                 </div>
                 <div v-else>
