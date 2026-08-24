@@ -946,7 +946,7 @@ export default {
       dialog_edit_title: '编辑 OEM 3',
       field_current_brand: '当前品牌',
       field_product: '关联产品',
-      product_placeholder: '输入 MR.1 / 产品名搜索该品牌下产品',
+      product_placeholder: '🔍 搜索产品 (输入 MR.1 / 产品名 / OEM 号)',
       field_oem_no3: 'OEM 3 号',
       field_oem2: 'OEM 2',
       field_machine_type: '机型类型',
@@ -983,6 +983,16 @@ export default {
       success_brand_added: "品牌 '{brand}' 已新增",
       err_brand_exists: '品牌已存在',
       err_add_brand_failed: '新增品牌失败',
+      // V3(2026-08-24): 品牌搜索 + 软删
+      brand_search_placeholder: '搜索品牌...',
+      no_brand_match: '无匹配品牌',
+      remove_brand_title: '移除品牌',
+      confirm_remove_brand: '确认移除品牌 "{brand}"? (软删除, 不影响产品数据; 之后用同名"新增品牌"可恢复)',
+      success_brand_removed: "品牌 '{brand}' 已移除",
+      err_remove_brand_failed: '移除品牌失败',
+      // V3(2026-08-24): 产品搜索 UX 强化
+      product_no_data: '未找到匹配产品, 换个关键词试试',
+      product_auto_hint: '选择产品后自动填入 OEM 3 / OEM 2, 可手动修改',
     },
     // 2026-08-01: AdminApiDocsView i18n 化 (批次 6d 页面补充)
     apidocs: {
