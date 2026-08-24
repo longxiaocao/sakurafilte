@@ -1346,7 +1346,8 @@ export default {
       restart_tip: '保存的配置将在容器重启后生效 (存储客户端为单例, 不支持热切换)。测试按钮用于验证凭证与网络连通性 (上传/读取/删除探针)。',
     },
     help: '帮助',
-    enterAdmin: '进入后台',
+    enterAdmin: '登录',
+    enterAdminArea: '后台管理',
     exitAdmin: '退出后台',
     // V24-F103 i18n 残留修复: AppHeader 顶栏按钮 + 字典下拉 + drawer 文案
     more: '更多',
