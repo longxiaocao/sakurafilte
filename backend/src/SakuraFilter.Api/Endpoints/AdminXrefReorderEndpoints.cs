@@ -59,7 +59,7 @@ public static class AdminXrefReorderEndpoints
                 {
                     brand = g.Key.Brand,
                     sortOrder = g.Key.SortOrder,
-                    oem3Count = g.Count(x => x != null && !x.IsDiscontinued && x.SortOrder > 0)
+                    oem3Count = g.Count(x => x != null && !x.IsDiscontinued && x.IsWhitelisted)
                 }).ToListAsync(ct);
 
             var result = brands.Cast<object>().ToList();
@@ -199,7 +199,7 @@ public static class AdminXrefReorderEndpoints
             // 基础查询: join products 取 mr1, 过滤未软删 + 仅白名单内 (sort_order > 0)
             //   q 模糊匹配 oemNo3 (PostgreSQL ILike 不区分大小写)
             var query = from x in db.CrossReferences.AsNoTracking()
-                        where x.OemBrand == oemBrand && !x.IsDiscontinued && x.SortOrder > 0
+                        where x.OemBrand == oemBrand && !x.IsDiscontinued && x.IsWhitelisted
                         join p in db.Products.AsNoTracking() on x.ProductId equals p.Id
                         where string.IsNullOrWhiteSpace(q)
                               || (x.OemNo3 != null && EF.Functions.ILike(x.OemNo3, "%" + q + "%"))
@@ -320,33 +320,57 @@ public static class AdminXrefReorderEndpoints
             await using var tx = await db.Database.BeginTransactionAsync(ct);
             try
             {
-                // 白名单改造: 新增时自动设置 SortOrder = 当前最大值 + 1, 排到白名单末尾
+                // V3(2026-08-24): 源数据已全量存在 OEM 3, "添加到白名单"对已有 OEM 3 应升级标记而非新增
+                //   (原实现直接 INSERT, 唯一约束 uq_xrefs_brand_oem3 冲突 → 409, 用户无法添加已有 OEM 3)
+                //   upsert 语义: 已存在 → 置 is_whitelisted=true + sort_order=max+1; 不存在 → 新增
+                var existingXref = await db.CrossReferences
+                    .Where(x => x.OemBrand == req.OemBrand && x.OemNo3 == req.OemNo3)
+                    .FirstOrDefaultAsync(ct);
+
+                // 白名单改造: 新增/升级时自动设置 SortOrder = 当前最大值 + 1, 排到白名单末尾
                 //   WHY max+1: 新增的产品默认应在白名单末尾, 管理员后续拖拽调整
                 //   边界: 该 brand 下尚无白名单产品 (max 为 null) → SortOrder = 1 (白名单首条)
                 //   并发: 两个管理员同时新增可能拿到相同 max → sort_order 重复, 后端拖拽排序时
                 //         通过 orderby sort_order, oem_no_3 兜底, 不影响功能正确性
                 var maxSortOrder = await db.CrossReferences
-                    .Where(x => x.OemBrand == req.OemBrand && x.SortOrder > 0)
+                    .Where(x => x.OemBrand == req.OemBrand && x.IsWhitelisted)
                     .Select(x => (int?)x.SortOrder)
                     .MaxAsync(ct) ?? 0;
                 var newSortOrder = maxSortOrder + 1;
 
-                // 新增 cross_reference 行
-                //   WHY 从 product 表回填 ProductName1: 表单不收集此字段, 但实体需保持一致便于审计
-                var entity = new CrossReference
+                CrossReference entity;
+                if (existingXref != null)
                 {
-                    ProductId = req.ProductId,
-                    ProductName1 = product.ProductName1,
-                    OemBrand = req.OemBrand,
-                    OemNo3 = req.OemNo3,
-                    Oem2 = req.Oem2,
-                    SortOrder = newSortOrder,  // 白名单改造: max+1, 新增即入白名单
-                    MachineType = string.IsNullOrWhiteSpace(req.MachineType) ? "others" : req.MachineType,
-                    IsPublished = req.IsPublished,
-                    IsDiscontinued = false,
-                    CreatedAt = DateTime.UtcNow
-                };
-                db.CrossReferences.Add(entity);
+                    // 已存在 (源数据或曾新增): 升级为白名单
+                    entity = existingXref;
+                    entity.IsWhitelisted = true;
+                    entity.SortOrder = newSortOrder;
+                    entity.IsDiscontinued = false;
+                    entity.IsPublished = req.IsPublished;
+                    entity.MachineType = string.IsNullOrWhiteSpace(req.MachineType) ? "others" : req.MachineType;
+                    entity.Oem2 = req.Oem2 ?? entity.Oem2;
+                    entity.ProductName1 ??= product.ProductName1;
+                }
+                else
+                {
+                    // 新增 cross_reference 行
+                    //   WHY 从 product 表回填 ProductName1: 表单不收集此字段, 但实体需保持一致便于审计
+                    entity = new CrossReference
+                    {
+                        ProductId = req.ProductId,
+                        ProductName1 = product.ProductName1,
+                        OemBrand = req.OemBrand,
+                        OemNo3 = req.OemNo3,
+                        Oem2 = req.Oem2,
+                        SortOrder = newSortOrder,  // 白名单改造: max+1, 新增即入白名单
+                        IsWhitelisted = true,      // V3: 显式标记白名单 (与源数据 sort_order 解耦)
+                        MachineType = string.IsNullOrWhiteSpace(req.MachineType) ? "others" : req.MachineType,
+                        IsPublished = req.IsPublished,
+                        IsDiscontinued = false,
+                        CreatedAt = DateTime.UtcNow
+                    };
+                    db.CrossReferences.Add(entity);
+                }
                 await db.SaveChangesAsync(ct);
 
                 // WHY 重新查询 rowVersion: EF Core SaveChanges 后 xmin 自动刷新, 但 uint 字段需显式读取
@@ -484,10 +508,10 @@ public static class AdminXrefReorderEndpoints
         {
             var logger = loggerFactory.CreateLogger("AdminXrefReorder");
 
-            // 先取 productId + 当前 sortOrder (用于触发索引重建 + 校验是否已在白名单外)
+            // 先取 productId + 当前状态 (用于触发索引重建 + 校验是否已在白名单外)
             var info = await db.CrossReferences.AsNoTracking()
                 .Where(x => x.Id == id)
-                .Select(x => new { x.ProductId, x.SortOrder, x.IsDiscontinued })
+                .Select(x => new { x.ProductId, x.SortOrder, x.IsDiscontinued, x.IsWhitelisted })
                 .FirstOrDefaultAsync(ct);
             if (info == null)
                 return Results.NotFound(new ProblemDetails
@@ -500,17 +524,17 @@ public static class AdminXrefReorderEndpoints
                     Title = "已软删", Status = StatusCodes.Status400BadRequest,
                     Detail = $"id={id} 已是软删状态, 无法操作白名单"
                 });
-            if (info.SortOrder == 0)
+            if (!info.IsWhitelisted)
                 return Results.BadRequest(new ProblemDetails
                 {
                     Title = "不在白名单内", Status = StatusCodes.Status400BadRequest,
-                    Detail = $"id={id} 当前 sort_order=0, 已不在白名单内, 无需移除"
+                    Detail = $"id={id} 当前未在白名单内 (is_whitelisted=false), 无需移除"
                 });
 
             await using var tx = await db.Database.BeginTransactionAsync(ct);
             try
             {
-                // 从白名单移除: SET sort_order = 0 (保留 is_discontinued 不变, 产品本身不删)
+                // 从白名单移除: SET is_whitelisted = false + sort_order = 0 (保留 is_discontinued 不变, 产品本身不删)
                 //   WHY 可选乐观锁: DELETE 场景前端可能仅持 id, rowVersion 缺省时不阻断
                 int rowsAffected;
                 if (rowVersion.HasValue)
@@ -518,7 +542,7 @@ public static class AdminXrefReorderEndpoints
                     var rv = rowVersion.Value;
                     rowsAffected = await db.Database.ExecuteSqlInterpolatedAsync($@"
                         UPDATE cross_references
-                        SET sort_order = 0
+                        SET sort_order = 0, is_whitelisted = false
                         WHERE id = {id}
                           AND xmin = CAST(CAST({rv} AS text) AS xid)", ct);
                 }
@@ -526,7 +550,7 @@ public static class AdminXrefReorderEndpoints
                 {
                     rowsAffected = await db.Database.ExecuteSqlInterpolatedAsync($@"
                         UPDATE cross_references
-                        SET sort_order = 0
+                        SET sort_order = 0, is_whitelisted = false
                         WHERE id = {id}", ct);
                 }
 
