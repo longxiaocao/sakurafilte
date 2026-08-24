@@ -133,6 +133,8 @@ public class ProductImage
     // V2: 图片分层(主图按 OEM 3 / 详情图按 MR.1)
     [Column("oem_no_3")] public string? OemNo3 { get; set; }  // V2: 主图关联的 OEM 3
     [Column("image_role")] public string ImageRole { get; set; } = "detail";  // V2: "primary" / "detail"
+    // V2 功能(2026-08-24): 详情页是否在该图上叠加尺寸标注线 (D1 x H1), 管理后台逐图切换
+    [Column("show_dimension")] public bool ShowDimension { get; set; }
 
     // 导航
     public Product? Product { get; set; }
