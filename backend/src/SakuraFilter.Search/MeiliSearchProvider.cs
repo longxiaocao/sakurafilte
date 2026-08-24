@@ -340,11 +340,21 @@ public class MeiliSearchProvider : ISearchProvider
         //   二次重排只能排"命中集内"顺序, 集外产品必须从 PG 单独取并强制排最前.
         //   补位条件: 搜索词非空 且 白名单产品的 品牌/OEM3/OEM2/产品名 含搜索词 (大小写不敏感)
         //   白名单数量级 < 100, 构造成本可忽略; 查询失败降级为空 (不阻塞主搜索)
+        // V3(2026-08-25): OEM 精确子串补位 — 搜 OEM 号 (含数字) 时 Meili typo 数字容错
+        //   产生大量误匹配 (如 '1002390' 71 命中, 精确产品 MR00839317 排 71 位). 
+        //   从 PG 按 oem_no_3 ILIKE %q% 精确子串匹配, 强制排最前 (精确 OEM 优先于 typo)
         var boostHits = new List<AggregateSearchHit>();
         var boostMr1s = new HashSet<string>();
         if (!string.IsNullOrWhiteSpace(query))
         {
-            boostHits = await LoadWhitelistBoostHitsAsync(query.ToLowerInvariant(), ct);
+            var qLower = query.ToLowerInvariant();
+            boostHits = await LoadWhitelistBoostHitsAsync(qLower, ct);
+            if (ContainsDigit(qLower))
+            {
+                // 含数字 → OEM 号特征, 精确子串补位 (精确匹配优先)
+                var oemExact = await LoadOemExactBoostHitsAsync(qLower, ct);
+                boostHits = boostHits.Concat(oemExact).ToList();
+            }
             boostMr1s = boostHits.Select(h => h.Mr1).ToHashSet();
         }
 
@@ -719,6 +729,82 @@ public class MeiliSearchProvider : ISearchProvider
             return new List<AggregateSearchHit>();
         }
     }
+
+    /// <summary>
+    /// V3(2026-08-25): OEM 精确子串补位 — 搜含数字的 OEM 号时, Meili typo 数字容错产生大量
+    ///   误匹配 (如 '1002390' 71 命中, 精确产品 MR00839317 排第 71 位).
+    ///   本方法从 PG 按 oem_no_3 ILIKE %q% 精确子串匹配, 强制排最前 (精确 OEM 优先于 typo 匹配).
+    ///   与白名单补位同模式: 数量级小, 构造成本可忽略; 失败降级为空 (不阻塞主搜索).
+    /// </summary>
+    private async Task<List<AggregateSearchHit>> LoadOemExactBoostHitsAsync(string queryLower, CancellationToken ct)
+    {
+        try
+        {
+            // ILIKE 通配符转义 (用户输入含 %/_ 时按字面匹配)
+            string likePattern = "%" + EscapeLikePattern(queryLower) + "%";
+            var rows = await _db.CrossReferences.AsNoTracking()
+                .Where(x => !x.IsDiscontinued && EF.Functions.ILike(x.OemNo3, likePattern))
+                .OrderBy(x => x.SortOrder)
+                .Take(30)  // 精确子串匹配上限 30, 防极端输入扫全表
+                .Select(x => new { x.ProductId, x.SortOrder, x.OemBrand, x.OemNo3, x.Oem2, x.MachineType, x.ProductName1 })
+                .ToListAsync(ct);
+            if (rows.Count == 0) return new List<AggregateSearchHit>();
+
+            // 同一产品多个 OEM 号命中: 去重 (取最小 sortOrder)
+            var best = rows.GroupBy(r => r.ProductId).Select(g => g.First()).ToList();
+            var ids = best.Select(r => r.ProductId).ToList();
+            var mr1Map = await _db.Products.AsNoTracking()
+                .Where(p => ids.Contains(p.Id))
+                .Select(p => new { p.Id, p.Mr1 })
+                .ToDictionaryAsync(p => p.Id, p => p.Mr1, ct);
+
+            var result = new List<AggregateSearchHit>(best.Count);
+            foreach (var r in best)
+            {
+                if (!mr1Map.TryGetValue(r.ProductId, out var mr1) || string.IsNullOrWhiteSpace(mr1))
+                    continue;
+                var oemList = new List<AggregateOemItem>
+                {
+                    new(r.OemBrand, r.OemNo3, r.Oem2, r.SortOrder, r.MachineType, true, null)
+                };
+                result.Add(new AggregateSearchHit(
+                    Mr1: mr1,
+                    ProductName1: r.ProductName1,
+                    ProductName2: null,
+                    Oem2: r.Oem2,
+                    Type: r.ProductName1 ?? "UNKNOWN",
+                    Remark: null,
+                    Media: null,
+                    IsPublished: true,
+                    IsDiscontinued: false,
+                    OemList: oemList,
+                    MachineList: new List<AggregateMachineItem>(),
+                    Formatted: null,
+                    RankingScore: null
+                ));
+            }
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "OEM 精确子串补位查询失败, 降级为空 (主搜索不受影响)");
+            return new List<AggregateSearchHit>();
+        }
+    }
+
+    /// <summary>判断字符串是否含数字 (OEM 号特征, 触发精确子串补位)</summary>
+    private static bool ContainsDigit(string s)
+    {
+        foreach (var c in s)
+        {
+            if (c >= '0' && c <= '9') return true;
+        }
+        return false;
+    }
+
+    /// <summary>ILIKE 模式转义 (%, _ 按字面匹配)</summary>
+    private static string EscapeLikePattern(string s)
+        => s.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
 
     public async Task IndexAsync(IEnumerable<Mr1IndexDoc> docs, CancellationToken ct = default)
     {
@@ -1147,6 +1233,8 @@ public class MeiliSearchProvider : ISearchProvider
 
                 // S4 修复: typoTolerance (OneTypo=3/TwoTypos=5, 3 字品牌缩写容错)
                 //   WHY: spec L1526 + L1685 要求, 默认 5/9, 先改 4/8, 再改为 3/5 让 "BOS" 匹配 "BOSCH"
+                //   V3(2026-08-25): 数字误匹配由 LoadOemExactBoostHitsAsync (OEM 精确子串补位) 兜底,
+                //   不改 typo 配置 (Meili 1.12 无 disableOnNumbers, 且字母容错是产品特性)
                 var typoTolerance = new TypoTolerance
                 {
                     Enabled = true,
