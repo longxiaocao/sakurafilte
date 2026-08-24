@@ -26,7 +26,7 @@ services:
     build:
       context: ./backend
       dockerfile: ../docker/Dockerfile.api
-    image: sakurafilter-api:1.0.11
+    image: sakurafilter-api:1.0.12
     container_name: sakura-api
     restart: unless-stopped
     depends_on:
