@@ -26,7 +26,7 @@ services:
     build:
       context: ./backend
       dockerfile: ../docker/Dockerfile.api
-    image: sakurafilter-api:1.0.5
+    image: sakurafilter-api:1.0.6
     container_name: sakura-api
     restart: unless-stopped
     depends_on:
@@ -119,7 +119,7 @@ services:
         VITE_PUBLIC_ABOUT_TEXT: ${VITE_PUBLIC_ABOUT_TEXT:-}
         VITE_PUBLIC_NEWS_TEXT: ${VITE_PUBLIC_NEWS_TEXT:-}
         VITE_PUBLIC_CONTACT_TEXT: ${VITE_PUBLIC_CONTACT_TEXT:-}
-    image: sakurafilter-web:1.0.4
+    image: sakurafilter-web:1.0.5
     container_name: sakura-web
     restart: unless-stopped
     depends_on:
