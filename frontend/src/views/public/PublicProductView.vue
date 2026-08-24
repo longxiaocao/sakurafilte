@@ -277,7 +277,7 @@ function numOrDash(v?: number | string) {
             </template>
           </el-image>
 
-          <!-- V2(2026-08-24): 尺寸标注线 overlay — 管理后台开启后展示, 黑白极简工程图纸风 -->
+          <!-- V2(2026-08-24): 尺寸标注线 overlay — 管理后台开启后展示, 黑白极简工程图纸风(无箭头) -->
           <svg
             v-if="activeImageShowDim && dimensionSpecs"
             viewBox="0 0 400 400"
@@ -285,21 +285,17 @@ function numOrDash(v?: number | string) {
             role="img"
             aria-label="产品尺寸标注示意"
           >
-            <!-- 高度线 H1 (右侧垂直, 黑白细线) -->
+            <!-- 高度线 H1 (右侧垂直: 细线 + 端部短界线, 无箭头) -->
             <g stroke="#2C2C2A" stroke-width="1" fill="none" opacity="0.9">
-              <line x1="330" y1="50" x2="330" y2="345" />
-              <path d="M330 60 L326 74 L334 74 Z" fill="#2C2C2A" stroke="none" />
-              <path d="M330 335 L326 321 L334 321 Z" fill="#2C2C2A" stroke="none" />
-              <line x1="321" y1="50" x2="339" y2="50" />
-              <line x1="321" y1="345" x2="339" y2="345" />
+              <line x1="330" y1="60" x2="330" y2="335" />
+              <line x1="321" y1="60" x2="339" y2="60" />
+              <line x1="321" y1="335" x2="339" y2="335" />
             </g>
-            <!-- 宽度线 D1 (底部水平, 黑白细线) -->
+            <!-- 宽度线 D1 (底部水平: 细线 + 端部短界线, 无箭头) -->
             <g stroke="#2C2C2A" stroke-width="1" fill="none" opacity="0.9">
-              <line x1="55" y1="350" x2="345" y2="350" />
-              <path d="M65 350 L79 346 L79 354 Z" fill="#2C2C2A" stroke="none" />
-              <path d="M335 350 L321 346 L321 354 Z" fill="#2C2C2A" stroke="none" />
-              <line x1="55" y1="341" x2="55" y2="359" />
-              <line x1="345" y1="341" x2="345" y2="359" />
+              <line x1="65" y1="350" x2="335" y2="350" />
+              <line x1="65" y1="341" x2="65" y2="359" />
+              <line x1="335" y1="341" x2="335" y2="359" />
             </g>
             <!-- 数值标签 (白底黑字, 极简) -->
             <g font-family="monospace" font-size="13" font-weight="500">
