@@ -500,6 +500,11 @@ export const adminXrefApi = {
   addBrand(brand: string): Promise<{ brand: string; sortOrder: number; oem3Count: number; restored: boolean }> {
     return http.post('/admin/xrefs/reorder/brands', { brand }).then((r) => r.data)
   },
+  // DELETE /api/admin/xrefs/reorder/brands/{brand} — 软删品牌 (从白名单管理列表移除, 数据保留; 同名新增可恢复)
+  //   V3(2026-08-24): 品牌"减少"能力 — xref_oem_brand.deleted_at = now()
+  deleteBrand(brand: string): Promise<{ brand: string; removed: boolean }> {
+    return http.delete(`/admin/xrefs/reorder/brands/${encodeURIComponent(brand)}`).then((r) => r.data)
+  },
   // GET /api/admin/xrefs/reorder?oemBrand=BOSCH — 某 Brand 下 OEM 3 列表 (分页 + 搜索, 含 rowVersion)
   //   V24-F86: 加 page/pageSize/q 参数, 返回 XrefOem3Page (含分页元数据)
   listByBrand(
