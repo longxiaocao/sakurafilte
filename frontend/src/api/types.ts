@@ -277,6 +277,8 @@ export interface PublicProductImageInfo {
   isPrimary: boolean
   oemNo3?: string
   imageRole?: string
+  // V2(2026-08-24): 是否叠加尺寸标注线 (D1 x H1), 管理后台逐图配置
+  showDimension?: boolean
 }
 
 export interface XrefInfo {
@@ -323,6 +325,11 @@ export interface ProductImageInfo {
   sizeBytes: number
   width?: number
   height?: number
+  oemNo3?: string
+  imageRole?: string
+  isPrimary?: boolean
+  // V2(2026-08-24): 是否叠加尺寸标注线
+  showDimension?: boolean
 }
 
 export interface ProductHistoryItem {
@@ -853,6 +860,7 @@ export interface ProductImageV2 {
   uploadedBy: string | null
   oemNo3: string | null  // V2: 主图关联的 OEM 3 (detail 为 null)
   imageRole: string  // V2: "primary" / "detail"
+  showDimension: boolean  // V2(2026-08-24): 是否叠加尺寸标注线
 }
 
 // ===== Day 11 改进 1: 自动生成的 Request DTO (re-export) =====
