@@ -193,7 +193,8 @@ public static class AdminProductEndpoints
         // V2 主图上传
         group.MapPost("/{mr1}/images/primary", async (
             string mr1, [FromQuery(Name = "oemNo3")] string oemNo3,
-            HttpRequest req, AdminProductImageService svc, HttpContext ctx, CancellationToken ct) =>
+            HttpRequest req, AdminProductImageService svc, HttpContext ctx, CancellationToken ct,
+            [FromQuery(Name = "showDimension")] bool showDimension = false) =>
         {
             if (string.IsNullOrWhiteSpace(oemNo3))
                 return Results.BadRequest(new { error = "oemNo3 参数必填 (主图关联的 OEM 3)" });
@@ -205,8 +206,8 @@ public static class AdminProductEndpoints
             try
             {
                 using var stream = file.OpenReadStream();
-                // V2: slot=1 固定 (主图), imageRole="primary"
-                var img = await svc.UploadAsync(mr1, "primary", oemNo3, 1, stream, file.ContentType ?? "image/jpeg", user, ct);
+                // V2: slot=1 固定 (主图), imageRole="primary"; showDimension 控制详情页尺寸标注线
+                var img = await svc.UploadAsync(mr1, "primary", oemNo3, 1, stream, file.ContentType ?? "image/jpeg", user, ct, showDimension);
                 return Results.Ok(img);
             }
             catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
@@ -232,7 +233,8 @@ public static class AdminProductEndpoints
         // V2 详情图上传
         group.MapPost("/{mr1}/images/detail", async (
             string mr1, [FromQuery(Name = "slot")] int slot,
-            HttpRequest req, AdminProductImageService svc, HttpContext ctx, CancellationToken ct) =>
+            HttpRequest req, AdminProductImageService svc, HttpContext ctx, CancellationToken ct,
+            [FromQuery(Name = "showDimension")] bool showDimension = false) =>
         {
             if (slot < 2 || slot > 6) return Results.BadRequest(new { error = "详情图 slot 必须在 2-6 之间" });
             if (!req.HasFormContentType) return Results.BadRequest(new { error = "需 multipart/form-data" });
@@ -243,8 +245,8 @@ public static class AdminProductEndpoints
             try
             {
                 using var stream = file.OpenReadStream();
-                // V2: imageRole="detail", slot 2-6
-                var img = await svc.UploadAsync(mr1, "detail", null, (short)slot, stream, file.ContentType ?? "image/jpeg", user, ct);
+                // V2: imageRole="detail", slot 2-6; showDimension 预留
+                var img = await svc.UploadAsync(mr1, "detail", null, (short)slot, stream, file.ContentType ?? "image/jpeg", user, ct, showDimension);
                 return Results.Ok(img);
             }
             catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
@@ -281,6 +283,28 @@ public static class AdminProductEndpoints
             catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
         })
         .WithName("AdminDeleteProductImage");
+
+        // V2(2026-08-24): 切换图片尺寸标注开关 (show_dimension), 不重传图片文件
+        //   管理后台逐图开启"叠加长宽高标注线", 详情页 primary 主图据此渲染 SVG 尺寸线
+        group.MapPost("/{mr1}/images/{imageRole}/{slot:int}/dimension", async (
+            string mr1, string imageRole, int slot,
+            [FromBody] SetDimensionRequest? body,
+            AdminProductImageService svc, HttpContext ctx, CancellationToken ct) =>
+        {
+            if (imageRole != "primary" && imageRole != "detail")
+                return Results.BadRequest(new { error = "imageRole 必须为 primary 或 detail" });
+            if (imageRole == "primary" && slot != 1) return Results.BadRequest(new { error = "主图 slot 必须为 1" });
+            if (imageRole == "detail" && (slot < 2 || slot > 6)) return Results.BadRequest(new { error = "详情图 slot 必须在 2-6 之间" });
+            try
+            {
+                var img = await svc.SetShowDimensionAsync(mr1, imageRole, (short)slot, body?.ShowDimension ?? false, ct);
+                return Results.Ok(img);
+            }
+            catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+            catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
+        })
+        .WithName("AdminSetImageDimension")
+        .DisableAntiforgery();
 
         // V2 列出产品图 (按 mr1)
         group.MapGet("/{mr1}/images", async (string mr1, AdminProductImageService svc, CancellationToken ct) =>
