@@ -40,7 +40,9 @@ WORKDIR /app
 #   + 数据文件 (icu-data-full); 仅装 data 时缺 libicuuc.so 仍 SIGSEGV (exit 139)
 #   apk 源切国内 (mirrors.aliyun.com) 加速: 默认 dl-cdn.alpinelinux.org 国内 10s+ 超时
 RUN sed -i 's|dl-cdn.alpinelinux.org|mirrors.aliyun.com|g' /etc/apk/repositories \
-    && apk add --no-cache tzdata icu-libs icu-data-full
+    && apk add --no-cache tzdata icu-libs icu-data-full \
+    # 🔧 fix(2026-08-24): compose healthcheck 用 curl (交付门禁 2026-08-21 改), alpine 基础镜像默认无 curl → unhealthy
+    && apk add --no-cache curl
 
 # 创建非 root 用户
 RUN adduser -D -u 1000 sakura && \
