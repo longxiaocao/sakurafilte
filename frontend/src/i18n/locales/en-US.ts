@@ -107,15 +107,25 @@ export default {
       guide_step3: '③ Provide the data file: drag & drop XLSX, or enter a container-accessible JSONL path (e.g. /tmp/etl/products.jsonl)',
       guide_step4: '④ Click "Trigger ETL" to run in background; you may click "Run dry-run" to validate only',
       guide_step5: '⑤ Check "Pipeline" and "Recent errors" below for progress and failure reasons',
+      // V3(2026-08-25): P0 import wizard (template + upload)
+      template_download: 'Download template',
+      uploading: 'Uploading...',
+      upload_hint: 'Click or drop file here to upload (XLSX / JSONL)',
+      upload_tip: 'Uploaded file auto-fills the server path; you may also enter a container JSONL path manually (advanced)',
+      err: {
+        template_download_failed: 'Template download failed',
+        upload_failed: 'File upload failed'
+      },
       entity: {
         products: 'Products',
         xrefs: 'OEM Cross-References',
         apps: 'Machine Applications'
       },
       mode: {
-        full_load: 'Full reload (truncate & re-import)',
+        // V3(2026-08-25): P1 customer-friendly wording
+        full_load: 'Full reload (clear & re-import)',
         insert_only: 'Insert only (skip existing)',
-        upsert: 'Upsert (overwrite existing)'
+        upsert: 'Update if exists, add if new (recommended)'
       },
       dry_run_check: 'Dry-run (validate only, no import)',
       section: {
@@ -125,6 +135,7 @@ export default {
         last_finished: 'Last Finished Result',
         dry_run: 'Recent dry-run Validation',
         recent_errors: 'Recent Errors (max 10)',
+        row_errors: 'Import failures (line-level, max 100)',
         audit: 'Cancel Audit (aggregate by reason_code)'
       ,reindex_confirm: 'Full Rebuild', total_cancelled: 'Total Cancelled', no_cancelled_records: 'No cancelled records'
       },
@@ -221,6 +232,10 @@ export default {
         phrase_63454: 'Read/Insert/Update',
         en_v3: 'Duration',
         cancel_timestamp: 'Cancel Timestamp',
+        // V3(2026-08-25): P2 row-level errors
+        row_no: 'Row No.',
+        field: 'Field',
+        reason: 'Reason',
       },
       placeholder: {
         jsonl_absolute_path: 'JSONL Absolute Path',
@@ -270,6 +285,9 @@ export default {
         dry_run_validation_completed: 'dry-run validation completed',
         triggered_etl_background_execute: 'Triggered ETL, background execute',
         phrase_21459: 'Cleared',
+        // V3(2026-08-25): P0 import wizard
+        template_downloaded: 'Template downloaded ({entity})',
+        file_uploaded: 'File {name} uploaded, path filled'
       },
       templatetext: {
         immediately_import: 'Immediately Import',
