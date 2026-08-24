@@ -16,7 +16,7 @@ function closeMobileNav() { mobileNavOpen.value = false }
 
 const route = useRoute()
 const router = useRouter()
-const { isAdmin, user, token, refreshToken, clearAuth } = useAdminAuth()
+const { isAdmin, isAuthenticated, user, token, refreshToken, clearAuth } = useAdminAuth()
 const theme = useThemeStore()  // P5.3
 // 🔧 fix(审查): 站点名从后端读取 (后台 AdminSiteContentView 可维护), 兜底 SakuraFilter
 const siteName = ref('SakuraFilter')
@@ -58,10 +58,11 @@ const allNavItems = computed(() => {
     { key: 'contact', labelKey: 'nav.contact', path: '/contact', icon: 'Message', priority: 4 },
     { key: 'oem', labelKey: 'nav.oemLookup', action: 'oemLookup', icon: 'Document', priority: 5 },
   ]
-  // 已登录用户: 在任何路径都看到 admin 入口, 解决 v3 跳公开页丢 admin 体验问题
-  // 🔧 fix(审查): admin 菜单以 token 为准 (旧 token 迁移场景 user 为 null 时导航仍完整)
-  //   原 if (user.value): 旧 localStorage 纯 token (LEGACY key 迁移) user=null → 已登录但导航只显示公共 5 项 (用户实测反馈)
-  if (token.value) {
+  // V3(2026-08-24): admin 菜单仅"有效登录"显示 (isAuthenticated = token 存在且未过期)
+  //   🔧 修复: 原 if (token.value) — localStorage 残留过期 token 时, 未登录访客界面
+  //   也会渲染 产品管理/高级搜索/字段管理/OEM白名单/运维中心/站点内容/帮助 (用户反馈)
+  //   isAuthenticated() 校验 expiresAt, 过期/旧 token(expiresAt=0) 一律不显示 admin 菜单
+  if (isAuthenticated()) {
     // admin 高优 (必显示, 不可收纳)
     items.push(
       { key: 'products', labelKey: 'nav.productManage', path: '/admin/products', icon: 'Goods', priority: 4 },
