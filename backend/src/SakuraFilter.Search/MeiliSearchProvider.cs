@@ -675,6 +675,7 @@ public class MeiliSearchProvider : ISearchProvider
                 x.SortOrder,
                 x.MachineType,
                 x.IsPublished,
+                x.IsWhitelisted,
                 BrandSortOrder = _db.XrefOemBrands
                     .Where(b => b.Brand == x.OemBrand && b.DeletedAt == null)
                     .Select(b => (int?)b.SortOrder)
@@ -743,11 +744,13 @@ public class MeiliSearchProvider : ISearchProvider
             .Select(x => (int?)x.BrandSortOrder!.Value)
             .Min();
 
-        // S4-16: oem_list_sort_order_min 取上架 OEM 3 的 sort_order MIN
-        // 修复: sort_order=0 是数据库默认值 (未通过 /admin/xrefs/reorder 维护), 视为 null 排末尾
-        //   仅 sort_order > 0 的 OEM 3 (管理员手动维护过优先级) 参与排序
+        // S4-16: oem_list_sort_order_min 取白名单内上架 OEM 3 的 sort_order MIN
+        // V3(2026-08-24): 白名单判定改 is_whitelisted — 源数据 92% 记录 sort_order>0,
+        //   原"sort_order > 0 视为管理员维护过优先级"被源数据淹没 (所有产品都有值, 排序无区分);
+        //   现仅 is_whitelisted=true (管理员手动添加到白名单) 的 OEM 参与优先排序, 语义与白名单页一致
+        //   修复: sort_order=0 或未入白名单 → 不参与 (视为 null 排末尾)
         int? oemListSortOrderMin = publishedOemList
-            .Where(x => x.SortOrder > 0)
+            .Where(x => x.IsWhitelisted && x.SortOrder > 0)
             .Select(x => (int?)x.SortOrder)
             .Min();
 
