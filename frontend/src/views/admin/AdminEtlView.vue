@@ -393,12 +393,13 @@ function statusTagType(s: string): 'success' | 'warning' | 'info' | 'danger' | '
   <div class="p-3 max-w-screen-2xl mx-auto">
     <h1 class="text-lg font-medium mb-3">{{ t('admin.etlview.page_title') }}</h1>
 
-    <!-- 🔧 fix(审查): 使用引导 (中文步骤说明, 用户反馈 ETL 界面难理解) -->
+    <!-- 🔧 fix(审查): 使用引导 (用户反馈 ETL 界面难理解 — 补充"ETL 是什么"顶层说明) -->
     <el-alert type="info" :closable="false" class="mb-3">
       <template #title>
         <span class="font-medium">{{ t('admin.etlview.guide_title') }}</span>
       </template>
       <div class="text-sm space-y-0.5 text-[var(--color-text-secondary)]">
+        <p class="mb-1 font-medium text-[var(--color-text)]">{{ t('admin.etlview.guide_intro') }}</p>
         <p>{{ t('admin.etlview.guide_step1') }}</p>
         <p>{{ t('admin.etlview.guide_step2') }}</p>
         <p>{{ t('admin.etlview.guide_step3') }}</p>
