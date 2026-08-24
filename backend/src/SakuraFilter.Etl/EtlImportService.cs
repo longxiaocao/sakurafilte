@@ -29,6 +29,10 @@ namespace SakuraFilter.Etl;
 public class EtlProgress
 {
     private const int MaxRecentErrors = 20;
+    // V3(2026-08-25): P2 行级错误 (导入失败明细: 行号/字段/原因, 环形缓冲 100 条)
+    private const int MaxRowErrors = 100;
+    private readonly object _rowErrorsLock = new();
+    private readonly Queue<(int LineNo, string Field, string Reason)> _rowErrors = new();
     private readonly object _errorsLock = new();
     private readonly Queue<(DateTime At, string Message)> _recentErrors = new();
     private readonly ILogger? _logger;       // Day 7.7: 落库失败时记日志
@@ -123,7 +127,28 @@ public class EtlProgress
         get { lock (_errorsLock) return _recentErrors.ToArray(); }
     }
 
-    public void Start(string file) { _status = "running"; _currentFile = file; _startedAt = DateTime.UtcNow; }
+    /// <summary>V3(2026-08-25): P2 行级错误明细 (最新 100 条, 线程安全)</summary>
+    public IReadOnlyList<(int LineNo, string Field, string Reason)> RowErrors
+    {
+        get { lock (_rowErrorsLock) return _rowErrors.ToArray(); }
+    }
+
+    /// <summary>V3(2026-08-25): P2 记录行级错误 (环形缓冲, 超上限丢最旧)</summary>
+    public void RecordRowError(int lineNo, string field, string reason)
+    {
+        lock (_rowErrorsLock)
+        {
+            _rowErrors.Enqueue((lineNo, field, reason));
+            while (_rowErrors.Count > MaxRowErrors) _rowErrors.Dequeue();
+        }
+    }
+
+    public void Start(string file)
+    {
+        _status = "running"; _currentFile = file; _startedAt = DateTime.UtcNow;
+        // V3(2026-08-25): P2 新任务清空上次行级错误 (防跨任务累积)
+        lock (_rowErrorsLock) _rowErrors.Clear();
+    }
 
     /// <summary>Day 9.2: 设置当前阶段 (用于前端精细化显示)
     ///   可选值: idle / reading / staging / inserting / committing / meili-sync
@@ -306,7 +331,9 @@ public class EtlProgress
         startedAt = StartedAt,
         finishedAt = FinishedAt,
         lastError = LastError,
-        recentErrors = RecentErrors.Select(e => new { at = e.At, message = e.Message }).ToArray()  // Day 7.6
+        recentErrors = RecentErrors.Select(e => new { at = e.At, message = e.Message }).ToArray(),  // Day 7.6
+        // V3(2026-08-25): P2 行级错误明细 (完成态经 /etl/status → lastFinished 展示)
+        rowErrors = RowErrors.Select(r => new { lineNo = r.LineNo, field = r.Field, reason = r.Reason }).ToArray()
     };
 
     /// <summary>Day 7.7: 生成持久化快照,用于落库 etl_progress_log
@@ -797,7 +824,9 @@ public class EtlImportService
                 progressPct = pct,
                 startedAt = p.StartedAt,
                 elapsedSec = p.Elapsed?.TotalSeconds,
-                lastError = p.LastError
+                lastError = p.LastError,
+                // V3(2026-08-25): P2 行级错误明细 (最新 100 条)
+                rowErrors = p.RowErrors.Select(r => new { r.LineNo, r.Field, r.Reason }).ToList()
             } : null
         };
     }
@@ -888,6 +917,7 @@ public class EtlImportService
                         if (string.IsNullOrWhiteSpace(mr1))
                         {
                             Progress.IncrSkippedNullField();
+                            Progress.RecordRowError(lineNo, "mr_1", "必填字段 mr_1 为空");  // V3 P2
                             _logger.LogWarning("products 行 {LineNo} mr_1 为空, 跳过", lineNo);
                             continue;
                         }
@@ -1949,6 +1979,10 @@ public class EtlImportService
                         {
                             missing++;
                             Progress.IncrSkippedMissingMr1();
+                            var globalLine = batchStartLineNo + idx + 1;
+                            // V3 P2: 行级错误明细
+                            Progress.RecordRowError((int)globalLine, "mr_1",
+                                string.IsNullOrWhiteSpace(mr1) ? "必填字段 mr_1 为空" : $"mr_1='{mr1}' 未找到关联产品");
                             continue;
                         }
                         // 🔧 fix(自动reindex): 记录受影响产品 (导入后触达 Meili 增量同步)
@@ -2223,6 +2257,9 @@ public class EtlImportService
                         {
                             missing++;
                             Progress.IncrSkippedMissingMr1();
+                            // V3 P2: 行级错误明细
+                            Progress.RecordRowError(lineNo, "mr_1",
+                                string.IsNullOrWhiteSpace(mr1) ? "必填字段 mr_1 为空" : $"mr_1='{mr1}' 未找到关联产品");
                             continue;
                         }
                         // 🔧 fix(自动reindex): 记录受影响产品 (导入后触达 Meili 增量同步)
