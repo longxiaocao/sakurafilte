@@ -673,22 +673,21 @@ public class MeiliSearchProvider : ISearchProvider
     {
         try
         {
+            // V3(2026-08-25): Join Products 取真实 ProductName1/Type/Mr1 — xrefs.product_name_1
+            //   是 ETL 冗余列, 与 products 不一致 (白名单量少暂未暴露, 但同 OEM 精确补位一并发修)
             var rows = await _db.CrossReferences.AsNoTracking()
                 .Where(x => x.IsWhitelisted && !x.IsDiscontinued && x.IsPublished)
                 .OrderBy(x => x.SortOrder)
-                .Select(x => new { x.ProductId, x.SortOrder, x.OemBrand, x.OemNo3, x.Oem2, x.MachineType, x.ProductName1 })
+                .Join(_db.Products.AsNoTracking(), x => x.ProductId, p => p.Id, (x, p) => new
+                {
+                    x.ProductId, x.SortOrder, x.OemBrand, x.OemNo3, x.Oem2, x.MachineType,
+                    p.ProductName1, p.Mr1, p.Type
+                })
                 .ToListAsync(ct);
             if (rows.Count == 0) return new List<AggregateSearchHit>();
 
-            // 同一产品多品牌白名单: 取最小 sortOrder 的一条 (避免重复展示)
+            // 同一产品多品牌白名单: 取最小 sortOrder 的一条 (避免重复展示); ProductName1/Mr1 已是真实值
             var best = rows.GroupBy(r => r.ProductId).Select(g => g.First()).ToList();
-
-            // 批量取 mr_1 (白名单产品主键)
-            var ids = best.Select(r => r.ProductId).ToList();
-            var mr1Map = await _db.Products.AsNoTracking()
-                .Where(p => ids.Contains(p.Id))
-                .Select(p => new { p.Id, p.Mr1 })
-                .ToDictionaryAsync(p => p.Id, p => p.Mr1, ct);
 
             var result = new List<AggregateSearchHit>(best.Count);
             foreach (var r in best)
@@ -698,7 +697,7 @@ public class MeiliSearchProvider : ISearchProvider
                 if (!haystacks.Any(h => h != null && h.ToLowerInvariant().Contains(queryLower, StringComparison.OrdinalIgnoreCase)))
                     continue;  // 与搜索词不相关, 不补位 (避免污染无关搜索)
 
-                if (!mr1Map.TryGetValue(r.ProductId, out var mr1) || string.IsNullOrWhiteSpace(mr1))
+                if (string.IsNullOrWhiteSpace(r.Mr1))
                     continue;
 
                 var oemList = new List<AggregateOemItem>
@@ -706,11 +705,11 @@ public class MeiliSearchProvider : ISearchProvider
                     new(r.OemBrand, r.OemNo3, r.Oem2, r.SortOrder, r.MachineType, true, null)
                 };
                 result.Add(new AggregateSearchHit(
-                    Mr1: mr1,
+                    Mr1: r.Mr1,
                     ProductName1: r.ProductName1,
                     ProductName2: null,
                     Oem2: r.Oem2,
-                    Type: r.ProductName1 ?? "UNKNOWN",
+                    Type: r.Type ?? r.ProductName1 ?? "UNKNOWN",
                     Remark: null,
                     Media: null,
                     IsPublished: true,
@@ -742,37 +741,39 @@ public class MeiliSearchProvider : ISearchProvider
         {
             // ILIKE 通配符转义 (用户输入含 %/_ 时按字面匹配)
             string likePattern = "%" + EscapeLikePattern(queryLower) + "%";
+            // V3(2026-08-25): Join Products 取真实 ProductName1/Type/Mr1 — 之前误用 xrefs 冗余字段
+            //   (xrefs.product_name_1 是 ETL 导入时的冗余列, 与 products 不一致, 如 MR00839317 真实是 OIL FILTER
+            //    但 xrefs 里出现 FUEL/AIR/PETROL/WATER SEPARATOR 等多种值)
             var rows = await _db.CrossReferences.AsNoTracking()
                 .Where(x => !x.IsDiscontinued && EF.Functions.ILike(x.OemNo3, likePattern))
                 .OrderBy(x => x.SortOrder)
                 .Take(30)  // 精确子串匹配上限 30, 防极端输入扫全表
-                .Select(x => new { x.ProductId, x.SortOrder, x.OemBrand, x.OemNo3, x.Oem2, x.MachineType, x.ProductName1 })
+                .Join(_db.Products.AsNoTracking(), x => x.ProductId, p => p.Id, (x, p) => new
+                {
+                    x.ProductId, x.SortOrder, x.OemBrand, x.OemNo3, x.Oem2, x.MachineType,
+                    p.ProductName1, p.Mr1, p.Type
+                })
                 .ToListAsync(ct);
             if (rows.Count == 0) return new List<AggregateSearchHit>();
 
-            // 同一产品多个 OEM 号命中: 去重 (取最小 sortOrder)
+            // 同一产品多个 OEM 号命中: 去重 (取最小 sortOrder); 此时 ProductName1/Mr1 已是真实值
             var best = rows.GroupBy(r => r.ProductId).Select(g => g.First()).ToList();
-            var ids = best.Select(r => r.ProductId).ToList();
-            var mr1Map = await _db.Products.AsNoTracking()
-                .Where(p => ids.Contains(p.Id))
-                .Select(p => new { p.Id, p.Mr1 })
-                .ToDictionaryAsync(p => p.Id, p => p.Mr1, ct);
 
             var result = new List<AggregateSearchHit>(best.Count);
             foreach (var r in best)
             {
-                if (!mr1Map.TryGetValue(r.ProductId, out var mr1) || string.IsNullOrWhiteSpace(mr1))
+                if (string.IsNullOrWhiteSpace(r.Mr1))
                     continue;
                 var oemList = new List<AggregateOemItem>
                 {
                     new(r.OemBrand, r.OemNo3, r.Oem2, r.SortOrder, r.MachineType, true, null)
                 };
                 result.Add(new AggregateSearchHit(
-                    Mr1: mr1,
+                    Mr1: r.Mr1,
                     ProductName1: r.ProductName1,
                     ProductName2: null,
                     Oem2: r.Oem2,
-                    Type: r.ProductName1 ?? "UNKNOWN",
+                    Type: r.Type ?? r.ProductName1 ?? "UNKNOWN",
                     Remark: null,
                     Media: null,
                     IsPublished: true,
