@@ -298,7 +298,8 @@ services:
       - ./docker/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus-data:/prometheus
     ports:
-      - "9090:9090"
+      # 🔧 fix(2026-08-24 审核): 绑定 127.0.0.1 — 监控面板仅本机/SSH Tunnel 访问, 不再暴露到公网
+      - "127.0.0.1:9090:9090"
     depends_on:
       - api
     networks:
@@ -315,13 +316,16 @@ services:
     restart: unless-stopped
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      # 🔧 fix(2026-08-24 审核): 去掉 admin 默认回退 — 漏配 GRAFANA_PASSWORD 时容器启动失败
+      #   (fail-fast) 而非以弱口令 admin/admin 裸奔公网
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD}
       GF_USERS_ALLOW_SIGN_UP: "false"
     volumes:
       - grafana-data:/var/lib/grafana
       - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
     ports:
-      - "3000:3000"
+      # 🔧 fix(2026-08-24 审核): 同 prometheus, 仅本机访问
+      - "127.0.0.1:3000:3000"
     depends_on:
       - prometheus
     networks:

@@ -312,6 +312,10 @@ public class PublicSearchController : ControllerBase
         //   🔧 fix(2026-08-23 走查): 拆段查询 — 原单条 OR+2 个 EXISTS 在 1M 行 Seq Scan (实测 10s+ 超时)。
         //     拆成 3 段独立查询 (products/xrefs/machine), 每段走 trgm GIN 索引 (025 迁移),
         //     合并 product_id 集合再 IN 过滤 (走主键索引)。每段 LIMIT 5000 防超宽结果。
+        //   🔧 fix(2026-08-24 审核): 截断可见化 — 合并前每段与合并结果各限 5000, 原实现无 OrderBy
+        //     且不告知截断 → 常见关键词每次取哪 5000 不确定 (随机漏结果)、前端无从感知。
+        //     现加 OrderBy 保证确定性, 并置 fuzzyTruncated 让响应 CountMode=truncated 显式告知。
+        var fuzzyTruncated = false;
         if (!string.IsNullOrEmpty(fuzzy))
         {
             var f = fuzzy.EscapeLikePattern();
@@ -344,7 +348,9 @@ public class PublicSearchController : ControllerBase
                 .Select(m => m.ProductId)
                 .Take(5000)
                 .ToListAsync(ct);
-            var fuzzyIds = ids1.Concat(ids2).Concat(ids3).Distinct().Take(5000).ToList();
+            var fuzzyIds = ids1.Concat(ids2).Concat(ids3).Distinct().OrderBy(x => x).Take(5000).ToList();
+            // 任一来源达到上限即视为可能截断 (Take 结果最大 5000, ==5000 即命中边界; 保守标记语义 = "可能超限")
+            fuzzyTruncated = ids1.Count >= 5000 || ids2.Count >= 5000 || ids3.Count >= 5000 || fuzzyIds.Count >= 5000;
             if (fuzzyIds.Count == 0)
             {
                 // 无任何命中 — 提前返回空结果 (不继续 AND 收窄到空)
@@ -431,6 +437,9 @@ public class PublicSearchController : ControllerBase
             countTimedOut = true;
         }
         string countModeUsed = countTimedOut ? "estimated" : "exact";
+        // 🔧 fix(2026-08-24 审核): fuzzy 候选被 5000 上限截断时用 truncated 显式告知 —
+        //   Total 是截断后子集上的计数, 前端应提示 "结果可能超过 5000 条, 仅展示部分"。
+        if (fuzzyTruncated) countModeUsed = "truncated";
         // 🔧 fix(2026-08-23 走查): 先查主表投影, 再批量取回 xrefs/machine 关联字段 (避免 N+1)
         var rows = await query
             .OrderByDescending(p => p.Id)
