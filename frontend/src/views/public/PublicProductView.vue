@@ -297,12 +297,11 @@ function numOrDash(v?: number | string) {
               <line x1="65" y1="341" x2="65" y2="359" />
               <line x1="335" y1="341" x2="335" y2="359" />
             </g>
-            <!-- 数值标签 (白底黑字, 极简) -->
-            <g font-family="monospace" font-size="13" font-weight="500">
-              <rect x="292" y="188" width="76" height="24" rx="3" fill="#FFFFFF" stroke="#2C2C2A" stroke-width="0.8" />
-              <text x="330" y="204" text-anchor="middle" fill="#2C2C2A">{{ dimensionSpecs.h1 }}mm</text>
-              <rect x="148" y="356" width="104" height="24" rx="3" fill="#FFFFFF" stroke="#2C2C2A" stroke-width="0.8" />
-              <text x="200" y="372" text-anchor="middle" fill="#2C2C2A">{{ dimensionSpecs.d1 }}mm</text>
+            <!-- 数值文字 (无矩形框, 白色描边 halo 保证可读性, 极简) -->
+            <g font-family="monospace" font-size="13" font-weight="500" fill="#2C2C2A"
+               stroke="#FFFFFF" stroke-width="3" stroke-linejoin="round" paint-order="stroke fill">
+              <text x="330" y="204" text-anchor="middle">{{ dimensionSpecs.h1 }}mm</text>
+              <text x="200" y="372" text-anchor="middle">{{ dimensionSpecs.d1 }}mm</text>
             </g>
             <!-- 示意图提示 -->
             <text x="12" y="26" font-size="10" fill="#888780">示意图, 尺寸以参数表为准</text>
