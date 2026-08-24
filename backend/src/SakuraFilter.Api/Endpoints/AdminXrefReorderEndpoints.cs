@@ -159,6 +159,48 @@ public static class AdminXrefReorderEndpoints
         .WithSummary("新增品牌到 xref_oem_brand 字典 (sort_order=max+1, 软删可恢复)")
         .WithName("AdminXrefReorder_CreateBrand");
 
+        // ===== V3(2026-08-24): DELETE /brands/{brand} — 软删品牌 (从列表移除, 数据保留) =====
+        //   用户需求: "需要白名单的品牌只能新增, 不能减少" → 增加软删能力
+        //   WHY 软删而非物理删: 品牌关联的 cross_references 仍保留 (产品数据不破坏)
+        //   恢复: 同名"新增品牌" (POST /brands) 自动恢复 (已有 restored 逻辑)
+        //   幂等: 品牌不存在或已软删均返回 404 提示 (前端刷新列表)
+        group.MapDelete("/brands/{brand}", async (
+            string brand,
+            ProductDbContext db,
+            IMemoryCache cache,
+            ILoggerFactory loggerFactory,
+            CancellationToken ct) =>
+        {
+            var logger = loggerFactory.CreateLogger("AdminXrefReorder");
+            if (string.IsNullOrWhiteSpace(brand))
+                return Results.BadRequest(new ProblemDetails
+                {
+                    Title = "缺少参数", Status = StatusCodes.Status400BadRequest, Detail = "brand 必填"
+                });
+
+            var existing = await db.XrefOemBrands
+                .Where(b => b.Brand == brand)
+                .FirstOrDefaultAsync(ct);
+            if (existing == null || existing.DeletedAt != null)
+                return Results.NotFound(new ProblemDetails
+                {
+                    Type = "https://sakurafilter.com/errors/brand-not-found",
+                    Title = "品牌不存在",
+                    Status = StatusCodes.Status404NotFound,
+                    Detail = $"品牌 '{brand}' 不存在或已被移除, 无需重复操作"
+                });
+
+            existing.DeletedAt = DateTime.UtcNow;
+            existing.UpdatedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync(ct);
+            cache.Remove("xref.brands.list");
+
+            logger.LogInformation("品牌软删: brand={Brand}", brand);
+            return Results.Ok(new { brand, removed = true, hint = "同名'新增品牌'可恢复" });
+        })
+        .WithSummary("软删品牌 (xref_oem_brand.deleted_at=now, 数据保留; 同名新增可恢复)")
+        .WithName("AdminXrefReorder_DeleteBrand");
+
         // ===== Task 2.1.3: GET /?oemBrand=BOSCH — 返回某 Brand 下白名单内 OEM 3 列表 =====
         //   V24-F86: 加分页 (page/pageSize) + 搜索 (q, oemNo3 模糊匹配), 解决全量加载卡顿
         //   WHY 分页: 单 Brand 下 OEM 3 可达数千条, 全量加载导致前端渲染卡顿
