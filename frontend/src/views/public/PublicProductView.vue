@@ -285,23 +285,23 @@ function numOrDash(v?: number | string) {
             role="img"
             aria-label="产品尺寸标注示意"
           >
-            <!-- 高度线 H1 (右侧垂直: 细线 + 端部短界线, 无箭头) -->
+            <!-- 高度线 H1 (右侧垂直: 细线 + 端部短界线, 无箭头; 靠右缘避免遮挡主图) -->
             <g stroke="#2C2C2A" stroke-width="1" fill="none" opacity="0.9">
-              <line x1="330" y1="60" x2="330" y2="335" />
-              <line x1="321" y1="60" x2="339" y2="60" />
-              <line x1="321" y1="335" x2="339" y2="335" />
+              <line x1="368" y1="60" x2="368" y2="335" />
+              <line x1="358" y1="60" x2="378" y2="60" />
+              <line x1="358" y1="335" x2="378" y2="335" />
             </g>
-            <!-- 宽度线 D1 (底部水平: 细线 + 端部短界线, 无箭头) -->
+            <!-- 宽度线 D1 (底部水平: 细线 + 端部短界线, 无箭头; 靠下缘避免遮挡主图) -->
             <g stroke="#2C2C2A" stroke-width="1" fill="none" opacity="0.9">
-              <line x1="65" y1="350" x2="335" y2="350" />
-              <line x1="65" y1="341" x2="65" y2="359" />
-              <line x1="335" y1="341" x2="335" y2="359" />
+              <line x1="65" y1="382" x2="335" y2="382" />
+              <line x1="65" y1="372" x2="65" y2="392" />
+              <line x1="335" y1="372" x2="335" y2="392" />
             </g>
-            <!-- 数值文字 (无矩形框, 白色描边 halo 保证可读性, 极简) -->
+            <!-- 数值文字 (无矩形框, 白色描边 halo 保证可读性, 极简; 标签贴线内侧) -->
             <g font-family="monospace" font-size="13" font-weight="500" fill="#2C2C2A"
                stroke="#FFFFFF" stroke-width="3" stroke-linejoin="round" paint-order="stroke fill">
-              <text x="330" y="204" text-anchor="middle">{{ dimensionSpecs.h1 }}mm</text>
-              <text x="200" y="372" text-anchor="middle">{{ dimensionSpecs.d1 }}mm</text>
+              <text x="362" y="204" text-anchor="end">{{ dimensionSpecs.h1 }}mm</text>
+              <text x="200" y="374" text-anchor="middle">{{ dimensionSpecs.d1 }}mm</text>
             </g>
             <!-- 示意图提示 -->
             <text x="12" y="26" font-size="10" fill="#888780">示意图, 尺寸以参数表为准</text>
