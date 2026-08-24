@@ -14,8 +14,9 @@
 //   - "添加到白名单": 新建 cross_reference, 后端自动 sort_order = max+1, 新增即入白名单
 //   - "从白名单移除": 置 sort_order = 0 (产品本身不删, 仅不再优先展示)
 //   - 添加弹窗按 selectedBrand 过滤产品搜索 (adminProductApi.search 加 oemBrand 参数)
-import { ref, onMounted, reactive, onBeforeUnmount } from 'vue'
+import { ref, onMounted, reactive, onBeforeUnmount, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Search } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
 import draggable from 'vuedraggable'
 import { adminXrefApi, adminProductApi } from '@/api'
@@ -33,6 +34,13 @@ const { t } = useI18n()
 const brands = ref<XrefBrandItem[]>([])
 const selectedBrand = ref<string>('')
 const loadingBrands = ref(false)
+// V3(2026-08-24): 品牌搜索 (本地过滤, 59 条无需防抖)
+const brandSearchQ = ref('')
+const filteredBrands = computed(() => {
+  const q = brandSearchQ.value.trim().toLowerCase()
+  if (!q) return brands.value
+  return brands.value.filter((b) => b.brand.toLowerCase().includes(q))
+})
 
 // ===== OEM 3 列表状态 (V24-F86: 加分页 + 搜索) =====
 const oemList = ref<XrefOem3Item[]>([])
@@ -55,7 +63,7 @@ const dialogMode = ref<'create' | 'edit'>('create')
 const dialogLoading = ref(false)
 const editingId = ref<number | null>(null)
 const form = reactive({
-  productId: 0,
+  productId: null as number | null,  // V3(2026-08-24): null 而非 0 — 0 会被 el-select 显示成 "0" 误导用户以为要输产品 ID
   oemBrand: '',
   oemNo3: '',
   oem2: '',
@@ -243,7 +251,7 @@ async function manualSave() {
 function openCreateDialog() {
   dialogMode.value = 'create'
   editingId.value = null
-  form.productId = 0
+  form.productId = null  // V3: null 初始 (el-select 显示空搜索态, 不显示误导性 "0")
   form.oemBrand = selectedBrand.value  // 默认填充当前选中 brand
   form.oemNo3 = ''
   form.oem2 = ''
@@ -321,24 +329,45 @@ async function searchProducts(q: string) {
   }
 }
 
-// ===== 选择产品后自动填充 oemNo3 (从选中产品的 oemNoDisplay 取) =====
-function onProductSelected(productId: number) {
+// ===== 产品选项格式化 (V3: 展示 mr1 + OEM3 + OEM2 + 类型, 信息更全) =====
+function formatProductOption(p: ProductListItem): string {
+  const parts: string[] = []
+  if (p.mr1) parts.push(p.mr1)
+  if (p.oemNoDisplay) parts.push(p.oemNoDisplay)
+  if (p.oem2) parts.push(p.oem2)
+  if (p.type) parts.push(p.type)
+  parts.push(`#${p.id}`)
+  return parts.join(' · ')
+}
+
+// ===== 选择产品后自动填充 (V3: 拉详情补全 oem2, 让用户只选产品即可) =====
+async function onProductSelected(productId: number) {
   const product = productOptions.value.find((p) => p.id === productId)
-  if (product) {
-    // 自动填充 oemNo3 (如果产品有 oemNoDisplay, 用它作为默认 OEM 3 号)
-    if (!form.oemNo3 && product.oemNoDisplay) {
-      form.oemNo3 = product.oemNoDisplay
-    }
-    // 自动填充 oem2 (如果产品有 oem2)
-    if (!form.oem2 && (product as any).oem2) {
-      form.oem2 = (product as any).oem2
+  if (!product) return
+  // 自动填充 oemNo3 (如果产品有 oemNoDisplay, 用它作为默认 OEM 3 号)
+  if (!form.oemNo3 && product.oemNoDisplay) {
+    form.oemNo3 = product.oemNoDisplay
+  }
+  // oem2 优先从详情接口取 (products.oem_2), fallback 搜索结果
+  if (!form.oem2) {
+    const searchOem2 = (product as any).oem2
+    if (searchOem2) {
+      form.oem2 = searchOem2
+    } else {
+      try {
+        const detail = await adminProductApi.get(productId)
+        const detailOem2 = (detail as any)?.oem2
+        if (detailOem2) form.oem2 = detailOem2
+      } catch {
+        /* 详情失败则保留空, 用户可手填 */
+      }
     }
   }
 }
 
 // ===== V24-F86: 提交表单 (新增/编辑) =====
 async function submitForm() {
-  if (form.productId <= 0) {
+  if (!form.productId) {
     ElMessage.error(t('admin.xrefreorder.err_select_product'))
     return
   }
@@ -469,6 +498,36 @@ async function submitBrand() {
   }
 }
 
+// ===== V3(2026-08-24): 软删品牌 (从列表移除; 同名"新增品牌"可恢复) =====
+async function removeBrand(brand: string) {
+  try {
+    await ElMessageBox.confirm(
+      t('admin.xrefreorder.confirm_remove_brand', { brand }),
+      t('admin.xrefreorder.remove_brand_title'),
+      { type: 'warning', confirmButtonText: t('admin.xrefreorder.remove_brand'), cancelButtonText: t('admin.xrefreorder.cancel') }
+    )
+  } catch {
+    return // 用户取消
+  }
+  try {
+    await adminXrefApi.deleteBrand(brand)
+    ElMessage.success(t('admin.xrefreorder.success_brand_removed', { brand }))
+    // 刷新品牌列表; 若删除的是当前选中, 重置
+    if (selectedBrand.value === brand) {
+      selectedBrand.value = ''
+      page.value = 1
+      searchQ.value = ''
+      oemList.value = []
+      dragList.value = []
+      total.value = 0
+      totalPages.value = 0
+    }
+    await loadBrands()
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.detail || t('admin.xrefreorder.err_remove_brand_failed'))
+  }
+}
+
 onMounted(loadBrands)
 
 // 🔧 fix(审查): 卸载时清理防抖 timer — 之前缺失, 卸载后 timer 仍会触发 loadOemList 访问已卸载状态
@@ -497,11 +556,25 @@ onBeforeUnmount(() => {
           <span>{{ t('admin.xrefreorder.brand_label', { count: brands.length }) }}</span>
           <el-button size="small" text type="primary" @click="openCreateBrandDialog">{{ t('admin.xrefreorder.add_brand') }}</el-button>
         </div>
-        <div v-loading="loadingBrands" class="overflow-auto" style="max-height: 540px">
+        <!-- V3(2026-08-24): 品牌搜索 (本地过滤) -->
+        <div class="px-2 py-1.5 border-b border-gray-100 dark:border-[var(--color-border-subtle)]">
+          <el-input
+            v-model="brandSearchQ"
+            size="small"
+            clearable
+            :placeholder="t('admin.xrefreorder.brand_search_placeholder')"
+            :aria-label="t('admin.xrefreorder.brand_search_placeholder')"
+          >
+            <template #prefix>
+              <el-icon><Search /></el-icon>
+            </template>
+          </el-input>
+        </div>
+        <div v-loading="loadingBrands" class="overflow-auto" style="max-height: 500px">
           <div
-            v-for="b in brands"
+            v-for="b in filteredBrands"
             :key="b.brand"
-            class="px-3 py-2 border-b border-gray-100 cursor-pointer hover:bg-gray-50 flex items-center justify-between dark:border-[var(--color-border-subtle)] dark:hover:bg-[var(--color-bg-hover)]"
+            class="px-3 py-2 border-b border-gray-100 cursor-pointer hover:bg-gray-50 flex items-center justify-between group dark:border-[var(--color-border-subtle)] dark:hover:bg-[var(--color-bg-hover)]"
             :class="{ 'bg-blue-50 border-l-2 border-l-blue-500': b.brand === selectedBrand, 'dark:bg-[var(--color-bg-hover)] dark:border-l-[var(--color-accent)]': b.brand === selectedBrand }"
             @click="selectBrand(b.brand)"
           >
@@ -509,9 +582,21 @@ onBeforeUnmount(() => {
               <div class="text-sm truncate">{{ b.brand }}</div>
               <div class="text-xs text-gray-500 dark:text-[var(--color-text-muted)]">{{ t('admin.xrefreorder.brand_whitelist_count', { count: b.oem3Count, sortOrder: b.sortOrder }) }}</div>
             </div>
+            <!-- V3(2026-08-24): 移除品牌 (软删) — hover 显示, 不与选中冲突 -->
+            <el-button
+              v-if="b.brand !== selectedBrand"
+              size="small"
+              text
+              type="danger"
+              class="opacity-0 group-hover:opacity-100 !ml-1"
+              :aria-label="t('admin.xrefreorder.remove_brand', { brand: b.brand })"
+              @click.stop="removeBrand(b.brand)"
+            >
+              ×
+            </el-button>
           </div>
-          <div v-if="!loadingBrands && brands.length === 0" class="p-4 text-center text-gray-400 text-sm dark:text-[var(--color-text-muted)]">
-            {{ t('admin.xrefreorder.no_brand_data') }}
+          <div v-if="!loadingBrands && filteredBrands.length === 0" class="p-4 text-center text-gray-400 text-sm dark:text-[var(--color-text-muted)]">
+            {{ brandSearchQ ? t('admin.xrefreorder.no_brand_match') : t('admin.xrefreorder.no_brand_data') }}
           </div>
         </div>
       </div>
@@ -619,25 +704,30 @@ onBeforeUnmount(() => {
           <span class="text-sm font-medium">{{ form.oemBrand || selectedBrand || '-' }}</span>
         </el-form-item>
         <el-form-item :label="t('admin.xrefreorder.field_product')">
-          <!-- productId 联想 (el-select remote, 多字段搜索, 自动按当前 brand 过滤) -->
+          <!-- V3(2026-08-24): 产品搜索选择 (remote) — 选产品后自动填 OEM 3/2, 无需记忆 ID -->
           <el-select
             v-model="form.productId"
             filterable
             remote
+            clearable
             :remote-method="searchProducts"
             :loading="productLoading"
             :disabled="dialogMode === 'edit'"
             :placeholder="t('admin.xrefreorder.product_placeholder')"
+            :no-data-text="t('admin.xrefreorder.product_no_data')"
             style="width: 100%"
             @change="onProductSelected"
           >
             <el-option
               v-for="p in productOptions"
               :key="p.id"
-              :label="p.mr1 ? `${p.mr1} · ${p.oemNoDisplay || ''} (#${p.id})` : `#${p.id}`"
+              :label="formatProductOption(p)"
               :value="p.id"
             />
           </el-select>
+          <div v-if="dialogMode === 'create'" class="text-xs text-gray-400 mt-1 dark:text-[var(--color-text-muted)]">
+            {{ t('admin.xrefreorder.product_auto_hint') }}
+          </div>
         </el-form-item>
         <el-form-item :label="t('admin.xrefreorder.field_oem_no3')">
           <el-input v-model="form.oemNo3" :placeholder="t('admin.xrefreorder.field_oem_no3')" />
