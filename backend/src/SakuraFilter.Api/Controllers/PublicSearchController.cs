@@ -610,6 +610,36 @@ public class PublicSearchController : ControllerBase
 
         // 聚合查询内部以 MR1 分组，但公开响应只能交付客户字段。
         // key 用于前端展开状态，优先取公开 OEM3，不得回退或序列化 MR1。
+        // 🔧 fix(2026-08-24): 搜索卡片缩略图 — 原前端硬编码 /oem2/{oem3}.jpg 静态路径, 与 R2 存储
+        //   (后端 /api/public/images/... 代理) 完全不通 → 卡片永远占位图。这里按 mr1 批量查 product_images
+        //   主图回填 primaryImageKey / primaryImageUrl, 前端优先读它, /oem2 降级为 fallback。
+        //   注意: 只回填 imageKey/imageUrl, 不把 MR1 序列化进公开响应 (保持"不交付 MR1"原则)。
+        string? PrimaryImageUrlFor(string? mr1, Dictionary<string, string?> map)
+            => map.TryGetValue(mr1 ?? "", out var key) && !string.IsNullOrEmpty(key)
+                ? $"/api/public/images/{key}"
+                : null;
+        var primaryImageMap = new Dictionary<string, string?>();
+        var hitMr1s = response.Hits
+            .Select(h => h.Mr1)
+            .Where(m => !string.IsNullOrWhiteSpace(m))
+            .Distinct()
+            .ToList();
+        if (hitMr1s.Count > 0)
+        {
+            var pidByMr1 = await _db.Products.AsNoTracking()
+                .Where(p => hitMr1s.Contains(p.Mr1!))
+                .Select(p => new { p.Id, p.Mr1 })
+                .ToListAsync(ct);
+            var pids = pidByMr1.Select(p => p.Id).ToList();
+            var primaryImages = await _db.ProductImages.AsNoTracking()
+                .Where(i => i.ImageRole == "primary" && pids.Contains(i.ProductId))
+                .Select(i => new { i.ProductId, i.ImageKey })
+                .ToListAsync(ct);
+            primaryImageMap = pidByMr1.ToDictionary(
+                p => p.Mr1 ?? "",
+                p => primaryImages.FirstOrDefault(i => i.ProductId == p.Id)?.ImageKey);
+        }
+
         var publicHits = response.Hits.Select((hit, index) => new
         {
             key = hit.OemList.FirstOrDefault(x => x.IsPublished && !string.IsNullOrWhiteSpace(x.OemNo3))?.OemNo3
@@ -622,6 +652,8 @@ public class PublicSearchController : ControllerBase
             hit.Type,
             hit.Remark,
             hit.Media,
+            PrimaryImageKey = primaryImageMap.GetValueOrDefault(hit.Mr1 ?? ""),
+            PrimaryImageUrl = PrimaryImageUrlFor(hit.Mr1, primaryImageMap),
             OemList = hit.OemList
                 .Where(x => x.IsPublished)
                 .Select(x => new { x.OemBrand, x.OemNo3, x.Oem2, x.MachineType })
