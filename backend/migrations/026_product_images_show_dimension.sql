@@ -1,3 +1,4 @@
+-- idempotent 脚本, 可重复执行: 026 产品图尺寸标注开关 (ADD COLUMN IF NOT EXISTS)
 -- 026: 产品图尺寸标注开关 (V2 功能: 详情页主图叠加长宽高标注线)
 --   show_dimension=true 时, 前端详情页在该图上叠加 SVG 尺寸标注 (D1 直径 x H1 高度)
 --   管理后台可逐图切换; 默认 false (不标注)
