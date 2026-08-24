@@ -628,6 +628,16 @@ export const imageApi = {
 
 // ===== ETL =====
 export const etlApi = {
+  // V3(2026-08-25): P0 导入向导 — 模板下载 (blob xlsx)
+  template(entity: string): Promise<Blob> {
+    return http.get('/admin/etl/template', { params: { entity }, responseType: 'blob' }).then((r) => r.data)
+  },
+  // V3(2026-08-25): P0 导入向导 — 文件上传 (真正上传 XLSX/JSONL, 返回服务器 jsonlPath)
+  upload(file: File, entity: string): Promise<{ jsonlPath: string; entityType: string; fileName: string; sizeBytes: number }> {
+    const fd = new FormData()
+    fd.append('file', file)
+    return http.post('/admin/etl/upload', fd, { params: { entity }, headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data)
+  },
   trigger(req: EtlTriggerRequest): Promise<EtlProgress> {
     return http.post('/admin/etl/trigger', req).then((r) => r.data)
   },
