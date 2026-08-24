@@ -937,7 +937,7 @@ export default {
       dialog_edit_title: 'Edit OEM 3',
       field_current_brand: 'Brand',
       field_product: 'Linked product',
-      product_placeholder: 'Search product by MR.1 / name under this brand',
+      product_placeholder: '🔍 Search product (MR.1 / name / OEM no.)',
       field_oem_no3: 'OEM 3 No.',
       field_oem2: 'OEM 2',
       field_machine_type: 'Machine type',
@@ -974,6 +974,16 @@ export default {
       success_brand_added: "Brand '{brand}' added",
       err_brand_exists: 'Brand already exists',
       err_add_brand_failed: 'Failed to add brand',
+      // V3(2026-08-24): brand search + soft delete
+      brand_search_placeholder: 'Search brands...',
+      no_brand_match: 'No matching brands',
+      remove_brand_title: 'Remove brand',
+      confirm_remove_brand: 'Remove brand "{brand}"? (soft delete, product data untouched; re-add same name to restore)',
+      success_brand_removed: "Brand '{brand}' removed",
+      err_remove_brand_failed: 'Failed to remove brand',
+      // V3(2026-08-24): product search UX
+      product_no_data: 'No matching product, try another keyword',
+      product_auto_hint: 'OEM 3 / OEM 2 auto-filled after product selection, editable',
     },
     // 2026-08-01: AdminApiDocsView i18n 化 (批次 6d 页面补充)
     apidocs: {
