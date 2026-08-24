@@ -76,6 +76,49 @@ function handleFilesDropped(files: File[]) {
   }
 }
 
+// ===== V3(2026-08-25): P0 导入向导 — 下载模板 + 文件上传 (客户自助导入) =====
+const downloadingTemplate = ref(false)
+const uploading = ref(false)
+
+async function downloadTemplate(entity: string) {
+  downloadingTemplate.value = true
+  try {
+    const blob = await etlApi.template(entity)
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `sakurafilter-${entity}-template.xlsx`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+    ElMessage.success(t('admin.etlview.success.template_downloaded', { entity }))
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.detail || t('admin.etlview.err.template_download_failed'))
+  } finally {
+    downloadingTemplate.value = false
+  }
+}
+
+// 真正上传文件到服务器 → 自动填 jsonlPath + 实体
+async function handleFileUpload(file: File) {
+  uploading.value = true
+  try {
+    const r = await etlApi.upload(file, form.entity)
+    form.jsonlPath = r.jsonlPath
+    ElMessage.success(t('admin.etlview.success.file_uploaded', { name: r.fileName }))
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.error || e?.response?.data?.detail || t('admin.etlview.err.upload_failed'))
+  } finally {
+    uploading.value = false
+  }
+}
+
+function onPickFile(file: File) {
+  handleFileUpload(file)
+  return false  // 阻止 el-upload 默认 auto-upload (已手动 FormData)
+}
+
 onMounted(() => {
   registerDrag({
     onFilesDropped: handleFilesDropped,
@@ -485,6 +528,17 @@ function statusTagType(s: string): 'success' | 'warning' | 'info' | 'danger' | '
             <el-radio-button value="xrefs">{{ t('admin.etlview.entity.xrefs') }}</el-radio-button>
             <el-radio-button value="apps">{{ t('admin.etlview.entity.apps') }}</el-radio-button>
           </el-radio-group>
+          <!-- V3(2026-08-25): P0 导入向导 — 下载模板按钮 -->
+          <el-button
+            class="ml-3"
+            size="small"
+            text
+            type="primary"
+            :loading="downloadingTemplate"
+            @click="downloadTemplate(form.entity)"
+          >
+            <el-icon class="mr-1"><Download /></el-icon>{{ t('admin.etlview.template_download') }}
+          </el-button>
         </el-form-item>
 
         <el-form-item :label="t('common.field.mode')">
@@ -496,12 +550,29 @@ function statusTagType(s: string): 'success' | 'warning' | 'info' | 'danger' | '
         </el-form-item>
 
         <el-form-item :label="t('admin.etlview.label.file')">
-          <el-input
-            v-model="form.jsonlPath"
-            :placeholder="t('admin.etlview.placeholder.jsonl_absolute_path')"
-            style="width: 500px"
-            clearable
-          />
+          <div class="flex flex-col gap-2 w-full">
+            <!-- V3(2026-08-25): P0 导入向导 — 文件上传 (真正上传到服务器) -->
+            <el-upload
+              drag
+              accept=".xlsx,.xls,.jsonl"
+              :auto-upload="false"
+              :show-file-list="false"
+              :on-change="(f: any) => onPickFile(f.raw)"
+              :disabled="uploading"
+            >
+              <div class="flex items-center justify-center gap-2 py-3 text-sm text-gray-500 dark:text-[var(--color-text-muted)]">
+                <el-icon :class="uploading ? 'animate-spin' : ''" size="18"><Upload /></el-icon>
+                <span>{{ uploading ? t('admin.etlview.uploading') : t('admin.etlview.upload_hint') }}</span>
+              </div>
+            </el-upload>
+            <el-input
+              v-model="form.jsonlPath"
+              :placeholder="t('admin.etlview.placeholder.jsonl_absolute_path')"
+              style="width: 100%"
+              clearable
+            />
+            <div class="text-xs text-gray-400 dark:text-[var(--color-text-muted)]">{{ t('admin.etlview.upload_tip') }}</div>
+          </div>
         </el-form-item>
 
         <el-form-item label=" ">
@@ -649,6 +720,16 @@ function statusTagType(s: string): 'success' | 'warning' | 'info' | 'danger' | '
         <el-table :data="lastFinished.recentErrors" size="small" max-height="240" border>
           <el-table-column prop="at" :label="t('admin.etlview.label.timestamp')" width="200" />
           <el-table-column prop="message" :label="t('admin.etlview.label.error')" show-overflow-tooltip />
+        </el-table>
+      </div>
+
+      <!-- V3(2026-08-25): P2 行级错误明细 (导入失败定位到行) -->
+      <div v-if="lastFinished.rowErrors && lastFinished.rowErrors.length > 0" class="mt-3">
+        <div class="text-sm font-semibold mb-1">{{ t('admin.etlview.section.row_errors') }}</div>
+        <el-table :data="lastFinished.rowErrors" size="small" max-height="240" border>
+          <el-table-column prop="lineNo" :label="t('admin.etlview.label.row_no')" width="90" />
+          <el-table-column prop="field" :label="t('admin.etlview.label.field')" width="140" />
+          <el-table-column prop="reason" :label="t('admin.etlview.label.reason')" show-overflow-tooltip />
         </el-table>
       </div>
     </el-card>
