@@ -100,12 +100,13 @@ export default {
     },
     etlview: {
       page_title: 'ETL Trigger & Monitor',
-      guide_title: 'How to use',
-      guide_step1: '1. Select data entity: Products / OEM Cross-References / Machine Applications',
-      guide_step2: '2. Select import mode: Full reload (truncate & re-import) / Insert only (skip existing) / Upsert (overwrite existing)',
-      guide_step3: '3. Enter the data file path (absolute path accessible inside container, e.g. /tmp/etl/products.jsonl), or drag & drop an XLSX file',
-      guide_step4: '4. Click "Trigger ETL" to run in background; you may click "Run dry-run" to validate only',
-      guide_step5: '5. Check "Pipeline" and "Recent errors" for progress and failure reasons',
+      guide_title: 'What is ETL & how to use',
+      guide_intro: 'ETL is the bulk product-data import tool: it loads product files (XLSX or JSONL) into the database. Use it for initial data load, catalog updates, or after data corrections; no action needed for daily queries.',
+      guide_step1: '① Select data entity: Products / OEM Cross-References / Machine Applications',
+      guide_step2: '② Select import mode: Full reload (truncate & re-import) / Insert only (skip existing) / Upsert (overwrite existing)',
+      guide_step3: '③ Provide the data file: drag & drop XLSX, or enter a container-accessible JSONL path (e.g. /tmp/etl/products.jsonl)',
+      guide_step4: '④ Click "Trigger ETL" to run in background; you may click "Run dry-run" to validate only',
+      guide_step5: '⑤ Check "Pipeline" and "Recent errors" below for progress and failure reasons',
       entity: {
         products: 'Products',
         xrefs: 'OEM Cross-References',
@@ -141,6 +142,7 @@ export default {
         status_paused: 'Paused',
         status_cancelled: 'Cancelled',
         status_idle: 'Idle',
+        empty_hint: 'No task running (idle is normal). Configure and trigger ETL above to see the pipeline here.',
         elapsed_label: 'Elapsed',
         errors_label: 'Errors'
       },
