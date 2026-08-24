@@ -1334,7 +1334,8 @@ export default {
       restart_tip: 'Saved config applies after container restart (storage client is singleton). The test button verifies credentials/connectivity (upload/read/delete probe).',
     },
     help: 'Help',
-    enterAdmin: 'Enter Admin',
+    enterAdmin: 'Login',
+    enterAdminArea: 'Admin Panel',
     exitAdmin: 'Exit Admin',
     // V24-F103 i18n residue fix: AppHeader nav buttons + dict dropdown + drawer
     more: 'More',
