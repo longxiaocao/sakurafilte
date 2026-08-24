@@ -115,10 +115,11 @@ const imageUrls = computed(() => {
 
 // ===== 尺寸标注线 (V2 功能 2026-08-24) =====
 //   示意模式: 线段按图片尺寸等比展示, 数值显示真实 mm (以参数表为准)
-const showDimLocal = ref<boolean | null>(null) // 本地临时开关, null = 跟随图片配置
+//   🔧 fix(2026-08-24 体验): 显示与否完全以管理后台 show_dimension 配置为准,
+//     移除本地临时开关 (客户侧不覆盖产品配置)
 const activeImageShowDim = computed(() => {
   const img = imageUrls.value[activeImageIdx.value]
-  return showDimLocal.value ?? (img?.showDimension ?? false)
+  return img?.showDimension ?? false
 })
 const dimensionSpecs = computed(() => {
   const d = data.value
@@ -126,9 +127,6 @@ const dimensionSpecs = computed(() => {
   if (!d.d1Mm || !d.h1Mm) return null
   return { d1: d.d1Mm, h1: d.h1Mm }
 })
-function toggleDimView(): void {
-  showDimLocal.value = !activeImageShowDim.value
-}
 
 // 工业极简融合风: 主图 + 灯箱预览列表
 const placeholderImage = '/images/product-placeholder.svg'
@@ -279,7 +277,7 @@ function numOrDash(v?: number | string) {
             </template>
           </el-image>
 
-          <!-- V2(2026-08-24): 尺寸标注线 overlay — 管理后台开启后展示, 用户可临时开关 -->
+          <!-- V2(2026-08-24): 尺寸标注线 overlay — 管理后台开启后展示, 黑白极简工程图纸风 -->
           <svg
             v-if="activeImageShowDim && dimensionSpecs"
             viewBox="0 0 400 400"
@@ -287,45 +285,32 @@ function numOrDash(v?: number | string) {
             role="img"
             aria-label="产品尺寸标注示意"
           >
-            <!-- 高度线 H1 (右侧垂直) -->
-            <g stroke="#185FA5" stroke-width="1.5" fill="none">
+            <!-- 高度线 H1 (右侧垂直, 黑白细线) -->
+            <g stroke="#2C2C2A" stroke-width="1" fill="none" opacity="0.9">
               <line x1="330" y1="50" x2="330" y2="345" />
-              <path d="M330 58 L324 74 L336 74 Z" fill="#185FA5" stroke="none" />
-              <path d="M330 337 L324 321 L336 321 Z" fill="#185FA5" stroke="none" />
-              <line x1="320" y1="50" x2="340" y2="50" />
-              <line x1="320" y1="345" x2="340" y2="345" />
+              <path d="M330 60 L326 74 L334 74 Z" fill="#2C2C2A" stroke="none" />
+              <path d="M330 335 L326 321 L334 321 Z" fill="#2C2C2A" stroke="none" />
+              <line x1="321" y1="50" x2="339" y2="50" />
+              <line x1="321" y1="345" x2="339" y2="345" />
             </g>
-            <!-- 宽度线 D1 (底部水平) -->
-            <g stroke="#185FA5" stroke-width="1.5" fill="none">
+            <!-- 宽度线 D1 (底部水平, 黑白细线) -->
+            <g stroke="#2C2C2A" stroke-width="1" fill="none" opacity="0.9">
               <line x1="55" y1="350" x2="345" y2="350" />
-              <path d="M63 350 L79 344 L79 356 Z" fill="#185FA5" stroke="none" />
-              <path d="M337 350 L321 344 L321 356 Z" fill="#185FA5" stroke="none" />
-              <line x1="55" y1="340" x2="55" y2="360" />
-              <line x1="345" y1="340" x2="345" y2="360" />
+              <path d="M65 350 L79 346 L79 354 Z" fill="#2C2C2A" stroke="none" />
+              <path d="M335 350 L321 346 L321 354 Z" fill="#2C2C2A" stroke="none" />
+              <line x1="55" y1="341" x2="55" y2="359" />
+              <line x1="345" y1="341" x2="345" y2="359" />
             </g>
-            <!-- 数值标签 -->
+            <!-- 数值标签 (白底黑字, 极简) -->
             <g font-family="monospace" font-size="13" font-weight="500">
-              <rect x="294" y="188" width="72" height="24" rx="4" fill="#E6F1FB" stroke="#185FA5" stroke-width="0.8" />
-              <text x="330" y="204" text-anchor="middle" fill="#0C447C">{{ dimensionSpecs.h1 }}mm</text>
-              <rect x="150" y="356" width="100" height="24" rx="4" fill="#E6F1FB" stroke="#185FA5" stroke-width="0.8" />
-              <text x="200" y="372" text-anchor="middle" fill="#0C447C">{{ dimensionSpecs.d1 }}mm</text>
+              <rect x="292" y="188" width="76" height="24" rx="3" fill="#FFFFFF" stroke="#2C2C2A" stroke-width="0.8" />
+              <text x="330" y="204" text-anchor="middle" fill="#2C2C2A">{{ dimensionSpecs.h1 }}mm</text>
+              <rect x="148" y="356" width="104" height="24" rx="3" fill="#FFFFFF" stroke="#2C2C2A" stroke-width="0.8" />
+              <text x="200" y="372" text-anchor="middle" fill="#2C2C2A">{{ dimensionSpecs.d1 }}mm</text>
             </g>
             <!-- 示意图提示 -->
             <text x="12" y="26" font-size="10" fill="#888780">示意图, 尺寸以参数表为准</text>
           </svg>
-
-          <!-- 尺寸标注开关 (本地临时) -->
-          <button
-            v-if="dimensionSpecs"
-            type="button"
-            class="absolute top-2 right-2 px-2 py-0.5 text-[11px] rounded border"
-            :class="activeImageShowDim
-              ? 'bg-[#E6F1FB] text-[#0C447C] border-[#185FA5]'
-              : 'bg-white text-gray-500 border-gray-300'"
-            @click.stop="toggleDimView"
-          >
-            {{ activeImageShowDim ? '标注线 开' : '标注线 关' }}
-          </button>
         </div>
         <!-- 缩略图列表 -->
         <div v-if="imageUrls.length > 1" class="flex gap-2 mt-3 overflow-x-auto">
