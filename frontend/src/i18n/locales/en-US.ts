@@ -110,6 +110,8 @@ export default {
       // V3(2026-08-25): P0 import wizard (template + upload)
       template_download: 'Download template',
       entity_auto_tip: 'Data type auto-detected after upload, no manual selection needed',
+      entity_auto_detected_badge: 'Detected: {entity}',
+      template_label: 'Template',
       uploading: 'Uploading...',
       upload_hint: 'Click or drop file here to upload (XLSX / JSONL)',
       upload_tip: 'Uploaded file auto-fills the server path; you may also enter a container JSONL path manually (advanced)',
@@ -287,7 +289,7 @@ export default {
         triggered_etl_background_execute: 'Triggered ETL, background execute',
         phrase_21459: 'Cleared',
         // V3(2026-08-25): P0 import wizard
-        template_downloaded: 'Template downloaded ({entity})',
+        template_downloaded: 'Template downloaded (3 sheets: products/xrefs/apps)',
         file_uploaded: 'File {name} uploaded, path filled',
         entity_auto_detected: 'Auto-detected {name} as: {entity} (change type above if wrong)'
       },
