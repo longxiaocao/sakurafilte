@@ -96,11 +96,16 @@ public static class AdminEtlEndpoints
                 await file.CopyToAsync(fs, ct);
             }
 
+            // V3(2026-08-25): 实体智能识别 — 先识别数据类型, 再用识别结果转换
+            //   顺序必须 识别→转换: xlsx 模板含多 sheet (按实体命名), ConvertAsync 用 entity 找对应 sheet,
+            //   若前端传错 entity 会转换失败; jsonl 直接识别 keys 即可
+            var detected = EtlEntityDetector.Detect(savedPath);
+
             // xlsx/xls → JSONL (ConvertAsync 只处理 .xlsx, 输出到 temp/sakurafilter-etl/)
             string jsonlPath;
             try
             {
-                jsonlPath = await EtlSpreadsheetAdapter.ConvertAsync(savedPath, entityKey, ct);
+                jsonlPath = await EtlSpreadsheetAdapter.ConvertAsync(savedPath, detected, ct);
             }
             catch (Exception ex)
             {
@@ -113,12 +118,15 @@ public static class AdminEtlEndpoints
                 try { File.Delete(savedPath); } catch { }
             }
 
-            logger.LogInformation("ETL 上传完成: entity={Entity} file={Name} jsonl={Path} size={Size}",
-                entityKey, file.FileName, jsonlPath, file.Length);
+            var resolved = detected;
+
+            logger.LogInformation("ETL 上传完成: entity={Entity} (detected={Detected}) file={Name} jsonl={Path} size={Size}",
+                entityKey, detected, file.FileName, jsonlPath, file.Length);
             return Results.Ok(new
             {
                 jsonlPath,
-                entityType = entityKey,
+                entityType = resolved,
+                autoDetected = !string.Equals(resolved, entityKey, StringComparison.OrdinalIgnoreCase),
                 fileName = file.FileName,
                 sizeBytes = file.Length
             });
