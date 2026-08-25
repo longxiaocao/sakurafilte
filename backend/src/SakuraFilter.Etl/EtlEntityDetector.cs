@@ -26,13 +26,12 @@ public static class EtlEntityDetector
             var ext = Path.GetExtension(path).ToLowerInvariant();
             if (ext == ".jsonl")
             {
-                var keys = PeekJsonlKeys(path);
-                return Score(keys);
+                var (entity, _) = Score2(PeekJsonlKeys(path));
+                return entity;
             }
             if (ext == ".xlsx" || ext == ".xls")
             {
-                var keys = PeekXlsxHeader(path);
-                return Score(keys);
+                return DetectXlsx(path);
             }
             return "products";
         }
@@ -43,9 +42,46 @@ public static class EtlEntityDetector
         }
     }
 
-    private static string Score(HashSet<string> keys)
+    /// <summary>xlsx/xls: 逐 sheet 打分, 仅"有数据行的 sheet"参与 (统一模板 3 sheet 都有表头,
+    ///   只看表头无法区分客户填了哪个; 跳过 Row1 表头 + Row2 示例行, 从 Row3 起有非空 cell 才算有数据)</summary>
+    private static string DetectXlsx(string path)
     {
-        if (keys.Count == 0) return "products";
+        using var wb = new ClosedXML.Excel.XLWorkbook(path);
+        string best = "products";
+        int bestScore = -1;
+        foreach (var ws in wb.Worksheets)
+        {
+            var headerRow = ws.FirstRowUsed();
+            if (headerRow is null) continue;
+            var keys = new HashSet<string>();
+            foreach (var cell in headerRow.CellsUsed())
+            {
+                var v = cell.GetFormattedString()?.Trim();
+                if (!string.IsNullOrEmpty(v)) keys.Add(v);
+            }
+            if (!HasDataRows(ws)) continue;  // 空表 (只有表头/示例行) 不参与
+            var (entity, score) = Score2(keys);
+            if (score > bestScore) { bestScore = score; best = entity; }
+        }
+        return best;
+    }
+
+    private static bool HasDataRows(ClosedXML.Excel.IXLWorksheet ws)
+    {
+        // RowsUsed 含表头+示例行, Skip(2) 后为真实数据区 (模板 Row1 表头 / Row2 示例)
+        foreach (var row in ws.RowsUsed().Skip(2))
+        {
+            foreach (var cell in row.CellsUsed())
+            {
+                if (!string.IsNullOrWhiteSpace(cell.GetFormattedString())) return true;
+            }
+        }
+        return false;
+    }
+
+    private static (string Entity, int Score) Score2(HashSet<string> keys)
+    {
+        if (keys.Count == 0) return ("products", 0);
 
         int apps = 0, xrefs = 0, products = 0;
         foreach (var k in keys)
@@ -68,10 +104,10 @@ public static class EtlEntityDetector
             }
         }
         // 命中数最高; 相等时优先级 products < xrefs < apps (专用特征更值得信任)
-        if (apps >= xrefs && apps >= products && apps > 0) return "apps";
-        if (xrefs >= products && xrefs > 0) return "xrefs";
-        if (products > 0) return "products";
-        return "products";
+        if (apps >= xrefs && apps >= products && apps > 0) return ("apps", apps);
+        if (xrefs >= products && xrefs > 0) return ("xrefs", xrefs);
+        if (products > 0) return ("products", products);
+        return ("products", 0);
     }
 
     /// <summary>jsonl: 读前 10 行聚合 key 集合</summary>
@@ -96,25 +132,6 @@ public static class EtlEntityDetector
             }
             catch { /* 忽略坏行 */ }
             n++;
-        }
-        return keys;
-    }
-
-    /// <summary>xlsx/xls: 遍历所有工作表合并表头 (模板可能多 sheet, 取并集判断实体)
-    ///   与 EtlSpreadsheetAdapter 的 sheet 命名 (实体名/中文名) 无关, 只看表头字段</summary>
-    private static HashSet<string> PeekXlsxHeader(string path)
-    {
-        var keys = new HashSet<string>();
-        using var wb = new ClosedXML.Excel.XLWorkbook(path);
-        foreach (var ws in wb.Worksheets)
-        {
-            var headerRow = ws.FirstRowUsed();
-            if (headerRow is null) continue;
-            foreach (var cell in headerRow.CellsUsed())
-            {
-                var v = cell.GetFormattedString()?.Trim();
-                if (!string.IsNullOrEmpty(v)) keys.Add(v);
-            }
         }
         return keys;
     }
