@@ -1766,26 +1766,30 @@ public class EtlImportService
     ///   - 返回 IAsyncDisposable 句柄, DisposeAsync 时 pg_advisory_unlock
     ///     (必须显式释放 — Npgsql 连接池复用物理连接, 归还池不会关闭连接, 锁不会自动消失)
     /// </summary>
-    private static async Task<AdvisoryLockHandle?> TryAcquireAdvisoryLockAsync(NpgsqlConnection conn, long lockKey, CancellationToken ct)
+    private async Task<AdvisoryLockHandle?> TryAcquireAdvisoryLockAsync(NpgsqlConnection conn, long lockKey, CancellationToken ct)
     {
         await using var cmd = new NpgsqlCommand("SELECT pg_try_advisory_lock(@k)", conn);
         cmd.Parameters.AddWithValue("k", lockKey);
         var result = await cmd.ExecuteScalarAsync(ct);
         if (result is not bool b || !b) return null;
-        return new AdvisoryLockHandle(conn, lockKey);
+        return new AdvisoryLockHandle(conn, lockKey, _logger);
     }
 
-    /// <summary>会话级 advisory lock 句柄: using/await using 结束自动 pg_advisory_unlock</summary>
+    /// <summary>会话级 advisory lock 句柄: using/await using 结束自动 pg_advisory_unlock
+    /// V3(2026-08-25) 上线审查 v2: 释放失败记录日志 (codex: 不能静默吞掉,
+    /// 会话锁残留会导致后续任务拿不到锁)</summary>
     private sealed class AdvisoryLockHandle : IAsyncDisposable
     {
         private readonly NpgsqlConnection _conn;
         private readonly long _key;
+        private readonly ILogger<EtlImportService> _logger;
         private int _released;
 
-        public AdvisoryLockHandle(NpgsqlConnection conn, long key)
+        public AdvisoryLockHandle(NpgsqlConnection conn, long key, ILogger<EtlImportService> logger)
         {
             _conn = conn;
             _key = key;
+            _logger = logger;
         }
 
         public async ValueTask DisposeAsync()
@@ -1797,9 +1801,10 @@ public class EtlImportService
                 cmd.Parameters.AddWithValue("k", _key);
                 await cmd.ExecuteNonQueryAsync();
             }
-            catch
+            catch (Exception ex)
             {
-                // 释放失败静默: 连接即将归还池, 若锁泄漏由连接池物理重建兜底 (极端场景)
+                // 释放失败必须记录: 会话锁残留会让后续 ETL 一直拿不到锁 (连接池复用物理连接)
+                _logger.LogWarning(ex, "ETL advisory lock 释放失败 key={Key} — 锁可能残留, 建议重启 api 容器清空连接池", _key);
             }
         }
     }
