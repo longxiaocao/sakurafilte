@@ -98,6 +98,22 @@ export default {
 
       },
     },
+
+    backupview: {
+      title: 'Database Backup',
+      subtitle: 'View PostgreSQL backups in the host _backups directory; configure BACKUP_S3_ENDPOINT for off-host storage',
+      how_to_run: 'How to run a backup on the host',
+      copy: 'Copy command',
+      copied: 'Copied',
+      copy_failed: 'Copy failed (browser permission)',
+      run_note: 'Run on the deployment host (not inside the API container); see .env.prod.example for off-host S3 config',
+      list_title: 'Recent backup files',
+      col: { name: 'File', size: 'Size', created_at: 'Created at' },
+      dir_missing: 'directory missing',
+      dir_missing_desc: 'Host _backups directory does not exist — no backups yet, run backup-db.sh on the host first',
+      err_load: 'Failed to load backup list',
+      refresh: 'Refresh',
+    },
     etlview: {
       page_title: 'ETL Trigger & Monitor',
       guide_title: 'What is ETL & how to use',
@@ -1341,7 +1357,7 @@ export default {
     opsCenter: 'Ops Center',
     // 🔧 fix(审查): 运维中心 el-tabs label i18n
     opsview: {
-      tab: { etl: 'Import Data', perf: 'Performance', errors: 'Errors', api: 'API Docs', storage: 'Storage Config' }
+      tab: { perf: 'Performance', errors: 'Errors', api: 'API Docs', storage: 'Storage Config', backup: 'Backup' }
     },
     storage: {
       provider: 'Storage Provider',

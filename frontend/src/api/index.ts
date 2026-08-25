@@ -1110,3 +1110,23 @@ export const siteContentApi = {
 }
 
 export type { SiteContent, NewsItem } from './types'
+
+
+// ===== V3(2026-08-25) 数据备份 (运维中心"数据备份" tab) =====
+//   list:        GET /api/admin/backup/list       列出 /backups 目录下的 .dump 文件
+//   scriptInfo:  GET /api/admin/backup/script-info 返回主机执行 backup-db.sh 的命令 (实际执行需在主机)
+export interface BackupFile {
+  name: string
+  sizeBytes: number
+  sizeHuman: string
+  createdAt: string
+}
+
+export const backupApi = {
+  list(): Promise<{ dir: string; exists: boolean; count: number; files: BackupFile[] }> {
+    return http.get('/admin/backup/list').then((r) => r.data)
+  },
+  scriptInfo(): Promise<{ hostCommand: string; note: string }> {
+    return http.get('/admin/backup/script-info').then((r) => r.data)
+  }
+}

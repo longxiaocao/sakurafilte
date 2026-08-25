@@ -26,7 +26,7 @@ services:
     build:
       context: ./backend
       dockerfile: ../docker/Dockerfile.api
-    image: sakurafilter-api:1.0.28
+    image: sakurafilter-api:1.0.29
     container_name: sakura-api
     restart: unless-stopped
     depends_on:
@@ -77,6 +77,8 @@ services:
       - data-protection-keys:/home/sakura/.aspnet/DataProtection-Keys
       # 数据迁移演练: 宿主机 jsonl 数据挂载到容器只读目录 (生产可挂载 ETL 数据卷或走上传)
       - ./spike-test/output/cleaned_customer:/tmp/etl:ro
+      # V3(2026-08-25) 备份列表: 宿主机 _backups 挂到容器只读, API 端点读取展示 (实际执行仍在主机)
+      - ./_backups:/backups:ro
     networks:
       - sakura-net
     healthcheck:
@@ -119,7 +121,7 @@ services:
         VITE_PUBLIC_ABOUT_TEXT: ${VITE_PUBLIC_ABOUT_TEXT:-}
         VITE_PUBLIC_NEWS_TEXT: ${VITE_PUBLIC_NEWS_TEXT:-}
         VITE_PUBLIC_CONTACT_TEXT: ${VITE_PUBLIC_CONTACT_TEXT:-}
-    image: sakurafilter-web:1.0.20
+    image: sakurafilter-web:1.0.21
     container_name: sakura-web
     restart: unless-stopped
     depends_on:

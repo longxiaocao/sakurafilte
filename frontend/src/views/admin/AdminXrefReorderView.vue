@@ -549,7 +549,7 @@ onBeforeUnmount(() => {
       </p>
     </div>
 
-    <div class="flex gap-4" style="min-height: 600px">
+    <div class="flex gap-4">
       <!-- 左侧: Brand 列表 -->
       <div class="w-64 border border-gray-200 rounded dark:border-[var(--color-border)]">
         <div class="px-3 py-2 border-b border-gray-200 bg-gray-50 text-sm font-medium flex items-center justify-between dark:border-[var(--color-border)] dark:bg-[var(--color-bg-elevated)]">
@@ -571,8 +571,10 @@ onBeforeUnmount(() => {
           </el-input>
         </div>
         <div v-loading="loadingBrands" class="overflow-auto" style="max-height: 500px">
+          <el-skeleton v-if="loadingBrands && brands.length === 0" :rows="4" animated class="p-2" />
           <div
             v-for="b in filteredBrands"
+            v-else
             :key="b.brand"
             class="px-3 py-2 border-b border-gray-100 cursor-pointer hover:bg-gray-50 flex items-center justify-between group dark:border-[var(--color-border-subtle)] dark:hover:bg-[var(--color-bg-hover)]"
             :class="{ 'bg-blue-50 border-l-2 border-l-blue-500': b.brand === selectedBrand, 'dark:bg-[var(--color-bg-hover)] dark:border-l-[var(--color-accent)]': b.brand === selectedBrand }"

@@ -106,6 +106,22 @@ export default {
 
       },
     },
+
+    backupview: {
+      title: '数据备份',
+      subtitle: '查看主机 _backups 目录下的 PostgreSQL 备份; 异机备份需配置 BACKUP_S3_ENDPOINT',
+      how_to_run: '如何在主机执行备份',
+      copy: '复制命令',
+      copied: '已复制',
+      copy_failed: '复制失败 (浏览器权限)',
+      run_note: '执行需要在部署主机 (非 API 容器内); 异机对象存储配置见 .env.prod.example',
+      list_title: '最近备份文件',
+      col: { name: '文件名', size: '大小', created_at: '创建时间' },
+      dir_missing: '目录不存在',
+      dir_missing_desc: '主机 _backups 目录不存在 — 尚未生成任何备份, 请先在主机执行 backup-db.sh',
+      err_load: '加载备份列表失败',
+      refresh: '刷新',
+    },
     etlview: {
       page_title: 'ETL 触发与监控',
       guide_title: 'ETL 是什么与使用步骤',
@@ -1353,7 +1369,7 @@ export default {
     opsCenter: '运维中心',
     // 🔧 fix(审查): 运维中心 el-tabs label i18n (原硬编码中文)
     opsview: {
-      tab: { etl: '数据导入', perf: '性能', errors: '错误', api: 'API 文档', storage: '存储配置' }
+      tab: { perf: '性能', errors: '错误', api: 'API 文档', storage: '存储配置', backup: '数据备份' }
     },
     storage: {
       provider: '存储服务商',

@@ -125,8 +125,10 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/admin/etl',
     name: 'AdminEtl',
-    // 🔧 fix(审查): 旧路由保留, 重定向到运维合并页 (ETL/性能/错误/API 文档)
-    redirect: '/admin/ops?tab=etl'
+    // V3(2026-08-25) 用户反馈: 顶栏"数据导入"已独立入口, ETL 不再藏在运维中心 tab —
+    //   直接渲染 AdminEtlView, 移除与运维中心 etl tab 的功能重复
+    component: () => import('@/views/admin/AdminEtlView.vue'),
+    meta: { title: '数据导入', requireAuth: true }
   },
   // ===== P2-1 告警系统: 历史与配置页 (admin 角色) =====
   {
