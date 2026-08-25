@@ -100,13 +100,22 @@ if [ "$READY" != "1" ]; then
     exit 1
 fi
 
-# 业务探针: 真实查询验证 (搜索接口返回 200)
-if curl -sk -o /dev/null -w "%{http_code}" -m 10 "https://localhost/api/public/search/aggregate?q=filter" 2>/dev/null | grep -q "200\|400"; then
-    echo "    [OK] 业务探针: /api/public/search/aggregate 可达"
+# 业务探针: 真实查询验证 — 断言 HTTP 200 + 响应为 JSON 且含 hits 字段 (codex v4: 不只验可达)
+#   用已知查询 q=filter, 期望聚合搜索正常返回 (空结果也算搜索成功, 只要结构正确)
+PROBE_OK=0
+PROBE_JSON=$(curl -sk -m 15 "https://localhost/api/public/search/aggregate?q=filter" 2>/dev/null || true)
+if echo "$PROBE_JSON" | grep -q '"hits"'; then
+    echo "    [OK] 业务探针: /api/public/search/aggregate 返回 JSON (含 hits)"
+    PROBE_OK=1
+elif echo "$PROBE_JSON" | grep -qi '"error"'; then
+    echo "    [FAIL] 业务探针: 聚合搜索返回错误: $(echo "$PROBE_JSON" | head -c 120)" >&2
 else
-    echo "    [WARN] 业务探针不可达 (可能 nginx 未就绪, 稍后人工确认)"
+    echo "    [WARN] 业务探针: 响应不含 hits (可能 nginx 未就绪或无数据), 稍后人工确认: $(echo "$PROBE_JSON" | head -c 80)"
+fi
+if [ "$PROBE_OK" = "1" ]; then
+    echo "    [OK] 业务探针通过"
 fi
 
 echo "===== 部署完成 ====="
 echo "提示: 生产数据库请配置每日自动备份计划任务 (bash scripts/backup-db.sh --verify --upload, 见脚本头)。"
-echo "      真正异机备份: 在 .env.prod 配置 BACKUP_S3_ENDPOINT/USER/PASS 指向 R2/异地对象存储。"
+echo "      异机备份必需: 在 .env.prod 配置 BACKUP_S3_ENDPOINT/USER/PASS 指向 R2/异地对象存储 (REQUIRE_REMOTE_BACKUP=1 默认强制)。"

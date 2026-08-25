@@ -147,13 +147,16 @@ if [ "$MODE" = "apply" ]; then
     echo "==> 迁移后结构验证..."
     FAILED=0
 
-    # 1. SQL schema_migrations 与目录一致 (全部已应用)
+    # 1. SQL schema_migrations 与目录一致 (全部已应用 + 无多余/幽灵记录)
     DIR_COUNT=$(ls "$MIGRATIONS_DIR"/*.sql 2>/dev/null | wc -l)
     DB_COUNT=$(psql -t -A -c "SELECT COUNT(*) FROM schema_migrations;" 2>/dev/null | tr -d ' ')
-    if [ "$DIR_COUNT" = "$DB_COUNT" ] && [ "$DIR_COUNT" -gt 0 ]; then
-        echo "    [OK] schema_migrations 完整 ($DB_COUNT/$DIR_COUNT)"
+    EXTRA=$(psql -t -A -c "SELECT filename FROM schema_migrations;" 2>/dev/null | while read -r f; do
+        [ -n "$f" ] && [ ! -f "$MIGRATIONS_DIR/$f" ] && echo "$f"
+    done)
+    if [ "$DIR_COUNT" = "$DB_COUNT" ] && [ "$DIR_COUNT" -gt 0 ] && [ -z "$EXTRA" ]; then
+        echo "    [OK] schema_migrations 完整一致 ($DB_COUNT/$DIR_COUNT, 无多余记录)"
     else
-        echo "❌ schema_migrations 不一致 (DB=$DB_COUNT 目录=$DIR_COUNT) — 迁移未全部记录" >&2
+        echo "❌ schema_migrations 不一致 (DB=$DB_COUNT 目录=$DIR_COUNT, 多余记录: ${EXTRA:-无}) — 迁移未全部记录或存在幽灵记录" >&2
         FAILED=1
     fi
 
