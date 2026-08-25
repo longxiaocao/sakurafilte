@@ -45,6 +45,9 @@ env:
   # 后端服务内部端口 (与 ASPNETCORE_URLS 一致)
   BACKEND_PORT: 5148
   DOTNET_VERSION: 8.0.x
+  # V3 fix(2026-08-25): .NET 10 SDK 抢占 8.0 → backend build 失败 (docs commit db38966 实测)
+  #   8.0.x 与 global.json(8.0.301 latestFeature) 在 runner 上可能被 10.x 干扰, 强制 roll forward
+  DOTNET_ROLL_FORWARD: LatestMajor
   NODE_VERSION: 20
   PYTHON_VERSION: 3.12
 
