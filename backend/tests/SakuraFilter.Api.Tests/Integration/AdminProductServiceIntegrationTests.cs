@@ -107,12 +107,13 @@ public class AdminProductServiceIntegrationTests : PgIntegrationTestBase
     {
         if (!IsEnabled) { _output.WriteLine("Skip: PG_TEST_CONNECTION_STRING 未配置"); return; }
 
-        // Arrange: 在另一连接上占用 advisory_xact_lock(7740001) (会话级锁, 连接关闭前一直持有)
+        // Arrange: 在另一连接上占用 advisory lock 7740000 (全局 ETL 锁, 连接关闭前一直持有)
+        //   V3(2026-08-25) 上线审查: key 从 7740001 统一为全局锁 7740000 (EtlImportService.EtlGlobalLockKey)
         await using var lockConn = new NpgsqlConnection(ConnectionString);
         await lockConn.OpenAsync();
         await using (var cmd = lockConn.CreateCommand())
         {
-            cmd.CommandText = "SELECT pg_advisory_lock(7740001)";
+            cmd.CommandText = "SELECT pg_advisory_lock(7740000)";
             await cmd.ExecuteNonQueryAsync();
         }
 
@@ -126,17 +127,17 @@ public class AdminProductServiceIntegrationTests : PgIntegrationTestBase
             Func<Task> act = () => sut.CreateAsync(form, "test-user", default);
 
             // Assert
-            //   pg_try_advisory_xact_lock(7740001) 失败 → InvalidOperationException
+            //   pg_try_advisory_xact_lock(7740000) 失败 → InvalidOperationException
             //   注意: 在 READ COMMITTED 下, AnyAsync 检查在 TryAcquireAdvisoryLockAsync 之后,
             //         所以抛出的应该是 ETL_IN_PROGRESS 而非"产品已存在"
             var ex = await act.Should().ThrowAsync<InvalidOperationException>();
-            ex.Which.Message.Should().Contain("ETL_IN_PROGRESS", "advisory lock 7740001 被 ETL 占用时应返回 ETL_IN_PROGRESS");
+            ex.Which.Message.Should().Contain("ETL_IN_PROGRESS", "advisory lock 7740000 被 ETL 占用时应返回 ETL_IN_PROGRESS");
         }
         finally
         {
             // Cleanup: 释放 advisory lock (避免污染后续测试)
             await using var cmd = lockConn.CreateCommand();
-            cmd.CommandText = "SELECT pg_advisory_unlock(7740001)";
+            cmd.CommandText = "SELECT pg_advisory_unlock(7740000)";
             await cmd.ExecuteNonQueryAsync();
         }
     }
