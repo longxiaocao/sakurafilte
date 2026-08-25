@@ -550,8 +550,8 @@ onBeforeUnmount(() => {
     </div>
 
     <div class="flex gap-4">
-      <!-- 左侧: Brand 列表 -->
-      <div class="w-64 border border-gray-200 rounded dark:border-[var(--color-border)]">
+      <!-- 左侧: Brand 列表 (V3 2026-08-25: min-height 撑满视口, 避免下方裸露) -->
+      <div class="w-64 border border-gray-200 rounded dark:border-[var(--color-border)] flex flex-col" style="min-height: calc(100vh - 180px);">
         <div class="px-3 py-2 border-b border-gray-200 bg-gray-50 text-sm font-medium flex items-center justify-between dark:border-[var(--color-border)] dark:bg-[var(--color-bg-elevated)]">
           <span>{{ t('admin.xrefreorder.brand_label', { count: brands.length }) }}</span>
           <el-button size="small" text type="primary" @click="openCreateBrandDialog">{{ t('admin.xrefreorder.add_brand') }}</el-button>
@@ -570,7 +570,7 @@ onBeforeUnmount(() => {
             </template>
           </el-input>
         </div>
-        <div v-loading="loadingBrands" class="overflow-auto" style="max-height: 500px">
+        <div v-loading="loadingBrands" class="overflow-auto flex-1" style="max-height: calc(100vh - 250px);">
           <el-skeleton v-if="loadingBrands && brands.length === 0" :rows="4" animated class="p-2" />
           <div
             v-for="b in filteredBrands"
@@ -603,8 +603,12 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
+      <!--         </div>
+      </div>
+
       <!-- 右侧: OEM 3 拖拽列表 + 分页 + 搜索 + CRUD -->
-      <div class="flex-1 border border-gray-200 rounded dark:border-[var(--color-border)]">
+      <!-- V3(2026-08-25): min-height 撑满视口高度, 内部 el-empty/el-skeleton 居中, 避免白名单为 0 时底部裸露 -->
+      <div class="flex-1 border border-gray-200 rounded dark:border-[var(--color-border)]" style="min-height: calc(100vh - 180px); display: flex; flex-direction: column;">
         <div class="px-3 py-2 border-b border-gray-200 bg-gray-50 flex items-center justify-between flex-wrap gap-2 dark:border-[var(--color-border)] dark:bg-[var(--color-bg-elevated)]">
           <div class="text-sm font-medium flex items-center gap-2">
             {{ selectedBrand || t('admin.xrefreorder.select_brand_placeholder') }}
@@ -640,9 +644,10 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
-        <div v-loading="loadingOem || saving" class="p-3" style="min-height: 480px">
+        <div v-loading="loadingOem || saving" class="p-3 flex-1" style="min-height: 0;">
+          <el-skeleton v-if="loadingOem && dragList.length === 0" :rows="5" animated />
           <draggable
-            v-if="dragList.length > 0"
+            v-else-if="dragList.length > 0"
             v-model="dragList"
             item-key="id"
             handle=".drag-handle"
@@ -671,9 +676,8 @@ onBeforeUnmount(() => {
             </template>
           </draggable>
 
-          <div v-else-if="!loadingOem" class="py-12 text-center text-gray-400 text-sm dark:text-[var(--color-text-muted)]">
-            <p v-if="selectedBrand">{{ t('admin.xrefreorder.empty_no_whitelist') }}</p>
-            <p v-else>{{ t('admin.xrefreorder.empty_select_brand') }}</p>
+          <div v-else class="flex-1 flex items-center justify-center py-12 dark:text-[var(--color-text-muted)]">
+            <el-empty :description="selectedBrand ? t('admin.xrefreorder.empty_no_whitelist') : t('admin.xrefreorder.empty_select_brand')" />
           </div>
         </div>
 
