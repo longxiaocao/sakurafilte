@@ -57,16 +57,17 @@ const allNavItems = computed(() => {
     { key: 'news', labelKey: 'nav.news', path: '/news', icon: 'Document', priority: 3 },
     { key: 'contact', labelKey: 'nav.contact', path: '/contact', icon: 'Message', priority: 4 },
     { key: 'oem', labelKey: 'nav.oemLookup', action: 'oemLookup', icon: 'Document', priority: 5 },
+    // V3(2026-08-25) 用户反馈: 高级搜索 (/public/search) 是公共功能, 从 admin 菜单移出归公共区
+    { key: 'adv-search', labelKey: 'nav.advSearch', path: '/public/search', icon: 'Filter', priority: 4.5 },
   ]
-  // V3(2026-08-24): admin 菜单仅"有效登录"显示 (isAuthenticated = token 存在且未过期)
-  //   🔧 修复: 原 if (token.value) — localStorage 残留过期 token 时, 未登录访客界面
-  //   也会渲染 产品管理/高级搜索/字段管理/OEM白名单/运维中心/站点内容/帮助 (用户反馈)
-  //   isAuthenticated() 校验 expiresAt, 过期/旧 token(expiresAt=0) 一律不显示 admin 菜单
-  if (isAuthenticated()) {
+  // V3(2026-08-25) 用户反馈 (bug): admin 登录后访问公开页显示完整 admin 布局 —
+  //   admin 菜单仅"有效登录 + /admin/* 路径"显示; 公开页不显示 admin 菜单
+  //   (原实现 isAuthenticated() 任意路径都显示 admin 菜单 → 公开页被污染)
+  //   admin 回后台入口在右侧用户下拉菜单 (goAdmin), 见 toggleAdmin/onUserCommand
+  if (isAuthenticated() && isAdminPath.value) {
     // admin 高优 (必显示, 不可收纳)
     items.push(
       { key: 'products', labelKey: 'nav.productManage', path: '/admin/products', icon: 'Goods', priority: 4 },
-      { key: 'adv-search', labelKey: 'nav.advSearch', path: '/public/search', icon: 'Filter', priority: 5 },
       { key: 'dict', labelKey: 'nav.dictManage', dropdown: 'dict', icon: 'Collection', priority: 6 },
     // 🔧 fix(审查): 独立对比页移除, '产品对比'菜单入口删除 — 对比内嵌高级搜索页 (结果勾选 + 详情页按钮),
       // V2 Task 2.2.6: OEM 排序管理入口 (priority 6.5, 在字典和 ETL 之间)
@@ -280,7 +281,8 @@ function onUserCommand(cmd: string) {
     handleLogout()
   } else if (cmd === 'goAdmin') {
     // V3(2026-08-24): 已登录用户后台入口 (未登录按钮已降权为"登录", 后台入口移至用户菜单)
-    router.push('/admin/xrefs/reorder')
+    // V3(2026-08-25): admin 菜单仅 /admin/* 显示后, 公开页需经此回到后台 → 跳运维中心 (通用首页)
+    router.push('/admin/ops')
   }
 }
 
