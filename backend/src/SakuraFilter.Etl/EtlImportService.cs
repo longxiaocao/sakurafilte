@@ -387,6 +387,14 @@ public class EtlImportService
     private readonly EtlOptions _options;
     public EtlProgress Progress { get; }
 
+    // V3(2026-08-25) 上线审查: 全局 ETL 互斥锁 key (codex 复核)
+    //   - 原设计 products=7740001 / xrefs=7740002 / apps=7740003 / reindex=7740005 分键,
+    //     products full-load 默认清空三表 (cascade) 时其它导入仍可并发写 → 数据不一致
+    //   - 统一为单个全局锁: 所有 ETL 导入 + 索引重建 + 后台编辑互斥 (谁先拿到谁跑)
+    //   - 会话级 pg_try_advisory_lock + IAsyncDisposable 句柄显式 unlock
+    //     (Npgsql 连接池复用物理连接, "连接关闭自动释放"不成立, 必须显式释放)
+    public const long EtlGlobalLockKey = 7740000L;
+
     // Day 9.1: 当前活跃任务的 CancellationTokenSource
     //   - 取消时让 CancellationToken 传播到 Import*Async 内部的 COPY/INSERT
     //   - 锁用 object, 因为 EtlImportService 是 Singleton, 可能多线程访问
@@ -862,9 +870,10 @@ public class EtlImportService
 
             // Day 7: 事务级 advisory lock 防多实例并发跑同一 ETL
             // 锁 key 7740001 固定 (跨重启稳定)
-            if (!await TryAcquireAdvisoryLockAsync(conn, 7740001L, ct))
+            await using var etlLock = await TryAcquireAdvisoryLockAsync(conn, EtlGlobalLockKey, ct);
+            if (etlLock is null)
             {
-                Progress.Fail("另一 ETL 任务正在跑 (advisory lock 7740001 被占用)");
+                Progress.Fail("另一 ETL 任务正在跑 (全局 ETL 锁被占用)");
                 _logger.LogWarning("ImportProductsAsync advisory lock 获取失败");
                 return Progress;
             }
@@ -1503,7 +1512,6 @@ public class EtlImportService
             //     - 7740002: ImportXrefsAsync (xrefs ETL)
             //     - 7740003: ImportAppsAsync (apps ETL)
             //     - 7740005: ReindexAllAsync + IndexReplayWorker (索引重建/补偿互斥)
-            const long reindexLockKey = 7740005L;
 
             using var scope = _sp.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<ProductDbContext>();
@@ -1520,15 +1528,14 @@ public class EtlImportService
             await using var conn = new Npgsql.NpgsqlConnection(_pgConn);
             await conn.OpenAsync(ct);
 
-            bool lockAcquired = false;
-            // 1. advisory lock (事务级,commit/rollback 自动释放)
-            lockAcquired = await TryAcquireAdvisoryLockAsync(conn, reindexLockKey, ct);
-            if (!lockAcquired)
+            // V3(2026-08-25) 上线审查: 全局 ETL 锁 (会话级, 与导入三类型统一互斥)
+            await using var etlLock = await TryAcquireAdvisoryLockAsync(conn, EtlGlobalLockKey, ct);
+            if (etlLock is null)
             {
-                return new ReindexResult("已有全量重建任务在运行", 0, 0, sw.ElapsedMilliseconds, null);
+                return new ReindexResult("已有 ETL/重建任务在运行 (全局 ETL 锁被占用)", 0, 0, sw.ElapsedMilliseconds, null);
             }
 
-            // 2. 显式事务包裹 (advisory lock 事务级,需在事务内持有)
+            // 2. 显式事务包裹 (重建清空/写库原子性)
             await using var tx = await conn.BeginTransactionAsync(ct);
 
             // 3. 清空 Meili 文档 (保留 schema)
@@ -1588,7 +1595,6 @@ public class EtlImportService
         Progress.Start("reindex-resume");
         Progress.SetStage("meili-sync");
         BroadcastCtx? broadcastCtx = null;
-        const long reindexLockKey = 7740005L;
         try
         {
             broadcastCtx = StartSnapshotTimerIfNeeded();
@@ -1607,36 +1613,20 @@ public class EtlImportService
             await using var conn = new Npgsql.NpgsqlConnection(_pgConn);
             await conn.OpenAsync(ct);
 
-            // 会话级 advisory lock: 跨整个续传过程持有, 不依赖长事务
-            bool lockAcquired = false;
+            // V3(2026-08-25) 上线审查: 全局 ETL 锁 (会话级, 与导入三类型/ReindexAll 统一互斥)
+            await using var etlLock = await TryAcquireAdvisoryLockAsync(conn, EtlGlobalLockKey, ct);
+            if (etlLock is null)
             {
-                await using var cmd = new Npgsql.NpgsqlCommand("SELECT pg_try_advisory_lock(@k)", conn);
-                cmd.Parameters.AddWithValue("k", reindexLockKey);
-                var r = await cmd.ExecuteScalarAsync(ct);
-                lockAcquired = r is bool b && b;
-            }
-            if (!lockAcquired)
-            {
-                return new ReindexResult("已有全量重建任务在运行", 0, 0, sw.ElapsedMilliseconds, null);
+                return new ReindexResult("已有 ETL/重建任务在运行 (全局 ETL 锁被占用)", 0, 0, sw.ElapsedMilliseconds, null);
             }
 
-            try
-            {
-                // 不清空, 从 fromId 之后续传 (batchSize=300 防硬件过载)
-                var (direct, queued) = await SyncAllSearchIndexAsync(meili, db, fromId, limit, ct);
-                sw.Stop();
-                var msg = $"续传重建完成 (fromId={fromId}, limit={limit}): 直接={direct}, 入队={queued}";
-                _logger.LogInformation("ReindexFromIdAsync: {Message}, elapsed={ElapsedMs}ms", msg, sw.ElapsedMilliseconds);
-                Progress.Finish("reindex-resume", "full-reindex");
-                return new ReindexResult(msg, direct, queued, sw.ElapsedMilliseconds, null);
-            }
-            finally
-            {
-                // 释放会话级锁 (CANCELLED/异常路径也保证释放)
-                await using var unlock = new Npgsql.NpgsqlCommand("SELECT pg_advisory_unlock(@k)", conn);
-                unlock.Parameters.AddWithValue("k", reindexLockKey);
-                await unlock.ExecuteScalarAsync(CancellationToken.None);
-            }
+            // 不清空, 从 fromId 之后续传 (batchSize=300 防硬件过载)
+            var (direct, queued) = await SyncAllSearchIndexAsync(meili, db, fromId, limit, ct);
+            sw.Stop();
+            var msg = $"续传重建完成 (fromId={fromId}, limit={limit}): 直接={direct}, 入队={queued}";
+            _logger.LogInformation("ReindexFromIdAsync: {Message}, elapsed={ElapsedMs}ms", msg, sw.ElapsedMilliseconds);
+            Progress.Finish("reindex-resume", "full-reindex");
+            return new ReindexResult(msg, direct, queued, sw.ElapsedMilliseconds, null);
         }
         catch (OperationCanceledException)
         {
@@ -1768,17 +1758,50 @@ public class EtlImportService
     }
 
     /// <summary>
-    /// 获取 PostgreSQL 事务级 advisory lock,防止多实例并发 ETL
-    /// 锁 key = 固定 bigint (每个 ETL 类型不同)
-    /// WHY: pg_try_advisory_xact_lock 在事务 commit/rollback 时自动释放,无需手动 unlock
-    ///      失败 (锁被另一实例持有) 抛 409 由 API 层转 Conflict
+    /// 获取全局 ETL advisory lock (会话级), 防止任何 ETL/索引重建并发
+    /// V3(2026-08-25) 上线审查修复: 原 pg_try_advisory_xact_lock 在无显式事务 (autocommit) 下
+    ///   语句结束即释放 → 互斥失效; 且各 ETL 分键无法互相排斥. 现改为:
+    ///   - 会话级 pg_try_advisory_lock (跨事务持有, 不依赖长事务)
+    ///   - 全局单 key EtlGlobalLockKey (导入三类型 + 索引重建统一互斥)
+    ///   - 返回 IAsyncDisposable 句柄, DisposeAsync 时 pg_advisory_unlock
+    ///     (必须显式释放 — Npgsql 连接池复用物理连接, 归还池不会关闭连接, 锁不会自动消失)
     /// </summary>
-    private static async Task<bool> TryAcquireAdvisoryLockAsync(NpgsqlConnection conn, long lockKey, CancellationToken ct)
+    private static async Task<AdvisoryLockHandle?> TryAcquireAdvisoryLockAsync(NpgsqlConnection conn, long lockKey, CancellationToken ct)
     {
-        await using var cmd = new NpgsqlCommand("SELECT pg_try_advisory_xact_lock(@k)", conn);
+        await using var cmd = new NpgsqlCommand("SELECT pg_try_advisory_lock(@k)", conn);
         cmd.Parameters.AddWithValue("k", lockKey);
         var result = await cmd.ExecuteScalarAsync(ct);
-        return result is bool b && b;
+        if (result is not bool b || !b) return null;
+        return new AdvisoryLockHandle(conn, lockKey);
+    }
+
+    /// <summary>会话级 advisory lock 句柄: using/await using 结束自动 pg_advisory_unlock</summary>
+    private sealed class AdvisoryLockHandle : IAsyncDisposable
+    {
+        private readonly NpgsqlConnection _conn;
+        private readonly long _key;
+        private int _released;
+
+        public AdvisoryLockHandle(NpgsqlConnection conn, long key)
+        {
+            _conn = conn;
+            _key = key;
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            if (Interlocked.Exchange(ref _released, 1) == 1) return;  // 防重复释放
+            try
+            {
+                await using var cmd = new NpgsqlCommand("SELECT pg_advisory_unlock(@k)", _conn);
+                cmd.Parameters.AddWithValue("k", _key);
+                await cmd.ExecuteNonQueryAsync();
+            }
+            catch
+            {
+                // 释放失败静默: 连接即将归还池, 若锁泄漏由连接池物理重建兜底 (极端场景)
+            }
+        }
     }
 
     /// <summary>
@@ -1813,10 +1836,11 @@ public class EtlImportService
         {
             await using var conn = new NpgsqlConnection(_pgConn);
             await conn.OpenAsync(ct);
-            // Day 7: xrefs 锁 key 7740002
-            if (!await TryAcquireAdvisoryLockAsync(conn, 7740002L, ct))
+            // V3(2026-08-25) 上线审查: 全局 ETL 锁 (7740000), 与 products/apps/reindex 互斥
+            await using var etlLock = await TryAcquireAdvisoryLockAsync(conn, EtlGlobalLockKey, ct);
+            if (etlLock is null)
             {
-                Progress.Fail("另一 ETL 任务正在跑 (advisory lock 7740002 被占用)");
+                Progress.Fail("另一 ETL 任务正在跑 (全局 ETL 锁被占用)");
                 _logger.LogWarning("ImportXrefsAsync advisory lock 获取失败");
                 return Progress;
             }
@@ -2205,10 +2229,11 @@ public class EtlImportService
         {
             await using var conn = new NpgsqlConnection(_pgConn);
             await conn.OpenAsync(ct);
-            // Day 7: apps 锁 key 7740003
-            if (!await TryAcquireAdvisoryLockAsync(conn, 7740003L, ct))
+            // V3(2026-08-25) 上线审查: 全局 ETL 锁 (7740000), 与 products/xrefs/reindex 互斥
+            await using var etlLock = await TryAcquireAdvisoryLockAsync(conn, EtlGlobalLockKey, ct);
+            if (etlLock is null)
             {
-                Progress.Fail("另一 ETL 任务正在跑 (advisory lock 7740003 被占用)", "apps", mode);
+                Progress.Fail("另一 ETL 任务正在跑 (全局 ETL 锁被占用)", "apps", mode);
                 _logger.LogWarning("ImportAppsAsync advisory lock 获取失败");
                 return Progress;
             }
