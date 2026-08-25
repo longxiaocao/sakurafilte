@@ -53,16 +53,28 @@ function persist() {
   } catch { /* 忽略 */ }
 }
 
+// V3(2026-08-26) 用户反馈: 3 个产品只显示 2 个 — 根因是 add() 多次并发 fetchProducts 竞态:
+//   add(id1) 触发 fetch([id1]) 请求 A, add(id2) 触发 fetch([id1,id2]) 请求 B, add(id3) 触发 fetch([id1,id2,id3]) 请求 C
+//   三个请求并发, 最后完成的覆盖 state.products, 但 map 只有最早请求的 N 个详情 (后完成的 N 多也来不及) —
+//   state.ids=[id1,id2,id3] 但 map 只有 1 或 2 个, filter 后 products 缺失.
+//   修复: 每次 fetchProducts 取最新 state.ids 快照, 用 AbortController 取消上一次未完成请求.
+let fetchAbort: AbortController | null = null
 async function fetchProducts() {
   if (state.ids.length === 0) return
+  fetchAbort?.abort()  // 取消上一次未完成请求
+  const ctrl = new AbortController()
+  fetchAbort = ctrl
+  const idsSnapshot = [...state.ids]  // 拍快照 (用最新 ids)
   state.loading = true
   try {
-    const data = await publicCompareApi.compare(state.ids)
+    const data = await publicCompareApi.compare(idsSnapshot, { signal: ctrl.signal })
     const map = new Map(data.items.map((p) => [p.id, p]))
-    state.products = state.ids.map((id) => map.get(id)).filter((p): p is PublicProductDetail => !!p)
+    state.products = idsSnapshot.map((id) => map.get(id)).filter((p): p is PublicProductDetail => !!p)
   } catch (e: any) {
+    if (e?.name === 'CanceledError' || e?.code === 'ERR_CANCELED') return  // 主动 abort, 忽略
     ElMessage.error(e?.problem?.detail || e?.response?.data?.error || e?.message || '对比加载失败')
   } finally {
+    if (fetchAbort === ctrl) fetchAbort = null
     state.loading = false
   }
 }
@@ -87,8 +99,9 @@ export function useCompareStore() {
       }
       state.ids.push(id)
       persist()
-      // 预拉详情, 打开抽屉时无延迟 (失败静默, 打开时重试)
-      if (state.products.length === 0) fetchProducts().catch(() => {})
+      // V3(2026-08-26): 每次 add 都触发 fetchProducts — 内部用 AbortController 取消旧请求,
+      //   保证 products 数组最终覆盖为最新完整 ids 的详情 (修复竞态导致 3 个只显示 2 个的 bug).
+      fetchProducts().catch(() => {})
       ElMessage.success(`已加入对比 (${state.ids.length}/${MAX_COMPARE})`)
       return true
     },
@@ -126,7 +139,7 @@ export function useCompareStore() {
     adoptFromUrl(ids: number[]) {
       state.ids = ids.slice(0, MAX_COMPARE)
       persist()
-      if (state.products.length === 0) fetchProducts().catch(() => {})
+      fetchProducts().catch(() => {})  // 总是触发 (abort 取消旧, 用最新 ids)
     },
 
     move(idx: number, dir: -1 | 1) {
