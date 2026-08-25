@@ -451,6 +451,13 @@ function statusTagType(s: string): 'success' | 'warning' | 'info' | 'danger' | '
       </template>
       <div class="text-sm space-y-0.5 text-[var(--color-text-secondary)]">
         <p class="mb-1 font-medium text-[var(--color-text)]">{{ t('admin.etlview.guide_intro') }}</p>
+        <!-- V3(2026-08-25): 三种数据类型说明 (用户反馈: 产品/OEM 交叉引用/机型适配 分不清) -->
+        <div class="mt-2 rounded-md p-2 bg-[var(--color-bg-hover)] space-y-1">
+          <p class="font-medium text-[var(--color-text)]">{{ t('admin.etlview.data_types_title') }}</p>
+          <p>• {{ t('admin.etlview.data_type_products') }}</p>
+          <p>• {{ t('admin.etlview.data_type_xrefs') }}</p>
+          <p>• {{ t('admin.etlview.data_type_apps') }}</p>
+        </div>
         <p>{{ t('admin.etlview.guide_step1') }}</p>
         <p>{{ t('admin.etlview.guide_step2') }}</p>
         <p>{{ t('admin.etlview.guide_step3') }}</p>
