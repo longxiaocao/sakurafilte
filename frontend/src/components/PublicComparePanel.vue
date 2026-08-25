@@ -116,7 +116,7 @@ const visibleGroups = computed(() => fieldGroups)
   <div class="compare-grid-wrap hairline">
     <div
       class="compare-grid"
-      :style="{ gridTemplateColumns: `160px repeat(${products.length}, minmax(180px, 1fr))` }"
+      :style="{ gridTemplateColumns: `140px repeat(${products.length}, minmax(150px, 1fr))` }"
     >
       <div class="compare-header-cell field-name-cell sticky-left">字段</div>
       <div v-for="(p, idx) in products" :key="p.id" class="compare-header-cell product-cell">

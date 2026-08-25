@@ -47,7 +47,7 @@ function onRemove(idx: number) {
   <el-drawer
     :model-value="store.state.open"
     :title="t('compare.floating.drawer_title', { n: count })"
-    size="min(92vw, 900px)"
+    size="min(96vw, 1280px)"
     destroy-on-close
     @update:model-value="store.close()"
   >
