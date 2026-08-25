@@ -38,12 +38,15 @@ echo "    使用环境文件: $ENV_FILE"
 #    应急: REQUIRE_BACKUP=0 跳过 (仅限明确授权的紧急发布)
 echo "[2/9] 数据库备份 (--verify --upload)..."
 REQUIRE_BACKUP="${REQUIRE_BACKUP:-1}"
+REQUIRE_REMOTE_BACKUP="${REQUIRE_REMOTE_BACKUP:-1}"
+# V3(2026-08-25) codex v5: 必须 export 传给 backup-db.sh 子进程 (否则脚本读到默认值, 异机强制失效)
+export REQUIRE_REMOTE_BACKUP
 if [ "$REQUIRE_BACKUP" = "1" ]; then
     if bash scripts/backup-db.sh --verify --upload; then
         echo "    [OK] 备份完成 (含对象存储副本)"
     else
         echo "[FAIL] 备份失败 — REQUIRE_BACKUP=1, 发布中止"
-        echo "        应急: REQUIRE_BACKUP=0 ./scripts/deploy-prod.sh 跳过备份 (仅限明确授权)"
+        echo "        应急: REQUIRE_BACKUP=0 REQUIRE_REMOTE_BACKUP=0 ./scripts/deploy-prod.sh 跳过备份 (仅限明确授权)"
         exit 1
     fi
 else

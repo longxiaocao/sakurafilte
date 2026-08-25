@@ -83,6 +83,12 @@ echo "==> 已清理 ${KEEP_DAYS} 天前的 ${PG_DB} 备份"
 if [ -n "$UPLOAD" ]; then
     MINIO_ALIAS="backup-src"
     MINIO_BUCKET="${BACKUP_MINIO_BUCKET:-sakurafilter-backups}"
+    # V3(2026-08-25) codex v5: BACKUP_S3_* 必须从 .env.prod 兜底读取 —
+    #   原实现只读 shell 环境变量, 用户按文档写入 .env.prod 后脚本读不到 (阻断发布误判).
+    #   读取链: 环境变量优先 (计划任务/手动 export) → .env.prod grep 兜底
+    BACKUP_S3_ENDPOINT="${BACKUP_S3_ENDPOINT:-$(grep -oP '^BACKUP_S3_ENDPOINT=\K.*' "$ENV_FILE" 2>/dev/null | tr -d '"')}"
+    BACKUP_S3_USER="${BACKUP_S3_USER:-$(grep -oP '^BACKUP_S3_USER=\K.*' "$ENV_FILE" 2>/dev/null | tr -d '"')}"
+    BACKUP_S3_PASS="${BACKUP_S3_PASS:-$(grep -oP '^BACKUP_S3_PASS=\K.*' "$ENV_FILE" 2>/dev/null | tr -d '"')}"
     MINIO_ENDPOINT="${BACKUP_S3_ENDPOINT:-http://minio:9000}"
     MINIO_USER="${BACKUP_S3_USER:-$(grep -oP '^MINIO_ROOT_USER=\K.*' "$ENV_FILE" | tr -d '"')}"
     MINIO_PASS="${BACKUP_S3_PASS:-$(grep -oP '^MINIO_ROOT_PASSWORD=\K.*' "$ENV_FILE" | tr -d '"')}"
