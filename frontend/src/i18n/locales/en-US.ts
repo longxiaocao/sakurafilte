@@ -1328,10 +1328,11 @@ export default {
     etlTrigger: 'ETL Trigger',
     compare: 'Compare',
     perf: 'Performance',
+    importData: 'Import Data',
     opsCenter: 'Ops Center',
     // 🔧 fix(审查): 运维中心 el-tabs label i18n
     opsview: {
-      tab: { etl: 'ETL Trigger & Monitor', perf: 'Performance', errors: 'Errors', api: 'API Docs', storage: 'Storage Config' }
+      tab: { etl: 'Import Data', perf: 'Performance', errors: 'Errors', api: 'API Docs', storage: 'Storage Config' }
     },
     storage: {
       provider: 'Storage Provider',
