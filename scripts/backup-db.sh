@@ -104,7 +104,8 @@ if [ -n "$UPLOAD" ]; then
             exit 1
         fi
     else
-        echo "⚠️ MinIO 容器无 mc, 跳过对象存储副本 (可手动上传 $OUT_FILE 至 R2/对象存储)"
+        echo "❌ MinIO 容器无 mc — 请求了 --upload 但无法上传, 按失败处理 (可手动上传 $OUT_FILE 至 R2)" >&2
+        exit 1
     fi
 fi
 

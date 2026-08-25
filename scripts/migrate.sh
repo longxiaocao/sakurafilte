@@ -64,7 +64,12 @@ if [ "$MODE" = "apply" ]; then
     API_IMAGE=$(grep -oP 'image: \Ksakurafilter-api:[0-9.]+' docker-compose.prod.yml | head -1)
     # compose 网络名 = {项目名}_sakura-net (项目名默认目录名, 动态探测)
     NET_NAME=$(docker network ls --format '{{.Name}}' | grep '_sakura-net$' | head -1 || true)
-    if [ -n "$API_IMAGE" ] && [ -n "$PG_PASS" ] && [ -n "$NET_NAME" ]; then
+    # V3(2026-08-25) codex v3: EF 条件不满足必须 exit 1, 不允许降级继续 —
+    #   "EF 未执行 + SQL 成功 + 返回成功" 会让新 API 在旧 schema 上启动.
+    #   应急绕行: SKIP_EF=1 (仅限明确授权, 且确认无 pending EF 迁移)
+    if [ "${SKIP_EF:-0}" = "1" ]; then
+        echo "⚠️ SKIP_EF=1 — 跳过 EF 迁移 (应急, 请确认无 pending C# migration)"
+    elif [ -n "$API_IMAGE" ] && [ -n "$PG_PASS" ] && [ -n "$NET_NAME" ]; then
         CONN="Host=postgres;Port=5432;Database=${PG_DB};Username=${PG_USER};Password=${PG_PASS}"
         if docker run --rm --network "$NET_NAME" -e "ConnectionStrings__Postgres=${CONN}" \
             "$API_IMAGE" dotnet SakuraFilter.Api.dll --migrate-db; then
@@ -74,7 +79,10 @@ if [ "$MODE" = "apply" ]; then
             exit 1
         fi
     else
-        echo "⚠️ 无法自动执行 EF 迁移 (API_IMAGE=$API_IMAGE NET_NAME=$NET_NAME PG_PASS=${PG_PASS:+set}) — 请手动: docker compose run --rm api --migrate-db"
+        echo "❌ 无法执行 EF 迁移 (API_IMAGE=$API_IMAGE NET_NAME=$NET_NAME PG_PASS=${PG_PASS:+set}) — 阻断部署" >&2
+        echo "   原因排查: ①API 镜像未构建 (deploy-prod.sh 已先 build api) ②docker 网络未创建 ③PG_PASSWORD 未配置" >&2
+        echo "   应急绕行: SKIP_EF=1 bash scripts/migrate.sh (仅限明确授权)" >&2
+        exit 1
     fi
 elif [ "$MODE" = "list" ]; then
     echo "==> [1/2] EF Core 迁移: 由 API --migrate-db 模式管理 (__EFMigrationsHistory), 与 SQL 通道独立"
@@ -133,3 +141,39 @@ case "$MODE" in
     baseline) echo "基线完成: 标记 $applied 个 SQL 迁移为已应用 (后续新迁移将自动应用)" ;;
     list)     echo "SQL 未应用:$pending (共 $skipped 已应用)"; [ -z "$pending" ] && echo "(无待应用 SQL 迁移)" ;;
 esac
+
+# --- 迁移后结构验证 (V3 2026-08-25 codex v3: 不能只信脚本返回成功) ---
+if [ "$MODE" = "apply" ]; then
+    echo "==> 迁移后结构验证..."
+    FAILED=0
+
+    # 1. SQL schema_migrations 与目录一致 (全部已应用)
+    DIR_COUNT=$(ls "$MIGRATIONS_DIR"/*.sql 2>/dev/null | wc -l)
+    DB_COUNT=$(psql -t -A -c "SELECT COUNT(*) FROM schema_migrations;" 2>/dev/null | tr -d ' ')
+    if [ "$DIR_COUNT" = "$DB_COUNT" ] && [ "$DIR_COUNT" -gt 0 ]; then
+        echo "    [OK] schema_migrations 完整 ($DB_COUNT/$DIR_COUNT)"
+    else
+        echo "❌ schema_migrations 不一致 (DB=$DB_COUNT 目录=$DIR_COUNT) — 迁移未全部记录" >&2
+        FAILED=1
+    fi
+
+    # 2. EF 历史表存在 + 关键列存在 (结构完整性)
+    CHECKS=(
+        "SELECT 1 FROM information_schema.tables WHERE table_name='__EFMigrationsHistory'"
+        "SELECT 1 FROM information_schema.columns WHERE table_name='products' AND column_name='oem_no_display'"
+        "SELECT 1 FROM information_schema.columns WHERE table_name='cross_references' AND column_name='oem_brand'"
+        "SELECT 1 FROM information_schema.columns WHERE table_name='machine_applications' AND column_name='machine_brand'"
+    )
+    for sql in "${CHECKS[@]}"; do
+        if [ "$(psql -t -A -c "$sql" 2>/dev/null | tr -d ' ')" != "1" ]; then
+            echo "❌ 结构验证失败: $sql" >&2
+            FAILED=1
+        fi
+    done
+    if [ "$FAILED" = "0" ]; then
+        echo "    [OK] 结构验证通过 (EF 历史表 + 关键列)"
+    else
+        echo "❌ 迁移后结构验证失败 — 不要启动 API, 修复后重跑" >&2
+        exit 1
+    fi
+fi
