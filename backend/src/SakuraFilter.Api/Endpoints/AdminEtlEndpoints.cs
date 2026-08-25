@@ -32,14 +32,17 @@ public static class AdminEtlEndpoints
             [FromQuery] string? entity,
             CancellationToken ct) =>
         {
-            var entityKey = (entity ?? "products").Trim().ToLowerInvariant();
+            // V3(2026-08-25): 统一模板 — entity 为空/非法时生成含 3 sheet 的统一模板 (默认入口)
+            var entityKey = (entity ?? "").Trim().ToLowerInvariant();
             if (entityKey != "products" && entityKey != "xrefs" && entityKey != "apps")
-                return Results.BadRequest(new { error = "entity 必须是 products/xrefs/apps", value = entityKey });
+                entityKey = "";  // 统一模板
 
             try
             {
                 var bytes = await Task.Run(() => EtlTemplateGenerator.Build(entityKey), ct);
-                var fileName = $"sakurafilter-{entityKey}-template.xlsx";
+                var fileName = string.IsNullOrEmpty(entityKey)
+                    ? "sakurafilter-import-template.xlsx"
+                    : $"sakurafilter-{entityKey}-template.xlsx";
                 return Results.File(bytes,
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     fileName);
