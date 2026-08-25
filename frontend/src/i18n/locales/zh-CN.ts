@@ -1340,10 +1340,11 @@ export default {
     etlTrigger: 'ETL 触发',
     compare: '产品对比',
     perf: '性能',
+    importData: '数据导入',
     opsCenter: '运维中心',
     // 🔧 fix(审查): 运维中心 el-tabs label i18n (原硬编码中文)
     opsview: {
-      tab: { etl: 'ETL 触发与监控', perf: '性能', errors: '错误', api: 'API 文档', storage: '存储配置' }
+      tab: { etl: '数据导入', perf: '性能', errors: '错误', api: 'API 文档', storage: '存储配置' }
     },
     storage: {
       provider: '存储服务商',
