@@ -4,7 +4,7 @@
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <NuGetAudit>false</NuGetAudit>
+    <NuGetAudit>true</NuGetAudit>  <!-- V3(2026-08-25) 上线审查: 恢复供应链漏洞审计 -->
     <!-- 批次 6d: 启用 XML 文档生成, Swagger 自动读取 /// 注释作为 endpoint 描述 -->
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
