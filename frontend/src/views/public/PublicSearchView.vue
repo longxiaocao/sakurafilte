@@ -471,8 +471,10 @@ onMounted(() => {
   if (typeof cmp === 'string' && cmp) {
     const ids = cmp.split(',').map(Number).filter((n) => Number.isInteger(n) && n > 0)
     if (ids.length > 0) {
+      // V3(2026-08-25) 用户反馈: 详情页点"加入对比"跳过来时自动开了抽屉 (即使只 1 个产品),
+      //   违背"主动点查看对比"的预期 — 改为只填入 compareIds (摘要条显示), 不开抽屉,
+      //   用户继续添加或手动点"查看对比"才展开. 分享链接 UX 略损失 (多一步交互) 换取更直觉.
       compareIds.value = new Set(ids.slice(0, MAX_COMPARE))
-      compareOpen.value = true
       compareLoading.value = true
       publicCompareApi.compare(ids.slice(0, MAX_COMPARE)).then((data) => {
         compareProducts.value = data.items
