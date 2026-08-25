@@ -118,6 +118,8 @@ export default {
       // V3(2026-08-25): P0 导入向导 (模板下载 + 文件上传)
       template_download: '下载模板',
       entity_auto_tip: '上传文件后自动识别数据类型, 无需手动选择',
+      entity_auto_detected_badge: '已识别: {entity}',
+      template_label: '模板',
       uploading: '上传中...',
       upload_hint: '点击或拖拽文件到此处上传 (XLSX / JSONL)',
       upload_tip: '上传后自动填入服务器路径；也可手动输入容器内 JSONL 路径（高级）',
@@ -296,7 +298,7 @@ export default {
         triggered_etl_background_execute: '已触发 ETL, 后台执行中',
         phrase_21459: '已清除',
         // V3(2026-08-25): P0 导入向导
-        template_downloaded: '模板已下载 ({entity})',
+        template_downloaded: '模板已下载 (含产品/OEM/机型 3 个工作表)',
         file_uploaded: '文件 {name} 上传成功, 已填入路径',
         entity_auto_detected: '已自动识别 {name} 文件为: {entity} (如识别错误可手动修改上方类型)'
       },
