@@ -184,11 +184,8 @@ function cellClass(values: string[]) {
             </div>
             <div class="text-xs text-muted truncate" :title="p.oem2 || ''">{{ p.oem2 || '—' }}</div>
           </div>
-          <div class="flex flex-col gap-0.5 no-print">
-            <!-- V3(2026-08-26): 删左右移按钮 (用户反馈不需要列序调换), 仅保留移除按钮 -->
-          <el-button size="small" text class="no-print" @click="emit('remove', idx)" title="移除该列" aria-label="移除该列" style="padding: 0 4px; height: 18px; color: #d00">×</el-button>
-          </div>
-          <el-button size="small" text class="no-print" @click="emit('remove', idx)" title="移除该列" aria-label="移除该列" style="padding: 0 4px; height: 18px; color: #d00">×</el-button>
+          <!-- V3(2026-08-26): 移除按钮 (用户反馈之前看到 2 个红叉是模板多写 1 个) -->
+          <el-button size="small" text class="no-print shrink-0" @click="emit('remove', idx)" title="移除该列" aria-label="移除该列" style="padding: 0 4px; height: 18px; color: #d00">×</el-button>
         </div>
       </div>
 
