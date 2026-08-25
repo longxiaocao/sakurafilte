@@ -5,12 +5,14 @@
 # 用法:
 #   bash scripts/backup-db.sh              # 备份一次
 #   bash scripts/backup-db.sh --verify     # 备份 + pg_restore -l 校验归档可读
+#   bash scripts/backup-db.sh --upload     # 备份 + 上传 MinIO 桶 (异机/多副本)
+#   bash scripts/backup-db.sh --verify --upload  # 全开 (推荐每日任务)
 #
 # 调度 (Windows 生产机):
 #   用任务计划程序注册每日 03:00 运行 (沙箱内无法注册系统级计划任务,
 #   需在"任务计划程序" GUI 手动添加或使用 schtasks 提权执行):
 #     Program:  C:\Program Files\Git\bin\bash.exe
-#     Arguments: -lc "cd /f/sakurafilter-real && bash scripts/backup-db.sh"
+#     Arguments: -lc "cd /f/sakurafilter-real && bash scripts/backup-db.sh --verify --upload"
 #
 # 恢复示例 (灾难恢复):
 #   docker exec -i sakura-postgres pg_restore -U postgres -d sakurafilter \
@@ -33,6 +35,12 @@ BACKUP_DIR="${BACKUP_DIR:-_backups}"
 KEEP_DAYS="${KEEP_DAYS:-7}"
 
 VERIFY=""
+UPLOAD=""
+for a in "$@"; do
+    [ "$a" = "--verify" ] && VERIFY=1
+    # V3(2026-08-25) 上线审查: --upload 将备份上传 MinIO 桶 (异机/多副本, S3 兼容)
+    [ "$a" = "--upload" ] && UPLOAD=1
+done
 [ "${1:-}" = "--verify" ] && VERIFY=1
 
 STAMP=$(date +%Y%m%d_%H%M%S)
@@ -65,6 +73,25 @@ fi
 # 清理超过 KEEP_DAYS 的旧备份 (只删本库文件, 不误删其他)
 find "$BACKUP_DIR" -name "${PG_DB}_*.dump" -mtime "+${KEEP_DAYS}" -delete
 echo "==> 已清理 ${KEEP_DAYS} 天前的 ${PG_DB} 备份"
+
+# V3(2026-08-25) 上线审查: 异机/多副本 — 备份上传 MinIO 桶 (S3 兼容, 防本机磁盘损坏连带丢失)
+if [ -n "$UPLOAD" ]; then
+    MINIO_ALIAS="backup-src"
+    MINIO_BUCKET="${BACKUP_MINIO_BUCKET:-sakurafilter-backups}"
+    MINIO_ENDPOINT="${MINIO_ENDPOINT:-http://127.0.0.1:55900}"
+    MINIO_USER=$(grep -oP '^MINIO_ROOT_USER=\K.*' "$ENV_FILE" | tr -d '"')
+    MINIO_PASS=$(grep -oP '^MINIO_ROOT_PASSWORD=\K.*' "$ENV_FILE" | tr -d '"')
+    if docker exec sakura-minio sh -c 'command -v mc >/dev/null' 2>/dev/null; then
+        echo "==> 上传备份到 MinIO 桶 $MINIO_BUCKET ..."
+        docker exec sakura-minio mc alias set "$MINIO_ALIAS" "$MINIO_ENDPOINT" "$MINIO_USER" "$MINIO_PASS" >/dev/null 2>&1 \
+            && docker exec sakura-minio mc mb --ignore-existing "$MINIO_ALIAS/$MINIO_BUCKET" >/dev/null 2>&1 \
+            && docker exec -i sakura-minio mc cp /dev/stdin "$MINIO_ALIAS/$MINIO_BUCKET/$(basename "$OUT_FILE")" < "$OUT_FILE" \
+            && echo "✅ 已上传异机副本: $MINIO_BUCKET/$(basename "$OUT_FILE")" \
+            || echo "⚠️ MinIO 上传失败 (检查 MINIO_ENDPOINT/凭据), 本地备份仍有效"
+    else
+        echo "⚠️ MinIO 容器无 mc, 跳过异机副本 (可手动上传 $OUT_FILE 至对象存储)"
+    fi
+fi
 
 # 列出当前保留
 echo "==> 当前备份:"
