@@ -1353,6 +1353,11 @@ export default {
         drawer_title: 'Product Compare ({n})',
         empty: 'Compare list is empty — click "Add to compare" on search results',
       },
+      panel: {
+        diffOnly: 'Diff only',
+        diffOnly_hint: 'Hide fields where all products have the same value',
+        productCount: '{n} products (fits in one screen for ≤6)',
+      },
     },
   nav: {
     productSearch: 'Product Search',

@@ -1365,6 +1365,11 @@ export default {
         drawer_title: '产品对比 ({n})',
         empty: '对比列表为空 — 在搜索结果中点击"加入对比"添加产品',
       },
+      panel: {
+        diffOnly: '只看不同项',
+        diffOnly_hint: '隐藏所有产品值相同的字段',
+        productCount: '当前 {n} 个产品 (6 个以内一屏显示)',
+      },
     },
   nav: {
     productSearch: '产品搜索',

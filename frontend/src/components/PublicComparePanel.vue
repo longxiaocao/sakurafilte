@@ -1,17 +1,53 @@
 <script setup lang="ts">
 // 🔧 fix(审查): 产品对比面板组件 (从 PublicCompareView 抽取, 内嵌到高级搜索页)
-//   用户反馈: 独立对比页与高级搜索页重复且无引导 — 移除独立页, 对比内嵌搜索页
-//   对比表格复用 AdminCompareView 6 字段组布局 (Musk 极简风, CSS 变量适配主题)
-import { computed } from 'vue'
+//   V3(2026-08-26) 用户反馈:
+//     - 6 个以内应一屏完整显示 (列宽自适应, 不需横向滚动)
+//     - 删左右移按钮 (用户不需要)
+//     - 加"只看不同项"开关 (diff-only): 只渲染有差异的字段行
+import { computed, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { buildProductUrl } from '@/utils/build-product-url'
 import type { PublicProductDetail, PublicXrefInfo, MachineAppInfo } from '@/api/types'
 
+const { t } = useI18n()
+
 const props = defineProps<{ products: PublicProductDetail[] }>()
 const emit = defineEmits<{
-  (e: 'moveLeft', idx: number): void
-  (e: 'moveRight', idx: number): void
   (e: 'remove', idx: number): void
 }>()
+
+// V3(2026-08-26): 列宽根据产品数自适应 — 6 个以内一屏内
+//   2 个 → 280px/列, 3 个 → 200px, 4 个 → 160px, 5 个 → 140px, 6 个 → 120px
+const colWidth = computed(() => {
+  const n = props.products.length || 1
+  if (n <= 2) return 'minmax(220px, 1fr)'
+  if (n === 3) return 'minmax(180px, 1fr)'
+  if (n === 4) return 'minmax(150px, 1fr)'
+  if (n === 5) return 'minmax(130px, 1fr)'
+  return 'minmax(115px, 1fr)'  // 6
+})
+const gridStyle = computed(() => `120px repeat(${props.products.length}, ${colWidth.value})`)
+
+// V3(2026-08-26): "只看不同项" — 过滤出至少一个值与其他产品不同的字段
+const diffOnly = ref(false)
+const visibleGroups = computed(() => {
+  if (!diffOnly.value || props.products.length < 2) return fieldGroups
+  // 对每个 group 内的字段: 收集各产品值, 若全等 (忽略 '—'/空) 则视为相同, 隐藏该字段
+  return fieldGroups
+    .map((g) => ({
+      name: g.name,
+      fields: g.fields.filter((f) => {
+        const set = new Set(props.products.map((p) => normalize(valueOf(p, f))))
+        return set.size > 1
+      }),
+    }))
+    .filter((g) => g.fields.length > 0)
+})
+// 归一化: 空/破折号视为同值, 避免被误判为差异
+function normalize(v: unknown): string {
+  if (v === null || v === undefined || v === '' || v === '—') return ''
+  return String(v).trim().toLowerCase()
+}
 
 const xrefSummary = (list: PublicXrefInfo[] | undefined) => {
   if (!list || list.length === 0) return ''
@@ -109,14 +145,26 @@ function cellClass(values: string[]) {
   return distinct.size > 1 ? 'diff' : ''
 }
 
-const visibleGroups = computed(() => fieldGroups)
 </script>
 
 <template>
+  <!-- V3(2026-08-26) 用户反馈: 6 个以内应一屏完整显示, 可选"只看不同项". 重写交互:
+       - 删左右移按钮 (用户不需要列序调换)
+       - 加 "只看不同项" 开关 (diff-only): 只渲染有差异的字段行, 列保持全部
+       - 列宽自适应产品数 (css): 2 个 → 280px/列, 3 个 → 200px, 4-6 个 → 120px, 一屏内
+  -->
+  <div class="p-3 border-b flex items-center justify-between gap-2 flex-wrap hairline">
+    <label class="flex items-center gap-2 text-sm cursor-pointer">
+      <el-switch v-model="diffOnly" />
+      <span>{{ t('compare.panel.diffOnly') }}</span>
+      <span class="text-xs text-[var(--color-text-muted)]">{{ t('compare.panel.diffOnly_hint') }}</span>
+    </label>
+    <span class="text-xs text-[var(--color-text-muted)]">{{ t('compare.panel.productCount', { n: products.length }) }}</span>
+  </div>
   <div class="compare-grid-wrap hairline">
     <div
       class="compare-grid"
-      :style="{ gridTemplateColumns: `140px repeat(${products.length}, minmax(150px, 1fr))` }"
+      :style="gridStyle"
     >
       <div class="compare-header-cell field-name-cell sticky-left">字段</div>
       <div v-for="(p, idx) in products" :key="p.id" class="compare-header-cell product-cell">
@@ -137,8 +185,8 @@ const visibleGroups = computed(() => fieldGroups)
             <div class="text-xs text-muted truncate" :title="p.oem2 || ''">{{ p.oem2 || '—' }}</div>
           </div>
           <div class="flex flex-col gap-0.5 no-print">
-            <el-button size="small" text :disabled="idx === 0" @click="emit('moveLeft', idx)" title="左移" style="padding: 0 2px; height: 16px" aria-label="左移">‹</el-button>
-            <el-button size="small" text :disabled="idx === products.length - 1" @click="emit('moveRight', idx)" title="右移" style="padding: 0 2px; height: 16px" aria-label="右移">›</el-button>
+            <!-- V3(2026-08-26): 删左右移按钮 (用户反馈不需要列序调换), 仅保留移除按钮 -->
+          <el-button size="small" text class="no-print" @click="emit('remove', idx)" title="移除该列" aria-label="移除该列" style="padding: 0 4px; height: 18px; color: #d00">×</el-button>
           </div>
           <el-button size="small" text class="no-print" @click="emit('remove', idx)" title="移除该列" aria-label="移除该列" style="padding: 0 4px; height: 18px; color: #d00">×</el-button>
         </div>

@@ -53,8 +53,6 @@ function onRemove(idx: number) {
   >
     <PublicComparePanel
       :products="store.state.products"
-      @move-left="(i: number) => store.move(i, -1)"
-      @move-right="(i: number) => store.move(i, 1)"
       @remove="onRemove"
     />
     <div v-if="store.state.ids.length === 0" class="py-12 text-center text-sm text-[var(--color-text-muted)]">
