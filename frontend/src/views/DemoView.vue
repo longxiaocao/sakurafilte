@@ -3,13 +3,21 @@
 //   - 整合展示需求 1-5 的所有优化点
 //   - 提供产品详情页 3 种布局方案 (A/B/C) 演示, 供整体重构决策
 //   - 全部使用 CSS 变量, 跟随主题切换
-import { ref, computed } from 'vue'
+// V3(2026-08-25) 上线审查: 生产环境守卫 — /demo 是开发演示页 (含 MOCK 数据 + admin/admin123 文案),
+//   生产构建 (npm run build) 时不渲染, 直接跳转首页, 避免暴露演示凭据提示
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useThemeStore } from '@/stores/theme'
 import { Search, ArrowLeft, Moon, Sunny, Lock, User } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const theme = useThemeStore()
+
+onMounted(() => {
+  if (import.meta.env.PROD) {
+    router.replace('/')
+  }
+})
 
 // 当前展示的优化点 Tab
 const activeTab = ref<'search' | 'detail' | 'oem' | 'login' | 'theme'>('search')
