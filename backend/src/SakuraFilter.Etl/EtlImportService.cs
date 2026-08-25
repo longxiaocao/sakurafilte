@@ -926,8 +926,10 @@ public class EtlImportService
 
                         await writer.StartRowAsync(ct);
                         await writer.WriteAsync(oemNorm, NpgsqlDbType.Varchar, ct);
-                        await writer.WriteAsync(doc.GetProperty("oem_no_display").GetString() ?? "", NpgsqlDbType.Varchar, ct);
-                        await writer.WriteAsync(doc.GetProperty("type").GetString() ?? "UNKNOWN", NpgsqlDbType.Varchar, ct);
+                        // V3 P0 fix(2026-08-25): oem_no_display 缺失时降级为派生值 (模板标注"可选"但原代码强制
+                        //   GetProperty → KeyNotFoundException 整批失败; 客户照模板留空会报错)
+                        await writer.WriteAsync(GetStringOrNull(doc, "oem_no_display") ?? oemNorm, NpgsqlDbType.Varchar, ct);
+                        await writer.WriteAsync(GetStringOrNull(doc, "type") ?? "UNKNOWN", NpgsqlDbType.Varchar, ct);
                         await WriteNullableStringAsync(writer, GetStringOrNull(doc, "product_name_1"), ct);
                         await WriteNullableStringAsync(writer, GetStringOrNull(doc, "product_name_2"), ct);
                         await WriteNullableStringAsync(writer, GetStringOrNull(doc, "product_name_3"), ct);
@@ -1853,8 +1855,10 @@ public class EtlImportService
                     // P1.1 (Task 3) 修复: ProcessXrefBatchAsync 现在返回 per-batch affected (4-tuple)
                     //   此前 3-tuple + 后续用 cumulative Progress 算 dup, 公式错误 (dup 翻倍)
                     //   正确 dup = stageCount - affected (本批) — 与 ImportAppsAsync 一致
+                    // V3 P2 fix(2026-08-25): batchStartLineNo 改传 lineNo - batchLines.Count (本批第一行之前的全局行数),
+                    //   原传 lastCommittedBatchId (已提交行数) 语义错误 → 行级错误行号错位
                     var (batchMissing, batchErrors, xrefStageCount, batchAffected) = await ProcessXrefBatchAsync(
-                        conn, batchLines, oemMap, mode, isFirstBatch, lastCommittedBatchId, ct, affectedProductIds);
+                        conn, batchLines, oemMap, mode, isFirstBatch, lineNo - batchLines.Count, ct, affectedProductIds);
                     lastCommittedBatchId += batchLines.Count;
                     Progress.IncrReadBy(batchLines.Count);
                     // dup = stageCount - affected (DISTINCT ON 去重 + ON CONFLICT 跳过)
@@ -1879,7 +1883,7 @@ public class EtlImportService
             {
                 // P1.1 (Task 3) 修复: 同样 4-tuple
                 var (batchMissing, batchErrors, xrefStageCount, batchAffected) = await ProcessXrefBatchAsync(
-                    conn, batchLines, oemMap, mode, isFirstBatch, lastCommittedBatchId, ct, affectedProductIds);
+                    conn, batchLines, oemMap, mode, isFirstBatch, lineNo - batchLines.Count, ct, affectedProductIds);
                 lastCommittedBatchId += batchLines.Count;
                 Progress.IncrReadBy(batchLines.Count);
                 var dup = xrefStageCount - batchAffected;
@@ -1966,8 +1970,10 @@ public class EtlImportService
                 COPY xrefs_stage (product_id, product_name_1, oem_brand, oem_no_3, oem_2, sort_order, machine_type, is_published) FROM STDIN (FORMAT BINARY)
             ", ct))
             {
-                var idx = 0;
-                foreach (var jsonLine in batchLines)
+                // V3 P2 fix(2026-08-25): foreach 用 (jsonLine, idx) 索引元组替代手动 idx++
+                //   原实现 idx++ 在 foreach 末尾, 错误分支 continue 跳过 → 后续行号错乱
+                //   (实测: 3 行文件第 2/3 行错误都显示"行2")
+                foreach (var (jsonLine, idx) in batchLines.Select((l, i) => (l, i)))
                 {
                     try
                     {
@@ -1997,7 +2003,6 @@ public class EtlImportService
                             var globalLineNo = batchStartLineNo + idx + 1;
                             Progress.IncrErrorsWith($"xrefs 行 {globalLineNo}: MACHINE_TYPE_INVALID (machine_type='{machineType}' 不在白名单)");
                             _logger.LogWarning("xrefs 行 {LineNo} machine_type 非法: {Val}", globalLineNo, machineType);
-                            idx++;
                             continue;
                         }
                         // sort_order: int, 缺失或非数字默认 0
@@ -2025,7 +2030,6 @@ public class EtlImportService
                         _logger.LogError(ex, "xrefs 行 {GlobalLineNo} (batch={BatchStart}, idx={Idx}) 解析失败: {Msg} | content={Preview}",
                             globalLineNo, batchStartLineNo, idx, ex.Message, preview);
                     }
-                    idx++;
                 }
                 await writer.CompleteAsync(ct);
             }
