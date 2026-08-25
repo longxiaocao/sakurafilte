@@ -70,8 +70,11 @@ const allNavItems = computed(() => {
       { key: 'dict', labelKey: 'nav.dictManage', dropdown: 'dict', icon: 'Collection', priority: 6 },
     // 🔧 fix(审查): 独立对比页移除, '产品对比'菜单入口删除 — 对比内嵌高级搜索页 (结果勾选 + 详情页按钮),
       // V2 Task 2.2.6: OEM 排序管理入口 (priority 6.5, 在字典和 ETL 之间)
-      { key: 'xref-reorder', labelKey: 'nav.xrefReorder', path: '/admin/xrefs/reorder', icon: 'Sort', priority: 6.5 }
-      // 🔧 fix(审查): ETL 高优独立项移除 — 与 perf/errors/api 合并为 "运维中心" (/admin/ops el-tabs)
+      { key: 'xref-reorder', labelKey: 'nav.xrefReorder', path: '/admin/xrefs/reorder', icon: 'Sort', priority: 6.5 },
+      // V3 fix(2026-08-25): 数据导入独立入口恢复 — 交付后客户管理员需自助导入产品数据,
+      //   用户反馈"找不到导入入口" (原合并进运维中心 tab 太隐蔽); /admin/etl 路由已存在
+      //   (redirect → /admin/ops?tab=etl), 高优区不收纳
+      { key: 'etl', labelKey: 'nav.importData', path: '/admin/etl', icon: 'Upload', priority: 6.8 }
     )
     if (isAdmin()) {
       items.push({ key: 'users', labelKey: 'nav.userManage', path: '/admin/users', icon: 'User', priority: 8 })
@@ -80,6 +83,7 @@ const allNavItems = computed(() => {
     // 🔧 fix(审查): ETL/性能/错误/API 文档 4 项合并为 1 项 "运维中心" (/admin/ops el-tabs) —
     //   用户反馈: 更多里仍分开显示 4 项, 且整合页信息密度低; 合并后菜单只露 1 入口, 更简洁
     //   adv-compare 已移除 (对比内嵌高级搜索页, 独立页冗余)
+    //   V3(2026-08-25): 数据导入(etl)已独立回高优区, 运维中心保留 性能/错误/API/存储
     items.push(
       { key: 'ops', labelKey: 'nav.opsCenter', path: '/admin/ops', icon: 'Setting', priority: 9 },
       { key: 'site', labelKey: 'nav.siteContent', path: '/admin/site-content', icon: 'Document', priority: 12.5 },
