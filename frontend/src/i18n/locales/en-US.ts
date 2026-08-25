@@ -1344,6 +1344,16 @@ export default {
       MR1_EMPTY: 'mr_1 is empty',
     },
   },
+
+    compare: {
+      floating: {
+        toggle: 'Open/close product compare',
+        label: 'Compare {n}/{max}',
+        clear: 'Clear compare',
+        drawer_title: 'Product Compare ({n})',
+        empty: 'Compare list is empty — click "Add to compare" on search results',
+      },
+    },
   nav: {
     productSearch: 'Product Search',
     oemLookup: 'OEM Lookup',

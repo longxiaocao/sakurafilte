@@ -12,6 +12,7 @@ import { ElMessage } from 'element-plus'
 import AppHeader from './components/AppHeader.vue'
 import ErrorBoundary from './components/ErrorBoundary.vue'
 import DragDropOverlay from './components/DragDropOverlay.vue'
+import CompareFloatingBar from './components/CompareFloatingBar.vue'
 import { useI18n } from 'vue-i18n'
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import en from 'element-plus/es/locale/lang/en'
@@ -56,6 +57,8 @@ onMounted(() => {
     </div>
     <!-- 全局拖拽反馈遮罩 (UX 偏好: 全窗口拖拽上传) -->
     <DragDropOverlay />
+    <!-- V3(2026-08-25): 全局浮动对比栏 (右下角 N/6, 点击展开对比抽屉, 所有页面可见) -->
+    <CompareFloatingBar />
   </el-config-provider>
 </template>
 

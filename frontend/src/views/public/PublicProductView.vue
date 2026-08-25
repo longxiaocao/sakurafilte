@@ -16,6 +16,8 @@ import { ElMessage } from 'element-plus'
 import { productApi } from '@/api'
 import type { PublicProductDetail } from '@/api/types'
 import SkeletonCard from '@/components/SkeletonCard.vue'
+import { useCompareStore } from '@/composables/useCompareStore'  // V3(2026-08-25): 全局对比状态
+const store = useCompareStore()
 import { buildProductUrl } from '@/utils/build-product-url'
 
 const route = useRoute()
@@ -196,29 +198,9 @@ function addToCompare() {
     ElMessage.warning(t('common.feedback.info_004'))
     return
   }
-  // V3(2026-08-25) 用户反馈: 详情页点"加入对比"原来 router.push('/public/search?compare='+id) 强制跳到高级搜索页,
-  //   体验割裂 (用户在聚合搜索 /search/aggregate 进来, 期望返回原搜索页继续加). 改为:
-  //   写 sessionStorage (PublicSearchView onMounted 会从 sessionStorage 恢复 compareIds) + 弹 toast + 不跳转,
-  //   用户从哪来回哪去 (router.back 或继续在详情页浏览), 回搜索页时摘要条自动显示 N/6.
-  const id = data.value.id
-  const MAX_COMPARE = 6
-  try {
-    const raw = sessionStorage.getItem('sakurafilter_compare_ids')
-    const list: number[] = raw ? (JSON.parse(raw) as number[]).filter((n) => Number.isInteger(n) && n > 0) : []
-    if (list.includes(id)) {
-      ElMessage.info('已在对比列表中, 返回搜索页查看')
-      return
-    }
-    if (list.length >= MAX_COMPARE) {
-      ElMessage.warning({ message: `最多对比 ${MAX_COMPARE} 个产品, 可返回搜索页清空后重新添加`, duration: 4000 })
-      return
-    }
-    list.push(id)
-    sessionStorage.setItem('sakurafilter_compare_ids', JSON.stringify(list))
-    ElMessage.success(`已加入对比 (${list.length}/${MAX_COMPARE}), 返回搜索页继续添加`)
-  } catch {
-    ElMessage.error('加入对比失败, 请稍后重试')
-  }
+  // V3(2026-08-25): 详情页加入对比 → 全局 store (useCompareStore), 不跳转;
+  //   用户从哪来回哪去 (router.back 或继续浏览), 全局浮动栏/搜索页摘要条自动显示 N/6
+  store.add(data.value.id)
 }
 
 function numOrDash(v?: number | string) {

@@ -1356,6 +1356,16 @@ export default {
       MR1_EMPTY: 'mr_1 不能为空',
     },
   },
+
+    compare: {
+      floating: {
+        toggle: '打开/关闭产品对比',
+        label: '对比 {n}/{max}',
+        clear: '清空对比',
+        drawer_title: '产品对比 ({n})',
+        empty: '对比列表为空 — 在搜索结果中点击"加入对比"添加产品',
+      },
+    },
   nav: {
     productSearch: '产品搜索',
     oemLookup: 'OEM 查询',
