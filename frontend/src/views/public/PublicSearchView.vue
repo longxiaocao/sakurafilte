@@ -143,6 +143,15 @@ const featuredLoading = ref(false)
 const compareIds = ref<Set<number>>(new Set())
 const MAX_COMPARE = 6  // 与 PublicCompareView 一致
 
+// V3(2026-08-25): compareIds 变化自动同步 sessionStorage — 统一持久化入口
+//   之前 addToCompare/removeFromCompare 只改状态, 依赖 reorder 路径手动写, 跨会话/详情页跳转不一致.
+//   现在 PublicProductView addToCompare 也直接写 sessionStorage (走 PublicSearchView onMounted else 恢复).
+watch(compareIds, (set) => {
+  try {
+    sessionStorage.setItem('sakurafilter_compare_ids', JSON.stringify(Array.from(set)))
+  } catch { /* 隐私模式忽略 */ }
+})
+
 // 8 字段 + 融合搜索框 是否全部空 — 用于禁用搜索按钮 + 提示文案
 //   V24-F103-1: 融合框 fuzzy 输入也算"非空" (用户单输 fuzzy 时不应触发空表单警告)
 const allEmpty = computed(() =>
