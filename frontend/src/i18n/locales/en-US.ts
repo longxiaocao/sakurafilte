@@ -109,6 +109,7 @@ export default {
       guide_step5: '⑤ Check "Pipeline" and "Recent errors" below for progress and failure reasons',
       // V3(2026-08-25): P0 import wizard (template + upload)
       template_download: 'Download template',
+      entity_auto_tip: 'Data type auto-detected after upload, no manual selection needed',
       uploading: 'Uploading...',
       upload_hint: 'Click or drop file here to upload (XLSX / JSONL)',
       upload_tip: 'Uploaded file auto-fills the server path; you may also enter a container JSONL path manually (advanced)',
@@ -287,7 +288,8 @@ export default {
         phrase_21459: 'Cleared',
         // V3(2026-08-25): P0 import wizard
         template_downloaded: 'Template downloaded ({entity})',
-        file_uploaded: 'File {name} uploaded, path filled'
+        file_uploaded: 'File {name} uploaded, path filled',
+        entity_auto_detected: 'Auto-detected {name} as: {entity} (change type above if wrong)'
       },
       templatetext: {
         immediately_import: 'Immediately Import',
