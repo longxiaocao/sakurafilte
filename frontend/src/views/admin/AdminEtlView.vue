@@ -100,13 +100,20 @@ async function downloadTemplate(entity: string) {
   }
 }
 
-// 真正上传文件到服务器 → 自动填 jsonlPath + 实体
+// 真正上传文件到服务器 → 自动填 jsonlPath + 实体 (后端自动识别数据类型)
 async function handleFileUpload(file: File) {
   uploading.value = true
   try {
     const r = await etlApi.upload(file, form.entity)
     form.jsonlPath = r.jsonlPath
-    ElMessage.success(t('admin.etlview.success.file_uploaded', { name: r.fileName }))
+    // V3(2026-08-25): 实体自动识别 — 后端读文件内容判断 (前端选择的仅兜底)
+    form.entity = (r.entityType as any) || form.entity
+    if (r.autoDetected) {
+      const name = t('admin.etlview.entity.' + (r.entityType || 'products'))
+      ElMessage.success(t('admin.etlview.success.entity_auto_detected', { entity: name, name: r.fileName }))
+    } else {
+      ElMessage.success(t('admin.etlview.success.file_uploaded', { name: r.fileName }))
+    }
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.error || e?.response?.data?.detail || t('admin.etlview.err.upload_failed'))
   } finally {
@@ -523,11 +530,16 @@ function statusTagType(s: string): 'success' | 'warning' | 'info' | 'danger' | '
 
       <el-form :inline="false" label-width="100px" size="default">
         <el-form-item :label="t('admin.etlview.label.entity')">
-          <el-radio-group v-model="form.entity" @change="changeEntity">
-            <el-radio-button value="products">{{ t('admin.etlview.entity.products') }}</el-radio-button>
-            <el-radio-button value="xrefs">{{ t('admin.etlview.entity.xrefs') }}</el-radio-button>
+          <div class="flex items-center gap-2 flex-wrap">
+            <el-radio-group v-model="form.entity" @change="changeEntity">
+              <el-radio-button value="products">{{ t('admin.etlview.entity.products') }}</el-radio-button>
+              <el-radio-button value="xrefs">{{ t('admin.etlview.entity.xrefs') }}</el-radio-button>
             <el-radio-button value="apps">{{ t('admin.etlview.entity.apps') }}</el-radio-button>
           </el-radio-group>
+          <!-- V3(2026-08-25): 实体自动识别 — 上传文件后系统自动判断类型, 无需手动选 -->
+          <span class="text-xs text-[var(--color-text-secondary)]">
+            {{ t('admin.etlview.entity_auto_tip') }}
+          </span>
           <!-- V3(2026-08-25): P0 导入向导 — 下载模板按钮 -->
           <el-button
             class="ml-3"
@@ -539,6 +551,7 @@ function statusTagType(s: string): 'success' | 'warning' | 'info' | 'danger' | '
           >
             <el-icon class="mr-1"><Download /></el-icon>{{ t('admin.etlview.template_download') }}
           </el-button>
+          </div>
         </el-form-item>
 
         <el-form-item :label="t('common.field.mode')">
