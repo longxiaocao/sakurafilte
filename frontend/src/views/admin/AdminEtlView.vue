@@ -80,19 +80,20 @@ function handleFilesDropped(files: File[]) {
 const downloadingTemplate = ref(false)
 const uploading = ref(false)
 
-async function downloadTemplate(entity: string) {
+// V3(2026-08-25): 统一模板下载 — 一个文件含 3 个 sheet (产品/OEM/机型), 无需选实体
+async function downloadTemplate() {
   downloadingTemplate.value = true
   try {
-    const blob = await etlApi.template(entity)
+    const blob = await etlApi.template('')
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `sakurafilter-${entity}-template.xlsx`
+    a.download = 'sakurafilter-import-template.xlsx'
     document.body.appendChild(a)
     a.click()
     a.remove()
     URL.revokeObjectURL(url)
-    ElMessage.success(t('admin.etlview.success.template_downloaded', { entity }))
+    ElMessage.success(t('admin.etlview.success.template_downloaded'))
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.detail || t('admin.etlview.err.template_download_failed'))
   } finally {
@@ -529,28 +530,28 @@ function statusTagType(s: string): 'success' | 'warning' | 'info' | 'danger' | '
       </template>
 
       <el-form :inline="false" label-width="100px" size="default">
+        <!-- V3(2026-08-25): 实体智能入口 — 去掉 radio 三选, 仅保留模板下载下拉 (按模板名选, 非选实体) -->
         <el-form-item :label="t('admin.etlview.label.entity')">
-          <div class="flex items-center gap-2 flex-wrap">
-            <el-radio-group v-model="form.entity" @change="changeEntity">
-              <el-radio-button value="products">{{ t('admin.etlview.entity.products') }}</el-radio-button>
-              <el-radio-button value="xrefs">{{ t('admin.etlview.entity.xrefs') }}</el-radio-button>
-            <el-radio-button value="apps">{{ t('admin.etlview.entity.apps') }}</el-radio-button>
-          </el-radio-group>
-          <!-- V3(2026-08-25): 实体自动识别 — 上传文件后系统自动判断类型, 无需手动选 -->
-          <span class="text-xs text-[var(--color-text-secondary)]">
-            {{ t('admin.etlview.entity_auto_tip') }}
-          </span>
-          <!-- V3(2026-08-25): P0 导入向导 — 下载模板按钮 -->
-          <el-button
-            class="ml-3"
-            size="small"
-            text
-            type="primary"
-            :loading="downloadingTemplate"
-            @click="downloadTemplate(form.entity)"
-          >
-            <el-icon class="mr-1"><Download /></el-icon>{{ t('admin.etlview.template_download') }}
-          </el-button>
+          <div class="flex items-center gap-2">
+            <!-- 已识别实体提示 (上传后显示) -->
+            <el-tag v-if="form.jsonlPath" type="success" effect="plain" size="small">
+              <el-icon class="mr-1"><Check /></el-icon>
+              {{ t('admin.etlview.entity_auto_detected_badge', { entity: t('admin.etlview.entity.' + form.entity) }) }}
+            </el-tag>
+            <span class="text-xs text-[var(--color-text-secondary)]">
+              {{ t('admin.etlview.entity_auto_tip') }}
+            </span>
+            <!-- V3(2026-08-25): 统一模板 — 单个按钮下载含 3 sheet 的模板文件, 无需选实体 -->
+            <el-button
+              class="ml-3"
+              size="small"
+              text
+              type="primary"
+              :loading="downloadingTemplate"
+              @click="downloadTemplate()"
+            >
+              <el-icon class="mr-1"><Download /></el-icon>{{ t('admin.etlview.template_download') }}
+            </el-button>
           </div>
         </el-form-item>
 
