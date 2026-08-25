@@ -1,3 +1,4 @@
+-- idempotent 脚本, 可重复执行: 029 xrefs upsert 唯一索引 (product_id, oem_brand, oem_no_3)
 -- 029_add_xrefs_product_brand_oem3_unique.sql
 -- 2026-08-25: ETL 导入向导 P2 验证时发现 xrefs upsert 报 42P10
 --   (there is no unique or exclusion constraint matching the ON CONFLICT specification)
