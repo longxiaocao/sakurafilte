@@ -3,6 +3,7 @@ using SakuraFilter.Core.DTOs;
 using SakuraFilter.Core.Entities;
 using SakuraFilter.Core.Extensions;
 using SakuraFilter.Core.Interfaces;
+using SakuraFilter.Etl;
 using SakuraFilter.Core.Validation;
 using SakuraFilter.Infrastructure.Data;
 using System.Globalization;
@@ -67,7 +68,7 @@ public class AdminProductService
             //   WHY: ETL ImportProductsAsync 用 advisory lock 7740001, AdminProductService 也需获取同一锁
             //        避免管理员编辑产品时 ETL TRUNCATE 导致 23505 唯一约束冲突或表级锁等待 504
             //   失败处理: 锁被 ETL 占用时返回 409 ETL_IN_PROGRESS, 让前端提示用户稍后重试
-            if (!await TryAcquireAdvisoryLockAsync(7740001L, ct))
+            if (!await TryAcquireAdvisoryLockAsync(EtlImportService.EtlGlobalLockKey, ct))
                 throw new InvalidOperationException("ETL_IN_PROGRESS: ETL 导入进行中, 请稍后重试");
 
             // 唯一性检查 (oem_no_normalized 唯一索引) - 仍保留, 提供业务友好错误
@@ -156,7 +157,7 @@ public class AdminProductService
             await _db.SaveChangesAsync(ct);  // 拿到 product.Id
 
             // V24-F21: xref 写入前加 advisory_xact_lock(7740002) 防止与 ETL DELETE+INSERT 冲突 (spec Task 0.3.19)
-            if (form.CrossReferences.Count > 0 && !await TryAcquireAdvisoryLockAsync(7740002L, ct))
+            if (form.CrossReferences.Count > 0 && !await TryAcquireAdvisoryLockAsync(EtlImportService.EtlGlobalLockKey, ct))
                 throw new InvalidOperationException("ETL_IN_PROGRESS: ETL xrefs 导入进行中, 请稍后重试");
 
             // 分区 2: xref (V2: 加 Oem2/SortOrder/MachineType/IsPublished)
@@ -235,7 +236,7 @@ public class AdminProductService
         try
         {
             // V24-F21: pg_try_advisory_xact_lock(7740001) 防止与 ETL TRUNCATE 冲突 (spec Task 0.3.18)
-            if (!await TryAcquireAdvisoryLockAsync(7740001L, ct))
+            if (!await TryAcquireAdvisoryLockAsync(EtlImportService.EtlGlobalLockKey, ct))
                 throw new InvalidOperationException("ETL_IN_PROGRESS: ETL 导入进行中, 请稍后重试");
 
             var product = await _db.Products.FirstOrDefaultAsync(p => p.Id == id, ct)
@@ -349,7 +350,7 @@ public class AdminProductService
             if (form.CrossReferences != null)
             {
                 // V24-F21: xref 写入前加 advisory_xact_lock(7740002) 防止与 ETL DELETE+INSERT 冲突 (spec Task 0.3.19)
-                if (form.CrossReferences.Count > 0 && !await TryAcquireAdvisoryLockAsync(7740002L, ct))
+                if (form.CrossReferences.Count > 0 && !await TryAcquireAdvisoryLockAsync(EtlImportService.EtlGlobalLockKey, ct))
                     throw new InvalidOperationException("ETL_IN_PROGRESS: ETL xrefs 导入进行中, 请稍后重试");
 
                 var oldXrefs = await _db.CrossReferences.Where(x => x.ProductId == id).ToListAsync(ct);
