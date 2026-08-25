@@ -64,15 +64,38 @@ public static class EtlTemplateGenerator
 
     public static byte[] Build(string entityKey)
     {
-        var columns = entityKey switch
+        // V3(2026-08-25): 统一模板 — entityKey 为空/非三实体时生成含 3 个 sheet 的统一模板
+        //   产品数据 / OEM 交叉引用 / 机型适配 各一 sheet, 客户只下载一个文件, 按需填写,
+        //   上传后 EtlEntityDetector 自动识别 (无需手动选实体)
+        using var wb = new XLWorkbook();
+
+        if (entityKey is "products" or "xrefs" or "apps")
+        {
+            AddSheet(wb, entityKey, ColumnsFor(entityKey));
+        }
+        else
+        {
+            AddSheet(wb, "products", ProductsColumns);
+            AddSheet(wb, "xrefs", XrefsColumns);
+            AddSheet(wb, "apps", AppsColumns);
+        }
+
+        using var ms = new MemoryStream();
+        wb.SaveAs(ms);
+        return ms.ToArray();
+    }
+
+    private static (string Key, string Desc, string? Sample)[] ColumnsFor(string entityKey) =>
+        entityKey switch
         {
             "products" => ProductsColumns,
             "xrefs" => XrefsColumns,
             "apps" => AppsColumns,
-            _ => throw new ArgumentException($"不支持的实体: {entityKey}")
+            _ => ProductsColumns
         };
 
-        using var wb = new XLWorkbook();
+    private static void AddSheet(XLWorkbook wb, string entityKey, (string Key, string Desc, string? Sample)[] columns)
+    {
         var ws = wb.Worksheets.Add(entityKey);
 
         // Row1 表头 (JSON key — ConvertAsync 读取的字段名) + 批注说明
@@ -101,9 +124,5 @@ public static class EtlTemplateGenerator
         for (int i = 0; i < columns.Length; i++)
             ws.Column(i + 1).AdjustToContents(4, 28);
         ws.SheetView.FreezeRows(1);
-
-        using var ms = new MemoryStream();
-        wb.SaveAs(ms);
-        return ms.ToArray();
     }
 }
