@@ -54,7 +54,8 @@ public static class AdminEtlEndpoints
         // 文件上传 (客户真正上传 XLSX/JSONL 到服务器)
         //   WHY: 原"拖拽"只填服务器路径 (假设文件已就位), 客户无法自助导入
         group.MapPost("/upload", async (
-            [FromForm] IFormFile? file,
+            IFormFile? file,  // V3 fix(2026-08-25): 去掉 [FromForm] — Swashbuckle 对 [FromForm]+IFormFile
+                              //   组合报 "Error reading parameter(s)" → swagger.json 500 (与 dict import-xlsx 无注解一致)
             [FromQuery] string? entity,
             ILogger<Program> logger,
             CancellationToken ct) =>
@@ -123,6 +124,12 @@ public static class AdminEtlEndpoints
             });
         })
         .DisableAntiforgery()  // V3: IFormFile 端点自动附加 antiforgery 元数据, 需显式禁用 (JWT 鉴权已足够)
+        // V3 fix(2026-08-25): Accepts<IFormFile> 修复 swagger.json 生成 500
+        //   Swashbuckle 对 [FromForm] IFormFile 无法推断 schema → SwaggerGeneratorException
+        //   ("Error reading parameter(s)... [FromForm] attribute used with IFormFile")
+        //   → 整个 /swagger/v1/swagger.json 500 → 运维中心 API 文档页报错
+        //   .Accepts 官方推荐: 显式声明 multipart/form-data 请求体
+        .Accepts<IFormFile>("multipart/form-data")
         .WithName("AdminEtlUpload");
 
         // 手动触发（含 dry-run）
