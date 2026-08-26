@@ -73,7 +73,9 @@ services:
   meilisearch:
     image: getmeili/meilisearch:v1.12
     # P1-1 S15: 限制索引内存 8GB, 防止全量重建时 OOM (生产环境容器内存通常 16GB, 留 8GB 给查询/系统)
-    command: ["--max-indexing-memory", "8192"]
+    # 修复 exit 127: 镜像 ENTRYPOINT 实测为 ["tini","--"], 直接 [-flag] 会让 tini exec 该参数 → exit 127。
+    #   必须显式带可执行文件路径 (与 docker-compose.perf.yml 一致)。
+    command: ["/bin/meilisearch", "--max-indexing-memory", "8192"]
     environment:
       MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-}
       MEILI_NO_ANALYTICS: "true"

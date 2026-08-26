@@ -41,7 +41,9 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
-      ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
+      # P0-连接(混元审核): 显式设 Maximum Pool Size=120 (Npgsql 默认 100) + Connection Idle Lifetime=60,
+      #   与 PG max_connections=200 配对, 防止 c100 并发时池占满 PG 槽位雪崩 (PROD 无副本时为单实例 120 < 200)。
+      ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};Maximum Pool Size=120;Connection Idle Lifetime=60"
       MeiliSearch__Endpoint: "http://meilisearch:7700"
       MeiliSearch__ApiKey: "${MEILI_MASTER_KEY}"
       MeiliSearch__IndexName: products
@@ -190,6 +192,13 @@ services:
     image: postgres:16-alpine
     container_name: sakura-postgres
     restart: unless-stopped
+    # P0-容量(混元审核): Docker 默认 /dev/shm 仅 64MB, 百万级并发查询并行排序/哈希会撑爆
+    #   → "No space left on device" → 查询失败 + P95 飙升 (基线 §3 / PERFORMANCE_VERIFICATION_20260817 已验证)。
+    #   放大到 4GB 消除该瓶颈。
+    shm_size: "4gb"
+    # P0-连接(混元审核): postgres:16-alpine 默认 max_connections=100 = Npgsql 池上限, c100 并发顶满槽位排队雪崩。
+    #   显式提到 200 留余量 (每连接约 5-10MB, 常规生产机 < 2GB)。
+    command: ["postgres", "-c", "max_connections=200"]
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -214,6 +223,10 @@ services:
     image: getmeili/meilisearch:v1.12
     container_name: sakura-meili
     restart: unless-stopped
+    # P0-内存(混元审核): Meili 全量索引常驻 RAM 做搜索, 容器内存上限过低必 OOMKill。
+    #   镜像 ENTRYPOINT 实测为 ["tini","--"] (docker inspect 已确认), 必须显式带可执行文件路径,
+    #   否则 ["--max-indexing-memory",...] 会让 tini 直接 exec 该参数 → exit 127 (base 的写法即此坑)。
+    command: ["/bin/meilisearch", "--max-indexing-memory", "8192"]
     environment:
       MEILI_MASTER_KEY: ${MEILI_MASTER_KEY}
       MEILI_NO_ANALYTICS: "true"
@@ -226,7 +239,10 @@ services:
       resources:
         limits:
           cpus: "1.0"
-          memory: 1G
+          # P0-内存(混元审核): 原 1G 上限必 OOMKill(Meili 索引常驻 RAM)。
+          #   留 16G 上限, 其中索引构建期 --max-indexing-memory 封顶 8G, 余量给常驻查询。
+          #   实际值请按生产机物理内存再调 (索引体积 ≈ 磁盘体积, 百万级约数 GB; 生产机建议 ≥32GB)。
+          memory: 16G
 
   minio:
     image: minio/minio:latest
