@@ -1,0 +1,7129 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "SakuraFilter API",
+    "description": "工业/汽车滤清器产品管理平台 API\r\n\r\n## 模块说明\r\n- **认证**: JWT 登录/刷新/登出/用户管理\r\n- **公开搜索**: 前台产品搜索/详情 (无需认证)\r\n- **后台产品管理**: CRUD (需 admin 角色)\r\n- **字典管理**: 8 类字典 CRUD (需认证)\r\n- **ETL**: 数据导入/状态/进度 (X-Admin-Token)\r\n- **运维**: 健康检查/指标/性能告警\r\n\r\n## 认证方式\r\n1. **JWT Bearer** (推荐): 登录 /api/auth/login 获取 token, 放入 Authorization: Bearer {token}\r\n2. **X-Admin-Token** (ETL/CI 备用): 放入 X-Admin-Token: {token}",
+    "contact": {
+      "name": "SakuraFilter Team",
+      "email": "admin@sakurafilter.dev"
+    },
+    "license": {
+      "name": "Proprietary"
+    },
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/api/auth/login": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "登录\r\n入参: { Username, Password }\r\n出参: { accessToken, refreshToken, expiresIn, user: { id, username, role } }\r\n失败返回 401 (统一错误信息, 不暴露具体原因)",
+        "description": "示例请求:\r\n            \r\n    POST /api/auth/login\r\n    {\r\n      \"username\": \"<your_username>\",\r\n      \"password\": \"<your_password>\"\r\n    }\r\n            \r\n成功响应 (200):\r\n            \r\n    {\r\n      \"accessToken\": \"eyJhbGciOiJIUzI1NiIs...\",\r\n      \"refreshToken\": \"3F0fPsvbU4c05XvxVBU1...\",\r\n      \"expiresIn\": 1800,\r\n      \"user\": { \"id\": 1, \"username\": \"admin\", \"role\": \"admin\" }\r\n    }\r\n            \r\n失败响应:\r\n- 401: 用户名或密码错误 (统一错误码 ERR_AUTH_FAILED)\r\n- 423: 账户已锁定 (ERR_USER_LOCKED, 5 次失败后锁 15 分钟)\r\n- 429: 请求过于频繁 (限流 5 次/分钟/IP)",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "423": {
+            "description": "Locked",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/refresh": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "刷新 token\r\n入参: { refreshToken }\r\n出参: 新 { accessToken, refreshToken, expiresIn }\r\n流程: 验证旧 token → 撤销旧 token + 签发新 token (一次性)\r\n失败返回 401 (refresh token 无效/过期/已撤销)",
+        "description": "示例请求:\r\n            \r\n    POST /api/auth/refresh\r\n    { \"refreshToken\": \"3F0fPsvbU4c05XvxVBU1...\" }\r\n            \r\n成功响应 (200): 新 token 三件套 (同 login)\r\n失败响应:\r\n- 401: refresh token 无效/过期/已撤销",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "登出 (撤销当前 refresh token)\r\n需登录: 从 JWT claims 取 userId\r\n入参: { refreshToken } (客户端传当前持有的 refresh token)",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/auth/me": {
+      "get": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "获取当前登录用户信息\r\n需登录: 从 JWT claims 取 userId",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/change-password": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "修改密码\r\n需登录: 从 JWT claims 取 userId\r\n入参: { oldPassword, newPassword }\r\n失败返回 400 (旧密码错误)",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePasswordRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePasswordRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePasswordRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/auth/turnstile-config": {
+      "get": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Turnstile 站点配置 (前端判断是否渲染验证码; 未配置返回空 siteKey)",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/public/compare": {
+      "get": {
+        "tags": [
+          "PublicCompare"
+        ],
+        "summary": "批量对比 (公开) - 1-6 个产品\r\nURL: GET /api/public/compare?ids=1,2,3",
+        "parameters": [
+          {
+            "name": "ids",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/public/featured": {
+      "get": {
+        "tags": [
+          "PublicFeatured"
+        ],
+        "summary": "获取最新 N 条 active 产品\r\nURL: GET /api/public/featured?limit=20",
+        "description": "成功响应 (200):\r\n            \r\n    {\r\n      \"total\": 20,\r\n      \"items\": [\r\n        { \"id\": 12345, \"oemNoDisplay\": \"P00050000\", \"oem2\": \"P00050000\", \"productName1\": \"OIL FILTER\", \"type\": \"Oil\", \"d1Mm\": \"95\", \"h1Mm\": \"120\" },\r\n        ...\r\n      ]\r\n    }",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicFeaturedResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicFeaturedResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicFeaturedResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/public/machine-brands/aggregated": {
+      "get": {
+        "tags": [
+          "PublicMachineBrands"
+        ],
+        "summary": "按 5 大类聚合 brand 列表\r\n返: MachineBrandsAggregatedDto:\r\n  { byCategory: { \"Agriculture\": [...], \"Commercial\": [...], ... }, totalCount: N }\r\n4 大类 key 一定存在, 即使空列表也返 []",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/public/machine-brands/catalog": {
+      "get": {
+        "tags": [
+          "PublicMachineBrands"
+        ],
+        "summary": "项目规划V2公开 Catalog：Machine Type -> Machine Brand -> Machine Model。\r\n仅返回未删除的字典项；模型为空的品牌仍保留，避免隐藏可检索品牌。",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/public/product/{slug}": {
+      "get": {
+        "tags": [
+          "PublicProduct"
+        ],
+        "summary": "P3.3 (Task 11): 单产品详情 (公开, JSON 响应)\r\nURL 格式: /api/public/product/{slug}\r\nslug 格式 (按 R1 规格): {name1}-{name2}-{oemBrand}-{oemNo}\r\n解析策略: 取 slug 最后一段作为 oem (支持 OEM 自身含 - 的场景,如 \"AB-123-X\")\r\n  - 1) OemNoDisplay 精确匹配\r\n  - 2) Oem2 匹配 (alt OEM)\r\n  - 3) Mr1 匹配\r\n排除 is_discontinued=true (前台不展示下架产品)\r\n            \r\nV2 Task 4.7: 查询逻辑抽取到 IProductDetailService.GetByOemAsync\r\n  V2 Task 4.2: 标记 [Obsolete], 由 Razor Pages /products/... 取代 (此 API 端点保留供 SPA/客户端 JSON 调用)",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "deprecated": true
+      }
+    },
+    "/product/{oem}": {
+      "get": {
+        "tags": [
+          "PublicProduct"
+        ],
+        "summary": "V2 Task 4.2: 旧 URL /product/{oem} 301 重定向到新 SEO URL /products/{pn1}/{pn2}/{brand}/{oem3}\r\n            \r\n触发场景:\r\n  - 搜索引擎索引的旧 URL (/product/F000000001) 需要迁移到新 SEO URL\r\n  - 用户书签中的旧 URL 需要重定向到新页面\r\n  - 第三方网站外链的旧 URL 需要迁移链接权重\r\n            \r\n配置开关: Seo:UrlLegacyRedirectEnabled (默认 true)\r\n  - true: 返回 301 永久重定向 (生产环境推荐, SEO 友好)\r\n  - false: 返回 410 Gone 或 404 (用于彻底废弃旧 URL)\r\n            \r\n安全:\r\n  - 开放重定向防御: 新 URL 由 BuildProductUrl 生成 (服务端拼接), 不接受用户输入作为 redirect target\r\n  - 404 友好: 查不到产品时返回 404 (不创建新页, 也不重定向到首页, 避免软 404)",
+        "parameters": [
+          {
+            "name": "oem",
+            "in": "path",
+            "description": "旧 URL 末段 OEM 字符串 (OemNoDisplay / Oem2 / Mr1 三级 fallback)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/public/by-type": {
+      "get": {
+        "tags": [
+          "PublicProduct"
+        ],
+        "summary": "按 type 分组聚合, 顺序按 dict_type.sort_order 升序\r\n返: List<TypeGroupDto>:\r\n  { type, sortOrder, productCount, products: [ProductSummaryDto...] }\r\n限制:\r\n  - 每个 type 至多 50 个 product (避免单 type 撑爆响应)\r\n  - 仅返回 dict_type 已定义的 5 类 (oil/fuel/air/cabin/others), 未定义 type 的产品不展示",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/public/products/{oem3}/sibling-oem3": {
+      "get": {
+        "tags": [
+          "PublicProduct"
+        ],
+        "summary": "同组其他 OEM 3 列表。路径只接收客户可见的 OEM3，MR1 聚合留在服务端。\r\nURL: GET /api/public/products/{oem3}/sibling-oem3\r\n排序: brand_sort_order → sort_order (与 Meilisearch oem_list 数组排序一致, Task 2.3.1)\r\n过滤: is_published=true AND is_discontinued=false (前台不展示下架/未发布)\r\n返回: oemBrand / oemNo3 / oem2 / sortOrder / machineType / brandSortOrder",
+        "parameters": [
+          {
+            "name": "oem3",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/public/search/batch-oem": {
+      "post": {
+        "tags": [
+          "PublicSearch"
+        ],
+        "summary": "批量 OEM 查询 (Excel 多行粘贴)\r\n入参: oems (1-500 个字符串, 自动 trim + 去重)\r\n返: 每个 OEM 一条结果\r\n  命中: {oem, hit=true, productId, oemBrand, productName1, oem2}\r\n  未命中: {oem, hit=false}\r\n匹配字段: oem_2 (与前台搜索一致)",
+        "description": "示例请求:\r\n            \r\n    POST /api/public/search/batch-oem\r\n    { \"oems\": [\"P00050000\", \"11427622448\", \"C-204\"] }\r\n            \r\n成功响应 (200):\r\n            \r\n    {\r\n      \"total\": 3,\r\n      \"hits\": 2,\r\n      \"miss\": 1,\r\n      \"results\": [\r\n        { \"oem\": \"P00050000\", \"hit\": true, \"productId\": 12345, \"oemBrand\": \"Mann\", \"productName1\": \"OIL FILTER\", \"oem2\": \"P00050000\" },\r\n        { \"oem\": \"11427622448\", \"hit\": true, \"productId\": 67890, \"oemBrand\": \"Bosch\", \"productName1\": \"AIR FILTER\", \"oem2\": \"11427622448\" },\r\n        { \"oem\": \"C-204\", \"hit\": false }\r\n      ]\r\n    }",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchOemRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchOemRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchOemRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchOemResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchOemResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchOemResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/public/search": {
+      "get": {
+        "tags": [
+          "PublicSearch"
+        ],
+        "summary": "P3.4 (Task 11.5): 公开搜索页 8 字段多框模糊搜索\r\nURL: GET /api/public/search?oemBrand=...&oemNo2=...&oemNo3=...&machineBrand=...&machineModel=...&modelName=...&engineBrand=...&engineType=...\r\n规格 (新思路.xlsx R2/R8): 8 字段同时支持模糊搜索,任一字段命中即返回\r\n - 8 字段全部 optional, 全部空 → 400\r\n - 多字段 = AND 关系 (收窄范围)\r\n - 全部走 P0.1 ILIKE ESCAPE (防止下划线/百分号被 PG 当通配符)\r\n - xref 2 字段 (oemBrand + oemNo3) → 1 个 EXISTS 合并\r\n - machine 5 字段 → 1 个 EXISTS 合并 (避免 5 次 EXISTS 嵌套扫描)\r\n - 排除 is_discontinued=true\r\n - 性能: 1M 数据 + 5M xref + 1M apps 预计 50-300ms",
+        "parameters": [
+          {
+            "name": "oemBrand",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "oemNo2",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "oemNo3",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "machineBrand",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "machineModel",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "modelName",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "engineBrand",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "engineType",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "fuzzy",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicEightResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicEightResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicEightResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/public/search/aggregate": {
+      "post": {
+        "tags": [
+          "PublicSearch"
+        ],
+        "summary": "V2 Task 1.2: 聚合搜索 (需求 5,修复漏洞 1/2/4/12)\r\nPOST /api/public/search/aggregate\r\n- 文档级返回: mr1 + oemList 嵌套数组 (修复漏洞 1: 之前返回扁平 OEM 列表丢失 MR.1 关联)\r\n- _formatted 高亮字段 + XSS 防御 (修复漏洞 4: MeiliSearchProvider.SanitizeFormatted 递归处理)\r\n- 分页深度校验 (修复漏洞 12: page > max_page_depth 抛 SEARCH_PAGE_TOO_DEEP)\r\n- PG 兜底 (修复漏洞 2: Meili 离线时降级,返回结构一致)",
+        "description": "示例请求:\r\n            \r\n    POST /api/public/search/aggregate\r\n    {\r\n      \"q\": \"CAT 320D\",\r\n      \"page\": 1,\r\n      \"pageSize\": 20,\r\n      \"tolerance\": 5,\r\n      \"machineCategory\": \"construction\"\r\n    }\r\n            \r\n成功响应 (200):\r\n            \r\n    {\r\n      \"total\": 42,\r\n      \"page\": 1,\r\n      \"pageSize\": 20,\r\n      \"totalPages\": 3,\r\n      \"processingTimeMs\": 12,\r\n      \"provider\": \"meilisearch\",\r\n      \"hits\": [\r\n        {\r\n          \"mr1\": \"ABC1234567\",\r\n          \"productName1\": \"Oil Filter\",\r\n          \"oemList\": [{\"oemBrand\":\"BOSCH\",\"oemNo3\":\"F000000001\",\"sortOrder\":1}],\r\n          \"formatted\": {\"productName1\":\"Oil <mark>Filter</mark>\"},\r\n          \"rankingScore\": 0.95\r\n        }\r\n      ]\r\n    }\r\n            \r\n400 (分页过深):\r\n            \r\n    {\r\n      \"type\": \"https://sakurafilter.com/errors/search-page-too-deep\",\r\n      \"title\": \"Search Page Too Deep\",\r\n      \"status\": 400,\r\n      \"errorCode\": \"SEARCH_PAGE_TOO_DEEP\",\r\n      \"detail\": \"分页深度超过限制(最大 100 页)\"\r\n    }",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AggregateSearchRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AggregateSearchRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AggregateSearchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/info": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "summary": "API 元信息 (名称/版本/状态)",
+        "operationId": "ApiInfo",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/perf": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "summary": "性能埋点快照 (P50/P95/P99, 最近 1000 条样本)",
+        "operationId": "PerfSnapshot",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/perf/alerts": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "summary": "性能告警列表 (按时间倒序, 运维面板用)",
+        "operationId": "PerfAlerts",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/perf/meili/snapshot": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "summary": "Meili 主路径性能快照 (P50/P95/P99 + FallbackRate, 最近 1000 条样本)",
+        "operationId": "PerfMeiliSnapshot",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/perf/ingest": {
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "summary": "接收前端性能埋点批量上报 (上限 100 条/批)",
+        "operationId": "PerfIngest",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FrontendPerfBatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/health/live": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "summary": "Liveness 探活 (进程是否存活, K8s/Docker 用)",
+        "operationId": "HealthLive",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "summary": "Readiness 探活 (PG/Meili/BackgroundService 整体健康度)",
+        "operationId": "HealthReady",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/auth/status": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "summary": "Auth Token 轮转状态查询 (current/previous 长度 + 轮转时间, 不暴露完整 token)",
+        "operationId": "AdminAuthStatus",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/search": {
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "summary": "产品搜索 (走 ISearchProvider 抽象, Resilient 主备自动切换)",
+        "operationId": "SearchProducts",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SearchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/search/health": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "summary": "搜索健康检查 (主备状态)",
+        "operationId": "SearchHealth",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/products/{oem}": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "summary": "产品详情 (按 OEM 精确/规范化查询, 含 cross-references + machine-applications)",
+        "operationId": "GetProductByOem",
+        "parameters": [
+          {
+            "name": "oem",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/etl/import": {
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "summary": "ETL 导入触发 (products/xrefs/apps, 统一入口, 路径白名单校验)",
+        "operationId": "EtlImport",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/etl/status": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "summary": "ETL 导入进度查询 (实时 JSON, 含 current/total/elapsed/eta)",
+        "operationId": "EtlStatus",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/etl/import-xrefs": {
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "summary": "ETL 导入 xrefs (兼容旧入口, 新调用走 /api/etl/import + entityType)",
+        "operationId": "EtlImportXrefs",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/etl/import-apps": {
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "summary": "ETL 导入 apps (兼容旧入口, 新调用走 /api/etl/import + entityType)",
+        "operationId": "EtlImportApps",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/etl/progress/stream": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/machine-tree": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminGetMachineTree",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/public/site-content": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "summary": "公开读取站点内容",
+        "operationId": "SiteContentPublicGet",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/robots.txt": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "summary": "robots.txt (允许全站 + sitemap 指引)",
+        "operationId": "RobotsTxt",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/products": {
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "summary": "后台创建产品 (含 cross-references + machine-applications 嵌套创建)",
+        "operationId": "AdminCreateProduct",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProductFormDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "summary": "后台产品列表 (支持搜索/筛选/排序/分页, 含 published/discontinued 状态)",
+        "operationId": "AdminListProducts",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "keyword",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "includeDiscontinued",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/products/search": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "summary": "后台产品搜索 (admin 用, 含下架, 8 字段)",
+        "operationId": "AdminSearchProducts",
+        "parameters": [
+          {
+            "name": "Page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "PageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "IncludeDiscontinued",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "IsPublished",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "ProductName1",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "ProductName2",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Type",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Mr1",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Oem2",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "OemBrand",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "MediaName",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "MediaModel",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "SealingMaterial",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Efficiency1",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Oem2Batch",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Oem3Batch",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "D1Min",
+            "in": "query",
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          {
+            "name": "D1Max",
+            "in": "query",
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          {
+            "name": "D2Min",
+            "in": "query",
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          {
+            "name": "D2Max",
+            "in": "query",
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          {
+            "name": "D3Min",
+            "in": "query",
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          {
+            "name": "D3Max",
+            "in": "query",
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          {
+            "name": "D4Min",
+            "in": "query",
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          {
+            "name": "D4Max",
+            "in": "query",
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          {
+            "name": "H1Min",
+            "in": "query",
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          {
+            "name": "H1Max",
+            "in": "query",
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          {
+            "name": "H2Min",
+            "in": "query",
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          {
+            "name": "H2Max",
+            "in": "query",
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          {
+            "name": "H3Min",
+            "in": "query",
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          {
+            "name": "H3Max",
+            "in": "query",
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          {
+            "name": "H4Min",
+            "in": "query",
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          {
+            "name": "H4Max",
+            "in": "query",
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          {
+            "name": "D7Thread",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "D8Thread",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "SizeTolerance",
+            "in": "query",
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          {
+            "name": "MachineBrand",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "MachineModel",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "ModelName",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "EngineBrand",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "EngineType",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "SortBy",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "SortDesc",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "CountMode",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "PagingMode",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "CountTimeoutMs",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/products/compare": {
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "summary": "后台产品对比 (admin 用, 不排除下架, 上限 6 个)",
+        "operationId": "AdminCompareProducts",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompareRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/products/{id}": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "summary": "后台产品详情 (含全部字段, 不排除下架)",
+        "operationId": "AdminGetProduct",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "summary": "后台更新产品 (xmin 乐观锁, 409 冲突)",
+        "operationId": "AdminUpdateProduct",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProductFormDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "summary": "后台软删除产品 (is_discontinued=true, 保留历史)",
+        "operationId": "AdminDeleteProduct",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/products/{id}/restore": {
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "summary": "后台恢复已下架产品 (is_discontinued=false)",
+        "operationId": "AdminRestoreProduct",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/products/{mr1}/images/primary": {
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "summary": "V2 上传主图 (slot=1, 按 OEM 3 命名, 唯一约束 uq_product_images_primary)",
+        "operationId": "AdminUploadPrimaryImage",
+        "parameters": [
+          {
+            "name": "mr1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "oemNo3",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "showDimension",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/products/{mr1}/images/detail": {
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "summary": "V2 上传详情图 (slot 2-6, 按 MR.1 命名, 唯一约束 uq_product_images_detail_slot)",
+        "operationId": "AdminUploadDetailImage",
+        "parameters": [
+          {
+            "name": "mr1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "slot",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "showDimension",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/products/{mr1}/images/{imageRole}/{slot}": {
+      "delete": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminDeleteProductImage",
+        "parameters": [
+          {
+            "name": "mr1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "imageRole",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "slot",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/products/{mr1}/images/{imageRole}/{slot}/dimension": {
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminSetImageDimension",
+        "parameters": [
+          {
+            "name": "mr1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "imageRole",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "slot",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetDimensionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/products/{mr1}/images": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminListProductImages",
+        "parameters": [
+          {
+            "name": "mr1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/products/images/import-folder": {
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "summary": "按 OEM3-1 与 MR1-2..6 文件名批量导入图片",
+        "operationId": "AdminImportProductImages",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImageFolderImportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/products/{id}/history": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminGetProductHistory",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "changeType",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "until",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/etl/template": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminEtlTemplate",
+        "parameters": [
+          {
+            "name": "entity",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/etl/upload": {
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminEtlUpload",
+        "parameters": [
+          {
+            "name": "entity",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              },
+              "encoding": {
+                "file": {
+                  "style": "form"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/etl/trigger": {
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminTriggerEtl",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EtlTriggerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/etl/task": {
+      "delete": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminCancelEtl",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/etl/pause": {
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminPauseEtl",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/etl/resume": {
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminResumeEtl",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/etl/progress": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminEtlProgress",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/etl/reindex-all": {
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminReindexAll",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/etl/reindex-resume": {
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminReindexResume",
+        "parameters": [
+          {
+            "name": "fromId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/etl/history": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminEtlHistory",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/etl/history/aggregate": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminEtlHistoryAggregate",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/typeahead/rebuild": {
+      "post": {
+        "tags": [
+          "AdminTypeahead"
+        ],
+        "operationId": "AdminRebuildTypeaheadDict",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/alerts/history": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "parameters": [
+          {
+            "name": "type",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "severity",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/alerts/history/{id}": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/alerts/stats": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/alerts/rules": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/alerts/rules/{id}": {
+      "put": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AlertRuleUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/alerts/test": {
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AlertTestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/xrefs/reorder/brands": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "summary": "获取 OEM 品牌列表 (含 sortOrder + oem3Count, 按 sortOrder 排序)",
+        "operationId": "AdminXrefReorder_ListBrands",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "summary": "新增品牌到 xref_oem_brand 字典 (sort_order=max+1, 软删可恢复)",
+        "operationId": "AdminXrefReorder_CreateBrand",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/XrefBrandCreatePayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/xrefs/reorder/brands/{brand}": {
+      "delete": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "summary": "软删品牌 (xref_oem_brand.deleted_at=now, 数据保留; 同名新增可恢复)",
+        "operationId": "AdminXrefReorder_DeleteBrand",
+        "parameters": [
+          {
+            "name": "brand",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/xrefs/reorder": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "summary": "获取指定 Brand 下白名单内 OEM 3 列表 (sort_order > 0, 分页 + oemNo3 搜索, 含 rowVersion 乐观锁令牌)",
+        "operationId": "AdminXrefReorder_ListByBrand",
+        "parameters": [
+          {
+            "name": "oemBrand",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "summary": "批量更新某 Brand 下 OEM 3 的 sort_order (含 xmin 乐观锁, 单事务全成功或全回滚)",
+        "operationId": "AdminXrefReorder_Update",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/XrefReorderRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/xrefs/reorder/items/{id}": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "summary": "获取单条 cross_reference 详情 (编辑回填用, 含 rowVersion)",
+        "operationId": "AdminXrefReorder_GetItem",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "summary": "编辑单条 cross_reference (oemNo3/isPublished/machineType, 含 xmin 乐观锁)",
+        "operationId": "AdminXrefReorder_UpdateItem",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/XrefItemUpdatePayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "summary": "从白名单移除单条 cross_reference (置 sort_order=0, 不删产品本身, 含可选 xmin 乐观锁)",
+        "operationId": "AdminXrefReorder_DeleteItem",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "rowVersion",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/xrefs/reorder/items": {
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "summary": "新增单条 cross_reference (校验 productId 存在, sort_order=max+1 入白名单, 触发索引重建)",
+        "operationId": "AdminXrefReorder_CreateItem",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/XrefItemCreatePayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/machine-apps/batch-bind": {
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "summary": "批量绑定 MR.1 到机型 (支持追加/替换模式, 幂等, 单次上限 200 个)",
+        "operationId": "AdminBatchBindMr1ToMachine",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchBindRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dead-letter": {
+      "get": {
+        "tags": [
+          "AdminDeadLetter"
+        ],
+        "summary": "死信队列分页查询 (keyset cursor, 支持 operation/since/recovery_count 过滤)",
+        "operationId": "GetDeadLetter",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "operation",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "min_recovery_count",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "max_recovery_count",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dead-letter/{id}/recover": {
+      "post": {
+        "tags": [
+          "AdminDeadLetter"
+        ],
+        "summary": "死信单条恢复 (移回 pending + advisory lock 串行化)",
+        "operationId": "RecoverDeadLetter",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": { }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/dead-letter/recover-batch": {
+      "post": {
+        "tags": [
+          "AdminDeadLetter"
+        ],
+        "operationId": "RecoverDeadLetterBatch",
+        "parameters": [
+          {
+            "name": "operation",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lastErrorContains",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "maxRecoveryCount",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": { }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/dict/oem-brands": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminListOemBrands",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "includeDeleted",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminCreateOemBrand",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OemBrandCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/oem-brands/typeahead": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminTypeaheadOemBrands",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/oem-brands/export": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminExportOemBrands",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/oem-brands/export-xlsx": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminExportOemBrandsXlsx",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/oem-brands/import": {
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminImportOemBrands",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportCsvRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/oem-brands/import-xlsx": {
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminImportOemBrandsXlsx",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "required": [
+                  "file"
+                ],
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              },
+              "encoding": {
+                "file": {
+                  "style": "form"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/oem-brands/{id}": {
+      "put": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminUpdateOemBrand",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OemBrandUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminDeleteOemBrand",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/oem-brands/{id}/restore": {
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminRestoreOemBrand",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/oem-brands/reorder": {
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminReorderOemBrands",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OemBrandReorderRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/product-name1s": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminListProductName1s",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "includeDeleted",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminCreateProductName1",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProductName1CreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/product-name1s/typeahead": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminTypeaheadProductName1s",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/product-name1s/export": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminExportProductName1s",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/product-name1s/export-xlsx": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminExportProductName1sXlsx",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/product-name1s/import": {
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminImportProductName1s",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportCsvRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/product-name1s/import-xlsx": {
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminImportProductName1sXlsx",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "required": [
+                  "file"
+                ],
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              },
+              "encoding": {
+                "file": {
+                  "style": "form"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/product-name1s/{id}": {
+      "put": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminUpdateProductName1",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProductName1UpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminDeleteProductName1",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/product-name1s/{id}/restore": {
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminRestoreProductName1",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/product-name1s/reorder": {
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminReorderProductName1s",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProductName1ReorderRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/product-name2s": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminListProductName2s",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "includeDeleted",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminCreateProductName2",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProductName2CreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/product-name2s/typeahead": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminTypeaheadProductName2s",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/product-name2s/export": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminExportProductName2s",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/product-name2s/export-xlsx": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminExportProductName2sXlsx",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/product-name2s/import": {
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminImportProductName2s",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportCsvRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/product-name2s/import-xlsx": {
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminImportProductName2sXlsx",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "required": [
+                  "file"
+                ],
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              },
+              "encoding": {
+                "file": {
+                  "style": "form"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/product-name2s/{id}": {
+      "put": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminUpdateProductName2",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProductName2UpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminDeleteProductName2",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/product-name2s/{id}/restore": {
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminRestoreProductName2",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/product-name2s/reorder": {
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminReorderProductName2s",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProductName2ReorderRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/types": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminListTypes",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "includeDeleted",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminCreateType",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TypeCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/types/typeahead": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminTypeaheadTypes",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/types/export": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminExportTypes",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/types/export-xlsx": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminExportTypesXlsx",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/types/import": {
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminImportTypes",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportCsvRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/types/import-xlsx": {
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminImportTypesXlsx",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "required": [
+                  "file"
+                ],
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              },
+              "encoding": {
+                "file": {
+                  "style": "form"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/types/{id}": {
+      "put": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminUpdateType",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TypeUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminDeleteType",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/types/{id}/restore": {
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminRestoreType",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/types/reorder": {
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminReorderTypes",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TypeReorderRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/oem-no3s": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminListOemNo3s",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "includeDeleted",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminCreateOemNo3",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OemNo3CreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/oem-no3s/typeahead": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminTypeaheadOemNo3s",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/oem-no3s/export": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminExportOemNo3s",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/oem-no3s/export-xlsx": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminExportOemNo3sXlsx",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/oem-no3s/import": {
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminImportOemNo3s",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportCsvRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/oem-no3s/import-xlsx": {
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminImportOemNo3sXlsx",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "required": [
+                  "file"
+                ],
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              },
+              "encoding": {
+                "file": {
+                  "style": "form"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/oem-no3s/{id}": {
+      "put": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminUpdateOemNo3",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OemNo3UpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminDeleteOemNo3",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/oem-no3s/{id}/restore": {
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminRestoreOemNo3",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/oem-no3s/reorder": {
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminReorderOemNo3s",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OemNo3ReorderRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/medias": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminListMedias",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "includeDeleted",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminCreateMedia",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MediaCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/medias/typeahead": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminTypeaheadMedias",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/medias/export": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminExportMedias",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/medias/export-xlsx": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminExportMediasXlsx",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/medias/import": {
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminImportMedias",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportCsvRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/medias/import-xlsx": {
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminImportMediasXlsx",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "required": [
+                  "file"
+                ],
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              },
+              "encoding": {
+                "file": {
+                  "style": "form"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/medias/{id}": {
+      "put": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminUpdateMedia",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MediaUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminDeleteMedia",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/medias/{id}/restore": {
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminRestoreMedia",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/medias/reorder": {
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminReorderMedias",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MediaReorderRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/machines": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminListMachines",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "includeDeleted",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminCreateMachine",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MachineCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/machines/typeahead": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminTypeaheadMachines",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/machines/export": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminExportMachines",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/machines/export-xlsx": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminExportMachinesXlsx",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/machines/import": {
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminImportMachines",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportCsvRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/machines/import-xlsx": {
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminImportMachinesXlsx",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "required": [
+                  "file"
+                ],
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              },
+              "encoding": {
+                "file": {
+                  "style": "form"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/machines/{id}": {
+      "put": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminUpdateMachine",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MachineUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminDeleteMachine",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/machines/{id}/restore": {
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminRestoreMachine",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/machines/reorder": {
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminReorderMachines",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MachineReorderRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/engines": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminListEngines",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "includeDeleted",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminCreateEngine",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EngineCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/engines/typeahead": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminTypeaheadEngines",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/engines/export": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminExportEngines",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/engines/export-xlsx": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminExportEnginesXlsx",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/engines/import": {
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminImportEngines",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportCsvRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/engines/import-xlsx": {
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminImportEnginesXlsx",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "required": [
+                  "file"
+                ],
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              },
+              "encoding": {
+                "file": {
+                  "style": "form"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/engines/{id}": {
+      "put": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminUpdateEngine",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EngineUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminDeleteEngine",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/engines/{id}/restore": {
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminRestoreEngine",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/engines/reorder": {
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminReorderEngines",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EngineReorderRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/dict/_schema": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminDictSchema",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/public/images/{key}": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "PublicGetImage",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/storage/config": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminGetStorageConfig",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminSaveStorageConfig",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StorageConfigDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/storage/test": {
+      "post": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "operationId": "AdminTestStorageConfig",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StorageConfigDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/site-content": {
+      "get": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "summary": "读取站点内容 (about/contact/news/site_name/logo)",
+        "operationId": "SiteContentGet",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "SakuraFilter.Api"
+        ],
+        "summary": "更新站点内容",
+        "operationId": "SiteContentPut",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/public/typeahead/{field}": {
+      "get": {
+        "tags": [
+          "PublicTypeahead"
+        ],
+        "summary": "公开搜索 8 字段 typeahead 候选项",
+        "description": "输入 2 字符起返回 distinct 候选 (最多 20 条), 走 ILIKE 模糊匹配",
+        "operationId": "PublicTypeahead",
+        "parameters": [
+          {
+            "name": "field",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/sitemap.xml": {
+      "get": {
+        "tags": [
+          "SitemapEndpoints"
+        ],
+        "summary": "sitemap 索引 (列出所有分片, 供搜索引擎发现)",
+        "operationId": "SitemapIndex",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/sitemaps/products-{shard}.xml": {
+      "get": {
+        "tags": [
+          "SitemapEndpoints"
+        ],
+        "summary": "sitemap 分片 urlset (每分片 ≤ 50000 URL)",
+        "operationId": "SitemapShard",
+        "parameters": [
+          {
+            "name": "shard",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/users": {
+      "get": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "用户列表 (分页)\r\n出参: { items: [...], total, page, pageSize }",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "创建用户\r\n入参: { username, password, role, email?, fullName? }",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateUserRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateUserRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateUserRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/users/{id}": {
+      "get": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "用户详情",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "修改用户 (role/email/fullName/isActive)\r\n入参: { role?, email?, fullName?, isActive? } (仅传需改字段)",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "软删除用户",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/users/{id}/reset-password": {
+      "post": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "管理员重置密码\r\n入参: { newPassword }",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetPasswordRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetPasswordRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetPasswordRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/audit/login": {
+      "get": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "登录审计日志 (分页, 按时间倒序)\r\n出参: { items: [...], total, page, pageSize }",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 50
+            }
+          },
+          {
+            "name": "userId",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AggregateSearchRequest": {
+        "type": "object",
+        "properties": {
+          "q": {
+            "type": "string",
+            "nullable": true
+          },
+          "page": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "tolerance": {
+            "type": "number",
+            "format": "double"
+          },
+          "includeDiscontinued": {
+            "type": "boolean"
+          },
+          "machineCategory": {
+            "type": "string",
+            "nullable": true
+          },
+          "type": {
+            "type": "string",
+            "nullable": true
+          },
+          "d1": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "d2": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "d3": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "h1": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "h2": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "h3": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "d7Thread": {
+            "type": "string",
+            "nullable": true
+          },
+          "d8Thread": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AlertRuleUpdateRequest": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "severity": {
+            "type": "string",
+            "nullable": true
+          },
+          "channels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "recipients": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AlertTestRequest": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "nullable": true
+          },
+          "severity": {
+            "type": "string",
+            "nullable": true
+          },
+          "title": {
+            "type": "string",
+            "nullable": true
+          },
+          "markdown": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "BatchBindRequest": {
+        "type": "object",
+        "properties": {
+          "machine_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "mr1_list": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "replace": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "BatchOemRequest": {
+        "type": "object",
+        "properties": {
+          "oems": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "批量查询入参"
+      },
+      "BatchOemResponse": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "hits": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "miss": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BatchOemResult"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "批量查询响应"
+      },
+      "BatchOemResult": {
+        "type": "object",
+        "properties": {
+          "oem": {
+            "type": "string",
+            "nullable": true
+          },
+          "hit": {
+            "type": "boolean"
+          },
+          "productId": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "oemBrand": {
+            "type": "string",
+            "nullable": true
+          },
+          "productName1": {
+            "type": "string",
+            "nullable": true
+          },
+          "oem2": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "单条 OEM 结果"
+      },
+      "CancelRequest": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "nullable": true
+          },
+          "reasonCode": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ChangePasswordRequest": {
+        "type": "object",
+        "properties": {
+          "oldPassword": {
+            "type": "string",
+            "nullable": true
+          },
+          "newPassword": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "CompareRequest": {
+        "type": "object",
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreateUserRequest": {
+        "type": "object",
+        "properties": {
+          "username": {
+            "type": "string",
+            "nullable": true
+          },
+          "password": {
+            "type": "string",
+            "nullable": true
+          },
+          "role": {
+            "type": "string",
+            "nullable": true
+          },
+          "email": {
+            "type": "string",
+            "nullable": true
+          },
+          "fullName": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "EngineCreateRequest": {
+        "type": "object",
+        "properties": {
+          "engineBrand": {
+            "type": "string",
+            "nullable": true
+          },
+          "engineType": {
+            "type": "string",
+            "nullable": true
+          },
+          "sortOrder": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "EngineReorderItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "sortOrder": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "EngineReorderRequest": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EngineReorderItem"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "EngineUpdateRequest": {
+        "type": "object",
+        "properties": {
+          "engineBrand": {
+            "type": "string",
+            "nullable": true
+          },
+          "engineType": {
+            "type": "string",
+            "nullable": true
+          },
+          "sortOrder": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "EtlTriggerRequest": {
+        "type": "object",
+        "properties": {
+          "jsonlPath": {
+            "type": "string",
+            "nullable": true
+          },
+          "mode": {
+            "type": "string",
+            "nullable": true
+          },
+          "dryRun": {
+            "type": "boolean"
+          },
+          "entityType": {
+            "type": "string",
+            "nullable": true
+          },
+          "cascade": {
+            "type": "boolean",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "FrontendPerfBatch": {
+        "type": "object",
+        "properties": {
+          "samples": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FrontendPerfSample"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "FrontendPerfSample": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "nullable": true
+          },
+          "method": {
+            "type": "string",
+            "nullable": true
+          },
+          "statusCode": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "durationMs": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "ts": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ImageFolderImportRequest": {
+        "type": "object",
+        "properties": {
+          "folderPath": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "项目规划V2：按 OEM3/MR.1 命名规则批量导入产品图片。"
+      },
+      "ImportCsvRequest": {
+        "type": "object",
+        "properties": {
+          "csv": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ImportRequest": {
+        "type": "object",
+        "properties": {
+          "jsonlPath": {
+            "type": "string",
+            "nullable": true
+          },
+          "mode": {
+            "type": "string",
+            "nullable": true
+          },
+          "entityType": {
+            "type": "string",
+            "nullable": true
+          },
+          "cascade": {
+            "type": "boolean",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "LoginRequest": {
+        "type": "object",
+        "properties": {
+          "username": {
+            "type": "string",
+            "nullable": true
+          },
+          "password": {
+            "type": "string",
+            "nullable": true
+          },
+          "turnstileToken": {
+            "type": "string",
+            "description": "Cloudflare Turnstile 人机验证 token (Turnstile:SiteKey 配置后必填)",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "MachineAppInput": {
+        "type": "object",
+        "properties": {
+          "machineBrand": {
+            "type": "string",
+            "nullable": true
+          },
+          "machineModel": {
+            "type": "string",
+            "nullable": true
+          },
+          "modelName": {
+            "type": "string",
+            "nullable": true
+          },
+          "engineBrand": {
+            "type": "string",
+            "nullable": true
+          },
+          "engineType": {
+            "type": "string",
+            "nullable": true
+          },
+          "engineEnergy": {
+            "type": "string",
+            "nullable": true
+          },
+          "productionDateStart": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "productionDateEnd": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "power": {
+            "type": "string",
+            "nullable": true
+          },
+          "serialNumberFrom": {
+            "type": "string",
+            "nullable": true
+          },
+          "serialNumberTo": {
+            "type": "string",
+            "nullable": true
+          },
+          "carBodyType": {
+            "type": "string",
+            "nullable": true
+          },
+          "series": {
+            "type": "string",
+            "nullable": true
+          },
+          "co2EmissionStandard": {
+            "type": "string",
+            "nullable": true
+          },
+          "transmissionType": {
+            "type": "string",
+            "nullable": true
+          },
+          "engineDisplacement": {
+            "type": "string",
+            "nullable": true
+          },
+          "numberOfCylinders": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "gvwr": {
+            "type": "string",
+            "nullable": true
+          },
+          "tonnage": {
+            "type": "string",
+            "nullable": true
+          },
+          "geographicArea": {
+            "type": "string",
+            "nullable": true
+          },
+          "chassisType": {
+            "type": "string",
+            "nullable": true
+          },
+          "engineModel": {
+            "type": "string",
+            "nullable": true
+          },
+          "cabinType": {
+            "type": "string",
+            "nullable": true
+          },
+          "capacity": {
+            "type": "string",
+            "nullable": true
+          },
+          "engineSerialNumber": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "MachineCreateRequest": {
+        "type": "object",
+        "properties": {
+          "machineBrand": {
+            "type": "string",
+            "nullable": true
+          },
+          "machineModel": {
+            "type": "string",
+            "nullable": true
+          },
+          "machineName": {
+            "type": "string",
+            "nullable": true
+          },
+          "sortOrder": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "machineCategory": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "MachineReorderItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "sortOrder": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "MachineReorderRequest": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MachineReorderItem"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "MachineUpdateRequest": {
+        "type": "object",
+        "properties": {
+          "machineBrand": {
+            "type": "string",
+            "nullable": true
+          },
+          "machineModel": {
+            "type": "string",
+            "nullable": true
+          },
+          "machineName": {
+            "type": "string",
+            "nullable": true
+          },
+          "sortOrder": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "machineCategory": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "MediaCreateRequest": {
+        "type": "object",
+        "properties": {
+          "mediaName": {
+            "type": "string",
+            "nullable": true
+          },
+          "mediaModel": {
+            "type": "string",
+            "nullable": true
+          },
+          "sortOrder": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "MediaReorderItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "sortOrder": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "MediaReorderRequest": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MediaReorderItem"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "MediaUpdateRequest": {
+        "type": "object",
+        "properties": {
+          "mediaName": {
+            "type": "string",
+            "nullable": true
+          },
+          "mediaModel": {
+            "type": "string",
+            "nullable": true
+          },
+          "sortOrder": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "OemBrandCreateRequest": {
+        "type": "object",
+        "properties": {
+          "brand": {
+            "type": "string",
+            "nullable": true
+          },
+          "sortOrder": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "OemBrandReorderItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "sortOrder": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false,
+        "description": "OEM 品牌重排序输入项"
+      },
+      "OemBrandReorderRequest": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OemBrandReorderItem"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "OEM 品牌重排序请求体"
+      },
+      "OemBrandUpdateRequest": {
+        "type": "object",
+        "properties": {
+          "brand": {
+            "type": "string",
+            "nullable": true
+          },
+          "sortOrder": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "OemNo3CreateRequest": {
+        "type": "object",
+        "properties": {
+          "oemNo3": {
+            "type": "string",
+            "nullable": true
+          },
+          "sortOrder": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "OemNo3ReorderItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "sortOrder": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "OemNo3ReorderRequest": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OemNo3ReorderItem"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "OemNo3UpdateRequest": {
+        "type": "object",
+        "properties": {
+          "oemNo3": {
+            "type": "string",
+            "nullable": true
+          },
+          "sortOrder": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ProblemDetails": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "nullable": true
+          },
+          "title": {
+            "type": "string",
+            "nullable": true
+          },
+          "status": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "detail": {
+            "type": "string",
+            "nullable": true
+          },
+          "instance": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": { }
+      },
+      "ProductFormDto": {
+        "type": "object",
+        "properties": {
+          "oem2": {
+            "type": "string",
+            "nullable": true
+          },
+          "productName1": {
+            "type": "string",
+            "nullable": true
+          },
+          "productName2": {
+            "type": "string",
+            "nullable": true
+          },
+          "type": {
+            "type": "string",
+            "nullable": true
+          },
+          "mr1": {
+            "type": "string",
+            "nullable": true
+          },
+          "isPublished": {
+            "type": "boolean"
+          },
+          "remark": {
+            "type": "string",
+            "nullable": true
+          },
+          "rowVersion": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "d1Mm": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "d2Mm": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "d3Mm": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "d4Mm": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "h1Mm": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "h2Mm": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "h3Mm": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "h4Mm": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "d7Thread": {
+            "type": "string",
+            "nullable": true
+          },
+          "d8Thread": {
+            "type": "string",
+            "nullable": true
+          },
+          "noCheckValves": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "noBypassValves": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "noCheckValvesRaw": {
+            "type": "string",
+            "nullable": true
+          },
+          "noBypassValvesRaw": {
+            "type": "string",
+            "nullable": true
+          },
+          "media": {
+            "type": "string",
+            "nullable": true
+          },
+          "mediaModel": {
+            "type": "string",
+            "nullable": true
+          },
+          "bypassValveLr": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "bypassValveHr": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "efficiency1": {
+            "type": "string",
+            "nullable": true
+          },
+          "efficiency2": {
+            "type": "string",
+            "nullable": true
+          },
+          "bypassPressure": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "collapsePressureBar": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "bypassValveLrRaw": {
+            "type": "string",
+            "nullable": true
+          },
+          "bypassValveHrRaw": {
+            "type": "string",
+            "nullable": true
+          },
+          "bypassPressureRaw": {
+            "type": "string",
+            "nullable": true
+          },
+          "collapsePressureBarRaw": {
+            "type": "string",
+            "nullable": true
+          },
+          "sealingMaterial": {
+            "type": "string",
+            "nullable": true
+          },
+          "tempRange": {
+            "type": "string",
+            "nullable": true
+          },
+          "qtyPerCarton": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "weightKgs": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "cartonLengthMm": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "cartonWidthMm": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "cartonHeightMm": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "masterBoxQty": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "masterBoxWeightKgs": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "masterBoxLengthMm": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "masterBoxWidthMm": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "masterBoxHeightMm": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "crossReferences": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/XrefInput"
+            },
+            "nullable": true
+          },
+          "machineApplications": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MachineAppInput"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ProductName1CreateRequest": {
+        "type": "object",
+        "properties": {
+          "productName1": {
+            "type": "string",
+            "nullable": true
+          },
+          "sortOrder": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ProductName1ReorderItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "sortOrder": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ProductName1ReorderRequest": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProductName1ReorderItem"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ProductName1UpdateRequest": {
+        "type": "object",
+        "properties": {
+          "productName1": {
+            "type": "string",
+            "nullable": true
+          },
+          "sortOrder": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ProductName2CreateRequest": {
+        "type": "object",
+        "properties": {
+          "productName2": {
+            "type": "string",
+            "nullable": true
+          },
+          "sortOrder": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ProductName2ReorderItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "sortOrder": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ProductName2ReorderRequest": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProductName2ReorderItem"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ProductName2UpdateRequest": {
+        "type": "object",
+        "properties": {
+          "productName2": {
+            "type": "string",
+            "nullable": true
+          },
+          "sortOrder": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PublicEightResponse": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "page": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalPages": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "elapsedMs": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "countMode": {
+            "type": "string",
+            "nullable": true
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PublicSearchHit"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "P3.4 (Task 11.5): 8 字段响应"
+      },
+      "PublicFeaturedResponse": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PublicSearchHit"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "公开 featured 响应 (复用 PublicSearchHit 形状, 方便前端统一处理)"
+      },
+      "PublicSearchHit": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "oemNoDisplay": {
+            "type": "string",
+            "nullable": true
+          },
+          "oem2": {
+            "type": "string",
+            "nullable": true
+          },
+          "productName1": {
+            "type": "string",
+            "nullable": true
+          },
+          "type": {
+            "type": "string",
+            "nullable": true
+          },
+          "d1Mm": {
+            "type": "string",
+            "nullable": true
+          },
+          "h1Mm": {
+            "type": "string",
+            "nullable": true
+          },
+          "oemBrand": {
+            "type": "string",
+            "nullable": true
+          },
+          "machineBrand": {
+            "type": "string",
+            "nullable": true
+          },
+          "engineBrand": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "P3.4 (Task 11.5): 公开搜索单条结果"
+      },
+      "RefreshRequest": {
+        "type": "object",
+        "properties": {
+          "refreshToken": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ResetPasswordRequest": {
+        "type": "object",
+        "properties": {
+          "newPassword": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "SearchRequest": {
+        "type": "object",
+        "properties": {
+          "q": {
+            "type": "string",
+            "nullable": true
+          },
+          "type": {
+            "type": "string",
+            "nullable": true
+          },
+          "d1": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "d2": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "d3": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "h1": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "h2": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "h3": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "d7Thread": {
+            "type": "string",
+            "nullable": true
+          },
+          "d8Thread": {
+            "type": "string",
+            "nullable": true
+          },
+          "tolerance": {
+            "type": "number",
+            "format": "double"
+          },
+          "includeDiscontinued": {
+            "type": "boolean"
+          },
+          "page": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SetDimensionRequest": {
+        "type": "object",
+        "properties": {
+          "showDimension": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "StorageConfigDto": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "string",
+            "nullable": true
+          },
+          "minio": {
+            "$ref": "#/components/schemas/StorageEndpointConfig"
+          },
+          "aliyun": {
+            "$ref": "#/components/schemas/StorageEndpointConfig"
+          },
+          "r2": {
+            "$ref": "#/components/schemas/StorageEndpointConfig"
+          }
+        },
+        "additionalProperties": false
+      },
+      "StorageEndpointConfig": {
+        "type": "object",
+        "properties": {
+          "endpoint": {
+            "type": "string",
+            "nullable": true
+          },
+          "accessKey": {
+            "type": "string",
+            "nullable": true
+          },
+          "secretKey": {
+            "type": "string",
+            "nullable": true
+          },
+          "accessKeyId": {
+            "type": "string",
+            "nullable": true
+          },
+          "accessKeySecret": {
+            "type": "string",
+            "nullable": true
+          },
+          "bucketName": {
+            "type": "string",
+            "nullable": true
+          },
+          "publicEndpoint": {
+            "type": "string",
+            "nullable": true
+          },
+          "cdnEndpoint": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "TypeCreateRequest": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "nullable": true
+          },
+          "sortOrder": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "TypeReorderItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "sortOrder": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "TypeReorderRequest": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TypeReorderItem"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "TypeUpdateRequest": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "nullable": true
+          },
+          "sortOrder": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "UpdateUserRequest": {
+        "type": "object",
+        "properties": {
+          "role": {
+            "type": "string",
+            "nullable": true
+          },
+          "email": {
+            "type": "string",
+            "nullable": true
+          },
+          "fullName": {
+            "type": "string",
+            "nullable": true
+          },
+          "isActive": {
+            "type": "boolean",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "XrefBrandCreatePayload": {
+        "type": "object",
+        "properties": {
+          "brand": {
+            "type": "string",
+            "description": "品牌名 (与 XrefOemBrand.Brand 一致, 会 trim)",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "白名单改造: 新增品牌请求体 (POST /brands)"
+      },
+      "XrefInput": {
+        "type": "object",
+        "properties": {
+          "productName1": {
+            "type": "string",
+            "nullable": true
+          },
+          "oemBrand": {
+            "type": "string",
+            "nullable": true
+          },
+          "oemNo3": {
+            "type": "string",
+            "nullable": true
+          },
+          "oem2": {
+            "type": "string",
+            "nullable": true
+          },
+          "sortOrder": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "machineType": {
+            "type": "string",
+            "nullable": true
+          },
+          "isPublished": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "rowVersion": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "XrefItemCreatePayload": {
+        "type": "object",
+        "properties": {
+          "productId": {
+            "type": "integer",
+            "description": "关联产品 ID (必须存在于 products 表)",
+            "format": "int64"
+          },
+          "oemBrand": {
+            "type": "string",
+            "description": "OEM 品牌名 (与 XrefOemBrand.Brand 一致)",
+            "nullable": true
+          },
+          "oemNo3": {
+            "type": "string",
+            "description": "OEM 3 号 (对外展示主键)",
+            "nullable": true
+          },
+          "oem2": {
+            "type": "string",
+            "description": "OEM 2 号 (可空)",
+            "nullable": true
+          },
+          "machineType": {
+            "type": "string",
+            "description": "机型类型 (缺省 \"others\")",
+            "nullable": true
+          },
+          "isPublished": {
+            "type": "boolean",
+            "description": "是否发布 (默认 true)"
+          }
+        },
+        "additionalProperties": false,
+        "description": "V24-F86: OEM 3 新增请求体 (POST /items)"
+      },
+      "XrefItemUpdatePayload": {
+        "type": "object",
+        "properties": {
+          "oemNo3": {
+            "type": "string",
+            "description": "OEM 3 号",
+            "nullable": true
+          },
+          "machineType": {
+            "type": "string",
+            "description": "机型类型",
+            "nullable": true
+          },
+          "isPublished": {
+            "type": "boolean",
+            "description": "是否发布"
+          },
+          "rowVersion": {
+            "type": "integer",
+            "description": "xmin 乐观锁令牌 (GET 接口返回, 透传回来比对)",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false,
+        "description": "V24-F86: OEM 3 编辑请求体 (PUT /items/{id}), 含 xmin 乐观锁令牌"
+      },
+      "XrefReorderItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "cross_references 表主键 (联调发现 oemNo3 不唯一, 必须用 Id 主键定位)",
+            "format": "int64"
+          },
+          "oemNo3": {
+            "type": "string",
+            "description": "OEM 3 号 (仅前端展示用, 不参与 UPDATE WHERE)",
+            "nullable": true
+          },
+          "sortOrder": {
+            "type": "integer",
+            "description": "新排序值 (类竞价排名, 数值越小越靠前)",
+            "format": "int32"
+          },
+          "rowVersion": {
+            "type": "integer",
+            "description": "xmin 乐观锁令牌 (GET 接口返回的 rowVersion, 透传回来比对)",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false,
+        "description": "V2 Task 2.1.4: OEM 3 排序单项"
+      },
+      "XrefReorderRequest": {
+        "type": "object",
+        "properties": {
+          "oemBrand": {
+            "type": "string",
+            "description": "品牌名 (与 XrefOemBrand.Brand 一致)",
+            "nullable": true
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/XrefReorderItem"
+            },
+            "description": "OEM 3 列表 (含 sortOrder + rowVersion 乐观锁令牌)",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "V2 Task 2.1.4: OEM 3 批量排序请求体"
+      }
+    },
+    "securitySchemes": {
+      "X-Admin-Token": {
+        "type": "apiKey",
+        "description": "Day 8.4: dev 静态 token, 从 appsettings.json 的 Auth:DevStaticToken 读",
+        "name": "X-Admin-Token",
+        "in": "header"
+      },
+      "Bearer": {
+        "type": "http",
+        "description": "JWT Bearer token. 格式: Bearer {token} (登录 /api/auth/login 获取)",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  },
+  "security": [
+    {
+      "X-Admin-Token": [ ]
+    },
+    {
+      "Bearer": [ ]
+    }
+  ],
+  "tags": [
+    {
+      "name": "Auth",
+      "description": "认证控制器 (JWT 登录/刷新/登出/当前用户/修改密码)\r\n路由前缀: /api/auth\r\n设计:\r\n  - login/refresh: [AllowAnonymous] (登录前无 token)\r\n  - logout/me/change-password: [Authorize] (需登录)\r\n  - 登录失败统一返回 401 (不区分\"用户不存在\"和\"密码错\", 防止枚举用户)\r\n  - refresh 端点: 旧 token 撤销 + 签发新 token (一次性使用, 防重放)"
+    },
+    {
+      "name": "PublicCompare",
+      "description": "P0 权限改造 (Day 14): 公开产品对比端点 (无需 token)\r\n设计:\r\n  - 复刻 AdminProductService.CompareAsync 的查询结构, 但排除 is_discontinued=true\r\n    (前台不应展示下架产品, 与 PublicProductController.GetBySlug 一致)\r\n  - 上限 6 个产品, 单次 query + InMemory 分组, 避免 N+1\r\n  - 返回: { count, items: PublicProductDetailDto[] }，只包含客户字段\r\n            \r\n与 admin/compare 的差异:\r\n  - 路径: /api/public/compare vs /api/admin/products/compare\r\n  - 鉴权: 公开 (AllowAnonymous) vs 需 X-Admin-Token / JWT\r\n  - 过滤: 排除下架 vs 不过滤\r\n  - 排序: 保持传入 ids 顺序 vs 保持传入 ids 顺序"
+    },
+    {
+      "name": "PublicFeatured",
+      "description": "公开 featured 端点 (无需 token, 走 \"search\" 限流分区)\r\n用途: 公开搜索页进入时, 展示\"最新 20 条产品\"明细表, 供用户直接浏览/对比/查看详情\r\n设计: 不带任何过滤条件, 只排除 is_discontinued=true\r\n  - 排序: OrderByDescending(Id) -> 最新上架优先\r\n  - limit: 1-50, 默认 20\r\n  - 性能: 主键降序扫描 + Take(20), 1M 数据下 < 20ms"
+    },
+    {
+      "name": "PublicMachineBrands",
+      "description": "P2.3 (Task 8.4): 公开机型品牌聚合端点 (无需 token)\r\n用途: 前台按 5 大类 (Agriculture/Commercial/Construction/Industrial/others) 展示活跃 brand\r\n设计:\r\n  - 仅含 active (deleted_at IS NULL) 的 dict_machine\r\n  - 去重: 同 brand 多次出现 (因 model/name 不同) 只返一次\r\n  - 4 大类一定有 key, 即使空列表也返 (前端不用判空)\r\n  - brand 按 sort_order 升序, 再按字母序"
+    },
+    {
+      "name": "PublicProduct",
+      "description": "公开产品页端点 (无需 token)\r\n设计:\r\n  - P2.3 by-type: 按 dict_type.sort_order 分组聚合产品摘要\r\n  - P3.3 by-slug: 单产品详情 (复用了 AdminProductService.GetByIdAsync 避免重写投影)\r\n  - V2 Task 4.2: 旧 URL /product/{oem} 301 重定向到新 SEO URL /products/{pn1}/{pn2}/{brand}/{oem3}"
+    },
+    {
+      "name": "PublicSearch",
+      "description": "P3.2 (Task 10): 公开搜索端点 (无需 token, 走 \"search\" 限流分区)\r\n用途: 前台搜索页面的批量粘贴查询\r\n设计: 与 AdminProductService 共享 ProductDbContext, 走 AsNoTracking 性能最优\r\nV2 Task 1.2: 新增 POST /aggregate 聚合搜索端点 (Meili 主 + PG 兜底)"
+    },
+    {
+      "name": "Users",
+      "description": "用户管理控制器 (管理员专用)\r\n路由前缀: /api/admin/users\r\n鉴权: [Authorize(Policy=\"Admin\")] 仅 admin 角色可访问\r\n设计:\r\n  - 用户 CRUD + 软删除\r\n  - 管理员重置密码 (不需旧密码)\r\n  - 登录审计日志查询 (分页)"
+    }
+  ]
+}
