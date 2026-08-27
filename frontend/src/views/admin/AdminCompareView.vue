@@ -308,6 +308,19 @@ function valueOf(p: ProductDetail | undefined, def: FieldDef): string {
   return def.get(p)
 }
 
+// ===== 主图获取 =====
+// V24-F105: 获取产品主图 (slot=1 优先)
+function getPrimaryImage(p: ProductDetail | undefined): { imageUrl: string } | undefined {
+  if (!p?.images || p.images.length === 0) return undefined
+  // 优先找 slot=1 (主图), 其次 fallback 到第一张图
+  const primary = p.images.find((img) => img.slot === 1)
+  if (primary?.imageUrl) return { imageUrl: primary.imageUrl }
+  // fallback: 第一张图
+  const first = p.images[0]
+  if (first?.imageUrl) return { imageUrl: first.imageUrl }
+  return undefined
+}
+
 // ===== 仅看差异 开关 =====
 const onlyDiff = ref(false)
 function groupHasDiff(group: FieldGroup): boolean {
@@ -400,6 +413,17 @@ function doPrint() {
             <div class="flex-1 min-w-0">
               <div class="font-medium text-sm truncate" :title="p.oemNoDisplay">{{ p.oemNoDisplay }}</div>
               <div class="text-xs text-muted truncate" :title="p.oem2 || ''">{{ p.oem2 || '—' }}</div>
+              <!-- V24-F105: 主图缩略图 (60x60px) -->
+              <!--   WHY: 客户反馈对比时无法看到产品图片, 增加主图便于直观对比 -->
+              <div v-if="getPrimaryImage(p)" class="mt-1 flex justify-center">
+                <img
+                  :src="getPrimaryImage(p)!.imageUrl"
+                  :alt="p.oemNoDisplay"
+                  class="w-12 h-12 object-contain rounded border"
+                  loading="lazy"
+                  @error="(e) => { const target = e.target as HTMLImageElement; if (target) target.style.display = 'none' }"
+                />
+              </div>
             </div>
             <div class="flex flex-col gap-0.5 no-print">
               <el-button

@@ -341,11 +341,12 @@ onBeforeUnmount(() => {
     </div>
 
     <!-- 🔧 fix(审查): 高级筛选页内展开区块 (原 el-drawer 侧边栏; 用户反馈: 筛选应在列表界面直接展示) -->
-    <div v-show="drawerOpen" class="hairline p-3 mb-3">
-      <div class="text-sm font-medium mb-2">{{ t('admin.productsview.title.filter') }}</div>
-      <div class="space-y-3">
+    <!-- V24-F105: 紧凑布局优化 - 减少留白, 更合理利用页面空间 -->
+    <div v-show="drawerOpen" class="hairline p-2 mb-2">
+      <div class="text-sm font-medium mb-1">{{ t('admin.productsview.title.filter') }}</div>
+      <div class="space-y-2">
         <div class="text-sm font-medium">文本字段</div>
-        <div class="grid grid-cols-2 gap-2">
+        <div class="grid grid-cols-2 gap-1">
           <el-input v-model="advFilter.productName1" :placeholder="t('common.action.product_name_1')" size="small" />
           <el-input v-model="advFilter.productName2" :placeholder="t('common.action.product_name_2')" size="small" />
           <el-input v-model="advFilter.mr1" placeholder="MR.1" size="small" />
@@ -358,7 +359,7 @@ onBeforeUnmount(() => {
         </div>
 
         <div class="text-sm font-medium">尺寸范围 (mm)</div>
-        <div class="grid grid-cols-2 gap-2">
+        <div class="grid grid-cols-2 gap-1">
           <el-input-number v-model="advFilter.d1Min" placeholder="D1 Min" size="small" :min="0" />
           <el-input-number v-model="advFilter.d1Max" placeholder="D1 Max" size="small" :min="0" />
           <el-input-number v-model="advFilter.d2Min" placeholder="D2 Min" size="small" :min="0" />
@@ -366,7 +367,7 @@ onBeforeUnmount(() => {
           <el-input-number v-model="advFilter.h1Min" placeholder="H1 Min" size="small" :min="0" />
           <el-input-number v-model="advFilter.h1Max" placeholder="H1 Max" size="small" :min="0" />
         </div>
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-1">
           <span class="text-xs text-muted">容差 (mm):</span>
           <el-radio-group v-model="advFilter.sizeTolerance" size="small">
             <el-radio :value="1">±1</el-radio>
@@ -376,14 +377,14 @@ onBeforeUnmount(() => {
         </div>
 
         <div class="text-sm font-medium">车型适配</div>
-        <div class="grid grid-cols-2 gap-2">
+        <div class="grid grid-cols-2 gap-1">
           <el-input v-model="advFilter.machineBrand" :placeholder="t('common.action.brand')" size="small" />
           <el-input v-model="advFilter.machineModel" :placeholder="t('common.action.model')" size="small" />
           <el-input v-model="advFilter.modelName" :placeholder="t('common.action.name')" size="small" />
           <el-input v-model="advFilter.engineBrand" :placeholder="t('common.field.engine_brand')" size="small" />
         </div>
 
-        <div class="flex justify-end gap-2 pt-3">
+        <div class="flex justify-end gap-1 pt-2">
           <el-button @click="drawerOpen = false">取消</el-button>
           <el-button type="primary" @click="applyAdv">应用</el-button>
         </div>

@@ -102,6 +102,7 @@ public class MachineDictService : BaseDictService<DictMachine>
     /// 用途: 前端机型选择级联组件的数据源 (后台管理 + 前台筛选)
     /// 缓存: IMemoryCache 5 分钟, key = "machine_tree" (字典变更频率低, 避免每次聚合查询)
     /// 排序: 每级按字母序 (category asc, brand asc, model asc)
+    /// 去重: DISTINCT ON 按 (category, brand, model) 去重, 避免 196 万行全量加载导致卡死
     /// 空数据: 返回空 List, 不返回 null
     /// </summary>
     public async Task<List<MachineTreeNode>> GetTreeAsync(CancellationToken ct = default)
@@ -112,15 +113,25 @@ public class MachineDictService : BaseDictService<DictMachine>
             return cached;
 
         // 查询所有未删除的 machine 记录, 数据库层预排序减少内存排序开销
+        // WHY DISTINCT: dict_machine 有 196 万行但仅 39.6 万唯一 (category, brand, model) 组合,
+        //   全量加载会导致前端 el-tree 卡死 (V24-F105 客户反馈)。
+        //   先 GroupBy → Select 在数据库层去重, 避免把 196 万行拉到内存。
         var rows = await _db.DictMachines.AsNoTracking()
             .Where(m => m.DeletedAt == null)
+            .GroupBy(m => new { m.MachineCategory, m.MachineBrand, m.MachineModel })
+            .Select(g => new {
+                MachineCategory = g.Key.MachineCategory,
+                MachineBrand = g.Key.MachineBrand,
+                MachineModel = g.Key.MachineModel,
+                MachineName = g.Select(x => x.MachineName).FirstOrDefault()
+            })
             .OrderBy(m => m.MachineCategory)
             .ThenBy(m => m.MachineBrand)
             .ThenBy(m => m.MachineModel)
             .ToListAsync(ct);
 
         // 分组聚合: category (一级) → brand (二级) → model (三级, 每行一个节点)
-        // WHY 内存分组而非 SQL GROUP BY: 三级嵌套结构在 SQL 中需多次 JOIN, 内存 LINQ 更清晰且数据量可控 (字典表 < 50 行级)
+        // WHY 内存分组而非 SQL GROUP BY: 三级嵌套结构在 SQL 中需多次 JOIN, 内存 LINQ 更清晰
         var tree = rows
             .GroupBy(m => m.MachineCategory)
             .Select(catGroup => new MachineTreeNode(
@@ -131,7 +142,7 @@ public class MachineDictService : BaseDictService<DictMachine>
                         brandGroup.Key,
                         brandGroup
                             .Select(m => new MachineModelNode(
-                                m.Id,
+                                0,  // id 占位, 树节点不需要真实 ID
                                 // WHY: machine_model 可能为 null, fallback 到 machine_name 保证前端展示有值
                                 m.MachineModel ?? m.MachineName ?? ""))
                             .OrderBy(m => m.ModelName)
@@ -142,7 +153,7 @@ public class MachineDictService : BaseDictService<DictMachine>
             .ToList();
 
         // 写缓存: 使用 SetWithSize 扩展方法 (SizeLimit=10000 要求每个 entry 必须指定 Size)
-        _cache.SetWithSize("machine_tree", tree, TimeSpan.FromMinutes(5));
+        _cache.SetWithSize("machine_tree", tree, TimeSpan.FromMinutes(5), 100);
         return tree;
     }
 

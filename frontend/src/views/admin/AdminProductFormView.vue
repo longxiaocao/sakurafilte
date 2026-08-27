@@ -258,7 +258,18 @@ async function load() {
       masterBoxLengthMm: p.masterBoxLengthMm, masterBoxWidthMm: p.masterBoxWidthMm, masterBoxHeightMm: p.masterBoxHeightMm
     })
     form.crossReferences = p.crossReferences.map((x) => withUid(x))
-    form.machineApplications = p.machineApplications.map((m) => withUid(m))
+    // V24-F105: 去重机型适配列表 (同一 product 下相同 brand+model 只保留一条)
+    //   WHY: 历史数据可能存在重复, 且前端表单展示重复行会让用户困惑
+    const seenMachineApps = new Set<string>()
+    const dedupedApps: any[] = []
+    for (const m of p.machineApplications) {
+      const key = `${m.machineBrand || ''}|${m.machineModel || ''}`
+      if (!seenMachineApps.has(key)) {
+        seenMachineApps.add(key)
+        dedupedApps.push(withUid(m))
+      }
+    }
+    form.machineApplications = dedupedApps
     // V2 Task 3.3.1: images 改为 Record<slot, img> 结构 (主图 slot=1, 详情图 slot=2-6)
     images.value = {}
     if (Array.isArray(p.images)) {
