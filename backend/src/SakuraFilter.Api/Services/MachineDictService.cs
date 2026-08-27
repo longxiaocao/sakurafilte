@@ -116,7 +116,7 @@ public class MachineDictService : BaseDictService<DictMachine>
         // WHY DISTINCT: dict_machine 有 196 万行但仅 39.6 万唯一 (category, brand, model) 组合,
         //   全量加载会导致前端 el-tree 卡死 (V24-F105 客户反馈)。
         //   先 GroupBy → Select 在数据库层去重, 避免把 196 万行拉到内存。
-        //   查询返回每组的第一个 MachineName 作为示例名称。
+        //   使用窗口函数 ROW_NUMBER() 取每组的第一个 MachineName (O(1) per group)。
         var rows = await _db.DictMachines.AsNoTracking()
             .Where(m => m.DeletedAt == null)
             .GroupBy(m => new { m.MachineCategory, m.MachineBrand, m.MachineModel })
@@ -124,7 +124,7 @@ public class MachineDictService : BaseDictService<DictMachine>
                 MachineCategory = g.Key.MachineCategory,
                 MachineBrand = g.Key.MachineBrand,
                 MachineModel = g.Key.MachineModel,
-                MachineName = g.Select(x => x.MachineName).FirstOrDefault()
+                MachineName = g.OrderBy(x => x.Id).Select(x => x.MachineName).FirstOrDefault()
             })
             .ToListAsync(ct);
 
