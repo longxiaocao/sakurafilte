@@ -211,16 +211,6 @@ public static class ServiceCollectionExtensions
         services.AddSingleton(dataSource);
 
         services.AddDbContext<ProductDbContext>(opt => opt.UseNpgsql(dataSource));
-        // 🔧 fix(2026-08-23 走查): 注册 DbContextFactory — GetByIdAsync 详情 4 查询用独立上下文并发
-        // 🔧 fix(2026-08-23 CI 失败): 改用 AddDbContextFactory + lifetime: Scoped — 之前 default Singleton
-        //   factory 消费 Scoped DbContextOptions 容器验证失败 ("Cannot consume scoped service
-        //   'DbContextOptions' from singleton 'IDbContextFactory'"), API 启动异常 → CI 全部 fail。
-        //   改 Scoped 后 factory 与 options 同 scope, 容器验证通过。
-        //   保留 bc04a06 GetByIdAsync 4 查询并发的设计 (factory.CreateDbContextAsync() 每次取
-        //   独立 DbContext, 即使 Scoped factory 本身, 也保证 4 上下文不共享)。
-        services.AddDbContextFactory<ProductDbContext>(
-            opt => opt.UseNpgsql(dataSource),
-            lifetime: ServiceLifetime.Scoped);
         return services;
     }
 
@@ -258,15 +248,8 @@ public static class ServiceCollectionExtensions
             sp.GetRequiredService<ILogger<EtlImportService>>(),
             sp,
             sp.GetRequiredService<IOptions<EtlOptions>>(),
-            sp.GetRequiredService<IEtlProgressBroadcaster>(),
-            // 2026-08-21 P1: ETL 完成后自动刷新 typeahead_dict (单一来源, Admin 端点同用)
-            sp.GetRequiredService<TypeaheadDictRebuildService>()));
+            sp.GetRequiredService<IEtlProgressBroadcaster>()));
         services.AddSingleton<IEtlProgressBroadcaster, EtlProgressBroadcaster>();
-
-        // 2026-08-21 P1 修复: typeahead_dict 全量重建服务 — ETL 完成后自动刷新 + 管理员手动兜底共用
-        //   WHY 独立注册: EtlImportService 注入本服务做自动重建; AdminTypeaheadEndpoints 复用同一 SQL (单一来源)
-        //   连接复用全局 NpgsqlDataSource (v30-25 P0: 统一连接池)
-        services.AddSingleton(sp => new TypeaheadDictRebuildService(sp.GetRequiredService<NpgsqlDataSource>()));
         return services;
     }
 

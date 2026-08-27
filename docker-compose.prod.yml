@@ -32,7 +32,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      # ⚠️ fix(2026-08-22): db-migrate 已禁用 (注释), 移除依赖避免重建迁移清库
+      db-migrate:
+        condition: service_completed_successfully
       meilisearch:
         condition: service_started
       data-protection-init:
@@ -40,6 +41,8 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
+      # P0-连接(混元审核): 显式设 Maximum Pool Size=120 (Npgsql 默认 100) + Connection Idle Lifetime=60,
+      #   与 PG max_connections=200 配对, 防止 c100 并发时池占满 PG 槽位雪崩 (PROD 无副本时为单实例 120 < 200)。
       ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};Maximum Pool Size=120;Connection Idle Lifetime=60"
       MeiliSearch__Endpoint: "http://meilisearch:7700"
       MeiliSearch__ApiKey: "${MEILI_MASTER_KEY}"
@@ -80,8 +83,7 @@ services:
     networks:
       - sakura-net
     healthcheck:
-      # 🔧 fix(交付门禁 2026-08-21): wget exit=8 (GNU wget 对 HTTP 探活异常), 改用 curl
-      test: ["CMD", "curl", "-sf", "http://127.0.0.1:8080/health/live"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health/live"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -132,8 +134,6 @@ services:
       # Nginx 配置卷挂载 (改配置免重建镜像: docker compose exec web nginx -s reload)
       - ./docker/nginx.conf:/etc/nginx/conf.d/sakurafilter.conf:ro
       - ./docker/security-headers.conf:/etc/nginx/conf.d/security-headers.conf:ro
-      # Cloudflare 真实访客 IP 白名单；Nginx 仅对白名单来源信任 CF-Connecting-IP。
-      - ./docker/cloudflare-realip.conf:/etc/nginx/cloudflare-realip.conf:ro
       # TLS 证书 (自签名演练; 生产挂载 Let's Encrypt 全链, 路径不变; 证书不入库)
       - ./docker/certs:/etc/nginx/certs:ro
     networks:
@@ -151,70 +151,53 @@ services:
           cpus: "0.5"
           memory: 256M
 
-  # ===== Cloudflare Tunnel (可选, 域名就绪后启用) =====
-  # 🔧 fix(2026-08-22): 生产机无需公网 IP / 端口映射, cloudflared 出站连接 CF 边缘暴露 80/443。
-  #   启用步骤 (见 docs/cloudflare-onboarding.md):
-  #     1) CF 控制台 Zero Trust → Networks → Tunnels → Create a tunnel → 复制 token
-  #     2) 取消下方注释 + .env.prod 配 CLOUDFLARE_TUNNEL_TOKEN=<token>
-  #     3) CF 控制台 Tunnel 配置 public hostname: <域名> → https://web:443 (保持 HTTPS)
-  #     4) 建议同时注释 web 的 80/443 ports 暴露 (Tunnel 模式下不对外开端口, 更安全)
-  # cloudflared:
-  #   image: cloudflare/cloudflared:latest
-  #   container_name: sakura-cloudflared
-  #   restart: unless-stopped
-  #   command: ["tunnel", "run", "--token", "${CLOUDFLARE_TUNNEL_TOKEN}"]
-  #   depends_on:
-  #     web:
-  #       condition: service_healthy
-  #   networks:
-  #     - sakura-net
-
   # ===== 数据层 =====
   # 🔧 fix(部署演练): 新增 db-init (EF 迁移) + db-migrate (SQL 增量) 一次性服务
   #   原编排无迁移步骤, prod 空库启动即崩 (42P01 relation "users" does not exist)
   #   顺序: postgres → db-init (EF 34 迁移建全表) → db-migrate (002-019 SQL 增量) → api → web
-  # ⚠️ fix(2026-08-22): 已注释禁用 — 生产库已有完整数据 (pg_restore 恢复), 重跑迁移会清空数据!
-  #   此前 rm 容器无效 (compose 服务定义还在), 任何 `up` 都会重建 db-migrate 并重跑迁移 → 数据全清。
-  #   恢复数据后必须保持禁用; 仅首次空库部署时取消注释。
-  # db-init:
-  #   image: sakurafilter-api:1.0.0
-  #   container_name: sakura-db-init
-  #   restart: "no"
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
-  #   environment:
-  #     ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};Maximum Pool Size=120;Connection Idle Lifetime=60"
-  #   command: ["--migrate-db"]
-  #   networks:
-  #     - sakura-net
+  db-init:
+    image: sakurafilter-api:1.0.0
+    container_name: sakura-db-init
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
+    command: ["--migrate-db"]
+    networks:
+      - sakura-net
 
-  # db-migrate:
-  #   image: postgres:16-alpine
-  #   container_name: sakura-db-migrate
-  #   restart: "no"
-  #   depends_on:
-  #     db-init:
-  #       condition: service_completed_successfully
-  #   volumes:
-  #     - ./backend/migrations:/migrations:ro
-  #   environment:
-  #     PGPASSWORD: ${POSTGRES_PASSWORD}
-  #   command: >
-  #     sh -c 'for f in /migrations/*.sql; do
-  #       echo "===== Executing $$f =====";
-  #       psql -h postgres -U ${POSTGRES_USER} -d ${POSTGRES_DB} -v ON_ERROR_STOP=1 -f "$$f" || exit 1;
-  #     done;
-  #     echo "===== All SQL migrations applied ====="'
-  #   networks:
-  #     - sakura-net
+  db-migrate:
+    image: postgres:16-alpine
+    container_name: sakura-db-migrate
+    restart: "no"
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    volumes:
+      - ./backend/migrations:/migrations:ro
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    command: >
+      sh -c 'for f in /migrations/*.sql; do
+        echo "===== Executing $$f =====";
+        psql -h postgres -U ${POSTGRES_USER} -d ${POSTGRES_DB} -v ON_ERROR_STOP=1 -f "$$f" || exit 1;
+      done;
+      echo "===== All SQL migrations applied ====="'
+    networks:
+      - sakura-net
 
   postgres:
     image: postgres:16-alpine
     container_name: sakura-postgres
     restart: unless-stopped
-    # 2026-08-17 冷缓存压测定位: max_connections=100 = Npgsql 池上限 100, c100 级并发连接耗尽雪崩。
-    # 服务端提到 200 与客户端池 120 解耦 (每连接约 5-10MB, 200 连接无压力)。
+    # P0-容量(混元审核): Docker 默认 /dev/shm 仅 64MB, 百万级并发查询并行排序/哈希会撑爆
+    #   → "No space left on device" → 查询失败 + P95 飙升 (基线 §3 / PERFORMANCE_VERIFICATION_20260817 已验证)。
+    #   放大到 4GB 消除该瓶颈。
+    shm_size: "4gb"
+    # P0-连接(混元审核): postgres:16-alpine 默认 max_connections=100 = Npgsql 池上限, c100 并发顶满槽位排队雪崩。
+    #   显式提到 200 留余量 (每连接约 5-10MB, 常规生产机 < 2GB)。
     command: ["postgres", "-c", "max_connections=200"]
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
@@ -240,12 +223,10 @@ services:
     image: getmeili/meilisearch:v1.12
     container_name: sakura-meili
     restart: unless-stopped
-    # 🔧 fix(2026-08-22): deploy.resources.limits 在 compose 非 swarm 模式不生效 → 容器实际 1GiB 默认限制,
-    #   1M 文档重建时 Meili 内存顶格、处理队列极慢 (328K 后 30 分钟无进展)。
-    #   显式 --max-indexing-memory 4096 (perf 栈验证写法) + mem_limit 4g (容器级硬限制, 防 OOM),
-    #   重建吞吐恢复正常。
-    mem_limit: 4g
-    command: ["/bin/meilisearch", "--max-indexing-memory", "4096"]
+    # P0-内存(混元审核): Meili 全量索引常驻 RAM 做搜索, 容器内存上限过低必 OOMKill。
+    #   镜像 ENTRYPOINT 实测为 ["tini","--"] (docker inspect 已确认), 必须显式带可执行文件路径,
+    #   否则 ["--max-indexing-memory",...] 会让 tini 直接 exec 该参数 → exit 127 (base 的写法即此坑)。
+    command: ["/bin/meilisearch", "--max-indexing-memory", "8192"]
     environment:
       MEILI_MASTER_KEY: ${MEILI_MASTER_KEY}
       MEILI_NO_ANALYTICS: "true"
@@ -258,7 +239,10 @@ services:
       resources:
         limits:
           cpus: "1.0"
-          memory: 4G
+          # P0-内存(混元审核): 原 1G 上限必 OOMKill(Meili 索引常驻 RAM)。
+          #   留 16G 上限, 其中索引构建期 --max-indexing-memory 封顶 8G, 余量给常驻查询。
+          #   实际值请按生产机物理内存再调 (索引体积 ≈ 磁盘体积, 百万级约数 GB; 生产机建议 ≥32GB)。
+          memory: 16G
 
   minio:
     image: minio/minio:latest
@@ -298,8 +282,7 @@ services:
       - ./docker/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus-data:/prometheus
     ports:
-      # 🔧 fix(2026-08-24 审核): 绑定 127.0.0.1 — 监控面板仅本机/SSH Tunnel 访问, 不再暴露到公网
-      - "127.0.0.1:9090:9090"
+      - "9090:9090"
     depends_on:
       - api
     networks:
@@ -316,16 +299,13 @@ services:
     restart: unless-stopped
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
-      # 🔧 fix(2026-08-24 审核): 去掉 admin 默认回退 — 漏配 GRAFANA_PASSWORD 时容器启动失败
-      #   (fail-fast) 而非以弱口令 admin/admin 裸奔公网
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
       GF_USERS_ALLOW_SIGN_UP: "false"
     volumes:
       - grafana-data:/var/lib/grafana
       - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
     ports:
-      # 🔧 fix(2026-08-24 审核): 同 prometheus, 仅本机访问
-      - "127.0.0.1:3000:3000"
+      - "3000:3000"
     depends_on:
       - prometheus
     networks:
