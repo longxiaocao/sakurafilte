@@ -112,9 +112,13 @@ services:
       - Search__CursorHmacKey=${CURSOR_HMAC_KEY:-dev-cursor-hmac-key-rotate-in-prod-XYZ7K3P9Q2M5V8N1B4D6F0G2H}
       # 性能测试隔离开关: 默认 true (生产限流); 压测时 RATELIMIT_ENABLED=false 关闭以隔离搜索引擎延迟
       - RateLimit__Enabled=${RATELIMIT_ENABLED:-true}
+      # JWT 认证签名密钥 (>=32 字符, 生产环境必须替换)
+      - Jwt__SigningKey=${JWT_SIGNING_KEY:-dev-jwt-signing-key-do-not-use-in-prod-MZK4R9P3X6V2N7Q1L5F0B8H3C9D2E4}
       - Cors__AllowedOrigins__0=http://localhost
       - Cors__AllowedOrigins__1=http://localhost:80
       - ASPNETCORE_ENVIRONMENT=Production
+      # 首次启动时开启自动迁移建表; 表就绪后迁移幂等, 不影响后续重启
+      - Db__AutoMigrateOnStartup=true
     ports:
       - "5148:5148"
     # P1-10.1: 日志持久化卷 (容器重启后日志不丢失)
@@ -137,19 +141,6 @@ services:
       timeout: 5s
       retries: 3
       start_period: 60s
-    # P3-10.4: 滚动更新配置 (需 Docker Swarm 模式生效, 单机 compose 不生效)
-    #   WHY start-first: 新实例先启动再停旧实例, 实现零停机
-    #   WHY failure_action rollback: healthcheck 失败自动回滚, 依赖 P1-10.2 健康检查
-    deploy:
-      replicas: 2
-      update_config:
-        order: start-first
-        failure_action: rollback
-        parallelism: 1
-        delay: 10s
-      rollback_config:
-        parallelism: 1
-        order: start-first
 
   frontend:
     build:
