@@ -101,20 +101,38 @@ export default {
     etlview: {
       page_title: 'ETL Trigger & Monitor',
       guide_title: 'How to use',
-      guide_step1: '1. Select data entity: Products / OEM Cross-References / Machine Applications',
-      guide_step2: '2. Select import mode: Full reload (truncate & re-import) / Insert only (skip existing) / Upsert (overwrite existing)',
-      guide_step3: '3. Enter the data file path (absolute path accessible inside container, e.g. /tmp/etl/products.jsonl), or drag & drop an XLSX file',
-      guide_step4: '4. Click "Trigger ETL" to run in background; you may click "Run dry-run" to validate only',
-      guide_step5: '5. Check "Pipeline" and "Recent errors" for progress and failure reasons',
+      // V3(2026-08-25): data type explanations (user: products/xrefs/apps confusing)
+      data_types_title: 'Three data types (read before importing)',
+      data_type_products: 'Products: your catalog of items for sale — internal code (MR number), name, type (e.g. oil filter / air filter), dimensions. This is the system master data.',
+      data_type_xrefs: 'OEM cross-references: map other brands/original numbers to your products. When customers search an OEM number (e.g. MAHLE S1002390), this table finds your product.',
+      data_type_apps: 'Machine applications: which machine models your products fit. When customers search by machine (e.g. an engine/equipment model), this table finds your product.',
+      guide_step1: '① Download the template (one file with 3 sheets: Products / OEM Cross-References / Machine Applications)',
+      guide_step2: '② Fill in the matching sheet by header — fill any of them, one type at a time is fine',
+      guide_step3: '③ Upload the file — data type is auto-detected, no manual selection',
+      guide_step4: '④ Select import mode (default "Upsert" is fine)',
+      guide_step5: '⑤ Click "Trigger Import" and watch progress & failure details below',
+      // V3(2026-08-25): P0 import wizard (template + upload)
+      template_download: 'Download template',
+      entity_auto_tip: 'Data type auto-detected after upload, no manual selection needed',
+      entity_auto_detected_badge: 'Detected: {entity}',
+      template_label: 'Template',
+      uploading: 'Uploading...',
+      upload_hint: 'Click or drop file here to upload (XLSX / JSONL)',
+      upload_tip: 'Uploaded file auto-fills the server path; you may also enter a container JSONL path manually (advanced)',
+      err: {
+        template_download_failed: 'Template download failed',
+        upload_failed: 'File upload failed'
+      },
       entity: {
         products: 'Products',
         xrefs: 'OEM Cross-References',
         apps: 'Machine Applications'
       },
       mode: {
-        full_load: 'Full reload (truncate & re-import)',
+        // V3(2026-08-25): P1 customer-friendly wording
+        full_load: 'Full reload (clear & re-import)',
         insert_only: 'Insert only (skip existing)',
-        upsert: 'Upsert (overwrite existing)'
+        upsert: 'Update if exists, add if new (recommended)'
       },
       dry_run_check: 'Dry-run (validate only, no import)',
       section: {
@@ -219,6 +237,10 @@ export default {
         phrase_63454: 'Read/Insert/Update',
         en_v3: 'Duration',
         cancel_timestamp: 'Cancel Timestamp',
+        // V3(2026-08-25): P2 row-level errors
+        row_no: 'Row No.',
+        field: 'Field',
+        reason: 'Reason',
       },
       placeholder: {
         jsonl_absolute_path: 'JSONL Absolute Path',
@@ -268,6 +290,10 @@ export default {
         dry_run_validation_completed: 'dry-run validation completed',
         triggered_etl_background_execute: 'Triggered ETL, background execute',
         phrase_21459: 'Cleared',
+        // V3(2026-08-25): P0 import wizard
+        template_downloaded: 'Template downloaded (3 sheets: products/xrefs/apps)',
+        file_uploaded: 'File {name} uploaded, path filled',
+        entity_auto_detected: 'Auto-detected {name} as: {entity} (change type above if wrong)'
       },
       templatetext: {
         immediately_import: 'Immediately Import',

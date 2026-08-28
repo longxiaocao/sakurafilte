@@ -108,21 +108,40 @@ export default {
     },
     etlview: {
       page_title: 'ETL 触发与监控',
-      guide_title: '使用步骤',
-      guide_step1: '1. 选择数据实体：产品 / OEM 交叉引用 / 机型适配',
-      guide_step2: '2. 选择导入模式：全量重建（清空后重导）· 仅新增（跳过已存在）· 增量更新（存在则覆盖）',
-      guide_step3: '3. 输入数据文件路径（容器内可访问的绝对路径，如 /tmp/etl/products.jsonl），或直接拖拽 XLSX 文件',
-      guide_step4: '4. 点击"触发 ETL"后台执行；可先点"执行 dry-run"只校验不导入',
-      guide_step5: '5. 在"数据流程"与"最近错误"查看实时进度与失败原因',
+      guide_title: 'ETL 是什么与使用步骤',
+      guide_intro: 'ETL 是产品数据的批量导入工具：把产品资料文件（XLSX 或 JSONL）导入数据库。首次上线灌数据、拿到新目录更新、或数据订正后重灌时使用；日常查询无需操作此页。',
+      // V3(2026-08-25): 三种数据类型说明 (用户反馈: 产品/OEM 交叉引用/机型适配 分不清)
+      data_types_title: '三种数据类型（导入前必读）',
+      data_type_products: '产品：您销售的商品目录 —— 自有编码（MR 号）、名称、类型（如机油滤芯/空气滤芯）、尺寸规格等。这是系统的主数据。',
+      data_type_xrefs: 'OEM 交叉引用：其他品牌或原厂的编号 → 对应到您的哪个产品。客户拿 OEM 号（如 MAHLE S1002390）搜索时，靠它找到您的产品。',
+      data_type_apps: '机型适配：您的产品适用于哪些机器型号。客户按机器（如某型号发动机/设备）搜索时，靠它找到您的产品。',
+      guide_step1: '① 下载模板（一个文件含产品 / OEM 交叉引用 / 机型适配 三个工作表）',
+      guide_step2: '② 在对应工作表按表头填写数据 —— 填哪种都行，一次可只填一种',
+      guide_step3: '③ 上传文件 —— 系统自动识别数据类型，无需手动选择',
+      guide_step4: '④ 选择导入模式（默认"有则更新无则新增"即可）',
+      guide_step5: '⑤ 点击"触发导入"，在下方查看进度与失败明细',
+      // V3(2026-08-25): P0 导入向导 (模板下载 + 文件上传)
+      template_download: '下载模板',
+      entity_auto_tip: '上传文件后自动识别数据类型, 无需手动选择',
+      entity_auto_detected_badge: '已识别: {entity}',
+      template_label: '模板',
+      uploading: '上传中...',
+      upload_hint: '点击或拖拽文件到此处上传 (XLSX / JSONL)',
+      upload_tip: '上传后自动填入服务器路径；也可手动输入容器内 JSONL 路径（高级）',
+      err: {
+        template_download_failed: '模板下载失败',
+        upload_failed: '文件上传失败'
+      },
       entity: {
         products: '产品',
         xrefs: 'OEM 交叉引用',
         apps: '机型适配'
       },
       mode: {
-        full_load: '全量重建 (清空后导入)',
-        insert_only: '仅新增 (跳过已存在)',
-        upsert: '增量更新 (存在则覆盖)'
+        // V3(2026-08-25): P1 策略口语化 — 客户可理解的语言
+        full_load: '全量重建（清空后重新导入）',
+        insert_only: '仅新增（跳过已存在的）',
+        upsert: '有则更新、无则新增（推荐）'
       },
       dry_run_check: '预检 (仅校验文件, 不导入)',
       section: {
@@ -132,6 +151,7 @@ export default {
         last_finished: '最近一次完成结果',
         dry_run: '最近 dry-run 校验',
         recent_errors: '最近错误 (最多 10 条)',
+        row_errors: '导入失败明细 (行号定位, 最多 100 条)',
         audit: '取消审计 (按 reason_code 聚合)'
       ,reindex_confirm: '执行全量重建', total_cancelled: '总取消数', no_cancelled_records: '暂无取消记录'
       },
@@ -277,6 +297,10 @@ export default {
         dry_run_validation_completed: 'dry-run 校验完成',
         triggered_etl_background_execute: '已触发 ETL, 后台执行中',
         phrase_21459: '已清除',
+        // V3(2026-08-25): P0 导入向导
+        template_downloaded: '模板已下载 (含产品/OEM/机型 3 个工作表)',
+        file_uploaded: '文件 {name} 上传成功, 已填入路径',
+        entity_auto_detected: '已自动识别 {name} 文件为: {entity} (如识别错误可手动修改上方类型)'
       },
       templatetext: {
         immediately_import: '立即导入',

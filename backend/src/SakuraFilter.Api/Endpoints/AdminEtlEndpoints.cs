@@ -22,6 +22,127 @@ public static class AdminEtlEndpoints
             .RequireAuthorization("Admin")  // V24-F19: spec F11
             .RequireRateLimiting("etl");
 
+        // ===== V3(2026-08-25): P0 导入向导 — 模板下载 + 文件上传 (客户自助导入) =====
+        //   设计: docs/etl-import-wizard-design.md
+        //   模板: GET /template?entity= → xlsx (表头=JSON key + 批注说明 + 示例行, 2 行式兼容 ConvertAsync Skip(1))
+        //   上传: POST /upload (multipart) → 保存 /tmp/etl-upload/{guid}.{ext} → xlsx 转 jsonl → 返回 jsonlPath
+        //   安全: 扩展名白名单 + 50MB 上限 + guid 文件名 (不信任原始名) + >24h 临时文件清理
+        group.MapGet("/template", async (
+            HttpContext ctx,
+            [FromQuery] string? entity,
+            CancellationToken ct) =>
+        {
+            // V3(2026-08-25): 统一模板 — entity 为空/非法时生成含 3 sheet 的统一模板 (默认入口)
+            var entityKey = (entity ?? "").Trim().ToLowerInvariant();
+            if (entityKey != "products" && entityKey != "xrefs" && entityKey != "apps")
+                entityKey = "";  // 统一模板
+
+            try
+            {
+                var bytes = await Task.Run(() => EtlTemplateGenerator.Build(entityKey), ct);
+                var fileName = string.IsNullOrEmpty(entityKey)
+                    ? "sakurafilter-import-template.xlsx"
+                    : $"sakurafilter-{entityKey}-template.xlsx";
+                return Results.File(bytes,
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    fileName);
+            }
+            catch (Exception ex)
+            {
+                return Results.Problem(detail: $"模板生成失败: {ex.Message}", statusCode: 500, title: "Template Generation Failed");
+            }
+        })
+        .WithName("AdminEtlTemplate");
+
+        // 文件上传 (客户真正上传 XLSX/JSONL 到服务器)
+        //   WHY: 原"拖拽"只填服务器路径 (假设文件已就位), 客户无法自助导入
+        group.MapPost("/upload", async (
+            IFormFile? file,  // V3 fix(2026-08-25): 去掉 [FromForm] — Swashbuckle 对 [FromForm]+IFormFile
+                              //   组合报 "Error reading parameter(s)" → swagger.json 500 (与 dict import-xlsx 无注解一致)
+            [FromQuery] string? entity,
+            ILogger<Program> logger,
+            CancellationToken ct) =>
+        {
+            var entityKey = (entity ?? "products").Trim().ToLowerInvariant();
+            if (entityKey != "products" && entityKey != "xrefs" && entityKey != "apps")
+                return Results.BadRequest(new { error = "entity 必须是 products/xrefs/apps", value = entityKey });
+            if (file is null || file.Length == 0)
+                return Results.BadRequest(new { error = "请选择要上传的文件" });
+            if (file.Length > 50 * 1024 * 1024)
+                return Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
+
+            var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+            var allowed = new[] { ".xlsx", ".xls", ".jsonl" };
+            if (!allowed.Contains(ext))
+                return Results.BadRequest(new { error = $"不支持的文件类型 {ext}, 仅支持: {string.Join(" / ", allowed)}" });
+
+            // 临时目录 + guid 文件名 (防路径注入)
+            var uploadDir = "/tmp/etl-upload";
+            Directory.CreateDirectory(uploadDir);
+            // 清理 >24h 旧临时文件 (防磁盘膨胀)
+            try
+            {
+                foreach (var old in Directory.GetFiles(uploadDir, "*", SearchOption.TopDirectoryOnly))
+                {
+                    if (DateTime.UtcNow - File.GetLastWriteTimeUtc(old) > TimeSpan.FromHours(24))
+                    {
+                        try { File.Delete(old); } catch { /* 忽略清理失败 */ }
+                    }
+                }
+            }
+            catch { /* 清理失败不影响上传 */ }
+
+            var guid = Guid.NewGuid().ToString("N");
+            var savedPath = Path.Combine(uploadDir, guid + ext);
+            await using (var fs = new FileStream(savedPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            {
+                await file.CopyToAsync(fs, ct);
+            }
+
+            // V3(2026-08-25): 实体智能识别 — 先识别数据类型, 再用识别结果转换
+            //   顺序必须 识别→转换: xlsx 模板含多 sheet (按实体命名), ConvertAsync 用 entity 找对应 sheet,
+            //   若前端传错 entity 会转换失败; jsonl 直接识别 keys 即可
+            var detected = EtlEntityDetector.Detect(savedPath);
+
+            // xlsx/xls → JSONL (ConvertAsync 只处理 .xlsx, 输出到 temp/sakurafilter-etl/)
+            string jsonlPath;
+            try
+            {
+                jsonlPath = await EtlSpreadsheetAdapter.ConvertAsync(savedPath, detected, ct);
+            }
+            catch (Exception ex)
+            {
+                try { File.Delete(savedPath); } catch { }
+                return Results.BadRequest(new { error = $"文件解析失败: {ex.Message}" });
+            }
+            // 转换成功后删除原始上传文件 (JSONL 已就位)
+            if (!jsonlPath.Equals(savedPath, StringComparison.Ordinal))
+            {
+                try { File.Delete(savedPath); } catch { }
+            }
+
+            var resolved = detected;
+
+            logger.LogInformation("ETL 上传完成: entity={Entity} (detected={Detected}) file={Name} jsonl={Path} size={Size}",
+                entityKey, detected, file.FileName, jsonlPath, file.Length);
+            return Results.Ok(new
+            {
+                jsonlPath,
+                entityType = resolved,
+                autoDetected = !string.Equals(resolved, entityKey, StringComparison.OrdinalIgnoreCase),
+                fileName = file.FileName,
+                sizeBytes = file.Length
+            });
+        })
+        .DisableAntiforgery()  // V3: IFormFile 端点自动附加 antiforgery 元数据, 需显式禁用 (JWT 鉴权已足够)
+        // V3 fix(2026-08-25): Accepts<IFormFile> 修复 swagger.json 生成 500
+        //   Swashbuckle 对 [FromForm] IFormFile 无法推断 schema → SwaggerGeneratorException
+        //   ("Error reading parameter(s)... [FromForm] attribute used with IFormFile")
+        //   → 整个 /swagger/v1/swagger.json 500 → 运维中心 API 文档页报错
+        //   .Accepts 官方推荐: 显式声明 multipart/form-data 请求体
+        .Accepts<IFormFile>("multipart/form-data")
+        .WithName("AdminEtlUpload");
+
         // 手动触发（含 dry-run）
         group.MapPost("/trigger", async (
             [FromBody] EtlTriggerRequest req,
