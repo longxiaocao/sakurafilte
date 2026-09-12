@@ -9,8 +9,10 @@ export default defineConfig({
   testDir: './tests',
   // P0-E2E 修复: 只匹配 .spec.ts, 排除 vitest 的 .test.ts (避免 Playwright 误扫 contract 目录)
   testMatch: '**/*.spec.ts',
-  fullyParallel: false,  // 共享一个 dev server, 顺序跑
-  workers: 1,
+  // 全并行: 各 spec 文件有独立 beforeAll/afterAll, 无跨文件共享状态; describe.serial 保护文件内串行
+  //   WHY workers=2: 平衡速度和 AuthPermitsPerMinute=5 限流; 4 workers 同时登录会 429
+  fullyParallel: true,
+  workers: 2,
   reporter: [['list'], ['html', { open: 'never', outputFolder: 'playwright-report' }]],
   use: {
     baseURL: process.env.BASE_URL || 'http://localhost:5173',

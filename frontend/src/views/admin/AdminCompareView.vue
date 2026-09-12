@@ -350,7 +350,7 @@ function doPrint() {
     <h1 class="sr-only">{{ t('dict.pageTitles.compare') }}</h1>
     <!-- 工具条 -->
     <div class="compare-toolbar flex items-center gap-2 mb-3 flex-wrap">
-      <span class="text-sm font-medium">产品对比</span>
+      <span class="text-sm font-medium">{{ t('admin.compareview.string.compare_title') }}</span>
       <span class="text-xs text-muted">最多 {{ MAX_COMPARE }} 个</span>
       <div class="flex-1" />
       <el-input
@@ -361,9 +361,9 @@ function doPrint() {
         @keyup.enter="addProductById"
       />
       <el-button size="small" :loading="loading" @click="addProductById">加入</el-button>
-      <el-checkbox v-model="onlyDiff" size="small">仅看差异</el-checkbox>
-      <el-button size="small" @click="clearAll" :disabled="products.length === 0">清空</el-button>
-      <el-button size="small" @click="doPrint" :disabled="products.length === 0">打印</el-button>
+      <el-checkbox v-model="onlyDiff" size="small">{{ t('admin.compareview.string.only_diff') }}</el-checkbox>
+      <el-button size="small" @click="clearAll" :disabled="products.length === 0">{{ t('admin.compareview.string.clear_btn') }}</el-button>
+      <el-button size="small" @click="doPrint" :disabled="products.length === 0">{{ t('admin.compareview.string.print_btn') }}</el-button>
     </div>
 
     <!-- 空状态 -->
@@ -403,7 +403,7 @@ function doPrint() {
         :style="{ gridTemplateColumns: `200px repeat(${products.length}, minmax(0, 1fr))` }"
       >
         <!-- 表头: 字段名 + 产品列 -->
-        <div class="compare-header-cell field-name-cell sticky-left">字段</div>
+        <div class="compare-header-cell field-name-cell sticky-left">{{ t('admin.compareview.string.field_cell') }}</div>
         <div
           v-for="(p, idx) in products"
           :key="p.id"

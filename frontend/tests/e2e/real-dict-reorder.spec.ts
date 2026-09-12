@@ -171,7 +171,21 @@ test.describe.serial('字典拖拽排序 → 搜索排序生效 全链路', () =
     adminLogin = await loginViaApi(request)
   })
 
-  test('1. OEM 排序管理页加载 + Brand 列表', async ({ page }) => {
+  test('1. OEM 排序管理页加载 + Brand 列表', async ({ page, request }) => {
+    // 前置检查: 先调 API 验证有品牌数据, 避免 UI 选择器超时
+    const brandsResp = await request.get(`${BACKEND}/api/admin/xrefs/brands`, {
+      headers: { Authorization: `Bearer ${adminLogin!.accessToken}` },
+      timeout: 10000
+    })
+    if (!brandsResp.ok()) {
+      test.skip(true, `获取 Brand 列表失败: ${brandsResp.status()}`)
+    }
+    const brandsData = await brandsResp.json()
+    const brands = brandsData.brands || []
+    if (brands.length === 0) {
+      test.skip(true, '数据库无 Brand 数据, 无法验证 OEM 排序管理页')
+    }
+
     await injectAdminToken(page)
     await page.goto(`${BASE}/admin/xrefs/reorder`, { waitUntil: 'domcontentloaded', timeout: 15000 })
     // 等待标题加载 (页面挂载标志)

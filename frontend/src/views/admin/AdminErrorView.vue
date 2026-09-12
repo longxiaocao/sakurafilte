@@ -323,7 +323,7 @@ onBeforeUnmount(() => {
             <pre class="text-[10px] p-2 hairline overflow-auto max-h-32 whitespace-pre-wrap break-all">{{ JSON.stringify(selected.extra, null, 2) }}</pre>
           </div>
           <div v-if="selected.breadcrumbs.length" class="mb-2">
-            <div class="text-xs text-muted mb-1">Breadcrumbs (最近 {{ selected.breadcrumbs.length }} 条)</div>
+            <div class="text-xs text-muted mb-1">{{ t('admin.errorview.string.breadcrumbs_label', { count: selected.breadcrumbs.length }) }}</div>
             <ul class="text-[10px] space-y-0.5">
               <!-- V24-F86 (P2-1): 复合 key 防同 timestamp 重复场景下 key 冲突 -->
               <li v-for="(b, i) in selected.breadcrumbs" :key="`${b.timestamp}-${i}`" class="flex gap-2">

@@ -240,7 +240,7 @@ onUnmounted(() => {
     dialog-title-edit-key="admin.machinesview.title.edit_machine_model"
     dialog-width="560px"
     dialog-label-width="120px"
-    :empty-text="t('admin.machinesview.string.add_machine_model') + t('dict.empty_start')"
+    :empty-text="t('admin.machinesview.string.add_machine_model') + ' ' + t('dict.empty_start')"
     :search-placeholder="t('common.field.search_any_field')"
     :create-button-text="t('admin.machinesview.string.add_machine_model')"
     :bulk-api="dictApi.machines"
@@ -310,7 +310,7 @@ onUnmounted(() => {
           maxlength="200"
           show-word-limit
         />
-        <div class="text-xs text-muted mt-1">3 字段组成 UNIQUE 索引, 任一字段可空</div>
+        <div class="text-xs text-muted mt-1">{{ t('admin.machinesview.string.unique_3_fields') }}</div>
       </el-form-item>
       <!-- P2.3: 分类下拉 (4 大类) -->
       <el-form-item :label="t('admin.machinesview.label.category')">

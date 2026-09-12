@@ -32,7 +32,8 @@ import type {
   MachineTreeNode,
   BatchBindRequest,
   BatchBindResponse,
-  SiteContent
+  SiteContent,
+  OrphanAppPage
 } from './types'
 
 // ===== JWT 鉴权 API (commit aff3ac3 后端 JWT 体系) =====
@@ -1077,6 +1078,19 @@ export const machineApi = {
 // P1 Task 3: re-export 类型, 供调用方 `import { type MachineTreeNode } from '@/api'` 使用
 //   (与 generated-types re-export 模式一致, 见 types.ts 文件末尾)
 export type { MachineTreeNode, BatchBindRequest, BatchBindResponse } from './types'
+
+// ===== V25: 孤儿机型管理 API =====
+export const orphanApi = {
+  list(page = 1, pageSize = 20, keyword?: string): Promise<OrphanAppPage> {
+    const params: Record<string, any> = { page, pageSize }
+    if (keyword) params.keyword = keyword
+    return http.get('/admin/apps/orphans', { params }).then((r) => r.data)
+  },
+  link(id: number, productId: number): Promise<{ linked: boolean; orphanId: number; productId: number; mr1: string }> {
+    return http.patch(`/admin/apps/orphan/${id}/link`, { productId }).then((r) => r.data)
+  }
+}
+export type { OrphanApp, OrphanAppPage, LinkOrphanRequest } from './types'
 
 
 // ===== SiteContent: 站点内容维护 (about/contact/news/站点名/logo) =====

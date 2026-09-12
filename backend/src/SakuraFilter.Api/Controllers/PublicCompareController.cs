@@ -91,7 +91,7 @@ public class PublicCompareController : ControllerBase
             select new { x.ProductId, x.Id, x.ProductName1, x.OemBrand, x.OemNo3, x.Oem2, x.SortOrder, x.MachineType, x.IsPublished, x.RowVersion })
             .ToListAsync(ct);
         var apps = await _db.MachineApplications.AsNoTracking()
-            .Where(m => matchedIds.Contains(m.ProductId))
+            .Where(m => m.ProductId.HasValue && matchedIds.Contains(m.ProductId.Value))
             .ToListAsync(ct);
 
         var result = new List<ProductDetailDto>();

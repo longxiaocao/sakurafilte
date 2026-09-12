@@ -2,7 +2,7 @@
 //   覆盖: 各页加载 + 核心 UI 元素存在 (不写数据)
 import { test, expect } from '@playwright/test'
 
-const BASE = process.env.BASE_URL || 'http://localhost:5173'
+const BASE = process.env.BASE_URL || 'http://localhost:5175'
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || 'dev-admin-token-rotate-in-prod-MZK4R9P3X6V2N7Q1L5F0B8H3C'
 
 async function injectAdminToken(page: import('@playwright/test').Page) {

@@ -12,8 +12,11 @@ export default {
         input_product_id_add: 'Input Product ID Add',
       },
       string: {
-
-
+        compare_title: 'Product Comparison',
+        only_diff: 'Only Show Differences',
+        clear_btn: 'Clear All',
+        print_btn: 'Print',
+        field_cell: 'Field',
         outer_carton: 'Outer Carton',
         outer_carton_pcs: 'Outer Carton/pcs',
         outer_carton_kg: 'Outer Carton Weight (kg)',
@@ -79,7 +82,8 @@ export default {
         e_g_isb_l: 'e.g.: ISB 4.5 L (可Empty)',
       },
       string: {
-
+        add_engine: 'Add Engine',
+        unique_2_fields: '2 fields form UNIQUE index, model is nullable',
       },
       success: {
 
@@ -142,9 +146,11 @@ export default {
         last_finished: 'Last Finished Result',
         dry_run: 'Recent dry-run Validation',
         recent_errors: 'Recent Errors (max 10)',
-        audit: 'Cancel Audit (aggregate by reason_code)'
-      ,reindex_confirm: 'Full Rebuild', total_cancelled: 'Total Cancelled', no_cancelled_records: 'No cancelled records'
+        audit: 'Cancel Audit (aggregate by reason_code)',
       },
+      reindex_confirm: 'Full Rebuild',
+      total_cancelled: 'Total Cancelled',
+      no_cancelled_records: 'No cancelled records',
       pipeline: {
         stage_read: 'Read',
         stage_staging: 'Staging',
@@ -464,7 +470,8 @@ export default {
         select: 'Select 4 大类之一',
       },
       string: {
-
+        add_machine_model: 'Add Machine Model',
+        unique_3_fields: '3 fields form UNIQUE index, any field nullable',
       },
       success: {
 
@@ -531,7 +538,7 @@ export default {
         e_g_m_m: 'e.g.: 5μm / 10μm (可Empty)',
       },
       string: {
-
+        add_media: 'Add Media',
       },
       success: {
 
@@ -609,11 +616,9 @@ export default {
         e_g: 'e.g.: 11427622448',
       },
       string: {
-
+        add_oem: 'Add OEM 3',
       },
       success: {
-
-
 
 
 
@@ -635,12 +640,21 @@ export default {
         refresh: 'Refresh 间隔',
       },
       string: {
+        total_requests: 'Total Requests',
+        error_rate_label: 'Error Rate',
+        sample_time: 'Sample Time',
+        health_probe: 'Health Probe',
+        current_token: 'Current Token',
+        source_data: 'Source Data',
+        operator: 'Operator',
+        token_not_found_auth: 'Token not found in auth config',
+        perf_ring_buffer_tip: 'Ring buffer: last {sec}s of samples',
         p_ms_ms_ms: 'P95 = {ms}ms (≥1000ms Critical)',
         p_ms_ms_ms_v2: 'P95 = {ms}ms (≥500ms Warning)',
         error_rate_pct_critical: 'Error Rate = {pct}% (≥10% Critical)',
         error_rate_pct_warning: 'Error Rate = {pct}% (≥5% Warning)',
 
-        en_v5: '[EN] 就绪',
+        en_v5: '[EN] Ready',
         downgrade: 'Downgrade',
 
         refresh_failed: 'Refresh Failed',
@@ -750,11 +764,7 @@ export default {
         e_g_oil_filter: 'e.g.: OIL FILTER',
       },
       string: {
-
-
-
-
-
+        add_product: 'Add Product 名 1',
       },
       success: {
 
@@ -789,7 +799,7 @@ export default {
         e_g_spin_on: 'e.g.: SPIN-ON',
       },
       string: {
-
+        add_product: 'Add Product 名 2',
       },
       success: {
 
@@ -1327,7 +1337,7 @@ export default {
     opsCenter: 'Ops Center',
     // 🔧 fix(审查): 运维中心 el-tabs label i18n
     opsview: {
-      tab: { etl: 'ETL Trigger & Monitor', perf: 'Performance', errors: 'Errors', api: 'API Docs', storage: 'Storage Config' }
+      tab: { etl: 'ETL Trigger & Monitor', perf: 'Performance', errors: 'Errors', api: 'API Docs', storage: 'Storage Config', orphans: 'Orphan Images' }
     },
     storage: {
       provider: 'Storage Provider',

@@ -19,7 +19,7 @@
 //   - Vue mount 验证用 waitForSelector 等待 #gallery-app / #compare-app / #inquiry-app
 import { test, expect } from '@playwright/test'
 
-const BASE = process.env.BASE_URL || 'http://localhost:5173'
+const BASE = process.env.BASE_URL || 'http://localhost:5175'
 
 test.describe('V2 Task 5.3.4: SEO URL 重定向 + Razor SSR + Vue mount', () => {
 

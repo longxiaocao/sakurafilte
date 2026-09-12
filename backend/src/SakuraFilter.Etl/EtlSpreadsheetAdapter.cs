@@ -13,15 +13,17 @@ public static class EtlSpreadsheetAdapter
     private static readonly IReadOnlyDictionary<string, string[]> SheetNames =
         new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
         {
-            ["products"] = new[] { "products", "产品区" },
-            ["xrefs"] = new[] { "xrefs", "oem区", "OEM区" },
-            ["apps"] = new[] { "apps", "机型区" }
+            ["products"] = new[] { "products", "产品区", "Sheet1" },
+            ["xrefs"] = new[] { "xrefs", "oem区", "OEM区", "Sheet1" },
+            ["apps"] = new[] { "apps", "机型区", "Sheet1" }
         };
 
     private static readonly IReadOnlyDictionary<string, string> HeaderMap =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["mr1"] = "mr_1", ["mr.1"] = "mr_1", ["mr_1"] = "mr_1",
+            // OEM NO.1 = oem_2 (客户 Excel 实际命名，非系统设计)
+            ["oemno1"] = "oem_2", ["oem1"] = "oem_2", ["oem_no_1"] = "oem_2",
             ["oemno2"] = "oem_2", ["oem2"] = "oem_2", ["oem_no_2"] = "oem_2",
             ["oemno3"] = "oem_no_3", ["oem3"] = "oem_no_3", ["oem_no_3"] = "oem_no_3",
             ["oembrand"] = "oem_brand", ["productname1"] = "product_name_1",
@@ -63,7 +65,7 @@ public static class EtlSpreadsheetAdapter
         var headerRow = sheet.FirstRowUsed() ?? throw new ArgumentException("XLSX 缺少表头行");
         var headers = headerRow.CellsUsed().ToDictionary(
             cell => cell.Address.ColumnNumber,
-            cell => MapHeader(cell.GetString()),
+            cell => MapHeader(cell.GetString(), normalizedEntity),
             EqualityComparer<int>.Default);
 
         await using var stream = new FileStream(outputPath, FileMode.CreateNew, FileAccess.Write, FileShare.None);
@@ -85,10 +87,13 @@ public static class EtlSpreadsheetAdapter
         return outputPath;
     }
 
-    private static string? MapHeader(string value)
+    private static string? MapHeader(string value, string entityType)
     {
         var normalized = new string(value.Trim().ToLowerInvariant().Where(char.IsLetterOrDigit).ToArray());
-        return HeaderMap.TryGetValue(normalized, out var mapped) ? mapped : normalized.Replace(" ", "_");
+        // Apps 专用映射优先: engine_brand 列名在客户 Excel 中实际表示 machine_brand
+        if (entityType == "apps" && normalized == "enginebrand") return "machine_brand";
+        if (HeaderMap.TryGetValue(normalized, out var mapped)) return mapped;
+        return normalized.Replace(" ", "_");
     }
 
     private static void ApplyCompatibilityFields(Dictionary<string, string?> record, string entityType)

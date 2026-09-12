@@ -81,6 +81,7 @@ const allNavItems = computed(() => {
     //   adv-compare 已移除 (对比内嵌高级搜索页, 独立页冗余)
     items.push(
       { key: 'ops', labelKey: 'nav.opsCenter', path: '/admin/ops', icon: 'Setting', priority: 9 },
+      { key: 'orphans', labelKey: 'nav.orphans', path: '/admin/orphans', icon: 'Warning', priority: 9.5 },
       { key: 'site', labelKey: 'nav.siteContent', path: '/admin/site-content', icon: 'Document', priority: 12.5 },
       { key: 'help', labelKey: 'nav.help', path: '/admin/help', icon: 'QuestionFilled', priority: 13 }
     )

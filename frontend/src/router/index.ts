@@ -261,6 +261,13 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/admin/AdminSiteContentView.vue'),
     meta: { title: '站点内容', requireAuth: true }
   },
+  // ===== V25: 孤儿机型管理 (ETL apps 导入 orphan 记录, product_id=NULL) =====
+  {
+    path: '/admin/orphans',
+    name: 'AdminOrphans',
+    component: () => import('@/views/admin/AdminOrphansView.vue'),
+    meta: { title: '孤儿机型管理', requireAuth: true }
+  },
   // ===== 需求 6: 前端优化 Demo 演示页 =====
   //   - 整合展示需求 1-5 的所有优化点
   //   - 提供产品详情页 3 种布局方案对比 (A/B/C)

@@ -155,12 +155,12 @@ async function findProductWithOem3(
   throw new Error('未找到带 crossReference (oemNo3) 的产品, 主图上传用例无法执行')
 }
 
-// 展开 el-collapse-item name="8" (图片区, 默认折叠)
+// 展开 el-tab-pane name="8" (图片区, 默认不激活)
 //   复用 admin-product-image-upload.spec.ts 模式
 async function expandImageSection(page: Page) {
-  const header = page.locator('.el-collapse-item__header').filter({ hasText: '图片' }).first()
-  await header.click()
-  // 等待折叠区内容可见 (input[type="file"] 出现)
+  const tabBtn = page.locator('.el-tabs__item').filter({ hasText: '图片' }).first()
+  await tabBtn.click()
+  // 等待图片区内容可见 (input[type="file"] 出现)
   await page.waitForSelector('input[type="file"]', { timeout: 5000 })
 }
 
@@ -489,11 +489,11 @@ test.describe.serial('产品乐观锁并发冲突 E2E (SakuraFilter)', () => {
         pageA.goto(editUrl, { waitUntil: 'domcontentloaded', timeout: 20000 }),
         pageB.goto(editUrl, { waitUntil: 'domcontentloaded', timeout: 20000 })
       ])
-      // 等待表单加载 (折叠区 header 出现)
-      await pageA.waitForSelector('.el-collapse-item__header', { timeout: 10000 })
-      await pageB.waitForSelector('.el-collapse-item__header', { timeout: 10000 })
+      // 等待表单加载 (el-tabs 渲染完成)
+      await pageA.waitForSelector('.el-tabs__item', { timeout: 10000 })
+      await pageB.waitForSelector('.el-tabs__item', { timeout: 10000 })
 
-      // 展开图片折叠区 (默认折叠, activeNames = ['1', '3', '5', '6'], 不含 '8')
+      // 展开图片 tab (name="8", 默认未激活)
       await expandImageSection(pageA)
       await expandImageSection(pageB)
 

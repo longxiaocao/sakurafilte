@@ -607,6 +607,7 @@ function statusTagType(s: string): 'success' | 'warning' | 'info' | 'danger' | '
               <el-checkbox v-model="form.cascade">cascade (清空关联表)</el-checkbox>
             </el-tooltip>
             <el-button
+              data-testid="etl-trigger-btn"
               type="primary"
               :loading="submitting"
               :disabled="status === 'running'"
@@ -623,6 +624,7 @@ function statusTagType(s: string): 'success' | 'warning' | 'info' | 'danger' | '
               {{ t('admin.etlview.buttontext.pause') }}
             </el-button>
             <el-button
+              data-testid="etl-cancel-btn"
               v-if="status === 'running'"
               type="danger"
               :loading="cancelling"

@@ -348,7 +348,7 @@ public class PublicSearchController : ControllerBase
                 .Select(m => m.ProductId)
                 .Take(5000)
                 .ToListAsync(ct);
-            var fuzzyIds = ids1.Concat(ids2).Concat(ids3).Distinct().OrderBy(x => x).Take(5000).ToList();
+            var fuzzyIds = ids1.Concat(ids2).Concat(ids3.Where(p => p.HasValue).Select(p => p.Value)).Distinct().OrderBy(x => x).Take(5000).ToList();
             // 任一来源达到上限即视为可能截断 (Take 结果最大 5000, ==5000 即命中边界; 保守标记语义 = "可能超限")
             fuzzyTruncated = ids1.Count >= 5000 || ids2.Count >= 5000 || ids3.Count >= 5000 || fuzzyIds.Count >= 5000;
             if (fuzzyIds.Count == 0)
@@ -481,8 +481,8 @@ public class PublicSearchController : ControllerBase
                 .ToListAsync(ct);
             brandMap = brandRows.ToDictionary(x => x.Id, x => x.Brand);
             var machineRows = await _db.MachineApplications.AsNoTracking()
-                .Where(m => rowIds.Contains(m.ProductId))
-                .GroupBy(m => m.ProductId)
+                .Where(m => m.ProductId.HasValue && rowIds.Contains(m.ProductId.Value))
+                .GroupBy(m => m.ProductId!.Value)
                 .Select(g => new { Id = g.Key, Mb = g.Select(x => x.MachineBrand).FirstOrDefault(), Eb = g.Select(x => x.EngineBrand).FirstOrDefault() })
                 .ToListAsync(ct);
             machineMap = machineRows.ToDictionary(x => x.Id, x => (x.Mb, x.Eb));

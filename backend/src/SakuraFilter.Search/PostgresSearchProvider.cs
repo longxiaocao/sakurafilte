@@ -227,8 +227,10 @@ public class PostgresSearchProvider : ISearchProvider
     UNION
     SELECT DISTINCT m.product_id
     FROM machine_applications m
-    WHERE m.machine_brand ILIKE '%' || {paramName} || '%' ESCAPE '\' OR
+    WHERE m.product_id IS NOT NULL AND (
+        m.machine_brand ILIKE '%' || {paramName} || '%' ESCAPE '\' OR
           m.machine_model ILIKE '%' || {paramName} || '%' ESCAPE '\'
+)
 )");
         }
 

@@ -50,7 +50,7 @@ import { execSync } from 'node:child_process'
 const BACKEND = process.env.BACKEND_URL || 'http://localhost:5148'
 const FRONTEND = process.env.BASE_URL || 'http://localhost:5175'
 const ADMIN_TOKEN =
-  process.env.ADMIN_TOKEN || 'dev-admin-token-rotate-in-prod-MZK4R9P3X6V2N7Q1L5F0B8H3C'
+  process.env.ADMIN_TOKEN || 'perf-import-token-not-for-production-use'
 const MEILI_CONTAINER = process.env.MEILI_CONTAINER || 'meilisearch'
 const SHOT_DIR = 'test-results'
 
@@ -214,10 +214,10 @@ async function mockProductGet(page: Page) {
   })
 }
 
-/** 展开 el-collapse-item "图片" 折叠区 (默认折叠) */
+/** 展开 el-tabs 中"图片"标签页 (tab name="8", tab-position="left") */
 async function expandImageSection(page: Page) {
   const header = page
-    .locator('.el-collapse-item__header')
+    .locator('.el-tabs__item')
     .filter({ hasText: '图片' })
     .first()
   await header.click()
@@ -584,8 +584,8 @@ test.describe.serial('Meili 降级 + 恶意文件上传 异常场景 E2E', () =>
     })
     await page.waitForTimeout(300)
 
-    // 点击"立即导入"按钮 (.el-form .el-button--primary, 触发 ElMessageBox.confirm)
-    const triggerBtn = page.locator('.el-form .el-button--primary').first()
+    // 点击"立即导入"按钮 (data-testid 精确匹配, 避免匹配下载模板按钮)
+    const triggerBtn = page.getByTestId('etl-trigger-btn')
     await triggerBtn.click()
 
     // 处理 ElMessageBox.confirm 二次确认 (点 primary 按钮)

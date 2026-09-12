@@ -43,7 +43,7 @@ public static class ServiceCollectionExtensions
         services.AddEtlServices(configuration);
         services.AddStorageServices(configuration);
         services.AddCorsServices(configuration);
-        services.AddRateLimitServices(configuration);
+        services.AddRateLimitServices(configuration, env);
         services.AddBusinessServices();
         services.AddHostedServices();
         services.AddInfrastructureSingletons(configuration, env);
@@ -250,6 +250,7 @@ public static class ServiceCollectionExtensions
             sp.GetRequiredService<IOptions<EtlOptions>>(),
             sp.GetRequiredService<IEtlProgressBroadcaster>()));
         services.AddSingleton<IEtlProgressBroadcaster, EtlProgressBroadcaster>();
+        services.AddSingleton<TypeaheadDictRebuildService>();
         return services;
     }
 
@@ -353,7 +354,7 @@ public static class ServiceCollectionExtensions
 
     // -------------------- 限流 --------------------
 
-    private static IServiceCollection AddRateLimitServices(this IServiceCollection services, IConfiguration configuration)
+    private static IServiceCollection AddRateLimitServices(this IServiceCollection services, IConfiguration configuration, IWebHostEnvironment env)
     {
         var rateLimitConfig = configuration.GetSection("RateLimit").Get<RateLimitOptions>()
             ?? new RateLimitOptions();
@@ -361,6 +362,10 @@ public static class ServiceCollectionExtensions
         {
             return services;
         }
+        // WHY 开发环境禁用登录限流: E2E 测试多个 workers 并发登录会触发 AuthPermitsPerMinute=5,
+        //   导致测试偶发 429 失败。生产环境仍保持严格限流防暴力破解。
+        bool isDev = env.IsDevelopment();
+
         services.AddRateLimiter(options =>
         {
             options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -409,16 +414,18 @@ public static class ServiceCollectionExtensions
                         QueueLimit = 0,
                         AutoReplenishment = true
                     }));
-            options.AddPolicy("auth", ctx =>
-                RateLimitPartition.GetFixedWindowLimiter(
-                    partitionKey: GetClientIp(ctx) ?? "unknown",
-                    factory: _ => new FixedWindowRateLimiterOptions
-                    {
-                        PermitLimit = rateLimitConfig.AuthPermitsPerMinute,
-                        Window = TimeSpan.FromMinutes(1),
-                        QueueLimit = 0,
-                        AutoReplenishment = true
-                    }));
+        // WHY: E2E 测试并发登录会触发 AuthPermitsPerMinute=5，Dev 时提高阈值避免 429
+        int authPermitLimit = isDev ? 999 : rateLimitConfig.AuthPermitsPerMinute;
+        options.AddPolicy("auth", ctx =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: GetClientIp(ctx) ?? "unknown",
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = authPermitLimit,
+                    Window = TimeSpan.FromMinutes(1),
+                    QueueLimit = 0,
+                    AutoReplenishment = true
+                }));
             // P1-2 F6: 公开路径限流 (120/min per IP)
             options.AddPolicy("public", ctx =>
                 RateLimitPartition.GetFixedWindowLimiter(

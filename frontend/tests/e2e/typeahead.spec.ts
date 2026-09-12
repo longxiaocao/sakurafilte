@@ -3,7 +3,7 @@
 //   依赖: 本地库有数据 (CI 空库无候选 → 跳过, 只验证请求不失败)
 import { test, expect } from '@playwright/test'
 
-const BASE = process.env.BASE_URL || 'http://localhost:5173'
+const BASE = process.env.BASE_URL || 'http://localhost:5175'
 
 async function injectZhLocale(page: import('@playwright/test').Page) {
   await page.addInitScript(() => {

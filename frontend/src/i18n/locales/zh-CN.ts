@@ -20,8 +20,11 @@ export default {
         input_product_id_add: '输入产品 ID 加入',
       },
       string: {
-
-
+        compare_title: '产品对比',
+        only_diff: '仅看差异',
+        clear_btn: '清空',
+        print_btn: '打印',
+        field_cell: '字段',
         outer_carton: '外箱',
         outer_carton_pcs: '外箱/件',
         outer_carton_kg: '外箱重 (kg)',
@@ -72,12 +75,8 @@ export default {
       error: {
 
 
-
-
-
       },
       label: {
-
 
 
       },
@@ -87,7 +86,8 @@ export default {
         e_g_isb_l: '例: ISB 4.5 L (可空)',
       },
       string: {
-
+        add_engine: '新增发动机',
+        unique_2_fields: '2 字段组成 UNIQUE 索引, 型号可空',
       },
       success: {
 
@@ -152,9 +152,11 @@ export default {
         dry_run: '最近 dry-run 校验',
         recent_errors: '最近错误 (最多 10 条)',
         row_errors: '导入失败明细 (行号定位, 最多 100 条)',
-        audit: '取消审计 (按 reason_code 聚合)'
-      ,reindex_confirm: '执行全量重建', total_cancelled: '总取消数', no_cancelled_records: '暂无取消记录'
+        audit: '取消审计 (按 reason_code 聚合)',
       },
+      reindex_confirm: '执行全量重建',
+      total_cancelled: '总取消数',
+      no_cancelled_records: '暂无取消记录',
       pipeline: {
         stage_read: '读取',
         stage_staging: '暂存',
@@ -471,7 +473,8 @@ export default {
         select: '选择 4 大类之一',
       },
       string: {
-
+        add_machine_model: '新增机型',
+        unique_3_fields: '3 字段组成 UNIQUE 索引, 任一字段可空',
       },
       success: {
 
@@ -524,8 +527,6 @@ export default {
 
 
 
-
-
       },
       label: {
         media_name: 'Media 名称',
@@ -538,7 +539,7 @@ export default {
         e_g_m_m: '例: 5μm / 10μm (可空)',
       },
       string: {
-
+        add_media: '新增介质',
       },
       success: {
 
@@ -616,7 +617,7 @@ export default {
         e_g: '例: 11427622448',
       },
       string: {
-
+        add_oem: '新增 OEM 3',
       },
       success: {
 
@@ -642,6 +643,15 @@ export default {
         refresh: '刷新间隔',
       },
       string: {
+        total_requests: '总请求数',
+        error_rate_label: '错误率',
+        sample_time: '采样时间',
+        health_probe: '健康探针',
+        current_token: '当前 Token',
+        source_data: '数据来源',
+        operator: '操作员',
+        token_not_found_auth: 'Auth 配置中未找到 Token',
+        perf_ring_buffer_tip: '环形缓冲区：最近 {sec}s 采样',
         p_ms_ms_ms: 'P95 = {ms}ms (≥1000ms 严重)',
         p_ms_ms_ms_v2: 'P95 = {ms}ms (≥500ms 警告)',
         error_rate_pct_critical: '错误率 = {pct}% (≥10% 严重)',
@@ -757,11 +767,7 @@ export default {
         e_g_oil_filter: '例: OIL FILTER',
       },
       string: {
-
-
-
-
-
+        add_product: '新增产品名 1',
       },
       success: {
 
@@ -786,7 +792,6 @@ export default {
 
 
 
-
       },
       label: {
 
@@ -796,7 +801,7 @@ export default {
         e_g_spin_on: '例: SPIN-ON',
       },
       string: {
-
+        add_product: '新增产品名 2',
       },
       success: {
 
@@ -869,8 +874,6 @@ export default {
 
 
 
-
-
       },
       label: {
 
@@ -880,8 +883,7 @@ export default {
         e_g_oil_fuel: '例: oil / fuel / air / cabin / others',
       },
       string: {
-
-
+        add_type: '新增 Type',
       },
       success: {
 
@@ -1337,7 +1339,7 @@ export default {
     opsCenter: '运维中心',
     // 🔧 fix(审查): 运维中心 el-tabs label i18n (原硬编码中文)
     opsview: {
-      tab: { etl: 'ETL 触发与监控', perf: '性能', errors: '错误', api: 'API 文档', storage: '存储配置' }
+      tab: { etl: 'ETL 触发与监控', perf: '性能', errors: '错误', api: 'API 文档', storage: '存储配置', orphans: '孤立图片' }
     },
     storage: {
       provider: '存储服务商',

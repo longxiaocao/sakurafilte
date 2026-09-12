@@ -9,6 +9,7 @@ import AdminPerfView from './AdminPerfView.vue'
 import AdminErrorView from './AdminErrorView.vue'
 import AdminApiDocsView from './AdminApiDocsView.vue'
 import AdminStorageView from './AdminStorageView.vue'
+import AdminOrphansView from './AdminOrphansView.vue'
 
 const { t } = useI18n()
 
@@ -37,6 +38,9 @@ if (typeof route.query.tab === 'string' && ['etl', 'perf', 'errors', 'api'].incl
       </el-tab-pane>
       <el-tab-pane :label="t('nav.opsview.tab.storage')" name="storage" lazy>
         <AdminStorageView />
+      </el-tab-pane>
+      <el-tab-pane :label="t('nav.opsview.tab.orphans')" name="orphans" lazy>
+        <AdminOrphansView />
       </el-tab-pane>
     </el-tabs>
   </div>

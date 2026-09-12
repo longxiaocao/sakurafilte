@@ -918,3 +918,24 @@ export interface NewsItem {
   body: string
   publishedAt: string
 }
+
+// V25: 孤儿机型记录 (product_id=NULL, 待客户手动关联到产品)
+export interface OrphanApp {
+  id: number
+  machineBrand?: string | null
+  machineModel?: string | null
+  modelName?: string | null
+  machineCategory?: string | null
+  createdAt: string
+}
+
+export interface OrphanAppPage {
+  total: number
+  page: number
+  pageSize: number
+  items: OrphanApp[]
+}
+
+export interface LinkOrphanRequest {
+  productId: number
+}
