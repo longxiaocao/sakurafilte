@@ -3,11 +3,18 @@
 //   依赖: 本地数据库有产品数据 (CI 空库会跳过列表验证, 只验证流程不白屏)
 //   注意: 只读操作, 不创建/修改/删除产品 (避免污染数据)
 import { test, expect } from '@playwright/test'
+// 🔧 fix(2026-09-13): 注入改用真实 JWT (旧 dev token 与后端 DevStaticToken 不匹配 → 401 跳登录)
+import { loginAsAdmin, injectAdminAuth, type AdminAuth } from './helpers/auth'
 
 const BASE = process.env.BASE_URL || 'http://localhost:5175'
-const ADMIN_TOKEN = process.env.ADMIN_TOKEN || 'perf-import-token-not-for-production-use'
 const ADMIN_USER = 'admin'
 const ADMIN_PWD = 'Admin@2026'
+
+// 模块级共享 JWT (beforeAll 登录一次)
+let adminAuth: AdminAuth | null = null
+test.beforeAll(async ({ request }) => {
+  adminAuth = await loginAsAdmin(request)
+})
 
 // v30-22: JWT 登录 (真实走后端 /api/auth/login) — 比注入旧 dev token 更稳定
 async function jwtLogin(page: import('@playwright/test').Page) {
@@ -23,13 +30,10 @@ async function jwtLogin(page: import('@playwright/test').Page) {
   await page.waitForURL(/\/admin\/products/, { timeout: 15000 }).catch(() => {})
 }
 
-// 兜底: 直接注入新 token (含 user 字段, 使 isAdmin() 返回 true)
+// 注入真实 JWT (含 user 字段, 使 isAdmin() 返回 true)
 async function injectAdminToken(page: import('@playwright/test').Page) {
-  await page.addInitScript((auth) => {
-    localStorage.setItem('sakura_locale', 'zh-CN')
-    localStorage.setItem('sakura_admin_token', auth.token)
-    localStorage.setItem('sakura_admin_auth', JSON.stringify(auth))
-  }, { token: ADMIN_TOKEN, user: { username: ADMIN_USER, role: 'admin' } })
+  if (!adminAuth) throw new Error('beforeAll 未执行')
+  await injectAdminAuth(page, adminAuth)
 }
 
 test.describe('P1-E2E-3 管理员产品管理流程 (用户视角)', () => {

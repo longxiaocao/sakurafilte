@@ -91,6 +91,24 @@ async function getColumnOrder(page: Page): Promise<string[]> {
   return page.locator('.product-cell a').allInnerTexts()
 }
 
+// 🔧 fix(2026-09-13 生产测试): 点击第一个结果卡片并等待跳转 /seo/。
+//   WHY 重试: 整轮并行测试高负载下, Vue 对 1000 条结果的大列表频繁 re-render (懒加载图/高亮),
+//     点击事件可能派发到刚被替换的旧 DOM 节点, @click 不触发 (偶发, 单跑 3 次全过、整轮跑失败率 ~50%)。
+//     先等"共 N 条"元信息出现 (渲染稳定信号) 再点击; 点击后轮询 URL, 未跳转则重试 (最多 3 次)。
+async function clickFirstCardAndWaitSeo(page: Page): Promise<void> {
+  // 渲染稳定信号: 顶部元信息"共 N 条"出现后才点击 (大列表 DOM 已完成首轮渲染)
+  await expect(page.getByText(/共\s*\d+\s*条/).first()).toBeVisible({ timeout: 10000 }).catch(() => {})
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    await page.locator('div[role="link"]').first().click()
+    try {
+      await page.waitForURL(/\/seo\//, { timeout: 10000 })
+      return
+    } catch {
+      if (attempt === 3) throw new Error(`点击结果卡片 ${attempt} 次后仍未跳转 /seo/ 详情页`)
+    }
+  }
+}
+
 test.describe.serial('真实搜索→详情→对比→列序持久化 E2E (用户视角)', () => {
   test('1. 聚合搜索 filter → 真实结果卡片 + OEM 信息', async ({ page }) => {
     await injectZhLocale(page)
@@ -139,12 +157,8 @@ test.describe.serial('真实搜索→详情→对比→列序持久化 E2E (用�
     await page.getByRole('button', { name: '搜索', exact: true }).click()
     await page.locator('img[alt$="产品主图"]').first().waitFor({ timeout: 15000 })
 
-    // 点击第一个搜索结果卡片 (viewDetail 用 window.location.href 整页跳转 SEO URL)
-    await Promise.all([
-      // 🔧 fix(审查): 统一 /seo/{oem} SPA 详情路径 (原 /products/ 四段走 Razor SSR 无 main.css 样式丢失)
-      page.waitForURL(/\/seo\//, { timeout: 20000 }),
-      page.locator('img[alt$="产品主图"]').first().click()
-    ])
+    // 🔧 fix(2026-09-13 生产测试): 统一走 clickFirstCardAndWaitSeo (渲染稳定 + 重试, 见 helper 注释)
+    await clickFirstCardAndWaitSeo(page)
 
     // 断言1: URL 为 /seo/:oem 格式 (V2 Task 4.4 SEO URL — 统一 SPA 详情)
     await expect(page).toHaveURL(/\/seo\/[^/]+/)
@@ -164,10 +178,8 @@ test.describe.serial('真实搜索→详情→对比→列序持久化 E2E (用�
     await page.getByRole('button', { name: '搜索', exact: true }).click()
     await page.locator('img[alt$="产品主图"]').first().waitFor({ timeout: 15000 })
 
-    await Promise.all([
-      page.waitForURL(/\/seo\//, { timeout: 20000 }),
-      page.locator('img[alt$="产品主图"]').first().click()
-    ])
+    // 🔧 fix(2026-09-13 生产测试): 与用例 2 同根因 (Vue 大列表 re-render 竞态), 统一走 helper
+    await clickFirstCardAndWaitSeo(page)
     await page.locator('h1').first().waitFor({ timeout: 15000 })
 
     // 详情页"加入对比"按钮 (SSR: CompareApp.vue button.compare-btn; SPA: el-button; 文案均为"加入对比")

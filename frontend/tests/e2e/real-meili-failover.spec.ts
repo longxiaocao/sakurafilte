@@ -45,14 +45,20 @@
 // ============================================================================
 
 import { test, expect, type Page, type APIRequestContext } from '@playwright/test'
+// 🔧 fix(2026-09-13): 注入改用真实 JWT (旧 dev token 与后端 DevStaticToken 不匹配 → 401 跳登录)
+import { loginAsAdmin, injectAdminAuth, type AdminAuth } from './helpers/auth'
 import { execSync } from 'node:child_process'
 
 const BACKEND = process.env.BACKEND_URL || 'http://localhost:5148'
 const FRONTEND = process.env.BASE_URL || 'http://localhost:5175'
-const ADMIN_TOKEN =
-  process.env.ADMIN_TOKEN || 'perf-import-token-not-for-production-use'
 const MEILI_CONTAINER = process.env.MEILI_CONTAINER || 'meilisearch'
 const SHOT_DIR = 'test-results'
+
+// 模块级共享 JWT (beforeAll 登录一次)
+let adminAuth: AdminAuth | null = null
+test.beforeAll(async ({ request }) => {
+  adminAuth = await loginAsAdmin(request)
+})
 
 // ===== 工具函数 =====
 
@@ -163,19 +169,10 @@ async function waitForMeiliUnhealthy(
   return false
 }
 
-/** 注入 admin token + 强制 zh-CN locale (与 real-etl-flow.spec.ts 一致) */
+/** 注入 admin JWT + 强制 zh-CN locale (真实 JWT, 与后端配置解耦) */
 async function injectAdminContext(page: Page) {
-  await page.addInitScript((token) => {
-    // 强制中文 (Playwright chromium 默认 en-US 会导致 i18n 走英文分支)
-    localStorage.setItem('sakura_locale', 'zh-CN')
-    // legacy token key
-    localStorage.setItem('sakura_admin_token', token)
-    // v30-22 新 key (JSON 格式, useAdminAuth 优先读)
-    localStorage.setItem(
-      'sakura_admin_auth',
-      JSON.stringify({ token, user: { username: 'admin', role: 'admin' } })
-    )
-  }, ADMIN_TOKEN)
+  if (!adminAuth) throw new Error('beforeAll 未执行')
+  await injectAdminAuth(page, adminAuth)
 }
 
 // 1x1 透明 PNG (正常上传场景占位图)

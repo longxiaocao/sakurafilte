@@ -77,6 +77,16 @@ public class UserService
             return null;
         }
 
+        // 锁定窗口已过期: 惰性重置失败计数与锁定时间。
+        // WHY: 若不重置, FailedLoginCount 仍为 5, 锁定过期后的下一次密码错误会立即再次触发锁定 (15min),
+        //   用户几乎无法恢复登录; 重置后需重新累计 5 次失败才会再次锁定。
+        if (user.LockedUntil is not null)
+        {
+            user.LockedUntil = null;
+            user.FailedLoginCount = 0;
+            await _db.SaveChangesAsync(ct);
+        }
+
         // BCrypt.Verify 验证密码 (BCrypt 内部已防时序攻击)
         // v30-23 P1 修复: hash 格式不兼容时 BCrypt.Verify 抛 SaltParseException 导致 500, 改为 try-catch 降级为密码不匹配
         bool passwordValid;

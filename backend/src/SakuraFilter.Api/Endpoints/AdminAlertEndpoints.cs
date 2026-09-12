@@ -21,9 +21,9 @@ public static class AdminAlertEndpoints
 {
     public static IEndpointRouteBuilder MapAdminAlertEndpoints(this IEndpointRouteBuilder app)
     {
+        // WHY: 权限细分 — 告警查看属监控 (viewer 可读), 规则修改/测试为运维操作 (仅 admin)
         var group = app.MapGroup("/api/admin/alerts")
             .WithTags("AdminAlerts")
-            .RequireAuthorization("Admin")
             .RequireRateLimiting("global");
 
         // 告警历史 (分页 + 过滤)
@@ -70,7 +70,8 @@ public static class AdminAlertEndpoints
                 offset,
                 items
             });
-        });
+        })
+        .RequireAuthorization("ReadOnly");
 
         // 单条详情
         group.MapGet("/history/{id:long}", async (long id, ProductDbContext db, CancellationToken ct) =>
@@ -92,7 +93,8 @@ public static class AdminAlertEndpoints
                 response = a.Response,
                 error = a.Error
             });
-        });
+        })
+        .RequireAuthorization("ReadOnly");
 
         // 7 日 KPI 统计
         group.MapGet("/stats", async (ProductDbContext db, CancellationToken ct) =>
@@ -126,7 +128,8 @@ public static class AdminAlertEndpoints
                 warn = 0,
                 info = 0
             });
-        });
+        })
+        .RequireAuthorization("ReadOnly");
 
         // 规则列表
         group.MapGet("/rules", async (ProductDbContext db, CancellationToken ct) =>
@@ -147,7 +150,8 @@ public static class AdminAlertEndpoints
                 r.CreatedAt,
                 r.UpdatedAt
             }));
-        });
+        })
+        .RequireAuthorization("ReadOnly");
 
         // 规则更新
         group.MapPut("/rules/{id:long}", async (
@@ -166,7 +170,8 @@ public static class AdminAlertEndpoints
             r.UpdatedAt = DateTimeOffset.UtcNow;
             await db.SaveChangesAsync(ct);
             return Results.Ok(new { success = true });
-        });
+        })
+        .RequireAuthorization("Admin");
 
         // 测试告警 (运维调试 webhook 配置)
         group.MapPost("/test", async (
@@ -197,7 +202,8 @@ public static class AdminAlertEndpoints
                 failedCount = r.FailedCount,
                 results = r.Results
             });
-        });
+        })
+        .RequireAuthorization("Admin");
 
         return app;
     }

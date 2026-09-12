@@ -46,7 +46,7 @@ public static class CommonEndpoints
         app.MapGet("/api/perf", (PerfMetrics metrics) =>
             Results.Ok(metrics.GetSnapshot()))
             .WithSummary("性能埋点快照 (P50/P95/P99, 最近 1000 条样本)").WithName("PerfSnapshot")
-            .RequireAuthorization("Admin")
+            .RequireAuthorization("ReadOnly")  // viewer 可查看监控 (user-manual.md)
             .WithOpenApi();
 
         // 性能告警列表
@@ -58,7 +58,7 @@ public static class CommonEndpoints
         app.MapGet("/api/admin/perf/alerts", (PerfAlertService alerts, int? limit) =>
             Results.Ok(alerts.GetRecentAlerts(limit ?? 50)))
             .WithSummary("性能告警列表 (按时间倒序, 运维面板用)").WithName("PerfAlerts")
-            .RequireAuthorization("Admin")
+            .RequireAuthorization("ReadOnly")
             .WithOpenApi();
 
         // v30-20: Meili 主路径性能快照 (P50/P95/P99 + FallbackRate)
@@ -69,7 +69,7 @@ public static class CommonEndpoints
         app.MapGet("/api/admin/perf/meili/snapshot", (MeiliSearchMetrics metrics) =>
             Results.Ok(metrics.GetSnapshot()))
             .WithSummary("Meili 主路径性能快照 (P50/P95/P99 + FallbackRate, 最近 1000 条样本)").WithName("PerfMeiliSnapshot")
-            .RequireAuthorization("Admin")
+            .RequireAuthorization("ReadOnly")
             .WithOpenApi();
 
         // 前端性能埋点批量上报
@@ -178,7 +178,7 @@ public static class CommonEndpoints
             });
         })
         .WithSummary("Auth Token 轮转状态查询 (current/previous 长度 + 轮转时间, 不暴露完整 token)").WithName("AdminAuthStatus")
-        .RequireAuthorization("Admin")
+        .RequireAuthorization("ReadOnly")
         .RequireRateLimiting("global");
         return app;
     }

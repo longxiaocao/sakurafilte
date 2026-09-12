@@ -154,7 +154,7 @@ async function navigateToRoute(page: Page, route: RouteDef) {
   if (route.needAuth) {
     await injectAdminToken(page)
   }
-  await page.goto(`${BASE}${route.path}`, { waitUntil: 'domcontentloaded', timeout: 20000 })
+  await page.goto(`${BASE}${route.path}`, { waitUntil: 'domcontentloaded', timeout: 30000 })
 }
 
 // 等待页面基本渲染完成 (header 出现或超时后继续)

@@ -17,8 +17,9 @@ public static class AdminMachineBatchBindEndpoints
 {
     public static IEndpointRouteBuilder MapAdminMachineBatchBindEndpoints(this IEndpointRouteBuilder app)
     {
+        // WHY: 批量绑定属产品-机型数据维护 (operator 职责, user-manual.md)
         var group = app.MapGroup("/api/admin/machine-apps").WithTags("AdminMachineApps")
-            .RequireAuthorization("Admin");  // V24-F19: spec F11 要求所有 /api/admin/* 端点必须 RequireAuthorization
+            .RequireAuthorization("Operator");
 
         // POST /api/admin/machine-apps/batch-bind
         group.MapPost("/batch-bind", async (

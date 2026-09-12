@@ -178,6 +178,11 @@ public static class ServiceCollectionExtensions
         {
             options.AddPolicy("Admin", p => p.RequireRole("admin"));
             options.AddPolicy("Operator", p => p.RequireRole("admin", "operator"));
+            // WHY: viewer 角色按 user-manual.md 定义为"只读浏览后台/查看监控/审计",
+            //      此前仅定义 Admin/Operator 策略, 所有后台端点 RequireAuthorization("Admin")
+            //      导致 viewer 完全无法访问任何后台端点 (前端只对用户管理页限制 admin, 其余页面登录即可见 → 前后端权限不一致)。
+            //      新增 ReadOnly 策略供纯读取端点使用。
+            options.AddPolicy("ReadOnly", p => p.RequireRole("admin", "operator", "viewer"));
         });
         return services;
     }

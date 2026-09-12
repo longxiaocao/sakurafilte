@@ -112,6 +112,10 @@ services:
       - Search__CursorHmacKey=${CURSOR_HMAC_KEY:-dev-cursor-hmac-key-rotate-in-prod-XYZ7K3P9Q2M5V8N1B4D6F0G2H}
       # 性能测试隔离开关: 默认 true (生产限流); 压测时 RATELIMIT_ENABLED=false 关闭以隔离搜索引擎延迟
       - RateLimit__Enabled=${RATELIMIT_ENABLED:-true}
+      # 本 compose 是开发/演示一键部署 (ASPNETCORE_ENVIRONMENT=Production 仅保证配置真实),
+      # 登录限流放宽到 999/min: E2E 多 worker 并行登录 + 联调频繁登录不会 429;
+      # 严格防暴力破解限流 (AuthPermitsPerMinute=5) 保留在 docker-compose.prod.yml
+      - RateLimit__AuthPermitsPerMinute=${RATE_LIMIT_AUTH_PERMITS_PER_MINUTE:-999}
       # JWT 认证签名密钥 (>=32 字符, 生产环境必须替换)
       - Jwt__SigningKey=${JWT_SIGNING_KEY:-dev-jwt-signing-key-do-not-use-in-prod-MZK4R9P3X6V2N7Q1L5F0B8H3C9D2E4}
       - Cors__AllowedOrigins__0=http://localhost

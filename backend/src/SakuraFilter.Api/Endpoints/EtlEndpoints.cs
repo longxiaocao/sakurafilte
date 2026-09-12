@@ -44,7 +44,7 @@ public static class EtlEndpoints
             return Results.Accepted(value: etl.Progress.ToJson());
         })
         .WithSummary("ETL 导入触发 (products/xrefs/apps, 统一入口, 路径白名单校验)").WithName("EtlImport")
-        .RequireAuthorization("Admin")  // v30-18 P0
+        .RequireAuthorization("Operator")  // v30-18 P0 安全: 防止任意 Bearer 触发导入; operator 负责 ETL 导入
         .RequireRateLimiting("etl")    // spec RateLimit: 30/min
         .WithOpenApi();
 
@@ -52,7 +52,7 @@ public static class EtlEndpoints
         app.MapGet("/api/etl/status", (EtlImportService etl) =>
             Results.Ok(etl.Progress.ToJson()))
         .WithSummary("ETL 导入进度查询 (实时 JSON, 含 current/total/elapsed/eta)").WithName("EtlStatus")
-        .RequireAuthorization("Admin")  // v30-18 P0
+        .RequireAuthorization("ReadOnly")  // v30-18 P0 安全; viewer 可查看进度
         .RequireRateLimiting("etl")    // spec RateLimit: 30/min
         .WithOpenApi();
 
@@ -71,7 +71,7 @@ public static class EtlEndpoints
             return Results.Accepted(value: etl.Progress.ToJson());
         })
         .WithSummary("ETL 导入 xrefs (兼容旧入口, 新调用走 /api/etl/import + entityType)").WithName("EtlImportXrefs")
-        .RequireAuthorization("Admin")  // v30-18 P0
+        .RequireAuthorization("Operator")  // v30-18 P0
         .RequireRateLimiting("etl")    // spec RateLimit: 30/min
         .WithOpenApi();
 
@@ -90,7 +90,7 @@ public static class EtlEndpoints
             return Results.Accepted(value: etl.Progress.ToJson());
         })
         .WithSummary("ETL 导入 apps (兼容旧入口, 新调用走 /api/etl/import + entityType)").WithName("EtlImportApps")
-        .RequireAuthorization("Admin")  // v30-18 P0
+        .RequireAuthorization("Operator")  // v30-18 P0
         .RequireRateLimiting("etl")    // spec RateLimit: 30/min
         .WithOpenApi();
 

@@ -30,6 +30,14 @@ export default defineConfig({
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] }
-    }
+    },
+    // 🔧 add(2026-09-13 生产测试): 跨浏览器兼容性 — ENABLE_CROSS_BROWSER=1 时启用 firefox/webkit
+    //   默认关闭: firefox/webkit 渲染差异可能引入 flaky, 仅生产部署测试/发布前手动开启
+    ...(process.env.ENABLE_CROSS_BROWSER === '1'
+      ? [
+          { name: 'firefox', use: { ...devices['Desktop Firefox'] } },
+          { name: 'webkit', use: { ...devices['Desktop Safari'] } }
+        ]
+      : [])
   ]
 })

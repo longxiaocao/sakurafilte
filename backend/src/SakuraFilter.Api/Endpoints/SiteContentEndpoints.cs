@@ -19,8 +19,8 @@ public static class SiteContentEndpoints
 
     public static void MapSiteContentEndpoints(this IEndpointRouteBuilder app)
     {
+        // WHY: 权限细分 — 站点内容读取 viewer 可读 (只读浏览后台), 编辑仅 admin (对外展示内容)
         var group = app.MapGroup(Prefix)
-            .RequireAuthorization("Admin")
             .WithTags("site-content");
 
         // GET 全部站点内容 (维护页加载)
@@ -33,7 +33,8 @@ public static class SiteContentEndpoints
             var data = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
             foreach (var k in Keys) data[k] = rows.FirstOrDefault(r => r.Key == k)?.Value;
             return Results.Ok(data);
-        }).WithSummary("读取站点内容 (about/contact/news/site_name/logo)").WithName("SiteContentGet");
+        }).WithSummary("读取站点内容 (about/contact/news/site_name/logo)").WithName("SiteContentGet")
+        .RequireAuthorization("ReadOnly");
 
         // PUT 更新全部站点内容 (维护页保存; 缺失的 key 用空串写入)
         group.MapPut("", async (Dictionary<string, string?> req, ProductDbContext db, CancellationToken ct) =>
@@ -56,7 +57,8 @@ public static class SiteContentEndpoints
             }
             await db.SaveChangesAsync(ct);
             return Results.Ok(new { ok = true });
-        }).WithSummary("更新站点内容").WithName("SiteContentPut");
+        }).WithSummary("更新站点内容").WithName("SiteContentPut")
+        .RequireAuthorization("Admin");
 
         // 公开只读聚合 (前台 About/News/Contact 页 + AppHeader 站点名/logo)
         app.MapGet("api/public/site-content", async (ProductDbContext db, CancellationToken ct) =>

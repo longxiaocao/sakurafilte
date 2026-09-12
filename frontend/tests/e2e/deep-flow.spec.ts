@@ -13,21 +13,25 @@
 //     - 截图存档供后续审查
 //     - 超时放宽到 20s (后端首次请求可能慢)
 import { test, expect, type Page } from '@playwright/test'
+// 🔧 fix(2026-09-13): 页面注入改用真实 JWT (旧 dev token 与后端 DevStaticToken 不匹配 → 401 跳登录)
+import { loginAsAdmin, injectAdminAuth, type AdminAuth } from './helpers/auth'
 
 const BASE = process.env.BASE_URL || 'http://localhost:5175'
-const ADMIN_TOKEN = process.env.ADMIN_TOKEN || 'perf-import-token-not-for-production-use'
 const ADMIN_USER = 'admin'
 const ADMIN_PWD = 'Admin@2026'
+
+// 模块级共享 JWT (beforeAll 登录一次, 供所有 describe 页面注入复用)
+let adminAuth: AdminAuth | null = null
+test.beforeAll(async ({ request }) => {
+  adminAuth = await loginAsAdmin(request)
+})
 
 // v30-22: 注入 admin token + 强制 zh-CN locale (Playwright chromium 默认 en-US 会导致按钮文案变 Login)
 //   WHY 同时注入 locale: i18n detectLocale() 检测顺序是 localStorage > navigator.language > zh-CN,
 //     Playwright chromium 默认 navigator.language=en-US, 加载 en-US 后 :has-text("登录") selector 失效
 async function injectAdminToken(page: Page) {
-  await page.addInitScript((token) => {
-    localStorage.setItem('sakura_admin_token', token)
-    // v30-22 修复: 强制 zh-CN, 让 i18n detectLocale 走 localStorage 分支
-    localStorage.setItem('sakura_locale', 'zh-CN')
-  }, ADMIN_TOKEN)
+  if (!adminAuth) throw new Error('beforeAll 未执行')
+  await injectAdminAuth(page, adminAuth)
 }
 
 // v30-22: 仅注入 locale (用于公开页面如 /login, 不需要 admin token)
@@ -120,7 +124,10 @@ test.describe('v30-22 深度 E2E: JWT 登录流程', () => {
     await page.goto(`${BASE}/login`, { waitUntil: 'domcontentloaded', timeout: 20000 })
     await page.waitForSelector('input[type="password"]', { timeout: 10000 })
     // 用 autocomplete 属性精准定位 (LoginView.vue 中 autocomplete="username"/"current-password")
-    await page.locator('input[autocomplete="username"]').fill('admin')
+    // 🔧 fix(2026-09-13): 改用不存在的用户测试失败提示
+    //   WHY: 用 admin + 错误密码会累计 admin 的 failed_login_count, 达 5 次触发账号锁定 (15min),
+    //     污染生产账号状态并导致后续测试登录失败; 不存在的用户不影响任何真实账号
+    await page.locator('input[autocomplete="username"]').fill('non-existent-user-e2e')
     await page.locator('input[autocomplete="current-password"]').fill('wrong-password-xxx')
     await page.locator('form .el-button--primary').first().click()
     // 等待错误提示 (ElMessage 或表单错误)
@@ -263,8 +270,9 @@ test.describe('v30-22 深度 E2E: 性能监控', () => {
   })
 
   test('5.3 /api/admin/perf/alerts 端点可访问 (v30-18 鉴权)', async ({ request }) => {
+    // 🔧 fix(2026-09-13): X-Admin-Token 依赖后端 DevStaticToken 一致, 改用 JWT Bearer 稳定
     const resp = await request.get(`http://localhost:5148/api/admin/perf/alerts?limit=10`, {
-      headers: { 'X-Admin-Token': ADMIN_TOKEN },
+      headers: { 'Authorization': `Bearer ${jwt}` },
       timeout: 10000
     })
     expect(resp.status()).toBe(200)
@@ -304,7 +312,11 @@ test.describe('v30-22 深度 E2E: 产品管理', () => {
     await page.waitForSelector('.el-form, form, .el-input', { timeout: 10000 })
     // 等待表单异步渲染完成 (字典数据加载后 MR.1/OEM2 等 el-input 才挂载)
     await page.waitForSelector('.el-input', { timeout: 8000 })
-    // 验证表单字段存在 (至少有 OEM 2 / MR.1 等核心字段)
+    // 🔧 fix(2026-09-13): 断言改为等待必填字段可见 (firefox 稳定)
+    //   WHY: 原 count() >= 3 断言依赖 .el-input 渲染数量, firefox 下异步渲染时序不同可能不足,
+    //     改为等待带 required rule 的 el-form-item (Element Plus 自动加 is-required class) 可见更稳定
+    const requiredField = page.locator('.el-form-item.is-required').first()
+    await expect(requiredField).toBeVisible({ timeout: 10000 })
     const inputCount = await page.locator('.el-input, input').count()
     expect(inputCount).toBeGreaterThanOrEqual(3)
     await page.screenshot({ path: 'test-results/deep-admin-product-form.png' })

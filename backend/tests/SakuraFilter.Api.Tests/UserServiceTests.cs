@@ -153,6 +153,42 @@ public class UserServiceTests
         (await db.LoginAuditLogs.SingleAsync()).FailureReason.Should().Be("locked");
     }
 
+    // 覆盖: P1-5 生产测试 — 锁定窗口过期后惰性重置失败计数, 防止"过期后单次失败立即再次锁定"
+    [Fact]
+    public async Task AuthenticateAsync_ExpiredLock_ResetsFailedCount_BeforePasswordCheck()
+    {
+        await using var db = CreateInMemoryDb();
+        db.Users.Add(User(failedCount: 5, lockedUntil: DateTimeOffset.UtcNow.AddMinutes(-1)));
+        await db.SaveChangesAsync();
+        var sut = CreateSut(db);
+
+        var result = await sut.AuthenticateAsync("tester", "Pass123!", "1.1.1.1", "UA", default);
+
+        // 锁定已过期 → 允许登录, 成功后计数保持 0 / 无锁定
+        result.Should().NotBeNull();
+        var user = await db.Users.SingleAsync();
+        user.FailedLoginCount.Should().Be(0);
+        user.LockedUntil.Should().BeNull();
+    }
+
+    // 覆盖: P1-5 生产测试 — 锁定过期后即使密码错误, 也只计 1 次失败而非立即重新锁定
+    [Fact]
+    public async Task AuthenticateAsync_ExpiredLock_WrongPassword_DoesNotRelockImmediately()
+    {
+        await using var db = CreateInMemoryDb();
+        db.Users.Add(User(failedCount: 5, lockedUntil: DateTimeOffset.UtcNow.AddMinutes(-1)));
+        await db.SaveChangesAsync();
+        var sut = CreateSut(db);
+
+        var result = await sut.AuthenticateAsync("tester", "WrongPwd", "1.1.1.1", "UA", default);
+
+        result.Should().BeNull();
+        var user = await db.Users.SingleAsync();
+        // 重置后从 0 计起: 单次错误只到 1, 不触发锁定
+        user.FailedLoginCount.Should().Be(1);
+        user.LockedUntil.Should().BeNull();
+    }
+
     [Fact]
     public async Task AuthenticateAsync_WrongPassword_IncrementsFailedCount()
     {

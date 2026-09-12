@@ -17,8 +17,10 @@ public static class AdminProductEndpoints
 {
     public static IEndpointRouteBuilder MapAdminProductEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/admin/products").WithTags("AdminProducts")
-            .RequireAuthorization("Admin");  // V24-F19: spec F11 要求所有 /api/admin/* 端点必须 RequireAuthorization
+        // WHY: 权限细分 (user-manual.md: operator=产品增删改, viewer=只读浏览后台)。
+        //      group 不设策略 (避免与端点级 RequireAuthorization AND 叠加导致 viewer 仍 403),
+        //      各端点按角色单独声明: ReadOnly=admin/operator/viewer, Operator=admin/operator, Admin=仅 admin。
+        var group = app.MapGroup("/api/admin/products").WithTags("AdminProducts");
 
         // 新增产品
         group.MapPost("/", async (ProductFormDto form, AdminProductService svc, HttpContext ctx, CancellationToken ct) =>
@@ -42,7 +44,8 @@ public static class AdminProductEndpoints
             catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
         })
-        .WithSummary("后台创建产品 (含 cross-references + machine-applications 嵌套创建)").WithName("AdminCreateProduct");
+        .WithSummary("后台创建产品 (含 cross-references + machine-applications 嵌套创建)").WithName("AdminCreateProduct")
+        .RequireAuthorization("Operator");
 
         // 列表
         group.MapGet("/", async (
@@ -57,7 +60,8 @@ public static class AdminProductEndpoints
                 page ?? 1, pageSize ?? 50, type, keyword, includeDiscontinued ?? false, ct);
             return Results.Ok(new { total, page = page ?? 1, pageSize = pageSize ?? 50, items });
         })
-        .WithSummary("后台产品列表 (支持搜索/筛选/排序/分页, 含 published/discontinued 状态)").WithName("AdminListProducts");
+        .WithSummary("后台产品列表 (支持搜索/筛选/排序/分页, 含 published/discontinued 状态)").WithName("AdminListProducts")
+        .RequireAuthorization("ReadOnly");
 
         // 高级搜索
         group.MapGet("/search", async (
@@ -92,7 +96,8 @@ public static class AdminProductEndpoints
                 return ProblemDetailsFactory.FromException(ctx, ex);
             }
         })
-        .WithSummary("后台产品搜索 (admin 用, 含下架, 8 字段)").WithName("AdminSearchProducts");
+        .WithSummary("后台产品搜索 (admin 用, 含下架, 8 字段)").WithName("AdminSearchProducts")
+        .RequireAuthorization("ReadOnly");
 
         // 批量对比
         group.MapPost("/compare", async (
@@ -106,7 +111,8 @@ public static class AdminProductEndpoints
             var items = await svc.CompareAsync(body.Ids, null, ct);
             return Results.Ok(new { count = items.Count, items });
         })
-        .WithSummary("后台产品对比 (admin 用, 不排除下架, 上限 6 个)").WithName("AdminCompareProducts");
+        .WithSummary("后台产品对比 (admin 用, 不排除下架, 上限 6 个)").WithName("AdminCompareProducts")
+        .RequireAuthorization("ReadOnly");
 
         // 详情
         group.MapGet("/{id:long}", async (long id, AdminProductService svc, AdminProductImageService imgSvc, HttpContext ctx, CancellationToken ct) =>
@@ -120,7 +126,8 @@ public static class AdminProductEndpoints
             }
             catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
         })
-        .WithSummary("后台产品详情 (含全部字段, 不排除下架)").WithName("AdminGetProduct");
+        .WithSummary("后台产品详情 (含全部字段, 不排除下架)").WithName("AdminGetProduct")
+        .RequireAuthorization("ReadOnly");
 
         // 更新
         group.MapPut("/{id:long}", async (long id, ProductFormDto form, AdminProductService svc, HttpContext ctx, CancellationToken ct) =>
@@ -154,7 +161,8 @@ public static class AdminProductEndpoints
             catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
         })
-        .WithSummary("后台更新产品 (xmin 乐观锁, 409 冲突)").WithName("AdminUpdateProduct");
+        .WithSummary("后台更新产品 (xmin 乐观锁, 409 冲突)").WithName("AdminUpdateProduct")
+        .RequireAuthorization("Operator");
 
         // 软删除
         group.MapDelete("/{id:long}", async (long id, AdminProductService svc, HttpContext ctx, CancellationToken ct) =>
@@ -168,7 +176,8 @@ public static class AdminProductEndpoints
             catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
         })
-        .WithSummary("后台软删除产品 (is_discontinued=true, 保留历史)").WithName("AdminDeleteProduct");
+        .WithSummary("后台软删除产品 (is_discontinued=true, 保留历史)").WithName("AdminDeleteProduct")
+        .RequireAuthorization("Operator");
 
         // 恢复
         group.MapPost("/{id:long}/restore", async (long id, AdminProductService svc, HttpContext ctx, CancellationToken ct) =>
@@ -182,7 +191,8 @@ public static class AdminProductEndpoints
             catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
         })
-        .WithSummary("后台恢复已下架产品 (is_discontinued=false)").WithName("AdminRestoreProduct");
+        .WithSummary("后台恢复已下架产品 (is_discontinued=false)").WithName("AdminRestoreProduct")
+        .RequireAuthorization("Operator");
 
         // V2 Task 3.2.5/3.2.8: 旧端点 POST /{id}/images/{slot} 拆为两个分层端点
         //   - POST /{mr1}/images/primary?oemNo3=...  (主图, slot=1)
@@ -227,6 +237,7 @@ public static class AdminProductEndpoints
         })
         .WithSummary("V2 上传主图 (slot=1, 按 OEM 3 命名, 唯一约束 uq_product_images_primary)")
         .WithName("AdminUploadPrimaryImage")
+        .RequireAuthorization("Operator")
         .DisableAntiforgery();
 
         // V2 详情图上传
@@ -261,6 +272,7 @@ public static class AdminProductEndpoints
         })
         .WithSummary("V2 上传详情图 (slot 2-6, 按 MR.1 命名, 唯一约束 uq_product_images_detail_slot)")
         .WithName("AdminUploadDetailImage")
+        .RequireAuthorization("Operator")
         .DisableAntiforgery();
 
         // V2 删除产品图 (按 mr1 + imageRole + slot)
@@ -280,12 +292,14 @@ public static class AdminProductEndpoints
             catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
         })
-        .WithName("AdminDeleteProductImage");
+        .WithName("AdminDeleteProductImage")
+        .RequireAuthorization("Operator");
 
         // V2 列出产品图 (按 mr1)
         group.MapGet("/{mr1}/images", async (string mr1, AdminProductImageService svc, CancellationToken ct) =>
             Results.Ok(await svc.ListAsync(mr1, ct)))
-        .WithName("AdminListProductImages");
+        .WithName("AdminListProductImages")
+        .RequireAuthorization("ReadOnly");
 
         group.MapPost("/images/import-folder", async (
             ImageFolderImportRequest body, AdminProductImageService svc, HttpContext ctx, CancellationToken ct) =>
@@ -301,7 +315,8 @@ public static class AdminProductEndpoints
             catch (DirectoryNotFoundException ex) { return Results.NotFound(new { error = ex.Message }); }
         })
         .WithSummary("按 OEM3-1 与 MR1-2..6 文件名批量导入图片")
-        .WithName("AdminImportProductImages");
+        .WithName("AdminImportProductImages")
+        .RequireAuthorization("Operator");
 
         // 变更历史
         group.MapGet("/{id:long}/history", async (
@@ -338,6 +353,7 @@ public static class AdminProductEndpoints
             catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
         })
         .WithName("AdminGetProductHistory")
+        .RequireAuthorization("ReadOnly")
         .RequireRateLimiting("global");
 
         return app;

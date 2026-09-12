@@ -27,6 +27,8 @@
 //   - 网络断开重连: setOffline(true) → fetch 抛错 → 1s 后第一次重连 (computeReconnectDelay(1)=1000ms)
 
 import { test, expect, type Page } from '@playwright/test'
+// 🔧 fix(2026-09-13): 注入改用真实 JWT (旧 dev token 与后端 DevStaticToken 不匹配 → 401 跳登录)
+import { loginAsAdmin, injectAdminAuth, type AdminAuth } from './helpers/auth'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -36,8 +38,9 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 const BASE = process.env.BASE_URL || 'http://localhost:5175'
-// 与 admin-products-flow.spec.ts / deep-flow.spec.ts 一致的 dev token
-const ADMIN_TOKEN = process.env.ADMIN_TOKEN || 'perf-import-token-not-for-production-use'
+
+// 模块级共享 JWT (beforeAll 登录一次, 供页面注入 + fetchEtlStatus API 调用)
+let adminAuth: AdminAuth | null = null
 
 // 测试数据目录 (相对 playwright testDir)
 const FIXTURES_DIR = path.resolve(__dirname, '..', '..', 'test-results', 'fixtures')
@@ -47,8 +50,10 @@ const SERVER_JSONL_PATH = 'D:/data/sakurafilter/products.jsonl'
 
 const SHOT_DIR = 'test-results'
 
-// ===== 前置准备: 创建占位 xlsx 文件 (供 DataTransfer 拖拽模拟) =====
-test.beforeAll(async () => {
+// ===== 前置准备: 共享 JWT 登录 + 创建占位 xlsx 文件 (供 DataTransfer 拖拽模拟) =====
+test.beforeAll(async ({ request }) => {
+  // 🔧 fix(2026-09-13): 真实 JWT 登录 (旧 dev token 401 导致 ETL 页跳登录)
+  adminAuth = await loginAsAdmin(request)
   fs.mkdirSync(FIXTURES_DIR, { recursive: true })
   // 写一个最小有效 zip 头 (xlsx 本质是 zip), 仅用于 page.dispatchEvent DataTransfer
   // WHY: 浏览器 File 构造需要真实 Blob, 内容无关紧要 (代码只取 file.name)
@@ -64,20 +69,10 @@ test.beforeAll(async () => {
 
 // ===== 工具函数 =====
 
-// 注入 admin token + 强制 zh-CN locale (与 deep-flow.spec.ts 一致)
-//   WHY 同时注入两个 key: v30-22 后 useAdminAuth 用 'sakura_admin_auth' (JSON), 但 legacy 'sakura_admin_token' 仍兼容
+// 注入 admin JWT + 强制 zh-CN locale (useAdminAuth 新 key, 与 helper 统一)
 async function injectAdminContext(page: Page) {
-  await page.addInitScript((token) => {
-    // 强制 zh-CN (Playwright chromium 默认 en-US 会导致 i18n 检测走英文分支)
-    localStorage.setItem('sakura_locale', 'zh-CN')
-    // legacy token
-    localStorage.setItem('sakura_admin_token', token)
-    // v30-22 新 key (JSON 格式)
-    localStorage.setItem('sakura_admin_auth', JSON.stringify({
-      token,
-      user: { username: 'admin', role: 'admin' }
-    }))
-  }, ADMIN_TOKEN)
+  if (!adminAuth) throw new Error('beforeAll 未执行')
+  await injectAdminAuth(page, adminAuth)
 }
 
 // 通过 API 获取当前 ETL 任务状态 (供测试判定 running/idle/completed/paused)
@@ -107,9 +102,10 @@ async function fetchEtlStatus(page: Page): Promise<{
 
 // 因为 page.evaluate 拿不到闭包变量, 注入 token 到 window 供 fetch 使用
 async function injectAdminTokenToWindow(page: Page) {
+  if (!adminAuth) throw new Error('beforeAll 未执行')
   await page.addInitScript((token) => {
     ;(window as any).__adminToken = token
-  }, ADMIN_TOKEN)
+  }, adminAuth.token)
 }
 
 // 模拟拖拽文件到 document 触发 useGlobalDragDrop (document.dragenter → dragover → drop)
@@ -485,10 +481,11 @@ test.describe.serial('P1-E2E-ETL 真实 ETL 全流程 (拖拽 + SSE + 暂停/恢
 
     // 步骤 2: 死信队列走 API 验证 (前端无死信队列页面, 仅后端 GET /api/admin/dead-letter)
     //   WHY 走 API: 前端无 /admin/dead-letter 路由, 死信队列仅在后端 API 暴露
+    // 🔧 fix(2026-09-13): ADMIN_TOKEN 未定义 → 改用共享 JWT (adminAuth.token), Bearer 为标准认证
+    if (!adminAuth) throw new Error('beforeAll 未执行: adminAuth 为空')
     const deadLetterResp = await request.get(`${BASE}/api/admin/dead-letter`, {
       headers: {
-        'X-Admin-Token': ADMIN_TOKEN,
-        'Authorization': `Bearer ${ADMIN_TOKEN}`
+        'Authorization': `Bearer ${adminAuth.token}`
       },
       timeout: 10000
     })

@@ -24,8 +24,9 @@ public static class DictionaryEndpoints
 {
     public static IEndpointRouteBuilder MapDictionaryEndpoints(this IEndpointRouteBuilder app)
     {
+        // WHY: 权限细分 (user-manual.md: operator=字典维护, viewer=只读浏览)。
+        //      group 不设策略 (避免端点级 AND 叠加), 各端点按角色单独声明。
         var group = app.MapGroup("/api/admin/dict").WithTags("AdminDict")
-            .RequireAuthorization("Admin")  // V24-F19: spec F11
             .RequireRateLimiting("global");
 
         MapOemBrandEndpoints(group);
@@ -54,7 +55,7 @@ public static class DictionaryEndpoints
             var items = await svc.ListOemBrandsAsync(q, includeDeleted ?? false, limit, ct);
             var total = await svc.CountAsync(q, includeDeleted ?? false, ct);
             return Results.Ok(new { total, count = items.Count, items });
-        }).WithName("AdminListOemBrands");
+        }).WithName("AdminListOemBrands").RequireAuthorization("ReadOnly");
 
         g.MapGet("/typeahead", async (
             [FromQuery] string? q, [FromQuery] int? limit,
@@ -62,7 +63,7 @@ public static class DictionaryEndpoints
         {
             var items = await svc.TypeaheadOemBrandsAsync(q, limit, ct);
             return Results.Ok(new { count = items.Count, items });
-        }).WithName("AdminTypeaheadOemBrands");
+        }).WithName("AdminTypeaheadOemBrands").RequireAuthorization("ReadOnly");
 
         g.MapPost("/", async (
             OemBrandCreateRequest body, OemBrandDictService svc, HttpContext ctx, CancellationToken ct) =>
@@ -76,7 +77,7 @@ public static class DictionaryEndpoints
             }
             catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
-        }).WithName("AdminCreateOemBrand");
+        }).WithName("AdminCreateOemBrand").RequireAuthorization("Operator");
 
         // 🔧 fix(审查): 批量导出 CSV — 用户反馈: 无数据导入导出入口, 只能逐个添加
         g.MapGet("/export", async (OemBrandDictService svc, CancellationToken ct) =>
@@ -93,14 +94,14 @@ public static class DictionaryEndpoints
                 sb.AppendLine($"{brand},{it.SortOrder},{(it.DeletedAt == null ? 0 : 1)}");
             }
             return Results.Text(sb.ToString(), "text/csv; charset=utf-8");
-        }).WithName("AdminExportOemBrands");
+        }).WithName("AdminExportOemBrands").RequireAuthorization("ReadOnly");
         // 🔧 fix(审查): XLSX 导出 (双格式 — ClosedXML, 前导零/长数字零风险)
         g.MapGet("/export-xlsx", async (OemBrandDictService svc, CancellationToken ct) =>
         {
             var items = await svc.ListOemBrandsAsync(null, true, 100000, ct);
             return ExportDictXlsx(items, new[] { "brand", "sortOrder", "deleted" },
                 x => new object?[] { x.Brand, x.SortOrder, x.DeletedAt == null ? 0 : 1 });
-        }).WithName("AdminExportOemBrandsXlsx");
+        }).WithName("AdminExportOemBrandsXlsx").RequireAuthorization("ReadOnly");
 
         // 🔧 fix(审查): 批量导入 CSV — 格式: brand[,sortOrder[,deleted]] 每行一个品牌
         //   deleted=1 时软删该品牌 (不硬删, 与现有字典删除策略一致)
@@ -112,10 +113,10 @@ public static class DictionaryEndpoints
             var rows = body.Csv.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                 .Select(l => l.Split(',')).ToList();
             return await ImportOemBrandRows(rows, svc, ct);
-        }).WithName("AdminImportOemBrands");
+        }).WithName("AdminImportOemBrands").RequireAuthorization("Operator");
         // 🔧 fix(审查): XLSX 批量导入 (双格式 — 复用行级处理, 解析后与 CSV 同逻辑)
         g.MapPost("/import-xlsx", async (IFormFile file, OemBrandDictService svc, CancellationToken ct) =>
-            await ImportOemBrandRows(ParseXlsxRows(file), svc, ct)).DisableAntiforgery().WithName("AdminImportOemBrandsXlsx");
+            await ImportOemBrandRows(ParseXlsxRows(file), svc, ct)).DisableAntiforgery().WithName("AdminImportOemBrandsXlsx").RequireAuthorization("Operator");
 
         g.MapPut("/{id:long}", async (
             long id, OemBrandUpdateRequest body, OemBrandDictService svc, HttpContext ctx, CancellationToken ct) =>
@@ -124,21 +125,21 @@ public static class DictionaryEndpoints
             catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
-        }).WithName("AdminUpdateOemBrand");
+        }).WithName("AdminUpdateOemBrand").RequireAuthorization("Operator");
 
         g.MapDelete("/{id:long}", async (long id, OemBrandDictService svc, HttpContext ctx, CancellationToken ct) =>
         {
             try { await svc.DeleteOemBrandAsync(id, ct); return Results.Ok(new { id, deleted = true }); }
             catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
-        }).WithName("AdminDeleteOemBrand");
+        }).WithName("AdminDeleteOemBrand").RequireAuthorization("Operator");
 
         g.MapPost("/{id:long}/restore", async (long id, OemBrandDictService svc, HttpContext ctx, CancellationToken ct) =>
         {
             try { return Results.Ok(await svc.RestoreOemBrandAsync(id, ct)); }
             catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
-        }).WithName("AdminRestoreOemBrand");
+        }).WithName("AdminRestoreOemBrand").RequireAuthorization("Operator");
 
         g.MapPost("/reorder", async (
             OemBrandReorderRequest body, OemBrandDictService svc, HttpContext ctx, CancellationToken ct) =>
@@ -146,7 +147,7 @@ public static class DictionaryEndpoints
             try { await svc.ReorderOemBrandsAsync(body.Items, ct); return Results.Ok(new { updated = body.Items?.Count ?? 0 }); }
             catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
-        }).WithName("AdminReorderOemBrands");
+        }).WithName("AdminReorderOemBrands").RequireAuthorization("Operator");
     }
 
     // -------------------- Product Name 1 --------------------
@@ -399,7 +400,7 @@ public static class DictionaryEndpoints
             var items = await svc.ListProductName1sAsync(q, includeDeleted ?? false, limit, ct);
             var total = await svc.CountAsync(q, includeDeleted ?? false, ct);
             return Results.Ok(new { total, count = items.Count, items });
-        }).WithName("AdminListProductName1s");
+        }).WithName("AdminListProductName1s").RequireAuthorization("ReadOnly");
 
         g.MapGet("/typeahead", async (
             [FromQuery] string? q, [FromQuery] int? limit,
@@ -407,7 +408,7 @@ public static class DictionaryEndpoints
         {
             var items = await svc.TypeaheadProductName1sAsync(q, limit, ct);
             return Results.Ok(new { count = items.Count, items });
-        }).WithName("AdminTypeaheadProductName1s");
+        }).WithName("AdminTypeaheadProductName1s").RequireAuthorization("ReadOnly");
 
         g.MapPost("/", async (
             ProductName1CreateRequest body, ProductName1DictService svc, HttpContext ctx, CancellationToken ct) =>
@@ -417,18 +418,18 @@ public static class DictionaryEndpoints
                 return Results.Created($"/api/admin/dict/product-name1s/{item.Id}", item); }
             catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
-        }).WithName("AdminCreateProductName1");
+        }).WithName("AdminCreateProductName1").RequireAuthorization("Operator");
         g.MapGet("/export", async (ProductName1DictService svc, CancellationToken ct) =>
-            await ExportDictCsv(svc, x => x.ProductName1, x => x.SortOrder, x => x.DeletedAt, ct)).WithName("AdminExportProductName1s");
+            await ExportDictCsv(svc, x => x.ProductName1, x => x.SortOrder, x => x.DeletedAt, ct)).WithName("AdminExportProductName1s").RequireAuthorization("ReadOnly");
         g.MapGet("/export-xlsx", async (ProductName1DictService svc, CancellationToken ct) =>
         {
             var items = await svc.ListAsync(null, true, 100000, ct);
             return ExportDictXlsx(items, new[] { "value", "sortOrder", "deleted" }, x => new object?[] { x.ProductName1, x.SortOrder, x.DeletedAt == null ? 0 : 1 });
-        }).WithName("AdminExportProductName1sXlsx");
+        }).WithName("AdminExportProductName1sXlsx").RequireAuthorization("ReadOnly");
         g.MapPost("/import", async (ImportCsvRequest body, ProductName1DictService svc, CancellationToken ct) =>
-            await ImportDictCsv<DictProductName1>(body.Csv, svc, x => x.ProductName1, x => x.DeletedAt, x => x.Id, ct)).WithName("AdminImportProductName1s");
+            await ImportDictCsv<DictProductName1>(body.Csv, svc, x => x.ProductName1, x => x.DeletedAt, x => x.Id, ct)).WithName("AdminImportProductName1s").RequireAuthorization("Operator");
         g.MapPost("/import-xlsx", async (IFormFile file, ProductName1DictService svc, CancellationToken ct) =>
-            await ImportDictRows(ParseXlsxRows(file), svc, x => x.ProductName1, x => x.DeletedAt, x => x.Id, ct)).DisableAntiforgery().WithName("AdminImportProductName1sXlsx");
+            await ImportDictRows(ParseXlsxRows(file), svc, x => x.ProductName1, x => x.DeletedAt, x => x.Id, ct)).DisableAntiforgery().WithName("AdminImportProductName1sXlsx").RequireAuthorization("Operator");
 
         g.MapPut("/{id:long}", async (
             long id, ProductName1UpdateRequest body, ProductName1DictService svc, HttpContext ctx, CancellationToken ct) =>
@@ -437,21 +438,21 @@ public static class DictionaryEndpoints
             catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
-        }).WithName("AdminUpdateProductName1");
+        }).WithName("AdminUpdateProductName1").RequireAuthorization("Operator");
 
         g.MapDelete("/{id:long}", async (long id, ProductName1DictService svc, HttpContext ctx, CancellationToken ct) =>
         {
             try { await svc.DeleteProductName1Async(id, ct); return Results.Ok(new { id, deleted = true }); }
             catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
-        }).WithName("AdminDeleteProductName1");
+        }).WithName("AdminDeleteProductName1").RequireAuthorization("Operator");
 
         g.MapPost("/{id:long}/restore", async (long id, ProductName1DictService svc, HttpContext ctx, CancellationToken ct) =>
         {
             try { return Results.Ok(await svc.RestoreProductName1Async(id, ct)); }
             catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
-        }).WithName("AdminRestoreProductName1");
+        }).WithName("AdminRestoreProductName1").RequireAuthorization("Operator");
 
         g.MapPost("/reorder", async (
             ProductName1ReorderRequest body, ProductName1DictService svc, HttpContext ctx, CancellationToken ct) =>
@@ -459,7 +460,7 @@ public static class DictionaryEndpoints
             try { await svc.ReorderProductName1sAsync(body.Items, ct); return Results.Ok(new { updated = body.Items?.Count ?? 0 }); }
             catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
-        }).WithName("AdminReorderProductName1s");
+        }).WithName("AdminReorderProductName1s").RequireAuthorization("Operator");
     }
 
     // -------------------- Product Name 2 --------------------
@@ -474,7 +475,7 @@ public static class DictionaryEndpoints
             var items = await svc.ListProductName2sAsync(q, includeDeleted ?? false, limit, ct);
             var total = await svc.CountAsync(q, includeDeleted ?? false, ct);
             return Results.Ok(new { total, count = items.Count, items });
-        }).WithName("AdminListProductName2s");
+        }).WithName("AdminListProductName2s").RequireAuthorization("ReadOnly");
 
         g.MapGet("/typeahead", async (
             [FromQuery] string? q, [FromQuery] int? limit,
@@ -482,7 +483,7 @@ public static class DictionaryEndpoints
         {
             var items = await svc.TypeaheadProductName2sAsync(q, limit, ct);
             return Results.Ok(new { count = items.Count, items });
-        }).WithName("AdminTypeaheadProductName2s");
+        }).WithName("AdminTypeaheadProductName2s").RequireAuthorization("ReadOnly");
 
         g.MapPost("/", async (
             ProductName2CreateRequest body, ProductName2DictService svc, HttpContext ctx, CancellationToken ct) =>
@@ -492,18 +493,18 @@ public static class DictionaryEndpoints
                 return Results.Created($"/api/admin/dict/product-name2s/{item.Id}", item); }
             catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
-        }).WithName("AdminCreateProductName2");
+        }).WithName("AdminCreateProductName2").RequireAuthorization("Operator");
         g.MapGet("/export", async (ProductName2DictService svc, CancellationToken ct) =>
-            await ExportDictCsv(svc, x => x.ProductName2, x => x.SortOrder, x => x.DeletedAt, ct)).WithName("AdminExportProductName2s");
+            await ExportDictCsv(svc, x => x.ProductName2, x => x.SortOrder, x => x.DeletedAt, ct)).WithName("AdminExportProductName2s").RequireAuthorization("ReadOnly");
         g.MapGet("/export-xlsx", async (ProductName2DictService svc, CancellationToken ct) =>
         {
             var items = await svc.ListAsync(null, true, 100000, ct);
             return ExportDictXlsx(items, new[] { "value", "sortOrder", "deleted" }, x => new object?[] { x.ProductName2, x.SortOrder, x.DeletedAt == null ? 0 : 1 });
-        }).WithName("AdminExportProductName2sXlsx");
+        }).WithName("AdminExportProductName2sXlsx").RequireAuthorization("ReadOnly");
         g.MapPost("/import", async (ImportCsvRequest body, ProductName2DictService svc, CancellationToken ct) =>
-            await ImportDictCsv<DictProductName2>(body.Csv, svc, x => x.ProductName2, x => x.DeletedAt, x => x.Id, ct)).WithName("AdminImportProductName2s");
+            await ImportDictCsv<DictProductName2>(body.Csv, svc, x => x.ProductName2, x => x.DeletedAt, x => x.Id, ct)).WithName("AdminImportProductName2s").RequireAuthorization("Operator");
         g.MapPost("/import-xlsx", async (IFormFile file, ProductName2DictService svc, CancellationToken ct) =>
-            await ImportDictRows(ParseXlsxRows(file), svc, x => x.ProductName2, x => x.DeletedAt, x => x.Id, ct)).DisableAntiforgery().WithName("AdminImportProductName2sXlsx");
+            await ImportDictRows(ParseXlsxRows(file), svc, x => x.ProductName2, x => x.DeletedAt, x => x.Id, ct)).DisableAntiforgery().WithName("AdminImportProductName2sXlsx").RequireAuthorization("Operator");
 
         g.MapPut("/{id:long}", async (
             long id, ProductName2UpdateRequest body, ProductName2DictService svc, HttpContext ctx, CancellationToken ct) =>
@@ -512,21 +513,21 @@ public static class DictionaryEndpoints
             catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
-        }).WithName("AdminUpdateProductName2");
+        }).WithName("AdminUpdateProductName2").RequireAuthorization("Operator");
 
         g.MapDelete("/{id:long}", async (long id, ProductName2DictService svc, HttpContext ctx, CancellationToken ct) =>
         {
             try { await svc.DeleteProductName2Async(id, ct); return Results.Ok(new { id, deleted = true }); }
             catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
-        }).WithName("AdminDeleteProductName2");
+        }).WithName("AdminDeleteProductName2").RequireAuthorization("Operator");
 
         g.MapPost("/{id:long}/restore", async (long id, ProductName2DictService svc, HttpContext ctx, CancellationToken ct) =>
         {
             try { return Results.Ok(await svc.RestoreProductName2Async(id, ct)); }
             catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
-        }).WithName("AdminRestoreProductName2");
+        }).WithName("AdminRestoreProductName2").RequireAuthorization("Operator");
 
         g.MapPost("/reorder", async (
             ProductName2ReorderRequest body, ProductName2DictService svc, HttpContext ctx, CancellationToken ct) =>
@@ -534,7 +535,7 @@ public static class DictionaryEndpoints
             try { await svc.ReorderProductName2sAsync(body.Items, ct); return Results.Ok(new { updated = body.Items?.Count ?? 0 }); }
             catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
-        }).WithName("AdminReorderProductName2s");
+        }).WithName("AdminReorderProductName2s").RequireAuthorization("Operator");
     }
 
     // -------------------- Type --------------------
@@ -549,7 +550,7 @@ public static class DictionaryEndpoints
             var items = await svc.ListTypesAsync(q, includeDeleted ?? false, limit, ct);
             var total = await svc.CountAsync(q, includeDeleted ?? false, ct);
             return Results.Ok(new { total, count = items.Count, items });
-        }).WithName("AdminListTypes");
+        }).WithName("AdminListTypes").RequireAuthorization("ReadOnly");
 
         g.MapGet("/typeahead", async (
             [FromQuery] string? q, [FromQuery] int? limit,
@@ -557,7 +558,7 @@ public static class DictionaryEndpoints
         {
             var items = await svc.TypeaheadTypesAsync(q, limit, ct);
             return Results.Ok(new { count = items.Count, items });
-        }).WithName("AdminTypeaheadTypes");
+        }).WithName("AdminTypeaheadTypes").RequireAuthorization("ReadOnly");
 
         g.MapPost("/", async (
             TypeCreateRequest body, TypeDictService svc, HttpContext ctx, CancellationToken ct) =>
@@ -567,18 +568,18 @@ public static class DictionaryEndpoints
                 return Results.Created($"/api/admin/dict/types/{item.Id}", item); }
             catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
-        }).WithName("AdminCreateType");
+        }).WithName("AdminCreateType").RequireAuthorization("Operator");
         g.MapGet("/export", async (TypeDictService svc, CancellationToken ct) =>
-            await ExportDictCsv(svc, x => x.Type, x => x.SortOrder, x => x.DeletedAt, ct)).WithName("AdminExportTypes");
+            await ExportDictCsv(svc, x => x.Type, x => x.SortOrder, x => x.DeletedAt, ct)).WithName("AdminExportTypes").RequireAuthorization("ReadOnly");
         g.MapGet("/export-xlsx", async (TypeDictService svc, CancellationToken ct) =>
         {
             var items = await svc.ListAsync(null, true, 100000, ct);
             return ExportDictXlsx(items, new[] { "value", "sortOrder", "deleted" }, x => new object?[] { x.Type, x.SortOrder, x.DeletedAt == null ? 0 : 1 });
-        }).WithName("AdminExportTypesXlsx");
+        }).WithName("AdminExportTypesXlsx").RequireAuthorization("ReadOnly");
         g.MapPost("/import", async (ImportCsvRequest body, TypeDictService svc, CancellationToken ct) =>
-            await ImportDictCsv<DictType>(body.Csv, svc, x => x.Type, x => x.DeletedAt, x => x.Id, ct)).WithName("AdminImportTypes");
+            await ImportDictCsv<DictType>(body.Csv, svc, x => x.Type, x => x.DeletedAt, x => x.Id, ct)).WithName("AdminImportTypes").RequireAuthorization("Operator");
         g.MapPost("/import-xlsx", async (IFormFile file, TypeDictService svc, CancellationToken ct) =>
-            await ImportDictRows(ParseXlsxRows(file), svc, x => x.Type, x => x.DeletedAt, x => x.Id, ct)).DisableAntiforgery().WithName("AdminImportTypesXlsx");
+            await ImportDictRows(ParseXlsxRows(file), svc, x => x.Type, x => x.DeletedAt, x => x.Id, ct)).DisableAntiforgery().WithName("AdminImportTypesXlsx").RequireAuthorization("Operator");
 
         g.MapPut("/{id:long}", async (
             long id, TypeUpdateRequest body, TypeDictService svc, HttpContext ctx, CancellationToken ct) =>
@@ -587,21 +588,21 @@ public static class DictionaryEndpoints
             catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
-        }).WithName("AdminUpdateType");
+        }).WithName("AdminUpdateType").RequireAuthorization("Operator");
 
         g.MapDelete("/{id:long}", async (long id, TypeDictService svc, HttpContext ctx, CancellationToken ct) =>
         {
             try { await svc.DeleteTypeAsync(id, ct); return Results.Ok(new { id, deleted = true }); }
             catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
-        }).WithName("AdminDeleteType");
+        }).WithName("AdminDeleteType").RequireAuthorization("Operator");
 
         g.MapPost("/{id:long}/restore", async (long id, TypeDictService svc, HttpContext ctx, CancellationToken ct) =>
         {
             try { return Results.Ok(await svc.RestoreTypeAsync(id, ct)); }
             catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
-        }).WithName("AdminRestoreType");
+        }).WithName("AdminRestoreType").RequireAuthorization("Operator");
 
         g.MapPost("/reorder", async (
             TypeReorderRequest body, TypeDictService svc, HttpContext ctx, CancellationToken ct) =>
@@ -609,7 +610,7 @@ public static class DictionaryEndpoints
             try { await svc.ReorderTypesAsync(body.Items, ct); return Results.Ok(new { updated = body.Items?.Count ?? 0 }); }
             catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
-        }).WithName("AdminReorderTypes");
+        }).WithName("AdminReorderTypes").RequireAuthorization("Operator");
     }
 
     // -------------------- OEM No3 --------------------
@@ -624,7 +625,7 @@ public static class DictionaryEndpoints
             var items = await svc.ListOemNo3sAsync(q, includeDeleted ?? false, limit, ct);
             var total = await svc.CountAsync(q, includeDeleted ?? false, ct);
             return Results.Ok(new { total, count = items.Count, items });
-        }).WithName("AdminListOemNo3s");
+        }).WithName("AdminListOemNo3s").RequireAuthorization("ReadOnly");
 
         g.MapGet("/typeahead", async (
             [FromQuery] string? q, [FromQuery] int? limit,
@@ -632,7 +633,7 @@ public static class DictionaryEndpoints
         {
             var items = await svc.TypeaheadOemNo3sAsync(q, limit, ct);
             return Results.Ok(new { count = items.Count, items });
-        }).WithName("AdminTypeaheadOemNo3s");
+        }).WithName("AdminTypeaheadOemNo3s").RequireAuthorization("ReadOnly");
 
         g.MapPost("/", async (
             OemNo3CreateRequest body, OemNo3DictService svc, HttpContext ctx, CancellationToken ct) =>
@@ -642,18 +643,18 @@ public static class DictionaryEndpoints
                 return Results.Created($"/api/admin/dict/oem-no3s/{item.Id}", item); }
             catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
-        }).WithName("AdminCreateOemNo3");
+        }).WithName("AdminCreateOemNo3").RequireAuthorization("Operator");
         g.MapGet("/export", async (OemNo3DictService svc, CancellationToken ct) =>
-            await ExportDictCsv(svc, x => x.OemNo3, x => x.SortOrder, x => x.DeletedAt, ct)).WithName("AdminExportOemNo3s");
+            await ExportDictCsv(svc, x => x.OemNo3, x => x.SortOrder, x => x.DeletedAt, ct)).WithName("AdminExportOemNo3s").RequireAuthorization("ReadOnly");
         g.MapGet("/export-xlsx", async (OemNo3DictService svc, CancellationToken ct) =>
         {
             var items = await svc.ListAsync(null, true, 100000, ct);
             return ExportDictXlsx(items, new[] { "value", "sortOrder", "deleted" }, x => new object?[] { x.OemNo3, x.SortOrder, x.DeletedAt == null ? 0 : 1 });
-        }).WithName("AdminExportOemNo3sXlsx");
+        }).WithName("AdminExportOemNo3sXlsx").RequireAuthorization("ReadOnly");
         g.MapPost("/import", async (ImportCsvRequest body, OemNo3DictService svc, CancellationToken ct) =>
-            await ImportDictCsv<DictOemNo3>(body.Csv, svc, x => x.OemNo3, x => x.DeletedAt, x => x.Id, ct)).WithName("AdminImportOemNo3s");
+            await ImportDictCsv<DictOemNo3>(body.Csv, svc, x => x.OemNo3, x => x.DeletedAt, x => x.Id, ct)).WithName("AdminImportOemNo3s").RequireAuthorization("Operator");
         g.MapPost("/import-xlsx", async (IFormFile file, OemNo3DictService svc, CancellationToken ct) =>
-            await ImportDictRows(ParseXlsxRows(file), svc, x => x.OemNo3, x => x.DeletedAt, x => x.Id, ct)).DisableAntiforgery().WithName("AdminImportOemNo3sXlsx");
+            await ImportDictRows(ParseXlsxRows(file), svc, x => x.OemNo3, x => x.DeletedAt, x => x.Id, ct)).DisableAntiforgery().WithName("AdminImportOemNo3sXlsx").RequireAuthorization("Operator");
 
         g.MapPut("/{id:long}", async (
             long id, OemNo3UpdateRequest body, OemNo3DictService svc, HttpContext ctx, CancellationToken ct) =>
@@ -662,21 +663,21 @@ public static class DictionaryEndpoints
             catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
-        }).WithName("AdminUpdateOemNo3");
+        }).WithName("AdminUpdateOemNo3").RequireAuthorization("Operator");
 
         g.MapDelete("/{id:long}", async (long id, OemNo3DictService svc, HttpContext ctx, CancellationToken ct) =>
         {
             try { await svc.DeleteOemNo3Async(id, ct); return Results.Ok(new { id, deleted = true }); }
             catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
-        }).WithName("AdminDeleteOemNo3");
+        }).WithName("AdminDeleteOemNo3").RequireAuthorization("Operator");
 
         g.MapPost("/{id:long}/restore", async (long id, OemNo3DictService svc, HttpContext ctx, CancellationToken ct) =>
         {
             try { return Results.Ok(await svc.RestoreOemNo3Async(id, ct)); }
             catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
-        }).WithName("AdminRestoreOemNo3");
+        }).WithName("AdminRestoreOemNo3").RequireAuthorization("Operator");
 
         g.MapPost("/reorder", async (
             OemNo3ReorderRequest body, OemNo3DictService svc, HttpContext ctx, CancellationToken ct) =>
@@ -684,7 +685,7 @@ public static class DictionaryEndpoints
             try { await svc.ReorderOemNo3sAsync(body.Items, ct); return Results.Ok(new { updated = body.Items?.Count ?? 0 }); }
             catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
-        }).WithName("AdminReorderOemNo3s");
+        }).WithName("AdminReorderOemNo3s").RequireAuthorization("Operator");
     }
 
     // -------------------- Media (2 字段) --------------------
@@ -699,14 +700,14 @@ public static class DictionaryEndpoints
             var items = await svc.ListMediasAsync(q, includeDeleted ?? false, limit, ct);
             var total = await svc.CountAsync(q, includeDeleted ?? false, ct);
             return Results.Ok(new { total, count = items.Count, items });
-        }).WithName("AdminListMedias");
+        }).WithName("AdminListMedias").RequireAuthorization("ReadOnly");
         g.MapGet("/typeahead", async (
             [FromQuery] string? q, [FromQuery] int? limit,
             MediaDictService svc, CancellationToken ct) =>
         {
             var items = await svc.TypeaheadMediasAsync(q, limit, ct);
             return Results.Ok(new { count = items.Count, items });
-        }).WithName("AdminTypeaheadMedias");
+        }).WithName("AdminTypeaheadMedias").RequireAuthorization("ReadOnly");
         g.MapPost("/", async (
             MediaCreateRequest body, MediaDictService svc, HttpContext ctx, CancellationToken ct) =>
         {
@@ -715,18 +716,18 @@ public static class DictionaryEndpoints
                 return Results.Created($"/api/admin/dict/medias/{item.Id}", item); }
             catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
-        }).WithName("AdminCreateMedia");
+        }).WithName("AdminCreateMedia").RequireAuthorization("Operator");
         g.MapGet("/export", async (MediaDictService svc, CancellationToken ct) =>
-            await ExportDictCsv(svc, x => x.MediaName, x => x.SortOrder, x => x.DeletedAt, ct)).WithName("AdminExportMedias");
+            await ExportDictCsv(svc, x => x.MediaName, x => x.SortOrder, x => x.DeletedAt, ct)).WithName("AdminExportMedias").RequireAuthorization("ReadOnly");
         g.MapGet("/export-xlsx", async (MediaDictService svc, CancellationToken ct) =>
         {
             var items = await svc.ListAsync(null, true, 100000, ct);
             return ExportDictXlsx(items, new[] { "value", "sortOrder", "deleted" }, x => new object?[] { x.MediaName, x.SortOrder, x.DeletedAt == null ? 0 : 1 });
-        }).WithName("AdminExportMediasXlsx");
+        }).WithName("AdminExportMediasXlsx").RequireAuthorization("ReadOnly");
         g.MapPost("/import", async (ImportCsvRequest body, MediaDictService svc, CancellationToken ct) =>
-            await ImportDictCsv<DictMedia>(body.Csv, svc, x => x.MediaName, x => x.DeletedAt, x => x.Id, ct)).WithName("AdminImportMedias");
+            await ImportDictCsv<DictMedia>(body.Csv, svc, x => x.MediaName, x => x.DeletedAt, x => x.Id, ct)).WithName("AdminImportMedias").RequireAuthorization("Operator");
         g.MapPost("/import-xlsx", async (IFormFile file, MediaDictService svc, CancellationToken ct) =>
-            await ImportDictRows(ParseXlsxRows(file), svc, x => x.MediaName, x => x.DeletedAt, x => x.Id, ct)).DisableAntiforgery().WithName("AdminImportMediasXlsx");
+            await ImportDictRows(ParseXlsxRows(file), svc, x => x.MediaName, x => x.DeletedAt, x => x.Id, ct)).DisableAntiforgery().WithName("AdminImportMediasXlsx").RequireAuthorization("Operator");
         g.MapPut("/{id:long}", async (
             long id, MediaUpdateRequest body, MediaDictService svc, HttpContext ctx, CancellationToken ct) =>
         {
@@ -734,26 +735,26 @@ public static class DictionaryEndpoints
             catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
-        }).WithName("AdminUpdateMedia");
+        }).WithName("AdminUpdateMedia").RequireAuthorization("Operator");
         g.MapDelete("/{id:long}", async (long id, MediaDictService svc, HttpContext ctx, CancellationToken ct) =>
         {
             try { await svc.DeleteMediaAsync(id, ct); return Results.Ok(new { id, deleted = true }); }
             catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
-        }).WithName("AdminDeleteMedia");
+        }).WithName("AdminDeleteMedia").RequireAuthorization("Operator");
         g.MapPost("/{id:long}/restore", async (long id, MediaDictService svc, HttpContext ctx, CancellationToken ct) =>
         {
             try { return Results.Ok(await svc.RestoreMediaAsync(id, ct)); }
             catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
-        }).WithName("AdminRestoreMedia");
+        }).WithName("AdminRestoreMedia").RequireAuthorization("Operator");
         g.MapPost("/reorder", async (
             MediaReorderRequest body, MediaDictService svc, HttpContext ctx, CancellationToken ct) =>
         {
             try { await svc.ReorderMediasAsync(body.Items, ct); return Results.Ok(new { updated = body.Items?.Count ?? 0 }); }
             catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
-        }).WithName("AdminReorderMedias");
+        }).WithName("AdminReorderMedias").RequireAuthorization("Operator");
     }
 
     // -------------------- Machine (3 字段) --------------------
@@ -768,14 +769,14 @@ public static class DictionaryEndpoints
             var items = await svc.ListMachinesAsync(q, includeDeleted ?? false, limit, ct);
             var total = await svc.CountAsync(q, includeDeleted ?? false, ct);
             return Results.Ok(new { total, count = items.Count, items });
-        }).WithName("AdminListMachines");
+        }).WithName("AdminListMachines").RequireAuthorization("ReadOnly");
         g.MapGet("/typeahead", async (
             [FromQuery] string? q, [FromQuery] int? limit,
             MachineDictService svc, CancellationToken ct) =>
         {
             var items = await svc.TypeaheadMachinesAsync(q, limit, ct);
             return Results.Ok(new { count = items.Count, items });
-        }).WithName("AdminTypeaheadMachines");
+        }).WithName("AdminTypeaheadMachines").RequireAuthorization("ReadOnly");
         g.MapPost("/", async (
             MachineCreateRequest body, MachineDictService svc, HttpContext ctx, CancellationToken ct) =>
         {
@@ -784,7 +785,7 @@ public static class DictionaryEndpoints
                 return Results.Created($"/api/admin/dict/machines/{item.Id}", item); }
             catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
-        }).WithName("AdminCreateMachine");
+        }).WithName("AdminCreateMachine").RequireAuthorization("Operator");
         // 🔧 fix(审查): 机型字典批量导入导出 (用户反馈: 需要扩展) — CSV 6 列: brand,model,name,category,sortOrder,deleted
         //   数字安全: 纯数字字段 ="..." 包裹 (Excel 防前导零丢失), 导入剥离 (同 OemBrand/泛型)
         g.MapGet("/export", async (MachineDictService svc, CancellationToken ct) =>
@@ -796,14 +797,14 @@ public static class DictionaryEndpoints
                 sb.AppendLine($"{CsvSafe(it.MachineBrand)},{CsvSafe(it.MachineModel)},{CsvSafe(it.MachineName)},{CsvSafe(it.MachineCategory)},{it.SortOrder},{(it.DeletedAt == null ? 0 : 1)}");
             }
             return Results.Text(sb.ToString(), "text/csv; charset=utf-8");
-        }).WithName("AdminExportMachines");
+        }).WithName("AdminExportMachines").RequireAuthorization("ReadOnly");
         // 🔧 fix(审查): 机型字典 XLSX 导出 (双格式)
         g.MapGet("/export-xlsx", async (MachineDictService svc, CancellationToken ct) =>
         {
             var items = await svc.ListMachinesAsync(null, true, 100000, ct);
             return ExportDictXlsx(items, new[] { "brand", "model", "name", "category", "sortOrder", "deleted" },
                 x => new object?[] { x.MachineBrand, x.MachineModel, x.MachineName, x.MachineCategory, x.SortOrder, x.DeletedAt == null ? 0 : 1 });
-        }).WithName("AdminExportMachinesXlsx");
+        }).WithName("AdminExportMachinesXlsx").RequireAuthorization("ReadOnly");
         g.MapPost("/import", async (
             ImportCsvRequest body, MachineDictService svc, CancellationToken ct) =>
         {
@@ -812,10 +813,10 @@ public static class DictionaryEndpoints
             var rows = body.Csv.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                 .Select(l => l.Split(',')).ToList();
             return await ImportMachineRows(rows, svc, ct);
-        }).WithName("AdminImportMachines");
+        }).WithName("AdminImportMachines").RequireAuthorization("Operator");
         // 🔧 fix(审查): 机型字典 XLSX 导入 (双格式)
         g.MapPost("/import-xlsx", async (IFormFile file, MachineDictService svc, CancellationToken ct) =>
-            await ImportMachineRows(ParseXlsxRows(file), svc, ct)).DisableAntiforgery().WithName("AdminImportMachinesXlsx");
+            await ImportMachineRows(ParseXlsxRows(file), svc, ct)).DisableAntiforgery().WithName("AdminImportMachinesXlsx").RequireAuthorization("Operator");
         g.MapPut("/{id:long}", async (
             long id, MachineUpdateRequest body, MachineDictService svc, HttpContext ctx, CancellationToken ct) =>
         {
@@ -823,26 +824,26 @@ public static class DictionaryEndpoints
             catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
-        }).WithName("AdminUpdateMachine");
+        }).WithName("AdminUpdateMachine").RequireAuthorization("Operator");
         g.MapDelete("/{id:long}", async (long id, MachineDictService svc, HttpContext ctx, CancellationToken ct) =>
         {
             try { await svc.DeleteMachineAsync(id, ct); return Results.Ok(new { id, deleted = true }); }
             catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
-        }).WithName("AdminDeleteMachine");
+        }).WithName("AdminDeleteMachine").RequireAuthorization("Operator");
         g.MapPost("/{id:long}/restore", async (long id, MachineDictService svc, HttpContext ctx, CancellationToken ct) =>
         {
             try { return Results.Ok(await svc.RestoreMachineAsync(id, ct)); }
             catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
-        }).WithName("AdminRestoreMachine");
+        }).WithName("AdminRestoreMachine").RequireAuthorization("Operator");
         g.MapPost("/reorder", async (
             MachineReorderRequest body, MachineDictService svc, HttpContext ctx, CancellationToken ct) =>
         {
             try { await svc.ReorderMachinesAsync(body.Items, ct); return Results.Ok(new { updated = body.Items?.Count ?? 0 }); }
             catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
-        }).WithName("AdminReorderMachines");
+        }).WithName("AdminReorderMachines").RequireAuthorization("Operator");
     }
 
     // -------------------- Engine (2 字段) --------------------
@@ -857,14 +858,14 @@ public static class DictionaryEndpoints
             var items = await svc.ListEnginesAsync(q, includeDeleted ?? false, limit, ct);
             var total = await svc.CountAsync(q, includeDeleted ?? false, ct);
             return Results.Ok(new { total, count = items.Count, items });
-        }).WithName("AdminListEngines");
+        }).WithName("AdminListEngines").RequireAuthorization("ReadOnly");
         g.MapGet("/typeahead", async (
             [FromQuery] string? q, [FromQuery] int? limit,
             EngineDictService svc, CancellationToken ct) =>
         {
             var items = await svc.TypeaheadEnginesAsync(q, limit, ct);
             return Results.Ok(new { count = items.Count, items });
-        }).WithName("AdminTypeaheadEngines");
+        }).WithName("AdminTypeaheadEngines").RequireAuthorization("ReadOnly");
         g.MapPost("/", async (
             EngineCreateRequest body, EngineDictService svc, HttpContext ctx, CancellationToken ct) =>
         {
@@ -873,18 +874,18 @@ public static class DictionaryEndpoints
                 return Results.Created($"/api/admin/dict/engines/{item.Id}", item); }
             catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
-        }).WithName("AdminCreateEngine");
+        }).WithName("AdminCreateEngine").RequireAuthorization("Operator");
         g.MapGet("/export", async (EngineDictService svc, CancellationToken ct) =>
-            await ExportDictCsv(svc, x => x.EngineBrand, x => x.SortOrder, x => x.DeletedAt, ct)).WithName("AdminExportEngines");
+            await ExportDictCsv(svc, x => x.EngineBrand, x => x.SortOrder, x => x.DeletedAt, ct)).WithName("AdminExportEngines").RequireAuthorization("ReadOnly");
         g.MapGet("/export-xlsx", async (EngineDictService svc, CancellationToken ct) =>
         {
             var items = await svc.ListAsync(null, true, 100000, ct);
             return ExportDictXlsx(items, new[] { "value", "sortOrder", "deleted" }, x => new object?[] { x.EngineBrand, x.SortOrder, x.DeletedAt == null ? 0 : 1 });
-        }).WithName("AdminExportEnginesXlsx");
+        }).WithName("AdminExportEnginesXlsx").RequireAuthorization("ReadOnly");
         g.MapPost("/import", async (ImportCsvRequest body, EngineDictService svc, CancellationToken ct) =>
-            await ImportDictCsv<DictEngine>(body.Csv, svc, x => x.EngineBrand, x => x.DeletedAt, x => x.Id, ct)).WithName("AdminImportEngines");
+            await ImportDictCsv<DictEngine>(body.Csv, svc, x => x.EngineBrand, x => x.DeletedAt, x => x.Id, ct)).WithName("AdminImportEngines").RequireAuthorization("Operator");
         g.MapPost("/import-xlsx", async (IFormFile file, EngineDictService svc, CancellationToken ct) =>
-            await ImportDictRows(ParseXlsxRows(file), svc, x => x.EngineBrand, x => x.DeletedAt, x => x.Id, ct)).DisableAntiforgery().WithName("AdminImportEnginesXlsx");
+            await ImportDictRows(ParseXlsxRows(file), svc, x => x.EngineBrand, x => x.DeletedAt, x => x.Id, ct)).DisableAntiforgery().WithName("AdminImportEnginesXlsx").RequireAuthorization("Operator");
         g.MapPut("/{id:long}", async (
             long id, EngineUpdateRequest body, EngineDictService svc, HttpContext ctx, CancellationToken ct) =>
         {
@@ -892,26 +893,26 @@ public static class DictionaryEndpoints
             catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
-        }).WithName("AdminUpdateEngine");
+        }).WithName("AdminUpdateEngine").RequireAuthorization("Operator");
         g.MapDelete("/{id:long}", async (long id, EngineDictService svc, HttpContext ctx, CancellationToken ct) =>
         {
             try { await svc.DeleteEngineAsync(id, ct); return Results.Ok(new { id, deleted = true }); }
             catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
-        }).WithName("AdminDeleteEngine");
+        }).WithName("AdminDeleteEngine").RequireAuthorization("Operator");
         g.MapPost("/{id:long}/restore", async (long id, EngineDictService svc, HttpContext ctx, CancellationToken ct) =>
         {
             try { return Results.Ok(await svc.RestoreEngineAsync(id, ct)); }
             catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (InvalidOperationException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
-        }).WithName("AdminRestoreEngine");
+        }).WithName("AdminRestoreEngine").RequireAuthorization("Operator");
         g.MapPost("/reorder", async (
             EngineReorderRequest body, EngineDictService svc, HttpContext ctx, CancellationToken ct) =>
         {
             try { await svc.ReorderEnginesAsync(body.Items, ct); return Results.Ok(new { updated = body.Items?.Count ?? 0 }); }
             catch (ArgumentException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
             catch (KeyNotFoundException ex) { return ProblemDetailsFactory.FromException(ctx, ex); }
-        }).WithName("AdminReorderEngines");
+        }).WithName("AdminReorderEngines").RequireAuthorization("Operator");
     }
 
     // -------------------- schema 契约端点 --------------------
@@ -966,6 +967,6 @@ public static class DictionaryEndpoints
                 dictionaries = schema
             });
         })
-        .WithName("AdminDictSchema");
+        .WithName("AdminDictSchema").RequireAuthorization("ReadOnly");
     }
 }

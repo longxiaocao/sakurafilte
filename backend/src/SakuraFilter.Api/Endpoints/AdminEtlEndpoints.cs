@@ -18,8 +18,8 @@ public static class AdminEtlEndpoints
 {
     public static IEndpointRouteBuilder MapAdminEtlEndpoints(this IEndpointRouteBuilder app)
     {
+        // WHY: 权限细分 (user-manual.md: operator=ETL 导入, viewer=只读浏览/查看监控)。
         var group = app.MapGroup("/api/admin/etl").WithTags("AdminEtl")
-            .RequireAuthorization("Admin")  // V24-F19: spec F11
             .RequireRateLimiting("etl");
 
         // ===== V3(2026-08-25): P0 导入向导 — 模板下载 + 文件上传 (客户自助导入) =====
@@ -52,7 +52,8 @@ public static class AdminEtlEndpoints
                 return Results.Problem(detail: $"模板生成失败: {ex.Message}", statusCode: 500, title: "Template Generation Failed");
             }
         })
-        .WithName("AdminEtlTemplate");
+        .WithName("AdminEtlTemplate")
+        .RequireAuthorization("ReadOnly");
 
         // 文件上传 (客户真正上传 XLSX/JSONL 到服务器)
         //   WHY: 原"拖拽"只填服务器路径 (假设文件已就位), 客户无法自助导入
@@ -141,7 +142,8 @@ public static class AdminEtlEndpoints
         //   → 整个 /swagger/v1/swagger.json 500 → 运维中心 API 文档页报错
         //   .Accepts 官方推荐: 显式声明 multipart/form-data 请求体
         .Accepts<IFormFile>("multipart/form-data")
-        .WithName("AdminEtlUpload");
+        .WithName("AdminEtlUpload")
+        .RequireAuthorization("Operator");
 
         // 手动触发（含 dry-run）
         group.MapPost("/trigger", async (
@@ -233,7 +235,8 @@ public static class AdminEtlEndpoints
             var p = await etl.TriggerAsync(entityType, req.JsonlPath, req.Mode ?? "upsert", 0, ct, cascade);
             return Results.Ok(p.ToJson());
         })
-        .WithName("AdminTriggerEtl");
+        .WithName("AdminTriggerEtl")
+        .RequireAuthorization("Operator");
 
         // 取消
         group.MapDelete("/task", (EtlImportService etl, [FromBody] CancelRequest? body) =>
@@ -252,7 +255,8 @@ public static class AdminEtlEndpoints
                 normalizedCode
             });
         })
-        .WithName("AdminCancelEtl");
+        .WithName("AdminCancelEtl")
+        .RequireAuthorization("Operator");
 
         // 暂停
         group.MapPost("/pause", (EtlImportService etl, ILogger<Program> logger) =>
@@ -268,7 +272,8 @@ public static class AdminEtlEndpoints
                 entity = etl.Progress.CurrentFile
             });
         })
-        .WithName("AdminPauseEtl");
+        .WithName("AdminPauseEtl")
+        .RequireAuthorization("Operator");
 
         // 恢复
         group.MapPost("/resume", async (EtlImportService etl, ILogger<Program> logger, CancellationToken ct) =>
@@ -296,14 +301,16 @@ public static class AdminEtlEndpoints
                 return Results.NotFound(new { error = ex.Message });
             }
         })
-        .WithName("AdminResumeEtl");
+        .WithName("AdminResumeEtl")
+        .RequireAuthorization("Operator");
 
         // 进度查询
         group.MapGet("/progress", (EtlImportService etl) =>
         {
             return Results.Ok(etl.GetActiveTaskInfo());
         })
-        .WithName("AdminEtlProgress");
+        .WithName("AdminEtlProgress")
+        .RequireAuthorization("ReadOnly");
 
         // V2 Task V17-3.2: 全量重建 Meilisearch 索引
         //   WHY 必要: 索引损坏/字段变更/schema 升级后需清空重建
@@ -335,7 +342,8 @@ public static class AdminEtlEndpoints
                 return Results.Conflict(new { error = ex.Message });
             }
         })
-        .WithName("AdminReindexAll");
+        .WithName("AdminReindexAll")
+        .RequireAuthorization("Operator");
 
         // 进度 SSE 流
         // v30-17 P0 安全修复: SSE 端点脱离 group 鉴权, 未认证用户可获取 ETL 进度
@@ -397,7 +405,7 @@ public static class AdminEtlEndpoints
                 subscription?.Dispose();
             }
             return Results.Empty;
-        }).RequireAuthorization("Admin");  // v30-17 P0: SSE 端点鉴权 (原脱离 group, 未认证可访问)
+        }).RequireAuthorization("ReadOnly");  // v30-17 P0: SSE 端点鉴权 (原脱离 group, 未认证可访问)
 
         // 历史查询
         group.MapGet("/history", async (
@@ -439,7 +447,8 @@ public static class AdminEtlEndpoints
             }).ToListAsync(ct);
             return Results.Ok(new { count = rows.Count, items = rows });
         })
-        .WithName("AdminEtlHistory");
+        .WithName("AdminEtlHistory")
+        .RequireAuthorization("ReadOnly");
 
         // reason_code 聚合
         group.MapGet("/history/aggregate", async (ProductDbContext db, CancellationToken ct) =>
@@ -476,7 +485,8 @@ public static class AdminEtlEndpoints
                 }).ToArray()
             });
         })
-        .WithName("AdminEtlHistoryAggregate");
+        .WithName("AdminEtlHistoryAggregate")
+        .RequireAuthorization("ReadOnly");
 
         // ===== V25: 孤儿机型管理 (product_id=NULL 的 MachineApplication 记录) =====
         //   GET /api/admin/apps/orphans  — 分页列出孤儿记录 (按机型关键字搜索)
@@ -511,7 +521,7 @@ public static class AdminEtlEndpoints
             return Results.Ok(new { total, page, pageSize, items });
         })
         .WithName("AdminAppsOrphans")
-        .RequireAuthorization("Admin");
+        .RequireAuthorization("ReadOnly");
 
         app.MapPatch("/api/admin/apps/orphan/{id}/link", async (
             long id,
@@ -563,7 +573,7 @@ public static class AdminEtlEndpoints
             return Results.Ok(new { linked = true, orphanId = id, productId = prodId, mr1 = product.Mr1 });
         })
         .WithName("AdminAppsOrphanLink")
-        .RequireAuthorization("Admin");
+        .RequireAuthorization("Operator");
 
         return app;
     }

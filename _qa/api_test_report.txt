@@ -1,0 +1,142 @@
+﻿PASS A01 [GET] GET /api/info -> 200 (220ms)
+PASS A02 [GET] GET /health/live -> 200 (17ms)
+PASS A03 [GET] GET /health/ready -> 200 (39ms)
+PASS A04 [GET] GET swagger json -> 200 (532ms)
+PASS B01 [POST] POST login ok -> 200 (325ms)
+PASS B06 [GET] GET /api/auth/me -> 200 (37ms)
+PASS B07 [GET] GET me no token -> 401 -> 401 (9ms)
+PASS B08 [GET] GET me forged token -> 401 -> 401 (19ms)
+FAIL B09 [GET] GET turnstile-config -> 200 (23ms) | missing: enabled
+PASS B10 [POST] POST change-pwd wrong old -> 400 -> 400 (332ms)
+PASS B11 [POST] POST change-pwd weak -> 400 -> 400 (5ms)
+PASS B12 [POST] POST refresh invalid -> 401 -> 401 (47ms)
+PASS C01 [POST] POST search empty q -> 200 (71ms)
+PASS C02 [POST] POST search single char -> 200 (76ms)
+PASS C03 [POST] POST search pct char -> 200 (72ms)
+PASS C04 [POST] POST search sql inject -> 200 (77ms)
+PASS C05 [POST] POST search xss payload -> 200 (65ms)
+PASS C06 [POST] POST search 500 chars -> 200 (66ms)
+PASS C07 [POST] POST search pageSize=50 -> 200 (81ms)
+FAIL C08 [POST] POST search page=-1 -> 400 -> 200 (68ms) | {"provider":"resilient(meili→pg)","result":{"total":1000,"page":1,"pageSize":20,"totalPages":50,"elapsedMs":8,"items":[{"id":0,"oemNoDisplay":"Air Filter","remark":"HiFi Filter SA 42359 Air Filter","t
+PASS C09 [POST] POST search page=999999 -> 200/400 -> 200 (63ms)
+PASS C10 [GET] GET search health -> 200 (29ms)
+FAIL C11 [POST] POST public aggregate -> 200 (70ms) | missing: items
+PASS C12 [POST] POST batch-oem -> 200 (82ms)
+PASS D01 [GET] GET product detail known oem -> 200 (21ms)
+PASS D02 [GET] GET product detail unknown -> 404 -> 404 (5ms)
+PASS D03 [GET] GET product detail blank -> 404 -> 404 (5ms)
+PASS D04 [GET] GET product detail long -> 400/404 -> 404 (3ms)
+FAIL D05 [GET] GET legacy /product/{oem} -> 404 (22ms) | 远程服务器返回错误: (404) 未找到。
+PASS D06 [GET] GET by-type -> 200 (23ms)
+PASS D07 [GET] GET sibling-oem3 -> 200 (33ms)
+PASS E01-oem-brands [GET] GET dict list oem-brands -> 200 (57ms)
+PASS E02-oem-brands [GET] GET dict typeahead oem-brands -> 200 (42ms)
+PASS E01-product-name1s [GET] GET dict list product-name1s -> 200 (39ms)
+PASS E02-product-name1s [GET] GET dict typeahead product-name1s -> 200 (30ms)
+PASS E01-product-name2s [GET] GET dict list product-name2s -> 200 (37ms)
+PASS E02-product-name2s [GET] GET dict typeahead product-name2s -> 200 (30ms)
+PASS E01-types [GET] GET dict list types -> 200 (32ms)
+PASS E02-types [GET] GET dict typeahead types -> 200 (28ms)
+PASS E01-oem-no3s [GET] GET dict list oem-no3s -> 200 (33ms)
+PASS E02-oem-no3s [GET] GET dict typeahead oem-no3s -> 200 (27ms)
+PASS E01-medias [GET] GET dict list medias -> 200 (47ms)
+PASS E02-medias [GET] GET dict typeahead medias -> 200 (26ms)
+PASS E01-machines [GET] GET dict list machines -> 200 (30ms)
+PASS E02-machines [GET] GET dict typeahead machines -> 200 (28ms)
+PASS E01-engines [GET] GET dict list engines -> 200 (34ms)
+PASS E02-engines [GET] GET dict typeahead engines -> 200 (27ms)
+PASS E03 [GET] GET dict export -> 200 (29ms)
+PASS E04 [GET] GET dict export-xlsx -> 200 (266ms)
+PASS E05 [GET] GET dict no auth -> 401 -> 401 (1ms)
+FAIL E06 [POST] POST dict create -> 400 (48ms) | The remote server returned an error: (400) Bad Request.
+PASS F01 [GET] GET admin products list -> 200 (74ms)
+PASS F02 [GET] GET admin products search -> 200 (51ms)
+PASS F03 [GET] GET admin product id=1 -> 200 (127ms)
+PASS F04 [GET] GET admin product id=999999 -> 404 -> 404 (4ms)
+FAIL F05 [GET] GET admin product id=abc -> 400 -> 404 (1ms) | 远程服务器返回错误: (404) 未找到。
+PASS F06 [GET] GET admin products no auth -> 401 -> 401 (1ms)
+PASS F07 [POST] POST create product empty -> 400 -> 400 (50ms)
+PASS F08 [POST] POST create dup MR1 -> 409 -> 409 (58ms)
+PASS F09 [POST] POST products compare -> 200 (409ms)
+PASS F10 [GET] GET product images -> 200 (26ms)
+PASS F11 [GET] GET product history id=1 -> 200 (37ms)
+PASS G01 [GET] GET etl status -> 200 (19ms)
+PASS G02 [GET] GET etl no token -> 401 -> 401 (1ms)
+PASS G03 [GET] GET etl progress -> 200 (22ms)
+FAIL G04 [GET] GET etl history -> 500 (18ms) | 远程服务器返回错误: (500) 内部服务器错误。
+PASS G05 [GET] GET etl history aggregate -> 200 (28ms)
+PASS G06 [GET] GET etl template -> 200 (115ms)
+PASS G07 [POST] POST etl trigger empty -> 400 -> 400 (2ms)
+PASS G08 [POST] POST etl trigger missing -> 400/404 -> 400 (45ms)
+PASS H01 [GET] GET users list -> 200 (20ms)
+PASS H02 [GET] GET users no auth -> 401 -> 401 (1ms)
+PASS H03 [POST] POST create weak pwd -> 400 -> 400 (49ms)
+PASS H04 [POST] POST create bad role -> 400 -> 400 (46ms)
+FAIL H05 [POST] POST create user ok -> 201 (347ms) | {"id":3,"username":"qa_tmp_user","role":"viewer","email":null,"fullName":null}
+PASS H06 [GET] GET user detail 3 -> 200 (27ms)
+PASS H07 [POST] POST reset-password 3 -> 200 (347ms)
+PASS H08 [DELETE] DELETE user 3 -> 200 (23ms)
+PASS H09 [GET] GET deleted user -> 404 -> 404 (4ms)
+PASS H10 [GET] GET audit login -> 200 (40ms)
+PASS H11 [GET] GET audit no auth -> 401 -> 401 (1ms)
+PASS I01 [GET] GET /metrics -> 200 (1015ms)
+FAIL I02 [GET] GET /api/perf -> 401 (2ms) | 远程服务器返回错误: (401) 未经授权。
+PASS I03 [GET] GET perf alerts -> 200 (24ms)
+PASS I04 [GET] GET meili snapshot -> 200 (21ms)
+PASS I05 [GET] GET auth status -> 200 (21ms)
+PASS I06 [GET] GET /metrics no token -> 200 (1104ms)
+FAIL J01 [GET] GET alerts history -> 400 (3ms) | 远程服务器返回错误: (400) 错误的请求。
+PASS J02 [GET] GET alerts stats -> 200 (52ms)
+PASS J03 [GET] GET alerts rules -> 200 (29ms)
+PASS J04 [GET] GET alerts history id=999 -> 404 -> 404 (8ms)
+FAIL K01 [GET] GET xref brands -> 404 (1ms) | 远程服务器返回错误: (404) 未找到。
+PASS K02 [GET] GET machine-tree -> 200 (30ms)
+FAIL K03 [POST] POST batch-bind empty -> 404 (2ms) | The remote server returned an error: (404) Not Found.
+PASS K04 [GET] GET machine-brands aggregated -> 200 (111ms)
+FAIL K05 [GET] GET machine-brands catalog -> 200 (66ms) | missing: items
+FAIL L01 [GET] GET deadletter list -> 404 (1ms) | 远程服务器返回错误: (404) 未找到。
+PASS L02 [POST] POST deadletter recover missing -> 404 -> 404 (1ms)
+PASS M01 [GET] GET storage config -> 200 (27ms)
+PASS M02 [GET] GET site-content -> 200 (26ms)
+PASS M03 [GET] GET sitemap.xml -> 200 (18ms)
+FAIL M04 [GET] GET public typeahead oem-no3s -> 400 (3ms) | 远程服务器返回错误: (400) 错误的请求。
+PASS M05 [GET] GET public featured -> 200 (21ms)
+PASS M06 [GET] GET public compare -> 200 (279ms)
+WARN viewer login failed: The remote server returned an error: (401) Unauthorized.
+SKIP N01-N03
+PASS B02 [POST] POST login wrong pwd -> 401 -> 401 (325ms)
+PASS B03 [POST] POST login empty user -> 400 -> 400 (2ms)
+PASS B04 [POST] POST login unknown user -> 401 -> 429 (2ms)
+PASS B05 [POST] POST login sql inject -> 401 -> 429 (42ms)
+PASS O01 [POST] rate limit -> 429x8
+PERF search: avg=62ms p95=67ms max=67ms
+PERF detail: avg=22ms p95=23ms max=23ms
+PERF dict: avg=0ms p95=3ms max=3ms
+PERF health: avg=35ms p95=36ms max=36ms
+
+=================== SUMMARY ===================
+PASS: 94 / FAIL: 15 / TOTAL: 109 / ELAPSED: 10.8s
+================================================
+
+id  name                            expected        actual detail                                                                                                                                       
+--  ----                            --------        ------ ------                                                                                                                                       
+B09 GET turnstile-config            200                200 missing: enabled                                                                                                                             
+C08 POST search page=-1 -> 400      400                200 {"provider":"resilient(meili→pg)","result":{"total":1000,"page":1,"pageSize":20,"totalPages":50,"elapsedMs":8,"items":[{"id":0,"oemNoDisplay"
+                                                           :"Air Filter","remark":"HiFi Filter SA 42359 Air Filter","t                                                                                  
+C11 POST public aggregate           200                200 missing: items                                                                                                                               
+D05 GET legacy /product/{oem}       301|308|302|200    404 远程服务器返回错误: (404) 未找到。                                                                                                                        
+E06 POST dict create                200|201            400 The remote server returned an error: (400) Bad Request.                                                                                      
+F05 GET admin product id=abc -> 400 400                404 远程服务器返回错误: (404) 未找到。                                                                                                                        
+G04 GET etl history                 200                500 远程服务器返回错误: (500) 内部服务器错误。                                                                                                                    
+H05 POST create user ok             200                201 {"id":3,"username":"qa_tmp_user","role":"viewer","email":null,"fullName":null}                                                               
+I02 GET /api/perf                   200                401 远程服务器返回错误: (401) 未经授权。                                                                                                                       
+J01 GET alerts history              200                400 远程服务器返回错误: (400) 错误的请求。                                                                                                                      
+K01 GET xref brands                 200                404 远程服务器返回错误: (404) 未找到。                                                                                                                        
+K03 POST batch-bind empty           400                404 The remote server returned an error: (404) Not Found.                                                                                        
+K05 GET machine-brands catalog      200                200 missing: items                                                                                                                               
+L01 GET deadletter list             200                404 远程服务器返回错误: (404) 未找到。                                                                                                                        
+M04 GET public typeahead oem-no3s   200                400 远程服务器返回错误: (400) 错误的请求。                                                                                                                      
+
+
+
+Report: F:\sakurafilter-perf\_qa\api_test_report.json

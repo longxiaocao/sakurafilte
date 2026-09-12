@@ -17,7 +17,7 @@ public static class AdminTypeaheadEndpoints
     public static void MapAdminTypeaheadEndpoints(this IEndpointRouteBuilder app)
     {
         var g = app.MapGroup("/api/admin/typeahead").WithTags("AdminTypeahead")
-            .RequireAuthorization("Admin");
+            .RequireAuthorization("Operator");  // 索引重建属 ETL/数据维护 (operator 职责)
 
         g.MapPost("/rebuild", (
             TypeaheadDictRebuildService rebuild,
