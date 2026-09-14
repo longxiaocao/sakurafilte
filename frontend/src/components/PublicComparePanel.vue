@@ -169,14 +169,30 @@ const visibleGroups = computed(() => {
             <div class="text-xs text-muted truncate" :title="p.oem2 || ''">{{ p.oem2 || '—' }}</div>
             <!-- 公开对比主图缩略图 (60x60px); 无图时不渲染, 不占位 -->
             <!--   WHY 客户反馈: 对比只有文字难直观比较, 与后台 AdminCompareView 主图缩略图对齐 -->
-            <img
+            <!--   hover 大图预览 (el-popover trigger=hover): 鼠标移到缩略图上弹出放大图, 移开恢复
+                 placement=right 跟随鼠标列; popper 默认 teleport 到 body, 不受外层横向滚动容器裁切 -->
+            <el-popover
               v-if="getPrimaryImage(p)"
-              :src="getPrimaryImage(p)!"
-              :alt="p.oemNoDisplay"
-              class="compare-thumb"
-              loading="lazy"
-              @error="(e) => { const t = e.target as HTMLImageElement; if (t) t.style.display = 'none' }"
-            />
+              trigger="hover"
+              placement="right"
+              :width="320"
+              popper-class="compare-zoom-popper"
+              :show-after="180"
+              :aria-label="`放大预览 ${p.oemNoDisplay}`"
+            >
+              <template #reference>
+                <img
+                  :src="getPrimaryImage(p)!"
+                  :alt="p.oemNoDisplay"
+                  class="compare-thumb"
+                  loading="lazy"
+                  @error="(e) => { const t = e.target as HTMLImageElement; if (t) t.style.display = 'none' }"
+                />
+              </template>
+              <div class="compare-zoom">
+                <img :src="getPrimaryImage(p)!" :alt="`放大预览 ${p.oemNoDisplay}`" class="compare-zoom-img" />
+              </div>
+            </el-popover>
           </div>
           <div class="flex flex-col gap-0.5 no-print">
             <el-button size="small" text :disabled="idx === 0" @click="emit('moveLeft', idx)" title="左移" style="padding: 0 2px; height: 16px" aria-label="左移">‹</el-button>
@@ -218,4 +234,8 @@ const visibleGroups = computed(() => {
 .data-cell.diff { background: rgba(64, 158, 255, 0.08); color: var(--color-accent); font-weight: 500; }
 .sticky-left { position: sticky; left: 0; }
 .compare-thumb { width: 60px; height: 60px; object-fit: contain; border: 1px solid var(--color-border); border-radius: 4px; margin-top: 6px; }
+/* hover 放大预览浮层 (teleport 到 body, 顶层): 轻边框无重度阴影, 极简栈疲劳 — 图片等比 contain 不裁切 */
+.compare-zoom-popper.el-popover { padding: 8px; border: 1px solid var(--color-border); border-radius: 8px; box-shadow: none; }
+.compare-zoom { width: 304px; height: 304px; display: flex; align-items: center; justify-content: center; }
+.compare-zoom-img { max-width: 304px; max-height: 304px; object-fit: contain; border-radius: 4px; }
 </style>
