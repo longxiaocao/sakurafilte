@@ -360,7 +360,12 @@ export async function searchWithFallback(
 export const productApi = {
   getByOem(slug: string): Promise<PublicProductDetail> {
     // 注意: 走 http 拦截器, 即使已登录后台 (有 token) 也可访问公开端点 (后端 [AllowAnonymous])
-    return http.get(`/public/product/${encodeURIComponent(slug)}`).then((r) => r.data)
+    // 🔧 fix(2026-09-14): 保留 OEM 编号中的原始斜杠, 仅编码其他字符
+    //   WHY: 上游 /seo/:oem Vue 路由已把 route.params.oem 解码 (含编码斜杠 SL%2081322%2F1 → "SL 81322/1"),
+    //        再用 encodeURIComponent 会把 / 编码成 %2F, 而后端 catch-all {**slug} 收到整串编码值无法精确匹配 → 404。
+    //        实测: /public/product/SL%2081322/1 (空格编码、斜杠保留) 返回 200; %2F 全编码返回 404。
+    //   encodeURIComponent 不会误伤: 斜杠是唯一会被编码成 %2F 的字符, replace 还原安全。
+    return http.get(`/public/product/${encodeURIComponent(slug).replace(/%2F/g, '/')}`).then((r) => r.data)
   },
   // 同组其他 OEM 3 列表，参数使用公开 OEM3，服务端内部按 MR1 聚合。
   //   GET /api/public/products/{oem3}/sibling-oem3
