@@ -2,9 +2,12 @@
 // 🔧 fix(审查): 产品对比面板组件 (从 PublicCompareView 抽取, 内嵌到高级搜索页)
 //   用户反馈: 独立对比页与高级搜索页重复且无引导 — 移除独立页, 对比内嵌搜索页
 //   对比表格复用 AdminCompareView 6 字段组布局 (Musk 极简风, CSS 变量适配主题)
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { buildProductUrl } from '@/utils/build-product-url'
 import type { PublicProductDetail, PublicXrefInfo, MachineAppInfo } from '@/api/types'
+
+const { t } = useI18n()
 
 const props = defineProps<{ products: PublicProductDetail[] }>()
 const emit = defineEmits<{
@@ -117,11 +120,32 @@ function cellClass(values: string[]) {
   return distinct.size > 1 ? 'diff' : ''
 }
 
-const visibleGroups = computed(() => fieldGroups)
+// ===== "仅看差异" 开关 (与后台 AdminCompareView 对齐) =====
+const onlyDiff = ref(false)
+/** 分组内是否至少一个字段存在差异 (产品数>=2 且非全空且不全相同才保留) */
+function groupHasDiff(group: FieldGroup): boolean {
+  if (props.products.length < 2) return false
+  return group.fields.some((f) => {
+    const values = props.products.map((p) => valueOf(p, f))
+    const allEmpty = values.every((v) => !v)
+    if (allEmpty) return false
+    return !values.every((v) => v === values[0])
+  })
+}
+
+const visibleGroups = computed(() => {
+  if (!onlyDiff.value) return fieldGroups
+  return fieldGroups.filter((g) => groupHasDiff(g))
+})
 </script>
 
 <template>
-  <div class="compare-grid-wrap hairline">
+  <div>
+    <!-- "仅看差异" 开关: 只展示有差异的分组, 弱化相同项噪音 (与后台对比对齐) -->
+    <div class="flex items-center justify-end mb-2">
+      <el-checkbox v-model="onlyDiff" size="small">{{ t('admin.compareview.string.only_diff') }}</el-checkbox>
+    </div>
+    <div class="compare-grid-wrap hairline">
     <div
       class="compare-grid"
       :style="{ gridTemplateColumns: `160px repeat(${products.length}, minmax(180px, 1fr))` }"
@@ -177,6 +201,7 @@ const visibleGroups = computed(() => fieldGroups)
           </div>
         </template>
       </template>
+    </div>
     </div>
   </div>
 </template>
