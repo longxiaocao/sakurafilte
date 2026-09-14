@@ -11,8 +11,13 @@ export default defineConfig({
   testMatch: '**/*.spec.ts',
   // 全并行: 各 spec 文件有独立 beforeAll/afterAll, 无跨文件共享状态; describe.serial 保护文件内串行
   //   WHY workers=2: 平衡速度和 AuthPermitsPerMinute=5 限流; 4 workers 同时登录会 429
+  //   🔧 fix(2026-09-13): 跨浏览器时降为 workers=1 — webkit 渲染慢, 3 浏览器 × 2 workers 并发时
+  //     负载过高导致 SPA 页面加载 >30s 超时 (12 个 webkit 失败全为 goto 超时), 降并发从根因缓解
   fullyParallel: true,
-  workers: 2,
+  workers: process.env.ENABLE_CROSS_BROWSER === '1' ? 1 : 2,
+  // 🔧 fix(2026-09-13): 全局 test timeout 30s → 60s — webkit 高负载下页面加载可达 30-45s,
+  //   30s test timeout 会先于导航超时触发导致误报 (12 个 webkit 失败), 60s 容纳导航+断言
+  timeout: 60000,
   reporter: [['list'], ['html', { open: 'never', outputFolder: 'playwright-report' }]],
   use: {
     baseURL: process.env.BASE_URL || 'http://localhost:5173',

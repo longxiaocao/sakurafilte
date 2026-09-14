@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using SakuraFilter.Core.Entities;
 using SakuraFilter.Infrastructure.Data;
 
@@ -15,7 +16,7 @@ namespace SakuraFilter.Api.Services;
 ///   - 启动期默认用户 seed (admin/operator, 密码从环境变量读)
 /// 设计:
 ///   - 所有写操作走 ProductDbContext (与产品域共享 DbContext, 单事务边界)
-///   - 登录失败 5 次锁定 15 分钟 (防暴力破解)
+///   - 登录失败达到阈值(Auth:MaxFailedLoginCount, 默认 5)锁定 15 分钟 (防暴力破解)
 ///   - 登录审计日志同步写入 (成功/失败均记录)
 ///   - Refresh token 仅存哈希 (SHA256), 原文仅返回给客户端一次
 /// WHY Scoped: 依赖 ProductDbContext (Scoped), 生命周期必须 ≤ DbContext
@@ -27,16 +28,19 @@ public class UserService
     private readonly ILogger<UserService> _logger;
     private readonly XssSanitizer _xssSanitizer;
 
-    // 锁定策略常量
-    private const int MaxFailedLoginCount = 5;
+    // 锁定策略配置
     private static readonly TimeSpan LockDuration = TimeSpan.FromMinutes(15);
+    // 登录失败锁定阈值: 默认 5 (与历史行为一致)。生产通过 Auth__MaxFailedLoginCount 收紧 (如 3)。
+    // WHY 可配置: 开发/演示想少干扰, 生产想更严, 硬编码无法按环境差异化。
+    private readonly int _maxFailedLoginCount;
 
-    public UserService(ProductDbContext db, JwtTokenService jwt, ILogger<UserService> logger, XssSanitizer xssSanitizer)
+    public UserService(ProductDbContext db, JwtTokenService jwt, ILogger<UserService> logger, XssSanitizer xssSanitizer, IConfiguration config)
     {
         _db = db;
         _jwt = jwt;
         _logger = logger;
         _xssSanitizer = xssSanitizer;
+        _maxFailedLoginCount = config.GetValue<int?>("Auth:MaxFailedLoginCount") ?? 5;
     }
 
     /// <summary>
@@ -45,7 +49,7 @@ public class UserService
     ///   1. 按 username 查用户 (排除软删除)
     ///   2. 检查 IsActive / LockedUntil
     ///   3. BCrypt.Verify 验证密码
-    ///   4. 失败: FailedLoginCount++, 达 5 次设 LockedUntil = now + 15min
+    ///   4. 失败: FailedLoginCount++, 达阈值设 LockedUntil = now + 15min
     ///   5. 成功: 重置 FailedLoginCount=0, 更新 LastLoginAt/LastLoginIp
     ///   6. 写 LoginAuditLog (成功/失败均记录)
     /// 返回 null 表示认证失败 (具体原因见 audit log)
@@ -103,7 +107,7 @@ public class UserService
         {
             // 失败: FailedLoginCount++, 达阈值则锁定
             user.FailedLoginCount++;
-            if (user.FailedLoginCount >= MaxFailedLoginCount)
+            if (user.FailedLoginCount >= _maxFailedLoginCount)
             {
                 user.LockedUntil = DateTimeOffset.UtcNow.Add(LockDuration);
                 _logger.LogWarning("用户 {Username} 连续登录失败 {Count} 次, 已锁定至 {LockedUntil}",

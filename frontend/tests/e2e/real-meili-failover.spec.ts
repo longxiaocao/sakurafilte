@@ -318,7 +318,7 @@ test.describe.serial('Meili 降级 + 恶意文件上传 异常场景 E2E', () =>
     await injectAdminContext(page)
     await page.goto(`${FRONTEND}/search`, {
       waitUntil: 'domcontentloaded',
-      timeout: 20000
+      timeout: 40000
     })
     await page.screenshot({
       path: `${SHOT_DIR}/real-meili-2-fallback.png`,
@@ -379,6 +379,9 @@ test.describe.serial('Meili 降级 + 恶意文件上传 异常场景 E2E', () =>
   })
 
   test('4. 上传伪装为 .xlsx 的恶意文件 → 后端拒绝', async ({ page }) => {
+    // 🔧 fix(2026-09-13): 60s timeout — webkit 下编辑页加载可达 30s+, 原 30s 默认 timeout
+    //   在页面加载 + tab 展开后耗尽导致 locator.click 误报超时
+    test.setTimeout(60000)
     await injectAdminContext(page)
     await mockProductGet(page)
 
@@ -400,7 +403,7 @@ test.describe.serial('Meili 降级 + 恶意文件上传 异常场景 E2E', () =>
 
     await page.goto(`${FRONTEND}/admin/products/123/edit`, {
       waitUntil: 'domcontentloaded',
-      timeout: 15000
+      timeout: 40000
     })
     await expandImageSection(page)
 
@@ -458,7 +461,7 @@ test.describe.serial('Meili 降级 + 恶意文件上传 异常场景 E2E', () =>
 
     await page.goto(`${FRONTEND}/admin/products/123/edit`, {
       waitUntil: 'domcontentloaded',
-      timeout: 15000
+      timeout: 40000
     })
     await expandImageSection(page)
 
@@ -507,7 +510,7 @@ test.describe.serial('Meili 降级 + 恶意文件上传 异常场景 E2E', () =>
 
     await page.goto(`${FRONTEND}/admin/products/123/edit`, {
       waitUntil: 'domcontentloaded',
-      timeout: 15000
+      timeout: 40000
     })
     await expandImageSection(page)
 
@@ -557,7 +560,7 @@ test.describe.serial('Meili 降级 + 恶意文件上传 异常场景 E2E', () =>
 
     await page.goto(`${FRONTEND}/admin/etl`, {
       waitUntil: 'domcontentloaded',
-      timeout: 20000
+      timeout: 40000
     })
     await page.waitForSelector('h1', { timeout: 10000 })
 

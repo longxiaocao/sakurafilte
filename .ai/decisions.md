@@ -11,6 +11,19 @@
 ```
 
 ---
+#20 前端入口文件缓存策略加固 (2026-09-14)
+决策: nginx 对无 hash 的 Vite 前端入口文件 (main.js / product-detail-client.js) 设 no-cache, 对带 hash 的 chunk/css 保持 immutable(1年) 长缓存
+理由: 入口文件因 vite `entryFileNames: 'assets/[name].js'` 固定名为无 hash 的 [name].js, 但内容随每次构建变化。若用 immutable(1年) 缓存, 重建镜像后浏览器仍用旧入口, 旧入口内部引用的 chunk hash 已被工程清理 → 404 / strict MIME 报错 (生产事故: 用户反馈产品搜索界面无法打开)。带 hash 的 chunk/css (assetFileNames 含 [hash], 内容变了 hash 就变→URL 变化) 才适合 immutable。用 `location = /assets/main.js` 精确匹配 (优先级高于 /assets/ 前缀 match) 覆盖 no-cache
+排除方案:
+  - 整个 /assets/ 改为 no-cache: 放弃 chunk 长缓存收益, 违背静态资源 immutable 最佳实践
+  - 改 vite entryFileNames 让入口也带 hash: 需同步改 index.html + Detail.cshtml 引用, 改动面大, 且 SEO Detail.cshtml 是静态引用固定名
+关联文件:
+  - backend/src/SakuraFilter.Api/Pages/Detail.cshtml (SEO 入口引用)
+  - frontend/vite.config.ts
+  - frontend/dist/index.html
+  - docker/nginx.conf
+
+---
 
 #1 SSE 401 修复方案选择 (2026-07-18, v30-17 SSE 鉴权修复 2026-07-21, v30-18 多端点鉴权批量修复 2026-07-22, v30-19 /api/perf 鉴权修复 2026-07-22)
 决策: 前端改用 fetch + ReadableStream 替代 EventSource, 不改后端 (V24-F78); v30-17 后端 SSE 端点加 RequireAuthorization("Admin") 修复 P0 安全漏洞 (未认证可访问 ETL 进度); v30-18 批量修复 6 个同类漏洞端点 (/api/admin/perf/alerts + /api/admin/auth/status + /api/etl/import + /api/etl/status + /api/etl/import-xrefs + /api/etl/import-apps); v30-19 修复 /api/perf 公开访问泄漏 P50/P95/P99 运维数据 (与 /api/admin/perf/alerts 同类敏感数据)
@@ -662,3 +675,22 @@ v30-14 1M OFFSET 深分页专项压测验证数据 (2026-07-21, sakurafilter_per
   - 恢复 db-init/db-migrate 服务: 任何 compose up 都会重建并重跑迁移 → 数据全清, 危险
   - Take(8) 加"加载更多"端点: 前端需联动改造 + 后端新端点, 低频场景不值, 留 P2
 关联文件: backend/src/SakuraFilter.Api/Controllers/PublicSearchController.cs, docker-compose.prod.yml, .env.prod.example, scripts/backup-db.sh, docs/ops-manual.md, frontend/src/api/types.ts
+
+#33 账号锁定过期惰性重置 (P1-5, 2026-09-13)
+决策: UserService.AuthenticateAsync 在密码校验前检测锁定窗口已过期 → 惰性重置 FailedLoginCount=0 + LockedUntil=null, 再走正常密码校验
+理由: 原逻辑锁定过期后 FailedLoginCount 仍为 5, 下一次密码错误会立即再次触发 15min 锁定 (计数器未归零), 用户几乎无法恢复登录。重置后需重新累计 5 次失败才锁定, 符合常见安全实现 (锁定是时间窗惩罚, 过期即作废)
+排除方案:
+  - 登录时定期后台任务清理过期锁定: 增加无谓 DB 写, 惰性重置在下次登录时顺带完成即可
+  - 锁定过期后仅解 LockedUntil 不重置计数: 不解决"单次失败再锁"问题
+验证: 单元测试 39/39 + 生产容器重建后实测 (过期+正确密码→200/计数归零; 过期+错误密码→401/仅计 1 次)
+关联文件: backend/src/SakuraFilter.Api/Services/UserService.cs, backend/tests/SakuraFilter.Api.Tests/UserServiceTests.cs
+
+#34 prod db-migrate 幂等化修复 (2026-09-14)
+决策: db-migrate 改为执行 run-migrations.sh，用历史表 __sakura_migrations 记录已应用的迁移文件，未记录才执行、已记录跳过。
+理由: 原 docker-compose.prod.yml db-migrate 每次 up 都 `for f in /migrations/*.sql` 全量重跑，而 migrations/ 中多个脚本标注"一次性不可重跑"（008/009/010 的 DELETE 去重、018_v2_legacy_data_cleanup.sql 的 TRUNCATE 业务表）。实测 2026-09-13 重建 prod 镜像后 018 被反复执行，清空 products(9376)/machine_applications(150111,含孤儿48832)/cross_references(149342)。幂等化后重启 db-migrate 全部 SKIP，数据不再丢失。
+排除方案:
+  - cmd 里直接排除 018 文件: 硬编码脆、其他一次性脚本仍会被重跑，无法根治
+  - 只给 018 加 IF 守卫: 每脚本单独打补丁维护成本高，且 008/009/010 同样不可重跑
+  - 用 __EFMigrationsHistory 关联: EF 表结构语义不同，SQL 迁移无对应行，误用有风险
+验证: docker compose up db-migrate 重启后日志全 SKIP(018 在内)，products/xrefs/apps 行数完好
+关联文件: docker-compose.prod.yml, backend/migrations/run-migrations.sh

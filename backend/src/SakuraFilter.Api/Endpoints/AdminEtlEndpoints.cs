@@ -549,7 +549,24 @@ public static class AdminEtlEndpoints
             if (product == null)
                 return Results.NotFound(new { error = "产品不存在" });
 
-            // 3. 更新孤儿记录
+            // 3. 查目标产品是否已有同机型 (brand+model 忽略大小写) — 拦截重复行
+            // WHY 2026-09-14 走查: 原链路直接 Update ProductId, 产品临时关联同一机型两次会生成
+            //   完全重复的 machine_applications 行; 产品管理/详情的机型列表查询 (Where ProductId==id) 不去重。
+            if (!string.IsNullOrWhiteSpace(app.MachineBrand) && !string.IsNullOrWhiteSpace(app.MachineModel))
+            {
+                var dup = await db.MachineApplications.AsNoTracking().AnyAsync(
+                    m => m.ProductId == prodId
+                        && m.MachineBrand != null && m.MachineBrand.ToLower() == app.MachineBrand!.ToLower()
+                        && m.MachineModel != null && m.MachineModel.ToLower() == app.MachineModel!.ToLower(),
+                    ct);
+                if (dup)
+                    return Results.Conflict(new
+                    {
+                        error = $"产品已包含机型 {app.MachineBrand} {app.MachineModel}, 已跳过 (避免重复)"
+                    });
+            }
+
+            // 4. 更新孤儿记录
             db.MachineApplications.Update(new MachineApplication
             {
                 Id = app.Id,
@@ -562,7 +579,7 @@ public static class AdminEtlEndpoints
             });
             await db.SaveChangesAsync(ct);
 
-            // 4. touch 产品 UpdatedAt → 触发 Meili 增量同步 (IndexReplayWorker)
+            // 5. touch 产品 UpdatedAt → 触发 Meili 增量同步 (IndexReplayWorker)
             // WHY: 孤儿关联后, 该机型应出现在产品详情页, 需让 Meili 重建此产品文档
             var now = DateTime.UtcNow;
             await db.Products

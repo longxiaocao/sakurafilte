@@ -633,6 +633,42 @@ export default {
 
       },
     },
+    orphansview: {
+      title: 'Orphan Machine Management',
+      hint: 'These machines are not linked to any product. After linking, they appear in the product detail "Machine Applications".',
+      search_placeholder: 'Search brand / model / name',
+      total_orphans: 'Total orphans: {total}',
+      filtered: 'Filtered: {keyword} ({total})',
+      col: {
+        id: 'ID',
+        brand: 'Brand',
+        model: 'Model',
+        model_name: 'Model Name',
+        category: 'Category',
+        created_at: 'Created At',
+      },
+      action: {
+        link: 'Link',
+      },
+      dialog: {
+        title: 'Link to Product',
+        linked_success: 'Linked: {mr1}',
+        search_product: 'Search Product (OEM / MR1)',
+        search_placeholder: 'Enter OEM or MR.1',
+        col_id: 'ID',
+        col_mr1: 'MR.1',
+        select_hint: 'Select a product then click "Confirm Link"',
+        confirm_link: 'Confirm Link',
+      },
+      error: {
+        load_failed: 'Failed to load orphan list',
+        select_product: 'Please select a product first',
+        link_failed: 'Link failed',
+      },
+      success: {
+        linked: 'Linked: {mr1}',
+      },
+    },
     perfview: {
       label: {
         pause_auto_refresh: 'Pause Auto Refresh',
@@ -1337,7 +1373,7 @@ export default {
     opsCenter: 'Ops Center',
     // 🔧 fix(审查): 运维中心 el-tabs label i18n
     opsview: {
-      tab: { etl: 'ETL Trigger & Monitor', perf: 'Performance', errors: 'Errors', api: 'API Docs', storage: 'Storage Config', orphans: 'Orphan Images' }
+      tab: { etl: 'ETL Trigger & Monitor', perf: 'Performance', errors: 'Errors', api: 'API Docs', storage: 'Storage Config', orphans: 'Orphan Machines' }
     },
     storage: {
       provider: 'Storage Provider',

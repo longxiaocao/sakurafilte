@@ -636,6 +636,42 @@ export default {
 
       },
     },
+    orphansview: {
+      title: '孤儿机型管理',
+      hint: '以下机型未关联任何产品。手动关联后即进入产品详情「适配机型」列表。',
+      search_placeholder: '搜索品牌 / 型号 / 名称',
+      total_orphans: '孤儿总量 {total}',
+      filtered: '已过滤: {keyword} ({total})',
+      col: {
+        id: 'ID',
+        brand: '机型品牌',
+        model: '机型型号',
+        model_name: '机型名称',
+        category: '类别',
+        created_at: '创建时间',
+      },
+      action: {
+        link: '关联',
+      },
+      dialog: {
+        title: '关联到产品',
+        linked_success: '已关联: {mr1}',
+        search_product: '搜索产品 (OEM / MR1)',
+        search_placeholder: '输入 OEM 或 MR.1 搜索',
+        col_id: 'ID',
+        col_mr1: 'MR.1',
+        select_hint: '从下方选择产品后点击「确认关联」',
+        confirm_link: '确认关联',
+      },
+      error: {
+        load_failed: '孤儿列表加载失败',
+        select_product: '请先选择产品',
+        link_failed: '关联失败',
+      },
+      success: {
+        linked: '已关联: {mr1}',
+      },
+    },
     perfview: {
       label: {
         pause_auto_refresh: '暂停自动刷新',
@@ -1339,7 +1375,7 @@ export default {
     opsCenter: '运维中心',
     // 🔧 fix(审查): 运维中心 el-tabs label i18n (原硬编码中文)
     opsview: {
-      tab: { etl: 'ETL 触发与监控', perf: '性能', errors: '错误', api: 'API 文档', storage: '存储配置', orphans: '孤立图片' }
+      tab: { etl: 'ETL 触发与监控', perf: '性能', errors: '错误', api: 'API 文档', storage: '存储配置', orphans: '孤立机型' }
     },
     storage: {
       provider: '存储服务商',

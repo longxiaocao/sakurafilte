@@ -17,7 +17,7 @@ test.describe('P1-E2E-3 公开搜索流程 (用户视角)', () => {
   test('1. 搜索页加载 + 输入关键词 + 触发搜索', async ({ page }) => {
     await injectZhLocale(page)
     // v30-22 修复: SSE 持续连接导致 networkidle 永远不触发, 改用 domcontentloaded
-    await page.goto(`${BASE}/search`, { waitUntil: 'domcontentloaded', timeout: 20000 })
+    await page.goto(`${BASE}/search`, { waitUntil: 'domcontentloaded', timeout: 40000 })
     // /search 已重定向到聚合搜索页，使用实际可访问的标题与输入框定位。
     await page.getByRole('heading', { name: '聚合搜索', exact: true }).waitFor({ timeout: 10000 })
     const searchInput = page.getByPlaceholder('输入关键词 (产品名 / OEM / 机型 / 品牌)')
@@ -48,7 +48,7 @@ test.describe('P1-E2E-3 公开搜索流程 (用户视角)', () => {
 
   test('2. 公开产品详情页加载 (已知 OEM)', async ({ page }) => {
     // P0505921 是 spike-test 库中的公开产品 (Air filter)
-    await page.goto(`${BASE}/product/P0505921`, { waitUntil: 'domcontentloaded', timeout: 15000 })
+    await page.goto(`${BASE}/product/P0505921`, { waitUntil: 'domcontentloaded', timeout: 40000 })
     // 等待详情页内容加载
     await page.waitForSelector('body', { timeout: 5000 })
     // 验证不白屏
@@ -60,7 +60,7 @@ test.describe('P1-E2E-3 公开搜索流程 (用户视角)', () => {
   })
 
   test('3. 公开搜索页 8 字段多框 (PublicSearch)', async ({ page }) => {
-    await page.goto(`${BASE}/public/search`, { waitUntil: 'domcontentloaded', timeout: 15000 })
+    await page.goto(`${BASE}/public/search`, { waitUntil: 'domcontentloaded', timeout: 40000 })
     // 等待 8 字段表单加载
     await page.waitForSelector('h1', { timeout: 10000 })
     await page.waitForSelector('.el-input', { timeout: 10000 })
@@ -76,7 +76,7 @@ test.describe('P1-E2E-3 公开搜索流程 (用户视角)', () => {
   })
 
   test('4. 主题切换功能 (浅色/深色)', async ({ page }) => {
-    await page.goto(`${BASE}/search`, { waitUntil: 'domcontentloaded', timeout: 15000 })
+    await page.goto(`${BASE}/search`, { waitUntil: 'domcontentloaded', timeout: 40000 })
     // 等待主题切换按钮
     const themeBtn = page.locator('button:has-text("主题切换"), button[title*="主题"]')
     await themeBtn.waitFor({ timeout: 5000 }).catch(() => null)
@@ -93,7 +93,7 @@ test.describe('P1-E2E-3 公开搜索流程 (用户视角)', () => {
   })
 
   test('5. 导航栏跳转 (搜索 ↔ 后台)', async ({ page }) => {
-    await page.goto(`${BASE}/search`, { waitUntil: 'domcontentloaded', timeout: 15000 })
+    await page.goto(`${BASE}/search`, { waitUntil: 'domcontentloaded', timeout: 40000 })
     // 等待导航栏
     await page.waitForSelector('nav, header', { timeout: 10000 })
     // 点击"产品搜索"导航
@@ -116,7 +116,7 @@ test.describe('P1-E2E-3 公开搜索流程 (用户视角)', () => {
     ]
 
     for (const target of pages) {
-      await page.goto(target.url, { waitUntil: 'domcontentloaded', timeout: 20000 })
+      await page.goto(target.url, { waitUntil: 'domcontentloaded', timeout: 40000 })
       const readySel = target.ready as string
       const fallbackSel = (target as any).fallback as string | undefined
       // data-dependent: 优先等待主选择器, 0 个匹配时降级到 fallback (如无图时等结果网格)
@@ -163,7 +163,7 @@ test.describe('P1-E2E-3 公开搜索流程 (用户视角)', () => {
   test('7. 桌面机型目录按场景、品牌、型号联动公开搜索', async ({ page }) => {
     await injectZhLocale(page)
     await page.setViewportSize({ width: 1440, height: 900 })
-    await page.goto(`${BASE}/search/aggregate`, { waitUntil: 'domcontentloaded', timeout: 20000 })
+    await page.goto(`${BASE}/search/aggregate`, { waitUntil: 'domcontentloaded', timeout: 40000 })
 
     const catalog = page.locator('aside[aria-label="机型分类目录"]')
     await catalog.waitFor({ timeout: 15000 })
@@ -213,7 +213,7 @@ test.describe('P1-E2E-3 公开搜索流程 (用户视角)', () => {
     //   跳 /seo/FRA-53205 (xrefs 另一条 oem_2) → 404; 必须用 row.oem (用户查询的 OEM)。
     //   本测试断言跳转 URL 包含 /seo/U0000014 (用户输入的 OEM), 防止回退。
     await injectZhLocale(page)
-    await page.goto(`${BASE}/search`, { waitUntil: 'domcontentloaded', timeout: 20000 })
+    await page.goto(`${BASE}/search`, { waitUntil: 'domcontentloaded', timeout: 40000 })
     await page.getByRole('button', { name: '批量粘贴', exact: true }).click()
     const textarea = page.locator('.el-dialog textarea')
     await textarea.waitFor({ timeout: 5000 })

@@ -69,8 +69,12 @@ public class UserServiceTests
         return new JwtTokenService(config);
     }
 
-    private static UserService CreateSut(ProductDbContext db, JwtTokenService? jwt = null, XssSanitizer? xss = null)
-        => new(db, jwt ?? CreateJwt(), NullLogger<UserService>.Instance, xss ?? new XssSanitizer());
+    // 默认 IConfiguration: 未配置 Auth:MaxFailedLoginCount → 阈值保持默认 5 (与历史/现有用例一致)
+    private static IConfiguration CreateConfig(params (string key, string value)[] kv)
+        => new ConfigurationBuilder().AddInMemoryCollection(kv.Select(x => new KeyValuePair<string, string?>(x.key, x.value))).Build();
+
+    private static UserService CreateSut(ProductDbContext db, JwtTokenService? jwt = null, XssSanitizer? xss = null, IConfiguration? config = null)
+        => new(db, jwt ?? CreateJwt(), NullLogger<UserService>.Instance, xss ?? new XssSanitizer(), config ?? CreateConfig());
 
     private static string HashPwd(string pwd) => BCrypt.Net.BCrypt.HashPassword(pwd, workFactor: 4);  // 4 = 测试快速
 

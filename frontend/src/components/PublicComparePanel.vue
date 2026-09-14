@@ -25,6 +25,14 @@ const machineSummary = (list: MachineAppInfo[] | undefined) => {
   return head.length === 0 ? '' : head.join('; ') + (list.length > 2 ? ` (+${list.length - 2})` : '')
 }
 
+// 公开对比主图: slot=1 优先, 其次第一张; 无图返回 undefined (前端占位)
+function getPrimaryImage(p: PublicProductDetail): string | undefined {
+  if (!p.images || p.images.length === 0) return undefined
+  const primary = p.images.find((img) => img.slot === 1)
+  const url = primary?.imageUrl || p.images[0]?.imageUrl
+  return url || undefined
+}
+
 interface FieldDef {
   key: string
   label: string
@@ -135,6 +143,16 @@ const visibleGroups = computed(() => fieldGroups)
               >{{ p.oemNoDisplay }}</a>
             </div>
             <div class="text-xs text-muted truncate" :title="p.oem2 || ''">{{ p.oem2 || '—' }}</div>
+            <!-- 公开对比主图缩略图 (60x60px); 无图时不渲染, 不占位 -->
+            <!--   WHY 客户反馈: 对比只有文字难直观比较, 与后台 AdminCompareView 主图缩略图对齐 -->
+            <img
+              v-if="getPrimaryImage(p)"
+              :src="getPrimaryImage(p)!"
+              :alt="p.oemNoDisplay"
+              class="compare-thumb"
+              loading="lazy"
+              @error="(e) => { const t = e.target as HTMLImageElement; if (t) t.style.display = 'none' }"
+            />
           </div>
           <div class="flex flex-col gap-0.5 no-print">
             <el-button size="small" text :disabled="idx === 0" @click="emit('moveLeft', idx)" title="左移" style="padding: 0 2px; height: 16px" aria-label="左移">‹</el-button>
@@ -174,4 +192,5 @@ const visibleGroups = computed(() => fieldGroups)
 .data-cell { padding: 6px 8px; font-size: 12px; border-bottom: 1px solid var(--color-border); word-break: break-word; }
 .data-cell.diff { background: rgba(64, 158, 255, 0.08); color: var(--color-accent); font-weight: 500; }
 .sticky-left { position: sticky; left: 0; }
+.compare-thumb { width: 60px; height: 60px; object-fit: contain; border: 1px solid var(--color-border); border-radius: 4px; margin-top: 6px; }
 </style>

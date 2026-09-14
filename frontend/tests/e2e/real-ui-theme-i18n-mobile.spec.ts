@@ -154,7 +154,7 @@ async function navigateToRoute(page: Page, route: RouteDef) {
   if (route.needAuth) {
     await injectAdminToken(page)
   }
-  await page.goto(`${BASE}${route.path}`, { waitUntil: 'domcontentloaded', timeout: 30000 })
+  await page.goto(`${BASE}${route.path}`, { waitUntil: 'domcontentloaded', timeout: 45000 })
 }
 
 // 等待页面基本渲染完成 (header 出现或超时后继续)
@@ -175,7 +175,7 @@ test.describe('1. 主题切换: 浅色 → 深色 → 跟随系统', () => {
   test('1.1 浅色 → 深色: html 加 dark class + localStorage 持久化', async ({ page }) => {
     await injectTheme(page, 'light')
     await injectLocale(page, 'zh-CN')
-    await page.goto(`${BASE}/search/aggregate`, { waitUntil: 'domcontentloaded', timeout: 20000 })
+    await page.goto(`${BASE}/search/aggregate`, { waitUntil: 'domcontentloaded', timeout: 40000 })
     await waitForPageRender(page)
 
     // 初始: 浅色, 无 dark class
@@ -199,7 +199,7 @@ test.describe('1. 主题切换: 浅色 → 深色 → 跟随系统', () => {
   test('1.2 深色 → 浅色: dark class 移除', async ({ page }) => {
     await injectTheme(page, 'dark')
     await injectLocale(page, 'zh-CN')
-    await page.goto(`${BASE}/search/aggregate`, { waitUntil: 'domcontentloaded', timeout: 20000 })
+    await page.goto(`${BASE}/search/aggregate`, { waitUntil: 'domcontentloaded', timeout: 40000 })
     await waitForPageRender(page)
 
     // 初始: 深色
@@ -229,7 +229,7 @@ test.describe('1. 主题切换: 浅色 → 深色 → 跟随系统', () => {
     await page.emulateMedia({ colorScheme: 'dark' })
     await clearTheme(page)
     await injectLocale(page, 'zh-CN')
-    await page.goto(`${BASE}/search/aggregate`, { waitUntil: 'domcontentloaded', timeout: 20000 })
+    await page.goto(`${BASE}/search/aggregate`, { waitUntil: 'domcontentloaded', timeout: 40000 })
     await waitForPageRender(page)
 
     // 断言1: 系统深色 → html 有 dark class
@@ -237,7 +237,7 @@ test.describe('1. 主题切换: 浅色 → 深色 → 跟随系统', () => {
 
     // 切换系统偏好为浅色, 清除 localStorage 后重新加载
     await page.emulateMedia({ colorScheme: 'light' })
-    await page.reload({ waitUntil: 'domcontentloaded', timeout: 20000 })
+    await page.reload({ waitUntil: 'domcontentloaded', timeout: 40000 })
     await waitForPageRender(page)
 
     // 断言2: 系统浅色 → html 无 dark class
@@ -254,7 +254,7 @@ test.describe('1. 主题切换: 浅色 → 深色 → 跟随系统', () => {
 test('2. 主题切换无刷新即时生效: CSS 变量立即变化', async ({ page }) => {
   await injectTheme(page, 'light')
   await injectLocale(page, 'zh-CN')
-  await page.goto(`${BASE}/search/aggregate`, { waitUntil: 'domcontentloaded', timeout: 20000 })
+  await page.goto(`${BASE}/search/aggregate`, { waitUntil: 'domcontentloaded', timeout: 40000 })
   await waitForPageRender(page)
 
   // 获取切换前的 CSS 变量值 (--el-bg-color 是 Element Plus 背景色, 深浅模式必不同)
@@ -304,7 +304,7 @@ test('2. 主题切换无刷新即时生效: CSS 变量立即变化', async ({ pa
 test.describe('3. i18n 切换: zh-CN → en-US, 覆盖全部路由', () => {
   test('3.1 语言切换按钮: 点击 zh-CN → en-US (localStorage + HTML lang)', async ({ page }) => {
     await injectLocale(page, 'zh-CN')
-    await page.goto(`${BASE}/search/aggregate`, { waitUntil: 'domcontentloaded', timeout: 20000 })
+    await page.goto(`${BASE}/search/aggregate`, { waitUntil: 'domcontentloaded', timeout: 40000 })
     await waitForPageRender(page)
 
     // 初始: 中文模式, 按钮显示 "中"
@@ -395,7 +395,7 @@ test.describe('3. i18n 切换: zh-CN → en-US, 覆盖全部路由', () => {
 test('4. i18n 切换后主题保持不变', async ({ page }) => {
   await injectTheme(page, 'dark')
   await injectLocale(page, 'zh-CN')
-  await page.goto(`${BASE}/search/aggregate`, { waitUntil: 'domcontentloaded', timeout: 20000 })
+  await page.goto(`${BASE}/search/aggregate`, { waitUntil: 'domcontentloaded', timeout: 40000 })
   await waitForPageRender(page)
 
   // 初始: 深色主题
@@ -437,7 +437,7 @@ test.describe('5. 移动端 375px 响应式', () => {
   })
 
   test('5.1 聚合搜索页: 无水平溢出 + 搜索框可见可输入', async ({ page }) => {
-    await page.goto(`${BASE}/search/aggregate`, { waitUntil: 'domcontentloaded', timeout: 20000 })
+    await page.goto(`${BASE}/search/aggregate`, { waitUntil: 'domcontentloaded', timeout: 40000 })
     await waitForPageRender(page)
 
     // 断言1: 无水平溢出 (scrollWidth <= clientWidth + 1px 渲染容差)
@@ -481,7 +481,7 @@ test.describe('5. 移动端 375px 响应式', () => {
 
   test('5.3 对比页: 表格横向滚动 (溢出有滚动条, 非布局破坏)', async ({ page }) => {
     // 带产品 ID 访问对比页 (ID 1,2 可能不存在, 但表格框架仍渲染)
-    await page.goto(`${BASE}/compare?ids=1,2`, { waitUntil: 'domcontentloaded', timeout: 20000 })
+    await page.goto(`${BASE}/compare?ids=1,2`, { waitUntil: 'domcontentloaded', timeout: 40000 })
     await page.waitForTimeout(2000)
 
     // 断言1: 页面正常渲染 (非白屏)
@@ -512,7 +512,7 @@ test.describe('5. 移动端 375px 响应式', () => {
 test('6. 移动端导航: 汉堡菜单可见 + 点击展开', async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 812 })
   await injectLocale(page, 'zh-CN')
-  await page.goto(`${BASE}/search/aggregate`, { waitUntil: 'domcontentloaded', timeout: 20000 })
+  await page.goto(`${BASE}/search/aggregate`, { waitUntil: 'domcontentloaded', timeout: 40000 })
   await waitForPageRender(page)
 
   // 断言1: 汉堡菜单按钮可见 (sm:hidden, 375px < 640px 显示)

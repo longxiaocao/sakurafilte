@@ -53,6 +53,8 @@ services:
       Jwt__ExpireMinutes: "60"
       Jwt__RefreshExpireDays: "7"
       Auth__DevStaticToken: "${ADMIN_DEV_TOKEN}"
+      # 登录失败锁定阈值 (UserService 读取; 生产收紧为 3, 默认 5)
+      Auth__MaxFailedLoginCount: "${AUTH_MAX_FAILED_LOGIN_COUNT:-3}"
       # 首次启动 seed 默认用户 (Users 表为空时创建 admin/operator, 密码来自 .env.prod)
       INITIAL_ADMIN_PASSWORD: "${INITIAL_ADMIN_PASSWORD}"
       INITIAL_OPERATOR_PASSWORD: "${INITIAL_OPERATOR_PASSWORD}"
@@ -179,12 +181,12 @@ services:
       - ./backend/migrations:/migrations:ro
     environment:
       PGPASSWORD: ${POSTGRES_PASSWORD}
-    command: >
-      sh -c 'for f in /migrations/*.sql; do
-        echo "===== Executing $$f =====";
-        psql -h postgres -U ${POSTGRES_USER} -d ${POSTGRES_DB} -v ON_ERROR_STOP=1 -f "$$f" || exit 1;
-      done;
-      echo "===== All SQL migrations applied ====="'
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_DB: ${POSTGRES_DB}
+    # 🔧 fix(生产数据丢失): 原命令每次 up 全量重跑 migrations/*.sql,
+    #   018_v2_legacy_data_cleanup.sql (一次性 TRUNCATE) 被反复执行 → 清空业务表。
+    #   改为 run-migrations.sh (历史表 __sakura_migrations 标记已应用, 未记录才执行, 已记录跳过)。
+    command: ["sh", "/migrations/run-migrations.sh"]
     networks:
       - sakura-net
 

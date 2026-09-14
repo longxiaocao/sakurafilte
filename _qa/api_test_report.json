@@ -6,7 +6,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  242,
+                        "ms":  235,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/info"
                     },
@@ -16,7 +16,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  19,
+                        "ms":  20,
                         "detail":  "",
                         "url":  "http://localhost:5148/health/live"
                     },
@@ -26,7 +26,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  46,
+                        "ms":  43,
                         "detail":  "",
                         "url":  "http://localhost:5148/health/ready"
                     },
@@ -36,7 +36,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  678,
+                        "ms":  898,
                         "detail":  "",
                         "url":  "http://localhost:5148/swagger/v1/swagger.json"
                     },
@@ -46,7 +46,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  328,
+                        "ms":  316,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/auth/login"
                     },
@@ -56,7 +56,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  33,
+                        "ms":  41,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/auth/me"
                     },
@@ -66,7 +66,7 @@
                         "ok":  true,
                         "expected":  "401",
                         "actual":  401,
-                        "ms":  10,
+                        "ms":  16,
                         "detail":  "远程服务器返回错误: (401) 未经授权。",
                         "url":  "http://localhost:5148/api/auth/me"
                     },
@@ -76,7 +76,7 @@
                         "ok":  true,
                         "expected":  "401",
                         "actual":  401,
-                        "ms":  4,
+                        "ms":  5,
                         "detail":  "远程服务器返回错误: (401) 未经授权。",
                         "url":  "http://localhost:5148/api/auth/me"
                     },
@@ -86,7 +86,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  20,
+                        "ms":  25,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/auth/turnstile-config"
                     },
@@ -96,7 +96,7 @@
                         "ok":  true,
                         "expected":  "400",
                         "actual":  400,
-                        "ms":  365,
+                        "ms":  334,
                         "detail":  "The remote server returned an error: (400) Bad Request.",
                         "url":  "http://localhost:5148/api/auth/change-password"
                     },
@@ -106,7 +106,7 @@
                         "ok":  true,
                         "expected":  "400",
                         "actual":  400,
-                        "ms":  8,
+                        "ms":  16,
                         "detail":  "The remote server returned an error: (400) Bad Request.",
                         "url":  "http://localhost:5148/api/auth/change-password"
                     },
@@ -116,7 +116,7 @@
                         "ok":  true,
                         "expected":  "401",
                         "actual":  401,
-                        "ms":  47,
+                        "ms":  54,
                         "detail":  "The remote server returned an error: (401) Unauthorized.",
                         "url":  "http://localhost:5148/api/auth/refresh"
                     },
@@ -126,7 +126,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  121,
+                        "ms":  76,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/search"
                     },
@@ -136,7 +136,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  36,
+                        "ms":  77,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/search"
                     },
@@ -146,7 +146,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  73,
+                        "ms":  74,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/search"
                     },
@@ -156,7 +156,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  85,
+                        "ms":  79,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/search"
                     },
@@ -166,7 +166,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  71,
+                        "ms":  67,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/search"
                     },
@@ -176,7 +176,7 @@
                         "ok":  true,
                         "expected":  "200|400",
                         "actual":  200,
-                        "ms":  71,
+                        "ms":  66,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/search"
                     },
@@ -186,7 +186,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  135,
+                        "ms":  85,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/search"
                     },
@@ -196,7 +196,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  97,
+                        "ms":  84,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/search"
                     },
@@ -206,7 +206,7 @@
                         "ok":  true,
                         "expected":  "200|400",
                         "actual":  200,
-                        "ms":  66,
+                        "ms":  70,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/search"
                     },
@@ -216,7 +216,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  36,
+                        "ms":  38,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/search/health"
                     },
@@ -226,7 +226,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  80,
+                        "ms":  119,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/public/search/aggregate"
                     },
@@ -236,7 +236,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  174,
+                        "ms":  145,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/public/search/batch-oem"
                     },
@@ -246,7 +246,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  62,
+                        "ms":  45,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/products/SH630239"
                     },
@@ -266,7 +266,7 @@
                         "ok":  true,
                         "expected":  "404",
                         "actual":  404,
-                        "ms":  4,
+                        "ms":  5,
                         "detail":  "远程服务器返回错误: (404) 未找到。",
                         "url":  "http://localhost:5148/api/products/%20"
                     },
@@ -276,7 +276,7 @@
                         "ok":  true,
                         "expected":  "400|404",
                         "actual":  404,
-                        "ms":  7,
+                        "ms":  3,
                         "detail":  "远程服务器返回错误: (404) 未找到。",
                         "url":  "http://localhost:5148/api/products/123456789012345678901234567890"
                     },
@@ -286,7 +286,7 @@
                         "ok":  true,
                         "expected":  "404",
                         "actual":  404,
-                        "ms":  40,
+                        "ms":  82,
                         "detail":  "远程服务器返回错误: (404) 未找到。",
                         "url":  "http://localhost:5148/product/SH630239"
                     },
@@ -296,7 +296,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  27,
+                        "ms":  34,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/public/by-type?oem1=Hydraulic%20Filter\u0026oem2=Spin-On"
                     },
@@ -306,7 +306,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  78,
+                        "ms":  41,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/public/products/SH630239/sibling-oem3"
                     },
@@ -316,7 +316,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  67,
+                        "ms":  86,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/admin/dict/oem-brands"
                     },
@@ -326,7 +326,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  58,
+                        "ms":  38,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/admin/dict/oem-brands/typeahead?q=a"
                     },
@@ -336,7 +336,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  49,
+                        "ms":  54,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/admin/dict/product-name1s"
                     },
@@ -346,7 +346,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  33,
+                        "ms":  29,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/admin/dict/product-name1s/typeahead?q=a"
                     },
@@ -356,7 +356,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  22,
+                        "ms":  33,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/admin/dict/product-name2s"
                     },
@@ -366,7 +366,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  34,
+                        "ms":  29,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/admin/dict/product-name2s/typeahead?q=a"
                     },
@@ -376,7 +376,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  21,
+                        "ms":  33,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/admin/dict/types"
                     },
@@ -386,7 +386,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  55,
+                        "ms":  28,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/admin/dict/types/typeahead?q=a"
                     },
@@ -396,7 +396,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  30,
+                        "ms":  34,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/admin/dict/oem-no3s"
                     },
@@ -406,7 +406,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  34,
+                        "ms":  29,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/admin/dict/oem-no3s/typeahead?q=a"
                     },
@@ -416,7 +416,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  26,
+                        "ms":  35,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/admin/dict/medias"
                     },
@@ -426,7 +426,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  35,
+                        "ms":  29,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/admin/dict/medias/typeahead?q=a"
                     },
@@ -436,7 +436,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  26,
+                        "ms":  103,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/admin/dict/machines"
                     },
@@ -446,7 +446,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  47,
+                        "ms":  95,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/admin/dict/machines/typeahead?q=a"
                     },
@@ -456,7 +456,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  25,
+                        "ms":  36,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/admin/dict/engines"
                     },
@@ -466,7 +466,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  55,
+                        "ms":  32,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/admin/dict/engines/typeahead?q=a"
                     },
@@ -476,7 +476,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  74,
+                        "ms":  127,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/admin/dict/oem-brands/export"
                     },
@@ -486,7 +486,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  1012,
+                        "ms":  811,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/admin/dict/oem-brands/export-xlsx"
                     },
@@ -506,7 +506,7 @@
                         "ok":  true,
                         "expected":  "200|201",
                         "actual":  201,
-                        "ms":  68,
+                        "ms":  104,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/admin/dict/oem-brands"
                     },
@@ -516,7 +516,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  59,
+                        "ms":  75,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/admin/products"
                     },
@@ -526,7 +526,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  53,
+                        "ms":  55,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/admin/products/search?q=filter"
                     },
@@ -536,7 +536,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  123,
+                        "ms":  133,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/admin/products/1"
                     },
@@ -546,7 +546,7 @@
                         "ok":  true,
                         "expected":  "404",
                         "actual":  404,
-                        "ms":  3,
+                        "ms":  8,
                         "detail":  "远程服务器返回错误: (404) 未找到。",
                         "url":  "http://localhost:5148/api/admin/products/999999"
                     },
@@ -556,7 +556,7 @@
                         "ok":  true,
                         "expected":  "404",
                         "actual":  404,
-                        "ms":  1,
+                        "ms":  2,
                         "detail":  "远程服务器返回错误: (404) 未找到。",
                         "url":  "http://localhost:5148/api/admin/products/abc"
                     },
@@ -566,7 +566,7 @@
                         "ok":  true,
                         "expected":  "401",
                         "actual":  401,
-                        "ms":  2,
+                        "ms":  1,
                         "detail":  "远程服务器返回错误: (401) 未经授权。",
                         "url":  "http://localhost:5148/api/admin/products"
                     },
@@ -596,7 +596,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  620,
+                        "ms":  430,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/admin/products/compare"
                     },
@@ -606,7 +606,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  25,
+                        "ms":  27,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/admin/products/MR000021/images"
                     },
@@ -616,7 +616,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  41,
+                        "ms":  52,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/admin/products/1/history"
                     },
@@ -626,7 +626,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  33,
+                        "ms":  30,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/etl/status"
                     },
@@ -646,7 +646,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  26,
+                        "ms":  25,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/admin/etl/progress"
                     },
@@ -656,7 +656,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  21,
+                        "ms":  34,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/admin/etl/history"
                     },
@@ -666,7 +666,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  24,
+                        "ms":  29,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/admin/etl/history/aggregate"
                     },
@@ -676,7 +676,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  230,
+                        "ms":  195,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/admin/etl/template"
                     },
@@ -686,7 +686,7 @@
                         "ok":  true,
                         "expected":  "400",
                         "actual":  400,
-                        "ms":  3,
+                        "ms":  6,
                         "detail":  "The remote server returned an error: (400) Bad Request.",
                         "url":  "http://localhost:5148/api/admin/etl/trigger"
                     },
@@ -696,7 +696,7 @@
                         "ok":  true,
                         "expected":  "400|404",
                         "actual":  400,
-                        "ms":  43,
+                        "ms":  42,
                         "detail":  "The remote server returned an error: (400) Bad Request.",
                         "url":  "http://localhost:5148/api/admin/etl/trigger"
                     },
@@ -706,7 +706,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  25,
+                        "ms":  49,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/admin/users"
                     },
@@ -716,7 +716,7 @@
                         "ok":  true,
                         "expected":  "401",
                         "actual":  401,
-                        "ms":  2,
+                        "ms":  1,
                         "detail":  "远程服务器返回错误: (401) 未经授权。",
                         "url":  "http://localhost:5148/api/admin/users"
                     },
@@ -726,7 +726,7 @@
                         "ok":  true,
                         "expected":  "400",
                         "actual":  400,
-                        "ms":  43,
+                        "ms":  49,
                         "detail":  "The remote server returned an error: (400) Bad Request.",
                         "url":  "http://localhost:5148/api/admin/users"
                     },
@@ -736,7 +736,7 @@
                         "ok":  true,
                         "expected":  "400",
                         "actual":  400,
-                        "ms":  44,
+                        "ms":  43,
                         "detail":  "The remote server returned an error: (400) Bad Request.",
                         "url":  "http://localhost:5148/api/admin/users"
                     },
@@ -746,39 +746,39 @@
                         "ok":  true,
                         "expected":  "200|201",
                         "actual":  201,
-                        "ms":  377,
+                        "ms":  375,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/admin/users"
                     },
                     {
                         "id":  "H06",
-                        "name":  "GET user detail 10",
+                        "name":  "GET user detail 28",
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  165,
+                        "ms":  28,
                         "detail":  "",
-                        "url":  "http://localhost:5148/api/admin/users/10"
+                        "url":  "http://localhost:5148/api/admin/users/28"
                     },
                     {
                         "id":  "H07",
-                        "name":  "POST reset-password 10",
+                        "name":  "POST reset-password 28",
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  483,
+                        "ms":  358,
                         "detail":  "",
-                        "url":  "http://localhost:5148/api/admin/users/10/reset-password"
+                        "url":  "http://localhost:5148/api/admin/users/28/reset-password"
                     },
                     {
                         "id":  "H08",
-                        "name":  "DELETE user 10",
+                        "name":  "DELETE user 28",
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  33,
+                        "ms":  38,
                         "detail":  "",
-                        "url":  "http://localhost:5148/api/admin/users/10"
+                        "url":  "http://localhost:5148/api/admin/users/28"
                     },
                     {
                         "id":  "H09",
@@ -786,9 +786,9 @@
                         "ok":  true,
                         "expected":  "404",
                         "actual":  404,
-                        "ms":  6,
+                        "ms":  4,
                         "detail":  "远程服务器返回错误: (404) 未找到。",
-                        "url":  "http://localhost:5148/api/admin/users/10"
+                        "url":  "http://localhost:5148/api/admin/users/28"
                     },
                     {
                         "id":  "H10",
@@ -796,7 +796,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  43,
+                        "ms":  48,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/admin/audit/login"
                     },
@@ -806,7 +806,7 @@
                         "ok":  true,
                         "expected":  "401",
                         "actual":  401,
-                        "ms":  3,
+                        "ms":  1,
                         "detail":  "远程服务器返回错误: (401) 未经授权。",
                         "url":  "http://localhost:5148/api/admin/audit/login"
                     },
@@ -816,7 +816,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  2020,
+                        "ms":  314,
                         "detail":  "",
                         "url":  "http://localhost:5148/metrics"
                     },
@@ -826,7 +826,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  24,
+                        "ms":  32,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/perf"
                     },
@@ -836,7 +836,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  21,
+                        "ms":  22,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/admin/perf/alerts?limit=10"
                     },
@@ -856,7 +856,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  20,
+                        "ms":  22,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/admin/auth/status"
                     },
@@ -866,7 +866,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  2330,
+                        "ms":  339,
                         "detail":  "",
                         "url":  "http://localhost:5148/metrics"
                     },
@@ -876,7 +876,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  25,
+                        "ms":  37,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/admin/alerts/history?limit=10\u0026offset=0"
                     },
@@ -886,7 +886,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  22,
+                        "ms":  35,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/admin/alerts/stats"
                     },
@@ -896,7 +896,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  35,
+                        "ms":  29,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/admin/alerts/rules"
                     },
@@ -916,7 +916,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  66,
+                        "ms":  197,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/admin/xrefs/reorder/brands"
                     },
@@ -926,7 +926,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  32,
+                        "ms":  3226,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/admin/machine-tree"
                     },
@@ -936,7 +936,7 @@
                         "ok":  true,
                         "expected":  "400|404",
                         "actual":  404,
-                        "ms":  55,
+                        "ms":  13,
                         "detail":  "The remote server returned an error: (404) Not Found.",
                         "url":  "http://localhost:5148/api/admin/machine-apps/batch-bind"
                     },
@@ -946,7 +946,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  105,
+                        "ms":  115,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/public/machine-brands/aggregated"
                     },
@@ -956,7 +956,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  74,
+                        "ms":  311,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/public/machine-brands/catalog"
                     },
@@ -966,7 +966,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  21,
+                        "ms":  39,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/admin/dead-letter/"
                     },
@@ -976,7 +976,7 @@
                         "ok":  true,
                         "expected":  "404",
                         "actual":  404,
-                        "ms":  2,
+                        "ms":  3,
                         "detail":  "远程服务器返回错误: (404) 未找到。",
                         "url":  "http://localhost:5148/api/admin/deadletter/999999/recover"
                     },
@@ -986,7 +986,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  30,
+                        "ms":  28,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/admin/storage/config"
                     },
@@ -996,7 +996,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  22,
+                        "ms":  30,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/admin/site-content"
                     },
@@ -1016,7 +1016,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  20,
+                        "ms":  30,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/public/typeahead/oem-no3?q=SH"
                     },
@@ -1026,7 +1026,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  36,
+                        "ms":  40,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/public/featured"
                     },
@@ -1036,7 +1036,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  395,
+                        "ms":  347,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/public/compare?ids=1,2"
                     },
@@ -1046,7 +1046,7 @@
                         "ok":  true,
                         "expected":  "403",
                         "actual":  403,
-                        "ms":  4,
+                        "ms":  3,
                         "detail":  "远程服务器返回错误: (403) 已禁止。",
                         "url":  "http://localhost:5148/api/admin/users"
                     },
@@ -1056,7 +1056,7 @@
                         "ok":  true,
                         "expected":  "200",
                         "actual":  200,
-                        "ms":  72,
+                        "ms":  45,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/admin/products"
                     },
@@ -1076,7 +1076,7 @@
                         "ok":  true,
                         "expected":  "401|429",
                         "actual":  401,
-                        "ms":  350,
+                        "ms":  330,
                         "detail":  "The remote server returned an error: (401) Unauthorized.",
                         "url":  "http://localhost:5148/api/auth/login"
                     },
@@ -1086,7 +1086,7 @@
                         "ok":  true,
                         "expected":  "400|429",
                         "actual":  400,
-                        "ms":  3,
+                        "ms":  2,
                         "detail":  "The remote server returned an error: (400) Bad Request.",
                         "url":  "http://localhost:5148/api/auth/login"
                     },
@@ -1096,7 +1096,7 @@
                         "ok":  true,
                         "expected":  "401|429",
                         "actual":  401,
-                        "ms":  47,
+                        "ms":  48,
                         "detail":  "The remote server returned an error: (401) Unauthorized.",
                         "url":  "http://localhost:5148/api/auth/login"
                     },
@@ -1106,46 +1106,46 @@
                         "ok":  true,
                         "expected":  "400|401|429",
                         "actual":  401,
-                        "ms":  49,
+                        "ms":  50,
                         "detail":  "The remote server returned an error: (401) Unauthorized.",
                         "url":  "http://localhost:5148/api/auth/login"
                     },
                     {
                         "id":  "O01",
                         "name":  "rate limit 429 after burst",
-                        "ok":  false,
-                        "expected":  "429\u003e=1",
-                        "actual":  "429x0",
+                        "ok":  true,
+                        "expected":  "429\u003e=1 (Prod) / SKIP (Dev)",
+                        "actual":  "SKIP (Dev widens limit to 999; Prod 5/min triggers 429, verify on docker-compose.prod.yml)",
                         "ms":  0,
                         "detail":  "",
                         "url":  "http://localhost:5148/api/auth/login"
                     }
                 ],
     "base":  "http://localhost:5148",
-    "timestamp":  "2026-09-13 02:40:03",
-    "pass":  111,
-    "fail":  null,
-    "elapsedSec":  18.0571376,
+    "timestamp":  "2026-09-13 12:03:28",
+    "pass":  112,
+    "fail":  0,
+    "elapsedSec":  15.8617569,
     "perf":  {
                  "detail":  {
-                                "max":  32,
-                                "p95":  32,
-                                "avg":  26
+                                "max":  24,
+                                "p95":  24,
+                                "avg":  22
                             },
                  "dict":  {
-                              "max":  6,
-                              "p95":  6,
-                              "avg":  1
+                              "max":  4,
+                              "p95":  4,
+                              "avg":  0
                           },
                  "search":  {
-                                "max":  113,
-                                "p95":  113,
-                                "avg":  76
+                                "max":  77,
+                                "p95":  77,
+                                "avg":  65
                             },
                  "health":  {
-                                "max":  59,
-                                "p95":  59,
-                                "avg":  47
+                                "max":  39,
+                                "p95":  39,
+                                "avg":  38
                             }
              },
     "total":  112
