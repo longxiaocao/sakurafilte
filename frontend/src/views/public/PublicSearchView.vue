@@ -140,7 +140,14 @@ const featuredItems = ref<PublicSearchHit[]>([])
 const featuredLoading = ref(false)
 
 // P-Demo: 对比功能 — 已加入对比的产品 ID 集合 (Set 用于 O(1) 查重)
-const compareIds = ref<Set<number>>(new Set())
+// 全局共享对比 store — 与详情页共用同一集合, 各页不再各自维护独立 compareIds
+//   WHY: 详情页"加入对比"曾被迫跳转到此页(打断体验), 现统一走共享集合,
+//        悬浮球+抽屉由 App 级 GlobalCompare.vue 渲染, 本页不再自带悬浮球/抽屉。
+import { useCompareStore } from '@/stores/useCompareStore'
+
+const store = useCompareStore()
+// 只读全局集合引用 (跨页共享, 摘要条 / 表格按钮 disabled 依赖它)
+const compareIds = store.ids
 const MAX_COMPARE = 6  // 与 PublicCompareView 一致
 
 // 8 字段是否全部空 — 用于禁用搜索按钮 + 提示文案
@@ -339,97 +346,21 @@ async function loadFeatured() {
   }
 }
 
-// 🔧 fix(审查): 对比功能内嵌 — 移除独立 /compare 页 (用户反馈与高级搜索重复), 勾选后在页内抽屉展示对比
+// 🔧 fix(审查): 对比功能 — 统一走全局 store + 全局 GlobalCompare 悬浮球/抽屉
 //   行为: 累加而非替换, 已加入的禁用按钮; 达 MAX_COMPARE 给提示
-import { publicCompareApi } from '@/api'
-import type { PublicProductDetail, PublicXrefInfo, MachineAppInfo } from '@/api/types'
-import PublicComparePanel from '@/components/PublicComparePanel.vue'
 
 function addToCompare(row: PublicSearchHit, event?: Event) {
   if (event) event.stopPropagation()  // 阻止冒泡到 row-click (查看详情)
-  if (compareIds.value.has(row.id)) {
+  // 🔧 fix(对比交互 v3): 改用全局共享 store — 集合跨页一致, 悬浮球见全局组件
+  const res = store.add(row.id)
+  if (res.ok && res.reason === 'added') {
+    ElMessage.success(`已加入对比 (${store.count.value}/${MAX_COMPARE})`)
+  } else if (res.ok && res.reason === 'existing') {
     ElMessage.info('已在对比列表中')
-    return
+  } else if (!res.ok && res.reason === 'full') {
+    // 🔧 fix(2026-08-23 走查): 上限提示带可操作指引 — 提示可点击右下角悬浮球清空
+    ElMessage.warning({ message: `最多对比 ${MAX_COMPARE} 个产品, 可点击右下角悬浮球"清空对比"后重新添加`, duration: 4000 })
   }
-  if (compareIds.value.size >= MAX_COMPARE) {
-    // 🔧 fix(2026-08-23 走查): 上限提示带可操作指引 — 摘要条已显示清空按钮,
-    //   提示文案说明可清空, 消除"系统坏了"的误解
-    ElMessage.warning({ message: `最多对比 ${MAX_COMPARE} 个产品, 可点击上方提示条'清空对比'后重新添加`, duration: 4000 })
-    return
-  }
-  // 创建新 Set 触发响应式更新
-  const next = new Set(compareIds.value)
-  next.add(row.id)
-  compareIds.value = next
-  ElMessage.success(`已加入对比 (${next.size}/${MAX_COMPARE})`)
-}
-
-// 对比抽屉 (内嵌)
-const compareOpen = ref(false)
-const compareProducts = ref<PublicProductDetail[]>([])
-const compareLoading = ref(false)
-
-async function openCompare() {
-  if (compareIds.value.size === 0) {
-    ElMessage.warning('请先在结果中点击"加入对比"')
-    return
-  }
-  compareOpen.value = true
-  compareLoading.value = true
-  try {
-    const ids = Array.from(compareIds.value).slice(0, MAX_COMPARE)
-    const data = await publicCompareApi.compare(ids)
-    const map = new Map(data.items.map((p) => [p.id, p]))
-    compareProducts.value = ids.map((id) => map.get(id)).filter((p): p is PublicProductDetail => !!p)
-  } catch (e: any) {
-    ElMessage.error(e?.problem?.detail || e?.response?.data?.error || e?.message || '对比加载失败')
-  } finally {
-    compareLoading.value = false
-  }
-}
-
-function closeCompare() {
-  compareOpen.value = false
-}
-
-function removeFromCompare(idx: number) {
-  const p = compareProducts.value[idx]
-  if (p) {
-    const next = new Set(compareIds.value)
-    next.delete(p.id)
-    compareIds.value = next
-    compareProducts.value = compareProducts.value.filter((_item, i) => i !== idx)
-  }
-}
-
-function moveCompare(idx: number, dir: -1 | 1) {
-  const target = idx + dir
-  if (target < 0 || target >= compareProducts.value.length) return
-  const arr = [...compareProducts.value]
-  ;[arr[idx], arr[target]] = [arr[target], arr[idx]]
-  compareProducts.value = arr
-  // 🔧 fix(审查): 列调序持久化 (与 AdminCompareView 对齐) — URL compare 参数 + sessionStorage
-  //   此前只交换数组, 刷新后顺序丢失 (用户/测试实测: 调序后刷新恢复原序)
-  const ids = arr.map((p) => p.id).join(',')
-  try {
-    sessionStorage.setItem('sakurafilter_compare_ids', JSON.stringify(arr.map((p) => p.id)))
-  } catch { /* 隐私模式等场景忽略 */ }
-  router.replace({ query: { ...route.query, compare: ids } })
-}
-
-function clearCompare() {
-  compareProducts.value = []
-  // 🔧 fix(2026-08-23 走查): 清空对比需同时清 compareIds ref — 只清 products/存储时
-  //   摘要条 v-if=compareIds.size>0 仍显示, 且后续加入对比会误判已满 (上限提示)
-  compareIds.value = new Set()
-  compareOpen.value = false
-  try {
-    sessionStorage.removeItem('sakurafilter_compare_ids')
-  } catch { /* 隐私模式等场景忽略 */ }
-  // 移除 URL compare 参数
-  const q = { ...route.query }
-  delete q.compare
-  router.replace({ query: q })
 }
 
 // ===== SEO meta =====
@@ -469,21 +400,12 @@ onMounted(() => {
   if (typeof cmp === 'string' && cmp) {
     const ids = cmp.split(',').map(Number).filter((n) => Number.isInteger(n) && n > 0)
     if (ids.length > 0) {
-      // 🔧 fix(对比交互 v2): 只恢复已加入集合, 不再自动弹抽屉 (compareOpen 保持 false)
-      //   WHY: 用户反馈"从详情页添加对比跳回搜索页就被抽屉打断" — 此时用户可能想继续加,
-      //        抽屉挡住页面体验差。改为仅悬浮按钮提示数量, 由用户点击"查看对比"主动打开。
-      compareIds.value = new Set(ids.slice(0, MAX_COMPARE))
+      // 🔧 fix(对比交互 v3): 统一走全局 store.replace — 集合跨页共享一致。
+      //   不再本地赋 compareIds (现为只读), 抽屉由全局组件接管, 不再自动弹抽屉
+      store.replace(ids)
     }
-  } else {
-    // 无 URL 参数: 恢复 sessionStorage 残留 (只恢复 id 集合, 摘要条显示; 不自动开抽屉)
-    try {
-      const raw = sessionStorage.getItem('sakurafilter_compare_ids')
-      if (raw) {
-        const ids = JSON.parse(raw).filter((n: number) => Number.isInteger(n) && n > 0)
-        if (ids.length > 0) compareIds.value = new Set(ids.slice(0, MAX_COMPARE))
-      }
-    } catch { /* 忽略损坏数据 */ }
   }
+  // 无 URL 参数时, 全局 store 在模块加载时已从 sessionStorage 恢复对比集合
   // 进入页面拉一次 featured 明细表 (即使有搜索条件也拉, 用户清空后可看)
   loadFeatured()
   if (filledCount.value > 0) doSearch()
@@ -551,8 +473,8 @@ onUnmounted(() => {
       </span>
       <span class="text-xs text-muted hidden sm:inline">— 加更多时会触发上限提示，可先清空</span>
       <div class="ml-auto flex items-center gap-2">
-        <el-button size="small" @click="openCompare">查看对比</el-button>
-        <el-button size="small" type="danger" plain @click="clearCompare">清空对比</el-button>
+        <el-button size="small" @click="store.requestOpen">查看对比</el-button>
+        <el-button size="small" type="danger" plain @click="store.clear">清空对比</el-button>
       </div>
     </div>
 
@@ -598,7 +520,7 @@ onUnmounted(() => {
           </span>
           <el-button
             v-if="compareIds.size > 0"
-            @click="openCompare"
+            @click="store.requestOpen"
             type="primary"
             size="small"
             plain
@@ -686,7 +608,7 @@ onUnmounted(() => {
           </span>
           <el-button
             v-if="compareIds.size > 0"
-            @click="openCompare"
+            @click="store.requestOpen"
             size="small"
             plain
             type="primary"
@@ -782,56 +704,6 @@ onUnmounted(() => {
         />
       </div>
     </div>
-  </div>
-
-  <!-- 🔧 fix(审查): 产品对比抽屉 (内嵌, 替代独立 /compare 页) -->
-  <el-drawer v-model="compareOpen" title="产品对比" size="80%" direction="rtl">
-    <div v-loading="compareLoading" class="p-3">
-      <div class="flex items-center justify-between mb-2">
-        <span v-if="compareProducts.length > 0" class="text-xs text-muted">{{ compareProducts.length }} 个产品</span>
-        <el-button v-if="compareProducts.length > 0" size="small" data-testid="clear-compare-btn" @click="clearCompare">清空对比</el-button>
-      </div>
-      <div v-if="compareProducts.length === 0 && !compareLoading" class="text-sm text-muted py-8 text-center">
-        暂无对比产品 — 在搜索结果中点击"加入对比"添加产品
-      </div>
-      <PublicComparePanel
-        v-if="compareProducts.length > 0"
-        :products="compareProducts"
-        @move-left="(i: number) => moveCompare(i, -1)"
-        @move-right="(i: number) => moveCompare(i, 1)"
-        @remove="removeFromCompare"
-      />
-      <div v-if="compareProducts.length > 0" class="mt-3 flex justify-end">
-        <el-button size="small" @click="closeCompare">关闭</el-button>
-      </div>
-    </div>
-  </el-drawer>
-
-  <!-- 🔧 fix(对比交互 v2): 悬浮对比球 — 添加对比后随时可点开, 不打断继续添加/滚动
-       WHY: 内嵌摘要条滚动后不可见, 用户继续添加/翻页时无法直达对比抽屉。
-       fixed 右下角, compareIds 非空即显示, 点击 openCompare, 显示数量徽标。 -->
-  <el-badge
-    v-if="compareIds.size > 0"
-    :value="compareIds.size"
-    :max="MAX_COMPARE"
-    offset="[0, 4]"
-    class="fixed bottom-6 right-6 z-50"
-    data-testid="compare-float-btn"
-  >
-    <el-button
-      type="primary"
-      circle
-      size="large"
-      aria-label="查看对比"
-      @click="openCompare"
-    >
-      <el-icon :size="20"><Aim /></el-icon>
-    </el-button>
-  </el-badge>
-
-  <!-- 悬浮提示文案 (靠近图标) -->
-  <div v-if="compareIds.size > 0" class="fixed bottom-6 right-[4.5rem] z-50 text-xs text-muted pointer-events-none hidden sm:block" data-testid="compare-float-hint">
-    已加入 {{ compareIds.size }} 个，点击查看对比
   </div>
 </template>
 

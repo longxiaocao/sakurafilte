@@ -17,9 +17,14 @@ import { productApi } from '@/api'
 import type { PublicProductDetail } from '@/api/types'
 import SkeletonCard from '@/components/SkeletonCard.vue'
 import { buildProductUrl } from '@/utils/build-product-url'
+// 全局共享对比 store: 详情页加入对比后停留在当前页继续对比 (见 addToCompare)
+import { useCompareStore, MAX_COMPARE } from '@/stores/useCompareStore'
 
 const route = useRoute()
 const router = useRouter()
+
+// 全局对比 store 单例 (模块级共享, 跨路由保持同一集合)
+const compareStore = useCompareStore()
 
 // SEO 路由使用 oem3；保留旧 oem 参数兼容历史入口。
 const slug = computed(() => String(route.params.oem3 ?? route.params.oem ?? ''))
@@ -181,9 +186,17 @@ function addToCompare() {
     ElMessage.warning(t('common.feedback.info_004'))
     return
   }
-  // 🔧 fix(审查): 对比内嵌 — 跳高级搜索页并携带 compare 参数 (页面自动勾选并打开对比抽屉)
-  //   独立 /compare 页已移除 (用户反馈与高级搜索重复)
-  router.push(`/public/search?compare=${data.value.id}`)
+  // 🔧 fix(对比交互 v3): 不再跳转搜页 — 改用全局共享对比 store + 全局悬浮球。
+  //   WHY: 用户反馈"详情页点加入对比被 jump 到高搜页, 打断继续对比"。
+  //        现停留本页, 全局 GlobalCompare 悬浮球随时可继续加/查看对比。
+  const res = compareStore.add(data.value.id)
+  if (res.ok && res.reason === 'added') {
+    ElMessage.success(`已加入对比 (${compareStore.count.value}/${MAX_COMPARE})`)
+  } else if (res.ok && res.reason === 'existing') {
+    ElMessage.info('已在对比列表中')
+  } else if (!res.ok && res.reason === 'full') {
+    ElMessage.warning({ message: `最多对比 ${MAX_COMPARE} 个产品, 可点击右下角悬浮球"清空对比"后重新添加`, duration: 4000 })
+  }
 }
 
 function numOrDash(v?: number | string) {

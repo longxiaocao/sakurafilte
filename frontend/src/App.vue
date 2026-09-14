@@ -10,6 +10,8 @@ import { computed, onMounted } from 'vue'
 import { RouterView } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import AppHeader from './components/AppHeader.vue'
+// 全局对比悬浮球+抽屉 — 所有公开页(详情/搜索)共用同一对比集合, 不再靠跳转
+import GlobalCompare from './components/GlobalCompare.vue'
 import ErrorBoundary from './components/ErrorBoundary.vue'
 import DragDropOverlay from './components/DragDropOverlay.vue'
 import { useI18n } from 'vue-i18n'
@@ -56,6 +58,8 @@ onMounted(() => {
     </div>
     <!-- 全局拖拽反馈遮罩 (UX 偏好: 全窗口拖拽上传) -->
     <DragDropOverlay />
+    <!-- 全局对比悬浮球+抽屉 (公开页共用, 挂在根组件使任一路由页可见) -->
+    <GlobalCompare />
   </el-config-provider>
 </template>
 
