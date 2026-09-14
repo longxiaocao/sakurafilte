@@ -469,16 +469,10 @@ onMounted(() => {
   if (typeof cmp === 'string' && cmp) {
     const ids = cmp.split(',').map(Number).filter((n) => Number.isInteger(n) && n > 0)
     if (ids.length > 0) {
+      // 🔧 fix(对比交互 v2): 只恢复已加入集合, 不再自动弹抽屉 (compareOpen 保持 false)
+      //   WHY: 用户反馈"从详情页添加对比跳回搜索页就被抽屉打断" — 此时用户可能想继续加,
+      //        抽屉挡住页面体验差。改为仅悬浮按钮提示数量, 由用户点击"查看对比"主动打开。
       compareIds.value = new Set(ids.slice(0, MAX_COMPARE))
-      compareOpen.value = true
-      compareLoading.value = true
-      publicCompareApi.compare(ids.slice(0, MAX_COMPARE)).then((data) => {
-        compareProducts.value = data.items
-      }).catch(() => {
-        ElMessage.warning('对比产品加载失败, 可重新搜索添加')
-      }).finally(() => {
-        compareLoading.value = false
-      })
     }
   } else {
     // 无 URL 参数: 恢复 sessionStorage 残留 (只恢复 id 集合, 摘要条显示; 不自动开抽屉)
@@ -709,7 +703,7 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <!-- 结果表格 -->
+      <!-- 结果表格 — 8 个搜索字段全作列, 命中字段高亮 (用户可确认自己搜的是哪个字段) -->
       <el-table
         v-loading="loading"
         :data="results"
@@ -720,23 +714,48 @@ onUnmounted(() => {
         max-height="calc(100vh - 320px)"
       >
         <el-table-column prop="id" label="ID" width="70" />
-        <el-table-column label="OEM" min-width="180" show-overflow-tooltip>
+        <el-table-column label="OEM Brand" min-width="120" show-overflow-tooltip>
           <template #default="{ row }">
-            <span class="text-blue-600">{{ row.oemNoDisplay || row.oem2 || '—' }}</span>
+            <span v-html="highlight(row.oemBrand, form.oemBrand || highlightKeyword) || '—'"></span>
           </template>
         </el-table-column>
-        <el-table-column label="OEM 2" min-width="160" show-overflow-tooltip>
-          <template #default="{ row }">{{ row.oem2 || '—' }}</template>
+        <el-table-column label="OEM 2" min-width="130" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span v-html="highlight(row.oem2, form.oemNo2 || highlightKeyword) || '—'"></span>
+          </template>
         </el-table-column>
-        <el-table-column label="Product Name 1" min-width="200" show-overflow-tooltip>
+        <el-table-column label="OEM 3" min-width="130" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span v-html="highlight(row.oemNoDisplay, form.oemNo3 || highlightKeyword)" class="text-blue-600"></span>
+          </template>
+        </el-table-column>
+        <el-table-column label="Machine Brand" min-width="130" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span v-html="highlight(row.machineBrand, form.machineBrand || highlightKeyword) || '—'"></span>
+          </template>
+        </el-table-column>
+        <el-table-column label="Machine Model" min-width="130" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span v-html="highlight(row.machineModel, form.machineModel || highlightKeyword) || '—'"></span>
+          </template>
+        </el-table-column>
+        <el-table-column label="Model Name" min-width="140" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span v-html="highlight(row.modelName, form.modelName || highlightKeyword) || '—'"></span>
+          </template>
+        </el-table-column>
+        <el-table-column label="Engine Brand" min-width="130" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span v-html="highlight(row.engineBrand, form.engineBrand || highlightKeyword) || '—'"></span>
+          </template>
+        </el-table-column>
+        <el-table-column label="Engine Type" min-width="130" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span v-html="highlight(row.engineType, form.engineType || highlightKeyword) || '—'"></span>
+          </template>
+        </el-table-column>
+        <el-table-column label="Product Name 1" min-width="180" show-overflow-tooltip>
           <template #default="{ row }">{{ row.productName1 || '—' }}</template>
-        </el-table-column>
-        <el-table-column prop="type" label="Type" width="100" />
-        <el-table-column label="D1 (mm)" width="100" align="right">
-          <template #default="{ row }">{{ row.d1Mm || '—' }}</template>
-        </el-table-column>
-        <el-table-column label="H1 (mm)" width="100" align="right">
-          <template #default="{ row }">{{ row.h1Mm || '—' }}</template>
         </el-table-column>
         <el-table-column label="操作" width="110" fixed="right">
           <template #default="{ row }">
@@ -787,6 +806,33 @@ onUnmounted(() => {
       </div>
     </div>
   </el-drawer>
+
+  <!-- 🔧 fix(对比交互 v2): 悬浮对比球 — 添加对比后随时可点开, 不打断继续添加/滚动
+       WHY: 内嵌摘要条滚动后不可见, 用户继续添加/翻页时无法直达对比抽屉。
+       fixed 右下角, compareIds 非空即显示, 点击 openCompare, 显示数量徽标。 -->
+  <el-badge
+    v-if="compareIds.size > 0"
+    :value="compareIds.size"
+    :max="MAX_COMPARE"
+    offset="[0, 4]"
+    class="fixed bottom-6 right-6 z-50"
+    data-testid="compare-float-btn"
+  >
+    <el-button
+      type="primary"
+      circle
+      size="large"
+      aria-label="查看对比"
+      @click="openCompare"
+    >
+      <el-icon :size="20"><Aim /></el-icon>
+    </el-button>
+  </el-badge>
+
+  <!-- 悬浮提示文案 (靠近图标) -->
+  <div v-if="compareIds.size > 0" class="fixed bottom-6 right-[4.5rem] z-50 text-xs text-muted pointer-events-none hidden sm:block" data-testid="compare-float-hint">
+    已加入 {{ compareIds.size }} 个，点击查看对比
+  </div>
 </template>
 
 <style scoped>

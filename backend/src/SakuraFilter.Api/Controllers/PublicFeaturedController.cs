@@ -86,8 +86,20 @@ public class PublicFeaturedController : ControllerBase
                     .Select(m => m.MachineBrand)
                     .FirstOrDefault(),
                 _db.MachineApplications
+                    .Where(m => m.ProductId == p.Id && m.MachineModel != null)
+                    .Select(m => m.MachineModel)
+                    .FirstOrDefault(),
+                _db.MachineApplications
+                    .Where(m => m.ProductId == p.Id && m.ModelName != null)
+                    .Select(m => m.ModelName)
+                    .FirstOrDefault(),
+                _db.MachineApplications
                     .Where(m => m.ProductId == p.Id && m.EngineBrand != null)
                     .Select(m => m.EngineBrand)
+                    .FirstOrDefault(),
+                _db.MachineApplications
+                    .Where(m => m.ProductId == p.Id && m.EngineType != null)
+                    .Select(m => m.EngineType)
                     .FirstOrDefault()
             ))
             .ToListAsync(ct);

@@ -470,8 +470,11 @@ public class PublicSearchController : ControllerBase
 
         // 批量取回关联字段 (每页 ≤100 行, 2 次批量查询, 无 N+1)
         var rowIds = rows.Select(r => r.Id).ToList();
+        // 🔧 fix(对比/字段展示): machine 关联字段补齐 5 字段 (MachineModel/ModelName/EngineType 新增)
+        //   WHY: 用户反馈结果表格要展示全部 8 个搜索字段, 原只取 MachineBrand/EngineBrand 2 个,
+        //        MachineModel/ModelName/EngineType 空白 → 前端无法确认机型/发动机信息
         Dictionary<long, string?> brandMap = new();
-        Dictionary<long, (string? Mb, string? Eb)> machineMap = new();
+        Dictionary<long, (string? Mb, string? Mm, string? Mn, string? Eb, string? Et)> machineMap = new();
         if (rowIds.Count > 0)
         {
             var brandRows = await _db.CrossReferences.AsNoTracking()
@@ -483,9 +486,17 @@ public class PublicSearchController : ControllerBase
             var machineRows = await _db.MachineApplications.AsNoTracking()
                 .Where(m => m.ProductId.HasValue && rowIds.Contains(m.ProductId.Value))
                 .GroupBy(m => m.ProductId!.Value)
-                .Select(g => new { Id = g.Key, Mb = g.Select(x => x.MachineBrand).FirstOrDefault(), Eb = g.Select(x => x.EngineBrand).FirstOrDefault() })
+                .Select(g => new
+                {
+                    Id = g.Key,
+                    Mb = g.Select(x => x.MachineBrand).FirstOrDefault(),
+                    Mm = g.Select(x => x.MachineModel).FirstOrDefault(),
+                    Mn = g.Select(x => x.ModelName).FirstOrDefault(),
+                    Eb = g.Select(x => x.EngineBrand).FirstOrDefault(),
+                    Et = g.Select(x => x.EngineType).FirstOrDefault()
+                })
                 .ToListAsync(ct);
-            machineMap = machineRows.ToDictionary(x => x.Id, x => (x.Mb, x.Eb));
+            machineMap = machineRows.ToDictionary(x => x.Id, x => (x.Mb, x.Mm, x.Mn, x.Eb, x.Et));
         }
         var items = rows.Select(r => new PublicSearchHit(
             r.Id,
@@ -497,7 +508,10 @@ public class PublicSearchController : ControllerBase
             r.H1Mm?.ToString(),
             brandMap.GetValueOrDefault(r.Id),
             machineMap.GetValueOrDefault(r.Id).Mb,
-            machineMap.GetValueOrDefault(r.Id).Eb
+            machineMap.GetValueOrDefault(r.Id).Mm,
+            machineMap.GetValueOrDefault(r.Id).Mn,
+            machineMap.GetValueOrDefault(r.Id).Eb,
+            machineMap.GetValueOrDefault(r.Id).Et
         )).ToList();
 
         sw.Stop();
@@ -687,6 +701,12 @@ public record BatchOemResponse(
 );
 
 /// <summary>P3.4 (Task 11.5): 公开搜索单条结果</summary>
+/// <remarks>
+/// 🔧 fix(对比/字段展示): 新增 MachineModel/ModelName/EngineType — 结果表格要展示用户填的全部 8 个
+/// 搜索字段 (OEM Brand / OEM 2 / OEM 3 / Machine Brand / Machine Model / Model Name / Engine Brand / Engine Type),
+/// 以便用户确认自己搜的是哪个字段、命中在哪。
+/// 字段与 8 搜索字段对应: OemNoDisplay=OEM 3, Oem2=OEM 2, OemBrand=OEM Brand, MachineBrand/EngineBrand 同理。
+/// </remarks>
 public record PublicSearchHit(
     long Id,
     string OemNoDisplay,
@@ -695,11 +715,12 @@ public record PublicSearchHit(
     string? Type,
     string? D1Mm,
     string? H1Mm,
-    // 🔧 fix(2026-08-23 走查): 新增 3 字段 — 结果表格展示 OEM Brand / Machine Brand / Engine Brand,
-    //   用户能确认搜索结果是否目标 (原 6 字段字段偏少)
     string? OemBrand,
     string? MachineBrand,
-    string? EngineBrand
+    string? MachineModel,
+    string? ModelName,
+    string? EngineBrand,
+    string? EngineType
 );
 
 /// <summary>P3.4 (Task 11.5): 8 字段响应</summary>
