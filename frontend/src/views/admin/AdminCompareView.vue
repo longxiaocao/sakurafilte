@@ -162,7 +162,9 @@ function saveOrder() {
   try {
     const data = products.value.map((p, i) => ({ id: p.id, order: i }))
     localStorage.setItem(ORDER_KEY, JSON.stringify(data))
-  } catch {}
+  } catch {
+    // WHY: 隐私模式/存储满时 localStorage 可能抛异常, 静默降级 (仅本次会话内排序顺序丢失, 无数据损坏)
+  }
 }
 
 function persistUrlOrder() {
@@ -468,7 +470,7 @@ function doPrint() {
           <template v-for="field in group.fields" :key="(group.name + '.' + field.key)">
             <div class="field-name-cell sticky-left">{{ field.label }}</div>
             <div
-              v-for="(p, idx) in products"
+              v-for="p in products"
               :key="p.id + '.' + field.key"
               :class="['data-cell', cellClass(products.map((pp) => valueOf(pp, field)))]"
             >

@@ -169,7 +169,7 @@ const visibleGroups = computed(() => fieldGroups)
         <template v-for="field in group.fields" :key="(group.name + '.' + field.key)">
           <div class="field-name-cell sticky-left">{{ field.label }}</div>
           <div
-            v-for="(p, idx) in products"
+            v-for="p in products"
             :key="p.id + '.' + field.key"
             :class="['data-cell', cellClass(products.map((pp) => valueOf(pp, field)))]"
           >

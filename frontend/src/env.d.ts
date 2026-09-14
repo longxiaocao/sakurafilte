@@ -26,6 +26,20 @@ interface ImportMeta {
 
 declare module '*.vue' {
   import type { DefineComponent } from 'vue'
-  const component: DefineComponent<{}, {}, any>
+  const component: DefineComponent<object, object, any>
   export default component
+}
+
+// Cloudflare Turnstile 人机验证全局 API (由 https://challenges.cloudflare.com/turnstile 脚本注入 window)
+//   WHY: 声明后 LoginView 无需再使用 @ts-ignore; render 'error-callback' 是 Turnstile 保留字, 不能 kebab/kebab-case 优雅映射
+interface Window {
+  turnstile?: {
+    render(el: HTMLElement, opts: {
+      sitekey: string
+      theme?: 'light' | 'dark'
+      callback?: (token: string) => void
+      'error-callback'?: () => void
+    }): void
+    reset(el: HTMLElement): void
+  }
 }

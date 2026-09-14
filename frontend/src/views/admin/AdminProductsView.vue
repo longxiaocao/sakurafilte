@@ -73,7 +73,10 @@ const resetHistoryFilter = () => {
   saveHistoryFilter()
 }
 function saveHistoryFilter() {
-  try { localStorage.setItem(HISTORY_FILTER_KEY, JSON.stringify({...historyFilter})) } catch {}
+  // WHY: 隐私模式/存储满时 localStorage 可能抛异常, 静默忽略 (筛选偏好写入失败不影响功能)
+  try {
+    localStorage.setItem(HISTORY_FILTER_KEY, JSON.stringify({...historyFilter}))
+  } catch { /* 静默忽略 localStorage 写入异常 */ }
 }
 function loadHistoryFilter() {
   try {
@@ -84,7 +87,9 @@ function loadHistoryFilter() {
     if (typeof saved.since === 'string') historyFilter.since = saved.since
     if (typeof saved.until === 'string') historyFilter.until = saved.until
     if (typeof saved.limit === 'number') historyFilter.limit = saved.limit
-  } catch {}
+  } catch {
+    // WHY: localStorage 数据可能被篡改/损坏导致 JSON.parse 抛错, 静默降级为默认筛选
+  }
 }
 loadHistoryFilter()
 // Day 9.3: 筛选条件变化时存 localStorage
