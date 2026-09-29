@@ -674,3 +674,15 @@ v30-14 1M OFFSET 深分页专项压测验证数据 (2026-07-21, sakurafilter_per
 理由: 客户目前没有 MR.1，且 49,391 个 OEM 锚点中只有 10,020 个有规格。直接写旧 products 表会因 type/MR.1 旧约束丢失数据或产生虚假默认值。catalog 层可完整保存 49,391 OEM、529,499 交叉号码和 709,843 条有锚点机型适配，并保持 public 旧系统不变。
 约束: 无 OEM 的 11,696 条 clean 机型行仍只留 staging；发布器只写 catalog，必须幂等，禁止清空或写 public 表及搜索索引。MR.1 后续按 OEM 更新，不需重导目录数据。
 关联文件: backend/migrations/033_oem_anchor_catalog.sql, OemCatalogPublishService.cs, docs/data-import/oem-no1-batch-1-quality-report.md
+
+#35 生产部署源由 F:\sakurafilter-perf 切至 F:\sakurafilter-real (2026-09-30)
+决策: 以 perf 线线上提交 b383bc3(09-14) 为基，在 real 仓库新建收口分支 codex/oem-catalog-prodline-20260930，纯叠加 OEM 目录功能（71 个新增文件 + 10 个手工合并文件），随后由 real 构建镜像并以 project=sakura-prod 重建 api/web。生产编排以 perf 目录中实际运行的版本为基，仅做 4 处编辑（镜像 tag → 1.0.35、api depends_on 摘除 db-migrate、db-init/db-migrate 整段注释）。
+理由: 生产容器此前由 perf 目录编排驱动（docker inspect 标签证实 project=sakura-prod / working_dir=F:\sakurafilter-perf），而 OEM catalog API 只存在于 real 的 OEM 分支，导致端点 404。直接覆盖 perf 工作区会破坏其压测栈；两条线各自带有一批对方没有的改动，不能简单取并集。
+排除方案:
+  - 将 OEM 提交同步进 perf 后由 perf 继续部署: perf 工作区承载压测栈 + 大量未跟踪产物，同步会污染压测环境；且不解决长期双源问题
+  - 代码并集合并（real 线 08-25 功能 + perf 线 09-14 功能）: real 线含未上线的 027_cross_references_is_whitelisted.sql 与 MeiliSearchProvider 的 IsWhitelisted 改判，并集会使全站 OEM 交叉号列表为空（生产库亦缺 is_whitelisted / show_dimension 两列），风险不可接受
+  - git apply --3way 应用 OEM 前端补丁: PowerShell 重定向 + CRLF 上下文导致 patch 无法落地，改为逐文件受控手工合并
+  - 恢复 db-init/db-migrate 服务: 任何 compose up 都会重建并重跑迁移（018_v2_legacy_data_cleanup.sql 为一次性 TRUNCATE），是 2026-08-22 与本次两次生产数据丢失事故的直接成因
+  - 并集方案保留 020/026 同号迁移的两份文件: 迁移器以 basename 为键，同号不同名不冲突，但 027/028/029 与 026_product_images_show_dimension.sql 已确认不进入 real 线，避免引入未上线语义
+约束: 数据层未做任何变更（三表行数与 catalog 计数仅只读核验）；030–034 已补登记进 __sakura_migrations（共 22 条），防止迁移器被重新启用时意外重跑；生产库迁移保持人工执行。
+关联文件: docker-compose.prod.yml, .env.prod (gitignore), .ai/index.md, backend/src/SakuraFilter.Api/Endpoints/AdminOemCatalogEndpoints.cs, backend/src/SakuraFilter.Api/Extensions/EndpointRouteBuilderExtensions.cs, frontend/src/router/index.ts, frontend/src/views/admin/AdminOemCatalogView.vue
