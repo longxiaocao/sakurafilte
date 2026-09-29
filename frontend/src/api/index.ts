@@ -33,7 +33,12 @@ import type {
   BatchBindRequest,
   BatchBindResponse,
   SiteContent,
-  OrphanAppPage
+  OrphanAppPage,
+  OemCatalogSummary,
+  OemCatalogProductPage,
+  OemCatalogProductDetail,
+  OemCatalogCrossReferencePage,
+  OemCatalogApplicationPage
 } from './types'
 
 // ===== JWT 鉴权 API (commit aff3ac3 后端 JWT 体系) =====
@@ -1111,6 +1116,28 @@ export const siteContentApi = {
   },
   publicGet(): Promise<SiteContent> {
     return http.get('/public/site-content').then((r) => r.data)
+  }
+}
+
+// ===== OEM 目录 (catalog 只读查询 + MR.1 映射) =====
+export const oemCatalogApi = {
+  summary(): Promise<OemCatalogSummary> {
+    return http.get('/admin/oem-catalog/summary').then((r) => r.data)
+  },
+  list(params: { q?: string; page: number; pageSize: number }): Promise<OemCatalogProductPage> {
+    return http.get('/admin/oem-catalog/products', { params }).then((r) => r.data)
+  },
+  detail(oemNo1: string): Promise<OemCatalogProductDetail> {
+    return http.get(`/admin/oem-catalog/products/${encodeURIComponent(oemNo1)}`).then((r) => r.data)
+  },
+  xrefs(oemNo1: string, params: { page: number; pageSize: number }): Promise<OemCatalogCrossReferencePage> {
+    return http.get(`/admin/oem-catalog/products/xrefs/${encodeURIComponent(oemNo1)}`, { params }).then((r) => r.data)
+  },
+  applications(oemNo1: string, params: { page: number; pageSize: number }): Promise<OemCatalogApplicationPage> {
+    return http.get(`/admin/oem-catalog/products/applications/${encodeURIComponent(oemNo1)}`, { params }).then((r) => r.data)
+  },
+  setMr1(oemNo1: string, data: { mr1: string | null; changeReason?: string | null }): Promise<void> {
+    return http.put(`/admin/oem-catalog/products/mr1/${encodeURIComponent(oemNo1)}`, data).then(() => undefined)
   }
 }
 

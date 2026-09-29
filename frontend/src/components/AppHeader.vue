@@ -80,6 +80,8 @@ const allNavItems = computed(() => {
     //   用户反馈: 更多里仍分开显示 4 项, 且整合页信息密度低; 合并后菜单只露 1 入口, 更简洁
     //   adv-compare 已移除 (对比内嵌高级搜索页, 独立页冗余)
     items.push(
+      // OEM 目录核验入口 (OEM NO 1 → catalog 只读查询)
+      { key: 'oem-catalog', labelKey: 'nav.oemCatalog', path: '/admin/oem-catalog', icon: 'Collection', priority: 8.5 },
       { key: 'ops', labelKey: 'nav.opsCenter', path: '/admin/ops', icon: 'Setting', priority: 9 },
       // 🔧 fix(2026-09-14): 孤儿机型入口并入运维中心 tab, 删除独立顶栏项 (原 labelKey 'nav.orphans' 无 i18n 定义,
       //   界面直接显示键名; 与运维中心「孤立机型」tab 同组件重复)

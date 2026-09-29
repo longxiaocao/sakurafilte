@@ -1362,6 +1362,7 @@ export default {
     },
   },
   nav: {
+    oemCatalog: 'OEM Catalog',
     productSearch: 'Product Search',
     oemLookup: 'OEM Lookup',
     productManage: 'Products',

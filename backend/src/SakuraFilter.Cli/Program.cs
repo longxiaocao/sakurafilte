@@ -53,6 +53,13 @@ public static class Program
         {
             "rotate-token" => await RotateTokenAsync(args, pgConn),
             "status" => await ShowStatusAsync(pgConn),
+            "stage-import" => await StagingImportCommand.RunAsync(args),
+            "stage-clean" => await StagingCleanCommand.RunAsync(args),
+            "stage-map-refresh" => await StagingMappingCommand.RefreshAsync(args),
+            "stage-map-review" => await StagingMappingCommand.ReviewAsync(args),
+            "stage-publish-approved" => await ApprovedOemPublishCommand.RunAsync(args),
+            "stage-publish-oem-catalog" => await OemCatalogPublishCommand.RunAsync(args),
+            "stage-legacy-audit" => await LegacyDataAuditCommand.RunAsync(args),
             "cleanup-orphan-images" => await CleanupOrphanImagesAsync(args, config, pgConn),
             _ => Fail($"未知子命令: {subCommand}"),
         };
@@ -250,6 +257,13 @@ public static class Program
         Console.WriteLine("  rotate-token --new <token> [--old <token>] [--by <user>] [--dry-run] [--pg-conn <conn>]");
         Console.WriteLine("  status [--pg-conn <conn>]");
         Console.WriteLine("  cleanup-orphan-images [--storage <minio|oss|r2>] [--endpoint <url>] [--bucket <name>]");
+        Console.WriteLine("  stage-import --specs <path> --oem-numbers <path> --applications <path> [--pg-conn <conn>] [--dry-run]");
+        Console.WriteLine("  stage-clean --batch-id <id> --pg-conn <conn>");
+        Console.WriteLine("  stage-map-refresh --batch-id <id> --pg-conn <conn>");
+        Console.WriteLine("  stage-map-review --batch-id <id> --oem-no-1 <oem> --status <approved|rejected> --reviewed-by <name> [--mr1 <mr1>] [--product-id <id>] [--reason <text>] --pg-conn <conn>");
+        Console.WriteLine("  stage-publish-approved --batch-id <id> --pg-conn <conn> [--apply]");
+        Console.WriteLine("  stage-publish-oem-catalog --batch-id <id> --pg-conn <conn>");
+        Console.WriteLine("  stage-legacy-audit --pg-conn <conn>");
         Console.WriteLine("                        [--access-key <k>] [--secret-key <k>] [--prefix <p>]");
         Console.WriteLine("                        [--dry-run] [--batch-size <n>] [--pg-conn <conn>]");
         Console.WriteLine();
@@ -257,6 +271,13 @@ public static class Program
         Console.WriteLine("  rotate-token           轮转 X-Admin-Token (写 DB + 广播 NOTIFY)");
         Console.WriteLine("  status                 查看 DB 当前状态 (不写)");
         Console.WriteLine("  cleanup-orphan-images  扫描存储桶与 DB 比对, 删除孤儿对象 (V24-F89 v27-2)");
+        Console.WriteLine("  stage-import            导入三份 Excel 到 staging 暂存区, 不写正式业务表");
+        Console.WriteLine("  stage-clean             按批次生成 staging clean 层, 不写正式业务表");
+        Console.WriteLine("  stage-map-refresh       生成 OEM NO 1 到 MR.1 的待审核候选, 不写正式业务表");
+        Console.WriteLine("  stage-map-review        写入 OEM 到 MR.1 的人工审核结论, 不发布正式数据");
+        Console.WriteLine("  stage-publish-approved  统计已审核映射的发布影响, 当前仅支持 dry-run 预检");
+        Console.WriteLine("  stage-publish-oem-catalog 将 clean 数据按 OEM NO 1 发布到独立 catalog 层, 不要求 MR.1");
+        Console.WriteLine("  stage-legacy-audit      只读审计旧正式表, 不执行任何删除");
         Console.WriteLine();
         Console.WriteLine("参数:");
         Console.WriteLine("  --new         必填, 新 token (≥ 32 字符)");

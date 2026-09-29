@@ -1364,6 +1364,7 @@ export default {
     },
   },
   nav: {
+    oemCatalog: 'OEM 目录核验',
     productSearch: '产品搜索',
     oemLookup: 'OEM 查询',
     productManage: '产品管理',

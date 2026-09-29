@@ -104,6 +104,73 @@ export interface PageResp<T> {
   items: T[]
 }
 
+// ===== OEM 目录 (catalog 只读查询) =====
+export interface OemCatalogSummary {
+  lastPublishedBatchId: number | null
+  oemProductCount: number
+  productWithSpecCount: number
+  crossReferenceCount: number
+  machineApplicationCount: number
+  activeMr1MappingCount: number
+}
+
+export interface OemCatalogProduct {
+  oemNo1: string
+  oemNo1Display: string
+  productNameCandidates: unknown
+  specConflictFieldCount: number
+  sourceBatchId: number
+  updatedAt: string
+  crossReferenceCount: number
+  machineApplicationCount: number
+  activeMr1: string | null
+}
+
+export interface OemCatalogProductDetail extends OemCatalogProduct {
+  specPayload: Record<string, unknown>
+  createdAt: string
+}
+
+export interface OemCatalogProductPage {
+  page: number
+  pageSize: number
+  total: number
+  items: OemCatalogProduct[]
+}
+
+export interface OemCatalogCrossReference {
+  productName1: string | null
+  oemBrand: string | null
+  oemNo3: string | null
+  sourceRowNos: number[]
+  mergedSourceRowCount: number
+}
+
+export interface OemCatalogApplication {
+  machineBrand: string | null
+  machineModel: string | null
+  modelName: string | null
+  engineBrand: string | null
+  engineModel: string | null
+  productionDate: string | null
+  power: string | null
+  sourceRowNo: number
+}
+
+export interface OemCatalogCrossReferencePage {
+  page: number
+  pageSize: number
+  total: number
+  items: OemCatalogCrossReference[]
+}
+
+export interface OemCatalogApplicationPage {
+  page: number
+  pageSize: number
+  total: number
+  items: OemCatalogApplication[]
+}
+
 // ===== 搜索 =====
 // Day 9.2: 字段名改 PascalCase 匹配后端 (C# record 默认 System.Text.Json PascalCase 序列化)
 //   之前用 snake_case,导致 result.hits undefined + 表格列 prop 找不到值

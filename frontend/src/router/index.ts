@@ -128,6 +128,13 @@ const routes: RouteRecordRaw[] = [
     // 🔧 fix(审查): 旧路由保留, 重定向到运维合并页 (ETL/性能/错误/API 文档)
     redirect: '/admin/ops?tab=etl'
   },
+  // OEM 目录核验页 (OEM NO 1 → catalog 只读查询)
+  {
+    path: '/admin/oem-catalog',
+    name: 'AdminOemCatalog',
+    component: () => import('@/views/admin/AdminOemCatalogView.vue'),
+    meta: { title: 'OEM 目录核验', requireAuth: true }
+  },
   // ===== P2-1 告警系统: 历史与配置页 (admin 角色) =====
   {
     path: '/admin/alerts',
