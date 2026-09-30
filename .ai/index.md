@@ -18,13 +18,13 @@
 - `backend/src/SakuraFilter.Etl/`: Excel 导入 + `Staging/`（OEM staging 清洗/映射，030–034 迁移建立）
 - `backend/src/SakuraFilter.Search/`: `MeiliSearchProvider`（主）、`PostgresSearchProvider`（fallback）、`ResilientSearchProvider`（弹性包装）
 - `backend/src/SakuraFilter.Cli/`: 运维 CLI（孤儿图片清理、OEM staging 导入/清洗/映射/发布）
-- `backend/migrations/`: SQL 迁移，按文件名顺序；`run-migrations.sh` 以 `__sakura_migrations` 幂等登记。OEM 切库相关：`035_oem_catalog_serving.sql`（`oem_key`/派生分类）、`036_catalog_to_public_cutover.sql`（catalog → public 投影）、`037_products_meili_safe_ids.sql`（`mr_1` 净化为 Meili 安全 ID + `oem_2` 回填）
+- `backend/migrations/`: SQL 迁移，按文件名顺序；`run-migrations.sh` 以 `__sakura_migrations` 幂等登记。OEM 切库相关：`035_oem_catalog_serving.sql`（`oem_key`/派生分类）、`036_catalog_to_public_cutover.sql`（catalog → public 投影）、`037_products_meili_safe_ids.sql`（`mr_1` 净化为 Meili 安全 ID + `oem_2` 回填）、`038_supplement_product_category.sql`（派生分类规则 v2：交叉引用名主判据 + OEM 前缀兜底）
 - `frontend/src/api/`: `types.ts` + `index.ts`（契约层）；`utils/http.ts`（axios 拦截器）
 - `frontend/src/views/public/`: 搜索/详情/对比；`frontend/src/views/admin/`: 后台各管理页
 
 ## 数据库 Schema
 
-- `public`: 正式业务表（products / cross_references / machine_applications 等）。**2026-10-01 起由 `catalog` 投影重建**（旧数据已清除）：`mr_1 = catalog.oem_key`、`oem_no_normalized = oem_key`、`type = catalog.product_category`；行数 48,733 / 529,499 / 709,843
+- `public`: 正式业务表（products / cross_references / machine_applications 等）。**2026-10-01 起由 `catalog` 投影重建**（旧数据已清除）：`mr_1 = catalog.oem_key`、`oem_no_normalized = oem_key`、`type = catalog.product_category`；行数 48,733 / 529,499 / 709,843。分类由 `catalog.refresh_product_categories()` 计算（交叉引用名关键词 ×2 + 候选名关键词 ×1 打分，全未命中按 OEM NO 1 首段前缀兜底），`catalog.oem_products.product_category` 与 `public.products.type` 及 Meili `type` facet 三层已对齐
 - `staging`: OEM 导入暂存（raw → clean → mapping candidates）
 - `catalog`: OEM 锚点目录（oem_products / oem_cross_references / oem_machine_applications / oem_mr1_mappings / oem_import_runs）
 - 关键约定：`mr_1` 为 Meili 文档主键，字符集受限 `^[A-Za-z0-9_-]{1,50}$`；`oem_no_1_normalized` 保留空格，`oem_key`/`oem_no_normalized` 去空格大写
@@ -65,6 +65,7 @@
 - Meilisearch 文档 ID 只允许 `[A-Za-z0-9_-]`（≤511 字节）；含 `/ . " +` 或空格会整批 `invalid_document_id`
 - 生产栈 `sakura-api` / `sakura-meili` **未映射宿主端口**（宿主 `:7700`/`:5148` 属压测栈）；生产只能经 `https://localhost/api/...`（`curl -k`）或 `docker exec`
 - OEM catalog 的 MR.1 映射当前为空（`oem_mr1_mappings = 0`），属设计预期（客户 MR.1 编码未定稿），待编码规则就绪后按 OEM 回填
-- `typeahead_dict` 快照表切库后未刷新，联想数据可能与新目录不一致
-- 派生分类覆盖率仅 17%（`others` 占 40,378/48,733），待业务侧补分类规则
+- `PublicTypeaheadService` 的内存缓存（查询 5 分钟 / 基数 10 分钟）在 `typeahead_dict` 重建后不会被失效，切换后最多 10 分钟窗口内可能返回旧快照
+- 前端搜索页快捷分类按钮只改 `advancedForm.type` 并触发 `doSearch()`，不调用 `syncUrl()` → 点击后 URL 不带 `type`，刷新/分享会丢失筛选
+- 派生分类仍有 `others` 9,908（20.3%，如 Cyclone / Mist Purifier / Liquid / Breather / Gasket Kit，无 6 类归属）；新增类别需同步前端 `dict_type`、`AdminTypesView.FIXED_TYPES`、i18n 与契约测试
 - 前端聚合搜索页有**两个**搜索输入框：页头全局框（placeholder「搜索产品 / OEM / 机型」）与页面搜索框（「输入关键词 …」）；自动化须定位后者
