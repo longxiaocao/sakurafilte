@@ -10,6 +10,46 @@
 关联文件: <影响的核心文件列表>
 ```
 
+<!-- 摘要索引（规则 §4.5.5）—— 新增决策时同步追加；被取代/废弃时更新状态，索引行不删除 -->
+<!-- 用法：先读本索引定位相关条目，再读正文详细内容；语义相关即可召回，不要求字面命中 -->
+<!-- #1 SSE 401 修复: 鉴权中间件覆盖 SSE 与多端点 | Api/Middleware/ | 状态: 有效 -->
+<!-- #2 23505 唯一约束并发测试: 专项并发用例 | tests/ | 状态: 有效 -->
+<!-- #3 CleanupOrphanImages MVP: 孤儿图片清理最小可用 | Cli/ | 状态: 有效 -->
+<!-- #4 PG 集成测试基础设施 | tests/ + 独立库 sakurafilter_int_tests | 状态: 有效 -->
+<!-- #5 PostgresSearchProvider Phase 2 keyset 分页暂缓 | Search/PostgresSearchProvider.cs | 状态: 有效 -->
+<!-- #6 IObjectStorage.ListAsync 接口扩展 | Core/Interfaces/IObjectStorage.cs | 状态: 有效 -->
+<!-- #7 后端日志脱敏审计与修复 | Api/ | 状态: 有效 -->
+<!-- #8 前端 loading 兜底全量审计与分层修复 | frontend/src/ | 状态: 被#13取代(组件提取部分) -->
+<!-- #9 DevTokenAuthMiddleware 中间件顺序纠正 | Api/Middleware/ | 状态: 有效 -->
+<!-- #10 V27-9-3 设计巡检保留非阻塞模式 | CI | 状态: 有效 -->
+<!-- #11 测试脚本路径跟随代码重构同步更新 | 脚本 | 状态: 有效 -->
+<!-- #12 ETL 数据完整性校验加 SkippedNullField | Etl/ | 状态: 有效 -->
+<!-- #13 DictManagerLayout 提取(推翻#8不提取) | frontend/src/layouts/ | 状态: 有效 -->
+<!-- #14 Meili 主路径 P99 监控告警 | Search/ + Prometheus | 状态: 有效 -->
+<!-- #15 Prometheus 暴露 Meili 指标 | Prometheus | 状态: 有效 -->
+<!-- #16 Meili 索引字段命名对齐 snake_case + BCrypt 修复 | Search/MeiliSearchProvider.cs | 状态: 有效 -->
+<!-- #17 NpgsqlDataSource 全局单例统一 | Infrastructure/Data/ | 状态: 有效 -->
+<!-- #18 Meili 压测验证 + reindex-all 后台化 | Etl/ + Search/ | 状态: 有效 -->
+<!-- #19 Meili 品牌优先级排序修复 | Search/ | 状态: 有效 -->
+<!-- #20 规划V2特殊参数双存储方案 | Core/Entities/ + DB | 状态: 有效 -->
+<!-- #21 聚合搜索高亮净化: 正则等价替代 DOMPurify | frontend/src/utils/ | 状态: 有效 -->
+<!-- #22 /api/perf 鉴权路径修复 | Api/ | 状态: 有效 -->
+<!-- #23 AuthTokenBroadcaster WaitAsync 重连循环修复 | Api/Services/ | 状态: 有效 -->
+<!-- #24 生产部署编排修复 | docker-compose.prod.yml | 状态: 有效 -->
+<!-- #25 运维演练: 密钥轮换 + 备份恢复 | 运维 | 状态: 有效 -->
+<!-- #26 阶段4 TLS 部署 | docker/nginx.conf + certs | 状态: 有效 -->
+<!-- #27 真实数据导入演练 | Etl/ | 状态: 有效 -->
+<!-- #28 自动 reindex 优化 | Etl/ + Search/ | 状态: 有效 -->
+<!-- #29 演示数据方案 | 数据 | 状态: 有效 -->
+<!-- #30 Npgsql DateTime Kind 兼容策略 | Program.cs | 状态: 有效 -->
+<!-- #31 CI 分层策略 | CI | 状态: 有效 -->
+<!-- #32 codex 上线审核 6 项问题处置 | 多模块 | 状态: 有效 -->
+<!-- #33 OEM NO 1 发布前置审核 | catalog/ schema | 状态: 有效 -->
+<!-- #34 OEM NO 1 独立正式目录层(锚点=OEM NO 1) | catalog/ schema | 状态: 有效；其中「不写 public 表与搜索索引」已被#36改为仅第一阶段约束 -->
+<!-- #35 生产部署源切至 F:\sakurafilter-real | docker-compose.prod.yml | 状态: 有效 -->
+<!-- #36 catalog 投影为公开层 public(替换旧业务数据) | backend/migrations/036_catalog_to_public_cutover.sql | 状态: 有效 -->
+<!-- #37 Meili 文档主键字符集 → mr_1 净化 | backend/migrations/037_products_meili_safe_ids.sql | 状态: 有效 -->
+
 ---
 
 #1 SSE 401 修复方案选择 (2026-07-18, v30-17 SSE 鉴权修复 2026-07-21, v30-18 多端点鉴权批量修复 2026-07-22, v30-19 /api/perf 鉴权修复 2026-07-22)

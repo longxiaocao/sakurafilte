@@ -1,7 +1,7 @@
 # 项目知识索引
 
 > 维护：随 `.ai/decisions.md` 同步更新；门控通过后做路径比对（规则 §5.2.1 第 6 步）。
-> 更新时间：2026-09-30
+> 更新时间：2026-10-01
 
 ## 技术栈
 
@@ -18,15 +18,23 @@
 - `backend/src/SakuraFilter.Etl/`: Excel 导入 + `Staging/`（OEM staging 清洗/映射，030–034 迁移建立）
 - `backend/src/SakuraFilter.Search/`: `MeiliSearchProvider`（主）、`PostgresSearchProvider`（fallback）、`ResilientSearchProvider`（弹性包装）
 - `backend/src/SakuraFilter.Cli/`: 运维 CLI（孤儿图片清理、OEM staging 导入/清洗/映射/发布）
-- `backend/migrations/`: SQL 迁移，按文件名顺序；`run-migrations.sh` 以 `__sakura_migrations` 幂等登记
+- `backend/migrations/`: SQL 迁移，按文件名顺序；`run-migrations.sh` 以 `__sakura_migrations` 幂等登记。OEM 切库相关：`035_oem_catalog_serving.sql`（`oem_key`/派生分类）、`036_catalog_to_public_cutover.sql`（catalog → public 投影）、`037_products_meili_safe_ids.sql`（`mr_1` 净化为 Meili 安全 ID + `oem_2` 回填）
 - `frontend/src/api/`: `types.ts` + `index.ts`（契约层）；`utils/http.ts`（axios 拦截器）
 - `frontend/src/views/public/`: 搜索/详情/对比；`frontend/src/views/admin/`: 后台各管理页
 
 ## 数据库 Schema
 
-- `public`: 正式业务表（products / cross_references / machine_applications 等）
+- `public`: 正式业务表（products / cross_references / machine_applications 等）。**2026-10-01 起由 `catalog` 投影重建**（旧数据已清除）：`mr_1 = catalog.oem_key`、`oem_no_normalized = oem_key`、`type = catalog.product_category`；行数 48,733 / 529,499 / 709,843
 - `staging`: OEM 导入暂存（raw → clean → mapping candidates）
 - `catalog`: OEM 锚点目录（oem_products / oem_cross_references / oem_machine_applications / oem_mr1_mappings / oem_import_runs）
+- 关键约定：`mr_1` 为 Meili 文档主键，字符集受限 `^[A-Za-z0-9_-]{1,50}$`；`oem_no_1_normalized` 保留空格，`oem_key`/`oem_no_normalized` 去空格大写
+
+## 关键接口（公开搜索，2026-10-01 切库后）
+
+- POST `/api/public/search/aggregate` → 聚合搜索；`type` 过滤值必须是短码 `air/oil/fuel/hydraulic/cabin/others`（传展示名恒 0 结果）
+- GET `/api/public/product/{**slug}`、`GET /product/{oem}` → 详情；反查优先级 OemNo3(1) → OemNoDisplay(2) → Oem2(3) → Mr1(4)
+- POST `/api/public/search/batch-oem` → 批量 OEM 查询
+- POST `/api/admin/etl/reindex-all` → 全量重建索引（需 Admin，限流 "etl"）
 
 ## 关键接口（OEM 目录，2026-09-30 上线）
 
@@ -54,4 +62,9 @@
 
 - 生产库迁移**人工执行**：编排中 `db-init` / `db-migrate` 已注释禁用，禁止随意取消注释（`018_v2_legacy_data_cleanup.sql` 为一次性 TRUNCATE）
 - `products.mr_1` 为业务关联键，搜索索引主键是字符串 `mr_1`，不是 DB 自增 Id
-- OEM catalog 的 MR.1 映射当前为空（`oem_mr1_mappings = 0`），待审核流程填充
+- Meilisearch 文档 ID 只允许 `[A-Za-z0-9_-]`（≤511 字节）；含 `/ . " +` 或空格会整批 `invalid_document_id`
+- 生产栈 `sakura-api` / `sakura-meili` **未映射宿主端口**（宿主 `:7700`/`:5148` 属压测栈）；生产只能经 `https://localhost/api/...`（`curl -k`）或 `docker exec`
+- OEM catalog 的 MR.1 映射当前为空（`oem_mr1_mappings = 0`），属设计预期（客户 MR.1 编码未定稿），待编码规则就绪后按 OEM 回填
+- `typeahead_dict` 快照表切库后未刷新，联想数据可能与新目录不一致
+- 派生分类覆盖率仅 17%（`others` 占 40,378/48,733），待业务侧补分类规则
+- 前端聚合搜索页有**两个**搜索输入框：页头全局框（placeholder「搜索产品 / OEM / 机型」）与页面搜索框（「输入关键词 …」）；自动化须定位后者
