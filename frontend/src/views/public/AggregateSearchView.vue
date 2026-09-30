@@ -34,7 +34,16 @@ const advancedForm = reactive({
   machineCategory: (route.query.machineCategory as string) || '',
   tolerance: [1, 5, 10].includes(routeTolerance) ? routeTolerance : 5
 })
-const quickProductTypes = ['Air Filter', 'Oil Filter', 'Fuel Filter', 'Hydraulic Filter'] as const
+// 🔧 fix(切库 2026-10-01): 原快捷分类直接把展示名 ('Air Filter') 当过滤值发给后端,
+//   而 products.type 实际取值是短码 (air/oil/fuel/hydraulic/cabin/others, 由 catalog 派生分类写入),
+//   Meili 过滤 type = "Air Filter" 恒为 0 结果。改为 value/label 分离, 请求只发短码。
+const quickProductTypes = [
+  { value: 'air', label: 'Air Filter' },
+  { value: 'oil', label: 'Oil Filter' },
+  { value: 'fuel', label: 'Fuel Filter' },
+  { value: 'hydraulic', label: 'Hydraulic Filter' },
+  { value: 'cabin', label: 'Cabin Filter' }
+] as const
 
 function toggleQuickProductType(type: string) {
   advancedForm.type = advancedForm.type === type ? '' : type
@@ -457,12 +466,12 @@ onBeforeUnmount(() => {
       <div class="flex flex-wrap gap-2 mt-3" aria-label="产品类型快捷筛选">
         <el-button
           v-for="type in quickProductTypes"
-          :key="type"
+          :key="type.value"
           size="small"
-          :type="advancedForm.type === type ? 'primary' : 'default'"
-          @click="toggleQuickProductType(type)"
+          :type="advancedForm.type === type.value ? 'primary' : 'default'"
+          @click="toggleQuickProductType(type.value)"
         >
-          {{ type }}
+          {{ type.label }}
         </el-button>
       </div>
       <!-- 高级筛选 (折叠展开) -->
@@ -473,7 +482,7 @@ onBeforeUnmount(() => {
         <div v-if="showAdvanced" class="flex flex-wrap gap-3 mt-2 p-3 border border-gray-200 rounded dark:border-[var(--color-border)]">
           <el-form-item label="分类" class="!mb-0">
             <el-select v-model="advancedForm.type" placeholder="全部" clearable size="small" style="width: 120px">
-              <el-option v-for="type in quickProductTypes" :key="type" :label="type" :value="type" />
+              <el-option v-for="type in quickProductTypes" :key="type.value" :label="type.label" :value="type.value" />
             </el-select>
           </el-form-item>
           <el-form-item label="机型分类" class="!mb-0">

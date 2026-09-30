@@ -328,9 +328,10 @@ onBeforeUnmount(() => {
       <el-input v-model="filter.mr1" placeholder="MR.1" clearable size="small" style="width: 120px" :aria-label="t('admin.productsview.aria.mr_search')" @keyup.enter="quickSearch" />
       <el-input v-model="filter.productName1" :placeholder="t('common.field.product_name')" clearable size="small" style="width: 160px" :aria-label="t('admin.productsview.aria.product_name_search')" @keyup.enter="quickSearch" />
       <el-select v-model="filter.type" :placeholder="t('common.action.type')" clearable size="small" style="width: 100px" :aria-label="t('admin.productsview.aria.filter_by_type')">
+        <el-option label="air" value="air" />
         <el-option label="oil" value="oil" />
         <el-option label="fuel" value="fuel" />
-        <el-option label="air" value="air" />
+        <el-option label="hydraulic" value="hydraulic" />
         <el-option label="cabin" value="cabin" />
         <el-option label="others" value="others" />
       </el-select>

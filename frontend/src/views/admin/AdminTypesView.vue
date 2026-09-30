@@ -1,7 +1,7 @@
 <script setup lang="ts">
-// Day 10+ P2.2: Type 字典管理页 (固定 5 值: oil/fuel/air/cabin/others)
+// Day 10+ P2.2: Type 字典管理页 (固定分类: air/oil/fuel/hydraulic/cabin/others)
 //   - 默认按 sortOrder 排 (P2.3 联动: 拖动后前台产品页按 sortOrder 展示)
-//   - 5 个固定值不允许硬删 (兜底 others)
+//   - 6 个固定值不允许硬删 (兜底 others)
 // P1-1 DictManagerLayout 提取: 用 useDictManager + DictManagerLayout 替代手写 state + CRUD + 拖拽 + 模板
 //   行数: 222 → ~55 (减少 75%)
 import { useI18n } from 'vue-i18n'
@@ -11,8 +11,9 @@ import { dictApi, type TypeItem, type TypeReorderItem } from '@/api'
 
 const { t } = useI18n()
 
-// 固定 5 值: oil/fuel/air/cabin/others (软删时额外警告)
-const FIXED_TYPES = ['oil', 'fuel', 'air', 'cabin', 'others']
+// 🔧 fix(切库 2026-10-01): 补 hydraulic — catalog 派生分类含 hydraulic (生产库 5,693 条),
+//   缺失会导致后台误删/误改该分类
+const FIXED_TYPES = ['air', 'oil', 'fuel', 'hydraulic', 'cabin', 'others']
 
 const mgr = useDictManager<TypeItem, TypeReorderItem>({
   api: dictApi.types,

@@ -386,7 +386,7 @@ export default {
         product_name_e_g: '产品主名称 (例: Oil Filter, Fuel Filter), 影响前台产品页',
 
         product_name_model_back: '产品副名称/型号后缀 (例: OF100)',
-        category_oil_fuel_air: '5 固定分类: oil / fuel / air / cabin / others, sort_order 决定前台排序',
+        category_oil_fuel_air: '固定分类: air / oil / fuel / hydraulic / cabin / others, sort_order 决定前台排序',
         type_type: '类型 (Type)',
         alternative_brand_oem_number: '替代品牌 OEM 编号 (5.27M distinct), 字典化便于 typeahead 联想',
         filter_media_name_model: '滤材名称 + 型号 (2 字段字典), 例: Cellulose / A020',
@@ -916,7 +916,7 @@ export default {
       },
       placeholder: {
         search_type: '搜索 Type',
-        e_g_oil_fuel: '例: oil / fuel / air / cabin / others',
+        e_g_oil_fuel: '例: air / oil / fuel / hydraulic / cabin / others',
       },
       string: {
         add_type: '新增 Type',
@@ -1437,7 +1437,7 @@ export default {
       oemBrands: { title: 'OEM 品牌字典', subtitle: 'P1.3 后台管理 · 用于产品表单分区 2 自动补全' },
       productName1s: { title: '产品名 1 字典', subtitle: 'P2.2 后台管理 · 用于产品表单分区 1 自动补全' },
       productName2s: { title: '产品名 2 字典', subtitle: 'P2.2 后台管理 · 用于产品表单分区 1 product_name_2 自动补全' },
-      types: { title: '类型字典 (Type)', subtitle: 'P2.2 后台管理 · 固定 5 值: oil / fuel / air / cabin / others · 拖动排序后前台立即生效' },
+      types: { title: '类型字典 (Type)', subtitle: 'P2.2 后台管理 · 固定分类: air / oil / fuel / hydraulic / cabin / others · 拖动排序后前台立即生效' },
       oemNo3s: { title: 'OEM 3 字典', subtitle: 'P2.2 后台管理 · 用于交叉引用分区 2 oem_no_3 自动补全' },
       medias: { title: '介质字典 (Media)', subtitle: 'P2.2 后台管理 · 2 字段: Media 名称 + 型号 · 用于产品表单分区 4 media/media_model 二合一' },
       machines: { title: '机型字典 (Machine)', subtitle: 'P2.2 后台管理 · 3 字段: 品牌 + 型号 + 名称 · 用于产品表单分区 7 适用车型' },

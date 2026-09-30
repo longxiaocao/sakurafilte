@@ -686,3 +686,23 @@ v30-14 1M OFFSET 深分页专项压测验证数据 (2026-07-21, sakurafilter_per
   - 并集方案保留 020/026 同号迁移的两份文件: 迁移器以 basename 为键，同号不同名不冲突，但 027/028/029 与 026_product_images_show_dimension.sql 已确认不进入 real 线，避免引入未上线语义
 约束: 数据层未做任何变更（三表行数与 catalog 计数仅只读核验）；030–034 已补登记进 __sakura_migrations（共 22 条），防止迁移器被重新启用时意外重跑；生产库迁移保持人工执行。
 关联文件: docker-compose.prod.yml, .env.prod (gitignore), .ai/index.md, backend/src/SakuraFilter.Api/Endpoints/AdminOemCatalogEndpoints.cs, backend/src/SakuraFilter.Api/Extensions/EndpointRouteBuilderExtensions.cs, frontend/src/router/index.ts, frontend/src/views/admin/AdminOemCatalogView.vue
+
+#36 目录层 catalog 投影为公开层 public(替换旧业务数据) (2026-10-01)
+决策: 采用"演进 public 表"而非"新建公开表 + 改所有下游": 后端 migrations/035_oem_catalog_serving.sql 为 catalog 建立稳定锚点键 oem_key(生成列 = normalize_oem_no1(oem_no_1_normalized)) 并派生 product_category; 036_catalog_to_public_cutover.sql 在演练库验证后, TRUNCATE public.cross_references/machine_applications/product_images/products 并装载 catalog 全量数据(48,733 产品 / 529,499 交叉号 / 709,843 机型适配), 令 public.products.mr_1 = oem_key、type = product_category。
+理由: (1) 旧 public.products 中 mr_1 与 oem_no_normalized 9,376/9,376 完全相同, 说明 mr_1 事实上一直是"OEM 号"字段 → 令 mr_1 = oem_key 后, Meili 主键(mr_1)、搜索/详情/批量查询全链路零代码改动即可用; (2) 规格字段绝大多数可映射到既有列(d1/d2/d3/h1/h2/h3/media/δ 等), 数值列同时写 *_raw 保留原文; (3) 新增公开表方案需改造 Meili 文档构建、PublicSearchController、PublicProductController、sitemap、前端契约共 5 条链路, 回归面过大。
+排除方案:
+  - 新建 public.oem_products 公开表 + 双读兼容: 下游 5 条链路全改, 且需长期双写, 成本与风险最高
+  - 保留旧 public 数据并存: 与用户"旧数据应清除、换上新导入数据"的明确要求冲突
+  - 不建 oem_key 直接沿用 oem_no_1_normalized: 该列保留空格(如 "SH 56212"), 与旧 oem_no_normalized(去空格) 口径不一致, URL/检索会分叉; 且 641 组同号异写未合并
+约束: 执行前全量备份并实证可还原(_backups/sakurafilter_pre_oem_cutover_20261001_000558.dump → 还原至 sakurafilter_verify_tmp 逐表比对); 迁移先在演练库跑通再上生产; 放宽/移除 chk_mr_1_format、uq_xrefs_brand_oem3、uq_apps_product_brand_model 三条与旧模型绑定的约束。
+关联文件: backend/migrations/035_oem_catalog_serving.sql, backend/migrations/036_catalog_to_public_cutover.sql, backend/src/SakuraFilter.Api/Controllers/PublicSearchController.cs, backend/src/SakuraFilter.Api/Controllers/PublicProductController.cs
+
+#37 Meili 文档主键字符集约束 → mr_1 净化为安全形态 (2026-10-01)
+决策: 全量重建时对 mr_1 应用 regexp_replace(upper(mr_1), '[^A-Za-z0-9_-]', '-', 'g') 净化(325 行受影响), 并把 chk_mr_1_format 由 ^[A-Za-z0-9/._"+-]{1,50}$ 收紧为 ^[A-Za-z0-9_-]{1,50}$ 固化该不变量; 同时回填 products.oem_2 = oem_no_display(036 切库后为 NULL, 前端结果卡片标签与 batch-oem 第 3 段兜底依赖)。
+理由: Meilisearch 文档主键仅允许字母数字/连字符/下划线(≤511 字节), 而 OEM 锚点键含 / . " +(如 CR800/3、LVO3/4"ALU), 导致含这类键的整批 1000 条被拒(invalid_document_id), 索引卡在 2,000/48,733。实测净化后 48,733 键零冲突, 且 mr_1 在公开链路中仅为最低优先级兜底标识(详情反查顺序 xrefs.OemNo3 → OemNoDisplay → Oem2 → Mr1, URL 由 OEM3 承载), 改动无外部契约影响。
+排除方案:
+  - 改用 products.id 作 Meili 主键: 需改 Mr1IndexDoc/IndexAsync/DeleteAsync/IndexReplayWorker/EtlImportService 及索引建键, 且索引需整体重建, 改动面与回归风险大
+  - 跳过 325 条不入索引: 与"全量入索引、全部可搜"的既定决策冲突
+  - 在应用层净化(不改 DB): PG 无法约束唯一性, 未来导入可能再现不可索引键且静默丢文档
+约束: 迁移已登记 public.__sakura_migrations(共 25 条); 生产 db-init/db-migrate 仍禁用, 迁移人工执行。
+关联文件: backend/migrations/037_products_meili_safe_ids.sql, backend/src/SakuraFilter.Search/MeiliSearchProvider.cs

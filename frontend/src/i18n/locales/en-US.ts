@@ -383,7 +383,7 @@ export default {
         product_name_e_g: 'Product main name (e.g.: Oil Filter, Fuel Filter), affects frontend product page',
 
         product_name_model_back: 'Product sub-name/model suffix (e.g.: OF100)',
-        category_oil_fuel_air: '5 fixed categories: oil / fuel / air / cabin / others, sort_order determines frontend sort order',
+        category_oil_fuel_air: 'Fixed categories: air / oil / fuel / hydraulic / cabin / others, sort_order determines frontend sort order',
         type_type: 'Type',
         alternative_brand_oem_number: 'Alternative brand OEM number (5.27M distinct), dictionary for typeahead',
         filter_media_name_model: 'Filter media name + model (2-field dict), e.g.: Cellulose / A020',
@@ -916,7 +916,7 @@ export default {
       },
       placeholder: {
         search_type: 'Search Type',
-        e_g_oil_fuel: 'e.g.: oil / fuel / air / cabin / others',
+        e_g_oil_fuel: 'e.g.: air / oil / fuel / hydraulic / cabin / others',
       },
       string: {
 
@@ -1435,7 +1435,7 @@ export default {
       oemBrands: { title: 'OEM Brands', subtitle: 'P1.3 Admin · autocomplete for product form section 2' },
       productName1s: { title: 'Product Name 1', subtitle: 'P2.2 Admin · autocomplete for product form section 1' },
       productName2s: { title: 'Product Name 2', subtitle: 'P2.2 Admin · autocomplete for product form section 1' },
-      types: { title: 'Types', subtitle: 'P2.2 Admin · fixed 5 values: oil / fuel / air / cabin / others · drag to reorder' },
+      types: { title: 'Types', subtitle: 'P2.2 Admin · fixed categories: air / oil / fuel / hydraulic / cabin / others · drag to reorder' },
       oemNo3s: { title: 'OEM No.3', subtitle: 'P2.2 Admin · autocomplete for cross-reference section oem_no_3' },
       medias: { title: 'Media', subtitle: 'P2.2 Admin · 2 fields: Media name + model · product form section 4' },
       machines: { title: 'Machines', subtitle: 'P2.2 Admin · 3 fields: brand + model + name · product form section 7' },
