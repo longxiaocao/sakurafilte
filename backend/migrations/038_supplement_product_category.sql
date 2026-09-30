@@ -158,4 +158,18 @@ FROM catalog.oem_products c
 WHERE p.mr_1 = c.oem_key
   AND p.type IS DISTINCT FROM c.product_category;
 
+-- ============================================================
+-- 4. 兜底传播: 325 行 mr_1 已被 037 净化为 Meili 安全形态（/ . " + → -），
+--    与 catalog.oem_key 不再字面相等（如 catalog 'FLS100/02' vs public 'FLS100-02'）。
+--    此处按同一净化规则对齐，覆盖剩余差异。
+--    WHY 不把 mr_1 改回原值: mr_1 同时是 Meili 文档主键，必须满足
+--      ^[A-Za-z0-9_-]{1,50}$（037 已加 CHECK 约束固化）。净化是可逆的展示层面工作，
+--      不应回退主键形态。
+-- ============================================================
+UPDATE public.products p
+SET type = c.product_category
+FROM catalog.oem_products c
+WHERE p.mr_1 = regexp_replace(c.oem_key, '[^A-Za-z0-9_-]', '-', 'g')
+  AND p.type IS DISTINCT FROM c.product_category;
+
 COMMIT;
