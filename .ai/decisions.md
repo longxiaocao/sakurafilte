@@ -49,6 +49,7 @@
 <!-- #35 生产部署源切至 F:\sakurafilter-real | docker-compose.prod.yml | 状态: 有效 -->
 <!-- #36 catalog 投影为公开层 public(替换旧业务数据) | backend/migrations/036_catalog_to_public_cutover.sql | 状态: 有效 -->
 <!-- #37 Meili 文档主键字符集 → mr_1 净化 | backend/migrations/037_products_meili_safe_ids.sql | 状态: 有效 -->
+<!-- #38 派生分类规则 v2(交叉引用名主判据+OEM前缀兜底) | backend/migrations/038_supplement_product_category.sql | 状态: 有效 -->
 
 ---
 
@@ -746,3 +747,16 @@ v30-14 1M OFFSET 深分页专项压测验证数据 (2026-07-21, sakurafilter_per
   - 在应用层净化(不改 DB): PG 无法约束唯一性, 未来导入可能再现不可索引键且静默丢文档
 约束: 迁移已登记 public.__sakura_migrations(共 25 条); 生产 db-init/db-migrate 仍禁用, 迁移人工执行。
 关联文件: backend/migrations/037_products_meili_safe_ids.sql, backend/src/SakuraFilter.Search/MeiliSearchProvider.cs
+
+#38 派生分类规则 v2: 交叉引用名主判据 + OEM 前缀兜底 (2026-10-01)
+决策: 新增 backend/migrations/038_supplement_product_category.sql, 以函数 catalog.refresh_product_categories() 重算 catalog.oem_products.product_category, 并把结果传播到 public.products.type。规则: 主判据 catalog.oem_cross_references.product_name_1 关键词计数 × 2, 辅判据 product_name_candidates 关键词计数 × 1, 按 (分数 DESC, 类别优先序 ASC) 取一; 关键词全未命中时按 OEM NO 1 展示值首段前缀兜底(SH→hydraulic / SA·SI·OS·OA→air / SC→cabin / SN→fuel / SO→oil), 仍未识别归 others。保持 6 分类不变。
+理由: (1) 035 仅以 product_name_candidates 为唯一来源, 实测 48,733 行中仅 9,376 行有候选名(19.2%), others 占 82.9%, 分类导航基本失效; (2) catalog.oem_cross_references.product_name_1 覆盖 529,461/529,499 = 99.99%, 是唯一高杠杆来源, 可覆盖 98.5% 的 others 锚点; (3) 前缀兜底精度经生产数据实测: 26,618 行中仅 26 例冲突(0.098%), 其中 SH/SA/OS/OA 达 100.0%, SC/SN/SO 99.7~99.8%, SI 95.0%; (4) 打分制替代 035 的"先匹配先赢"顺序制, 避免单条含通用词的交叉名(如 Air/Oil Filter)压过多数证据。
+排除方案:
+  - 用 spec_payload->>'remark' 作补充来源: 与候选名重叠 9,376/9,377(both=9,376 / remark_only=1 / neither=39,356), 无增量, 已证伪
+  - 用 spec_payload->>'media' 分类: 仅 7.4% 且为媒体路径, 无分类语义
+  - 保留 035 的 cartridge/element → hydraulic: 二者是通用形态词, 会把空气/机油滤芯误判为液压
+  - 新增 liquid/carbon/breather 等类别: 前端 dict_type、AdminTypesView.FIXED_TYPES、i18n 中英文案、契约测试均硬编码 6 值, 属独立产品决策
+约束: 迁移已执行并登记 public.__sakura_migrations(共 26 条); 执行前导出回滚快照 _backups/category_before_038.csv 与 _backups/public_type_before_038.csv; 不更新 updated_at(与 035 口径一致); 函数与传播语句均幂等。
+效果: others 40,378 → 9,908(82.9% → 20.3%); air 16,428 / hydraulic 14,218 / fuel 3,877 / cabin 2,674 / oil 1,628; catalog/public/Meili 三层分布完全一致。
+附带修复: 325 行 mr_1 已被 #37 净化为 Meili 安全形态, 与 catalog.oem_key 字面不等 → 追加按同一净化规则 regexp_replace(oem_key,'[^A-Za-z0-9_-]','-','g') 的对齐传播。
+关联文件: backend/migrations/038_supplement_product_category.sql, backend/migrations/035_oem_catalog_serving.sql, frontend/src/views/public/AggregateSearchView.vue
