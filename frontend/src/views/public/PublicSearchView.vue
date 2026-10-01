@@ -330,7 +330,9 @@ function clearAll() {
   results.value = []
   total.value = 0
   page.value = 1
-  ElMessage.info(t('common.feedback.success_016'))
+  // 🔧 fix(2026-10-01 走查): 原用 success_016（文案是「已在对比列表中, 跳转查看」）—— 与「清空」语义无关，
+  //   用户点清空却收到对比列表提示。改用专用文案 success_020「已清空搜索条件」。
+  ElMessage.success(t('common.feedback.success_020'))
 }
 
 // ===== 详情页跳转 =====

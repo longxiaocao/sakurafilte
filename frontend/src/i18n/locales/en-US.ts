@@ -1294,6 +1294,8 @@ export default {
       success_015: 'All error logs cleared',
       success_016: 'Already in compare list, navigating',
       success_019: 'Logged out',
+      // 2026-10-01: copy for the public search page "Clear" button (previously reused the compare-list copy success_016)
+      success_020: 'Search cleared',
       // ----- Info -----
       info_004: 'OEM cannot be empty',
       info_005: 'Permission denied, redirected to product management',
