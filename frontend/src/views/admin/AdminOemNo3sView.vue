@@ -42,14 +42,14 @@ const columns = [
     dialog-title-edit-key="admin.oemno3sview.title.edit_oem"
     dialog-width="480px"
     dialog-label-width="100px"
-    :empty-text="t('admin.oemno3sview.string.add_oem') + t('dict.empty_start')"
+    :empty-text="t('admin.oemno3sview.string.add_oem') + ' ' + t('dict.empty_start')"
     :search-placeholder="t('admin.oemno3sview.placeholder.search_oem')"
     :create-button-text="t('admin.oemno3sview.string.add_oem')"
     :bulk-api="dictApi.oemNo3s"
     bulk-template="value,sortOrder,deleted&#10;示例OEM3,1,0"
   >
     <template #dialog-form="{ form }">
-      <el-form-item label="OEM 3" required>
+      <el-form-item :label="t('admin.oemno3sview.label.oem3')" required>
         <el-input
           v-model="form.oemNo3"
           :placeholder="t('admin.oemno3sview.placeholder.e_g')"

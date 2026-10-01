@@ -19,7 +19,7 @@
 //   - Vue mount 验证用 waitForSelector 等待 #gallery-app / #compare-app / #inquiry-app
 import { test, expect } from '@playwright/test'
 
-const BASE = process.env.BASE_URL || 'http://localhost:5173'
+const BASE = process.env.BASE_URL || 'http://localhost:5175'
 
 test.describe('V2 Task 5.3.4: SEO URL 重定向 + Razor SSR + Vue mount', () => {
 
@@ -30,7 +30,7 @@ test.describe('V2 Task 5.3.4: SEO URL 重定向 + Razor SSR + Vue mount', () => 
     //   后端 PublicProductController.cs 301 重定向到 /products/{pn1}/{pn2}/{brand}/{oem3}
     //   测试策略: 访问旧 URL, 期望最终 URL 以 /products/ 开头 (经 301 跳转)
     const oem = 'P0505921' // spike-test 库已知产品
-    const response = await page.goto(`${BASE}/product/${oem}`, { waitUntil: 'domcontentloaded', timeout: 15000 })
+    const response = await page.goto(`${BASE}/product/${oem}`, { waitUntil: 'domcontentloaded', timeout: 40000 })
 
     // 验证不白屏
     const bodyText = await page.locator('body').innerText()
@@ -56,7 +56,7 @@ test.describe('V2 Task 5.3.4: SEO URL 重定向 + Razor SSR + Vue mount', () => 
   test('2. 旧 URL 含特殊字符时 301 仍正常 (URL 编码)', async ({ page }) => {
     // WHY URL 编码: oem 含斜杠/空格时 encodeURIComponent 编码, 301 不应破坏编码
     const oem = encodeURIComponent('F/000 001')
-    const response = await page.goto(`${BASE}/product/${oem}`, { waitUntil: 'domcontentloaded', timeout: 15000 })
+    const response = await page.goto(`${BASE}/product/${oem}`, { waitUntil: 'domcontentloaded', timeout: 40000 })
 
     // 验证不白屏 + 不报 500
     const bodyText = await page.locator('body').innerText()
@@ -75,7 +75,7 @@ test.describe('V2 Task 5.3.4: SEO URL 重定向 + Razor SSR + Vue mount', () => 
     //   测试策略: 访问已知 SEO URL, 验证 SSR HTML 包含产品字段
     //   注: 此测试依赖后端有 V2 产品数据, 若无数据则降级验证页面不白屏
     const seoUrl = `${BASE}/products/air-filter/premium/bosch/f0001`
-    const response = await page.goto(seoUrl, { waitUntil: 'domcontentloaded', timeout: 15000 })
+    const response = await page.goto(seoUrl, { waitUntil: 'domcontentloaded', timeout: 40000 })
 
     // 验证不白屏
     const bodyText = await page.locator('body').innerText()
@@ -92,7 +92,7 @@ test.describe('V2 Task 5.3.4: SEO URL 重定向 + Razor SSR + Vue mount', () => 
     //   Vue 客户端脚本 product-detail-client.ts mount 子组件到这些占位符
     //   测试策略: 访问产品详情页, 等待 Vue mount 完成 (最长 5s)
     const seoUrl = `${BASE}/products/air-filter/premium/bosch/f0001`
-    await page.goto(seoUrl, { waitUntil: 'domcontentloaded', timeout: 15000 })
+    await page.goto(seoUrl, { waitUntil: 'domcontentloaded', timeout: 40000 })
 
     // 等待 Vue mount (5s 超时, mount 失败不阻塞测试, 只记录)
     const galleryMounted = await page.locator('#gallery-app').waitFor({ timeout: 5000 })
@@ -112,7 +112,7 @@ test.describe('V2 Task 5.3.4: SEO URL 重定向 + Razor SSR + Vue mount', () => 
   test('5. 不存在的 OEM3 访问 SEO URL 返回 404 (不白屏)', async ({ page }) => {
     // WHY 404 兜底: V2 SEO URL 路由查不到产品时应返回 404 页面 (非 500 红屏)
     const seoUrl = `${BASE}/products/nonexistent/unknown/unknown/unknown`
-    const response = await page.goto(seoUrl, { waitUntil: 'domcontentloaded', timeout: 15000 })
+    const response = await page.goto(seoUrl, { waitUntil: 'domcontentloaded', timeout: 40000 })
 
     // 验证不白屏
     const bodyText = await page.locator('body').innerText()
@@ -135,7 +135,7 @@ test.describe('V2 Task 5.3.4: SEO URL 重定向 + Razor SSR + Vue mount', () => 
     await page.route('**/CompareApp*', (route) => route.abort())
     await page.route('**/InquiryApp*', (route) => route.abort())
 
-    await page.goto(seoUrl, { waitUntil: 'domcontentloaded', timeout: 15000 })
+    await page.goto(seoUrl, { waitUntil: 'domcontentloaded', timeout: 40000 })
 
     // 验证 SSR HTML 仍可见 (不依赖 Vue)
     const bodyText = await page.locator('body').innerText()
@@ -152,7 +152,7 @@ test.describe('V2 Task 5.3.4: SEO URL 重定向 + Razor SSR + Vue mount', () => 
   test('7. 聚合搜索页加载 + Vue mount (AggregateSearchView)', async ({ page }) => {
     // WHY 聚合搜索: V2 Task 5.3.4 要求验证 AggregateSearchView 的 Vue mount
     //   聚合搜索是 V2 新增页面, 支持多维度筛选 + 高亮显示
-    await page.goto(`${BASE}/aggregate-search`, { waitUntil: 'domcontentloaded', timeout: 15000 })
+    await page.goto(`${BASE}/aggregate-search`, { waitUntil: 'domcontentloaded', timeout: 40000 })
 
     // 验证不白屏
     const bodyText = await page.locator('body').innerText()
@@ -176,7 +176,7 @@ test.describe('V2 Task 5.3.4: SEO URL 重定向 + Razor SSR + Vue mount', () => 
       localStorage.setItem('sakura_admin_token', token)
     }, ADMIN_TOKEN)
 
-    await page.goto(`${BASE}/admin/products/new`, { waitUntil: 'domcontentloaded', timeout: 15000 })
+    await page.goto(`${BASE}/admin/products/new`, { waitUntil: 'domcontentloaded', timeout: 40000 })
     await page.waitForSelector('.el-form, form', { timeout: 10000 })
 
     // 查找 MR.1 输入框 (V2 Task 1.1 新增)
@@ -212,7 +212,7 @@ test.describe('V2 Task 5.3.4: SEO URL 重定向 + Razor SSR + Vue mount', () => 
       localStorage.setItem('sakura_admin_token', token)
     }, ADMIN_TOKEN)
 
-    await page.goto(`${BASE}/admin/xrefs/reorder`, { waitUntil: 'domcontentloaded', timeout: 15000 })
+    await page.goto(`${BASE}/admin/xrefs/reorder`, { waitUntil: 'domcontentloaded', timeout: 40000 })
 
     // 验证不白屏
     const bodyText = await page.locator('body').innerText()

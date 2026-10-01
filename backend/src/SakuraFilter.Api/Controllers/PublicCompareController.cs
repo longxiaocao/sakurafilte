@@ -91,8 +91,21 @@ public class PublicCompareController : ControllerBase
             select new { x.ProductId, x.Id, x.ProductName1, x.OemBrand, x.OemNo3, x.Oem2, x.SortOrder, x.MachineType, x.IsPublished, x.RowVersion })
             .ToListAsync(ct);
         var apps = await _db.MachineApplications.AsNoTracking()
-            .Where(m => matchedIds.Contains(m.ProductId))
+            .Where(m => m.ProductId.HasValue && matchedIds.Contains(m.ProductId.Value))
             .ToListAsync(ct);
+
+        // 加载图片 (公开对比缩略图): 单次查 product_images, 每产品取其主图 (slot 升序第一张)。
+        //   imageUrl 用后端代理 /api/public/images/{key}：生产 MinIO 端口不对外暴露,
+        //   GetPublicUrl 返回的直连 URL 浏览器不可达; 代理端点 (StorageEndpoints) 任何存储下均可访问,
+        //   与 PublicProductView 的 key→代理用法保持一致。
+        var imageRows = await _db.ProductImages.AsNoTracking()
+            .Where(i => matchedIds.Contains(i.ProductId))
+            .OrderBy(i => i.ProductId).ThenBy(i => i.Slot)
+            .ToListAsync(ct);
+        var primaryImageByProduct = imageRows
+            .Where(i => !string.IsNullOrEmpty(i.ImageKey))
+            .GroupBy(i => i.ProductId)
+            .ToDictionary(g => g.Key, g => g.OrderBy(x => x.Slot).First());
 
         var result = new List<ProductDetailDto>();
         foreach (var p in ordered)
@@ -113,6 +126,15 @@ public class PublicCompareController : ControllerBase
                     m.ChassisType, m.EngineModel,
                     m.CabinType, m.Capacity, m.EngineSerialNumber))
                 .ToList();
+            // 公开对比: 只带主图 (slot 优先); 无图时空列表 (前端占位, img v-if 隐藏)
+            var imgList = new List<ProductImageInfo>();
+            if (primaryImageByProduct.TryGetValue(p.Id, out var pi))
+            {
+                imgList.Add(new ProductImageInfo(0, p.Id, 1, pi.ImageKey,
+                    $"/api/public/images/{pi.ImageKey}", pi.FileSize, pi.ContentType,
+                    pi.Width, pi.Height, pi.IsPrimary, pi.UploadedAt, pi.UploadedBy, pi.OemNo3, "primary",
+                    pi.ShowDimension));  // V2(2026-08-24): 尺寸标注线开关 (分支新增字段, 合并 master 后补齐)
+            }
             // 公开对比不需要 RowVersion (前台不修改数据), 传 0 即可
             result.Add(new ProductDetailDto(
                 p.Id, p.OemNoDisplay, p.Oem2, p.Mr1, p.ProductName1, p.ProductName2,
@@ -135,7 +157,7 @@ public class PublicCompareController : ControllerBase
                 p.MasterBoxLengthMm, p.MasterBoxWidthMm, p.MasterBoxHeightMm,
                 p.VolumePerCartonM3,
                 p.IsDiscontinued, p.CreatedAt, p.UpdatedAt,
-                pXrefs, pApps, new List<ProductImageInfo>()
+                pXrefs, pApps, imgList
             ));
         }
 

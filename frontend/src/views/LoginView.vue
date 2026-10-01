@@ -57,7 +57,7 @@ async function initTurnstile() {
 
 function loadTurnstileScript(): Promise<boolean> {
   return new Promise((resolve) => {
-    // @ts-ignore — window.turnstile 来自 CF 脚本
+    // window.turnstile 由 CF 脚本注入, 类型在 env.d.ts 声明
     if (window.turnstile || document.querySelector('script[data-turnstile]')) { resolve(true); return }
     const s = document.createElement('script')
     s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit'
@@ -78,8 +78,8 @@ function renderTurnstile(siteKey: string) {
   nextTick(() => {
     if (!turnstileWidget.value) return
     try {
-      // @ts-ignore — window.turnstile 来自 CF 脚本
-      window.turnstile.render(turnstileWidget.value, {
+      // window.turnstile 类型在 env.d.ts 声明
+      window.turnstile!.render(turnstileWidget.value, {
         sitekey: siteKey,
         theme: document.documentElement.classList.contains('dark') ? 'dark' : 'light',
         callback: (token: string) => { turnstileToken.value = token; turnstileError.value = '' },
@@ -100,9 +100,8 @@ function renderTurnstile(siteKey: string) {
 // 主题切换时重渲染 (widget 主题跟随)
 function onThemeChange() {
   if (!turnstileLoaded.value || !turnstileWidget.value) return
-  // @ts-ignore — window.turnstile 来自 CF 脚本
+  // window.turnstile 类型在 env.d.ts 声明
   if (window.turnstile?.reset) {
-    // @ts-ignore
     window.turnstile.reset(turnstileWidget.value)
   }
 }

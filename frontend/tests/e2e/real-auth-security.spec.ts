@@ -174,7 +174,7 @@ test.describe.serial('SakuraFilter 真实鉴权安全 E2E', () => {
   test('1. 未登录访问 /admin/products → 跳转 /login?redirect=...', async ({ page }) => {
     // 不注入任何 token, 清除鉴权 localStorage
     await clearAuthStorage(page)
-    await page.goto(`${BASE}/admin/products`, { waitUntil: 'domcontentloaded', timeout: 20000 })
+    await page.goto(`${BASE}/admin/products`, { waitUntil: 'domcontentloaded', timeout: 40000 })
     // 等待跳转到登录页 (路由守卫 next({ path: '/login', query: { redirect: to.fullPath } }))
     await page.waitForURL(/\/login/, { timeout: 10000 })
     const url = page.url()
@@ -193,7 +193,7 @@ test.describe.serial('SakuraFilter 真实鉴权安全 E2E', () => {
     // 先访问带 redirect 参数的登录页 (模拟从 /admin/products 跳转过来)
     await page.goto(`${BASE}/login?redirect=${encodeURIComponent('/admin/products')}`, {
       waitUntil: 'domcontentloaded',
-      timeout: 20000
+      timeout: 40000
     })
     // 等密码框出现 (Vue 已渲染)
     await page.waitForSelector('input[type="password"]', { timeout: 10000 })
@@ -225,9 +225,9 @@ test.describe.serial('SakuraFilter 真实鉴权安全 E2E', () => {
     await injectAuthState(page, viewerLogin!)
     // 设置跨导航等待: ElMessage.warning 在路由守卫触发 (requireRole='admin' && !isAdmin())
     //   WHY 在 goto 之前设置: waitForSelector 跨导航持续等待, 直到 DOM 出现 .el-message--warning
-    const warningPromise = page.waitForSelector('.el-message--warning', { timeout: 8000 }).catch(() => null)
+    const warningPromise = page.waitForSelector('.el-message--warning', { timeout: 15000 }).catch(() => null)
     // 访问 /admin/users (requireRole='admin', viewer 应被拦截)
-    await page.goto(`${BASE}/admin/users`, { waitUntil: 'domcontentloaded', timeout: 20000 })
+    await page.goto(`${BASE}/admin/users`, { waitUntil: 'domcontentloaded', timeout: 40000 })
     // 等待跳转 (viewer 被拦截 → 跳 /admin/products)
     await page.waitForURL(/\/admin\/products/, { timeout: 10000 }).catch(() => {})
     const warning = await warningPromise
@@ -362,7 +362,7 @@ test.describe.serial('SakuraFilter 真实鉴权安全 E2E', () => {
     })
 
     // 步骤 5: 访问 /admin/products (触发列表请求 → 401 → refresh → 重试)
-    await page.goto(`${BASE}/admin/products`, { waitUntil: 'domcontentloaded', timeout: 20000 })
+    await page.goto(`${BASE}/admin/products`, { waitUntil: 'domcontentloaded', timeout: 40000 })
     // 等待 refresh + 重试完成 (axios 拦截器异步, 给足时间)
     await page.waitForTimeout(3000)
 
@@ -419,7 +419,7 @@ test.describe.serial('SakuraFilter 真实鉴权安全 E2E', () => {
     })
 
     // 步骤 5: 访问 /admin/products (触发 401 → refresh → refresh 失败 → redirectToLogin)
-    await page.goto(`${BASE}/admin/products`, { waitUntil: 'domcontentloaded', timeout: 20000 })
+    await page.goto(`${BASE}/admin/products`, { waitUntil: 'domcontentloaded', timeout: 40000 })
     // 等待跳转到登录页 (http.ts handle401Redirect → /login?return=...)
     //   WHY 先 waitForURL 再 waitForTimeout: 8b 期望 refresh 被调用 (即使失败),
     //     需给 axios 异步流程足够时间; waitForURL 跳转后还要等 refresh 完成

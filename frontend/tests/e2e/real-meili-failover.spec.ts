@@ -45,14 +45,20 @@
 // ============================================================================
 
 import { test, expect, type Page, type APIRequestContext } from '@playwright/test'
+// 🔧 fix(2026-09-13): 注入改用真实 JWT (旧 dev token 与后端 DevStaticToken 不匹配 → 401 跳登录)
+import { loginAsAdmin, injectAdminAuth, type AdminAuth } from './helpers/auth'
 import { execSync } from 'node:child_process'
 
 const BACKEND = process.env.BACKEND_URL || 'http://localhost:5148'
 const FRONTEND = process.env.BASE_URL || 'http://localhost:5175'
-const ADMIN_TOKEN =
-  process.env.ADMIN_TOKEN || 'dev-admin-token-rotate-in-prod-MZK4R9P3X6V2N7Q1L5F0B8H3C'
 const MEILI_CONTAINER = process.env.MEILI_CONTAINER || 'meilisearch'
 const SHOT_DIR = 'test-results'
+
+// 模块级共享 JWT (beforeAll 登录一次)
+let adminAuth: AdminAuth | null = null
+test.beforeAll(async ({ request }) => {
+  adminAuth = await loginAsAdmin(request)
+})
 
 // ===== 工具函数 =====
 
@@ -163,19 +169,10 @@ async function waitForMeiliUnhealthy(
   return false
 }
 
-/** 注入 admin token + 强制 zh-CN locale (与 real-etl-flow.spec.ts 一致) */
+/** 注入 admin JWT + 强制 zh-CN locale (真实 JWT, 与后端配置解耦) */
 async function injectAdminContext(page: Page) {
-  await page.addInitScript((token) => {
-    // 强制中文 (Playwright chromium 默认 en-US 会导致 i18n 走英文分支)
-    localStorage.setItem('sakura_locale', 'zh-CN')
-    // legacy token key
-    localStorage.setItem('sakura_admin_token', token)
-    // v30-22 新 key (JSON 格式, useAdminAuth 优先读)
-    localStorage.setItem(
-      'sakura_admin_auth',
-      JSON.stringify({ token, user: { username: 'admin', role: 'admin' } })
-    )
-  }, ADMIN_TOKEN)
+  if (!adminAuth) throw new Error('beforeAll 未执行')
+  await injectAdminAuth(page, adminAuth)
 }
 
 // 1x1 透明 PNG (正常上传场景占位图)
@@ -214,10 +211,10 @@ async function mockProductGet(page: Page) {
   })
 }
 
-/** 展开 el-collapse-item "图片" 折叠区 (默认折叠) */
+/** 展开 el-tabs 中"图片"标签页 (tab name="8", tab-position="left") */
 async function expandImageSection(page: Page) {
   const header = page
-    .locator('.el-collapse-item__header')
+    .locator('.el-tabs__item')
     .filter({ hasText: '图片' })
     .first()
   await header.click()
@@ -321,7 +318,7 @@ test.describe.serial('Meili 降级 + 恶意文件上传 异常场景 E2E', () =>
     await injectAdminContext(page)
     await page.goto(`${FRONTEND}/search`, {
       waitUntil: 'domcontentloaded',
-      timeout: 20000
+      timeout: 40000
     })
     await page.screenshot({
       path: `${SHOT_DIR}/real-meili-2-fallback.png`,
@@ -382,6 +379,9 @@ test.describe.serial('Meili 降级 + 恶意文件上传 异常场景 E2E', () =>
   })
 
   test('4. 上传伪装为 .xlsx 的恶意文件 → 后端拒绝', async ({ page }) => {
+    // 🔧 fix(2026-09-13): 60s timeout — webkit 下编辑页加载可达 30s+, 原 30s 默认 timeout
+    //   在页面加载 + tab 展开后耗尽导致 locator.click 误报超时
+    test.setTimeout(60000)
     await injectAdminContext(page)
     await mockProductGet(page)
 
@@ -403,7 +403,7 @@ test.describe.serial('Meili 降级 + 恶意文件上传 异常场景 E2E', () =>
 
     await page.goto(`${FRONTEND}/admin/products/123/edit`, {
       waitUntil: 'domcontentloaded',
-      timeout: 15000
+      timeout: 40000
     })
     await expandImageSection(page)
 
@@ -461,7 +461,7 @@ test.describe.serial('Meili 降级 + 恶意文件上传 异常场景 E2E', () =>
 
     await page.goto(`${FRONTEND}/admin/products/123/edit`, {
       waitUntil: 'domcontentloaded',
-      timeout: 15000
+      timeout: 40000
     })
     await expandImageSection(page)
 
@@ -510,7 +510,7 @@ test.describe.serial('Meili 降级 + 恶意文件上传 异常场景 E2E', () =>
 
     await page.goto(`${FRONTEND}/admin/products/123/edit`, {
       waitUntil: 'domcontentloaded',
-      timeout: 15000
+      timeout: 40000
     })
     await expandImageSection(page)
 
@@ -560,7 +560,7 @@ test.describe.serial('Meili 降级 + 恶意文件上传 异常场景 E2E', () =>
 
     await page.goto(`${FRONTEND}/admin/etl`, {
       waitUntil: 'domcontentloaded',
-      timeout: 20000
+      timeout: 40000
     })
     await page.waitForSelector('h1', { timeout: 10000 })
 
@@ -584,8 +584,8 @@ test.describe.serial('Meili 降级 + 恶意文件上传 异常场景 E2E', () =>
     })
     await page.waitForTimeout(300)
 
-    // 点击"立即导入"按钮 (.el-form .el-button--primary, 触发 ElMessageBox.confirm)
-    const triggerBtn = page.locator('.el-form .el-button--primary').first()
+    // 点击"立即导入"按钮 (data-testid 精确匹配, 避免匹配下载模板按钮)
+    const triggerBtn = page.getByTestId('etl-trigger-btn')
     await triggerBtn.click()
 
     // 处理 ElMessageBox.confirm 二次确认 (点 primary 按钮)

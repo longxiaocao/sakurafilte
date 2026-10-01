@@ -84,9 +84,9 @@ export default tseslint.config(
     }
   },
 
-  // 严格 TS 规则 (仅对 .ts)
+  // 严格 TS 规则 (对 .ts 与 .vue script 区一并生效)
   {
-    files: ['**/*.ts'],
+    files: ['**/*.{ts,vue}'],
     languageOptions: {
       parserOptions: {
         project: tsconfigPath,

@@ -104,6 +104,73 @@ export interface PageResp<T> {
   items: T[]
 }
 
+// ===== OEM 目录 (catalog 只读查询) =====
+export interface OemCatalogSummary {
+  lastPublishedBatchId: number | null
+  oemProductCount: number
+  productWithSpecCount: number
+  crossReferenceCount: number
+  machineApplicationCount: number
+  activeMr1MappingCount: number
+}
+
+export interface OemCatalogProduct {
+  oemNo1: string
+  oemNo1Display: string
+  productNameCandidates: unknown
+  specConflictFieldCount: number
+  sourceBatchId: number
+  updatedAt: string
+  crossReferenceCount: number
+  machineApplicationCount: number
+  activeMr1: string | null
+}
+
+export interface OemCatalogProductDetail extends OemCatalogProduct {
+  specPayload: Record<string, unknown>
+  createdAt: string
+}
+
+export interface OemCatalogProductPage {
+  page: number
+  pageSize: number
+  total: number
+  items: OemCatalogProduct[]
+}
+
+export interface OemCatalogCrossReference {
+  productName1: string | null
+  oemBrand: string | null
+  oemNo3: string | null
+  sourceRowNos: number[]
+  mergedSourceRowCount: number
+}
+
+export interface OemCatalogApplication {
+  machineBrand: string | null
+  machineModel: string | null
+  modelName: string | null
+  engineBrand: string | null
+  engineModel: string | null
+  productionDate: string | null
+  power: string | null
+  sourceRowNo: number
+}
+
+export interface OemCatalogCrossReferencePage {
+  page: number
+  pageSize: number
+  total: number
+  items: OemCatalogCrossReference[]
+}
+
+export interface OemCatalogApplicationPage {
+  page: number
+  pageSize: number
+  total: number
+  items: OemCatalogApplication[]
+}
+
 // ===== 搜索 =====
 // Day 9.2: 字段名改 PascalCase 匹配后端 (C# record 默认 System.Text.Json PascalCase 序列化)
 //   之前用 snake_case,导致 result.hits undefined + 表格列 prop 找不到值
@@ -641,7 +708,11 @@ export interface PublicSearchHit {
   // 🔧 fix(2026-08-23 走查): 新增 3 列 — 用户能确认结果是否目标
   oemBrand?: string | null
   machineBrand?: string | null
+  // 🔧 fix(对比/字段展示): 补齐 3 字段, 结果表格展示用户填的全部 8 个搜索字段
+  machineModel?: string | null
+  modelName?: string | null
   engineBrand?: string | null
+  engineType?: string | null
   productName1?: string | null
   type?: string | null
   d1Mm?: string | null
@@ -718,6 +789,17 @@ export interface AggregateSearchRequest {
   h1?: number
   h2?: number
   h3?: number
+  // W4 (2026-10-01): 8 字段多框条件并入聚合搜索
+  //   语义与 GET /api/public/search 一致 (各字段 AND 收窄, 空字段不参与)
+  //   后端注意: 这 8 字段不在 Meili filterableAttributes 中, 任一非空时控制器改走 PG 精确过滤
+  oemBrand?: string
+  oemNo2?: string
+  oemNo3?: string
+  machineBrand?: string
+  machineModel?: string
+  modelName?: string
+  engineBrand?: string
+  engineType?: string
 }
 
 export interface AggregateOemItem {
@@ -928,4 +1010,25 @@ export interface NewsItem {
   title: string
   body: string
   publishedAt: string
+}
+
+// V25: 孤儿机型记录 (product_id=NULL, 待客户手动关联到产品)
+export interface OrphanApp {
+  id: number
+  machineBrand?: string | null
+  machineModel?: string | null
+  modelName?: string | null
+  machineCategory?: string | null
+  createdAt: string
+}
+
+export interface OrphanAppPage {
+  total: number
+  page: number
+  pageSize: number
+  items: OrphanApp[]
+}
+
+export interface LinkOrphanRequest {
+  productId: number
 }

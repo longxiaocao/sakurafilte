@@ -24,6 +24,8 @@ public static class EndpointRouteBuilderExtensions
         app.MapStorageEndpoints();  // 🔧 fix: 图片代理端点 (MinIO 容器内不可直连 → 裂图)
         app.MapStorageConfigEndpoints();  // 🔧 fix: 存储配置 (运维中心: 查看/保存/连通测试)
         app.MapAdminMachineTreeEndpoints();  // Task 1: 机型三级树查询
+        app.MapAdminOemMappingEndpoints();  // OEM NO 1 到 MR.1 审核队列
+        app.MapAdminOemCatalogEndpoints();  // OEM NO 1 锚点目录核验
         app.MapSiteContentEndpoints();  // 站点内容维护 (about/contact/news/站点名/logo)
         app.MapPublicTypeaheadEndpoints();
         // V2 Task 4.3: sitemap.xml 端点

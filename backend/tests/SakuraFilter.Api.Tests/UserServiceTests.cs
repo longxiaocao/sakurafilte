@@ -69,8 +69,12 @@ public class UserServiceTests
         return new JwtTokenService(config);
     }
 
-    private static UserService CreateSut(ProductDbContext db, JwtTokenService? jwt = null, XssSanitizer? xss = null)
-        => new(db, jwt ?? CreateJwt(), NullLogger<UserService>.Instance, xss ?? new XssSanitizer());
+    // 默认 IConfiguration: 未配置 Auth:MaxFailedLoginCount → 阈值保持默认 5 (与历史/现有用例一致)
+    private static IConfiguration CreateConfig(params (string key, string value)[] kv)
+        => new ConfigurationBuilder().AddInMemoryCollection(kv.Select(x => new KeyValuePair<string, string?>(x.key, x.value))).Build();
+
+    private static UserService CreateSut(ProductDbContext db, JwtTokenService? jwt = null, XssSanitizer? xss = null, IConfiguration? config = null)
+        => new(db, jwt ?? CreateJwt(), NullLogger<UserService>.Instance, xss ?? new XssSanitizer(), config ?? CreateConfig());
 
     private static string HashPwd(string pwd) => BCrypt.Net.BCrypt.HashPassword(pwd, workFactor: 4);  // 4 = 测试快速
 
@@ -151,6 +155,42 @@ public class UserServiceTests
 
         result.Should().BeNull();
         (await db.LoginAuditLogs.SingleAsync()).FailureReason.Should().Be("locked");
+    }
+
+    // 覆盖: P1-5 生产测试 — 锁定窗口过期后惰性重置失败计数, 防止"过期后单次失败立即再次锁定"
+    [Fact]
+    public async Task AuthenticateAsync_ExpiredLock_ResetsFailedCount_BeforePasswordCheck()
+    {
+        await using var db = CreateInMemoryDb();
+        db.Users.Add(User(failedCount: 5, lockedUntil: DateTimeOffset.UtcNow.AddMinutes(-1)));
+        await db.SaveChangesAsync();
+        var sut = CreateSut(db);
+
+        var result = await sut.AuthenticateAsync("tester", "Pass123!", "1.1.1.1", "UA", default);
+
+        // 锁定已过期 → 允许登录, 成功后计数保持 0 / 无锁定
+        result.Should().NotBeNull();
+        var user = await db.Users.SingleAsync();
+        user.FailedLoginCount.Should().Be(0);
+        user.LockedUntil.Should().BeNull();
+    }
+
+    // 覆盖: P1-5 生产测试 — 锁定过期后即使密码错误, 也只计 1 次失败而非立即重新锁定
+    [Fact]
+    public async Task AuthenticateAsync_ExpiredLock_WrongPassword_DoesNotRelockImmediately()
+    {
+        await using var db = CreateInMemoryDb();
+        db.Users.Add(User(failedCount: 5, lockedUntil: DateTimeOffset.UtcNow.AddMinutes(-1)));
+        await db.SaveChangesAsync();
+        var sut = CreateSut(db);
+
+        var result = await sut.AuthenticateAsync("tester", "WrongPwd", "1.1.1.1", "UA", default);
+
+        result.Should().BeNull();
+        var user = await db.Users.SingleAsync();
+        // 重置后从 0 计起: 单次错误只到 1, 不触发锁定
+        user.FailedLoginCount.Should().Be(1);
+        user.LockedUntil.Should().BeNull();
     }
 
     [Fact]

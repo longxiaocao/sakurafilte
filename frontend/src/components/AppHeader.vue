@@ -57,8 +57,9 @@ const allNavItems = computed(() => {
     { key: 'news', labelKey: 'nav.news', path: '/news', icon: 'Document', priority: 3 },
     { key: 'contact', labelKey: 'nav.contact', path: '/contact', icon: 'Message', priority: 4 },
     { key: 'oem', labelKey: 'nav.oemLookup', action: 'oemLookup', icon: 'Document', priority: 5 },
-    // V3(2026-08-25) 用户反馈: 高级搜索 (/public/search) 是公共功能, 从 admin 菜单移出归公共区
-    { key: 'adv-search', labelKey: 'nav.advSearch', path: '/public/search', icon: 'Filter', priority: 4.5 },
+    // V3(2026-08-25) 用户反馈: 高级搜索是公共功能, 从 admin 菜单移出归公共区
+    // W9 (2026-10-01): 8 字段搜索页已并入聚合搜索页的「高级搜索与筛选」面板 → 导航直指合并页
+    { key: 'adv-search', labelKey: 'nav.advSearch', path: '/search/aggregate', icon: 'Filter', priority: 4.5 },
   ]
   // V3(2026-08-25) 用户反馈 (bug): admin 登录后访问公开页显示完整 admin 布局 —
   //   admin 菜单仅"有效登录 + /admin/* 路径"显示; 公开页不显示 admin 菜单
@@ -68,8 +69,9 @@ const allNavItems = computed(() => {
     // admin 高优 (必显示, 不可收纳)
     items.push(
       { key: 'products', labelKey: 'nav.productManage', path: '/admin/products', icon: 'Goods', priority: 4 },
+      //   admin 区不再重复放"高级搜索"入口, 统一走公共区那一条
       { key: 'dict', labelKey: 'nav.dictManage', dropdown: 'dict', icon: 'Collection', priority: 6 },
-    // 🔧 fix(审查): 独立对比页移除, '产品对比'菜单入口删除 — 对比内嵌高级搜索页 (结果勾选 + 详情页按钮),
+      // 🔧 fix(审查): 独立对比页移除, '产品对比'菜单入口删除 — 对比内嵌高级搜索页 (结果勾选 + 详情页按钮),
       // V2 Task 2.2.6: OEM 排序管理入口 (priority 6.5, 在字典和 ETL 之间)
       { key: 'xref-reorder', labelKey: 'nav.xrefReorder', path: '/admin/xrefs/reorder', icon: 'Sort', priority: 6.5 },
       // V3 fix(2026-08-25): 数据导入独立入口恢复 — 交付后客户管理员需自助导入产品数据,
@@ -86,7 +88,11 @@ const allNavItems = computed(() => {
     //   adv-compare 已移除 (对比内嵌高级搜索页, 独立页冗余)
     //   V3(2026-08-25): 数据导入(etl)已独立回高优区, 运维中心保留 性能/错误/API/存储
     items.push(
+      // OEM 目录核验入口 (OEM NO 1 → catalog 只读查询)
+      { key: 'oem-catalog', labelKey: 'nav.oemCatalog', path: '/admin/oem-catalog', icon: 'Collection', priority: 8.5 },
       { key: 'ops', labelKey: 'nav.opsCenter', path: '/admin/ops', icon: 'Setting', priority: 9 },
+      // 🔧 fix(2026-09-14): 孤儿机型入口并入运维中心 tab, 删除独立顶栏项 (原 labelKey 'nav.orphans' 无 i18n 定义,
+      //   界面直接显示键名; 与运维中心「孤立机型」tab 同组件重复)
       { key: 'site', labelKey: 'nav.siteContent', path: '/admin/site-content', icon: 'Document', priority: 12.5 },
       { key: 'help', labelKey: 'nav.help', path: '/admin/help', icon: 'QuestionFilled', priority: 13 }
     )

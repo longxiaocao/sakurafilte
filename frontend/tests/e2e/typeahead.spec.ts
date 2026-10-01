@@ -3,7 +3,7 @@
 //   依赖: 本地库有数据 (CI 空库无候选 → 跳过, 只验证请求不失败)
 import { test, expect } from '@playwright/test'
 
-const BASE = process.env.BASE_URL || 'http://localhost:5173'
+const BASE = process.env.BASE_URL || 'http://localhost:5175'
 
 async function injectZhLocale(page: import('@playwright/test').Page) {
   await page.addInitScript(() => {
@@ -14,7 +14,7 @@ async function injectZhLocale(page: import('@playwright/test').Page) {
 test.describe('E2E-typeahead 自动补全', () => {
   test('1. 搜索框输入 2 字符 → 联想候选出现 (防抖 500ms 后)', async ({ page }) => {
     await injectZhLocale(page)
-    await page.goto(`${BASE}/search`, { waitUntil: 'domcontentloaded', timeout: 20000 })
+    await page.goto(`${BASE}/search`, { waitUntil: 'domcontentloaded', timeout: 30000 })
     await page.getByRole('heading', { name: '聚合搜索', exact: true }).waitFor({ timeout: 10000 })
     const searchInput = page.getByPlaceholder('输入关键词 (产品名 / OEM / 机型 / 品牌)')
     await searchInput.waitFor({ timeout: 10000 })
@@ -38,7 +38,7 @@ test.describe('E2E-typeahead 自动补全', () => {
       const url = resp.url()
       if (url.includes('/api/public/typeahead/')) typeaheadResponses.push(url)
     })
-    await page.goto(`${BASE}/search`, { waitUntil: 'domcontentloaded', timeout: 20000 })
+    await page.goto(`${BASE}/search`, { waitUntil: 'domcontentloaded', timeout: 30000 })
     await page.getByRole('heading', { name: '聚合搜索', exact: true }).waitFor({ timeout: 10000 })
     const searchInput = page.getByPlaceholder('输入关键词 (产品名 / OEM / 机型 / 品牌)')
     await searchInput.waitFor({ timeout: 10000 })

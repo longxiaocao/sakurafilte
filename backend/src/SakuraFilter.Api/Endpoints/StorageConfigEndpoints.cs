@@ -18,7 +18,8 @@ public static class StorageConfigEndpoints
 
     public static void MapStorageConfigEndpoints(this IEndpointRouteBuilder app)
     {
-        var g = app.MapGroup("/api/admin/storage").WithTags("Storage").RequireAuthorization("Admin");
+        // WHY: 权限细分 — 查看配置 viewer 可读; 保存/测试为高危运维操作, 仅 admin
+        var g = app.MapGroup("/api/admin/storage").WithTags("Storage");
 
         // 当前配置 (system_settings 优先, 否则环境变量; 密钥脱敏)
         g.MapGet("/config", async (ProductDbContext db, IConfiguration cfg, CancellationToken ct) =>
@@ -56,7 +57,8 @@ public static class StorageConfigEndpoints
                 },
             };
             return Results.Ok(Mask(dto));
-        }).WithName("AdminGetStorageConfig");
+        }).WithName("AdminGetStorageConfig")
+        .RequireAuthorization("ReadOnly");
 
         // 保存配置 (重启生效)
         g.MapPut("/config", async (StorageConfigDto body, ProductDbContext db, CancellationToken ct) =>
@@ -76,7 +78,8 @@ public static class StorageConfigEndpoints
             }
             await db.SaveChangesAsync(ct);
             return Results.Ok(new { ok = true, message = "已保存, 重启容器后生效 (存储客户端为单例, 无法热切换)" });
-        }).WithName("AdminSaveStorageConfig");
+        }).WithName("AdminSaveStorageConfig")
+        .RequireAuthorization("Admin");
 
         // 连通性测试 — 用提交的参数创建临时客户端, 上传/读取/删除探针
         g.MapPost("/test", async (StorageConfigDto body, CancellationToken ct) =>
@@ -116,7 +119,8 @@ public static class StorageConfigEndpoints
                 sw.Stop();
                 return Results.Ok(new StorageTestResult { Ok = false, LatencyMs = sw.ElapsedMilliseconds, Message = ex.Message });
             }
-        }).WithName("AdminTestStorageConfig").DisableAntiforgery();
+        }).WithName("AdminTestStorageConfig").DisableAntiforgery()
+        .RequireAuthorization("Admin");
     }
 
     private static async Task<StorageConfigDto?> GetSavedConfig(ProductDbContext db, CancellationToken ct)

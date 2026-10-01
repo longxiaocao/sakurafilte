@@ -3,14 +3,37 @@
 //   依赖: 本地数据库有产品数据 (CI 空库会跳过列表验证, 只验证流程不白屏)
 //   注意: 只读操作, 不创建/修改/删除产品 (避免污染数据)
 import { test, expect } from '@playwright/test'
+// 🔧 fix(2026-09-13): 注入改用真实 JWT (旧 dev token 与后端 DevStaticToken 不匹配 → 401 跳登录)
+import { loginAsAdmin, injectAdminAuth, type AdminAuth } from './helpers/auth'
 
-const BASE = process.env.BASE_URL || 'http://localhost:5173'
-const ADMIN_TOKEN = process.env.ADMIN_TOKEN || 'dev-admin-token-rotate-in-prod-MZK4R9P3X6V2N7Q1L5F0B8H3C'
+const BASE = process.env.BASE_URL || 'http://localhost:5175'
+const ADMIN_USER = 'admin'
+const ADMIN_PWD = 'Admin@2026'
 
+// 模块级共享 JWT (beforeAll 登录一次)
+let adminAuth: AdminAuth | null = null
+test.beforeAll(async ({ request }) => {
+  adminAuth = await loginAsAdmin(request)
+})
+
+// v30-22: JWT 登录 (真实走后端 /api/auth/login) — 比注入旧 dev token 更稳定
+async function jwtLogin(page: import('@playwright/test').Page) {
+  await page.addInitScript(() => {
+    localStorage.setItem('sakura_locale', 'zh-CN')
+  })
+  await page.goto(`${BASE}/login`, { waitUntil: 'domcontentloaded', timeout: 20000 })
+  await page.waitForSelector('input[type="password"]', { timeout: 10000 })
+  const userInput = page.locator('input[autocomplete="username"], input[type="text"]:not([aria-label*="搜索"])').last()
+  await userInput.fill(ADMIN_USER)
+  await page.locator('input[type="password"]').first().fill(ADMIN_PWD)
+  await page.locator('form .el-button--primary').first().click()
+  await page.waitForURL(/\/admin\/products/, { timeout: 15000 }).catch(() => {})
+}
+
+// 注入真实 JWT (含 user 字段, 使 isAdmin() 返回 true)
 async function injectAdminToken(page: import('@playwright/test').Page) {
-  await page.addInitScript((token) => {
-    localStorage.setItem('sakura_admin_token', token)
-  }, ADMIN_TOKEN)
+  if (!adminAuth) throw new Error('beforeAll 未执行')
+  await injectAdminAuth(page, adminAuth)
 }
 
 test.describe('P1-E2E-3 管理员产品管理流程 (用户视角)', () => {
@@ -28,10 +51,14 @@ test.describe('P1-E2E-3 管理员产品管理流程 (用户视角)', () => {
   test('2. 产品筛选表单交互', async ({ page }) => {
     await injectAdminToken(page)
     await page.goto(`${BASE}/admin/products`, { waitUntil: 'domcontentloaded', timeout: 15000 })
-    await page.waitForSelector('.el-input', { timeout: 10000 })
-    // 在搜索框输入关键词 (data-testid 精准定位 OEM 2 字段, 避免 .first() 选错)
+    // 等待主内容区加载完成 (h1 标题出现, 比 .el-input 更稳定作为就绪信号)
+    await page.waitForSelector('h1', { timeout: 10000 })
+    // 等待搜索框可见 (显式等待, 避免仅 DOM 存在但被 loading 遮挡时误判)
     const searchInput = page.getByTestId('admin-search-oem2')
+    await searchInput.waitFor({ state: 'visible', timeout: 8000 })
+    // 输入关键词并触发筛选 (Enter 触发 quickSearch)
     await searchInput.fill('Bosch')
+    await searchInput.press('Enter')
     await page.waitForTimeout(500)
     // 验证输入成功
     const inputValue = await searchInput.inputValue()

@@ -15,8 +15,8 @@ public static class DeadLetterEndpoints
 {
     public static IEndpointRouteBuilder MapDeadLetterEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/admin/dead-letter").WithTags("AdminDeadLetter")
-            .RequireAuthorization("Admin");  // V24-F19: spec F11
+        // WHY: 权限细分 — 死信查询 viewer 可读; 恢复操作为数据修复, 仅 admin
+        var group = app.MapGroup("/api/admin/dead-letter").WithTags("AdminDeadLetter");
 
         // 分页查询
         group.MapGet("/", async (
@@ -105,6 +105,7 @@ public static class DeadLetterEndpoints
             });
         })
         .WithSummary("死信队列分页查询 (keyset cursor, 支持 operation/since/recovery_count 过滤)").WithName("GetDeadLetter")
+        .RequireAuthorization("ReadOnly")
         .WithOpenApi();
 
         // 单条恢复
@@ -163,6 +164,7 @@ public static class DeadLetterEndpoints
             return result!;
         })
         .WithSummary("死信单条恢复 (移回 pending + advisory lock 串行化)").WithName("RecoverDeadLetter")
+        .RequireAuthorization("Admin")
         .WithOpenApi();
 
         // 批量恢复
@@ -247,6 +249,7 @@ public static class DeadLetterEndpoints
             return result!;
         })
         .WithName("RecoverDeadLetterBatch")
+        .RequireAuthorization("Admin")
         .WithOpenApi();
 
         return app;

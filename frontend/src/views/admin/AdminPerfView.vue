@@ -289,7 +289,7 @@ function fmtTime(ts: string | null): string {
 
       <div v-if="perf" class="grid grid-cols-2 md:grid-cols-3 gap-3 mt-3">
         <div class="hairline p-3">
-          <div class="text-xs text-muted mb-1">总请求数</div>
+          <div class="text-xs text-muted mb-1">{{ t('admin.perfview.string.total_requests') }}</div>
           <div class="text-base font-medium">{{ perf.totalRequests.toLocaleString() }}</div>
         </div>
         <div class="hairline p-3">
@@ -297,18 +297,18 @@ function fmtTime(ts: string | null): string {
           <div class="text-base font-medium">{{ perf.errorRequests.toLocaleString() }}</div>
         </div>
         <div class="hairline p-3">
-          <div class="text-xs text-muted mb-1">错误率</div>
+          <div class="text-xs text-muted mb-1">{{ t('admin.perfview.string.error_rate_label') }}</div>
           <div class="text-base font-medium" :class="errorColor">{{ perf.errorRate.toFixed(2) }}%</div>
         </div>
       </div>
       <p v-if="perf" class="text-xs text-muted mt-2">
-        采样时间: {{ fmtTime(perf.generatedAt) }}
+        {{ t('admin.perfview.string.sample_time') }} {{ fmtTime(perf.generatedAt) }}
       </p>
     </section>
 
     <!-- 健康探针 -->
     <section class="hairline p-4 mb-3">
-      <h2 class="text-base font-medium mb-3">健康探针</h2>
+      <h2 class="text-base font-medium mb-3">{{ t('admin.perfview.string.health_probe') }} </h2>
       <div class="grid grid-cols-2 gap-3">
         <div class="hairline p-3">
           <div class="text-xs text-muted mb-1">Liveness (/health/live)</div>
@@ -330,7 +330,7 @@ function fmtTime(ts: string | null): string {
       <SkeletonCard v-if="loading && !auth" variant="list" :count="3" height="60px" />
       <div v-else-if="auth" class="grid grid-cols-2 md:grid-cols-3 gap-3">
         <div class="hairline p-3">
-          <div class="text-xs text-muted mb-1">当前 Token</div>
+          <div class="text-xs text-muted mb-1">{{ t('admin.perfview.string.current_token') }} </div>
           <div class="text-base font-medium font-mono">
             {{ auth.currentPrefix }}…({{ auth.currentLen }} 字)
           </div>
@@ -345,7 +345,7 @@ function fmtTime(ts: string | null): string {
           </div>
         </div>
         <div class="hairline p-3">
-          <div class="text-xs text-muted mb-1">数据来源</div>
+          <div class="text-xs text-muted mb-1">{{ t('admin.perfview.string.source_data') }} </div>
           <div class="text-base font-medium">
             <span :class="auth.loadedFromDb ? 'text-green-600' : 'text-yellow-600'">
               {{ auth.loadedFromDb ? t('admin.perfview.templatetext.db_load') : t('admin.perfview.templatetext.en_appsettings_json') }}
@@ -357,12 +357,12 @@ function fmtTime(ts: string | null): string {
           <div class="text-sm font-medium">{{ fmtTime(auth.lastRotatedAt) }}</div>
         </div>
         <div class="hairline p-3">
-          <div class="text-xs text-muted mb-1">操作人</div>
+          <div class="text-xs text-muted mb-1">{{ t('admin.perfview.string.operator') }} </div>
           <div class="text-sm font-medium">{{ auth.lastRotatedBy || '—' }}</div>
         </div>
       </div>
       <div v-else class="text-sm text-muted py-4 text-center">
-        <div class="mb-2">无法获取 Token 状态 (需鉴权)</div>
+        <div class="mb-2">{{ t('admin.perfview.string.token_not_found_auth') }}</div>
         <button class="text-xs hairline px-3 py-1 hover:bg-[var(--color-bg-hover)]" @click="refreshAll">
           {{ t('admin.perfview.templatetext.refresh') }}
         </button>
@@ -370,7 +370,7 @@ function fmtTime(ts: string | null): string {
     </section>
 
     <p class="text-xs text-muted text-center">
-      💡 指标来自后端 PerfMetrics ring buffer (最近 1000 条请求), 每 {{ refreshSec }}s 刷新
+      {{ t('admin.perfview.string.perf_ring_buffer_tip', { sec: refreshSec }) }}
     </p>
   </div>
 </template>

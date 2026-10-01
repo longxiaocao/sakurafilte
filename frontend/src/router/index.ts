@@ -46,6 +46,10 @@ const routes: RouteRecordRaw[] = [
     meta: { title: 'Contact us' }
   },
   // ===== P3.4 (Task 11.5): 公开搜索页 8 字段多框 (公开, 无需 token) =====
+  //   W9 (2026-10-01 走查): 8 字段搜索能力已并入聚合搜索页的「高级搜索与筛选」面板,
+  //     导航入口 (AppHeader) 与 /search 页按钮统一指向 /search/aggregate。
+  //   本路由保留: ① 承载「对比内嵌视图」(?compare=id1,id2 → .compare-grid), 该视图合并页未实现;
+  //     ② 旧书签/外链仍可用。不做重定向以免破坏对比功能与既有 E2E 用例。
   {
     path: '/public/search',
     name: 'PublicSearch',
@@ -55,7 +59,7 @@ const routes: RouteRecordRaw[] = [
   // ===== V2 Task 1.3.7: 聚合搜索页 (需求 5, 文档级返回 + 高亮) =====
   //   URL: /search/aggregate?q=CAT 320D&page=1
   //   公开路由 (无 requireAuth, 游客可访问)
-  //   与 /public/search 区别: 聚合搜索走 Meilisearch (typo 容错 + 高亮), 8 字段走 PG ILIKE
+  //   W9 (2026-10-01): 该页现为公开搜索统一入口 — 融合搜索框 + 8 字段 + 分类/机型分类 + 6 尺寸 + 批量查询
   {
     path: '/search/aggregate',
     name: 'AggregateSearch',
@@ -129,6 +133,13 @@ const routes: RouteRecordRaw[] = [
     //   直接渲染 AdminEtlView, 移除与运维中心 etl tab 的功能重复
     component: () => import('@/views/admin/AdminEtlView.vue'),
     meta: { title: '数据导入', requireAuth: true }
+  },
+  // OEM 目录核验页 (OEM NO 1 → catalog 只读查询)
+  {
+    path: '/admin/oem-catalog',
+    name: 'AdminOemCatalog',
+    component: () => import('@/views/admin/AdminOemCatalogView.vue'),
+    meta: { title: 'OEM 目录核验', requireAuth: true }
   },
   // ===== P2-1 告警系统: 历史与配置页 (admin 角色) =====
   {
@@ -263,6 +274,8 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/admin/AdminSiteContentView.vue'),
     meta: { title: '站点内容', requireAuth: true }
   },
+  // ===== V25: 孤儿机型管理 (ETL apps 导入 orphan 记录, product_id=NULL) =====
+  // 🔧 fix(2026-09-14): 独立路由移除 — 孤儿入口并入运维中心 /admin/ops tab (同组件, 避免重复入口)
   // ===== 需求 6: 前端优化 Demo 演示页 =====
   //   - 整合展示需求 1-5 的所有优化点
   //   - 提供产品详情页 3 种布局方案对比 (A/B/C)

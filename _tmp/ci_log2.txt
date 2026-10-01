@@ -1,0 +1,814 @@
+﻿2026-08-25T03:00:07.8780237Z Current runner version: '2.336.0'
+2026-08-25T03:00:07.8807479Z ##[group]Runner Image Provisioner
+2026-08-25T03:00:07.8808841Z Hosted Compute Agent
+2026-08-25T03:00:07.8809494Z Version: 20260729.566
+2026-08-25T03:00:07.8810207Z Commit: cf7153fe6e25b664e8693c24944bf2b00355d109
+2026-08-25T03:00:07.8811015Z Build Date: 2026-07-29T19:17:02Z
+2026-08-25T03:00:07.8811774Z Worker ID: {ce27afae-c9cf-4f6b-b7df-367b0e98652d}
+2026-08-25T03:00:07.8812638Z Azure Region: northcentralus
+2026-08-25T03:00:07.8813279Z ##[endgroup]
+2026-08-25T03:00:07.8815085Z ##[group]Operating System
+2026-08-25T03:00:07.8816042Z Ubuntu
+2026-08-25T03:00:07.8816608Z 24.04.4
+2026-08-25T03:00:07.8817254Z LTS
+2026-08-25T03:00:07.8817805Z ##[endgroup]
+2026-08-25T03:00:07.8818589Z ##[group]Runner Image
+2026-08-25T03:00:07.8819302Z Image: ubuntu-24.04
+2026-08-25T03:00:07.8819957Z Version: 20260816.277.1
+2026-08-25T03:00:07.8821330Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20260816.277/images/ubuntu/Ubuntu2404-Readme.md
+2026-08-25T03:00:07.8822870Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20260816.277
+2026-08-25T03:00:07.8824005Z ##[endgroup]
+2026-08-25T03:00:07.8825246Z ##[group]GITHUB_TOKEN Permissions
+2026-08-25T03:00:07.8827647Z Contents: read
+2026-08-25T03:00:07.8828453Z Metadata: read
+2026-08-25T03:00:07.8829146Z Packages: read
+2026-08-25T03:00:07.8829753Z ##[endgroup]
+2026-08-25T03:00:07.8831986Z Secret source: Actions
+2026-08-25T03:00:07.8833602Z Prepare workflow directory
+2026-08-25T03:00:07.9434523Z Prepare all required actions
+2026-08-25T03:00:07.9506993Z Getting action download info
+2026-08-25T03:00:08.1534407Z Download action repository 'actions/checkout@v4' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+2026-08-25T03:00:08.2743696Z Download action repository 'actions/setup-dotnet@v4' (SHA:67a3573c9a986a3f9c594539f4ab511d57bb3ce9)
+2026-08-25T03:00:09.0101751Z Download action repository 'actions/upload-artifact@v4' (SHA:ea165f8d65b6e75b540449e92b4886f43607fa02)
+2026-08-25T03:00:09.3248158Z Download action repository 'actions/setup-python@v5' (SHA:a26af69be951a213d495a4c3e4e4022e16d87065)
+2026-08-25T03:00:09.9832433Z Complete job name: Backend Build & Smoke Test
+2026-08-25T03:00:10.0524084Z ##[group]Checking docker version
+2026-08-25T03:00:10.0538670Z ##[command]/usr/bin/docker version --format '{{.Server.APIVersion}}'
+2026-08-25T03:00:10.2938139Z '1.48'
+2026-08-25T03:00:10.2950758Z Docker daemon API version: '1.48'
+2026-08-25T03:00:10.2952209Z ##[command]/usr/bin/docker version --format '{{.Client.APIVersion}}'
+2026-08-25T03:00:10.3118138Z '1.48'
+2026-08-25T03:00:10.3132376Z Docker client API version: '1.48'
+2026-08-25T03:00:10.3138489Z ##[endgroup]
+2026-08-25T03:00:10.3141817Z ##[group]Clean up resources from previous jobs
+2026-08-25T03:00:10.3148311Z ##[command]/usr/bin/docker ps --all --quiet --no-trunc --filter "label=326103"
+2026-08-25T03:00:10.3295932Z ##[command]/usr/bin/docker network prune --force --filter "label=326103"
+2026-08-25T03:00:10.3437646Z ##[endgroup]
+2026-08-25T03:00:10.3439363Z ##[group]Create local container network
+2026-08-25T03:00:10.3451918Z ##[command]/usr/bin/docker network create --label 326103 github_network_508f4ec50a514cf8b064c9b31137bfae
+2026-08-25T03:00:10.3982225Z 31dbf83e71622286e872e95c11595c7a55f4377d8b2b4f7ca566e08acfc9263c
+2026-08-25T03:00:10.4002948Z ##[endgroup]
+2026-08-25T03:00:10.4029605Z ##[group]Starting postgres service container
+2026-08-25T03:00:10.4052181Z ##[command]/usr/bin/docker pull postgres:16
+2026-08-25T03:00:11.0324459Z 16: Pulling from library/postgres
+2026-08-25T03:00:11.2141633Z 26c307b5e35a: Pulling fs layer
+2026-08-25T03:00:11.2142122Z 32a162df1425: Pulling fs layer
+2026-08-25T03:00:11.2142523Z 05f63dbab933: Pulling fs layer
+2026-08-25T03:00:11.2142893Z 0418a1024c20: Pulling fs layer
+2026-08-25T03:00:11.2143257Z 4c85fe314a1e: Pulling fs layer
+2026-08-25T03:00:11.2143626Z 3220d19f365a: Pulling fs layer
+2026-08-25T03:00:11.2143995Z a4edcba0bccb: Pulling fs layer
+2026-08-25T03:00:11.2144389Z 82bf5df0bf96: Pulling fs layer
+2026-08-25T03:00:11.2145339Z eff308662b50: Pulling fs layer
+2026-08-25T03:00:11.2145774Z 74c34431998c: Pulling fs layer
+2026-08-25T03:00:11.2146025Z f16885bd597c: Pulling fs layer
+2026-08-25T03:00:11.2146276Z 432b70e673ec: Pulling fs layer
+2026-08-25T03:00:11.2146521Z 1f24f03930f9: Pulling fs layer
+2026-08-25T03:00:11.2146769Z e6c3b63bdd87: Pulling fs layer
+2026-08-25T03:00:11.2147066Z 82bf5df0bf96: Waiting
+2026-08-25T03:00:11.2147403Z eff308662b50: Waiting
+2026-08-25T03:00:11.2147734Z a4edcba0bccb: Waiting
+2026-08-25T03:00:11.2148557Z 74c34431998c: Waiting
+2026-08-25T03:00:11.2148768Z f16885bd597c: Waiting
+2026-08-25T03:00:11.2149100Z 432b70e673ec: Waiting
+2026-08-25T03:00:11.2149305Z 1f24f03930f9: Waiting
+2026-08-25T03:00:11.2149520Z e6c3b63bdd87: Waiting
+2026-08-25T03:00:11.2149737Z 0418a1024c20: Waiting
+2026-08-25T03:00:11.2149944Z 4c85fe314a1e: Waiting
+2026-08-25T03:00:11.2150160Z 3220d19f365a: Waiting
+2026-08-25T03:00:11.3300488Z 32a162df1425: Verifying Checksum
+2026-08-25T03:00:11.3301091Z 32a162df1425: Download complete
+2026-08-25T03:00:11.5110087Z 05f63dbab933: Verifying Checksum
+2026-08-25T03:00:11.5117747Z 05f63dbab933: Download complete
+2026-08-25T03:00:11.5501995Z 0418a1024c20: Verifying Checksum
+2026-08-25T03:00:11.5502430Z 0418a1024c20: Download complete
+2026-08-25T03:00:11.6091377Z 26c307b5e35a: Verifying Checksum
+2026-08-25T03:00:11.6091847Z 26c307b5e35a: Download complete
+2026-08-25T03:00:11.7265957Z a4edcba0bccb: Download complete
+2026-08-25T03:00:11.8212754Z 3220d19f365a: Verifying Checksum
+2026-08-25T03:00:11.8213310Z 3220d19f365a: Download complete
+2026-08-25T03:00:11.8241053Z 4c85fe314a1e: Verifying Checksum
+2026-08-25T03:00:11.8241784Z 4c85fe314a1e: Download complete
+2026-08-25T03:00:11.8863721Z 82bf5df0bf96: Verifying Checksum
+2026-08-25T03:00:11.8864303Z 82bf5df0bf96: Download complete
+2026-08-25T03:00:11.9541402Z 74c34431998c: Verifying Checksum
+2026-08-25T03:00:11.9548509Z 74c34431998c: Download complete
+2026-08-25T03:00:12.0107572Z f16885bd597c: Verifying Checksum
+2026-08-25T03:00:12.0108634Z f16885bd597c: Download complete
+2026-08-25T03:00:12.0765345Z 432b70e673ec: Download complete
+2026-08-25T03:00:12.1528820Z 1f24f03930f9: Verifying Checksum
+2026-08-25T03:00:12.1532624Z 1f24f03930f9: Download complete
+2026-08-25T03:00:12.2018687Z e6c3b63bdd87: Verifying Checksum
+2026-08-25T03:00:12.2019504Z e6c3b63bdd87: Download complete
+2026-08-25T03:00:12.4696362Z eff308662b50: Verifying Checksum
+2026-08-25T03:00:12.4698267Z eff308662b50: Download complete
+2026-08-25T03:00:12.7120669Z 26c307b5e35a: Pull complete
+2026-08-25T03:00:14.2133516Z 32a162df1425: Pull complete
+2026-08-25T03:00:14.3910952Z 05f63dbab933: Pull complete
+2026-08-25T03:00:14.4299996Z 0418a1024c20: Pull complete
+2026-08-25T03:00:14.7302198Z 4c85fe314a1e: Pull complete
+2026-08-25T03:00:14.8091047Z 3220d19f365a: Pull complete
+2026-08-25T03:00:14.8167301Z a4edcba0bccb: Pull complete
+2026-08-25T03:00:14.8260829Z 82bf5df0bf96: Pull complete
+2026-08-25T03:00:17.8756014Z eff308662b50: Pull complete
+2026-08-25T03:00:17.8889755Z 74c34431998c: Pull complete
+2026-08-25T03:00:17.8986243Z f16885bd597c: Pull complete
+2026-08-25T03:00:17.9077544Z 432b70e673ec: Pull complete
+2026-08-25T03:00:17.9164846Z 1f24f03930f9: Pull complete
+2026-08-25T03:00:17.9263082Z e6c3b63bdd87: Pull complete
+2026-08-25T03:00:17.9309178Z Digest: sha256:e17e86066e5ef83e0952a9347f5c792b7ece00972e2aa787a6986f471b3dd3d5
+2026-08-25T03:00:17.9320892Z Status: Downloaded newer image for postgres:16
+2026-08-25T03:00:17.9330364Z docker.io/library/postgres:16
+2026-08-25T03:00:17.9392102Z ##[command]/usr/bin/docker create --name 24465f5bd8c04ffebce3a91bf0645890_postgres16_f9088e --label 326103 --network github_network_508f4ec50a514cf8b064c9b31137bfae --network-alias postgres -p 5432:5432 --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 3s --health-retries 20 -e "POSTGRES_DB=spike_test_v3" -e "POSTGRES_USER=postgres" -e "POSTGRES_PASSWORD=784533" -e GITHUB_ACTIONS=true -e CI=true postgres:16
+2026-08-25T03:00:17.9654665Z a3f0f58a38549c7e7da20ab621575a70e9ee6346d236421f617eca22b1982ae7
+2026-08-25T03:00:17.9677822Z ##[command]/usr/bin/docker start a3f0f58a38549c7e7da20ab621575a70e9ee6346d236421f617eca22b1982ae7
+2026-08-25T03:00:18.1807720Z a3f0f58a38549c7e7da20ab621575a70e9ee6346d236421f617eca22b1982ae7
+2026-08-25T03:00:18.1849444Z ##[command]/usr/bin/docker ps --all --filter id=a3f0f58a38549c7e7da20ab621575a70e9ee6346d236421f617eca22b1982ae7 --filter status=running --no-trunc --format "{{.ID}} {{.Status}}"
+2026-08-25T03:00:18.2007821Z a3f0f58a38549c7e7da20ab621575a70e9ee6346d236421f617eca22b1982ae7 Up Less than a second (health: starting)
+2026-08-25T03:00:18.2030288Z ##[command]/usr/bin/docker port a3f0f58a38549c7e7da20ab621575a70e9ee6346d236421f617eca22b1982ae7
+2026-08-25T03:00:18.2182873Z 5432/tcp -> 0.0.0.0:5432
+2026-08-25T03:00:18.2183769Z 5432/tcp -> [::]:5432
+2026-08-25T03:00:18.2240298Z ##[endgroup]
+2026-08-25T03:00:18.2252964Z ##[group]Waiting for all services to be ready
+2026-08-25T03:00:18.2270844Z ##[command]/usr/bin/docker inspect --format="{{if .Config.Healthcheck}}{{print .State.Health.Status}}{{end}}" a3f0f58a38549c7e7da20ab621575a70e9ee6346d236421f617eca22b1982ae7
+2026-08-25T03:00:18.2412149Z starting
+2026-08-25T03:00:18.2433526Z postgres service is starting, waiting 2 seconds before checking again.
+2026-08-25T03:00:20.2437890Z ##[command]/usr/bin/docker inspect --format="{{if .Config.Healthcheck}}{{print .State.Health.Status}}{{end}}" a3f0f58a38549c7e7da20ab621575a70e9ee6346d236421f617eca22b1982ae7
+2026-08-25T03:00:20.2567659Z starting
+2026-08-25T03:00:20.2580384Z postgres service is starting, waiting 3 seconds before checking again.
+2026-08-25T03:00:24.1488683Z ##[command]/usr/bin/docker inspect --format="{{if .Config.Healthcheck}}{{print .State.Health.Status}}{{end}}" a3f0f58a38549c7e7da20ab621575a70e9ee6346d236421f617eca22b1982ae7
+2026-08-25T03:00:24.1614150Z healthy
+2026-08-25T03:00:24.1631057Z postgres service is healthy.
+2026-08-25T03:00:24.1631731Z ##[endgroup]
+2026-08-25T03:00:24.1909579Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+2026-08-25T03:00:24.1917598Z ##[group]Run actions/checkout@v4
+2026-08-25T03:00:24.1918203Z with:
+2026-08-25T03:00:24.1918446Z   repository: longxiaocao/sakurafilte
+2026-08-25T03:00:24.1921136Z   token: ***
+2026-08-25T03:00:24.1921363Z   ssh-strict: true
+2026-08-25T03:00:24.1921589Z   ssh-user: git
+2026-08-25T03:00:24.1921810Z   persist-credentials: true
+2026-08-25T03:00:24.1922050Z   clean: true
+2026-08-25T03:00:24.1922270Z   sparse-checkout-cone-mode: true
+2026-08-25T03:00:24.1922529Z   fetch-depth: 1
+2026-08-25T03:00:24.1922733Z   fetch-tags: false
+2026-08-25T03:00:24.1922954Z   show-progress: true
+2026-08-25T03:00:24.1923169Z   lfs: false
+2026-08-25T03:00:24.1923397Z   submodules: false
+2026-08-25T03:00:24.1923617Z   set-safe-directory: true
+2026-08-25T03:00:24.1923870Z   allow-unsafe-pr-checkout: false
+2026-08-25T03:00:24.1924298Z env:
+2026-08-25T03:00:24.1924620Z   ADMIN_TOKEN: dev-admin-token-rotate-in-prod-MZK4R9P3X6V2N7Q1L5F0B8H3C
+2026-08-25T03:00:24.1925162Z   CURSOR_HMAC_KEY: dev-cursor-hmac-key-rotate-in-prod-XYZ7K3P9Q2M5V8N1B4D6F0G2H
+2026-08-25T03:00:24.1925741Z   Jwt__SigningKey: dev-jwt-signing-key-not-for-prod-X7K9M2P5Q8R3T6V1W4Y7Z0A3B6C9D2E5F8
+2026-08-25T03:00:24.1926188Z   Jwt__Issuer: SakuraFilter
+2026-08-25T03:00:24.1926433Z   Jwt__Audience: SakuraFilter.Web
+2026-08-25T03:00:24.1926688Z   Jwt__ExpireMinutes: 30
+2026-08-25T03:00:24.1926930Z   Jwt__RefreshExpireDays: 7
+2026-08-25T03:00:24.1927157Z   BACKEND_PORT: 5148
+2026-08-25T03:00:24.1927374Z   DOTNET_VERSION: 8.0.x
+2026-08-25T03:00:24.1927614Z   DOTNET_ROLL_FORWARD: LatestMajor
+2026-08-25T03:00:24.1927875Z   NODE_VERSION: 20
+2026-08-25T03:00:24.1928344Z   PYTHON_VERSION: 3.12
+2026-08-25T03:00:24.1928589Z ##[endgroup]
+2026-08-25T03:00:24.2976340Z Syncing repository: longxiaocao/sakurafilte
+2026-08-25T03:00:24.2978812Z ##[group]Getting Git version info
+2026-08-25T03:00:24.2979451Z Working directory is '/home/runner/work/sakurafilte/sakurafilte'
+2026-08-25T03:00:24.2980352Z [command]/usr/bin/git version
+2026-08-25T03:00:24.3062370Z git version 2.55.0
+2026-08-25T03:00:24.3083125Z ##[endgroup]
+2026-08-25T03:00:24.3099316Z Temporarily overriding HOME='/home/runner/work/_temp/4275fcc8-d518-433c-a096-e87f314674b4' before making global git config changes
+2026-08-25T03:00:24.3100694Z Adding repository directory to the temporary git global config as a safe directory
+2026-08-25T03:00:24.3106844Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/sakurafilte/sakurafilte
+2026-08-25T03:00:24.3163430Z Deleting the contents of '/home/runner/work/sakurafilte/sakurafilte'
+2026-08-25T03:00:24.3167240Z ##[group]Initializing the repository
+2026-08-25T03:00:24.3171357Z [command]/usr/bin/git init /home/runner/work/sakurafilte/sakurafilte
+2026-08-25T03:00:24.3275423Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-08-25T03:00:24.3276230Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-08-25T03:00:24.3276784Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-08-25T03:00:24.3277172Z hint: call:
+2026-08-25T03:00:24.3277368Z hint:
+2026-08-25T03:00:24.3277690Z hint: 	git config --global init.defaultBranch <name>
+2026-08-25T03:00:24.3278229Z hint:
+2026-08-25T03:00:24.3278530Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-08-25T03:00:24.3279012Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-08-25T03:00:24.3279374Z hint:
+2026-08-25T03:00:24.3279583Z hint: 	git branch -m <name>
+2026-08-25T03:00:24.3279812Z hint:
+2026-08-25T03:00:24.3280127Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-08-25T03:00:24.3285681Z Initialized empty Git repository in /home/runner/work/sakurafilte/sakurafilte/.git/
+2026-08-25T03:00:24.3295700Z [command]/usr/bin/git remote add origin https://github.com/longxiaocao/sakurafilte
+2026-08-25T03:00:24.3344473Z ##[endgroup]
+2026-08-25T03:00:24.3351053Z ##[group]Disabling automatic garbage collection
+2026-08-25T03:00:24.3351656Z [command]/usr/bin/git config --local gc.auto 0
+2026-08-25T03:00:24.3382323Z ##[endgroup]
+2026-08-25T03:00:24.3382871Z ##[group]Setting up auth
+2026-08-25T03:00:24.3392892Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-08-25T03:00:24.3430790Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-08-25T03:00:24.3826365Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-08-25T03:00:24.3874662Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-08-25T03:00:24.4121219Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-08-25T03:00:24.4160471Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-08-25T03:00:24.4403708Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-08-25T03:00:24.4445441Z ##[endgroup]
+2026-08-25T03:00:24.4445884Z ##[group]Fetching the repository
+2026-08-25T03:00:24.4455119Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +e6b13023c41acf23b8fbe1cba0b34f23cf2d408b:refs/remotes/origin/master
+2026-08-25T03:00:25.1876055Z From https://github.com/longxiaocao/sakurafilte
+2026-08-25T03:00:25.1876707Z  * [new ref]         e6b13023c41acf23b8fbe1cba0b34f23cf2d408b -> origin/master
+2026-08-25T03:00:25.1881264Z ##[endgroup]
+2026-08-25T03:00:25.1882150Z ##[group]Determining the checkout info
+2026-08-25T03:00:25.1884220Z ##[endgroup]
+2026-08-25T03:00:25.1891914Z [command]/usr/bin/git sparse-checkout disable
+2026-08-25T03:00:25.1943821Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-08-25T03:00:25.1977226Z ##[group]Checking out the ref
+2026-08-25T03:00:25.1982380Z [command]/usr/bin/git checkout --progress --force -B master refs/remotes/origin/master
+2026-08-25T03:00:25.2812602Z Reset branch 'master'
+2026-08-25T03:00:25.2817421Z branch 'master' set up to track 'origin/master'.
+2026-08-25T03:00:25.2828989Z ##[endgroup]
+2026-08-25T03:00:25.2876945Z [command]/usr/bin/git log -1 --format=%H
+2026-08-25T03:00:25.2908241Z e6b13023c41acf23b8fbe1cba0b34f23cf2d408b
+2026-08-25T03:00:25.3141474Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+2026-08-25T03:00:25.3143246Z ##[group]Run actions/setup-dotnet@v4
+2026-08-25T03:00:25.3143513Z with:
+2026-08-25T03:00:25.3143719Z   dotnet-version: 8.0.x
+2026-08-25T03:00:25.3143951Z   cache: false
+2026-08-25T03:00:25.3144151Z env:
+2026-08-25T03:00:25.3144467Z   ADMIN_TOKEN: dev-admin-token-rotate-in-prod-MZK4R9P3X6V2N7Q1L5F0B8H3C
+2026-08-25T03:00:25.3145007Z   CURSOR_HMAC_KEY: dev-cursor-hmac-key-rotate-in-prod-XYZ7K3P9Q2M5V8N1B4D6F0G2H
+2026-08-25T03:00:25.3145584Z   Jwt__SigningKey: dev-jwt-signing-key-not-for-prod-X7K9M2P5Q8R3T6V1W4Y7Z0A3B6C9D2E5F8
+2026-08-25T03:00:25.3146039Z   Jwt__Issuer: SakuraFilter
+2026-08-25T03:00:25.3146322Z   Jwt__Audience: SakuraFilter.Web
+2026-08-25T03:00:25.3146588Z   Jwt__ExpireMinutes: 30
+2026-08-25T03:00:25.3146830Z   Jwt__RefreshExpireDays: 7
+2026-08-25T03:00:25.3147091Z   BACKEND_PORT: 5148
+2026-08-25T03:00:25.3147311Z   DOTNET_VERSION: 8.0.x
+2026-08-25T03:00:25.3147545Z   DOTNET_ROLL_FORWARD: LatestMajor
+2026-08-25T03:00:25.3147803Z   NODE_VERSION: 20
+2026-08-25T03:00:25.3148215Z   PYTHON_VERSION: 3.12
+2026-08-25T03:00:25.3148441Z ##[endgroup]
+2026-08-25T03:00:25.4561821Z (node:2722) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-08-25T03:00:25.4562612Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-08-25T03:00:25.4586598Z [command]/home/runner/work/_actions/actions/setup-dotnet/v4/externals/install-dotnet.sh --skip-non-versioned-files --runtime dotnet --channel LTS
+2026-08-25T03:00:25.6970920Z dotnet-install: .NET Core Runtime with version '10.0.11' is already installed.
+2026-08-25T03:00:25.6996337Z [command]/home/runner/work/_actions/actions/setup-dotnet/v4/externals/install-dotnet.sh --skip-non-versioned-files --channel 8.0
+2026-08-25T03:00:25.9187111Z dotnet-install: .NET Core SDK with version '8.0.424' is already installed.
+2026-08-25T03:00:25.9383394Z ##[group]Run dotnet restore SakuraFilter.sln
+2026-08-25T03:00:25.9383815Z [36;1mdotnet restore SakuraFilter.sln[0m
+2026-08-25T03:00:25.9429476Z shell: /usr/bin/bash -e {0}
+2026-08-25T03:00:25.9429746Z env:
+2026-08-25T03:00:25.9430097Z   ADMIN_TOKEN: dev-admin-token-rotate-in-prod-MZK4R9P3X6V2N7Q1L5F0B8H3C
+2026-08-25T03:00:25.9430657Z   CURSOR_HMAC_KEY: dev-cursor-hmac-key-rotate-in-prod-XYZ7K3P9Q2M5V8N1B4D6F0G2H
+2026-08-25T03:00:25.9431257Z   Jwt__SigningKey: dev-jwt-signing-key-not-for-prod-X7K9M2P5Q8R3T6V1W4Y7Z0A3B6C9D2E5F8
+2026-08-25T03:00:25.9431702Z   Jwt__Issuer: SakuraFilter
+2026-08-25T03:00:25.9431960Z   Jwt__Audience: SakuraFilter.Web
+2026-08-25T03:00:25.9432216Z   Jwt__ExpireMinutes: 30
+2026-08-25T03:00:25.9432452Z   Jwt__RefreshExpireDays: 7
+2026-08-25T03:00:25.9432680Z   BACKEND_PORT: 5148
+2026-08-25T03:00:25.9432898Z   DOTNET_VERSION: 8.0.x
+2026-08-25T03:00:25.9433160Z   DOTNET_ROLL_FORWARD: LatestMajor
+2026-08-25T03:00:25.9433424Z   NODE_VERSION: 20
+2026-08-25T03:00:25.9433678Z   PYTHON_VERSION: 3.12
+2026-08-25T03:00:25.9434139Z   DOTNET_ROOT: /usr/share/dotnet
+2026-08-25T03:00:25.9434387Z ##[endgroup]
+2026-08-25T03:00:35.2482334Z   Determining projects to restore...
+2026-08-25T03:00:37.4946715Z   Restored /home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Core/SakuraFilter.Core.csproj (in 248 ms).
+2026-08-25T03:00:43.2731809Z /home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Api/SakuraFilter.Api.csproj : warning NU1902: Package 'HtmlSanitizer' 8.0.601 has a known moderate severity vulnerability, https://github.com/advisories/GHSA-43cp-6p3q-2pc4 [/home/runner/work/sakurafilte/sakurafilte/backend/SakuraFilter.sln]
+2026-08-25T03:00:43.2735555Z /home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Api/SakuraFilter.Api.csproj : warning NU1902: Package 'HtmlSanitizer' 8.0.601 has a known moderate severity vulnerability, https://github.com/advisories/GHSA-j92c-7v7g-gj3f [/home/runner/work/sakurafilte/sakurafilte/backend/SakuraFilter.sln]
+2026-08-25T03:00:43.4419457Z   Restored /home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Search/SakuraFilter.Search.csproj (in 6.25 sec).
+2026-08-25T03:00:43.4444029Z   Restored /home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Infrastructure/SakuraFilter.Infrastructure.csproj (in 6.25 sec).
+2026-08-25T03:00:43.4730259Z   Restored /home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Api/SakuraFilter.Api.csproj (in 6.28 sec).
+2026-08-25T03:00:43.5447387Z   Restored /home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Etl/SakuraFilter.Etl.csproj (in 6 sec).
+2026-08-25T03:00:43.7166315Z   Restored /home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Cli/SakuraFilter.Cli.csproj (in 262 ms).
+2026-08-25T03:00:44.1978243Z   Restored /home/runner/work/sakurafilte/sakurafilte/backend/tests/SakuraFilter.Etl.Tests/SakuraFilter.Etl.Tests.csproj (in 743 ms).
+2026-08-25T03:00:44.1997070Z   Restored /home/runner/work/sakurafilte/sakurafilte/backend/tests/SakuraFilter.Api.Tests/SakuraFilter.Api.Tests.csproj (in 715 ms).
+2026-08-25T03:00:44.2984448Z ##[group]Run dotnet build SakuraFilter.sln -c Release --no-restore
+2026-08-25T03:00:44.2984973Z [36;1mdotnet build SakuraFilter.sln -c Release --no-restore[0m
+2026-08-25T03:00:44.3025834Z shell: /usr/bin/bash -e {0}
+2026-08-25T03:00:44.3026105Z env:
+2026-08-25T03:00:44.3026439Z   ADMIN_TOKEN: dev-admin-token-rotate-in-prod-MZK4R9P3X6V2N7Q1L5F0B8H3C
+2026-08-25T03:00:44.3026995Z   CURSOR_HMAC_KEY: dev-cursor-hmac-key-rotate-in-prod-XYZ7K3P9Q2M5V8N1B4D6F0G2H
+2026-08-25T03:00:44.3027581Z   Jwt__SigningKey: dev-jwt-signing-key-not-for-prod-X7K9M2P5Q8R3T6V1W4Y7Z0A3B6C9D2E5F8
+2026-08-25T03:00:44.3028229Z   Jwt__Issuer: SakuraFilter
+2026-08-25T03:00:44.3028478Z   Jwt__Audience: SakuraFilter.Web
+2026-08-25T03:00:44.3028737Z   Jwt__ExpireMinutes: 30
+2026-08-25T03:00:44.3028974Z   Jwt__RefreshExpireDays: 7
+2026-08-25T03:00:44.3029211Z   BACKEND_PORT: 5148
+2026-08-25T03:00:44.3029439Z   DOTNET_VERSION: 8.0.x
+2026-08-25T03:00:44.3029692Z   DOTNET_ROLL_FORWARD: LatestMajor
+2026-08-25T03:00:44.3029992Z   NODE_VERSION: 20
+2026-08-25T03:00:44.3030220Z   PYTHON_VERSION: 3.12
+2026-08-25T03:00:44.3030459Z   DOTNET_ROOT: /usr/share/dotnet
+2026-08-25T03:00:44.3030700Z ##[endgroup]
+2026-08-25T03:00:45.8595877Z /home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Api/SakuraFilter.Api.csproj : warning NU1902: Package 'HtmlSanitizer' 8.0.601 has a known moderate severity vulnerability, https://github.com/advisories/GHSA-43cp-6p3q-2pc4
+2026-08-25T03:00:45.8599563Z /home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Api/SakuraFilter.Api.csproj : warning NU1902: Package 'HtmlSanitizer' 8.0.601 has a known moderate severity vulnerability, https://github.com/advisories/GHSA-j92c-7v7g-gj3f
+2026-08-25T03:00:52.8408351Z   SakuraFilter.Core -> /home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Core/bin/Release/net8.0/SakuraFilter.Core.dll
+2026-08-25T03:00:56.8983574Z   SakuraFilter.Infrastructure -> /home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Infrastructure/bin/Release/net8.0/SakuraFilter.Infrastructure.dll
+2026-08-25T03:00:58.1670091Z   SakuraFilter.Cli -> /home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Cli/bin/Release/net8.0/SakuraFilter.Cli.dll
+2026-08-25T03:00:59.0172478Z ##[warning]/home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Search/MeiliSearchProvider.cs(748,69): warning CS8604: Possible null reference argument for parameter 'matchExpression' in 'bool NpgsqlDbFunctionsExtensions.ILike(DbFunctions _, string matchExpression, string pattern)'. [/home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Search/SakuraFilter.Search.csproj]
+2026-08-25T03:00:59.1212905Z   SakuraFilter.Search -> /home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Search/bin/Release/net8.0/SakuraFilter.Search.dll
+2026-08-25T03:01:00.3463201Z ##[warning]/home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Etl/EtlImportService.cs(1676,60): warning CS8629: Nullable value type may be null. [/home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Etl/SakuraFilter.Etl.csproj]
+2026-08-25T03:01:00.3717706Z   SakuraFilter.Etl -> /home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Etl/bin/Release/net8.0/SakuraFilter.Etl.dll
+2026-08-25T03:01:08.7007104Z ##[warning]/home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Api/Endpoints/AdminEtlEndpoints.cs(316,35): warning CS1998: This async method lacks 'await' operators and will run synchronously. Consider using the 'await' operator to await non-blocking API calls, or 'await Task.Run(...)' to do CPU-bound work on a background thread. [/home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Api/SakuraFilter.Api.csproj]
+2026-08-25T03:01:08.7015422Z ##[warning]/home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Api/Endpoints/AdminEtlEndpoints.cs(348,35): warning CS1998: This async method lacks 'await' operators and will run synchronously. Consider using the 'await' operator to await non-blocking API calls, or 'await Task.Run(...)' to do CPU-bound work on a background thread. [/home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Api/SakuraFilter.Api.csproj]
+2026-08-25T03:01:08.7024939Z ##[warning]/home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Api/Services/PerfAlertService.cs(142,60): warning CS8620: Argument of type 'Dictionary<string, string>' cannot be used for parameter 'settings' of type 'Dictionary<string, string?>' in 'double PerfAlertClassifier.ParseDouble(Dictionary<string, string?> settings, string key, double defaultValue)' due to differences in the nullability of reference types. [/home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Api/SakuraFilter.Api.csproj]
+2026-08-25T03:01:08.7036190Z ##[warning]/home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Api/Services/PerfAlertService.cs(143,61): warning CS8620: Argument of type 'Dictionary<string, string>' cannot be used for parameter 'settings' of type 'Dictionary<string, string?>' in 'double PerfAlertClassifier.ParseDouble(Dictionary<string, string?> settings, string key, double defaultValue)' due to differences in the nullability of reference types. [/home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Api/SakuraFilter.Api.csproj]
+2026-08-25T03:01:08.7045712Z ##[warning]/home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Api/Services/PerfAlertService.cs(144,63): warning CS8620: Argument of type 'Dictionary<string, string>' cannot be used for parameter 'settings' of type 'Dictionary<string, string?>' in 'double PerfAlertClassifier.ParseDouble(Dictionary<string, string?> settings, string key, double defaultValue)' due to differences in the nullability of reference types. [/home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Api/SakuraFilter.Api.csproj]
+2026-08-25T03:01:08.7055097Z ##[warning]/home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Api/Services/PerfAlertService.cs(145,56): warning CS8620: Argument of type 'Dictionary<string, string>' cannot be used for parameter 'settings' of type 'Dictionary<string, string?>' in 'double PerfAlertClassifier.ParseDouble(Dictionary<string, string?> settings, string key, double defaultValue)' due to differences in the nullability of reference types. [/home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Api/SakuraFilter.Api.csproj]
+2026-08-25T03:01:08.7065113Z ##[warning]/home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Api/Services/PerfAlertService.cs(147,65): warning CS8620: Argument of type 'Dictionary<string, string>' cannot be used for parameter 'settings' of type 'Dictionary<string, string?>' in 'double PerfAlertClassifier.ParseDouble(Dictionary<string, string?> settings, string key, double defaultValue)' due to differences in the nullability of reference types. [/home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Api/SakuraFilter.Api.csproj]
+2026-08-25T03:01:08.7074880Z ##[warning]/home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Api/Services/PerfAlertService.cs(148,66): warning CS8620: Argument of type 'Dictionary<string, string>' cannot be used for parameter 'settings' of type 'Dictionary<string, string?>' in 'double PerfAlertClassifier.ParseDouble(Dictionary<string, string?> settings, string key, double defaultValue)' due to differences in the nullability of reference types. [/home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Api/SakuraFilter.Api.csproj]
+2026-08-25T03:01:08.7084121Z ##[warning]/home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Api/Services/PerfAlertService.cs(149,71): warning CS8620: Argument of type 'Dictionary<string, string>' cannot be used for parameter 'settings' of type 'Dictionary<string, string?>' in 'double PerfAlertClassifier.ParseDouble(Dictionary<string, string?> settings, string key, double defaultValue)' due to differences in the nullability of reference types. [/home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Api/SakuraFilter.Api.csproj]
+2026-08-25T03:01:08.7100036Z ##[warning]/home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Api/Services/DeadLetterCleanupService.cs(87,59): warning CS8620: Argument of type 'Dictionary<string, string>' cannot be used for parameter 'settings' of type 'IReadOnlyDictionary<string, string?>' in 'DeadLetterCleanupSettings DeadLetterCleanupClassifier.ParseSettings(IReadOnlyDictionary<string, string?> settings)' due to differences in the nullability of reference types. [/home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Api/SakuraFilter.Api.csproj]
+2026-08-25T03:01:08.7111730Z ##[warning]/home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Api/Services/EtlLogCleanupService.cs(88,55): warning CS8620: Argument of type 'Dictionary<string, string>' cannot be used for parameter 'settings' of type 'IReadOnlyDictionary<string, string?>' in 'EtlLogCleanupSettings EtlLogCleanupClassifier.ParseSettings(IReadOnlyDictionary<string, string?> settings)' due to differences in the nullability of reference types. [/home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Api/SakuraFilter.Api.csproj]
+2026-08-25T03:01:08.7121977Z ##[warning]/home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Api/Services/DeadLetterRecoveryService.cs(160,60): warning CS8620: Argument of type 'Dictionary<string, string>' cannot be used for parameter 'settings' of type 'IReadOnlyDictionary<string, string?>' in 'DeadLetterRecoverySettings DeadLetterRecoveryClassifier.ParseSettings(IReadOnlyDictionary<string, string?> settings)' due to differences in the nullability of reference types. [/home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Api/SakuraFilter.Api.csproj]
+2026-08-25T03:01:09.4100795Z   SakuraFilter.Etl.Tests -> /home/runner/work/sakurafilte/sakurafilte/backend/tests/SakuraFilter.Etl.Tests/bin/Release/net8.0/SakuraFilter.Etl.Tests.dll
+2026-08-25T03:01:09.5179773Z   SakuraFilter.Api -> /home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Api/bin/Release/net8.0/SakuraFilter.Api.dll
+2026-08-25T03:01:13.1799006Z   SakuraFilter.Api.Tests -> /home/runner/work/sakurafilte/sakurafilte/backend/tests/SakuraFilter.Api.Tests/bin/Release/net8.0/SakuraFilter.Api.Tests.dll
+2026-08-25T03:01:13.2268644Z 
+2026-08-25T03:01:13.2294555Z Build succeeded.
+2026-08-25T03:01:13.2350044Z 
+2026-08-25T03:01:13.2409873Z /home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Api/SakuraFilter.Api.csproj : warning NU1902: Package 'HtmlSanitizer' 8.0.601 has a known moderate severity vulnerability, https://github.com/advisories/GHSA-43cp-6p3q-2pc4
+2026-08-25T03:01:13.2430249Z /home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Api/SakuraFilter.Api.csproj : warning NU1902: Package 'HtmlSanitizer' 8.0.601 has a known moderate severity vulnerability, https://github.com/advisories/GHSA-j92c-7v7g-gj3f
+2026-08-25T03:01:13.2443590Z ##[warning]/home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Search/MeiliSearchProvider.cs(748,69): warning CS8604: Possible null reference argument for parameter 'matchExpression' in 'bool NpgsqlDbFunctionsExtensions.ILike(DbFunctions _, string matchExpression, string pattern)'. [/home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Search/SakuraFilter.Search.csproj]
+2026-08-25T03:01:13.2470923Z ##[warning]/home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Etl/EtlImportService.cs(1676,60): warning CS8629: Nullable value type may be null. [/home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Etl/SakuraFilter.Etl.csproj]
+2026-08-25T03:01:13.2482988Z ##[warning]/home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Api/Endpoints/AdminEtlEndpoints.cs(316,35): warning CS1998: This async method lacks 'await' operators and will run synchronously. Consider using the 'await' operator to await non-blocking API calls, or 'await Task.Run(...)' to do CPU-bound work on a background thread. [/home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Api/SakuraFilter.Api.csproj]
+2026-08-25T03:01:13.2491178Z ##[warning]/home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Api/Endpoints/AdminEtlEndpoints.cs(348,35): warning CS1998: This async method lacks 'await' operators and will run synchronously. Consider using the 'await' operator to await non-blocking API calls, or 'await Task.Run(...)' to do CPU-bound work on a background thread. [/home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Api/SakuraFilter.Api.csproj]
+2026-08-25T03:01:13.2507503Z ##[warning]/home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Api/Services/PerfAlertService.cs(142,60): warning CS8620: Argument of type 'Dictionary<string, string>' cannot be used for parameter 'settings' of type 'Dictionary<string, string?>' in 'double PerfAlertClassifier.ParseDouble(Dictionary<string, string?> settings, string key, double defaultValue)' due to differences in the nullability of reference types. [/home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Api/SakuraFilter.Api.csproj]
+2026-08-25T03:01:13.2516725Z ##[warning]/home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Api/Services/PerfAlertService.cs(143,61): warning CS8620: Argument of type 'Dictionary<string, string>' cannot be used for parameter 'settings' of type 'Dictionary<string, string?>' in 'double PerfAlertClassifier.ParseDouble(Dictionary<string, string?> settings, string key, double defaultValue)' due to differences in the nullability of reference types. [/home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Api/SakuraFilter.Api.csproj]
+2026-08-25T03:01:13.2550368Z ##[warning]/home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Api/Services/PerfAlertService.cs(144,63): warning CS8620: Argument of type 'Dictionary<string, string>' cannot be used for parameter 'settings' of type 'Dictionary<string, string?>' in 'double PerfAlertClassifier.ParseDouble(Dictionary<string, string?> settings, string key, double defaultValue)' due to differences in the nullability of reference types. [/home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Api/SakuraFilter.Api.csproj]
+2026-08-25T03:01:13.2560282Z ##[warning]/home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Api/Services/PerfAlertService.cs(145,56): warning CS8620: Argument of type 'Dictionary<string, string>' cannot be used for parameter 'settings' of type 'Dictionary<string, string?>' in 'double PerfAlertClassifier.ParseDouble(Dictionary<string, string?> settings, string key, double defaultValue)' due to differences in the nullability of reference types. [/home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Api/SakuraFilter.Api.csproj]
+2026-08-25T03:01:13.2576586Z ##[warning]/home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Api/Services/PerfAlertService.cs(147,65): warning CS8620: Argument of type 'Dictionary<string, string>' cannot be used for parameter 'settings' of type 'Dictionary<string, string?>' in 'double PerfAlertClassifier.ParseDouble(Dictionary<string, string?> settings, string key, double defaultValue)' due to differences in the nullability of reference types. [/home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Api/SakuraFilter.Api.csproj]
+2026-08-25T03:01:13.2585944Z ##[warning]/home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Api/Services/PerfAlertService.cs(148,66): warning CS8620: Argument of type 'Dictionary<string, string>' cannot be used for parameter 'settings' of type 'Dictionary<string, string?>' in 'double PerfAlertClassifier.ParseDouble(Dictionary<string, string?> settings, string key, double defaultValue)' due to differences in the nullability of reference types. [/home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Api/SakuraFilter.Api.csproj]
+2026-08-25T03:01:13.2595512Z ##[warning]/home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Api/Services/PerfAlertService.cs(149,71): warning CS8620: Argument of type 'Dictionary<string, string>' cannot be used for parameter 'settings' of type 'Dictionary<string, string?>' in 'double PerfAlertClassifier.ParseDouble(Dictionary<string, string?> settings, string key, double defaultValue)' due to differences in the nullability of reference types. [/home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Api/SakuraFilter.Api.csproj]
+2026-08-25T03:01:13.2605175Z ##[warning]/home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Api/Services/DeadLetterCleanupService.cs(87,59): warning CS8620: Argument of type 'Dictionary<string, string>' cannot be used for parameter 'settings' of type 'IReadOnlyDictionary<string, string?>' in 'DeadLetterCleanupSettings DeadLetterCleanupClassifier.ParseSettings(IReadOnlyDictionary<string, string?> settings)' due to differences in the nullability of reference types. [/home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Api/SakuraFilter.Api.csproj]
+2026-08-25T03:01:13.2615504Z ##[warning]/home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Api/Services/EtlLogCleanupService.cs(88,55): warning CS8620: Argument of type 'Dictionary<string, string>' cannot be used for parameter 'settings' of type 'IReadOnlyDictionary<string, string?>' in 'EtlLogCleanupSettings EtlLogCleanupClassifier.ParseSettings(IReadOnlyDictionary<string, string?> settings)' due to differences in the nullability of reference types. [/home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Api/SakuraFilter.Api.csproj]
+2026-08-25T03:01:13.2625440Z ##[warning]/home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Api/Services/DeadLetterRecoveryService.cs(160,60): warning CS8620: Argument of type 'Dictionary<string, string>' cannot be used for parameter 'settings' of type 'IReadOnlyDictionary<string, string?>' in 'DeadLetterRecoverySettings DeadLetterRecoveryClassifier.ParseSettings(IReadOnlyDictionary<string, string?> settings)' due to differences in the nullability of reference types. [/home/runner/work/sakurafilte/sakurafilte/backend/src/SakuraFilter.Api/SakuraFilter.Api.csproj]
+2026-08-25T03:01:13.2630237Z     16 Warning(s)
+2026-08-25T03:01:13.2630579Z     0 Error(s)
+2026-08-25T03:01:13.2630776Z 
+2026-08-25T03:01:13.2630966Z Time Elapsed 00:00:28.46
+2026-08-25T03:01:13.2863185Z ##[group]Run dotnet test tests/SakuraFilter.Api.Tests/SakuraFilter.Api.Tests.csproj --no-build -c Release --logger "trx;LogFileName=test-results.trx" --collect:"XPlat Code Coverage"
+2026-08-25T03:01:13.2865302Z [36;1mdotnet test tests/SakuraFilter.Api.Tests/SakuraFilter.Api.Tests.csproj --no-build -c Release --logger "trx;LogFileName=test-results.trx" --collect:"XPlat Code Coverage"[0m
+2026-08-25T03:01:13.2922393Z shell: /usr/bin/bash -e {0}
+2026-08-25T03:01:13.2922774Z env:
+2026-08-25T03:01:13.2923279Z   ADMIN_TOKEN: dev-admin-token-rotate-in-prod-MZK4R9P3X6V2N7Q1L5F0B8H3C
+2026-08-25T03:01:13.2924156Z   CURSOR_HMAC_KEY: dev-cursor-hmac-key-rotate-in-prod-XYZ7K3P9Q2M5V8N1B4D6F0G2H
+2026-08-25T03:01:13.2925125Z   Jwt__SigningKey: dev-jwt-signing-key-not-for-prod-X7K9M2P5Q8R3T6V1W4Y7Z0A3B6C9D2E5F8
+2026-08-25T03:01:13.2925879Z   Jwt__Issuer: SakuraFilter
+2026-08-25T03:01:13.2926254Z   Jwt__Audience: SakuraFilter.Web
+2026-08-25T03:01:13.2926659Z   Jwt__ExpireMinutes: 30
+2026-08-25T03:01:13.2927067Z   Jwt__RefreshExpireDays: 7
+2026-08-25T03:01:13.2927450Z   BACKEND_PORT: 5148
+2026-08-25T03:01:13.2927785Z   DOTNET_VERSION: 8.0.x
+2026-08-25T03:01:13.2928692Z   DOTNET_ROLL_FORWARD: LatestMajor
+2026-08-25T03:01:13.2928995Z   NODE_VERSION: 20
+2026-08-25T03:01:13.2929221Z   PYTHON_VERSION: 3.12
+2026-08-25T03:01:13.2929459Z   DOTNET_ROOT: /usr/share/dotnet
+2026-08-25T03:01:13.2929711Z ##[endgroup]
+2026-08-25T03:01:14.4956367Z Test run for /home/runner/work/sakurafilte/sakurafilte/backend/tests/SakuraFilter.Api.Tests/bin/Release/net8.0/SakuraFilter.Api.Tests.dll (.NETCoreApp,Version=v8.0)
+2026-08-25T03:01:14.9260977Z VSTest version 17.11.1 (x64)
+2026-08-25T03:01:14.9295725Z 
+2026-08-25T03:01:15.4659477Z Starting test execution, please wait...
+2026-08-25T03:01:15.5425138Z A total of 1 test files matched the specified pattern.
+2026-08-25T03:01:50.0718154Z Results File: /home/runner/work/sakurafilte/sakurafilte/backend/tests/SakuraFilter.Api.Tests/TestResults/test-results.trx
+2026-08-25T03:01:50.0736237Z 
+2026-08-25T03:01:50.0783345Z Passed!  - Failed:     0, Passed:   691, Skipped:     0, Total:   691, Duration: 12 s - SakuraFilter.Api.Tests.dll (net8.0)
+2026-08-25T03:01:50.3984901Z 
+2026-08-25T03:01:50.3999275Z Attachments:
+2026-08-25T03:01:50.4002843Z   /home/runner/work/sakurafilte/sakurafilte/backend/tests/SakuraFilter.Api.Tests/TestResults/a6ca7512-f7f7-48f3-b18b-f01121086b87/coverage.cobertura.xml
+2026-08-25T03:01:50.4729885Z ##[group]Run # 创建独立测试库 (与 spike_test_v3 隔离, 避免 TRUNCATE 污染 smoke test 数据)
+2026-08-25T03:01:50.4730388Z [36;1m# 创建独立测试库 (与 spike_test_v3 隔离, 避免 TRUNCATE 污染 smoke test 数据)[0m
+2026-08-25T03:01:50.4730931Z [36;1mpsql -h localhost -U postgres -c "DROP DATABASE IF EXISTS sakurafilter_int_tests;" || true[0m
+2026-08-25T03:01:50.4731503Z [36;1mpsql -h localhost -U postgres -c "CREATE DATABASE sakurafilter_int_tests;"[0m
+2026-08-25T03:01:50.4771919Z shell: /usr/bin/bash -e {0}
+2026-08-25T03:01:50.4772177Z env:
+2026-08-25T03:01:50.4772516Z   ADMIN_TOKEN: dev-admin-token-rotate-in-prod-MZK4R9P3X6V2N7Q1L5F0B8H3C
+2026-08-25T03:01:50.4773073Z   CURSOR_HMAC_KEY: dev-cursor-hmac-key-rotate-in-prod-XYZ7K3P9Q2M5V8N1B4D6F0G2H
+2026-08-25T03:01:50.4773673Z   Jwt__SigningKey: dev-jwt-signing-key-not-for-prod-X7K9M2P5Q8R3T6V1W4Y7Z0A3B6C9D2E5F8
+2026-08-25T03:01:50.4774127Z   Jwt__Issuer: SakuraFilter
+2026-08-25T03:01:50.4774376Z   Jwt__Audience: SakuraFilter.Web
+2026-08-25T03:01:50.4774721Z   Jwt__ExpireMinutes: 30
+2026-08-25T03:01:50.4774958Z   Jwt__RefreshExpireDays: 7
+2026-08-25T03:01:50.4775186Z   BACKEND_PORT: 5148
+2026-08-25T03:01:50.4775403Z   DOTNET_VERSION: 8.0.x
+2026-08-25T03:01:50.4775634Z   DOTNET_ROLL_FORWARD: LatestMajor
+2026-08-25T03:01:50.4775897Z   NODE_VERSION: 20
+2026-08-25T03:01:50.4776106Z   PYTHON_VERSION: 3.12
+2026-08-25T03:01:50.4776338Z   DOTNET_ROOT: /usr/share/dotnet
+2026-08-25T03:01:50.4776579Z   PGPASSWORD: 784533
+2026-08-25T03:01:50.4777015Z ##[endgroup]
+2026-08-25T03:01:50.5590518Z NOTICE:  database "sakurafilter_int_tests" does not exist, skipping
+2026-08-25T03:01:50.5591082Z DROP DATABASE
+2026-08-25T03:01:50.6353901Z CREATE DATABASE
+2026-08-25T03:01:50.6410479Z ##[group]Run dotnet tool install --global dotnet-ef --version 8.* || dotnet tool update --global dotnet-ef --version 8.*
+2026-08-25T03:01:50.6411772Z [36;1mdotnet tool install --global dotnet-ef --version 8.* || dotnet tool update --global dotnet-ef --version 8.*[0m
+2026-08-25T03:01:50.6467618Z shell: /usr/bin/bash -e {0}
+2026-08-25T03:01:50.6468278Z env:
+2026-08-25T03:01:50.6468811Z   ADMIN_TOKEN: dev-admin-token-rotate-in-prod-MZK4R9P3X6V2N7Q1L5F0B8H3C
+2026-08-25T03:01:50.6469702Z   CURSOR_HMAC_KEY: dev-cursor-hmac-key-rotate-in-prod-XYZ7K3P9Q2M5V8N1B4D6F0G2H
+2026-08-25T03:01:50.6470677Z   Jwt__SigningKey: dev-jwt-signing-key-not-for-prod-X7K9M2P5Q8R3T6V1W4Y7Z0A3B6C9D2E5F8
+2026-08-25T03:01:50.6471381Z   Jwt__Issuer: SakuraFilter
+2026-08-25T03:01:50.6471782Z   Jwt__Audience: SakuraFilter.Web
+2026-08-25T03:01:50.6472189Z   Jwt__ExpireMinutes: 30
+2026-08-25T03:01:50.6472563Z   Jwt__RefreshExpireDays: 7
+2026-08-25T03:01:50.6472940Z   BACKEND_PORT: 5148
+2026-08-25T03:01:50.6473355Z   DOTNET_VERSION: 8.0.x
+2026-08-25T03:01:50.6473725Z   DOTNET_ROLL_FORWARD: LatestMajor
+2026-08-25T03:01:50.6474117Z   NODE_VERSION: 20
+2026-08-25T03:01:50.6474446Z   PYTHON_VERSION: 3.12
+2026-08-25T03:01:50.6474803Z   DOTNET_ROOT: /usr/share/dotnet
+2026-08-25T03:01:50.6475167Z ##[endgroup]
+2026-08-25T03:01:53.6231834Z You can invoke the tool using the following command: dotnet-ef
+2026-08-25T03:01:53.6232642Z Tool 'dotnet-ef' (version '8.0.30') was successfully installed.
+2026-08-25T03:01:53.6381328Z ##[group]Run export PATH="$HOME/.dotnet/tools:$PATH"
+2026-08-25T03:01:53.6381769Z [36;1mexport PATH="$HOME/.dotnet/tools:$PATH"[0m
+2026-08-25T03:01:53.6382265Z [36;1m# P1 修复 (v30-8): 加 --configuration Release, 让 ef 用 Release 配置找 deps.json[0m
+2026-08-25T03:01:53.6382771Z [36;1m#   WHY: 上一步 dotnet build -c Release, 但 dotnet ef 默认 Debug 配置,[0m
+2026-08-25T03:01:53.6383276Z [36;1m#     报 "bin/Debug/net8.0/SakuraFilter.Api.deps.json does not exist"[0m
+2026-08-25T03:01:53.6383761Z [36;1m#   注: dotnet ef 的 -c 是 --context (DbContext), --configuration 才是配置[0m
+2026-08-25T03:01:53.6384223Z [36;1mdotnet ef database update --no-build --configuration Release \[0m
+2026-08-25T03:01:53.6384760Z [36;1m  --project ../SakuraFilter.Infrastructure/SakuraFilter.Infrastructure.csproj \[0m
+2026-08-25T03:01:53.6385214Z [36;1m  --startup-project .[0m
+2026-08-25T03:01:53.6426677Z shell: /usr/bin/bash -e {0}
+2026-08-25T03:01:53.6427050Z env:
+2026-08-25T03:01:53.6427615Z   ADMIN_TOKEN: dev-admin-token-rotate-in-prod-MZK4R9P3X6V2N7Q1L5F0B8H3C
+2026-08-25T03:01:53.6428758Z   CURSOR_HMAC_KEY: dev-cursor-hmac-key-rotate-in-prod-XYZ7K3P9Q2M5V8N1B4D6F0G2H
+2026-08-25T03:01:53.6429687Z   Jwt__SigningKey: dev-jwt-signing-key-not-for-prod-X7K9M2P5Q8R3T6V1W4Y7Z0A3B6C9D2E5F8
+2026-08-25T03:01:53.6430364Z   Jwt__Issuer: SakuraFilter
+2026-08-25T03:01:53.6430776Z   Jwt__Audience: SakuraFilter.Web
+2026-08-25T03:01:53.6431181Z   Jwt__ExpireMinutes: 30
+2026-08-25T03:01:53.6431549Z   Jwt__RefreshExpireDays: 7
+2026-08-25T03:01:53.6431902Z   BACKEND_PORT: 5148
+2026-08-25T03:01:53.6432172Z   DOTNET_VERSION: 8.0.x
+2026-08-25T03:01:53.6432421Z   DOTNET_ROLL_FORWARD: LatestMajor
+2026-08-25T03:01:53.6432685Z   NODE_VERSION: 20
+2026-08-25T03:01:53.6432898Z   PYTHON_VERSION: 3.12
+2026-08-25T03:01:53.6433131Z   DOTNET_ROOT: /usr/share/dotnet
+2026-08-25T03:01:53.6433990Z   ConnectionStrings__Postgres: Host=localhost;Port=5432;Database=sakurafilter_int_tests;Username=postgres;***
+2026-08-25T03:01:53.6434491Z ##[endgroup]
+2026-08-25T03:01:57.0345167Z [Storage] storage_config 覆盖失败(忽略, 用环境变量): 42P01: relation "system_settings" does not exist
+2026-08-25T03:01:57.0345584Z 
+2026-08-25T03:01:57.0345689Z POSITION: 19
+2026-08-25T03:01:58.4832671Z Applying migration '20260702025150_InitialCreate'.
+2026-08-25T03:01:58.5769961Z Applying migration '20260702051540_AddUniqueIndexOnOemNoNormalized'.
+2026-08-25T03:01:58.5952281Z Applying migration '20260702052101_AddIsPublishedDefaultTrue'.
+2026-08-25T03:01:58.6138763Z Applying migration '20260702052628_AddProductsDefaultsV9'.
+2026-08-25T03:01:58.6299577Z Applying migration '20260702062636_AddXrefOemBrandDict'.
+2026-08-25T03:01:58.6500029Z Applying migration '20260702085522_AddEtlCheckpointId'.
+2026-08-25T03:01:58.6672204Z Applying migration '20260702121232_AddDictP22SevenDicts'.
+2026-08-25T03:01:58.7187510Z Applying migration '20260702133148_AddMachineCategory'.
+2026-08-25T03:01:58.7427108Z Applying migration '20260704012204_AddDictOemNo3SortIndex'.
+2026-08-25T03:01:58.7665576Z Applying migration '20260704015031_AddProductsOem2Mr1Indexes'.
+2026-08-25T03:01:58.7912222Z Applying migration '20260704090617_AddUserAuthTables'.
+2026-08-25T03:01:58.8322289Z Applying migration '20260704150246_AddProductRowVersionXminV2'.
+2026-08-25T03:01:58.8585471Z Applying migration '20260706121320_AddAlertHistoryP21'.
+2026-08-25T03:01:58.8970095Z Applying migration '20260717125735_AddMr1PrimaryKeyAndV2Fields'.
+2026-08-25T03:01:59.0318834Z Applying migration '20260722085049_FixSchemaSyncWithSpec'.
+2026-08-25T03:01:59.1012621Z Applying migration '20260726014656_AddRawParameterValues'.
+2026-08-25T03:01:59.1460607Z Done.
+2026-08-25T03:01:59.1953395Z ##[group]Run for f in *.sql; do
+2026-08-25T03:01:59.1953701Z [36;1mfor f in *.sql; do[0m
+2026-08-25T03:01:59.1953954Z [36;1m  echo "== Applying $f =="[0m
+2026-08-25T03:01:59.1954438Z [36;1m  psql -h localhost -U postgres -d sakurafilter_int_tests -v ON_ERROR_STOP=1 -f "$f" || exit 1[0m
+2026-08-25T03:01:59.1954892Z [36;1mdone[0m
+2026-08-25T03:01:59.1995624Z shell: /usr/bin/bash -e {0}
+2026-08-25T03:01:59.1995889Z env:
+2026-08-25T03:01:59.1996220Z   ADMIN_TOKEN: dev-admin-token-rotate-in-prod-MZK4R9P3X6V2N7Q1L5F0B8H3C
+2026-08-25T03:01:59.1996780Z   CURSOR_HMAC_KEY: dev-cursor-hmac-key-rotate-in-prod-XYZ7K3P9Q2M5V8N1B4D6F0G2H
+2026-08-25T03:01:59.1997370Z   Jwt__SigningKey: dev-jwt-signing-key-not-for-prod-X7K9M2P5Q8R3T6V1W4Y7Z0A3B6C9D2E5F8
+2026-08-25T03:01:59.1997838Z   Jwt__Issuer: SakuraFilter
+2026-08-25T03:01:59.1998284Z   Jwt__Audience: SakuraFilter.Web
+2026-08-25T03:01:59.1998549Z   Jwt__ExpireMinutes: 30
+2026-08-25T03:01:59.1998791Z   Jwt__RefreshExpireDays: 7
+2026-08-25T03:01:59.1999057Z   BACKEND_PORT: 5148
+2026-08-25T03:01:59.1999277Z   DOTNET_VERSION: 8.0.x
+2026-08-25T03:01:59.1999526Z   DOTNET_ROLL_FORWARD: LatestMajor
+2026-08-25T03:01:59.1999781Z   NODE_VERSION: 20
+2026-08-25T03:01:59.1999993Z   PYTHON_VERSION: 3.12
+2026-08-25T03:01:59.2000226Z   DOTNET_ROOT: /usr/share/dotnet
+2026-08-25T03:01:59.2000475Z   PGPASSWORD: 784533
+2026-08-25T03:01:59.2000693Z ##[endgroup]
+2026-08-25T03:01:59.2063559Z == Applying 002_create_system_settings_table.sql ==
+2026-08-25T03:01:59.2412229Z psql:002_create_system_settings_table.sql:13: NOTICE:  relation "system_settings" already exists, skipping
+2026-08-25T03:01:59.2412886Z CREATE TABLE
+2026-08-25T03:01:59.2422093Z INSERT 0 4
+2026-08-25T03:01:59.2439858Z == Applying 008_dedup_and_add_unique_constraint.sql ==
+2026-08-25T03:01:59.2787164Z DELETE 0
+2026-08-25T03:01:59.2801898Z CREATE INDEX
+2026-08-25T03:01:59.2808996Z ANALYZE
+2026-08-25T03:01:59.2818939Z == Applying 009_add_xrefs_unique_constraint.sql ==
+2026-08-25T03:01:59.3219824Z DELETE 0
+2026-08-25T03:01:59.3232815Z CREATE INDEX
+2026-08-25T03:01:59.3238372Z ANALYZE
+2026-08-25T03:01:59.3248850Z == Applying 010_add_apps_unique_constraint.sql ==
+2026-08-25T03:01:59.3602383Z DELETE 0
+2026-08-25T03:01:59.3617020Z CREATE INDEX
+2026-08-25T03:01:59.3623238Z ANALYZE
+2026-08-25T03:01:59.3647210Z == Applying 015_dead_letter_status.sql ==
+2026-08-25T03:01:59.3988226Z psql:015_dead_letter_status.sql:16: NOTICE:  column "status" of relation "search_index_dead_letter" already exists, skipping
+2026-08-25T03:01:59.3989712Z psql:015_dead_letter_status.sql:16: NOTICE:  column "recovered_at" of relation "search_index_dead_letter" already exists, skipping
+2026-08-25T03:01:59.3991191Z psql:015_dead_letter_status.sql:16: NOTICE:  column "recovered_to_pending_id" of relation "search_index_dead_letter" already exists, skipping
+2026-08-25T03:01:59.3992048Z ALTER TABLE
+2026-08-25T03:01:59.4002268Z UPDATE 0
+2026-08-25T03:01:59.4016612Z CREATE INDEX
+2026-08-25T03:01:59.4025548Z CREATE INDEX
+2026-08-25T03:01:59.4036989Z CREATE INDEX
+2026-08-25T03:01:59.4041027Z COMMENT
+2026-08-25T03:01:59.4043482Z COMMENT
+2026-08-25T03:01:59.4045792Z COMMENT
+2026-08-25T03:01:59.4055728Z == Applying 016_add_history_paging_index.sql ==
+2026-08-25T03:01:59.4412199Z CREATE INDEX
+2026-08-25T03:01:59.4421038Z == Applying 017_add_trgm_indexes.sql ==
+2026-08-25T03:01:59.4817818Z CREATE EXTENSION
+2026-08-25T03:01:59.4828401Z CREATE INDEX
+2026-08-25T03:01:59.4834105Z CREATE INDEX
+2026-08-25T03:01:59.4839432Z CREATE INDEX
+2026-08-25T03:01:59.4845058Z CREATE INDEX
+2026-08-25T03:01:59.4850629Z CREATE INDEX
+2026-08-25T03:01:59.4855704Z CREATE INDEX
+2026-08-25T03:01:59.4860925Z CREATE INDEX
+2026-08-25T03:01:59.4866038Z CREATE INDEX
+2026-08-25T03:01:59.4876035Z == Applying 018_v2_legacy_data_cleanup.sql ==
+2026-08-25T03:01:59.5216562Z BEGIN
+2026-08-25T03:01:59.5254801Z TRUNCATE TABLE
+2026-08-25T03:01:59.5305876Z TRUNCATE TABLE
+2026-08-25T03:01:59.5343254Z TRUNCATE TABLE
+2026-08-25T03:01:59.5346569Z psql:018_v2_legacy_data_cleanup.sql:39: NOTICE:  truncate cascades to table "cross_references"
+2026-08-25T03:01:59.5347695Z psql:018_v2_legacy_data_cleanup.sql:39: NOTICE:  truncate cascades to table "machine_applications"
+2026-08-25T03:01:59.5348791Z psql:018_v2_legacy_data_cleanup.sql:39: NOTICE:  truncate cascades to table "product_images"
+2026-08-25T03:01:59.5550858Z TRUNCATE TABLE
+2026-08-25T03:01:59.5573819Z TRUNCATE TABLE
+2026-08-25T03:01:59.5632760Z TRUNCATE TABLE
+2026-08-25T03:01:59.5667755Z psql:018_v2_legacy_data_cleanup.sql:57: NOTICE:  表不存在, 跳过: etl_alert_history
+2026-08-25T03:01:59.5668450Z DO
+2026-08-25T03:01:59.5677260Z psql:018_v2_legacy_data_cleanup.sql:68: NOTICE:  表不存在, 跳过: etl_progress
+2026-08-25T03:01:59.5677637Z DO
+2026-08-25T03:01:59.5687163Z psql:018_v2_legacy_data_cleanup.sql:79: NOTICE:  表不存在, 跳过: cleanup_failures
+2026-08-25T03:01:59.5687785Z DO
+2026-08-25T03:01:59.5697718Z TRUNCATE TABLE
+2026-08-25T03:01:59.5706791Z INSERT 0 9
+2026-08-25T03:01:59.5745090Z COMMIT
+2026-08-25T03:01:59.5781299Z == Applying 019_v2_etl_progress_log_add_skipped_missing_mr1.sql ==
+2026-08-25T03:01:59.6199175Z psql:019_v2_etl_progress_log_add_skipped_missing_mr1.sql:24: NOTICE:  列已存在, 跳过: etl_progress_log.skipped_missing_mr1
+2026-08-25T03:01:59.6200051Z DO
+2026-08-25T03:01:59.6219650Z DO
+2026-08-25T03:01:59.6230172Z == Applying 020_machine_apps_is_discontinued_default.sql ==
+2026-08-25T03:01:59.6585539Z ALTER TABLE
+2026-08-25T03:01:59.6595188Z == Applying 021_products_mr1_varchar50.sql ==
+2026-08-25T03:01:59.6947756Z ALTER TABLE
+2026-08-25T03:01:59.6969392Z ALTER TABLE
+2026-08-25T03:01:59.6975358Z ALTER TABLE
+2026-08-25T03:01:59.6984734Z == Applying 022_add_products_updated_at_id_idx.sql ==
+2026-08-25T03:01:59.7347387Z CREATE INDEX
+2026-08-25T03:01:59.7357724Z == Applying 023_typeahead_dict.sql ==
+2026-08-25T03:01:59.7724167Z CREATE TABLE
+2026-08-25T03:01:59.7735460Z CREATE INDEX
+2026-08-25T03:01:59.7754651Z TRUNCATE TABLE
+2026-08-25T03:01:59.7784115Z INSERT 0 0
+2026-08-25T03:01:59.7798227Z == Applying 024_typeahead_dict_indexes.sql ==
+2026-08-25T03:01:59.8151026Z DROP INDEX
+2026-08-25T03:01:59.8164239Z CREATE INDEX
+2026-08-25T03:01:59.8169905Z CREATE INDEX
+2026-08-25T03:01:59.8174973Z CREATE INDEX
+2026-08-25T03:01:59.8180397Z CREATE INDEX
+2026-08-25T03:01:59.8185785Z CREATE INDEX
+2026-08-25T03:01:59.8190924Z CREATE INDEX
+2026-08-25T03:01:59.8196667Z ANALYZE
+2026-08-25T03:01:59.8206990Z == Applying 025_products_trgm_indexes.sql ==
+2026-08-25T03:01:59.8601122Z CREATE INDEX
+2026-08-25T03:01:59.8608526Z CREATE INDEX
+2026-08-25T03:01:59.8616036Z CREATE INDEX
+2026-08-25T03:01:59.8623264Z CREATE INDEX
+2026-08-25T03:01:59.8633890Z == Applying 026_product_images_show_dimension.sql ==
+2026-08-25T03:01:59.9029459Z ALTER TABLE
+2026-08-25T03:01:59.9033440Z COMMENT
+2026-08-25T03:01:59.9045555Z == Applying 027_cross_references_is_whitelisted.sql ==
+2026-08-25T03:01:59.9415954Z ALTER TABLE
+2026-08-25T03:01:59.9425106Z == Applying 028_xrefs_brand_whitelisted_idx.sql ==
+2026-08-25T03:01:59.9781716Z CREATE INDEX
+2026-08-25T03:01:59.9790747Z == Applying 029_add_xrefs_product_brand_oem3_unique.sql ==
+2026-08-25T03:02:00.0151830Z CREATE INDEX
+2026-08-25T03:02:00.0161159Z ANALYZE
+2026-08-25T03:02:00.0211403Z ##[group]Run dotnet test tests/SakuraFilter.Api.Tests/SakuraFilter.Api.Tests.csproj --no-build -c Release --filter "Category=Integration" --logger "trx;LogFileName=integration-test-results.trx"
+2026-08-25T03:02:00.0212709Z [36;1mdotnet test tests/SakuraFilter.Api.Tests/SakuraFilter.Api.Tests.csproj --no-build -c Release --filter "Category=Integration" --logger "trx;LogFileName=integration-test-results.trx"[0m
+2026-08-25T03:02:00.0253483Z shell: /usr/bin/bash -e {0}
+2026-08-25T03:02:00.0253747Z env:
+2026-08-25T03:02:00.0254086Z   ADMIN_TOKEN: dev-admin-token-rotate-in-prod-MZK4R9P3X6V2N7Q1L5F0B8H3C
+2026-08-25T03:02:00.0254674Z   CURSOR_HMAC_KEY: dev-cursor-hmac-key-rotate-in-prod-XYZ7K3P9Q2M5V8N1B4D6F0G2H
+2026-08-25T03:02:00.0255298Z   Jwt__SigningKey: dev-jwt-signing-key-not-for-prod-X7K9M2P5Q8R3T6V1W4Y7Z0A3B6C9D2E5F8
+2026-08-25T03:02:00.0255761Z   Jwt__Issuer: SakuraFilter
+2026-08-25T03:02:00.0256009Z   Jwt__Audience: SakuraFilter.Web
+2026-08-25T03:02:00.0256305Z   Jwt__ExpireMinutes: 30
+2026-08-25T03:02:00.0256546Z   Jwt__RefreshExpireDays: 7
+2026-08-25T03:02:00.0256778Z   BACKEND_PORT: 5148
+2026-08-25T03:02:00.0257001Z   DOTNET_VERSION: 8.0.x
+2026-08-25T03:02:00.0257255Z   DOTNET_ROLL_FORWARD: LatestMajor
+2026-08-25T03:02:00.0257518Z   NODE_VERSION: 20
+2026-08-25T03:02:00.0257731Z   PYTHON_VERSION: 3.12
+2026-08-25T03:02:00.0258166Z   DOTNET_ROOT: /usr/share/dotnet
+2026-08-25T03:02:00.0258839Z   PG_TEST_CONNECTION_STRING: Host=localhost;Port=5432;Database=sakurafilter_int_tests;Username=postgres;***
+2026-08-25T03:02:00.0259328Z ##[endgroup]
+2026-08-25T03:02:00.9407881Z Test run for /home/runner/work/sakurafilte/sakurafilte/backend/tests/SakuraFilter.Api.Tests/bin/Release/net8.0/SakuraFilter.Api.Tests.dll (.NETCoreApp,Version=v8.0)
+2026-08-25T03:02:00.9961574Z VSTest version 17.11.1 (x64)
+2026-08-25T03:02:00.9994246Z 
+2026-08-25T03:02:01.1431891Z Starting test execution, please wait...
+2026-08-25T03:02:01.2028818Z A total of 1 test files matched the specified pattern.
+2026-08-25T03:02:05.4357207Z [xUnit.net 00:00:03.80]     SakuraFilter.Api.Tests.Integration.AdminProductServiceIntegrationTests.CreateAsync_AdvisoryLockHeldByEtl_ThrowsEtlInProgress_Integration [FAIL]
+2026-08-25T03:02:05.8510184Z   Failed SakuraFilter.Api.Tests.Integration.AdminProductServiceIntegrationTests.CreateAsync_AdvisoryLockHeldByEtl_ThrowsEtlInProgress_Integration [68 ms]
+2026-08-25T03:02:05.8516826Z   Error Message:
+2026-08-25T03:02:05.8517557Z    Expected a <System.InvalidOperationException> to be thrown, but no exception was thrown.
+2026-08-25T03:02:05.8518798Z   Stack Trace:
+2026-08-25T03:02:05.8521819Z      at FluentAssertions.Execution.XUnit2TestFramework.Throw(String message)
+2026-08-25T03:02:05.8523032Z    at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+2026-08-25T03:02:05.8524001Z    at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+2026-08-25T03:02:05.8524968Z    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+2026-08-25T03:02:05.8525871Z    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+2026-08-25T03:02:05.8526726Z    at FluentAssertions.Execution.AssertionScope.FailWith(String message)
+2026-08-25T03:02:05.8528104Z    at FluentAssertions.Specialized.DelegateAssertionsBase`2.ThrowInternal[TException](Exception exception, String because, Object[] becauseArgs)
+2026-08-25T03:02:05.8529174Z    at FluentAssertions.Specialized.AsyncFunctionAssertions`2.ThrowAsync[TException](String because, Object[] becauseArgs)
+2026-08-25T03:02:05.8530656Z    at SakuraFilter.Api.Tests.Integration.AdminProductServiceIntegrationTests.CreateAsync_AdvisoryLockHeldByEtl_ThrowsEtlInProgress_Integration() in /home/runner/work/sakurafilte/sakurafilte/backend/tests/SakuraFilter.Api.Tests/Integration/AdminProductServiceIntegrationTests.cs:line 132
+2026-08-25T03:02:05.8533855Z    at SakuraFilter.Api.Tests.Integration.AdminProductServiceIntegrationTests.CreateAsync_AdvisoryLockHeldByEtl_ThrowsEtlInProgress_Integration() in /home/runner/work/sakurafilte/sakurafilte/backend/tests/SakuraFilter.Api.Tests/Integration/AdminProductServiceIntegrationTests.cs:line 133
+2026-08-25T03:02:05.8535946Z    at SakuraFilter.Api.Tests.Integration.AdminProductServiceIntegrationTests.CreateAsync_AdvisoryLockHeldByEtl_ThrowsEtlInProgress_Integration() in /home/runner/work/sakurafilte/sakurafilte/backend/tests/SakuraFilter.Api.Tests/Integration/AdminProductServiceIntegrationTests.cs:line 141
+2026-08-25T03:02:05.8538653Z    at SakuraFilter.Api.Tests.Integration.AdminProductServiceIntegrationTests.CreateAsync_AdvisoryLockHeldByEtl_ThrowsEtlInProgress_Integration() in /home/runner/work/sakurafilte/sakurafilte/backend/tests/SakuraFilter.Api.Tests/Integration/AdminProductServiceIntegrationTests.cs:line 141
+2026-08-25T03:02:05.8540071Z --- End of stack trace from previous location ---
+2026-08-25T03:02:08.4427090Z Results File: /home/runner/work/sakurafilte/sakurafilte/backend/tests/SakuraFilter.Api.Tests/TestResults/integration-test-results.trx
+2026-08-25T03:02:08.4444660Z 
+2026-08-25T03:02:08.4484609Z Failed!  - Failed:     1, Passed:    38, Skipped:     0, Total:    39, Duration: 4 s - SakuraFilter.Api.Tests.dll (net8.0)
+2026-08-25T03:02:08.5115090Z ##[error]Process completed with exit code 1.
+2026-08-25T03:02:08.5167471Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+2026-08-25T03:02:08.5168949Z ##[group]Run actions/upload-artifact@v4
+2026-08-25T03:02:08.5169241Z with:
+2026-08-25T03:02:08.5169469Z   name: backend-coverage
+2026-08-25T03:02:08.5169860Z   path: backend/tests/SakuraFilter.Api.Tests/TestResults/*/coverage.cobertura.xml
+2026-08-25T03:02:08.5170281Z   if-no-files-found: ignore
+2026-08-25T03:02:08.5170527Z   compression-level: 6
+2026-08-25T03:02:08.5170753Z   overwrite: false
+2026-08-25T03:02:08.5170974Z   include-hidden-files: false
+2026-08-25T03:02:08.5171209Z env:
+2026-08-25T03:02:08.5171526Z   ADMIN_TOKEN: dev-admin-token-rotate-in-prod-MZK4R9P3X6V2N7Q1L5F0B8H3C
+2026-08-25T03:02:08.5172098Z   CURSOR_HMAC_KEY: dev-cursor-hmac-key-rotate-in-prod-XYZ7K3P9Q2M5V8N1B4D6F0G2H
+2026-08-25T03:02:08.5172685Z   Jwt__SigningKey: dev-jwt-signing-key-not-for-prod-X7K9M2P5Q8R3T6V1W4Y7Z0A3B6C9D2E5F8
+2026-08-25T03:02:08.5173128Z   Jwt__Issuer: SakuraFilter
+2026-08-25T03:02:08.5173377Z   Jwt__Audience: SakuraFilter.Web
+2026-08-25T03:02:08.5173638Z   Jwt__ExpireMinutes: 30
+2026-08-25T03:02:08.5173879Z   Jwt__RefreshExpireDays: 7
+2026-08-25T03:02:08.5174135Z   BACKEND_PORT: 5148
+2026-08-25T03:02:08.5174355Z   DOTNET_VERSION: 8.0.x
+2026-08-25T03:02:08.5174597Z   DOTNET_ROLL_FORWARD: LatestMajor
+2026-08-25T03:02:08.5174847Z   NODE_VERSION: 20
+2026-08-25T03:02:08.5175062Z   PYTHON_VERSION: 3.12
+2026-08-25T03:02:08.5175297Z   DOTNET_ROOT: /usr/share/dotnet
+2026-08-25T03:02:08.5175540Z ##[endgroup]
+2026-08-25T03:02:08.6804729Z (node:4294) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-08-25T03:02:08.6805506Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-08-25T03:02:08.6872045Z With the provided path, there will be 1 file uploaded
+2026-08-25T03:02:08.6878760Z Artifact name is valid!
+2026-08-25T03:02:08.6880901Z Root directory input is valid!
+2026-08-25T03:02:08.9136202Z Beginning upload of artifact content to blob storage
+2026-08-25T03:02:08.9799721Z (node:4294) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-08-25T03:02:09.1725911Z Uploaded bytes 304990
+2026-08-25T03:02:09.2047138Z Finished uploading artifact content to blob storage!
+2026-08-25T03:02:09.2048581Z SHA256 digest of uploaded artifact zip is c20bdbe4d21b17cc332fe02d7a279b7bd8579a99e0e438fc96f6a9aabadadacb
+2026-08-25T03:02:09.2049900Z Finalizing artifact upload
+2026-08-25T03:02:09.4307492Z Artifact backend-coverage.zip successfully finalized. Artifact ID 9547369319
+2026-08-25T03:02:09.4308873Z Artifact backend-coverage has been successfully uploaded! Final size is 304990 bytes. Artifact ID is 9547369319
+2026-08-25T03:02:09.4315327Z Artifact download URL: https://github.com/longxiaocao/sakurafilte/actions/runs/32803344701/artifacts/9547369319
+2026-08-25T03:02:09.4468920Z ##[group]Run python .github/scripts/coverage_gate.py "backend/tests/SakuraFilter.Api.Tests/TestResults/*/coverage.cobertura.xml" 5
+2026-08-25T03:02:09.4470503Z [36;1mpython .github/scripts/coverage_gate.py "backend/tests/SakuraFilter.Api.Tests/TestResults/*/coverage.cobertura.xml" 5[0m
+2026-08-25T03:02:09.4522336Z shell: /usr/bin/bash -e {0}
+2026-08-25T03:02:09.4522620Z env:
+2026-08-25T03:02:09.4522982Z   ADMIN_TOKEN: dev-admin-token-rotate-in-prod-MZK4R9P3X6V2N7Q1L5F0B8H3C
+2026-08-25T03:02:09.4523573Z   CURSOR_HMAC_KEY: dev-cursor-hmac-key-rotate-in-prod-XYZ7K3P9Q2M5V8N1B4D6F0G2H
+2026-08-25T03:02:09.4524201Z   Jwt__SigningKey: dev-jwt-signing-key-not-for-prod-X7K9M2P5Q8R3T6V1W4Y7Z0A3B6C9D2E5F8
+2026-08-25T03:02:09.4524688Z   Jwt__Issuer: SakuraFilter
+2026-08-25T03:02:09.4524962Z   Jwt__Audience: SakuraFilter.Web
+2026-08-25T03:02:09.4525243Z   Jwt__ExpireMinutes: 30
+2026-08-25T03:02:09.4525501Z   Jwt__RefreshExpireDays: 7
+2026-08-25T03:02:09.4525750Z   BACKEND_PORT: 5148
+2026-08-25T03:02:09.4526024Z   DOTNET_VERSION: 8.0.x
+2026-08-25T03:02:09.4526279Z   DOTNET_ROLL_FORWARD: LatestMajor
+2026-08-25T03:02:09.4526547Z   NODE_VERSION: 20
+2026-08-25T03:02:09.4526777Z   PYTHON_VERSION: 3.12
+2026-08-25T03:02:09.4527036Z   DOTNET_ROOT: /usr/share/dotnet
+2026-08-25T03:02:09.4527298Z ##[endgroup]
+2026-08-25T03:02:09.6360671Z [coverage] line-rate=6.69% 阈值=5.00% 文件数=1 选用=backend/tests/SakuraFilter.Api.Tests/TestResults/a6ca7512-f7f7-48f3-b18b-f01121086b87/coverage.cobertura.xml PASS
+2026-08-25T03:02:09.6494223Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+2026-08-25T03:02:09.6495468Z ##[group]Run actions/upload-artifact@v4
+2026-08-25T03:02:09.6495755Z with:
+2026-08-25T03:02:09.6495979Z   name: backend-log
+2026-08-25T03:02:09.6496222Z   path: /tmp/backend.log
+2026-08-25T03:02:09.6496480Z   if-no-files-found: ignore
+2026-08-25T03:02:09.6496736Z   compression-level: 6
+2026-08-25T03:02:09.6496972Z   overwrite: false
+2026-08-25T03:02:09.6497240Z   include-hidden-files: false
+2026-08-25T03:02:09.6497492Z env:
+2026-08-25T03:02:09.6497819Z   ADMIN_TOKEN: dev-admin-token-rotate-in-prod-MZK4R9P3X6V2N7Q1L5F0B8H3C
+2026-08-25T03:02:09.6498912Z   CURSOR_HMAC_KEY: dev-cursor-hmac-key-rotate-in-prod-XYZ7K3P9Q2M5V8N1B4D6F0G2H
+2026-08-25T03:02:09.6499580Z   Jwt__SigningKey: dev-jwt-signing-key-not-for-prod-X7K9M2P5Q8R3T6V1W4Y7Z0A3B6C9D2E5F8
+2026-08-25T03:02:09.6500065Z   Jwt__Issuer: SakuraFilter
+2026-08-25T03:02:09.6500328Z   Jwt__Audience: SakuraFilter.Web
+2026-08-25T03:02:09.6500604Z   Jwt__ExpireMinutes: 30
+2026-08-25T03:02:09.6500849Z   Jwt__RefreshExpireDays: 7
+2026-08-25T03:02:09.6501100Z   BACKEND_PORT: 5148
+2026-08-25T03:02:09.6501333Z   DOTNET_VERSION: 8.0.x
+2026-08-25T03:02:09.6501600Z   DOTNET_ROLL_FORWARD: LatestMajor
+2026-08-25T03:02:09.6501867Z   NODE_VERSION: 20
+2026-08-25T03:02:09.6502098Z   PYTHON_VERSION: 3.12
+2026-08-25T03:02:09.6502345Z   DOTNET_ROOT: /usr/share/dotnet
+2026-08-25T03:02:09.6502808Z ##[endgroup]
+2026-08-25T03:02:09.8112061Z (node:4308) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-08-25T03:02:09.8112964Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-08-25T03:02:09.8127464Z No files were found with the provided path: /tmp/backend.log. No artifacts will be uploaded.
+2026-08-25T03:02:09.8389244Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+2026-08-25T03:02:09.8391320Z Post job cleanup.
+2026-08-25T03:02:09.9293083Z [command]/usr/bin/git version
+2026-08-25T03:02:09.9370042Z git version 2.55.0
+2026-08-25T03:02:09.9410438Z Temporarily overriding HOME='/home/runner/work/_temp/4d8c56b7-2f3b-4b8b-a4ad-00f060274461' before making global git config changes
+2026-08-25T03:02:09.9411494Z Adding repository directory to the temporary git global config as a safe directory
+2026-08-25T03:02:09.9416513Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/sakurafilte/sakurafilte
+2026-08-25T03:02:09.9458967Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-08-25T03:02:09.9500109Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-08-25T03:02:09.9794152Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-08-25T03:02:09.9826001Z http.https://github.com/.extraheader
+2026-08-25T03:02:09.9840638Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-08-25T03:02:09.9877228Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-08-25T03:02:10.0174783Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-08-25T03:02:10.0217817Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-08-25T03:02:10.0973233Z Print service container logs: 24465f5bd8c04ffebce3a91bf0645890_postgres16_f9088e
+2026-08-25T03:02:10.0978569Z ##[command]/usr/bin/docker logs --details a3f0f58a38549c7e7da20ab621575a70e9ee6346d236421f617eca22b1982ae7
+2026-08-25T03:02:10.1107816Z  initdb: warning: enabling "trust" authentication for local connections
+2026-08-25T03:02:10.1109363Z  initdb: hint: You can change this by editing pg_hba.conf or using the option -A, or --auth-local and --auth-host, the next time you run initdb.
+2026-08-25T03:02:10.1111161Z  2026-08-25 03:00:19.116 UTC [1] LOG:  starting PostgreSQL 16.15 (Debian 16.15-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
+2026-08-25T03:02:10.1112641Z  2026-08-25 03:00:19.116 UTC [1] LOG:  listening on IPv4 address "0.0.0.0", port 5432
+2026-08-25T03:02:10.1113410Z  2026-08-25 03:00:19.116 UTC [1] LOG:  listening on IPv6 address "::", port 5432
+2026-08-25T03:02:10.1114309Z  2026-08-25 03:00:19.117 UTC [1] LOG:  listening on Unix socket "/var/run/postgresql/.s.PGSQL.5432"
+2026-08-25T03:02:10.1115233Z  2026-08-25 03:00:19.120 UTC [64] LOG:  database system was shut down at 2026-08-25 03:00:19 UTC
+2026-08-25T03:02:10.1116073Z  2026-08-25 03:00:19.124 UTC [1] LOG:  database system is ready to accept connections
+2026-08-25T03:02:10.1116926Z  2026-08-25 03:01:57.023 UTC [227] ERROR:  relation "system_settings" does not exist at character 19
+2026-08-25T03:02:10.1118127Z  2026-08-25 03:01:57.023 UTC [227] STATEMENT:  SELECT value FROM system_settings WHERE key = 'storage_config' LIMIT 1
+2026-08-25T03:02:10.1119298Z  2026-08-25 03:02:04.572 UTC [260] ERROR:  duplicate key value violates unique constraint "uq_product_images_detail_slot"
+2026-08-25T03:02:10.1120693Z  2026-08-25 03:02:04.572 UTC [260] DETAIL:  Key (product_id, slot)=(1, 2) already exists.
+2026-08-25T03:02:10.1121366Z  2026-08-25 03:02:04.572 UTC [260] STATEMENT:  
+2026-08-25T03:02:10.1122132Z  	                    INSERT INTO product_images (product_id, slot, image_key, file_size, content_type,
+2026-08-25T03:02:10.1123082Z  	                        is_primary, display_order, uploaded_at, uploaded_by, oem_no_3, image_role)
+2026-08-25T03:02:10.1123915Z  	                    VALUES ($1, 2, 'products/detail/test2/test2-2.jpg', 2048, 'image/png',
+2026-08-25T03:02:10.1124590Z  	                        false, 2, now(), 'tester2', NULL, 'detail')
+2026-08-25T03:02:10.1125270Z  The files belonging to this database system will be owned by user "postgres".
+2026-08-25T03:02:10.1125988Z  This user must also own the server process.
+2026-08-25T03:02:10.1126410Z  
+2026-08-25T03:02:10.1126832Z  The database cluster will be initialized with locale "en_US.utf8".
+2026-08-25T03:02:10.1127560Z  The default database encoding has accordingly been set to "UTF8".
+2026-08-25T03:02:10.1128382Z  The default text search configuration will be set to "english".
+2026-08-25T03:02:10.1128897Z  
+2026-08-25T03:02:10.1129201Z  Data page checksums are disabled.
+2026-08-25T03:02:10.1129581Z  
+2026-08-25T03:02:10.1129944Z  fixing permissions on existing directory /var/lib/postgresql/data ... ok
+2026-08-25T03:02:10.1130353Z  creating subdirectories ... ok
+2026-08-25T03:02:10.1130687Z  selecting dynamic shared memory implementation ... posix
+2026-08-25T03:02:10.1131054Z  selecting default max_connections ... 100
+2026-08-25T03:02:10.1131368Z  selecting default shared_buffers ... 128MB
+2026-08-25T03:02:10.1131661Z  selecting default time zone ... Etc/UTC
+2026-08-25T03:02:10.1131971Z  creating configuration files ... ok
+2026-08-25T03:02:10.1132253Z  running bootstrap script ... ok
+2026-08-25T03:02:10.1132564Z  performing post-bootstrap initialization ... ok
+2026-08-25T03:02:10.1132890Z  syncing data to disk ... ok
+2026-08-25T03:02:10.1133133Z  
+2026-08-25T03:02:10.1133326Z  
+2026-08-25T03:02:10.1133563Z  Success. You can now start the database server using:
+2026-08-25T03:02:10.1133880Z  
+2026-08-25T03:02:10.1134126Z      pg_ctl -D /var/lib/postgresql/data -l logfile start
+2026-08-25T03:02:10.1134429Z  
+2026-08-25T03:02:10.1135308Z  waiting for server to start....2026-08-25 03:00:18.807 UTC [48] LOG:  starting PostgreSQL 16.15 (Debian 16.15-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
+2026-08-25T03:02:10.1136158Z  2026-08-25 03:00:18.807 UTC [48] LOG:  listening on Unix socket "/var/run/postgresql/.s.PGSQL.5432"
+2026-08-25T03:02:10.1136712Z  2026-08-25 03:00:18.810 UTC [51] LOG:  database system was shut down at 2026-08-25 03:00:18 UTC
+2026-08-25T03:02:10.1137220Z  2026-08-25 03:00:18.813 UTC [48] LOG:  database system is ready to accept connections
+2026-08-25T03:02:10.1137590Z   done
+2026-08-25T03:02:10.1137790Z  server started
+2026-08-25T03:02:10.1138252Z  CREATE DATABASE
+2026-08-25T03:02:10.1138581Z  
+2026-08-25T03:02:10.1138842Z  
+2026-08-25T03:02:10.1139331Z  /usr/local/bin/docker-entrypoint.sh: ignoring /docker-entrypoint-initdb.d/*
+2026-08-25T03:02:10.1139873Z  
+2026-08-25T03:02:10.1140138Z  2026-08-25 03:00:18.994 UTC [48] LOG:  received fast shutdown request
+2026-08-25T03:02:10.1140663Z  waiting for server to shut down....2026-08-25 03:00:18.995 UTC [48] LOG:  aborting any active transactions
+2026-08-25T03:02:10.1141460Z  2026-08-25 03:00:18.997 UTC [48] LOG:  background worker "logical replication launcher" (PID 54) exited with exit code 1
+2026-08-25T03:02:10.1142025Z  2026-08-25 03:00:18.997 UTC [49] LOG:  shutting down
+2026-08-25T03:02:10.1142465Z  2026-08-25 03:00:18.997 UTC [49] LOG:  checkpoint starting: shutdown immediate
+2026-08-25T03:02:10.1143510Z  2026-08-25 03:00:19.012 UTC [49] LOG:  checkpoint complete: wrote 926 buffers (5.7%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.013 s, sync=0.002 s, total=0.016 s; sync files=301, longest=0.001 s, average=0.001 s; distance=4273 kB, estimate=4273 kB; lsn=0/191F0F0, redo lsn=0/191F0F0
+2026-08-25T03:02:10.1144717Z  2026-08-25 03:00:19.019 UTC [48] LOG:  database system is shut down
+2026-08-25T03:02:10.1145050Z   done
+2026-08-25T03:02:10.1145253Z  server stopped
+2026-08-25T03:02:10.1145459Z  
+2026-08-25T03:02:10.1145713Z  PostgreSQL init process complete; ready for start up.
+2026-08-25T03:02:10.1146023Z  
+2026-08-25T03:02:10.1151256Z Stop and remove container: 24465f5bd8c04ffebce3a91bf0645890_postgres16_f9088e
+2026-08-25T03:02:10.1156065Z ##[command]/usr/bin/docker rm --force a3f0f58a38549c7e7da20ab621575a70e9ee6346d236421f617eca22b1982ae7
+2026-08-25T03:02:10.2468925Z a3f0f58a38549c7e7da20ab621575a70e9ee6346d236421f617eca22b1982ae7
+2026-08-25T03:02:10.2498979Z Remove container network: github_network_508f4ec50a514cf8b064c9b31137bfae
+2026-08-25T03:02:10.2503820Z ##[command]/usr/bin/docker network rm github_network_508f4ec50a514cf8b064c9b31137bfae
+2026-08-25T03:02:10.3412560Z github_network_508f4ec50a514cf8b064c9b31137bfae
+2026-08-25T03:02:10.3484860Z Cleaning up orphan processes
+2026-08-25T03:02:10.3830075Z Terminate orphan process: pid (2976) (dotnet)
+2026-08-25T03:02:10.3854806Z Terminate orphan process: pid (2977) (dotnet)
+2026-08-25T03:02:10.3878708Z Terminate orphan process: pid (2978) (dotnet)
+2026-08-25T03:02:10.3910393Z Terminate orphan process: pid (3166) (dotnet)
+2026-08-25T03:02:10.3959543Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/setup-dotnet@v4, actions/upload-artifact@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

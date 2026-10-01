@@ -1,0 +1,1152 @@
+﻿{
+    "results":  [
+                    {
+                        "id":  "A01",
+                        "name":  "GET /api/info",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  235,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/info"
+                    },
+                    {
+                        "id":  "A02",
+                        "name":  "GET /health/live",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  20,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/health/live"
+                    },
+                    {
+                        "id":  "A03",
+                        "name":  "GET /health/ready",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  43,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/health/ready"
+                    },
+                    {
+                        "id":  "A04",
+                        "name":  "GET swagger json",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  898,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/swagger/v1/swagger.json"
+                    },
+                    {
+                        "id":  "B01",
+                        "name":  "POST login ok",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  316,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/auth/login"
+                    },
+                    {
+                        "id":  "B06",
+                        "name":  "GET /api/auth/me",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  41,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/auth/me"
+                    },
+                    {
+                        "id":  "B07",
+                        "name":  "GET me no token -\u003e 401",
+                        "ok":  true,
+                        "expected":  "401",
+                        "actual":  401,
+                        "ms":  16,
+                        "detail":  "远程服务器返回错误: (401) 未经授权。",
+                        "url":  "http://localhost:5148/api/auth/me"
+                    },
+                    {
+                        "id":  "B08",
+                        "name":  "GET me forged token -\u003e 401",
+                        "ok":  true,
+                        "expected":  "401",
+                        "actual":  401,
+                        "ms":  5,
+                        "detail":  "远程服务器返回错误: (401) 未经授权。",
+                        "url":  "http://localhost:5148/api/auth/me"
+                    },
+                    {
+                        "id":  "B09",
+                        "name":  "GET turnstile-config",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  25,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/auth/turnstile-config"
+                    },
+                    {
+                        "id":  "B10",
+                        "name":  "POST change-pwd wrong old -\u003e 400",
+                        "ok":  true,
+                        "expected":  "400",
+                        "actual":  400,
+                        "ms":  334,
+                        "detail":  "The remote server returned an error: (400) Bad Request.",
+                        "url":  "http://localhost:5148/api/auth/change-password"
+                    },
+                    {
+                        "id":  "B11",
+                        "name":  "POST change-pwd weak -\u003e 400",
+                        "ok":  true,
+                        "expected":  "400",
+                        "actual":  400,
+                        "ms":  16,
+                        "detail":  "The remote server returned an error: (400) Bad Request.",
+                        "url":  "http://localhost:5148/api/auth/change-password"
+                    },
+                    {
+                        "id":  "B12",
+                        "name":  "POST refresh invalid -\u003e 401",
+                        "ok":  true,
+                        "expected":  "401",
+                        "actual":  401,
+                        "ms":  54,
+                        "detail":  "The remote server returned an error: (401) Unauthorized.",
+                        "url":  "http://localhost:5148/api/auth/refresh"
+                    },
+                    {
+                        "id":  "C01",
+                        "name":  "POST search empty q",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  76,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/search"
+                    },
+                    {
+                        "id":  "C02",
+                        "name":  "POST search single char",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  77,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/search"
+                    },
+                    {
+                        "id":  "C03",
+                        "name":  "POST search pct char",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  74,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/search"
+                    },
+                    {
+                        "id":  "C04",
+                        "name":  "POST search sql inject",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  79,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/search"
+                    },
+                    {
+                        "id":  "C05",
+                        "name":  "POST search xss payload",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  67,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/search"
+                    },
+                    {
+                        "id":  "C06",
+                        "name":  "POST search 500 chars",
+                        "ok":  true,
+                        "expected":  "200|400",
+                        "actual":  200,
+                        "ms":  66,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/search"
+                    },
+                    {
+                        "id":  "C07",
+                        "name":  "POST search pageSize=50",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  85,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/search"
+                    },
+                    {
+                        "id":  "C08",
+                        "name":  "POST search page=-1 -\u003e 200(褰掍竴鍖?",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  84,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/search"
+                    },
+                    {
+                        "id":  "C09",
+                        "name":  "POST search page=999999 -\u003e 200/400",
+                        "ok":  true,
+                        "expected":  "200|400",
+                        "actual":  200,
+                        "ms":  70,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/search"
+                    },
+                    {
+                        "id":  "C10",
+                        "name":  "GET search health",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  38,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/search/health"
+                    },
+                    {
+                        "id":  "C11",
+                        "name":  "POST public aggregate",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  119,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/public/search/aggregate"
+                    },
+                    {
+                        "id":  "C12",
+                        "name":  "POST batch-oem",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  145,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/public/search/batch-oem"
+                    },
+                    {
+                        "id":  "D01",
+                        "name":  "GET product detail known oem",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  45,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/products/SH630239"
+                    },
+                    {
+                        "id":  "D02",
+                        "name":  "GET product detail unknown -\u003e 404",
+                        "ok":  true,
+                        "expected":  "404",
+                        "actual":  404,
+                        "ms":  4,
+                        "detail":  "远程服务器返回错误: (404) 未找到。",
+                        "url":  "http://localhost:5148/api/products/NO_SUCH_OEM_XYZ"
+                    },
+                    {
+                        "id":  "D03",
+                        "name":  "GET product detail blank -\u003e 404",
+                        "ok":  true,
+                        "expected":  "404",
+                        "actual":  404,
+                        "ms":  5,
+                        "detail":  "远程服务器返回错误: (404) 未找到。",
+                        "url":  "http://localhost:5148/api/products/%20"
+                    },
+                    {
+                        "id":  "D04",
+                        "name":  "GET product detail long -\u003e 400/404",
+                        "ok":  true,
+                        "expected":  "400|404",
+                        "actual":  404,
+                        "ms":  3,
+                        "detail":  "远程服务器返回错误: (404) 未找到。",
+                        "url":  "http://localhost:5148/api/products/123456789012345678901234567890"
+                    },
+                    {
+                        "id":  "D05",
+                        "name":  "GET legacy /product/{oem} 鍚庣404(nginx 鐢熶骇301)",
+                        "ok":  true,
+                        "expected":  "404",
+                        "actual":  404,
+                        "ms":  82,
+                        "detail":  "远程服务器返回错误: (404) 未找到。",
+                        "url":  "http://localhost:5148/product/SH630239"
+                    },
+                    {
+                        "id":  "D06",
+                        "name":  "GET by-type",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  34,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/public/by-type?oem1=Hydraulic%20Filter\u0026oem2=Spin-On"
+                    },
+                    {
+                        "id":  "D07",
+                        "name":  "GET sibling-oem3",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  41,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/public/products/SH630239/sibling-oem3"
+                    },
+                    {
+                        "id":  "E01-oem-brands",
+                        "name":  "GET dict list oem-brands",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  86,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/admin/dict/oem-brands"
+                    },
+                    {
+                        "id":  "E02-oem-brands",
+                        "name":  "GET dict typeahead oem-brands",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  38,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/admin/dict/oem-brands/typeahead?q=a"
+                    },
+                    {
+                        "id":  "E01-product-name1s",
+                        "name":  "GET dict list product-name1s",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  54,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/admin/dict/product-name1s"
+                    },
+                    {
+                        "id":  "E02-product-name1s",
+                        "name":  "GET dict typeahead product-name1s",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  29,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/admin/dict/product-name1s/typeahead?q=a"
+                    },
+                    {
+                        "id":  "E01-product-name2s",
+                        "name":  "GET dict list product-name2s",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  33,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/admin/dict/product-name2s"
+                    },
+                    {
+                        "id":  "E02-product-name2s",
+                        "name":  "GET dict typeahead product-name2s",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  29,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/admin/dict/product-name2s/typeahead?q=a"
+                    },
+                    {
+                        "id":  "E01-types",
+                        "name":  "GET dict list types",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  33,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/admin/dict/types"
+                    },
+                    {
+                        "id":  "E02-types",
+                        "name":  "GET dict typeahead types",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  28,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/admin/dict/types/typeahead?q=a"
+                    },
+                    {
+                        "id":  "E01-oem-no3s",
+                        "name":  "GET dict list oem-no3s",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  34,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/admin/dict/oem-no3s"
+                    },
+                    {
+                        "id":  "E02-oem-no3s",
+                        "name":  "GET dict typeahead oem-no3s",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  29,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/admin/dict/oem-no3s/typeahead?q=a"
+                    },
+                    {
+                        "id":  "E01-medias",
+                        "name":  "GET dict list medias",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  35,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/admin/dict/medias"
+                    },
+                    {
+                        "id":  "E02-medias",
+                        "name":  "GET dict typeahead medias",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  29,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/admin/dict/medias/typeahead?q=a"
+                    },
+                    {
+                        "id":  "E01-machines",
+                        "name":  "GET dict list machines",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  103,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/admin/dict/machines"
+                    },
+                    {
+                        "id":  "E02-machines",
+                        "name":  "GET dict typeahead machines",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  95,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/admin/dict/machines/typeahead?q=a"
+                    },
+                    {
+                        "id":  "E01-engines",
+                        "name":  "GET dict list engines",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  36,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/admin/dict/engines"
+                    },
+                    {
+                        "id":  "E02-engines",
+                        "name":  "GET dict typeahead engines",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  32,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/admin/dict/engines/typeahead?q=a"
+                    },
+                    {
+                        "id":  "E03",
+                        "name":  "GET dict export",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  127,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/admin/dict/oem-brands/export"
+                    },
+                    {
+                        "id":  "E04",
+                        "name":  "GET dict export-xlsx",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  811,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/admin/dict/oem-brands/export-xlsx"
+                    },
+                    {
+                        "id":  "E05",
+                        "name":  "GET dict no auth -\u003e 401",
+                        "ok":  true,
+                        "expected":  "401",
+                        "actual":  401,
+                        "ms":  2,
+                        "detail":  "远程服务器返回错误: (401) 未经授权。",
+                        "url":  "http://localhost:5148/api/admin/dict/oem-brands"
+                    },
+                    {
+                        "id":  "E06",
+                        "name":  "POST dict create",
+                        "ok":  true,
+                        "expected":  "200|201",
+                        "actual":  201,
+                        "ms":  104,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/admin/dict/oem-brands"
+                    },
+                    {
+                        "id":  "F01",
+                        "name":  "GET admin products list",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  75,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/admin/products"
+                    },
+                    {
+                        "id":  "F02",
+                        "name":  "GET admin products search",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  55,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/admin/products/search?q=filter"
+                    },
+                    {
+                        "id":  "F03",
+                        "name":  "GET admin product id=1",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  133,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/admin/products/1"
+                    },
+                    {
+                        "id":  "F04",
+                        "name":  "GET admin product id=999999 -\u003e 404",
+                        "ok":  true,
+                        "expected":  "404",
+                        "actual":  404,
+                        "ms":  8,
+                        "detail":  "远程服务器返回错误: (404) 未找到。",
+                        "url":  "http://localhost:5148/api/admin/products/999999"
+                    },
+                    {
+                        "id":  "F05",
+                        "name":  "GET admin product id=abc -\u003e 404(璺敱绾︽潫)",
+                        "ok":  true,
+                        "expected":  "404",
+                        "actual":  404,
+                        "ms":  2,
+                        "detail":  "远程服务器返回错误: (404) 未找到。",
+                        "url":  "http://localhost:5148/api/admin/products/abc"
+                    },
+                    {
+                        "id":  "F06",
+                        "name":  "GET admin products no auth -\u003e 401",
+                        "ok":  true,
+                        "expected":  "401",
+                        "actual":  401,
+                        "ms":  1,
+                        "detail":  "远程服务器返回错误: (401) 未经授权。",
+                        "url":  "http://localhost:5148/api/admin/products"
+                    },
+                    {
+                        "id":  "F07",
+                        "name":  "POST create product empty -\u003e 400",
+                        "ok":  true,
+                        "expected":  "400",
+                        "actual":  400,
+                        "ms":  52,
+                        "detail":  "The remote server returned an error: (400) Bad Request.",
+                        "url":  "http://localhost:5148/api/admin/products/"
+                    },
+                    {
+                        "id":  "F08",
+                        "name":  "POST create dup MR1 -\u003e 409",
+                        "ok":  true,
+                        "expected":  "409",
+                        "actual":  409,
+                        "ms":  59,
+                        "detail":  "The remote server returned an error: (409) Conflict.",
+                        "url":  "http://localhost:5148/api/admin/products/"
+                    },
+                    {
+                        "id":  "F09",
+                        "name":  "POST products compare",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  430,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/admin/products/compare"
+                    },
+                    {
+                        "id":  "F10",
+                        "name":  "GET product images",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  27,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/admin/products/MR000021/images"
+                    },
+                    {
+                        "id":  "F11",
+                        "name":  "GET product history id=1",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  52,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/admin/products/1/history"
+                    },
+                    {
+                        "id":  "G01",
+                        "name":  "GET etl status",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  30,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/etl/status"
+                    },
+                    {
+                        "id":  "G02",
+                        "name":  "GET etl no token -\u003e 401",
+                        "ok":  true,
+                        "expected":  "401",
+                        "actual":  401,
+                        "ms":  2,
+                        "detail":  "远程服务器返回错误: (401) 未经授权。",
+                        "url":  "http://localhost:5148/api/etl/status"
+                    },
+                    {
+                        "id":  "G03",
+                        "name":  "GET etl progress",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  25,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/admin/etl/progress"
+                    },
+                    {
+                        "id":  "G04",
+                        "name":  "GET etl history",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  34,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/admin/etl/history"
+                    },
+                    {
+                        "id":  "G05",
+                        "name":  "GET etl history aggregate",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  29,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/admin/etl/history/aggregate"
+                    },
+                    {
+                        "id":  "G06",
+                        "name":  "GET etl template",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  195,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/admin/etl/template"
+                    },
+                    {
+                        "id":  "G07",
+                        "name":  "POST etl trigger empty -\u003e 400",
+                        "ok":  true,
+                        "expected":  "400",
+                        "actual":  400,
+                        "ms":  6,
+                        "detail":  "The remote server returned an error: (400) Bad Request.",
+                        "url":  "http://localhost:5148/api/admin/etl/trigger"
+                    },
+                    {
+                        "id":  "G08",
+                        "name":  "POST etl trigger missing -\u003e 400/404",
+                        "ok":  true,
+                        "expected":  "400|404",
+                        "actual":  400,
+                        "ms":  42,
+                        "detail":  "The remote server returned an error: (400) Bad Request.",
+                        "url":  "http://localhost:5148/api/admin/etl/trigger"
+                    },
+                    {
+                        "id":  "H01",
+                        "name":  "GET users list",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  49,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/admin/users"
+                    },
+                    {
+                        "id":  "H02",
+                        "name":  "GET users no auth -\u003e 401",
+                        "ok":  true,
+                        "expected":  "401",
+                        "actual":  401,
+                        "ms":  1,
+                        "detail":  "远程服务器返回错误: (401) 未经授权。",
+                        "url":  "http://localhost:5148/api/admin/users"
+                    },
+                    {
+                        "id":  "H03",
+                        "name":  "POST create weak pwd -\u003e 400",
+                        "ok":  true,
+                        "expected":  "400",
+                        "actual":  400,
+                        "ms":  49,
+                        "detail":  "The remote server returned an error: (400) Bad Request.",
+                        "url":  "http://localhost:5148/api/admin/users"
+                    },
+                    {
+                        "id":  "H04",
+                        "name":  "POST create bad role -\u003e 400",
+                        "ok":  true,
+                        "expected":  "400",
+                        "actual":  400,
+                        "ms":  43,
+                        "detail":  "The remote server returned an error: (400) Bad Request.",
+                        "url":  "http://localhost:5148/api/admin/users"
+                    },
+                    {
+                        "id":  "H05",
+                        "name":  "POST create user ok",
+                        "ok":  true,
+                        "expected":  "200|201",
+                        "actual":  201,
+                        "ms":  375,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/admin/users"
+                    },
+                    {
+                        "id":  "H06",
+                        "name":  "GET user detail 28",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  28,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/admin/users/28"
+                    },
+                    {
+                        "id":  "H07",
+                        "name":  "POST reset-password 28",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  358,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/admin/users/28/reset-password"
+                    },
+                    {
+                        "id":  "H08",
+                        "name":  "DELETE user 28",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  38,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/admin/users/28"
+                    },
+                    {
+                        "id":  "H09",
+                        "name":  "GET deleted user -\u003e 404",
+                        "ok":  true,
+                        "expected":  "404",
+                        "actual":  404,
+                        "ms":  4,
+                        "detail":  "远程服务器返回错误: (404) 未找到。",
+                        "url":  "http://localhost:5148/api/admin/users/28"
+                    },
+                    {
+                        "id":  "H10",
+                        "name":  "GET audit login",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  48,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/admin/audit/login"
+                    },
+                    {
+                        "id":  "H11",
+                        "name":  "GET audit no auth -\u003e 401",
+                        "ok":  true,
+                        "expected":  "401",
+                        "actual":  401,
+                        "ms":  1,
+                        "detail":  "远程服务器返回错误: (401) 未经授权。",
+                        "url":  "http://localhost:5148/api/admin/audit/login"
+                    },
+                    {
+                        "id":  "I01",
+                        "name":  "GET /metrics",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  314,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/metrics"
+                    },
+                    {
+                        "id":  "I02",
+                        "name":  "GET /api/perf",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  32,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/perf"
+                    },
+                    {
+                        "id":  "I03",
+                        "name":  "GET perf alerts",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  22,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/admin/perf/alerts?limit=10"
+                    },
+                    {
+                        "id":  "I04",
+                        "name":  "GET meili snapshot",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  24,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/admin/perf/meili/snapshot"
+                    },
+                    {
+                        "id":  "I05",
+                        "name":  "GET auth status",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  22,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/admin/auth/status"
+                    },
+                    {
+                        "id":  "I06",
+                        "name":  "GET /metrics no token",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  339,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/metrics"
+                    },
+                    {
+                        "id":  "J01",
+                        "name":  "GET alerts history",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  37,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/admin/alerts/history?limit=10\u0026offset=0"
+                    },
+                    {
+                        "id":  "J02",
+                        "name":  "GET alerts stats",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  35,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/admin/alerts/stats"
+                    },
+                    {
+                        "id":  "J03",
+                        "name":  "GET alerts rules",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  29,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/admin/alerts/rules"
+                    },
+                    {
+                        "id":  "J04",
+                        "name":  "GET alerts history id=999 -\u003e 404",
+                        "ok":  true,
+                        "expected":  "404",
+                        "actual":  404,
+                        "ms":  9,
+                        "detail":  "远程服务器返回错误: (404) 未找到。",
+                        "url":  "http://localhost:5148/api/admin/alerts/history/999"
+                    },
+                    {
+                        "id":  "K01",
+                        "name":  "GET xref brands",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  197,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/admin/xrefs/reorder/brands"
+                    },
+                    {
+                        "id":  "K02",
+                        "name":  "GET machine-tree",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  3226,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/admin/machine-tree"
+                    },
+                    {
+                        "id":  "K03",
+                        "name":  "POST batch-bind empty -\u003e 404(MACHINE_NOT_FOUND)",
+                        "ok":  true,
+                        "expected":  "400|404",
+                        "actual":  404,
+                        "ms":  13,
+                        "detail":  "The remote server returned an error: (404) Not Found.",
+                        "url":  "http://localhost:5148/api/admin/machine-apps/batch-bind"
+                    },
+                    {
+                        "id":  "K04",
+                        "name":  "GET machine-brands aggregated",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  115,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/public/machine-brands/aggregated"
+                    },
+                    {
+                        "id":  "K05",
+                        "name":  "GET machine-brands catalog",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  311,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/public/machine-brands/catalog"
+                    },
+                    {
+                        "id":  "L01",
+                        "name":  "GET deadletter list",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  39,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/admin/dead-letter/"
+                    },
+                    {
+                        "id":  "L02",
+                        "name":  "POST deadletter recover missing -\u003e 404",
+                        "ok":  true,
+                        "expected":  "404",
+                        "actual":  404,
+                        "ms":  3,
+                        "detail":  "远程服务器返回错误: (404) 未找到。",
+                        "url":  "http://localhost:5148/api/admin/deadletter/999999/recover"
+                    },
+                    {
+                        "id":  "M01",
+                        "name":  "GET storage config",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  28,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/admin/storage/config"
+                    },
+                    {
+                        "id":  "M02",
+                        "name":  "GET site-content",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  30,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/admin/site-content"
+                    },
+                    {
+                        "id":  "M03",
+                        "name":  "GET sitemap.xml",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  32,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/sitemap.xml"
+                    },
+                    {
+                        "id":  "M04",
+                        "name":  "GET public typeahead oem-no3",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  30,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/public/typeahead/oem-no3?q=SH"
+                    },
+                    {
+                        "id":  "M05",
+                        "name":  "GET public featured",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  40,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/public/featured"
+                    },
+                    {
+                        "id":  "M06",
+                        "name":  "GET public compare",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  347,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/public/compare?ids=1,2"
+                    },
+                    {
+                        "id":  "N01",
+                        "name":  "viewer GET users -\u003e 403",
+                        "ok":  true,
+                        "expected":  "403",
+                        "actual":  403,
+                        "ms":  3,
+                        "detail":  "远程服务器返回错误: (403) 已禁止。",
+                        "url":  "http://localhost:5148/api/admin/users"
+                    },
+                    {
+                        "id":  "N02",
+                        "name":  "viewer GET products -\u003e 200",
+                        "ok":  true,
+                        "expected":  "200",
+                        "actual":  200,
+                        "ms":  45,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/admin/products"
+                    },
+                    {
+                        "id":  "N03",
+                        "name":  "viewer DELETE product -\u003e 403",
+                        "ok":  true,
+                        "expected":  "403",
+                        "actual":  403,
+                        "ms":  2,
+                        "detail":  "远程服务器返回错误: (403) 已禁止。",
+                        "url":  "http://localhost:5148/api/admin/products/1"
+                    },
+                    {
+                        "id":  "B02",
+                        "name":  "POST login wrong pwd -\u003e 401",
+                        "ok":  true,
+                        "expected":  "401|429",
+                        "actual":  401,
+                        "ms":  330,
+                        "detail":  "The remote server returned an error: (401) Unauthorized.",
+                        "url":  "http://localhost:5148/api/auth/login"
+                    },
+                    {
+                        "id":  "B03",
+                        "name":  "POST login empty user -\u003e 400",
+                        "ok":  true,
+                        "expected":  "400|429",
+                        "actual":  400,
+                        "ms":  2,
+                        "detail":  "The remote server returned an error: (400) Bad Request.",
+                        "url":  "http://localhost:5148/api/auth/login"
+                    },
+                    {
+                        "id":  "B04",
+                        "name":  "POST login unknown user -\u003e 401",
+                        "ok":  true,
+                        "expected":  "401|429",
+                        "actual":  401,
+                        "ms":  48,
+                        "detail":  "The remote server returned an error: (401) Unauthorized.",
+                        "url":  "http://localhost:5148/api/auth/login"
+                    },
+                    {
+                        "id":  "B05",
+                        "name":  "POST login sql inject -\u003e 401",
+                        "ok":  true,
+                        "expected":  "400|401|429",
+                        "actual":  401,
+                        "ms":  50,
+                        "detail":  "The remote server returned an error: (401) Unauthorized.",
+                        "url":  "http://localhost:5148/api/auth/login"
+                    },
+                    {
+                        "id":  "O01",
+                        "name":  "rate limit 429 after burst",
+                        "ok":  true,
+                        "expected":  "429\u003e=1 (Prod) / SKIP (Dev)",
+                        "actual":  "SKIP (Dev widens limit to 999; Prod 5/min triggers 429, verify on docker-compose.prod.yml)",
+                        "ms":  0,
+                        "detail":  "",
+                        "url":  "http://localhost:5148/api/auth/login"
+                    }
+                ],
+    "base":  "http://localhost:5148",
+    "timestamp":  "2026-09-13 12:03:28",
+    "pass":  112,
+    "fail":  0,
+    "elapsedSec":  15.8617569,
+    "perf":  {
+                 "detail":  {
+                                "max":  24,
+                                "p95":  24,
+                                "avg":  22
+                            },
+                 "dict":  {
+                              "max":  4,
+                              "p95":  4,
+                              "avg":  0
+                          },
+                 "search":  {
+                                "max":  77,
+                                "p95":  77,
+                                "avg":  65
+                            },
+                 "health":  {
+                                "max":  39,
+                                "p95":  39,
+                                "avg":  38
+                            }
+             },
+    "total":  112
+}

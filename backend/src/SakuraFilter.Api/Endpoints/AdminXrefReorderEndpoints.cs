@@ -23,8 +23,8 @@ public static class AdminXrefReorderEndpoints
 {
     public static IEndpointRouteBuilder MapAdminXrefReorderEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/admin/xrefs/reorder").WithTags("AdminXrefReorder")
-            .RequireAuthorization("Admin");  // V24-F19: spec F11
+        // WHY: 权限细分 — OEM 排序查看 viewer 可读, 修改属数据维护 (operator 职责)
+        var group = app.MapGroup("/api/admin/xrefs/reorder").WithTags("AdminXrefReorder");
 
         // ===== Task 2.1.2: GET /brands — 返回 Brand 列表 (brand / sortOrder / oem3Count) =====
         //   改进 2.1: IMemoryCache 5 分钟缓存 (brand 字典变更频率低, 避免每次聚合查询)
@@ -68,7 +68,7 @@ public static class AdminXrefReorderEndpoints
             return Results.Ok(new { brands = result });
         })
         .WithSummary("获取 OEM 品牌列表 (含 sortOrder + oem3Count, 按 sortOrder 排序)")
-        .WithName("AdminXrefReorder_ListBrands");
+        .WithName("AdminXrefReorder_ListBrands").RequireAuthorization("ReadOnly");
 
         // ===== 白名单改造: POST /brands — 新增品牌到 xref_oem_brand 字典 =====
         //   用户需求: 品牌应可独立新增, 新增后即可在该品牌下添加白名单
@@ -157,7 +157,7 @@ public static class AdminXrefReorderEndpoints
             });
         })
         .WithSummary("新增品牌到 xref_oem_brand 字典 (sort_order=max+1, 软删可恢复)")
-        .WithName("AdminXrefReorder_CreateBrand");
+        .WithName("AdminXrefReorder_CreateBrand").RequireAuthorization("Operator");
 
         // ===== V3(2026-08-24): DELETE /brands/{brand} — 软删品牌 (从列表移除, 数据保留) =====
         //   用户需求: "需要白名单的品牌只能新增, 不能减少" → 增加软删能力
@@ -276,7 +276,7 @@ public static class AdminXrefReorderEndpoints
             });
         })
         .WithSummary("获取指定 Brand 下白名单内 OEM 3 列表 (sort_order > 0, 分页 + oemNo3 搜索, 含 rowVersion 乐观锁令牌)")
-        .WithName("AdminXrefReorder_ListByBrand");
+        .WithName("AdminXrefReorder_ListByBrand").RequireAuthorization("ReadOnly");
 
         // ===== V24-F86: GET /items/{id} — 取单条 cross_reference 详情 (编辑回填用) =====
         group.MapGet("/items/{id:long}", async (
@@ -315,7 +315,7 @@ public static class AdminXrefReorderEndpoints
             return Results.Ok(item);
         })
         .WithSummary("获取单条 cross_reference 详情 (编辑回填用, 含 rowVersion)")
-        .WithName("AdminXrefReorder_GetItem");
+        .WithName("AdminXrefReorder_GetItem").RequireAuthorization("ReadOnly");
 
         // ===== V24-F86: POST /items — 新增单条 cross_reference (白名单改造: 新增即入白名单) =====
         //   校验: productId 必须存在于 products 表
@@ -455,7 +455,7 @@ public static class AdminXrefReorderEndpoints
             }
         })
         .WithSummary("新增单条 cross_reference (校验 productId 存在, sort_order=max+1 入白名单, 触发索引重建)")
-        .WithName("AdminXrefReorder_CreateItem");
+        .WithName("AdminXrefReorder_CreateItem").RequireAuthorization("Operator");
 
         // ===== V24-F86: PUT /items/{id} — 编辑单条 (oemNo3 / isPublished / machineType), xmin 乐观锁 =====
         group.MapPut("/items/{id:long}", async (
@@ -533,7 +533,7 @@ public static class AdminXrefReorderEndpoints
             }
         })
         .WithSummary("编辑单条 cross_reference (oemNo3/isPublished/machineType, 含 xmin 乐观锁)")
-        .WithName("AdminXrefReorder_UpdateItem");
+        .WithName("AdminXrefReorder_UpdateItem").RequireAuthorization("Operator");
 
         // ===== V24-F86: DELETE /items/{id} — 从白名单移除 (置 sort_order=0, 不删产品本身) =====
         //   白名单改造: 原"软删 is_discontinued=true" 改为"从白名单移除 sort_order=0"
@@ -627,7 +627,7 @@ public static class AdminXrefReorderEndpoints
             }
         })
         .WithSummary("从白名单移除单条 cross_reference (置 sort_order=0, 不删产品本身, 含可选 xmin 乐观锁)")
-        .WithName("AdminXrefReorder_DeleteItem");
+        .WithName("AdminXrefReorder_DeleteItem").RequireAuthorization("Operator");
 
         // ===== Task 2.1.4/2.1.5/2.1.6: POST / — 批量更新 sort_order (含乐观锁 + 事务) =====
         group.MapPost("/", async (
@@ -734,7 +734,7 @@ public static class AdminXrefReorderEndpoints
             }
         })
         .WithSummary("批量更新某 Brand 下 OEM 3 的 sort_order (含 xmin 乐观锁, 单事务全成功或全回滚)")
-        .WithName("AdminXrefReorder_Update");
+        .WithName("AdminXrefReorder_Update").RequireAuthorization("Operator");
 
         return app;
     }

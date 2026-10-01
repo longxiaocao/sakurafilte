@@ -145,13 +145,18 @@ const featuredLoading = ref(false)
 import { useCompareStore, MAX_COMPARE } from '@/composables/useCompareStore'
 const store = useCompareStore()
 
-// 8 字段 + 融合搜索框 是否全部空 — 用于禁用搜索按钮 + 提示文案
-//   V24-F103-1: 融合框 fuzzy 输入也算"非空" (用户单输 fuzzy 时不应触发空表单警告)
+// 8 字段是否全部空 — 仅表示 8 字段本身, 不包含融合搜索框 (模板"已填 N/8 字段"依赖此语义)
 const allEmpty = computed(() =>
-  !fuzzy.value.trim() && !form.oemBrand && !form.oemNo2 && !form.oemNo3
+  !form.oemBrand && !form.oemNo2 && !form.oemNo3
   && !form.machineBrand && !form.machineModel
   && !form.modelName && !form.engineBrand && !form.engineType
 )
+
+// 🔧 fix(2026-10-01 走查): 是否具备任一搜索条件 — 必须把融合搜索框 fuzzy 计入
+//   WHY: 原 doSearch 守卫只看 allEmpty(8 字段), 用户在融合框输入时 8 字段为空
+//        → 被误判为"空表单"并弹出对比上限提示(warn_040)后 return, 搜索根本不执行。
+//   注意: 不能用 allEmpty 替代本判断去禁用按钮/重置结果, 否则会再次漏掉融合框输入。
+const hasCondition = computed(() => !allEmpty.value || !!fuzzy.value.trim())
 
 // 当前填了几个字段 — 显示在结果区顶部 "8 字段中 N 项有值"
 const filledCount = computed(() =>
@@ -203,7 +208,7 @@ watch(pageSize, () => {
   syncUrlFromForm()
   // 🔧 fix(审查): 已在第 1 页时切换每页条数, el-pagination 重置 current-page 为 1 但值不变,
   //   watch(page) 不触发 → 列表不刷新; 显式刷新
-  if (page.value === 1 && !allEmpty.value) doSearch()
+  if (page.value === 1 && hasCondition.value) doSearch()
 })
 
 // 🔧 fix(2026-08-23 走查): 融合搜索框 watch — 用户输入 AIR/G1312 等需自动搜索
@@ -214,6 +219,15 @@ watch(fuzzy, (nv, ov) => {
   if (syncing) return
   if (nv === ov) return
   if (fuzzyDebounceTimer) window.clearTimeout(fuzzyDebounceTimer)
+  // 🔧 fix(2026-10-01 走查): 清空融合框 (或点「清空」按钮) 后条件为空时, 自动触发路径不得发起搜索 —
+  //   否则误弹「请在融合搜索框或 8 字段中输入至少一项」(用户主动清空却收到警示)。
+  //   与上方 watch(form) 的空态处理保持一致: 静默重置结果。
+  if (!hasCondition.value) {
+    results.value = []
+    total.value = 0
+    totalPages.value = 0
+    return
+  }
   fuzzyDebounceTimer = window.setTimeout(() => {
     doSearch()
   }, 500)
@@ -237,8 +251,7 @@ watch(() => route.query, () => {
 // 取消前序未完成请求, 防止旧响应后到覆盖新结果 (快速输入竞态)
 let searchAbort: AbortController | null = null
 async function doSearch() {
-  if (allEmpty.value) {
-    // V24-F103-1: 之前误用 warn_040 ("已选满 6 个对比"), 应为"空表单"提示
+  if (!hasCondition.value) {
     ElMessage.warning(t('common.feedback.warn_empty_form'))
     return
   }
@@ -287,8 +300,8 @@ async function doSearch() {
 // 任意字段输入 → 自动搜索 (debounce 500ms, 与 Day 9 SearchView 体验一致)
 let debounceTimer: number | null = null
 watch(form, () => {
-  if (allEmpty.value) {
-    // 全部清空 → 重置结果
+  if (!hasCondition.value) {
+    // 全部清空 (含融合框) → 重置结果
     results.value = []
     total.value = 0
     return
@@ -302,7 +315,7 @@ watch(form, () => {
 
 // 翻页
 watch(page, () => {
-  if (allEmpty.value) return
+  if (!hasCondition.value) return
   doSearch()
 })
 
@@ -312,7 +325,9 @@ function clearAll() {
   results.value = []
   total.value = 0
   page.value = 1
-  ElMessage.info(t('common.feedback.success_016'))
+  // 🔧 fix(2026-10-01 走查): 原用 success_016（文案是「已在对比列表中, 跳转查看」）—— 与「清空」语义无关，
+  //   用户点清空却收到对比列表提示。改用专用文案 success_020「已清空搜索条件」。
+  ElMessage.success(t('common.feedback.success_020'))
 }
 
 // ===== 详情页跳转 =====
@@ -399,6 +414,7 @@ onMounted(() => {
   } else {
     // 无 URL 参数: store 构造时已从 sessionStorage 恢复 (摘要条/浮动栏显示; 不自动开抽屉)
   }
+  // 无 URL 参数时, 全局 store 在模块加载时已从 sessionStorage 恢复对比集合
   // 进入页面拉一次 featured 明细表 (即使有搜索条件也拉, 用户清空后可看)
   loadFeatured()
   if (filledCount.value > 0) doSearch()
@@ -431,7 +447,7 @@ onUnmounted(() => {
           规格: OEM Brand / OEM 2 / OEM 3 / Machine Brand / Machine Model / Model Name / Engine Brand / Engine Type
         </p>
       </div>
-      <el-button @click="clearAll" size="small" :disabled="allEmpty">清空</el-button>
+      <el-button @click="clearAll" size="small" :disabled="!hasCondition">清空</el-button>
     </div>
 
     <!-- 🔧 fix(2026-08-23 走查): 融合搜索框 — 不区分 8 字段, 随便输入自动查 (全部字段 OR) -->
@@ -500,8 +516,8 @@ onUnmounted(() => {
     <!-- 错误提示 -->
     <div v-if="lastError" class="text-red-600 text-sm mb-2">{{ lastError }}</div>
 
-    <!-- 全部空 → 显示最新产品明细表 (用户可点行查看/点按钮加入对比) -->
-    <div v-if="allEmpty">
+    <!-- 无任何条件 (含融合框为空) → 显示最新产品明细表 (用户可点行查看/点按钮加入对比) -->
+    <div v-if="!hasCondition">
       <div class="flex items-center justify-between mb-2">
         <div class="text-xs text-muted">
           <el-icon class="mr-1 align-middle"><InfoFilled /></el-icon>
@@ -618,7 +634,7 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <!-- 结果表格 -->
+      <!-- 结果表格 — 8 个搜索字段全作列, 命中字段高亮 (用户可确认自己搜的是哪个字段) -->
       <el-table
         v-loading="loading"
         :data="results"
@@ -629,23 +645,48 @@ onUnmounted(() => {
         max-height="calc(100vh - 320px)"
       >
         <el-table-column prop="id" label="ID" width="70" />
-        <el-table-column label="OEM" min-width="180" show-overflow-tooltip>
+        <el-table-column label="OEM Brand" min-width="120" show-overflow-tooltip>
           <template #default="{ row }">
-            <span class="text-blue-600">{{ row.oemNoDisplay || row.oem2 || '—' }}</span>
+            <span v-html="highlight(row.oemBrand, form.oemBrand || highlightKeyword) || '—'"></span>
           </template>
         </el-table-column>
-        <el-table-column label="OEM 2" min-width="160" show-overflow-tooltip>
-          <template #default="{ row }">{{ row.oem2 || '—' }}</template>
+        <el-table-column label="OEM 2" min-width="130" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span v-html="highlight(row.oem2, form.oemNo2 || highlightKeyword) || '—'"></span>
+          </template>
         </el-table-column>
-        <el-table-column label="Product Name 1" min-width="200" show-overflow-tooltip>
+        <el-table-column label="OEM 3" min-width="130" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span v-html="highlight(row.oemNoDisplay, form.oemNo3 || highlightKeyword)" class="text-blue-600"></span>
+          </template>
+        </el-table-column>
+        <el-table-column label="Machine Brand" min-width="130" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span v-html="highlight(row.machineBrand, form.machineBrand || highlightKeyword) || '—'"></span>
+          </template>
+        </el-table-column>
+        <el-table-column label="Machine Model" min-width="130" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span v-html="highlight(row.machineModel, form.machineModel || highlightKeyword) || '—'"></span>
+          </template>
+        </el-table-column>
+        <el-table-column label="Model Name" min-width="140" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span v-html="highlight(row.modelName, form.modelName || highlightKeyword) || '—'"></span>
+          </template>
+        </el-table-column>
+        <el-table-column label="Engine Brand" min-width="130" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span v-html="highlight(row.engineBrand, form.engineBrand || highlightKeyword) || '—'"></span>
+          </template>
+        </el-table-column>
+        <el-table-column label="Engine Type" min-width="130" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span v-html="highlight(row.engineType, form.engineType || highlightKeyword) || '—'"></span>
+          </template>
+        </el-table-column>
+        <el-table-column label="Product Name 1" min-width="180" show-overflow-tooltip>
           <template #default="{ row }">{{ row.productName1 || '—' }}</template>
-        </el-table-column>
-        <el-table-column prop="type" label="Type" width="100" />
-        <el-table-column label="D1 (mm)" width="100" align="right">
-          <template #default="{ row }">{{ row.d1Mm || '—' }}</template>
-        </el-table-column>
-        <el-table-column label="H1 (mm)" width="100" align="right">
-          <template #default="{ row }">{{ row.h1Mm || '—' }}</template>
         </el-table-column>
         <el-table-column label="操作" width="110" fixed="right">
           <template #default="{ row }">

@@ -13,15 +13,17 @@ public static class EtlSpreadsheetAdapter
     private static readonly IReadOnlyDictionary<string, string[]> SheetNames =
         new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
         {
-            ["products"] = new[] { "products", "产品区" },
-            ["xrefs"] = new[] { "xrefs", "oem区", "OEM区" },
-            ["apps"] = new[] { "apps", "机型区" }
+            ["products"] = new[] { "products", "产品区", "Sheet1" },
+            ["xrefs"] = new[] { "xrefs", "oem区", "OEM区", "Sheet1" },
+            ["apps"] = new[] { "apps", "机型区", "Sheet1" }
         };
 
     private static readonly IReadOnlyDictionary<string, string> HeaderMap =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["mr1"] = "mr_1", ["mr.1"] = "mr_1", ["mr_1"] = "mr_1",
+            // OEM NO.1 = oem_2 (客户 Excel 实际命名，非系统设计)
+            ["oemno1"] = "oem_2", ["oem1"] = "oem_2", ["oem_no_1"] = "oem_2",
             ["oemno2"] = "oem_2", ["oem2"] = "oem_2", ["oem_no_2"] = "oem_2",
             ["oemno3"] = "oem_no_3", ["oem3"] = "oem_no_3", ["oem_no_3"] = "oem_no_3",
             ["oembrand"] = "oem_brand", ["productname1"] = "product_name_1",
@@ -36,6 +38,17 @@ public static class EtlSpreadsheetAdapter
             , ["nocheckvalves"] = "no_check_valves", ["nobypassvalves"] = "no_bypass_valves"
             , ["bypassvalvesettinglr"] = "bypass_valve_lr", ["bypassvalvesettinghr"] = "bypass_valve_hr"
             , ["bypasspressure"] = "bypass_pressure", ["collapsepressure"] = "collapse_pressure_bar"
+            // 🔧 fix(数据导入漏项): 客户原始文件 data0827.xlsx 的参数列名 (D1/D2/D3/H1/D7/H2/H3/...),
+            //   此前不在 HeaderMap → 转成未映射的 json key "d1/h1/..." → EtlImportService 读 d1_mm 得 NULL,
+            //   导致尺寸/参数列整体静默丢失。这里把这类列名归一化后 (MapHeader 会去非字母数字) 显式映射到规范字段。
+            , ["d1"] = "d1_mm", ["d2"] = "d2_mm", ["d3"] = "d3_mm", ["d4"] = "d4_mm"
+            , ["h1"] = "h1_mm", ["h2"] = "h2_mm", ["h3"] = "h3_mm", ["h4"] = "h4_mm"
+            , ["d7"] = "d7_thread", ["d8"] = "d8_thread"
+            , ["type"] = "type", ["media"] = "media"
+            , ["efficiency1"] = "efficiency_1", ["efficiency2"] = "efficiency_2"
+            , ["sealmaterial"] = "sealing_material", ["temperaturerange"] = "temp_range"
+            , ["remark"] = "remark"
+            , ["outerdiameter"] = "d1_mm", ["innerdiameter"] = "d2_mm"
         };
 
     public static async Task<string> ConvertAsync(string sourcePath, string entityType, CancellationToken ct)
@@ -63,7 +76,7 @@ public static class EtlSpreadsheetAdapter
         var headerRow = sheet.FirstRowUsed() ?? throw new ArgumentException("XLSX 缺少表头行");
         var headers = headerRow.CellsUsed().ToDictionary(
             cell => cell.Address.ColumnNumber,
-            cell => MapHeader(cell.GetString()),
+            cell => MapHeader(cell.GetString(), normalizedEntity),
             EqualityComparer<int>.Default);
 
         await using var stream = new FileStream(outputPath, FileMode.CreateNew, FileAccess.Write, FileShare.None);
@@ -85,10 +98,13 @@ public static class EtlSpreadsheetAdapter
         return outputPath;
     }
 
-    private static string? MapHeader(string value)
+    private static string? MapHeader(string value, string entityType)
     {
         var normalized = new string(value.Trim().ToLowerInvariant().Where(char.IsLetterOrDigit).ToArray());
-        return HeaderMap.TryGetValue(normalized, out var mapped) ? mapped : normalized.Replace(" ", "_");
+        // Apps 专用映射优先: engine_brand 列名在客户 Excel 中实际表示 machine_brand
+        if (entityType == "apps" && normalized == "enginebrand") return "machine_brand";
+        if (HeaderMap.TryGetValue(normalized, out var mapped)) return mapped;
+        return normalized.Replace(" ", "_");
     }
 
     private static void ApplyCompatibilityFields(Dictionary<string, string?> record, string entityType)
@@ -104,6 +120,16 @@ public static class EtlSpreadsheetAdapter
             PreserveRawValue(record, "bypass_valve_hr");
             PreserveRawValue(record, "bypass_pressure");
             PreserveRawValue(record, "collapse_pressure_bar");
+            // 🔧 fix(数据导入漏项): 尺寸列同样保留原文 (如 "178.0 mm" → d1_mm=178.00 + d1_mm_raw="178.0 mm")，
+            //   便于溯源且 GetDecimalOrNull 可成功剥单位解析。
+            PreserveRawValue(record, "d1_mm");
+            PreserveRawValue(record, "d2_mm");
+            PreserveRawValue(record, "d3_mm");
+            PreserveRawValue(record, "d4_mm");
+            PreserveRawValue(record, "h1_mm");
+            PreserveRawValue(record, "h2_mm");
+            PreserveRawValue(record, "h3_mm");
+            PreserveRawValue(record, "h4_mm");
         }
     }
 

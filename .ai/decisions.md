@@ -10,6 +10,54 @@
 关联文件: <影响的核心文件列表>
 ```
 
+<!-- 摘要索引（规则 §4.5.5）—— 新增决策时同步追加；被取代/废弃时更新状态，索引行不删除 -->
+<!-- 用法：先读本索引定位相关条目，再读正文详细内容；语义相关即可召回，不要求字面命中 -->
+<!-- #1 SSE 401 修复: 鉴权中间件覆盖 SSE 与多端点 | Api/Middleware/ | 状态: 有效 -->
+<!-- #2 23505 唯一约束并发测试: 专项并发用例 | tests/ | 状态: 有效 -->
+<!-- #3 CleanupOrphanImages MVP: 孤儿图片清理最小可用 | Cli/ | 状态: 有效 -->
+<!-- #4 PG 集成测试基础设施 | tests/ + 独立库 sakurafilter_int_tests | 状态: 有效 -->
+<!-- #5 PostgresSearchProvider Phase 2 keyset 分页暂缓 | Search/PostgresSearchProvider.cs | 状态: 有效 -->
+<!-- #6 IObjectStorage.ListAsync 接口扩展 | Core/Interfaces/IObjectStorage.cs | 状态: 有效 -->
+<!-- #7 后端日志脱敏审计与修复 | Api/ | 状态: 有效 -->
+<!-- #8 前端 loading 兜底全量审计与分层修复 | frontend/src/ | 状态: 被#13取代(组件提取部分) -->
+<!-- #9 DevTokenAuthMiddleware 中间件顺序纠正 | Api/Middleware/ | 状态: 有效 -->
+<!-- #10 V27-9-3 设计巡检保留非阻塞模式 | CI | 状态: 有效 -->
+<!-- #11 测试脚本路径跟随代码重构同步更新 | 脚本 | 状态: 有效 -->
+<!-- #12 ETL 数据完整性校验加 SkippedNullField | Etl/ | 状态: 有效 -->
+<!-- #13 DictManagerLayout 提取(推翻#8不提取) | frontend/src/layouts/ | 状态: 有效 -->
+<!-- #14 Meili 主路径 P99 监控告警 | Search/ + Prometheus | 状态: 有效 -->
+<!-- #15 Prometheus 暴露 Meili 指标 | Prometheus | 状态: 有效 -->
+<!-- #16 Meili 索引字段命名对齐 snake_case + BCrypt 修复 | Search/MeiliSearchProvider.cs | 状态: 有效 -->
+<!-- #17 NpgsqlDataSource 全局单例统一 | Infrastructure/Data/ | 状态: 有效 -->
+<!-- #18 Meili 压测验证 + reindex-all 后台化 | Etl/ + Search/ | 状态: 有效 -->
+<!-- #19 Meili 品牌优先级排序修复 | Search/ | 状态: 有效 -->
+<!-- #20 规划V2特殊参数双存储方案 | Core/Entities/ + DB | 状态: 有效 -->
+<!-- #21 聚合搜索高亮净化: 正则等价替代 DOMPurify | frontend/src/utils/ | 状态: 有效 -->
+<!-- #22 /api/perf 鉴权路径修复 | Api/ | 状态: 有效 -->
+<!-- #23 AuthTokenBroadcaster WaitAsync 重连循环修复 | Api/Services/ | 状态: 有效 -->
+<!-- #24 生产部署编排修复 | docker-compose.prod.yml | 状态: 有效 -->
+<!-- #25 运维演练: 密钥轮换 + 备份恢复 | 运维 | 状态: 有效 -->
+<!-- #26 阶段4 TLS 部署 | docker/nginx.conf + certs | 状态: 有效 -->
+<!-- #27 真实数据导入演练 | Etl/ | 状态: 有效 -->
+<!-- #28 自动 reindex 优化 | Etl/ + Search/ | 状态: 有效 -->
+<!-- #29 演示数据方案 | 数据 | 状态: 有效 -->
+<!-- #30 Npgsql DateTime Kind 兼容策略 | Program.cs | 状态: 有效 -->
+<!-- #31 CI 分层策略 | CI | 状态: 有效 -->
+<!-- #32 codex 上线审核 6 项问题处置 | 多模块 | 状态: 有效 -->
+<!-- #33 OEM NO 1 发布前置审核 | catalog/ schema | 状态: 有效 -->
+<!-- #34 OEM NO 1 独立正式目录层(锚点=OEM NO 1) | catalog/ schema | 状态: 有效；其中「不写 public 表与搜索索引」已被#36改为仅第一阶段约束 -->
+<!-- #35 生产部署源切至 F:\sakurafilter-real | docker-compose.prod.yml | 状态: 有效 -->
+<!-- #36 catalog 投影为公开层 public(替换旧业务数据) | backend/migrations/036_catalog_to_public_cutover.sql | 状态: 有效 -->
+<!-- #37 Meili 文档主键字符集 → mr_1 净化 | backend/migrations/037_products_meili_safe_ids.sql | 状态: 有效 -->
+<!-- #38 派生分类规则 v2(交叉引用名主判据+OEM前缀兜底) | backend/migrations/038_supplement_product_category.sql | 状态: 有效 -->
+<!-- #39 高级搜索 8 字段与尺寸: 零 Meili 索引变更, 任一非空改走 PG 精确过滤 | Search/PostgresSearchProvider.cs + Api/Controllers/PublicSearchController.cs | 状态: 有效 -->
+<!-- #40 高级搜索与高级筛选合并为统一入口「高级搜索与筛选」 | frontend/src/views/public/AggregateSearchView.vue | 状态: 有效 -->
+<!-- #41 typeahead 缓存按重建世代号失效 | Api/Services/PublicTypeaheadService.cs + Etl/TypeaheadDictRebuildService.cs | 状态: 有效 -->
+<!-- #42 /public/search 保留路由不重定向, 仅统一导航入口至合并页 | frontend/src/router/index.ts + components/AppHeader.vue | 状态: 有效 -->
+<!-- #43 ETL 端点授权保留 per-endpoint 粒度(拒绝 group 级 Admin) | Api/Endpoints/AdminEtlEndpoints.cs | 状态: 有效 -->
+<!-- #44 对比(compare)子系统统一为公开页实现, 弃用分支重复实现 | frontend/src/composables/useCompareStore.ts + components/CompareFloatingBar.vue | 状态: 有效 -->
+<!-- #45 行尾伪冲突: 以三方 LF 归一流水线解合并冲突 | .gitattributes(缺) / 合并工具链 | 状态: 有效 -->
+
 ---
 
 #1 SSE 401 修复方案选择 (2026-07-18, v30-17 SSE 鉴权修复 2026-07-21, v30-18 多端点鉴权批量修复 2026-07-22, v30-19 /api/perf 鉴权修复 2026-07-22)
@@ -662,3 +710,129 @@ v30-14 1M OFFSET 深分页专项压测验证数据 (2026-07-21, sakurafilter_per
   - 恢复 db-init/db-migrate 服务: 任何 compose up 都会重建并重跑迁移 → 数据全清, 危险
   - Take(8) 加"加载更多"端点: 前端需联动改造 + 后端新端点, 低频场景不值, 留 P2
 关联文件: backend/src/SakuraFilter.Api/Controllers/PublicSearchController.cs, docker-compose.prod.yml, .env.prod.example, scripts/backup-db.sh, docs/ops-manual.md, frontend/src/api/types.ts
+
+#33 OEM NO 1 发布前置审核 (2026-09-28)
+决策: OEM NO 1 是当前数据锚点，但正式表发布只能读取人工 `approved` 的 OEM 到 MR.1 映射；候选匹配不能自动批准。发布器先提供只读预检，实际写入另行演练与确认。
+理由: batch 1 在生产备份演练库中有 49,391 个 OEM 锚点，仅 669 个唯一精确候选，48,722 个仍需人工指定 MR.1。自动发布会把不完整来源错误地归入现有产品，破坏 MR.1 现有产品体系。
+约束: 预检要求目标 MR.1 恰好对应一个未下架产品；不存在、重复或已下架均为阻断。预检和候选刷新不写 products、cross_references、machine_applications 或搜索索引。
+关联文件: backend/src/SakuraFilter.Etl/Staging/ApprovedOemPublishService.cs, backend/src/SakuraFilter.Cli/ApprovedOemPublishCommand.cs, docs/data-import/oem-no1-staging-runbook.md
+
+#34 OEM NO 1 独立正式目录层 (2026-09-28)
+决策: 新增独立 `catalog` schema，以 OEM NO 1 规范化值作为目录唯一身份；规格、交叉号码和机型适配先发布到此层，MR.1 保留为可空的后续历史映射。
+理由: 客户目前没有 MR.1，且 49,391 个 OEM 锚点中只有 10,020 个有规格。直接写旧 products 表会因 type/MR.1 旧约束丢失数据或产生虚假默认值。catalog 层可完整保存 49,391 OEM、529,499 交叉号码和 709,843 条有锚点机型适配，并保持 public 旧系统不变。
+约束: 无 OEM 的 11,696 条 clean 机型行仍只留 staging；发布器只写 catalog，必须幂等，禁止清空或写 public 表及搜索索引。MR.1 后续按 OEM 更新，不需重导目录数据。
+关联文件: backend/migrations/033_oem_anchor_catalog.sql, OemCatalogPublishService.cs, docs/data-import/oem-no1-batch-1-quality-report.md
+
+#35 生产部署源由 F:\sakurafilter-perf 切至 F:\sakurafilter-real (2026-09-30)
+决策: 以 perf 线线上提交 b383bc3(09-14) 为基，在 real 仓库新建收口分支 codex/oem-catalog-prodline-20260930，纯叠加 OEM 目录功能（71 个新增文件 + 10 个手工合并文件），随后由 real 构建镜像并以 project=sakura-prod 重建 api/web。生产编排以 perf 目录中实际运行的版本为基，仅做 4 处编辑（镜像 tag → 1.0.35、api depends_on 摘除 db-migrate、db-init/db-migrate 整段注释）。
+理由: 生产容器此前由 perf 目录编排驱动（docker inspect 标签证实 project=sakura-prod / working_dir=F:\sakurafilter-perf），而 OEM catalog API 只存在于 real 的 OEM 分支，导致端点 404。直接覆盖 perf 工作区会破坏其压测栈；两条线各自带有一批对方没有的改动，不能简单取并集。
+排除方案:
+  - 将 OEM 提交同步进 perf 后由 perf 继续部署: perf 工作区承载压测栈 + 大量未跟踪产物，同步会污染压测环境；且不解决长期双源问题
+  - 代码并集合并（real 线 08-25 功能 + perf 线 09-14 功能）: real 线含未上线的 027_cross_references_is_whitelisted.sql 与 MeiliSearchProvider 的 IsWhitelisted 改判，并集会使全站 OEM 交叉号列表为空（生产库亦缺 is_whitelisted / show_dimension 两列），风险不可接受
+  - git apply --3way 应用 OEM 前端补丁: PowerShell 重定向 + CRLF 上下文导致 patch 无法落地，改为逐文件受控手工合并
+  - 恢复 db-init/db-migrate 服务: 任何 compose up 都会重建并重跑迁移（018_v2_legacy_data_cleanup.sql 为一次性 TRUNCATE），是 2026-08-22 与本次两次生产数据丢失事故的直接成因
+  - 并集方案保留 020/026 同号迁移的两份文件: 迁移器以 basename 为键，同号不同名不冲突，但 027/028/029 与 026_product_images_show_dimension.sql 已确认不进入 real 线，避免引入未上线语义
+约束: 数据层未做任何变更（三表行数与 catalog 计数仅只读核验）；030–034 已补登记进 __sakura_migrations（共 22 条），防止迁移器被重新启用时意外重跑；生产库迁移保持人工执行。
+关联文件: docker-compose.prod.yml, .env.prod (gitignore), .ai/index.md, backend/src/SakuraFilter.Api/Endpoints/AdminOemCatalogEndpoints.cs, backend/src/SakuraFilter.Api/Extensions/EndpointRouteBuilderExtensions.cs, frontend/src/router/index.ts, frontend/src/views/admin/AdminOemCatalogView.vue
+
+#36 目录层 catalog 投影为公开层 public(替换旧业务数据) (2026-10-01)
+决策: 采用"演进 public 表"而非"新建公开表 + 改所有下游": 后端 migrations/035_oem_catalog_serving.sql 为 catalog 建立稳定锚点键 oem_key(生成列 = normalize_oem_no1(oem_no_1_normalized)) 并派生 product_category; 036_catalog_to_public_cutover.sql 在演练库验证后, TRUNCATE public.cross_references/machine_applications/product_images/products 并装载 catalog 全量数据(48,733 产品 / 529,499 交叉号 / 709,843 机型适配), 令 public.products.mr_1 = oem_key、type = product_category。
+理由: (1) 旧 public.products 中 mr_1 与 oem_no_normalized 9,376/9,376 完全相同, 说明 mr_1 事实上一直是"OEM 号"字段 → 令 mr_1 = oem_key 后, Meili 主键(mr_1)、搜索/详情/批量查询全链路零代码改动即可用; (2) 规格字段绝大多数可映射到既有列(d1/d2/d3/h1/h2/h3/media/δ 等), 数值列同时写 *_raw 保留原文; (3) 新增公开表方案需改造 Meili 文档构建、PublicSearchController、PublicProductController、sitemap、前端契约共 5 条链路, 回归面过大。
+排除方案:
+  - 新建 public.oem_products 公开表 + 双读兼容: 下游 5 条链路全改, 且需长期双写, 成本与风险最高
+  - 保留旧 public 数据并存: 与用户"旧数据应清除、换上新导入数据"的明确要求冲突
+  - 不建 oem_key 直接沿用 oem_no_1_normalized: 该列保留空格(如 "SH 56212"), 与旧 oem_no_normalized(去空格) 口径不一致, URL/检索会分叉; 且 641 组同号异写未合并
+约束: 执行前全量备份并实证可还原(_backups/sakurafilter_pre_oem_cutover_20261001_000558.dump → 还原至 sakurafilter_verify_tmp 逐表比对); 迁移先在演练库跑通再上生产; 放宽/移除 chk_mr_1_format、uq_xrefs_brand_oem3、uq_apps_product_brand_model 三条与旧模型绑定的约束。
+关联文件: backend/migrations/035_oem_catalog_serving.sql, backend/migrations/036_catalog_to_public_cutover.sql, backend/src/SakuraFilter.Api/Controllers/PublicSearchController.cs, backend/src/SakuraFilter.Api/Controllers/PublicProductController.cs
+
+#37 Meili 文档主键字符集约束 → mr_1 净化为安全形态 (2026-10-01)
+决策: 全量重建时对 mr_1 应用 regexp_replace(upper(mr_1), '[^A-Za-z0-9_-]', '-', 'g') 净化(325 行受影响), 并把 chk_mr_1_format 由 ^[A-Za-z0-9/._"+-]{1,50}$ 收紧为 ^[A-Za-z0-9_-]{1,50}$ 固化该不变量; 同时回填 products.oem_2 = oem_no_display(036 切库后为 NULL, 前端结果卡片标签与 batch-oem 第 3 段兜底依赖)。
+理由: Meilisearch 文档主键仅允许字母数字/连字符/下划线(≤511 字节), 而 OEM 锚点键含 / . " +(如 CR800/3、LVO3/4"ALU), 导致含这类键的整批 1000 条被拒(invalid_document_id), 索引卡在 2,000/48,733。实测净化后 48,733 键零冲突, 且 mr_1 在公开链路中仅为最低优先级兜底标识(详情反查顺序 xrefs.OemNo3 → OemNoDisplay → Oem2 → Mr1, URL 由 OEM3 承载), 改动无外部契约影响。
+排除方案:
+  - 改用 products.id 作 Meili 主键: 需改 Mr1IndexDoc/IndexAsync/DeleteAsync/IndexReplayWorker/EtlImportService 及索引建键, 且索引需整体重建, 改动面与回归风险大
+  - 跳过 325 条不入索引: 与"全量入索引、全部可搜"的既定决策冲突
+  - 在应用层净化(不改 DB): PG 无法约束唯一性, 未来导入可能再现不可索引键且静默丢文档
+约束: 迁移已登记 public.__sakura_migrations(共 25 条); 生产 db-init/db-migrate 仍禁用, 迁移人工执行。
+关联文件: backend/migrations/037_products_meili_safe_ids.sql, backend/src/SakuraFilter.Search/MeiliSearchProvider.cs
+
+#38 派生分类规则 v2: 交叉引用名主判据 + OEM 前缀兜底 (2026-10-01)
+决策: 新增 backend/migrations/038_supplement_product_category.sql, 以函数 catalog.refresh_product_categories() 重算 catalog.oem_products.product_category, 并把结果传播到 public.products.type。规则: 主判据 catalog.oem_cross_references.product_name_1 关键词计数 × 2, 辅判据 product_name_candidates 关键词计数 × 1, 按 (分数 DESC, 类别优先序 ASC) 取一; 关键词全未命中时按 OEM NO 1 展示值首段前缀兜底(SH→hydraulic / SA·SI·OS·OA→air / SC→cabin / SN→fuel / SO→oil), 仍未识别归 others。保持 6 分类不变。
+理由: (1) 035 仅以 product_name_candidates 为唯一来源, 实测 48,733 行中仅 9,376 行有候选名(19.2%), others 占 82.9%, 分类导航基本失效; (2) catalog.oem_cross_references.product_name_1 覆盖 529,461/529,499 = 99.99%, 是唯一高杠杆来源, 可覆盖 98.5% 的 others 锚点; (3) 前缀兜底精度经生产数据实测: 26,618 行中仅 26 例冲突(0.098%), 其中 SH/SA/OS/OA 达 100.0%, SC/SN/SO 99.7~99.8%, SI 95.0%; (4) 打分制替代 035 的"先匹配先赢"顺序制, 避免单条含通用词的交叉名(如 Air/Oil Filter)压过多数证据。
+排除方案:
+  - 用 spec_payload->>'remark' 作补充来源: 与候选名重叠 9,376/9,377(both=9,376 / remark_only=1 / neither=39,356), 无增量, 已证伪
+  - 用 spec_payload->>'media' 分类: 仅 7.4% 且为媒体路径, 无分类语义
+  - 保留 035 的 cartridge/element → hydraulic: 二者是通用形态词, 会把空气/机油滤芯误判为液压
+  - 新增 liquid/carbon/breather 等类别: 前端 dict_type、AdminTypesView.FIXED_TYPES、i18n 中英文案、契约测试均硬编码 6 值, 属独立产品决策
+约束: 迁移已执行并登记 public.__sakura_migrations(共 26 条); 执行前导出回滚快照 _backups/category_before_038.csv 与 _backups/public_type_before_038.csv; 不更新 updated_at(与 035 口径一致); 函数与传播语句均幂等。
+效果: others 40,378 → 9,908(82.9% → 20.3%); air 16,428 / hydraulic 14,218 / fuel 3,877 / cabin 2,674 / oil 1,628; catalog/public/Meili 三层分布完全一致。
+附带修复: 325 行 mr_1 已被 #37 净化为 Meili 安全形态, 与 catalog.oem_key 字面不等 → 追加按同一净化规则 regexp_replace(oem_key,'[^A-Za-z0-9_-]','-','g') 的对齐传播。
+关联文件: backend/migrations/038_supplement_product_category.sql, backend/migrations/035_oem_catalog_serving.sql, frontend/src/views/public/AggregateSearchView.vue
+
+#39 高级搜索 8 字段与尺寸: 零 Meili 索引变更, 任一非空改走 PG 精确过滤 (2026-10-01)
+决策: 聚合搜索新增 8 个高级字段(oemBrand / oemNo2 / oemNo3 / machineBrand / machineModel / modelName / engineBrand / engineType)与 6 个尺寸字段(d1/d2/d3/h1/h2/h3)。这 8 个字段**不加入 Meili 的 filterableAttributes**, 而是在控制器层判定: 任一 8 字段非空 → 直接走 `PostgresSearchProvider.AggregateSearchAsync` 做 ILIKE 精确过滤; 全部为空 → 维持原有「Meili 主(1s 超时) + PG 兜底」路径。字段间关系为**互不替代、可叠加**(OEM Brand 不融合进关键词框, 也不与其他 7 字段合并为一次 OR 检索)。
+理由: (1) Meili 只支持前缀/全文匹配, 不支持任意子串 ILIKE, 且 OEM Brand / Engine Type 等值域小、精确性要求高; (2) 把这 8 个字段加入 filterableAttributes 需全量重建索引(48,733 文档)并改动 Mr1IndexDoc 构建, 回归面覆盖 ETL 索引回放与详情页, 成本远高于收益; (3) 生产实测带 `{q:"MANN", oemBrand:"MANN", d1:100, h1:200}` 的聚合请求 HTTP 200 / 0.558s, 满足交互要求。
+排除方案:
+  - 加 Meili filterableAttributes 全量重建: 需改索引模型 + 重建 48,733 文档 + 回归 ETL 回放, 且 Meili 仍无法做子串匹配
+  - 8 字段与关键词框融合为一次 OR 检索: 与用户明确要求「各自独立、互不融合」冲突, 且会互相污染召回集
+  - 为每个字段单独建索引/物化列: 数据层改动大, 当前量级(48,733)下收益不明显
+约束: SQL 拼装统一走参数化 + `EscapeLikePattern()`, 不做字符串拼接; `oemBrand + oemNo3` 合并为 1 个 `cross_references` EXISTS, `machine*` 5 字段合并为 1 个 `machine_applications` EXISTS, 避免 5 次表扫描; `oemNo2` 直查 `products.oem_2`。
+关联文件: backend/src/SakuraFilter.Core/DTOs/AggregateSearchDto.cs, backend/src/SakuraFilter.Search/PostgresSearchProvider.cs, backend/src/SakuraFilter.Api/Controllers/PublicSearchController.cs, frontend/src/api/types.ts
+
+#40 高级搜索与高级筛选合并为统一入口「高级搜索与筛选」 (2026-10-01)
+决策: 以原「聚合搜索页(`/search/aggregate`)」为基准, 把原独立「高级筛选」的 8 字段与尺寸条件整体并入同一可展开面板, 命名「高级搜索与筛选」; 页面自上而下重排为: 顶部融合搜索框 → 中部高级搜索与筛选展开区 → 下部批量 OEM 查询结果。批量查询结果按 `hit` 拆为「已匹配」与「未匹配」两个分区, 未匹配行 hover 显示「快捷添加」并复用后台 `POST /api/admin/products`(Operator 策略)在页内弹窗新建产品; 未登录时先跳登录页并带 `redirect`。
+理由: (1) 用户明确要求合并入口并给出命名; (2) 原有的 `/search/aggregate` 已承载分类导航 + 关键词搜索 + 结果卡片, 作为基准可最大限度复用既有状态与 URL 同步逻辑; (3) 快捷添加复用既有后台写接口, 不新增无鉴权的公开写端点, 写操作最小权限审计与后台产品表单保持一致(MR.1 必填、OEM2 必填, 前端预填 `sanitizeToMr1(oem)` 并即时提示)。
+排除方案:
+  - 以原「高级筛选页」为基准: 该页仅 8 个过滤字段, 需重建分类导航/卡片/分页/对比等全套, 改动量与回归面最大
+  - 新增公开写接口供未登录用户快捷添加: 无鉴权写接口违反最小权限原则, 且会绕过后台校验
+  - 快捷添加跳转到后台产品页表单(`/admin/products?new=...`): 参数传递链路长、丢失上下文, 且用户要求"页内弹窗直接新建"
+约束: 空条件搜索统一提示 `common.feedback.warn_empty_form`(不得复用对比数量提示 `warn_040`); `advancedForm` 使用显式 `interface` 约束类型(避免 `reactive` 索引访问被扩宽为 `string | number | null`); 尺寸字段以 `undefined` 表示"未填写"以对齐 `el-input-number` 的 v-model 类型; URL 同步 `syncUrl()` 覆盖 8 字段 + 6 尺寸, `clearSearch()` 一并对齐重置。
+关联文件: frontend/src/views/public/AggregateSearchView.vue, frontend/src/views/public/PublicSearchView.vue, frontend/src/i18n/locales/en-US.ts, frontend/src/api/index.ts
+
+#41 typeahead 缓存按重建世代号失效 (2026-10-01)
+决策: 在 `TypeaheadDictRebuildService` 内维护静态世代号 `CacheGeneration`(原子切换成功后 `Interlocked.Increment`), `PublicTypeaheadService` 的缓存键统一带前缀 `v{世代号}`(`typeahead:v{n}:{field}:{q}:{limit}` 与 `typeahead:cardinality:v{n}`), 使快照重建后旧缓存条目自然不再命中。不主动调用 `IMemoryCache.Remove`(无法枚举前缀键)。
+理由: `IMemoryCache` 不支持按前缀批量失效, 而重建是在另一程序集(`SakuraFilter.Etl`)的宿主机后台任务中完成, 通过 DI 拿不到 `Api` 层的缓存实例; 世代号是进程内静态量, 两侧同进程可见, 实现最小且无跨层依赖。重建后查询自动落到新快照, 旧条目按 TTL(5/10 分钟)自然淘汰。
+排除方案:
+  - `IMemoryCache.Remove` 精确删除: 键集合不可枚举(字段 × 查询串 × limit 组合爆炸), 无法穷举
+  - 把 `IMemoryCache` 注入 `SakuraFilter.Etl`: 跨程序集引入 `Microsoft.Extensions.Caching.Memory` 依赖与生命周期耦合, 且 `Etl` 不应感知 API 层缓存
+  - 重建后重启 API 进程: 不可接受(生产可用性), 且容器内无自重启机制
+约束: 世代号仅在进程内有效; 重建服务与 API 必须同进程(当前 `TypeaheadDictRebuildService` 由 API 宿主机承载, 成立)。若未来重建改为独立进程, 需改回共享存储(如 DB 表或 Redis 键)。
+关联文件: backend/src/SakuraFilter.Etl/TypeaheadDictRebuildService.cs, backend/src/SakuraFilter.Api/Services/PublicTypeaheadService.cs
+
+#42 /public/search 保留路由不重定向, 仅统一导航入口至合并页 (2026-10-01)
+决策: `/public/search` **保留原路由与组件**(不重定向到 `/search/aggregate`), 仅把站内导航入口(AppHeader 的 `adv-search` 菜单项、SearchView 的跳转按钮)统一指向合并后的 `/search/aggregate`; 路由注释标明 `/public/search` 承载「对比内嵌视图」。
+理由: grep 发现 `/public/search?compare=<ids>` 是「产品对比内嵌视图」(`.compare-grid`), 被 `public-search-flow.spec.ts`、`real-search-compare.spec.ts`、`deep-flow.spec.ts`、`real-ui-theme-i18n-mobile.spec.ts` 共 4 个 E2E 用例依赖; 若重定向, 对比功能与 4 个用例同时失效(对比入口本身已从导航移除, 但页面与用例仍在)。统一导航入口已足以达成"用户不再在两个面板间切换"的目标。
+排除方案:
+  - 重定向 `/public/search` → `/search/aggregate`: 破坏对比内嵌视图与 4 个 E2E 用例, 需同步改测试与对比功能的承载页
+  - 删除 `/public/search` 路由与组件: 同上, 且对比功能需另行找落点
+  - 保留两套独立页面各自演进而仅改菜单: 与"合并入口避免面板切换"的用户要求冲突
+约束: 导航入口变更仅 2 处(AppHeader.vue `adv-search`、SearchView.vue 跳转); 后续若产品决定彻底下线对比页, 再评估重定向与用例迁移。
+关联文件: frontend/src/router/index.ts, frontend/src/components/AppHeader.vue, frontend/src/views/SearchView.vue, frontend/tests/e2e/public-search-flow.spec.ts
+
+#43 ETL 端点授权保留 per-endpoint 粒度, 拒绝 group 级 Admin (2026-10-01, 合并 master 时裁决)
+决策: 合并 `origin/master` 时, `AdminEtlEndpoints.cs` 的授权模型取**分支的 per-endpoint 粒度**(`/template`+`/progress`+`/history`+`/history/aggregate`+`/apps/orphans` 为 `ReadOnly`; `/upload`+`/trigger`+`/task`+`/pause`+`/resume`+`/reindex-all`+`/reindex-resume`+`/apps/orphan/{id}/link` 为 `Operator`; SSE `/progress/stream` 为 `ReadOnly`), 放弃 master 的 group 级 `.RequireAuthorization("Admin")`; 同时并入 master 的 `/reindex-resume`(断点续传重建)并按 `Operator` 收口。
+理由: 分支显式新增了 `ReadOnly` 策略(`ServiceCollectionExtensions.cs` L181-185), 注释与 `user-manual.md` 的角色定义对齐(operator=ETL 导入, viewer=只读浏览/查看监控); 合并后 `Endpoints/` 目录下 16 个文件的 per-endpoint 授权模式已是大面积既成事实(161 处), 若本文件单独回到 group 级 `Admin` 会与其余端点文件不一致, 且会使 operator 无法执行 ETL 导入(破坏唯一有权限导入数据的角色), 使新增的 `ReadOnly` 策略在 ETL 侧形同虚设。
+排除方案:
+  - 取 master 的 group 级 `.RequireAuthorization("Admin")`: 与合并后其余端点文件的粒度冲突; operator 无法导入数据; `ReadOnly` 策略失去 ETL 场景
+  - 两者叠加(既加 group 级, 又保留 per-endpoint): 语义冗余, 且 group 级 Admin 更严格, per-endpoint 粒度被架空
+  - per-endpoint 用 `Admin` 统一收紧: 同上, 破坏 operator 导入工作流
+约束: 角色权限矩阵(admin/operator/viewer)是安全相关语义, 后续若 spec F11 要求 ETL 全量 Admin, 需先确认 user-manual 的角色定义是否同步修订, 再统一调整全部 16 个端点文件。测试侧无针对 ETL 端点具体策略的断言, 本次选择不破坏现有单测。
+关联文件: backend/src/SakuraFilter.Api/Endpoints/AdminEtlEndpoints.cs, backend/src/SakuraFilter.Api/Extensions/ServiceCollectionExtensions.cs
+
+#44 对比(compare)子系统统一为公开页实现, 弃用分支重复实现 (2026-10-01, 合并 master 时裁决)
+决策: 分支与 master 各自发展出一套对比实现, 合并时**统一取 master 版**: `composables/useCompareStore.ts`(状态 `state.ids/products/open` + `openCompare/close/adoptFromUrl/add`, 导出 `MAX_COMPARE=6`/`COMPARE_STORAGE_KEY`) + `components/CompareFloatingBar.vue`(i18n `compare.floating.*`); 删除分支的 `stores/useCompareStore.ts`(107 行 store 版, `count/ids/pendingOpen/requestOpen/consumeOpen/replace`) 与 `components/GlobalCompare.vue`(硬编码中文, 含左右移按钮)。相关页面对比逻辑(`App.vue`/`PublicProductView.vue`/`PublicSearchView.vue`/`PublicComparePanel.vue`)一并取 master 版。
+理由: master 版把状态放在 composable 而非 Pinia store, 且文案全部走 vue-i18n(符合项目 i18n 规范); 分支版存在硬编码中文与已被用户否决的左右移按钮(V3 用户反馈"删左右移按钮")。两套实现同时保留会产生双份对比状态源(state 分裂), 必须择一。master 版与 `CompareFloatingBar` + `PublicComparePanel` 的 `diffOnly` 交互是同一次迭代的成套实现, 内部一致性更高。
+排除方案:
+  - 保留分支版(store + GlobalCompare): 与 master 的 `CompareFloatingBar`/`PublicComparePanel` 不配套, 且带回已否决的交互与硬编码中文
+  - 两套并存: 双状态源导致对比计数与实际集合不一致
+约束: 删除前已 grep 确认无其他引用(`GlobalCompare.vue` 与 `stores/useCompareStore.ts` 仅互相引用, 其余全部走 `@/composables/useCompareStore`); 前端 `npm run build` 与 259 项 vitest 通过。
+关联文件: frontend/src/composables/useCompareStore.ts, frontend/src/components/CompareFloatingBar.vue, frontend/src/components/PublicComparePanel.vue, frontend/src/views/public/PublicProductView.vue, frontend/src/views/public/PublicSearchView.vue, frontend/src/App.vue
+
+#45 行尾伪冲突: 以三方 LF 归一流水线解合并冲突 (2026-10-01)
+决策: 仓库 `core.autocrlf=true` 但**无 `.gitattributes`**, 导致 `origin/master` 与本分支对同一文件存储的行尾不一致(LF vs CRLF), git 对 13 个文件产生**整文件级伪冲突**(如 `en-US.ts` 冲突横跨 1-3146 行, 实际是全文对撞)。处置: 用临时 `GIT_INDEX_FILE` + `read-tree` + `checkout-index` 取出 base/ours/theirs 三方原字节, 统一 `Normalize-LF`(UTF-8 无 BOM)后用 `git -c core.autocrlf=false merge-file --diff3` 重新三方合并 → 25 个文件中 12 个变干净, 其余按语义手工解决。
+理由: 伪冲突的根因是行尾而非内容, 在归一化行尾后重跑三方合并可把"全文冲突"还原为真实的最小差异, 大幅降低误判风险(直接按 ours/theirs 整体取值会静默丢弃另一侧的真实改动)。
+排除方案:
+  - 直接 `git checkout --ours/--theirs` 整文件取一侧: 会丢失另一侧的真实功能改动(i18n 键、tab 白名单等), 且无法发现内容级冲突
+  - `git merge -X ours/-X theirs`: 同上, 静默丢改动
+  - 本次顺手新增 `.gitattributes`(`* text=auto eol=lf`): 会改变全仓后续检出的行尾, 产生大面积"无内容变更"的 diff, 需单独评估与统一提交, 本次不做(见 suggestions.md P2)
+约束: 该流水线(`C:\Users\C\AppData\Local\Temp\m3`)是一次性临时工具, 不纳入仓库; 根治手段是补 `.gitattributes` 并统一一次行尾, 待单独任务处理。
+关联文件: .gitattributes(缺失), frontend/src/i18n/locales/en-US.ts, frontend/src/i18n/locales/zh-CN.ts

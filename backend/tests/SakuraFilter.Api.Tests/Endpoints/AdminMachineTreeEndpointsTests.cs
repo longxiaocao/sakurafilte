@@ -4,7 +4,6 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -15,6 +14,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using SakuraFilter.Api.Endpoints;
 using SakuraFilter.Api.Services;
+using SakuraFilter.Api.Tests.Integration;
 using SakuraFilter.Core.Entities;
 using SakuraFilter.Infrastructure.Data;
 using Xunit;
@@ -24,41 +24,23 @@ namespace SakuraFilter.Api.Tests.Endpoints;
 /// <summary>
 /// Task 1: 机型三级树查询端点测试
 ///
-/// 测试策略 (参考 BaseDictServiceTests 模式):
-///   - 用例 1/2: 直接 Service 测试 (EF Core InMemory), 验证 GetTreeAsync 三级树聚合逻辑 + 空数据
-///   - 用例 3: TestHost HTTP 级别测试, 验证未授权请求返回 401 (RequireAuthorization("Admin") 生效)
+/// 测试策略:
+///   - 用例 1/2: 真实 PG 集成测试 (继承 PgIntegrationTestBase), 验证 GetTreeAsync 三级树聚合 + 空数据
+///   - 用例 3: TestHost HTTP 级别测试, 验证未授权请求返回 401 (RequireAuthorization("ReadOnly") 生效)
 ///
-/// WHY 不用 WebApplicationFactory&lt;Program&gt;:
-///   - Program.cs 含 DB 迁移/ETL 广播/搜索探活等启动逻辑, 需真实 PG + Meili, 测试环境不满足
-///   - TestHost 构建最小管道 (auth + endpoint), 足够验证 401 鉴权行为
-///   - 401 由 ASP.NET Core 授权中间件在 handler 之前短路, 无需真实 MachineDictService
+/// 🔧 fix(2026-10-01 CI): 用例 1/2 原用 EF Core InMemory provider, 但 MachineDictService.GetTreeAsync
+///   在 6036f6c 改用 FromSqlRaw(DISTINCT ON ...) 后, InMemory provider 不支持原生 SQL, CI 报
+///   "Query root of type 'FromSqlQueryRootExpression' wasn't handled by provider code"。
+///   故改为继承 PgIntegrationTestBase 走真实 PG (与项目其余集成测试一致), 未配置
+///   PG_TEST_CONNECTION_STRING 时自动跳过, 不伪造通过。
+///   用例 3 补注册 ReadOnly 策略 — 端点策略已由 Admin 改为 ReadOnly (viewer 可只读浏览后台,
+///   见 user-manual.md), 但测试的 TestHost 只注册了 Admin 策略, 导致
+///   "The AuthorizationPolicy named: 'ReadOnly' was not found"。
 /// </summary>
-public class AdminMachineTreeEndpointsTests
+[Collection("PgSequential")]
+[Trait("Category", "Integration")]
+public class AdminMachineTreeEndpointsTests : PgIntegrationTestBase
 {
-    // ========== InMemory 测试基础设施 (复用 BaseDictServiceTests 模式) ==========
-
-    private sealed class TestProductDbContext : ProductDbContext
-    {
-        public TestProductDbContext(DbContextOptions<ProductDbContext> options) : base(options) { }
-
-        protected override void OnModelCreating(ModelBuilder mb)
-        {
-            base.OnModelCreating(mb);
-            // WHY 忽略 Alert* 实体: InMemory 不支持其复杂配置, 与 BaseDictServiceTests 一致
-            mb.Ignore<AlertRule>();
-            mb.Ignore<AlertHistory>();
-            mb.Ignore<SecurityEvent>();
-        }
-    }
-
-    private static ProductDbContext CreateInMemoryDb()
-    {
-        var options = new DbContextOptionsBuilder<ProductDbContext>()
-            .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
-            .Options;
-        return new TestProductDbContext(options);
-    }
-
     private static MachineDictService CreateSut(ProductDbContext db)
     {
         var cache = new MemoryCache(new MemoryCacheOptions { SizeLimit = 10000 });
@@ -86,7 +68,10 @@ public class AdminMachineTreeEndpointsTests
     [Fact]
     public async Task GetTreeAsync_WithData_ReturnsThreeLevelTree()
     {
-        await using var db = CreateInMemoryDb();
+        // WHY IsEnabled 守卫: 未配置 PG_TEST_CONNECTION_STRING 时不执行 (与其余集成测试一致)
+        if (!IsEnabled) return;
+
+        await using var db = CreateDbContext();
         // 准备: 2 个 category, 每个 category 下 2 个 brand, brand 下 1-2 个 model
         //   WHY 打乱插入顺序: 验证 OrderBy 排序生效 (非依赖插入顺序)
         db.DictMachines.Add(Machine(1, "Caterpillar", "320D", "Excavator", "Construction"));
@@ -124,8 +109,10 @@ public class AdminMachineTreeEndpointsTests
         var cat = constr.Brands[1];
         cat.Models.Should().HaveCount(2);
         cat.Models.Select(m => m.ModelName).Should().BeInAscendingOrder();
+        // 验证 machine_id 为组内真实最小 id (上游 DISTINCT ON ... ORDER BY ... id 决定):
+        //   前端 el-tree 以 node-key="id" 绑定, 必须是真实且唯一的 id, 不能用常量占位
         cat.Models.Should().Contain(m => m.ModelName == "320D" && m.MachineId == 1);
-        // model=null 的行 fallback 到 machine_name
+        // model=null 的行 fallback 到 machine_name, id 为 4 (Caterpillar 下 model IS NULL 组的最小 id)
         cat.Models.Should().Contain(m => m.ModelName == "Excavator" && m.MachineId == 4);
 
         // 验证软删行 (id=6 Komatsu) 不在结果中
@@ -139,7 +126,9 @@ public class AdminMachineTreeEndpointsTests
     [Fact]
     public async Task GetTreeAsync_NoData_ReturnsEmptyList()
     {
-        await using var db = CreateInMemoryDb();
+        if (!IsEnabled) return;
+
+        await using var db = CreateDbContext();
         var sut = CreateSut(db);
 
         var result = await sut.GetTreeAsync();
@@ -151,7 +140,7 @@ public class AdminMachineTreeEndpointsTests
 
     // ==================== 用例 3: 未授权 401 ====================
 
-    // 覆盖: 未授权 401 — 不带 token 返回 401 (RequireAuthorization("Admin") 生效)
+    // 覆盖: 未授权 401 — 不带 token 返回 401 (RequireAuthorization("ReadOnly") 生效)
     [Fact]
     public async Task MachineTreeEndpoint_WithoutAuth_Returns401()
     {
@@ -171,8 +160,13 @@ public class AdminMachineTreeEndpointsTests
                     // 注册 auth: NoopAuthHandler 永不认证 → 请求始终匿名
                     services.AddAuthentication("Noop")
                         .AddScheme<AuthenticationSchemeOptions, NoopAuthHandler>("Noop", _ => { });
-                    // 注册 authz: Admin 策略要求已认证用户 (匿名请求 → 401)
-                    services.AddAuthorization(o => o.AddPolicy("Admin", p => p.RequireAuthenticatedUser()));
+                    // 注册 authz: 端点策略为 ReadOnly (viewer 只读浏览), 此处与生产策略同名同语义
+                    //   (要求已认证用户) → 匿名请求 401。Admin 一并注册, 兼容其它端点引用。
+                    services.AddAuthorization(o =>
+                    {
+                        o.AddPolicy("Admin", p => p.RequireAuthenticatedUser());
+                        o.AddPolicy("ReadOnly", p => p.RequireAuthenticatedUser());
+                    });
                     // WHY 注册 MachineDictService 依赖: 路由元数据推断阶段要求端点参数类型已注册为服务,
                     //   否则尝试从 body 推断 (GET 请求禁止 body → 启动抛 InvalidOperationException).
                     //   401 短路后 handler 不会被调用, 依赖仅为元数据推断占位, 无需真实可用

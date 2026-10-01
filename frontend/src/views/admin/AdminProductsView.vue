@@ -73,7 +73,10 @@ const resetHistoryFilter = () => {
   saveHistoryFilter()
 }
 function saveHistoryFilter() {
-  try { localStorage.setItem(HISTORY_FILTER_KEY, JSON.stringify({...historyFilter})) } catch {}
+  // WHY: 隐私模式/存储满时 localStorage 可能抛异常, 静默忽略 (筛选偏好写入失败不影响功能)
+  try {
+    localStorage.setItem(HISTORY_FILTER_KEY, JSON.stringify({...historyFilter}))
+  } catch { /* 静默忽略 localStorage 写入异常 */ }
 }
 function loadHistoryFilter() {
   try {
@@ -84,7 +87,9 @@ function loadHistoryFilter() {
     if (typeof saved.since === 'string') historyFilter.since = saved.since
     if (typeof saved.until === 'string') historyFilter.until = saved.until
     if (typeof saved.limit === 'number') historyFilter.limit = saved.limit
-  } catch {}
+  } catch {
+    // WHY: localStorage 数据可能被篡改/损坏导致 JSON.parse 抛错, 静默降级为默认筛选
+  }
 }
 loadHistoryFilter()
 // Day 9.3: 筛选条件变化时存 localStorage
@@ -323,9 +328,10 @@ onBeforeUnmount(() => {
       <el-input v-model="filter.mr1" placeholder="MR.1" clearable size="small" style="width: 120px" :aria-label="t('admin.productsview.aria.mr_search')" @keyup.enter="quickSearch" />
       <el-input v-model="filter.productName1" :placeholder="t('common.field.product_name')" clearable size="small" style="width: 160px" :aria-label="t('admin.productsview.aria.product_name_search')" @keyup.enter="quickSearch" />
       <el-select v-model="filter.type" :placeholder="t('common.action.type')" clearable size="small" style="width: 100px" :aria-label="t('admin.productsview.aria.filter_by_type')">
+        <el-option label="air" value="air" />
         <el-option label="oil" value="oil" />
         <el-option label="fuel" value="fuel" />
-        <el-option label="air" value="air" />
+        <el-option label="hydraulic" value="hydraulic" />
         <el-option label="cabin" value="cabin" />
         <el-option label="others" value="others" />
       </el-select>
@@ -341,11 +347,12 @@ onBeforeUnmount(() => {
     </div>
 
     <!-- 🔧 fix(审查): 高级筛选页内展开区块 (原 el-drawer 侧边栏; 用户反馈: 筛选应在列表界面直接展示) -->
-    <div v-show="drawerOpen" class="hairline p-3 mb-3">
-      <div class="text-sm font-medium mb-2">{{ t('admin.productsview.title.filter') }}</div>
-      <div class="space-y-3">
+    <!-- V24-F105: 紧凑布局优化 - 减少留白, 更合理利用页面空间 -->
+    <div v-show="drawerOpen" class="hairline p-2 mb-2">
+      <div class="text-sm font-medium mb-1">{{ t('admin.productsview.title.filter') }}</div>
+      <div class="space-y-2">
         <div class="text-sm font-medium">文本字段</div>
-        <div class="grid grid-cols-2 gap-2">
+        <div class="grid grid-cols-2 gap-1">
           <el-input v-model="advFilter.productName1" :placeholder="t('common.action.product_name_1')" size="small" />
           <el-input v-model="advFilter.productName2" :placeholder="t('common.action.product_name_2')" size="small" />
           <el-input v-model="advFilter.mr1" placeholder="MR.1" size="small" />
@@ -358,7 +365,7 @@ onBeforeUnmount(() => {
         </div>
 
         <div class="text-sm font-medium">尺寸范围 (mm)</div>
-        <div class="grid grid-cols-2 gap-2">
+        <div class="grid grid-cols-2 gap-1">
           <el-input-number v-model="advFilter.d1Min" placeholder="D1 Min" size="small" :min="0" />
           <el-input-number v-model="advFilter.d1Max" placeholder="D1 Max" size="small" :min="0" />
           <el-input-number v-model="advFilter.d2Min" placeholder="D2 Min" size="small" :min="0" />
@@ -366,7 +373,7 @@ onBeforeUnmount(() => {
           <el-input-number v-model="advFilter.h1Min" placeholder="H1 Min" size="small" :min="0" />
           <el-input-number v-model="advFilter.h1Max" placeholder="H1 Max" size="small" :min="0" />
         </div>
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-1">
           <span class="text-xs text-muted">容差 (mm):</span>
           <el-radio-group v-model="advFilter.sizeTolerance" size="small">
             <el-radio :value="1">±1</el-radio>
@@ -376,14 +383,14 @@ onBeforeUnmount(() => {
         </div>
 
         <div class="text-sm font-medium">车型适配</div>
-        <div class="grid grid-cols-2 gap-2">
+        <div class="grid grid-cols-2 gap-1">
           <el-input v-model="advFilter.machineBrand" :placeholder="t('common.action.brand')" size="small" />
           <el-input v-model="advFilter.machineModel" :placeholder="t('common.action.model')" size="small" />
           <el-input v-model="advFilter.modelName" :placeholder="t('common.action.name')" size="small" />
           <el-input v-model="advFilter.engineBrand" :placeholder="t('common.field.engine_brand')" size="small" />
         </div>
 
-        <div class="flex justify-end gap-2 pt-3">
+        <div class="flex justify-end gap-1 pt-2">
           <el-button @click="drawerOpen = false">取消</el-button>
           <el-button type="primary" @click="applyAdv">应用</el-button>
         </div>

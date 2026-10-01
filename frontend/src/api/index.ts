@@ -32,7 +32,13 @@ import type {
   MachineTreeNode,
   BatchBindRequest,
   BatchBindResponse,
-  SiteContent
+  SiteContent,
+  OrphanAppPage,
+  OemCatalogSummary,
+  OemCatalogProductPage,
+  OemCatalogProductDetail,
+  OemCatalogCrossReferencePage,
+  OemCatalogApplicationPage
 } from './types'
 
 // ===== JWT 鉴权 API (commit aff3ac3 后端 JWT 体系) =====
@@ -359,7 +365,12 @@ export async function searchWithFallback(
 export const productApi = {
   getByOem(slug: string): Promise<PublicProductDetail> {
     // 注意: 走 http 拦截器, 即使已登录后台 (有 token) 也可访问公开端点 (后端 [AllowAnonymous])
-    return http.get(`/public/product/${encodeURIComponent(slug)}`).then((r) => r.data)
+    // 🔧 fix(2026-09-14): 保留 OEM 编号中的原始斜杠, 仅编码其他字符
+    //   WHY: 上游 /seo/:oem Vue 路由已把 route.params.oem 解码 (含编码斜杠 SL%2081322%2F1 → "SL 81322/1"),
+    //        再用 encodeURIComponent 会把 / 编码成 %2F, 而后端 catch-all {**slug} 收到整串编码值无法精确匹配 → 404。
+    //        实测: /public/product/SL%2081322/1 (空格编码、斜杠保留) 返回 200; %2F 全编码返回 404。
+    //   encodeURIComponent 不会误伤: 斜杠是唯一会被编码成 %2F 的字符, replace 还原安全。
+    return http.get(`/public/product/${encodeURIComponent(slug).replace(/%2F/g, '/')}`).then((r) => r.data)
   },
   // 同组其他 OEM 3 列表，参数使用公开 OEM3，服务端内部按 MR1 聚合。
   //   GET /api/public/products/{oem3}/sibling-oem3
@@ -1092,6 +1103,19 @@ export const machineApi = {
 //   (与 generated-types re-export 模式一致, 见 types.ts 文件末尾)
 export type { MachineTreeNode, BatchBindRequest, BatchBindResponse } from './types'
 
+// ===== V25: 孤儿机型管理 API =====
+export const orphanApi = {
+  list(page = 1, pageSize = 20, keyword?: string): Promise<OrphanAppPage> {
+    const params: Record<string, any> = { page, pageSize }
+    if (keyword) params.keyword = keyword
+    return http.get('/admin/apps/orphans', { params }).then((r) => r.data)
+  },
+  link(id: number, productId: number): Promise<{ linked: boolean; orphanId: number; productId: number; mr1: string }> {
+    return http.patch(`/admin/apps/orphan/${id}/link`, { productId }).then((r) => r.data)
+  }
+}
+export type { OrphanApp, OrphanAppPage, LinkOrphanRequest } from './types'
+
 
 // ===== SiteContent: 站点内容维护 (about/contact/news/站点名/logo) =====
 //   get:  GET /api/admin/site-content           → SiteContent (后台维护页加载)
@@ -1106,6 +1130,28 @@ export const siteContentApi = {
   },
   publicGet(): Promise<SiteContent> {
     return http.get('/public/site-content').then((r) => r.data)
+  }
+}
+
+// ===== OEM 目录 (catalog 只读查询 + MR.1 映射) =====
+export const oemCatalogApi = {
+  summary(): Promise<OemCatalogSummary> {
+    return http.get('/admin/oem-catalog/summary').then((r) => r.data)
+  },
+  list(params: { q?: string; page: number; pageSize: number }): Promise<OemCatalogProductPage> {
+    return http.get('/admin/oem-catalog/products', { params }).then((r) => r.data)
+  },
+  detail(oemNo1: string): Promise<OemCatalogProductDetail> {
+    return http.get(`/admin/oem-catalog/products/${encodeURIComponent(oemNo1)}`).then((r) => r.data)
+  },
+  xrefs(oemNo1: string, params: { page: number; pageSize: number }): Promise<OemCatalogCrossReferencePage> {
+    return http.get(`/admin/oem-catalog/products/xrefs/${encodeURIComponent(oemNo1)}`, { params }).then((r) => r.data)
+  },
+  applications(oemNo1: string, params: { page: number; pageSize: number }): Promise<OemCatalogApplicationPage> {
+    return http.get(`/admin/oem-catalog/products/applications/${encodeURIComponent(oemNo1)}`, { params }).then((r) => r.data)
+  },
+  setMr1(oemNo1: string, data: { mr1: string | null; changeReason?: string | null }): Promise<void> {
+    return http.put(`/admin/oem-catalog/products/mr1/${encodeURIComponent(oemNo1)}`, data).then(() => undefined)
   }
 }
 

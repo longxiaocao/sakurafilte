@@ -52,7 +52,11 @@ public class PublicProductController : ControllerBase
     /// V2 Task 4.7: 查询逻辑抽取到 IProductDetailService.GetByOemAsync
     ///   V2 Task 4.2: 标记 [Obsolete], 由 Razor Pages /products/... 取代 (此 API 端点保留供 SPA/客户端 JSON 调用)
     /// </summary>
-    [HttpGet("product/{slug}")]
+    // 🔧 fix(2026-09-14): 路由改 catch-all {**slug} — 支持含斜杠的 OEM 编号 (如 "SL 81322/1")
+    //   WHY: 原路由 product/{slug} 中 ASP.NET 把 %2F 解码为 / 后作为路径分隔符, slug 只取 "SL 81322",
+    //        `/1` 成为新路径段无法匹配该路由 → 404。库中 xref 有 4867 个含斜杠 OEM, 否则详情页全部打不开。
+    //         catch-all 拦截整个剩余路径(含 /), 参数为解码后的完整编号, 后端按完整值匹配。
+    [HttpGet("product/{**slug}")]
     [Obsolete("V2: 改用 Razor Pages /products/{pn1}/{pn2}/{brand}/{oem3} (Task 4.1); 此 API 端点保留供 JSON 客户端调用, 浏览器访问走 /product/{oem} 301 重定向")]
     // 🔧 fix(2026-08-24): 禁缓存 — 详情含动态配置(图片/标注线 show_dimension), 无 Cache-Control 头时
     //   浏览器启发式缓存旧 JSON 导致配置变更不生效 (用户实测: 关闭标注线仍显示)

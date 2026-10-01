@@ -12,8 +12,11 @@ export default {
         input_product_id_add: 'Input Product ID Add',
       },
       string: {
-
-
+        compare_title: 'Product Comparison',
+        only_diff: 'Only Show Differences',
+        clear_btn: 'Clear All',
+        print_btn: 'Print',
+        field_cell: 'Field',
         outer_carton: 'Outer Carton',
         outer_carton_pcs: 'Outer Carton/pcs',
         outer_carton_kg: 'Outer Carton Weight (kg)',
@@ -79,7 +82,8 @@ export default {
         e_g_isb_l: 'e.g.: ISB 4.5 L (可Empty)',
       },
       string: {
-
+        add_engine: 'Add Engine',
+        unique_2_fields: '2 fields form UNIQUE index, model is nullable',
       },
       success: {
 
@@ -161,8 +165,10 @@ export default {
         recent_errors: 'Recent Errors (max 10)',
         row_errors: 'Import failures (line-level, max 100)',
         audit: 'Cancel Audit (aggregate by reason_code)'
-      ,reindex_confirm: 'Full Rebuild', total_cancelled: 'Total Cancelled', no_cancelled_records: 'No cancelled records'
       },
+      reindex_confirm: 'Full Rebuild',
+      total_cancelled: 'Total Cancelled',
+      no_cancelled_records: 'No cancelled records',
       pipeline: {
         stage_read: 'Read',
         stage_staging: 'Staging',
@@ -396,7 +402,7 @@ export default {
         product_name_e_g: 'Product main name (e.g.: Oil Filter, Fuel Filter), affects frontend product page',
 
         product_name_model_back: 'Product sub-name/model suffix (e.g.: OF100)',
-        category_oil_fuel_air: '5 fixed categories: oil / fuel / air / cabin / others, sort_order determines frontend sort order',
+        category_oil_fuel_air: 'Fixed categories: air / oil / fuel / hydraulic / cabin / others, sort_order determines frontend sort order',
         type_type: 'Type',
         alternative_brand_oem_number: 'Alternative brand OEM number (5.27M distinct), dictionary for typeahead',
         filter_media_name_model: 'Filter media name + model (2-field dict), e.g.: Cellulose / A020',
@@ -483,7 +489,8 @@ export default {
         select: 'Select 4 大类之一',
       },
       string: {
-
+        add_machine_model: 'Add Machine Model',
+        unique_3_fields: '3 fields form UNIQUE index, any field nullable',
       },
       success: {
 
@@ -550,7 +557,7 @@ export default {
         e_g_m_m: 'e.g.: 5μm / 10μm (可Empty)',
       },
       string: {
-
+        add_media: 'Add Media',
       },
       success: {
 
@@ -628,11 +635,9 @@ export default {
         e_g: 'e.g.: 11427622448',
       },
       string: {
-
+        add_oem: 'Add OEM 3',
       },
       success: {
-
-
 
 
 
@@ -647,6 +652,42 @@ export default {
 
       },
     },
+    orphansview: {
+      title: 'Orphan Machine Management',
+      hint: 'These machines are not linked to any product. After linking, they appear in the product detail "Machine Applications".',
+      search_placeholder: 'Search brand / model / name',
+      total_orphans: 'Total orphans: {total}',
+      filtered: 'Filtered: {keyword} ({total})',
+      col: {
+        id: 'ID',
+        brand: 'Brand',
+        model: 'Model',
+        model_name: 'Model Name',
+        category: 'Category',
+        created_at: 'Created At',
+      },
+      action: {
+        link: 'Link',
+      },
+      dialog: {
+        title: 'Link to Product',
+        linked_success: 'Linked: {mr1}',
+        search_product: 'Search Product (OEM / MR1)',
+        search_placeholder: 'Enter OEM or MR.1',
+        col_id: 'ID',
+        col_mr1: 'MR.1',
+        select_hint: 'Select a product then click "Confirm Link"',
+        confirm_link: 'Confirm Link',
+      },
+      error: {
+        load_failed: 'Failed to load orphan list',
+        select_product: 'Please select a product first',
+        link_failed: 'Link failed',
+      },
+      success: {
+        linked: 'Linked: {mr1}',
+      },
+    },
     perfview: {
       label: {
         pause_auto_refresh: 'Pause Auto Refresh',
@@ -654,12 +695,21 @@ export default {
         refresh: 'Refresh 间隔',
       },
       string: {
+        total_requests: 'Total Requests',
+        error_rate_label: 'Error Rate',
+        sample_time: 'Sample Time',
+        health_probe: 'Health Probe',
+        current_token: 'Current Token',
+        source_data: 'Source Data',
+        operator: 'Operator',
+        token_not_found_auth: 'Token not found in auth config',
+        perf_ring_buffer_tip: 'Ring buffer: last {sec}s of samples',
         p_ms_ms_ms: 'P95 = {ms}ms (≥1000ms Critical)',
         p_ms_ms_ms_v2: 'P95 = {ms}ms (≥500ms Warning)',
         error_rate_pct_critical: 'Error Rate = {pct}% (≥10% Critical)',
         error_rate_pct_warning: 'Error Rate = {pct}% (≥5% Warning)',
 
-        en_v5: '[EN] 就绪',
+        en_v5: '[EN] Ready',
         downgrade: 'Downgrade',
 
         refresh_failed: 'Refresh Failed',
@@ -769,11 +819,7 @@ export default {
         e_g_oil_filter: 'e.g.: OIL FILTER',
       },
       string: {
-
-
-
-
-
+        add_product: 'Add Product 名 1',
       },
       success: {
 
@@ -808,7 +854,7 @@ export default {
         e_g_spin_on: 'e.g.: SPIN-ON',
       },
       string: {
-
+        add_product: 'Add Product 名 2',
       },
       success: {
 
@@ -889,7 +935,7 @@ export default {
       },
       placeholder: {
         search_type: 'Search Type',
-        e_g_oil_fuel: 'e.g.: oil / fuel / air / cabin / others',
+        e_g_oil_fuel: 'e.g.: air / oil / fuel / hydraulic / cabin / others',
       },
       string: {
 
@@ -1277,6 +1323,8 @@ export default {
       success_015: 'All error logs cleared',
       success_016: 'Already in compare list, navigating',
       success_019: 'Logged out',
+      // 2026-10-01: copy for the public search page "Clear" button (previously reused the compare-list copy success_016)
+      success_020: 'Search cleared',
       // ----- Info -----
       info_004: 'OEM cannot be empty',
       info_005: 'Permission denied, redirected to product management',
@@ -1287,7 +1335,9 @@ export default {
       info_042: 'Please sign in first',
       info_043: 'Session expired, please sign in again',
       // ----- Warning -----
-      warn_040: 'Compare list is full (6/6), please remove first'
+      warn_040: 'Compare list is full (6/6), please remove first',
+      // V24-F103-1: 空表单提示 (与 zh-CN 同步, 融合搜索框输入时不得误用 warn_040)
+      warn_empty_form: 'Please enter at least one value in the combined search box or the 8 fields'
     },
     // V24-F103 i18n residue fix: aria-label a11y text (AppHeader + DictManagerLayout)
     aria: {
@@ -1360,6 +1410,7 @@ export default {
       },
     },
   nav: {
+    oemCatalog: 'OEM Catalog',
     productSearch: 'Product Search',
     oemLookup: 'OEM Lookup',
     productManage: 'Products',
@@ -1372,7 +1423,7 @@ export default {
     opsCenter: 'Ops Center',
     // 🔧 fix(审查): 运维中心 el-tabs label i18n
     opsview: {
-      tab: { perf: 'Performance', errors: 'Errors', api: 'API Docs', storage: 'Storage Config', backup: 'Backup' }
+      tab: { perf: 'Performance', errors: 'Errors', api: 'API Docs', storage: 'Storage Config', orphans: 'Orphan Machines', backup: 'Backup' }
     },
     storage: {
       provider: 'Storage Provider',
@@ -1434,7 +1485,7 @@ export default {
       oemBrands: { title: 'OEM Brands', subtitle: 'P1.3 Admin · autocomplete for product form section 2' },
       productName1s: { title: 'Product Name 1', subtitle: 'P2.2 Admin · autocomplete for product form section 1' },
       productName2s: { title: 'Product Name 2', subtitle: 'P2.2 Admin · autocomplete for product form section 1' },
-      types: { title: 'Types', subtitle: 'P2.2 Admin · fixed 5 values: oil / fuel / air / cabin / others · drag to reorder' },
+      types: { title: 'Types', subtitle: 'P2.2 Admin · fixed categories: air / oil / fuel / hydraulic / cabin / others · drag to reorder' },
       oemNo3s: { title: 'OEM No.3', subtitle: 'P2.2 Admin · autocomplete for cross-reference section oem_no_3' },
       medias: { title: 'Media', subtitle: 'P2.2 Admin · 2 fields: Media name + model · product form section 4' },
       machines: { title: 'Machines', subtitle: 'P2.2 Admin · 3 fields: brand + model + name · product form section 7' },

@@ -9,8 +9,15 @@ export default defineConfig({
   testDir: './tests',
   // P0-E2E 修复: 只匹配 .spec.ts, 排除 vitest 的 .test.ts (避免 Playwright 误扫 contract 目录)
   testMatch: '**/*.spec.ts',
-  fullyParallel: false,  // 共享一个 dev server, 顺序跑
-  workers: 1,
+  // 全并行: 各 spec 文件有独立 beforeAll/afterAll, 无跨文件共享状态; describe.serial 保护文件内串行
+  //   WHY workers=2: 平衡速度和 AuthPermitsPerMinute=5 限流; 4 workers 同时登录会 429
+  //   🔧 fix(2026-09-13): 跨浏览器时降为 workers=1 — webkit 渲染慢, 3 浏览器 × 2 workers 并发时
+  //     负载过高导致 SPA 页面加载 >30s 超时 (12 个 webkit 失败全为 goto 超时), 降并发从根因缓解
+  fullyParallel: true,
+  workers: process.env.ENABLE_CROSS_BROWSER === '1' ? 1 : 2,
+  // 🔧 fix(2026-09-13): 全局 test timeout 30s → 60s — webkit 高负载下页面加载可达 30-45s,
+  //   30s test timeout 会先于导航超时触发导致误报 (12 个 webkit 失败), 60s 容纳导航+断言
+  timeout: 60000,
   reporter: [['list'], ['html', { open: 'never', outputFolder: 'playwright-report' }]],
   use: {
     baseURL: process.env.BASE_URL || 'http://localhost:5173',
@@ -28,6 +35,14 @@ export default defineConfig({
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] }
-    }
+    },
+    // 🔧 add(2026-09-13 生产测试): 跨浏览器兼容性 — ENABLE_CROSS_BROWSER=1 时启用 firefox/webkit
+    //   默认关闭: firefox/webkit 渲染差异可能引入 flaky, 仅生产部署测试/发布前手动开启
+    ...(process.env.ENABLE_CROSS_BROWSER === '1'
+      ? [
+          { name: 'firefox', use: { ...devices['Desktop Firefox'] } },
+          { name: 'webkit', use: { ...devices['Desktop Safari'] } }
+        ]
+      : [])
   ]
 })

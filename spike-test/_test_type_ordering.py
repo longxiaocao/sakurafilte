@@ -2,13 +2,17 @@
 """Day 10+ P2.3 E2E 测试: Type 字典排序 + Machine 4 大类
 
 覆盖:
-  1) dict_type 5 行 seed (oil=1, fuel=2, air=3, cabin=4, others=99)
+  1) dict_type 6 行 seed (oil=1, fuel=2, air=3, cabin=4, hydraulic=7, others=99)
   2) dict_machine 加 category 列后, 默认值 'others'
-  3) GET /api/public/products/by-type 返按 sort_order 升序的 5 个 group
+  3) GET /api/public/products/by-type 返按 sort_order 升序的 6 个 group
   4) GET /api/public/machine-brands/aggregated 返 4 大类 (含空 list)
   5) dict_type 拖动 sort_order 后, GET 顺序变化
   6) dict_machine 加 category 后, ListMachinesByCategoryAsync 正确返回
   7) 全部 5 个场景独立 PASS, 至少保证脚本可解析 + DB seed 可执行 (API 端点 1+2+5 走 DB 直查)
+
+WHY 6 类: migration 036_catalog_to_public_cutover.sql 为 catalog 派生分类补充了
+  hydraulic (sort_order=7), 前端 AdminTypesView.FIXED_TYPES 亦为 6 类;
+  本脚本原按 5 类断言, 会在 hydraulic 落于 1-99 排序区间时失败。
 
 依赖: PostgreSQL spike_test_v3, dict_machine.machine_category 列已通过 EF Migration AddMachineCategory 添加
   (运行前需先启动后端一次, 让 Migrate() 自动应用)
@@ -31,9 +35,9 @@ H_ADMIN = {"X-Admin-Token": TOKEN, "Content-Type": "application/json"}
 PG = dict(host="localhost", port=5432, dbname="spike_test_v3",
           user="postgres", password="784533")
 
-# P2.3 计划排序: oil=1, fuel=2, air=3, cabin=4, others=99
-EXPECTED_TYPE_ORDER = ["oil", "fuel", "air", "cabin", "others"]
-EXPECTED_TYPE_SORTORDER = [1, 2, 3, 4, 99]
+# P2.3 计划排序: oil=1, fuel=2, air=3, cabin=4, hydraulic=7, others=99
+EXPECTED_TYPE_ORDER = ["oil", "fuel", "air", "cabin", "hydraulic", "others"]
+EXPECTED_TYPE_SORTORDER = [1, 2, 3, 4, 7, 99]
 
 # 4 大类
 EXPECTED_CATEGORIES = ["Agriculture", "Commercial", "Construction", "others"]
@@ -85,61 +89,62 @@ def db_conn():
     return psycopg2.connect(**PG)
 
 
-# ========== Case 1: seed dict_type 5 行 + 验证排序 ==========
+# ========== Case 1: seed dict_type 6 行 + 验证排序 ==========
 def test_seed_dict_type():
-    """seed 5 行 dict_type (ON CONFLICT DO UPDATE SET sort_order) + 推后 sort_order=0 历史脏数据
+    """seed 6 行 dict_type (ON CONFLICT DO UPDATE SET sort_order) + 推后 sort_order=0 历史脏数据
     Day 11 fix v2: 调 _seed_dict_defaults.seed_dict_type 走完整流程
-    WHY: 历史 40+ 行 dict_type sort_order=0, 即便 P2.3 五类已 seed 1/2/3/4/99,
-         验证 "全部 active type 按 sort_order 排序" 时, sort_order=0 的行混在 P2.3 之后
-         → 实际返 46 行, 而 expected 只有 5 行 → 列表长度比较失败
-    修复: 用完整 seed_dict_type (含脏数据推后), 然后只校验前 5 个
+    WHY: 历史 40+ 行 dict_type sort_order=0, 即便 canonical 六类已 seed 1/2/3/4/7/99,
+         验证 "全部 active type 按 sort_order 排序" 时, sort_order=0 的行混在 canonical 之后
+         → 实际返 47 行, 而 expected 只有 6 行 → 列表长度比较失败
+    修复: 用完整 seed_dict_type (含脏数据推后), 然后只校验前 6 个
     """
     import _seed_dict_defaults as seed_mod
     conn = db_conn()
     cur = conn.cursor()
     res = seed_mod.seed_dict_type(cur, conn)
     conn.commit()
-    # 验证 P2.3 五类的 sort_order 正确
+    # 验证 canonical 六类的 sort_order 正确
     cur.execute("""
         SELECT type, sort_order FROM dict_type
-        WHERE deleted_at IS NULL AND type IN ('oil', 'fuel', 'air', 'cabin', 'others')
+        WHERE deleted_at IS NULL
+          AND type IN ('oil', 'fuel', 'air', 'cabin', 'hydraulic', 'others')
         ORDER BY sort_order, type
     """)
     p23_rows = cur.fetchall()
     actual_order = [r[0] for r in p23_rows]
     actual_sortorder = [r[1] for r in p23_rows]
     assert actual_order == EXPECTED_TYPE_ORDER, \
-        f"dict_type P2.3 五类顺序错误, 期望 {EXPECTED_TYPE_ORDER}, 实际 {actual_order}"
+        f"dict_type canonical 六类顺序错误, 期望 {EXPECTED_TYPE_ORDER}, 实际 {actual_order}"
     assert actual_sortorder == EXPECTED_TYPE_SORTORDER, \
-        f"dict_type P2.3 五类 sort_order 错误, 期望 {EXPECTED_TYPE_SORTORDER}, 实际 {actual_sortorder}"
-    # 验证: 5 类排在前 5 位 (历史 type 已被推后到 100+)
+        f"dict_type canonical 六类 sort_order 错误, 期望 {EXPECTED_TYPE_SORTORDER}, 实际 {actual_sortorder}"
+    # 验证: 6 类排在前 6 位 (历史 type 已被推后到 100+)
     cur.execute("""
         SELECT type, sort_order FROM dict_type
         WHERE deleted_at IS NULL
         ORDER BY sort_order, type
     """)
     all_rows = cur.fetchall()
-    assert all_rows[0][1] == 1, f"前 5 个 sort_order 应从 1 开始, 实际 {all_rows[0][1]}"
-    assert [r[0] for r in all_rows[:5]] == EXPECTED_TYPE_ORDER, \
-        f"前 5 个 type 顺序错误, 期望 {EXPECTED_TYPE_ORDER}, 实际 {[r[0] for r in all_rows[:5]]}"
-    # 验证: 所有非 P2.3 的 sort_order > 99
+    assert all_rows[0][1] == 1, f"前 6 个 sort_order 应从 1 开始, 实际 {all_rows[0][1]}"
+    assert [r[0] for r in all_rows[:6]] == EXPECTED_TYPE_ORDER, \
+        f"前 6 个 type 顺序错误, 期望 {EXPECTED_TYPE_ORDER}, 实际 {[r[0] for r in all_rows[:6]]}"
+    # 验证: canonical 六类之外的 type 都不在 1-99 排序区间
     cur.execute("""
         SELECT COUNT(*) FROM dict_type
         WHERE deleted_at IS NULL AND sort_order > 0 AND sort_order < 100
-          AND type NOT IN ('oil', 'fuel', 'air', 'cabin', 'others')
+          AND type NOT IN ('oil', 'fuel', 'air', 'cabin', 'hydraulic', 'others')
     """)
     in_p23_band = cur.fetchone()[0]
-    assert in_p23_band == 0, f"P2.3 排序区间 (1-99) 不应有其他 type, 实际 {in_p23_band} 条"
+    assert in_p23_band == 0, f"canonical 排序区间 (1-99) 不应有其他 type, 实际 {in_p23_band} 条"
     conn.close()
-    print(f"  ✓ P2.3 五类 sort_order={actual_sortorder}, "
-          f"前 5 个顺序 = {actual_order}, "
+    print(f"  ✓ canonical 六类 sort_order={actual_sortorder}, "
+          f"前 6 个顺序 = {actual_order}, "
           f"被推后 {res['moved_zero']} 条历史脏数据, "
           f"总 active type = {len(all_rows)}")
 
 
 # ========== Case 2: GET /api/public/products/by-type ==========
 def test_by_type_order():
-    """GET by-type 验证顺序 = oil(1) fuel(2) air(3) cabin(4) others(99)"""
+    """GET by-type 验证顺序 = oil(1) fuel(2) air(3) cabin(4) hydraulic(7) others(99)"""
     code, body = http("GET", "/api/public/by-type")
     if code == 0:
         raise AssertionError(f"后端未启动或不可达: {body[:200]}")
@@ -147,13 +152,13 @@ def test_by_type_order():
     obj = json.loads(body)
     groups = obj.get("groups", [])
     actual_order = [g["type"] for g in groups]
-    # 至少有 5 个 group, 顺序符合预期
-    assert len(groups) >= 5, f"by-type 应至少返 5 个 group, 实际 {len(groups)}"
-    # 检查前 5 个按预期排序
-    assert actual_order[:5] == EXPECTED_TYPE_ORDER, \
-        f"by-type 前 5 个 group 顺序错误, 期望 {EXPECTED_TYPE_ORDER}, 实际 {actual_order[:5]}"
+    # 至少有 6 个 group, 顺序符合预期
+    assert len(groups) >= 6, f"by-type 应至少返 6 个 group, 实际 {len(groups)}"
+    # 检查前 6 个按预期排序
+    assert actual_order[:6] == EXPECTED_TYPE_ORDER, \
+        f"by-type 前 6 个 group 顺序错误, 期望 {EXPECTED_TYPE_ORDER}, 实际 {actual_order[:6]}"
     # 检查 sortOrder 字段也正确
-    actual_so = [g["sortOrder"] for g in groups[:5]]
+    actual_so = [g["sortOrder"] for g in groups[:6]]
     assert actual_so == EXPECTED_TYPE_SORTORDER, \
         f"by-type sortOrder 错误, 期望 {EXPECTED_TYPE_SORTORDER}, 实际 {actual_so}"
     # 检查 productCount 和 products 字段
@@ -162,7 +167,7 @@ def test_by_type_order():
         assert "products" in g, f"group 缺 products: {g.keys()}"
         assert len(g["products"]) == g["productCount"], \
             f"group {g['type']} products.length != productCount"
-    print(f"  ✓ by-type 顺序正确 = {actual_order[:5]}, 总类型数 = {len(groups)}")
+    print(f"  ✓ by-type 顺序正确 = {actual_order[:6]}, 总类型数 = {len(groups)}")
 
 
 # ========== Case 3: GET /api/public/machine-brands/aggregated ==========
@@ -294,7 +299,7 @@ if __name__ == "__main__":
     print(f"BASE={BASE} TOKEN={TOKEN[:20]}...")
 
     print("\n[prep] seed dict_type P2.3 排序...")
-    case("1. seed dict_type 5 行 + 验证 sort_order", test_seed_dict_type)
+    case("1. seed dict_type 6 行 + 验证 sort_order", test_seed_dict_type)
     case("2. GET /api/public/products/by-type 验证顺序", test_by_type_order)
     case("3. GET /api/public/machine-brands/aggregated 4 大类", test_machine_brands_aggregated)
     case("4. 拖动 type.sort_order 后 GET 顺序变化", test_drag_type_reorder)

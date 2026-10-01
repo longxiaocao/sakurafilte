@@ -11,6 +11,8 @@
   <ItemGroup>
     <!-- WHY 引用 Infrastructure: 复用 ProductDbContext + 实体类型 (P5.5 AuthTokenStore 直接读 DB) -->
     <ProjectReference Include="..\SakuraFilter.Infrastructure\SakuraFilter.Infrastructure.csproj" />
+    <!-- staging 导入复用 ETL 的 Excel 读取和 PostgreSQL 暂存服务 -->
+    <ProjectReference Include="..\SakuraFilter.Etl\SakuraFilter.Etl.csproj" />
     <!-- WHY 引用 Core: ProductFormDto 等 DTO 类型共享 -->
     <ProjectReference Include="..\SakuraFilter.Core\SakuraFilter.Core.csproj" />
   </ItemGroup>
@@ -19,7 +21,8 @@
     <!-- P5.5: 解析 appsettings.json + PostgreSQL 连接串 -->
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="8.0.0" />
     <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="8.0.0" />
-    <PackageReference Include="Npgsql" Version="8.0.3" />
+    <!-- 与 ETL 项目统一 Npgsql 版本，避免 staging COPY/Batch API 运行时装载冲突 -->
+    <PackageReference Include="Npgsql" Version="8.0.5" />
     <!-- 版本统一: EFCore.BulkExtensions 8.1.0 传递依赖 EFCore 8.0.7, 显式引用 8.0.10 与 Infrastructure 对齐, 消除 MSB3277 -->
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.10" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="8.0.10" />

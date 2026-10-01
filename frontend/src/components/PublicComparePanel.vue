@@ -61,6 +61,14 @@ const machineSummary = (list: MachineAppInfo[] | undefined) => {
   return head.length === 0 ? '' : head.join('; ') + (list.length > 2 ? ` (+${list.length - 2})` : '')
 }
 
+// 公开对比主图: slot=1 优先, 其次第一张; 无图返回 undefined (前端占位)
+function getPrimaryImage(p: PublicProductDetail): string | undefined {
+  if (!p.images || p.images.length === 0) return undefined
+  const primary = p.images.find((img) => img.slot === 1)
+  const url = primary?.imageUrl || p.images[0]?.imageUrl
+  return url || undefined
+}
+
 interface FieldDef {
   key: string
   label: string
@@ -183,6 +191,32 @@ function cellClass(values: string[]) {
               >{{ p.oemNoDisplay }}</a>
             </div>
             <div class="text-xs text-muted truncate" :title="p.oem2 || ''">{{ p.oem2 || '—' }}</div>
+            <!-- 公开对比主图缩略图 (60x60px); 无图时不渲染, 不占位 -->
+            <!--   WHY 客户反馈: 对比只有文字难直观比较, 与后台 AdminCompareView 主图缩略图对齐 -->
+            <!--   hover 大图预览 (el-popover trigger=hover): 鼠标移到缩略图上弹出放大图, 移开恢复
+                 placement=right 跟随鼠标列; popper 默认 teleport 到 body, 不受外层横向滚动容器裁切 -->
+            <el-popover
+              v-if="getPrimaryImage(p)"
+              trigger="hover"
+              placement="right"
+              :width="320"
+              popper-class="compare-zoom-popper"
+              :show-after="180"
+              :aria-label="`放大预览 ${p.oemNoDisplay}`"
+            >
+              <template #reference>
+                <img
+                  :src="getPrimaryImage(p)!"
+                  :alt="p.oemNoDisplay"
+                  class="compare-thumb"
+                  loading="lazy"
+                  @error="(e) => { const t = e.target as HTMLImageElement; if (t) t.style.display = 'none' }"
+                />
+              </template>
+              <div class="compare-zoom">
+                <img :src="getPrimaryImage(p)!" :alt="`放大预览 ${p.oemNoDisplay}`" class="compare-zoom-img" />
+              </div>
+            </el-popover>
           </div>
           <!-- V3(2026-08-26): 移除按钮 (用户反馈之前看到 2 个红叉是模板多写 1 个) -->
           <el-button size="small" text class="no-print shrink-0" @click="emit('remove', idx)" title="移除该列" aria-label="移除该列" style="padding: 0 4px; height: 18px; color: #d00">×</el-button>
@@ -196,7 +230,7 @@ function cellClass(values: string[]) {
         <template v-for="field in group.fields" :key="(group.name + '.' + field.key)">
           <div class="field-name-cell sticky-left">{{ field.label }}</div>
           <div
-            v-for="(p, idx) in products"
+            v-for="p in products"
             :key="p.id + '.' + field.key"
             :class="['data-cell', cellClass(products.map((pp) => valueOf(pp, field)))]"
           >
@@ -219,4 +253,9 @@ function cellClass(values: string[]) {
 .data-cell { padding: 6px 8px; font-size: 12px; border-bottom: 1px solid var(--color-border); word-break: break-word; }
 .data-cell.diff { background: rgba(64, 158, 255, 0.08); color: var(--color-accent); font-weight: 500; }
 .sticky-left { position: sticky; left: 0; }
+.compare-thumb { width: 60px; height: 60px; object-fit: contain; border: 1px solid var(--color-border); border-radius: 4px; margin-top: 6px; }
+/* hover 放大预览浮层 (teleport 到 body, 顶层): 轻边框无重度阴影, 极简栈疲劳 — 图片等比 contain 不裁切 */
+.compare-zoom-popper.el-popover { padding: 8px; border: 1px solid var(--color-border); border-radius: 8px; box-shadow: none; }
+.compare-zoom { width: 304px; height: 304px; display: flex; align-items: center; justify-content: center; }
+.compare-zoom-img { max-width: 304px; max-height: 304px; object-fit: contain; border-radius: 4px; }
 </style>

@@ -27,7 +27,21 @@ public record AggregateSearchRequest(
     decimal? H3 = null,
     // v24 修复: 螺纹规格 (与 SearchRequest.D7Thread/D8Thread 对齐, 文本精确匹配)
     string? D7Thread = null,
-    string? D8Thread = null
+    string? D8Thread = null,
+    // W4 (2026-10-01 走查): 8 字段多框搜索并入聚合搜索页
+    //   WHY: 原 8 字段搜索在独立页 /public/search (GET /api/public/search), 与聚合搜索页
+    //     条件面板割裂; 合并为"高级搜索与筛选"后统一走本端点。
+    //   语义与 EightField 完全一致: 各字段 AND 收窄, 空字段不参与;
+    //   oemBrand/oemNo3 走 cross_references, machine* 5 字段走 machine_applications, oemNo2 走产品主表。
+    //   注意: 这 8 字段不在 Meili filterableAttributes 中 → 任一非空时控制器改走 PG 精确过滤。
+    string? OemBrand = null,
+    string? OemNo2 = null,
+    string? OemNo3 = null,
+    string? MachineBrand = null,
+    string? MachineModel = null,
+    string? ModelName = null,
+    string? EngineBrand = null,
+    string? EngineType = null
 );
 
 /// <summary>

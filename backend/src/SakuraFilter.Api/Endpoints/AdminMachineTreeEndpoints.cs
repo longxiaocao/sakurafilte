@@ -23,7 +23,7 @@ public static class AdminMachineTreeEndpoints
         })
         .WithName("AdminGetMachineTree")
         .WithTags("AdminMachineTree")
-        .RequireAuthorization("Admin");  // V24-F19: spec F11
+        .RequireAuthorization("ReadOnly");  // viewer 可只读浏览后台 (user-manual.md)
 
         return app;
     }

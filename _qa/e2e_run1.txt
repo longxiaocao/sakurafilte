@@ -1,0 +1,445 @@
+﻿
+Running 199 tests using 2 workers
+
+  ✓    2 [chromium] › tests\e2e\admin-aux-pages.spec.ts:24:3 › E2E-辅助管理页 (后台) › 2. 错误监控页 /admin/errors 加载 (3.9s)
+  ✓    1 [chromium] › tests\e2e\admin-aux-pages.spec.ts:15:3 › E2E-辅助管理页 (后台) › 1. 运维页 /admin/ops 加载 (tabs 结构) (4.0s)
+  ✓    3 [chromium] › tests\e2e\admin-aux-pages.spec.ts:31:3 › E2E-辅助管理页 (后台) › 3. API 文档页 /admin/api-docs 加载 + 搜索框 (1.1s)
+  ✓    4 [chromium] › tests\e2e\admin-aux-pages.spec.ts:38:3 › E2E-辅助管理页 (后台) › 4. 站点内容管理 /admin/site-content 加载 + 表单字段 (1.1s)
+  ✓    6 [chromium] › tests\e2e\admin-aux-pages.spec.ts:52:3 › E2E-辅助管理页 (后台) › 6. 修改密码页 /change-password 加载 + 表单 (1.0s)
+  ✓    5 [chromium] › tests\e2e\admin-aux-pages.spec.ts:45:3 › E2E-辅助管理页 (后台) › 5. 告警页 /admin/alerts 加载 + 过滤/测试按钮 (1.2s)
+  ✓    7 [chromium] › tests\e2e\admin-dict-crud.spec.ts:51:3 › E2E-字典 CRUD (后台) › 1. OEM 品牌字典页加载 + 列表/搜索区存在 (1.0s)
+  ✓    8 [chromium] › tests\e2e\admin-dict-crud.spec.ts:82:3 › E2E-字典 CRUD (后台) › 3. 机型字典页加载 + 三级树/批量绑定入口存在 (1.1s)
+  ✓    9 [chromium] › tests\e2e\admin-dict-crud.spec.ts:60:3 › E2E-字典 CRUD (后台) › 2. OEM 品牌新建对话框打开 + 表单字段存在 (1.6s)
+  ✓   11 [chromium] › tests\e2e\admin-product-image-upload.spec.ts:126:3 › v27-5 管理员产品图片上传 E2E (V24-F83 前端路径补全) › 1. 编辑模式表单加载 + 图片折叠区可见 (默认折叠) (1.5s)
+  ✓   10 [chromium] › tests\e2e\admin-dict-crud.spec.ts:89:3 › E2E-字典 CRUD (后台) › 4. 8 个字典页全部可达 (逐页跳转 + 非白屏) (3.1s)
+  ✓   12 [chromium] › tests\e2e\admin-product-image-upload.spec.ts:139:3 › v27-5 管理员产品图片上传 E2E (V24-F83 前端路径补全) › 2. 上传主图成功 → ElMessage 提示 + 图片显示 (1.8s)
+  ✓   13 [chromium] › tests\e2e\admin-product-image-upload.spec.ts:165:3 › v27-5 管理员产品图片上传 E2E (V24-F83 前端路径补全) › 3. 上传主图 409 ERR_DB_CONFLICT → ElMessage 数据冲突提示 (V24-F83 前端路径) (1.7s)
+  ✓   14 [chromium] › tests\e2e\admin-product-image-upload.spec.ts:188:3 › v27-5 管理员产品图片上传 E2E (V24-F83 前端路径补全) › 4. 上传详情图 409 IMAGE_DETAIL_SLOT_DUPLICATE → ElMessage 槽位重复提示 (1.7s)
+  ✓   15 [chromium] › tests\e2e\admin-product-image-upload.spec.ts:212:3 › v27-5 管理员产品图片上传 E2E (V24-F83 前端路径补全) › 5. 删除主图成功 → ElMessage 已删除提示 (1.7s)
+  ✓   16 [chromium] › tests\e2e\admin-product-image-upload.spec.ts:247:3 › v27-5 管理员产品图片上传 E2E (V24-F83 前端路径补全) › 6. 新建模式 (/admin/products/new) 图片 tab 不显示 (isEdit=false) (1.2s)
+  ✓   17 [chromium] › tests\e2e\admin-products-flow.spec.ts:36:3 › P1-E2E-3 管理员产品管理流程 (用户视角) › 1. 后台产品列表加载 + 分页控件存在 (1.2s)
+  ✓   19 [chromium] › tests\e2e\admin-products-flow.spec.ts:66:3 › P1-E2E-3 管理员产品管理流程 (用户视角) › 3. 新增产品表单加载 (1.1s)
+  ✓   20 [chromium] › tests\e2e\admin-products-flow.spec.ts:78:3 › P1-E2E-3 管理员产品管理流程 (用户视角) › 4. ETL 触发页加载 + 进度区域 (1.1s)
+  ✓   21 [chromium] › tests\e2e\admin-products-flow.spec.ts:90:3 › P1-E2E-3 管理员产品管理流程 (用户视角) › 5. 性能监控页加载 + 指标卡片 (973ms)
+  ✘   22 [chromium] › tests\e2e\admin-products-flow.spec.ts:101:3 › P1-E2E-3 管理员产品管理流程 (用户视角) › 6. 字典管理导航 (8 字典切换) (918ms)
+  ✓   23 [chromium] › tests\e2e\admin-products-flow.spec.ts:112:3 › P1-E2E-3 管理员产品管理流程 (用户视角) › 7. 帮助页加载 + 5 模块 (1.0s)
+  ✓   24 [chromium] › tests\e2e\admin-products-flow.spec.ts:121:3 › P1-E2E-3 管理员产品管理流程 (用户视角) › 8. 对比页空状态提示 (860ms)
+  ✓   25 [chromium] › tests\e2e\admin-users.spec.ts:42:3 › E2E-用户管理 (后台) › 1. 用户列表加载 + 角色/状态列存在 (1.0s)
+  ✘   18 [chromium] › tests\e2e\admin-products-flow.spec.ts:47:3 › P1-E2E-3 管理员产品管理流程 (用户视角) › 2. 产品筛选表单交互 (9.1s)
+  ✓   26 [chromium] › tests\e2e\admin-users.spec.ts:50:3 › E2E-用户管理 (后台) › 2. 新增用户对话框打开 + 角色选项存在 (admin/viewer) (1.2s)
+  ✓   27 [chromium] › tests\e2e\deep-flow.spec.ts:87:3 › v30-22 深度 E2E: JWT 登录流程 › 1.1 登录页加载 + 表单元素存在 (884ms)
+  ✓   28 [chromium] › tests\e2e\admin-users.spec.ts:62:3 › E2E-用户管理 (后台) › 3. 新增用户对话框角色下拉存在 (1.3s)
+  ✓   29 [chromium] › tests\e2e\deep-flow.spec.ts:101:3 › v30-22 深度 E2E: JWT 登录流程 › 1.2 JWT 登录成功 → 跳转 /admin/products (2.0s)
+  ✓   30 [chromium] › tests\e2e\deep-flow.spec.ts:118:3 › v30-22 深度 E2E: JWT 登录流程 › 1.3 JWT 登录失败 → 错误提示 (1.0s)
+  ✓   31 [chromium] › tests\e2e\deep-flow.spec.ts:136:3 › v30-22 深度 E2E: 搜索流程 › 2.1 搜索页加载 + 输入框 + 搜索按钮存在 (1.5s)
+  ✓   32 [chromium] › tests\e2e\deep-flow.spec.ts:147:3 › v30-22 深度 E2E: 搜索流程 › 2.2 输入关键词 + 点击搜索 → 不白屏 (1.5s)
+  ✓   34 [chromium] › tests\e2e\deep-flow.spec.ts:171:3 › v30-22 深度 E2E: 搜索流程 › 2.4 公开搜索页 (8 字段) 加载 (1.3s)
+  ✓   33 [chromium] › tests\e2e\deep-flow.spec.ts:161:3 › v30-22 深度 E2E: 搜索流程 › 2.3 聚合搜索页加载 (Meili typo 容错) (1.8s)
+  ✓   35 [chromium] › tests\e2e\deep-flow.spec.ts:194:5 › v30-22 深度 E2E: 字典管理 › 3.1 字典 oem-brands 加载 (1.1s)
+  ✓   36 [chromium] › tests\e2e\deep-flow.spec.ts:194:5 › v30-22 深度 E2E: 字典管理 › 3.2 字典 product-name1s 加载 (1.1s)
+  ✓   37 [chromium] › tests\e2e\deep-flow.spec.ts:194:5 › v30-22 深度 E2E: 字典管理 › 3.3 字典 product-name2s 加载 (1.1s)
+  ✓   38 [chromium] › tests\e2e\deep-flow.spec.ts:194:5 › v30-22 深度 E2E: 字典管理 › 3.4 字典 types 加载 (1.1s)
+  ✓   39 [chromium] › tests\e2e\deep-flow.spec.ts:194:5 › v30-22 深度 E2E: 字典管理 › 3.5 字典 oem-no3s 加载 (1.1s)
+  ✓   40 [chromium] › tests\e2e\deep-flow.spec.ts:194:5 › v30-22 深度 E2E: 字典管理 › 3.6 字典 medias 加载 (1.1s)
+  ✓   41 [chromium] › tests\e2e\deep-flow.spec.ts:194:5 › v30-22 深度 E2E: 字典管理 › 3.7 字典 machines 加载 (1.1s)
+  ✓   42 [chromium] › tests\e2e\deep-flow.spec.ts:194:5 › v30-22 深度 E2E: 字典管理 › 3.8 字典 engines 加载 (1.2s)
+  ✓   43 [chromium] › tests\e2e\deep-flow.spec.ts:208:3 › v30-22 深度 E2E: ETL 触发 › 4.1 ETL 页加载 (domcontentloaded, 不等 SSE) (1.3s)
+  ✓   44 [chromium] › tests\e2e\deep-flow.spec.ts:219:3 › v30-22 深度 E2E: ETL 触发 › 4.2 ETL 历史查询 (如有) (1.2s)
+  ✓   45 [chromium] › tests\e2e\deep-flow.spec.ts:286:3 › v30-22 深度 E2E: 产品管理 › 6.1 产品列表加载 + 筛选交互 (1.2s)
+  ✓   46 [chromium] › tests\e2e\deep-flow.spec.ts:301:3 › v30-22 深度 E2E: 产品管理 › 6.2 新增产品表单加载 + 必填字段 (1.2s)
+  ✓   48 [chromium] › tests\e2e\deep-flow.spec.ts:325:3 › v30-22 深度 E2E: 告警 + 用户 + 密码 › 7.2 用户管理页加载 (admin 角色) (1.1s)
+  ✓   47 [chromium] › tests\e2e\deep-flow.spec.ts:316:3 › v30-22 深度 E2E: 告警 + 用户 + 密码 › 7.1 告警中心页加载 (P2-1) (1.2s)
+  ✓   49 [chromium] › tests\e2e\deep-flow.spec.ts:334:3 › v30-22 深度 E2E: 告警 + 用户 + 密码 › 7.3 修改密码页加载 (951ms)
+  ✓   50 [chromium] › tests\e2e\deep-flow.spec.ts:346:3 › v30-22 深度 E2E: OEM 排序 + 对比 › 8.1 OEM 排序管理页加载 (1.1s)
+  ✓   51 [chromium] › tests\e2e\deep-flow.spec.ts:355:3 › v30-22 深度 E2E: OEM 排序 + 对比 › 8.2 公开对比页 (旧 /compare 已移除, 验证路由降级不崩溃) (953ms)
+  ✓   52 [chromium] › tests\e2e\deep-flow.spec.ts:365:3 › v30-22 深度 E2E: OEM 排序 + 对比 › 8.3 Admin 对比页加载 (959ms)
+  ✘   53 [chromium] › tests\e2e\deep-flow.spec.ts:238:3 › v30-22 深度 E2E: 性能监控 › 5.1 性能监控页加载 + 指标卡片 (0ms)
+  -   55 [chromium] › tests\e2e\deep-flow.spec.ts:247:3 › v30-22 深度 E2E: 性能监控 › 5.2 /api/admin/perf/meili/snapshot 端点 (v30-20) 可访问
+  -   56 [chromium] › tests\e2e\deep-flow.spec.ts:265:3 › v30-22 深度 E2E: 性能监控 › 5.3 /api/admin/perf/alerts 端点可访问 (v30-18 鉴权)
+  -   57 [chromium] › tests\e2e\deep-flow.spec.ts:275:3 › v30-22 深度 E2E: 性能监控 › 5.4 /api/admin/perf/meili/snapshot 无 token → 401/403 (鉴权验证)
+  ✘   54 [chromium] › tests\e2e\deep-flow.spec.ts:397:3 › v30-22 深度 E2E: 后端 API 契约 › 9.2 /api/perf (v30-19 需 Admin token) 鉴权 (0ms)
+  -   58 [chromium] › tests\e2e\deep-flow.spec.ts:415:3 › v30-22 深度 E2E: 后端 API 契约 › 9.3 /api/admin/auth/status (v30-18 需 Admin token) 鉴权
+  -   59 [chromium] › tests\e2e\deep-flow.spec.ts:426:3 › v30-22 深度 E2E: 后端 API 契约 › 9.4 /metrics (Prometheus, v30-21 含 sakura_meili_*)
+  -   60 [chromium] › tests\e2e\deep-flow.spec.ts:437:3 › v30-22 深度 E2E: 后端 API 契约 › 9.5 /api/search/health (Meili 健康)
+  ✓   62 [chromium] › tests\e2e\public-search-flow.spec.ts:17:3 › P1-E2E-3 公开搜索流程 (用户视角) › 1. 搜索页加载 + 输入关键词 + 触发搜索 (2.1s)
+  ✓   63 [chromium] › tests\e2e\public-search-flow.spec.ts:49:3 › P1-E2E-3 公开搜索流程 (用户视角) › 2. 公开产品详情页加载 (已知 OEM) (834ms)
+  ✓   64 [chromium] › tests\e2e\public-search-flow.spec.ts:62:3 › P1-E2E-3 公开搜索流程 (用户视角) › 3. 公开搜索页 8 字段多框 (PublicSearch) (1.7s)
+  ✘   61 [chromium] › tests\e2e\deep-flow.spec.ts:384:3 › v30-22 深度 E2E: 后端 API 契约 › 9.1 /health/ready 返回完整 checks (0ms)
+  ✓   66 [chromium] › tests\e2e\public-search-flow.spec.ts:95:3 › P1-E2E-3 公开搜索流程 (用户视角) › 5. 导航栏跳转 (搜索 ↔ 后台) (1.5s)
+  ✓   65 [chromium] › tests\e2e\public-search-flow.spec.ts:78:3 › P1-E2E-3 公开搜索流程 (用户视角) › 4. 主题切换功能 (浅色/深色) (5.7s)
+  ✓   68 [chromium] › tests\e2e\public-search-flow.spec.ts:164:3 › P1-E2E-3 公开搜索流程 (用户视角) › 7. 桌面机型目录按场景、品牌、型号联动公开搜索 (2.3s)
+  ✓   69 [chromium] › tests\e2e\public-search-flow.spec.ts:212:3 › P1-E2E-3 公开搜索流程 (用户视角) › 10. 批量粘贴 → 查询 → 点击命中行 → 跳正确详情 URL (1.9s)
+node.exe : [cleanup] viewer 用户清理失败: Error: 登录失败 admin: 429 {"type":"https://tools.ietf.org/html/rfc6585#section-4","tit
+le":"Too Many Requests","status":429,"detail":"请求频率超限, 请稍后重试"}
+At line:1 char:1
++ & "C:\Program Files\nodejs/node.exe" "C:\Program Files\nodejs/node_mo ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ([cleanup] viewe...请求频率超限, 请稍后重试"}:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+    at loginViaApi (file:///F:/sakurafilter-perf/frontend/tests/e2e/real-auth-security.spec.ts:60:11)
+    at cleanupViewerUser (file:///F:/sakurafilter-perf/frontend/tests/e2e/real-auth-security.spec.ts:124:34)
+    at file:///F:/sakurafilter-perf/frontend/tests/e2e/real-auth-security.spec.ts:170:5
+    at F:\sakurafilter-perf\frontend\node_modules\playwright\lib\worker\workerProcessEntry.js:1154:11
+    at TimeoutManager.withRunnable (F:\sakurafilter-perf\frontend\node_modules\playwright\lib\worker\workerProcessEntry
+.js:425:14)
+    at TestInfoImpl._runWithTimeout (F:\sakurafilter-perf\frontend\node_modules\playwright\lib\worker\workerProcessEntr
+y.js:1152:7)
+    at FixtureRunner.resolveParametersAndRunFunction (F:\sakurafilter-perf\frontend\node_modules\playwright\lib\worker\
+workerProcessEntry.js:343:5)
+    at F:\sakurafilter-perf\frontend\node_modules\playwright\lib\worker\workerProcessEntry.js:1782:13
+    at TestInfoImpl._runAsStep (F:\sakurafilter-perf\frontend\node_modules\playwright\lib\worker\workerProcessEntry.js:
+1143:7)
+    at WorkerMain._runAllHooksForSuite (F:\sakurafilter-perf\frontend\node_modules\playwright\lib\worker\workerProcessE
+ntry.js:1777:9)
+    at WorkerMain._runAfterAllHooksForSuite (F:\sakurafilter-perf\frontend\node_modules\playwright\lib\worker\workerPro
+cessEntry.js:1807:5)
+    at F:\sakurafilter-perf\frontend\node_modules\playwright\lib\worker\workerProcessEntry.js:1692:13
+    at TestInfoImpl._runAsStep (F:\sakurafilter-perf\frontend\node_modules\playwright\lib\worker\workerProcessEntry.js:
+1143:7)
+    at WorkerMain._runTest (F:\sakurafilter-perf\frontend\node_modules\playwright\lib\worker\workerProcessEntry.js:1670
+:5)
+    at WorkerMain.runTestGroup (F:\sakurafilter-perf\frontend\node_modules\playwright\lib\worker\workerProcessEntry.js:
+1528:9)
+    at process.<anonymous> (F:\sakurafilter-perf\frontend\node_modules\playwright\lib\common\index.js:1991:25)
+  ✘   70 [chromium] › tests\e2e\real-auth-security.spec.ts:174:3 › SakuraFilter 真实鉴权安全 E2E › 1. 未登录访问 /admin/products → 跳转 /login?redirect=... (0ms)
+  -   71 [chromium] › tests\e2e\real-auth-security.spec.ts:191:3 › SakuraFilter 真实鉴权安全 E2E › 2. 登录页输入 admin/Admin@2026 → 登录成功 → 回跳 /admin/products
+  -   72 [chromium] › tests\e2e\real-auth-security.spec.ts:222:3 › SakuraFilter 真实鉴权安全 E2E › 3. viewer 角色访问 /admin/users → 跳转 /admin/products + ElMessage warning
+  -   73 [chromium] › tests\e2e\real-auth-security.spec.ts:243:3 › SakuraFilter 真实鉴权安全 E2E › 4. viewer token 调用 /api/admin/users → 403 Forbidden
+  -   74 [chromium] › tests\e2e\real-auth-security.spec.ts:269:3 › SakuraFilter 真实鉴权安全 E2E › 5. 无 token 调用 /api/admin/products → 401 Unauthorized
+  -   75 [chromium] › tests\e2e\real-auth-security.spec.ts:279:3 › SakuraFilter 真实鉴权安全 E2E › 6. 不存在的产品 ID 999999999 → 404 非 500, 不泄露堆栈
+  -   76 [chromium] › tests\e2e\real-auth-security.spec.ts:296:3 › SakuraFilter 真实鉴权安全 E2E › 7. cursor 篡改 → 400 + errorCode (CURSOR_INVALID)
+  -   77 [chromium] › tests\e2e\real-auth-security.spec.ts:327:3 › SakuraFilter 真实鉴权安全 E2E › 8a. JWT 过期 (401) → axios 自动 refresh → 请求重试成功
+  -   78 [chromium] › tests\e2e\real-auth-security.spec.ts:385:3 › SakuraFilter 真实鉴权安全 E2E › 8b. refresh 也过期 (无效 refreshToken) → 跳转 /login
+  ✘   79 [chromium] › tests\e2e\real-dict-reorder.spec.ts:174:3 › 字典拖拽排序 → 搜索排序生效 全链路 › 1. OEM 排序管理页加载 + Brand 列表 (0ms)
+  -   80 [chromium] › tests\e2e\real-dict-reorder.spec.ts:221:3 › 字典拖拽排序 → 搜索排序生效 全链路 › 2. 拖拽 OEM 3 重排序 (API 触发 + UI 持久化验证)
+  -   81 [chromium] › tests\e2e\real-dict-reorder.spec.ts:300:3 › 字典拖拽排序 → 搜索排序生效 全链路 › 3. 保存后排序持久化 (刷新页面仍保持)
+  -   82 [chromium] › tests\e2e\real-dict-reorder.spec.ts:322:3 › 字典拖拽排序 → 搜索排序生效 全链路 › 4. 公开搜索结果排序生效 (后端 DB sortOrder 验证 + UI 搜索加载)
+  -   83 [chromium] › tests\e2e\real-dict-reorder.spec.ts:380:3 › 字典拖拽排序 → 搜索排序生效 全链路 › 5. 并发重排序 → 收到 409 XREF_CONFLICT (API 验证)
+  -   84 [chromium] › tests\e2e\real-dict-reorder.spec.ts:424:3 › 字典拖拽排序 → 搜索排序生效 全链路 › 6. 还原原始顺序 (避免污染数据)
+  ✓   85 [chromium] › tests\e2e\real-etl-flow.spec.ts:193:3 › P1-E2E-ETL 真实 ETL 全流程 (拖拽 + SSE + 暂停/恢复 + 死信 + 重连 + 取消) › 1. ETL 页面加载 + 触发区域存在 (1.3s)
+  ✓   86 [chromium] › tests\e2e\real-etl-flow.spec.ts:218:3 › P1-E2E-ETL 真实 ETL 全流程 (拖拽 + SSE + 暂停/恢复 + 死信 + 重连 + 取消) › 2. 全窗口拖拽触发 DragDropOverlay 遮罩 (1.1s)
+  ✘   67 [chromium] › tests\e2e\public-search-flow.spec.ts:108:3 › P1-E2E-3 公开搜索流程 (用户视角) › 6. 移动端公开搜索、详情与对比页无页面级横向溢出 (17.2s)
+  ✓   88 [chromium] › tests\e2e\real-meili-failover.spec.ts:236:3 › Meili 降级 + 恶意文件上传 异常场景 E2E › 1. Meili 正常时搜索返回 meili provider (76ms)
+  ✓   89 [chromium] › tests\e2e\real-meili-failover.spec.ts:267:3 › Meili 降级 + 恶意文件上传 异常场景 E2E › 2. 模拟 Meili 挂掉 → 搜索降级到 PG (3.5s)
+  ✓   90 [chromium] › tests\e2e\real-meili-failover.spec.ts:342:3 › Meili 降级 + 恶意文件上传 异常场景 E2E › 3. Meili 恢复 → 搜索回切 (3.1s)
+  ✘   87 [chromium] › tests\e2e\real-etl-flow.spec.ts:259:3 › P1-E2E-ETL 真实 ETL 全流程 (拖拽 + SSE + 暂停/恢复 + 死信 + 重连 + 取消) › 3. 拖拽 XLSX → 路径填入 → 触发 ETL → SSE 进度 (15.3s)
+  -   92 [chromium] › tests\e2e\real-etl-flow.spec.ts:356:3 › P1-E2E-ETL 真实 ETL 全流程 (拖拽 + SSE + 暂停/恢复 + 死信 + 重连 + 取消) › 4. 暂停按钮 → 任务状态 paused
+  -   93 [chromium] › tests\e2e\real-etl-flow.spec.ts:399:3 › P1-E2E-ETL 真实 ETL 全流程 (拖拽 + SSE + 暂停/恢复 + 死信 + 重连 + 取消) › 5. 恢复按钮 → 任务继续
+  -   94 [chromium] › tests\e2e\real-etl-flow.spec.ts:455:3 › P1-E2E-ETL 真实 ETL 全流程 (拖拽 + SSE + 暂停/恢复 + 死信 + 重连 + 取消) › 6. 任务完成 + 死信队列 API 验证
+  -   95 [chromium] › tests\e2e\real-etl-flow.spec.ts:510:3 › P1-E2E-ETL 真实 ETL 全流程 (拖拽 + SSE + 暂停/恢复 + 死信 + 重连 + 取消) › 7. SSE 断开重连 (route 拦截模拟服务端错误 → 指数退避重连)
+  -   96 [chromium] › tests\e2e\real-etl-flow.spec.ts:559:3 › P1-E2E-ETL 真实 ETL 全流程 (拖拽 + SSE + 暂停/恢复 + 死信 + 重连 + 取消) › 8. 取消按钮 + ElMessageBox 多步确认
+  ✓   91 [chromium] › tests\e2e\real-meili-failover.spec.ts:384:3 › Meili 降级 + 恶意文件上传 异常场景 E2E › 4. 上传伪装为 .xlsx 的恶意文件 → 后端拒绝 (1.7s)
+  ✓   97 [chromium] › tests\e2e\real-optimistic-lock.spec.ts:270:3 › 产品乐观锁并发冲突 E2E (SakuraFilter) › 1. 并发编辑同一产品 → Context B 保存收到 409 (2.6s)
+  ✓   98 [chromium] › tests\e2e\real-meili-failover.spec.ts:442:3 › Meili 降级 + 恶意文件上传 异常场景 E2E › 5. 上传超大文件 → 触发大小限制 (4.0s)
+  ✓  100 [chromium] › tests\e2e\real-meili-failover.spec.ts:492:3 › Meili 降级 + 恶意文件上传 异常场景 E2E › 6. 上传空文件 (1.7s)
+  ✓   99 [chromium] › tests\e2e\real-optimistic-lock.spec.ts:335:3 › 产品乐观锁并发冲突 E2E (SakuraFilter) › 2. 冲突后前端自动 reload + GET 最新数据 (或弹草稿恢复弹窗) (7.3s)
+  ✓  102 [chromium] › tests\e2e\real-optimistic-lock.spec.ts:419:3 › 产品乐观锁并发冲突 E2E (SakuraFilter) › 3. 还原 oem2 为原值 (2.1s)
+  ✓  103 [chromium] › tests\e2e\real-optimistic-lock.spec.ts:470:3 › 产品乐观锁并发冲突 E2E (SakuraFilter) › 4. 同时上传主图 slot 1 → 触发 23505 → 409 ERR_DB_CONFLICT (2.0s)
+  ✓  104 [chromium] › tests\e2e\real-search-compare.spec.ts:95:3 › 真实搜索→详情→对比→列序持久化 E2E (用户视角) › 1. 聚合搜索 filter → 真实结果卡片 + OEM 信息 (1.8s)
+  ✘  101 [chromium] › tests\e2e\real-meili-failover.spec.ts:539:3 › Meili 降级 + 恶意文件上传 异常场景 E2E › 7. mr_1 空行导致整批拒绝 (11.5s)
+  ✓  105 [chromium] › tests\e2e\real-search-compare.spec.ts:135:3 › 真实搜索→详情→对比→列序持久化 E2E (用户视角) › 2. 点击产品卡片 → SEO 详情页 URL 验证 (1.9s)
+  ✓  107 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:175:3 › 1. 主题切换: 浅色 → 深色 → 跟随系统 › 1.1 浅色 → 深色: html 加 dark class + localStorage 持久化 (2.0s)
+  ✓  108 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:199:3 › 1. 主题切换: 浅色 → 深色 → 跟随系统 › 1.2 深色 → 浅色: dark class 移除 (1.8s)
+  ✓  109 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:223:3 › 1. 主题切换: 浅色 → 深色 → 跟随系统 › 1.3 跟随系统: 清除 localStorage 后按 prefers-color-scheme 决定主题 (1.9s)
+  ✓  110 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:254:1 › 2. 主题切换无刷新即时生效: CSS 变量立即变化 (1.8s)
+  ✓  111 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:305:3 › 3. i18n 切换: zh-CN → en-US, 覆盖全部路由 › 3.1 语言切换按钮: 点击 zh-CN → en-US (localStorage + HTML lang) (1.5s)
+  ✓  112 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:344:5 › 3. i18n 切换: zh-CN → en-US, 覆盖全部路由 › 3.2 aggregate-search (/search/aggregate): en-US 无 i18n key 残留 (2.9s)
+  ✓  113 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:344:5 › 3. i18n 切换: zh-CN → en-US, 覆盖全部路由 › 3.2 public-search (/public/search): en-US 无 i18n key 残留 (2.3s)
+  ✓  114 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:344:5 › 3. i18n 切换: zh-CN → en-US, 覆盖全部路由 › 3.2 product-detail (/products/oil-filter/spin-on/bosch/11427622448): en-US 无 i18n key 残留 (2.3s)
+  ✓  115 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:344:5 › 3. i18n 切换: zh-CN → en-US, 覆盖全部路由 › 3.2 compare (/compare): en-US 无 i18n key 残留 (2.4s)
+  ✓  116 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:344:5 › 3. i18n 切换: zh-CN → en-US, 覆盖全部路由 › 3.2 about (/about): en-US 无 i18n key 残留 (2.4s)
+  ✘  106 [chromium] › tests\e2e\real-search-compare.spec.ts:160:3 › 真实搜索→详情→对比→列序持久化 E2E (用户视角) › 3. 详情页"加入对比" → 跳转对比页 + 列存在 (22.2s)
+  -  118 [chromium] › tests\e2e\real-search-compare.spec.ts:199:3 › 真实搜索→详情→对比→列序持久化 E2E (用户视角) › 4. 对比页列调序 → 刷新后顺序持久化
+  -  119 [chromium] › tests\e2e\real-search-compare.spec.ts:266:3 › 真实搜索→详情→对比→列序持久化 E2E (用户视角) › 5. 对比页差异高亮验证
+  -  120 [chromium] › tests\e2e\real-search-compare.spec.ts:305:3 › 真实搜索→详情→对比→列序持久化 E2E (用户视角) › 6. 对比页清空 → 空状态 + sessionStorage 清理
+  ✓  117 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:344:5 › 3. i18n 切换: zh-CN → en-US, 覆盖全部路由 › 3.2 news (/news): en-US 无 i18n key 残留 (2.4s)
+  ✓  121 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:344:5 › 3. i18n 切换: zh-CN → en-US, 覆盖全部路由 › 3.2 contact (/contact): en-US 无 i18n key 残留 (2.5s)
+  ✓  122 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:344:5 › 3. i18n 切换: zh-CN → en-US, 覆盖全部路由 › 3.2 login (/login): en-US 无 i18n key 残留 (2.3s)
+  ✓  123 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:344:5 › 3. i18n 切换: zh-CN → en-US, 覆盖全部路由 › 3.2 demo (/demo): en-US 无 i18n key 残留 (2.3s)
+  ✓  124 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:344:5 › 3. i18n 切换: zh-CN → en-US, 覆盖全部路由 › 3.2 admin-products (/admin/products): en-US 无 i18n key 残留 (2.5s)
+  ✓  125 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:344:5 › 3. i18n 切换: zh-CN → en-US, 覆盖全部路由 › 3.2 admin-product-new (/admin/products/new): en-US 无 i18n key 残留 (2.4s)
+  ✓  126 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:344:5 › 3. i18n 切换: zh-CN → en-US, 覆盖全部路由 › 3.2 admin-etl (/admin/etl): en-US 无 i18n key 残留 (2.4s)
+  ✓  127 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:344:5 › 3. i18n 切换: zh-CN → en-US, 覆盖全部路由 › 3.2 admin-alerts (/admin/alerts): en-US 无 i18n key 残留 (2.6s)
+  ✓  128 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:344:5 › 3. i18n 切换: zh-CN → en-US, 覆盖全部路由 › 3.2 admin-oem-brands (/admin/dict/oem-brands): en-US 无 i18n key 残留 (2.4s)
+  ✓  129 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:344:5 › 3. i18n 切换: zh-CN → en-US, 覆盖全部路由 › 3.2 admin-pn1 (/admin/dict/product-name1s): en-US 无 i18n key 残留 (2.4s)
+  ✓  130 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:344:5 › 3. i18n 切换: zh-CN → en-US, 覆盖全部路由 › 3.2 admin-pn2 (/admin/dict/product-name2s): en-US 无 i18n key 残留 (2.4s)
+  ✓  131 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:344:5 › 3. i18n 切换: zh-CN → en-US, 覆盖全部路由 › 3.2 admin-types (/admin/dict/types): en-US 无 i18n key 残留 (2.4s)
+  ✓  132 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:344:5 › 3. i18n 切换: zh-CN → en-US, 覆盖全部路由 › 3.2 admin-oem3 (/admin/dict/oem-no3s): en-US 无 i18n key 残留 (2.4s)
+  ✓  133 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:344:5 › 3. i18n 切换: zh-CN → en-US, 覆盖全部路由 › 3.2 admin-medias (/admin/dict/medias): en-US 无 i18n key 残留 (2.5s)
+  ✓  134 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:344:5 › 3. i18n 切换: zh-CN → en-US, 覆盖全部路由 › 3.2 admin-machines (/admin/dict/machines): en-US 无 i18n key 残留 (2.4s)
+  ✓  135 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:344:5 › 3. i18n 切换: zh-CN → en-US, 覆盖全部路由 › 3.2 admin-engines (/admin/dict/engines): en-US 无 i18n key 残留 (2.4s)
+  ✓  136 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:344:5 › 3. i18n 切换: zh-CN → en-US, 覆盖全部路由 › 3.2 admin-xrefs (/admin/xrefs/reorder): en-US 无 i18n key 残留 (2.4s)
+  ✓  137 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:344:5 › 3. i18n 切换: zh-CN → en-US, 覆盖全部路由 › 3.2 admin-compare (/admin/compare): en-US 无 i18n key 残留 (2.4s)
+  ✓  138 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:344:5 › 3. i18n 切换: zh-CN → en-US, 覆盖全部路由 › 3.2 admin-help (/admin/help): en-US 无 i18n key 残留 (2.5s)
+  ✓  139 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:344:5 › 3. i18n 切换: zh-CN → en-US, 覆盖全部路由 › 3.2 admin-perf (/admin/perf): en-US 无 i18n key 残留 (2.4s)
+  ✓  140 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:344:5 › 3. i18n 切换: zh-CN → en-US, 覆盖全部路由 › 3.2 admin-errors (/admin/errors): en-US 无 i18n key 残留 (2.4s)
+  ✓  141 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:344:5 › 3. i18n 切换: zh-CN → en-US, 覆盖全部路由 › 3.2 admin-api-docs (/admin/api-docs): en-US 无 i18n key 残留 (2.4s)
+  ✓  142 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:395:1 › 4. i18n 切换后主题保持不变 (1.5s)
+  ✓  143 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:439:3 › 5. 移动端 375px 响应式 › 5.1 聚合搜索页: 无水平溢出 + 搜索框可见可输入 (1.3s)
+  ✓  144 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:465:3 › 5. 移动端 375px 响应式 › 5.2 详情页: 内容不溢出 (2.8s)
+  ✓  145 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:482:3 › 5. 移动端 375px 响应式 › 5.3 对比页: 表格横向滚动 (溢出有滚动条, 非布局破坏) (2.9s)
+  ✓  146 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:512:1 › 6. 移动端导航: 汉堡菜单可见 + 点击展开 (1.5s)
+  ✓  147 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:546:5 › 7. 暗色主题: 全部路由无样式异常 › 7. aggregate-search (/search/aggregate): 暗色不白屏 + 背景深色 (2.9s)
+  ✓  148 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:546:5 › 7. 暗色主题: 全部路由无样式异常 › 7. public-search (/public/search): 暗色不白屏 + 背景深色 (2.9s)
+  ✓  149 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:546:5 › 7. 暗色主题: 全部路由无样式异常 › 7. product-detail (/products/oil-filter/spin-on/bosch/11427622448): 暗色不白屏 + 背景深色 (2.9s)
+  ✓  150 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:546:5 › 7. 暗色主题: 全部路由无样式异常 › 7. compare (/compare): 暗色不白屏 + 背景深色 (2.9s)
+  ✓  151 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:546:5 › 7. 暗色主题: 全部路由无样式异常 › 7. about (/about): 暗色不白屏 + 背景深色 (2.9s)
+  ✓  152 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:546:5 › 7. 暗色主题: 全部路由无样式异常 › 7. news (/news): 暗色不白屏 + 背景深色 (2.8s)
+  ✓  153 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:546:5 › 7. 暗色主题: 全部路由无样式异常 › 7. contact (/contact): 暗色不白屏 + 背景深色 (2.9s)
+  ✓  154 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:546:5 › 7. 暗色主题: 全部路由无样式异常 › 7. login (/login): 暗色不白屏 + 背景深色 (2.9s)
+  ✓  155 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:546:5 › 7. 暗色主题: 全部路由无样式异常 › 7. demo (/demo): 暗色不白屏 + 背景深色 (3.0s)
+  ✓  156 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:546:5 › 7. 暗色主题: 全部路由无样式异常 › 7. admin-products (/admin/products): 暗色不白屏 + 背景深色 (3.0s)
+  ✓  157 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:546:5 › 7. 暗色主题: 全部路由无样式异常 › 7. admin-product-new (/admin/products/new): 暗色不白屏 + 背景深色 (2.9s)
+  ✓  158 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:546:5 › 7. 暗色主题: 全部路由无样式异常 › 7. admin-etl (/admin/etl): 暗色不白屏 + 背景深色 (2.9s)
+  ✓  160 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:546:5 › 7. 暗色主题: 全部路由无样式异常 › 7. admin-oem-brands (/admin/dict/oem-brands): 暗色不白屏 + 背景深色 (2.9s)
+  ✓  159 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:546:5 › 7. 暗色主题: 全部路由无样式异常 › 7. admin-alerts (/admin/alerts): 暗色不白屏 + 背景深色 (3.1s)
+  ✓  161 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:546:5 › 7. 暗色主题: 全部路由无样式异常 › 7. admin-pn1 (/admin/dict/product-name1s): 暗色不白屏 + 背景深色 (2.9s)
+  ✓  162 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:546:5 › 7. 暗色主题: 全部路由无样式异常 › 7. admin-pn2 (/admin/dict/product-name2s): 暗色不白屏 + 背景深色 (2.9s)
+  ✓  163 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:546:5 › 7. 暗色主题: 全部路由无样式异常 › 7. admin-types (/admin/dict/types): 暗色不白屏 + 背景深色 (3.0s)
+  ✓  164 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:546:5 › 7. 暗色主题: 全部路由无样式异常 › 7. admin-oem3 (/admin/dict/oem-no3s): 暗色不白屏 + 背景深色 (3.0s)
+  ✓  165 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:546:5 › 7. 暗色主题: 全部路由无样式异常 › 7. admin-medias (/admin/dict/medias): 暗色不白屏 + 背景深色 (2.9s)
+  ✓  166 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:546:5 › 7. 暗色主题: 全部路由无样式异常 › 7. admin-machines (/admin/dict/machines): 暗色不白屏 + 背景深色 (2.9s)
+  ✓  167 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:546:5 › 7. 暗色主题: 全部路由无样式异常 › 7. admin-engines (/admin/dict/engines): 暗色不白屏 + 背景深色 (2.9s)
+  ✓  168 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:546:5 › 7. 暗色主题: 全部路由无样式异常 › 7. admin-xrefs (/admin/xrefs/reorder): 暗色不白屏 + 背景深色 (2.9s)
+  ✓  169 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:546:5 › 7. 暗色主题: 全部路由无样式异常 › 7. admin-compare (/admin/compare): 暗色不白屏 + 背景深色 (2.9s)
+  ✓  170 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:546:5 › 7. 暗色主题: 全部路由无样式异常 › 7. admin-help (/admin/help): 暗色不白屏 + 背景深色 (3.0s)
+  ✓  171 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:546:5 › 7. 暗色主题: 全部路由无样式异常 › 7. admin-perf (/admin/perf): 暗色不白屏 + 背景深色 (3.0s)
+  ✓  172 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:546:5 › 7. 暗色主题: 全部路由无样式异常 › 7. admin-errors (/admin/errors): 暗色不白屏 + 背景深色 (3.0s)
+  ✓  173 [chromium] › tests\e2e\real-ui-theme-i18n-mobile.spec.ts:546:5 › 7. 暗色主题: 全部路由无样式异常 › 7. admin-api-docs (/admin/api-docs): 暗色不白屏 + 背景深色 (2.9s)
+  ✓  174 [chromium] › tests\e2e\typeahead.spec.ts:15:3 › E2E-typeahead 自动补全 › 1. 搜索框输入 2 字符 → 联想候选出现 (防抖 500ms 后) (2.6s)
+  ✓  176 [chromium] › tests\e2e\v2-seo-redirect.spec.ts:28:3 › V2 Task 5.3.4: SEO URL 重定向 + Razor SSR + Vue mount › 1. 旧 URL /product/{oem} 触发 301 重定向到新 SEO URL (799ms)
+  ✓  177 [chromium] › tests\e2e\v2-seo-redirect.spec.ts:56:3 › V2 Task 5.3.4: SEO URL 重定向 + Razor SSR + Vue mount › 2. 旧 URL 含特殊字符时 301 仍正常 (URL 编码) (853ms)
+  ✓  178 [chromium] › tests\e2e\v2-seo-redirect.spec.ts:71:3 › V2 Task 5.3.4: SEO URL 重定向 + Razor SSR + Vue mount › 3. SEO URL 直接访问 Razor SSR 渲染产品详情 (769ms)
+  ✓  175 [chromium] › tests\e2e\typeahead.spec.ts:34:3 › E2E-typeahead 自动补全 › 2. 输入触发 typeahead API 请求 (network 验证) (2.7s)
+  ✓  180 [chromium] › tests\e2e\v2-seo-redirect.spec.ts:112:3 › V2 Task 5.3.4: SEO URL 重定向 + Razor SSR + Vue mount › 5. 不存在的 OEM3 访问 SEO URL 返回 404 (不白屏) (840ms)
+  ✓  181 [chromium] › tests\e2e\v2-seo-redirect.spec.ts:126:3 › V2 Task 5.3.4: SEO URL 重定向 + Razor SSR + Vue mount › 6. VueMountFailure 兜底: SSR 内容在 Vue mount 失败时仍可见 (730ms)
+  ✓  182 [chromium] › tests\e2e\v2-seo-redirect.spec.ts:152:3 › V2 Task 5.3.4: SEO URL 重定向 + Razor SSR + Vue mount › 7. 聚合搜索页加载 + Vue mount (AggregateSearchView) (807ms)
+  ✓  183 [chromium] › tests\e2e\v2-seo-redirect.spec.ts:171:3 › V2 Task 5.3.4: SEO URL 重定向 + Razor SSR + Vue mount › 8. Admin 产品表单加载 + MR.1 校验规则触发 (1.1s)
+  ✓  184 [chromium] › tests\e2e\v2-seo-redirect.spec.ts:207:3 › V2 Task 5.3.4: SEO URL 重定向 + Razor SSR + Vue mount › 9. Admin OEM 3 排序管理页加载 (V2 Task 2.2) (934ms)
+  ✓  185 [chromium] › tests\functional\smoke.spec.ts:26:3 › P0-E2E-2 功能性 smoke (CI 空库友好) › 1. 公开搜索页 /search 能加载 (1.4s)
+  ✓  186 [chromium] › tests\functional\smoke.spec.ts:34:3 › P0-E2E-2 功能性 smoke (CI 空库友好) › 2. 公开产品详情页路由能匹配 (404 也算 PASS, 只验证不白屏) (1.7s)
+  ✓  187 [chromium] › tests\functional\smoke.spec.ts:43:3 › P0-E2E-2 功能性 smoke (CI 空库友好) › 3. admin token 注入后后台产品页能加载 (1.4s)
+  ✓  188 [chromium] › tests\functional\smoke.spec.ts:63:7 › P0-E2E-2 功能性 smoke (CI 空库友好) › 4. 8 个字典页能加载 › 字典页 oem-brands 能加载 (.dict-head 出现) (865ms)
+  ✓  189 [chromium] › tests\functional\smoke.spec.ts:63:7 › P0-E2E-2 功能性 smoke (CI 空库友好) › 4. 8 个字典页能加载 › 字典页 product-name1s 能加载 (.dict-head 出现) (950ms)
+  ✓  190 [chromium] › tests\functional\smoke.spec.ts:63:7 › P0-E2E-2 功能性 smoke (CI 空库友好) › 4. 8 个字典页能加载 › 字典页 product-name2s 能加载 (.dict-head 出现) (891ms)
+  ✓  191 [chromium] › tests\functional\smoke.spec.ts:63:7 › P0-E2E-2 功能性 smoke (CI 空库友好) › 4. 8 个字典页能加载 › 字典页 types 能加载 (.dict-head 出现) (894ms)
+  ✓  192 [chromium] › tests\functional\smoke.spec.ts:63:7 › P0-E2E-2 功能性 smoke (CI 空库友好) › 4. 8 个字典页能加载 › 字典页 oem-no3s 能加载 (.dict-head 出现) (879ms)
+  ✓  193 [chromium] › tests\functional\smoke.spec.ts:63:7 › P0-E2E-2 功能性 smoke (CI 空库友好) › 4. 8 个字典页能加载 › 字典页 medias 能加载 (.dict-head 出现) (877ms)
+  ✓  194 [chromium] › tests\functional\smoke.spec.ts:63:7 › P0-E2E-2 功能性 smoke (CI 空库友好) › 4. 8 个字典页能加载 › 字典页 machines 能加载 (.dict-head 出现) (919ms)
+  ✓  179 [chromium] › tests\e2e\v2-seo-redirect.spec.ts:90:3 › V2 Task 5.3.4: SEO URL 重定向 + Razor SSR + Vue mount › 4. Vue 子组件 mount (GalleryApp/CompareApp/InquiryApp) (15.8s)
+  ✓  195 [chromium] › tests\functional\smoke.spec.ts:63:7 › P0-E2E-2 功能性 smoke (CI 空库友好) › 4. 8 个字典页能加载 › 字典页 engines 能加载 (.dict-head 出现) (994ms)
+  ✓  196 [chromium] › tests\functional\smoke.spec.ts:72:3 › P0-E2E-2 功能性 smoke (CI 空库友好) › 5. ETL 触发页能加载 (1.2s)
+  ✓  197 [chromium] › tests\functional\smoke.spec.ts:81:3 › P0-E2E-2 功能性 smoke (CI 空库友好) › 6. 性能监控页能加载 (975ms)
+  ✓  198 [chromium] › tests\functional\smoke.spec.ts:87:3 › P0-E2E-2 功能性 smoke (CI 空库友好) › 7. 帮助页能加载 (1.1s)
+  ✓  199 [chromium] › tests\functional\smoke.spec.ts:93:3 › P0-E2E-2 功能性 smoke (CI 空库友好) › 8. 对比页能加载 (空状态) (931ms)
+
+
+  1) [chromium] › tests\e2e\admin-products-flow.spec.ts:47:3 › P1-E2E-3 管理员产品管理流程 (用户视角) › 2. 产品筛选表单交互 
+
+    TimeoutError: locator.waitFor: Timeout 8000ms exceeded.
+    Call log:
+      - waiting for getByTestId('admin-search-oem2') to be visible
+
+
+      52 |     // 等待搜索框可见 (显式等待, 避免仅 DOM 存在但被 loading 遮挡时误判)
+      53 |     const searchInput = page.getByTestId('admin-search-oem2')
+    > 54 |     await searchInput.waitFor({ state: 'visible', timeout: 8000 })
+         |                       ^
+      55 |     // 输入关键词并触发筛选 (Enter 触发 quickSearch)
+      56 |     await searchInput.fill('Bosch')
+      57 |     await searchInput.press('Enter')
+        at F:\sakurafilter-perf\frontend\tests\e2e\admin-products-flow.spec.ts:54:23
+
+    Error Context: test-results\e2e-admin-products-flow-P1-E2E-3-管理员产品管理流程-用户视角-2-产品筛选表单交互-chromium\error-context.md
+
+  2) [chromium] › tests\e2e\admin-products-flow.spec.ts:101:3 › P1-E2E-3 管理员产品管理流程 (用户视角) › 6. 字典管理导航 (8 字典切换) 
+
+    Error: expect(received).toBeGreaterThanOrEqual(expected)
+
+    Expected: >= 1
+    Received:    0
+
+      105 |     // 验证字典表格存在
+      106 |     const dictHead = await page.locator('.dict-head').count()
+    > 107 |     expect(dictHead).toBeGreaterThanOrEqual(1)
+          |                      ^
+      108 |     // 截图
+      109 |     await page.screenshot({ path: 'test-results/e2e-admin-dict-oem-brands.png' })
+      110 |   })
+        at F:\sakurafilter-perf\frontend\tests\e2e\admin-products-flow.spec.ts:107:22
+
+    Error Context: test-results\e2e-admin-products-flow-P1-f354c-品管理流程-用户视角-6-字典管理导航-8-字典切换--chromium\error-context.md
+
+  3) [chromium] › tests\e2e\deep-flow.spec.ts:238:3 › v30-22 深度 E2E: 性能监控 › 5.1 性能监控页加载 + 指标卡片 ─────
+
+    Error: JWT login failed after retries: rate limited
+
+      80 |     return body.accessToken
+      81 |   }
+    > 82 |   throw new Error('JWT login failed after retries: rate limited')
+         |         ^
+      83 | }
+      84 |
+      85 | // ===== 1. JWT 登录流程 =====
+        at fetchJwtToken (F:\sakurafilter-perf\frontend\tests\e2e\deep-flow.spec.ts:82:9)
+        at F:\sakurafilter-perf\frontend\tests\e2e\deep-flow.spec.ts:235:11
+
+    Error Context: test-results\e2e-deep-flow-v30-22-深度-E2E-性能监控-5-1-性能监控页加载-指标卡片-chromium\error-context.md
+
+  4) [chromium] › tests\e2e\deep-flow.spec.ts:384:3 › v30-22 深度 E2E: 后端 API 契约 › 9.1 /health/ready 返回完整 checks 
+
+    Error: JWT login failed after retries: rate limited
+
+      80 |     return body.accessToken
+      81 |   }
+    > 82 |   throw new Error('JWT login failed after retries: rate limited')
+         |         ^
+      83 | }
+      84 |
+      85 | // ===== 1. JWT 登录流程 =====
+        at fetchJwtToken (F:\sakurafilter-perf\frontend\tests\e2e\deep-flow.spec.ts:82:9)
+        at F:\sakurafilter-perf\frontend\tests\e2e\deep-flow.spec.ts:381:11
+
+    Error Context: test-results\e2e-deep-flow-v30-22-深度-E2-b88ea--1-health-ready-返回完整-checks-chromium\error-context.md
+
+  5) [chromium] › tests\e2e\deep-flow.spec.ts:397:3 › v30-22 深度 E2E: 后端 API 契约 › 9.2 /api/perf (v30-19 需 Admin token) 鉴权 
+
+    Error: JWT login failed after retries: rate limited
+
+      80 |     return body.accessToken
+      81 |   }
+    > 82 |   throw new Error('JWT login failed after retries: rate limited')
+         |         ^
+      83 | }
+      84 |
+      85 | // ===== 1. JWT 登录流程 =====
+        at fetchJwtToken (F:\sakurafilter-perf\frontend\tests\e2e\deep-flow.spec.ts:82:9)
+        at F:\sakurafilter-perf\frontend\tests\e2e\deep-flow.spec.ts:381:11
+
+    Error Context: test-results\e2e-deep-flow-v30-22-深度-E2-f60f4-erf-v30-19-需-Admin-token-鉴权-chromium\error-context.md
+
+  6) [chromium] › tests\e2e\public-search-flow.spec.ts:108:3 › P1-E2E-3 公开搜索流程 (用户视角) › 6. 移动端公开搜索、详情与对比页无页面级横向溢出 
+
+    Error: expect(received).toBeTruthy()
+
+    Received: false
+
+      155 |             element.scrollWidth <= element.clientWidth
+      156 |           )
+    > 157 |           expect(headerFits).toBeTruthy()
+          |                              ^
+      158 |         }
+      159 |       }
+      160 |       await page.screenshot({ path: `test-results/mobile-${target.name}.png`, fullPage: true })
+        at F:\sakurafilter-perf\frontend\tests\e2e\public-search-flow.spec.ts:157:30
+
+    Error Context: test-results\e2e-public-search-flow-P1--cfa2d-视角-6-移动端公开搜索、详情与对比页无页面级横向溢出-chromium\error-context.md
+
+  7) [chromium] › tests\e2e\real-auth-security.spec.ts:174:3 › SakuraFilter 真实鉴权安全 E2E › 1. 未登录访问 /admin/products → 跳转 /login?redirect=... 
+
+    Error: 登录失败 admin: 429 {"type":"https://tools.ietf.org/html/rfc6585#section-4","title":"Too Many Requests","status":429,"detail":"请求频率超限, 请稍后重试"}
+
+      58 |   })
+      59 |   if (!resp.ok()) {
+    > 60 |     throw new Error(`登录失败 ${username}: ${resp.status()} ${await resp.text()}`)
+         |           ^
+      61 |   }
+      62 |   return await resp.json()
+      63 | }
+        at loginViaApi (F:\sakurafilter-perf\frontend\tests\e2e\real-auth-security.spec.ts:60:11)
+        at F:\sakurafilter-perf\frontend\tests\e2e\real-auth-security.spec.ts:160:18
+
+    Error Context: test-results\e2e-real-auth-security-Sak-4fd66-oducts-→-跳转-login-redirect--chromium\error-context.md
+
+    Error Context: test-results\e2e-real-auth-security-Sak-4fd66-oducts-→-跳转-login-redirect--chromium\error-context.md
+
+  8) [chromium] › tests\e2e\real-dict-reorder.spec.ts:174:3 › 字典拖拽排序 → 搜索排序生效 全链路 › 1. OEM 排序管理页加载 + Brand 列表 
+
+    Error: 登录失败: 429 {"type":"https://tools.ietf.org/html/rfc6585#section-4","title":"Too Many Requests","status":429,"detail":"请求频率超限, 请稍后重试"}
+
+      48 |   })
+      49 |   if (!resp.ok()) {
+    > 50 |     throw new Error(`登录失败: ${resp.status()} ${await resp.text()}`)
+         |           ^
+      51 |   }
+      52 |   return await resp.json()
+      53 | }
+        at loginViaApi (F:\sakurafilter-perf\frontend\tests\e2e\real-dict-reorder.spec.ts:50:11)
+        at F:\sakurafilter-perf\frontend\tests\e2e\real-dict-reorder.spec.ts:171:18
+
+    Error Context: test-results\e2e-real-dict-reorder-字典拖拽-d7cb1--全链路-1-OEM-排序管理页加载-Brand-列表-chromium\error-context.md
+
+  9) [chromium] › tests\e2e\real-etl-flow.spec.ts:259:3 › P1-E2E-ETL 真实 ETL 全流程 (拖拽 + SSE + 暂停/恢复 + 死信 + 重连 + 取消) › 3. 拖拽 XLSX → 路径填入 → 触发 ETL → SSE 进度 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+    Call Log:
+    - Timeout 15000ms exceeded while waiting on the predicate
+
+      342 |       const statusTag = await page.locator('.el-tag').filter({ hasText: /running|completed|failed|cancelled|paused|idle/i }).first().isVisible().catch(() => false)
+      343 |       return wrapVisible || statusTag
+    > 344 |     }, { timeout: 15000, intervals: [500, 1000, 2000] }).toBe(true)
+          |                                                          ^
+      345 |
+      346 |     // 断言 5: 进度数值变化或任务已进入终态 (快速完成兜底)
+      347 |     //   读 .pipeline-node .node-value 或 .el-tag 任意含数字的元素
+        at F:\sakurafilter-perf\frontend\tests\e2e\real-etl-flow.spec.ts:344:58
+
+    Error Context: test-results\e2e-real-etl-flow-P1-E2E-E-d5453-SX-→-路径填入-→-触发-ETL-→-SSE-进度-chromium\error-context.md
+
+  10) [chromium] › tests\e2e\real-meili-failover.spec.ts:539:3 › Meili 降级 + 恶意文件上传 异常场景 E2E › 7. mr_1 空行导致整批拒绝 
+
+    TimeoutError: locator.click: Timeout 10000ms exceeded.
+    Call log:
+      - waiting for getByTestId('etl-trigger-btn')
+
+
+      587 |     // 点击"立即导入"按钮 (data-testid 精确匹配, 避免匹配下载模板按钮)
+      588 |     const triggerBtn = page.getByTestId('etl-trigger-btn')
+    > 589 |     await triggerBtn.click()
+          |                      ^
+      590 |
+      591 |     // 处理 ElMessageBox.confirm 二次确认 (点 primary 按钮)
+      592 |     await page
+        at F:\sakurafilter-perf\frontend\tests\e2e\real-meili-failover.spec.ts:589:22
+
+    Error Context: test-results\e2e-real-meili-failover-Me-f83f8-上传-异常场景-E2E-7-mr-1-空行导致整批拒绝-chromium\error-context.md
+
+    Error Context: test-results\e2e-real-meili-failover-Me-f83f8-上传-异常场景-E2E-7-mr-1-空行导致整批拒绝-chromium\error-context.md
+
+  11) [chromium] › tests\e2e\real-search-compare.spec.ts:160:3 › 真实搜索→详情→对比→列序持久化 E2E (用户视角) › 3. 详情页"加入对比" → 跳转对比页 + 列存在 
+
+    TimeoutError: page.waitForURL: Timeout 20000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation until "load"
+    ============================================================
+
+      166 |
+      167 |     await Promise.all([
+    > 168 |       page.waitForURL(/\/seo\//, { timeout: 20000 }),
+          |            ^
+      169 |       page.locator('img[alt$="产品主图"]').first().click()
+      170 |     ])
+      171 |     await page.locator('h1').first().waitFor({ timeout: 15000 })
+        at F:\sakurafilter-perf\frontend\tests\e2e\real-search-compare.spec.ts:168:12
+
+    Error Context: test-results\e2e-real-search-compare-真实-163c6-用户视角-3-详情页-加入对比-→-跳转对比页-列存在-chromium\error-context.md
+
+  11 failed
+    [chromium] › tests\e2e\admin-products-flow.spec.ts:47:3 › P1-E2E-3 管理员产品管理流程 (用户视角) › 2. 产品筛选表单交互 
+    [chromium] › tests\e2e\admin-products-flow.spec.ts:101:3 › P1-E2E-3 管理员产品管理流程 (用户视角) › 6. 字典管理导航 (8 字典切换) 
+    [chromium] › tests\e2e\deep-flow.spec.ts:238:3 › v30-22 深度 E2E: 性能监控 › 5.1 性能监控页加载 + 指标卡片 ──────
+    [chromium] › tests\e2e\deep-flow.spec.ts:384:3 › v30-22 深度 E2E: 后端 API 契约 › 9.1 /health/ready 返回完整 checks 
+    [chromium] › tests\e2e\deep-flow.spec.ts:397:3 › v30-22 深度 E2E: 后端 API 契约 › 9.2 /api/perf (v30-19 需 Admin token) 鉴权 
+    [chromium] › tests\e2e\public-search-flow.spec.ts:108:3 › P1-E2E-3 公开搜索流程 (用户视角) › 6. 移动端公开搜索、详情与对比页无页面级横向溢出 
+    [chromium] › tests\e2e\real-auth-security.spec.ts:174:3 › SakuraFilter 真实鉴权安全 E2E › 1. 未登录访问 /admin/products → 跳转 /login?redirect=... 
+    [chromium] › tests\e2e\real-dict-reorder.spec.ts:174:3 › 字典拖拽排序 → 搜索排序生效 全链路 › 1. OEM 排序管理页加载 + Brand 列表 
+    [chromium] › tests\e2e\real-etl-flow.spec.ts:259:3 › P1-E2E-ETL 真实 ETL 全流程 (拖拽 + SSE + 暂停/恢复 + 死信 + 重连 + 取消) › 3. 拖拽 XLSX → 路径填入 → 触发 ETL → SSE 进度 
+    [chromium] › tests\e2e\real-meili-failover.spec.ts:539:3 › Meili 降级 + 恶意文件上传 异常场景 E2E › 7. mr_1 空行导致整批拒绝 
+    [chromium] › tests\e2e\real-search-compare.spec.ts:160:3 › 真实搜索→详情→对比→列序持久化 E2E (用户视角) › 3. 详情页"加入对比" → 跳转对比页 + 列存在 
+  27 did not run
+  161 passed (3.7m)

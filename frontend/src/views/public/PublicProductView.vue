@@ -93,14 +93,16 @@ function ensureLinkTag(rel: string, href: string) {
 // ===== P3.3 (Task 11): imageKey 命名 (R5 规格) =====
 // 主图: oem2/{OEM}.jpg
 // 副图: oem2/{OEM}_{slot}.jpg (slot 2-6)
-function buildImageUrl(key: string, oem: string, slot: number): string {
+function buildImageUrl(key: string): string {
   if (key && key.startsWith('http')) return key
   // 🔧 fix(审查): 有存储 key 时走 API 代理 — key 为安全字符集 [A-Za-z0-9/._-], 无需 URL 编码
   //   (encodeURIComponent 会产生 %2F → Kestrel 拒绝 → 400; 后端 IsSafeKey 白名单兜底)
   if (key) return `/api/public/images/${key}`
-  // 旧命名兜底 (无 key 时): oem2/{OEM}.jpg (主图) / oem2/{OEM}_{slot}.jpg (副图)
-  const slotSuffix = slot === 1 ? '' : `_${slot}`
-  return `/oem2/${oem}${slotSuffix}.jpg`
+  // 🔧 fix(图片裂图 v2): 无 key 时直接返回占位图, 不再拼旧路径 /oem2/{oem}.jpg
+  //   WHY: 用户反馈 06202 等未上传图片产品显示断裂图标 — 旧路径 /oem2/ 无对应静态资源/代理,
+  //        dev 下 vite 返回 SPA index.html, el-image 无法解码 → 裂图。
+  //        占位图 (product-placeholder.svg) 始终存在, 直接兜底避免裂图。
+  return placeholderImage
 }
 
 // 收集所有可用图片 URL (主图 + 副图 slot 1-6, R5 规格命名)
@@ -109,7 +111,7 @@ const imageUrls = computed(() => {
   if (!d) return []
   return (d.images ?? []).map(img => ({
     slot: img.slot,
-    url: img.imageUrl || buildImageUrl(img.imageKey, d.oemNoDisplay, img.slot),
+    url: img.imageUrl || buildImageUrl(img.imageKey),
     // V2(2026-08-24): 管理后台逐图配置的尺寸标注开关
     showDimension: !!img.showDimension
   }))

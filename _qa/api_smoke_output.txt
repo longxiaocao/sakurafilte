@@ -1,0 +1,197 @@
+﻿PASS A01 [GET] GET /api/info -> 200 (229ms)
+PASS A02 [GET] GET /health/live -> 200 (17ms)
+PASS A03 [GET] GET /health/ready -> 200 (49ms)
+PASS A04 [GET] GET /swagger/v1/swagger.json -> 200 (705ms)
+PASS B01 [POST] POST login ok -> 200 (336ms)
+PASS B02 [POST] POST login wrong pwd -> 401 -> 401 (399ms)
+PASS B03 [POST] POST login empty user -> 400 -> 400 (24ms)
+PASS B04 [POST] POST login unknown user -> 401 -> 401 (48ms)
+PASS B05 [POST] POST login sql inject -> 401 -> 401 (49ms)
+WARN login failed: The remote server returned an error: (429) Too Many Requests.
+SKIP B06-B12
+PASS C01 [POST] POST search empty q -> 200 (63ms)
+PASS C02 [POST] POST search single char -> 200 (73ms)
+PASS C03 [POST] POST search pct char -> 200 (75ms)
+PASS C04 [POST] POST search sql inject -> 200 (75ms)
+PASS C05 [POST] POST search xss payload -> 200 (67ms)
+PASS C06 [POST] POST search 500 chars -> 200 (66ms)
+PASS C07 [POST] POST search pageSize=50 -> 200 (81ms)
+FAIL C08 [POST] POST search page=-1 -> 400 -> 200 (70ms) | {"provider":"resilient(meili→pg)","result":{"total":1000,"page":1,"pageSize":20,"totalPages":50,"elapsedMs":9,"items":[{"id":0,"oemNoDisplay":"Air Filter","remark":"HiFi Filter SA 42359 Air Filter","type":"others","d1Mm":null,"d2Mm":null,"h1Mm":null,"imageKey":null,"isDiscontinued":false},{"id":0,"o
+PASS C09 [GET] GET search health -> 200 (30ms)
+FAIL C10 [POST] POST public aggregate -> 200 (111ms) | missing: items
+PASS C11 [POST] POST batch-oem -> 200 (139ms)
+PASS D01 [GET] GET product detail known oem -> 200 (32ms)
+PASS D02 [GET] GET product detail unknown -> 404 -> 404 (6ms)
+PASS D03 [GET] GET product detail blank -> 404 -> 404 (4ms)
+PASS D04 [GET] GET product detail long -> 400/404 -> 404 (3ms)
+FAIL D05 [GET] GET legacy /product/{oem} -> 301 -> 404 (77ms) | 远程服务器返回错误: (404) 未找到。
+FAIL D06 [GET] GET by-type -> 0 (2ms) | Cannot send a content-body with this verb-type.
+PASS D07 [GET] GET sibling-oem3 -> 200 (64ms)
+FAIL E01-oem-brands [GET] GET dict list oem-brands -> 0 (4ms) | Cannot index into a null array.
+FAIL E02-oem-brands [GET] GET dict typeahead oem-brands -> 0 (0ms) | Cannot index into a null array.
+FAIL E01-product-name1s [GET] GET dict list product-name1s -> 0 (0ms) | Cannot index into a null array.
+FAIL E02-product-name1s [GET] GET dict typeahead product-name1s -> 0 (0ms) | Cannot index into a null array.
+FAIL E01-product-name2s [GET] GET dict list product-name2s -> 0 (0ms) | Cannot index into a null array.
+FAIL E02-product-name2s [GET] GET dict typeahead product-name2s -> 0 (0ms) | Cannot index into a null array.
+FAIL E01-types [GET] GET dict list types -> 0 (0ms) | Cannot index into a null array.
+FAIL E02-types [GET] GET dict typeahead types -> 0 (0ms) | Cannot index into a null array.
+FAIL E01-oem-no3s [GET] GET dict list oem-no3s -> 0 (0ms) | Cannot index into a null array.
+FAIL E02-oem-no3s [GET] GET dict typeahead oem-no3s -> 0 (0ms) | Cannot index into a null array.
+FAIL E01-medias [GET] GET dict list medias -> 0 (0ms) | Cannot index into a null array.
+FAIL E02-medias [GET] GET dict typeahead medias -> 0 (0ms) | Cannot index into a null array.
+FAIL E01-machines [GET] GET dict list machines -> 0 (0ms) | Cannot index into a null array.
+FAIL E02-machines [GET] GET dict typeahead machines -> 0 (0ms) | Cannot index into a null array.
+FAIL E01-engines [GET] GET dict list engines -> 0 (0ms) | Cannot index into a null array.
+FAIL E02-engines [GET] GET dict typeahead engines -> 0 (0ms) | Cannot index into a null array.
+FAIL E03 [GET] GET dict export -> 0 (0ms) | Cannot index into a null array.
+FAIL E04 [GET] GET dict export-xlsx -> 0 (0ms) | Cannot index into a null array.
+PASS E05 [GET] GET dict no auth -> 401 -> 401 (2ms)
+FAIL E06 [POST] POST dict create -> 0 (0ms) | Cannot index into a null array.
+SKIP E07-E10
+FAIL F01 [GET] GET admin products list -> 0 (0ms) | Cannot index into a null array.
+FAIL F02 [GET] GET admin products search -> 0 (0ms) | Cannot index into a null array.
+FAIL F03 [GET] GET admin product id=1 -> 0 (0ms) | Cannot index into a null array.
+FAIL F04 [GET] GET admin product id=999999 -> 404 -> 0 (0ms) | Cannot index into a null array.
+FAIL F05 [GET] GET admin product id=abc -> 400 -> 0 (0ms) | Cannot index into a null array.
+PASS F06 [GET] GET admin products no auth -> 401 -> 401 (1ms)
+FAIL F07 [POST] POST create product empty -> 400 -> 0 (0ms) | Cannot index into a null array.
+FAIL F08 [POST] POST create dup MR1 -> 409 -> 0 (0ms) | Cannot index into a null array.
+FAIL F09 [POST] POST products compare -> 0 (0ms) | Cannot index into a null array.
+FAIL F10 [GET] GET product images -> 0 (0ms) | Cannot index into a null array.
+FAIL F11 [GET] GET product history id=1 -> 0 (0ms) | Cannot index into a null array.
+FAIL G01 [GET] GET etl status -> 0 (0ms) | Cannot index into a null array.
+PASS G02 [GET] GET etl no token -> 401 -> 401 (2ms)
+FAIL G03 [GET] GET etl progress -> 0 (0ms) | Cannot index into a null array.
+FAIL G04 [GET] GET etl history -> 0 (0ms) | Cannot index into a null array.
+FAIL G05 [GET] GET etl history aggregate -> 0 (0ms) | Cannot index into a null array.
+FAIL G06 [GET] GET etl template -> 0 (0ms) | Cannot index into a null array.
+FAIL G07 [POST] POST etl trigger empty path -> 400 -> 0 (0ms) | Cannot index into a null array.
+FAIL G08 [POST] POST etl trigger missing path -> 400/404 -> 0 (0ms) | Cannot index into a null array.
+FAIL G09 [POST] POST etl reindex-all -> 0 (0ms) | Cannot index into a null array.
+FAIL H01 [GET] GET users list -> 0 (0ms) | Cannot index into a null array.
+PASS H02 [GET] GET users no auth -> 401 -> 401 (2ms)
+FAIL H03 [POST] POST create weak pwd -> 400 -> 0 (0ms) | Cannot index into a null array.
+FAIL H04 [POST] POST create bad role -> 400 -> 0 (0ms) | Cannot index into a null array.
+FAIL H05 [POST] POST create user ok -> 0 (0ms) | Cannot index into a null array.
+SKIP H06-H09
+FAIL H10 [GET] GET audit login -> 0 (0ms) | Cannot index into a null array.
+PASS H11 [GET] GET audit no auth -> 401 -> 401 (1ms)
+FAIL I01 [GET] GET /metrics -> 0 (0ms) | Cannot index into a null array.
+FAIL I02 [GET] GET /api/perf -> 401 (1ms) | 远程服务器返回错误: (401) 未经授权。
+FAIL I03 [GET] GET perf alerts -> 401 (2ms) | 远程服务器返回错误: (401) 未经授权。
+FAIL I04 [GET] GET meili snapshot -> 0 (0ms) | Cannot index into a null array.
+FAIL I05 [GET] GET auth status -> 0 (0ms) | Cannot index into a null array.
+FAIL I06 [GET] GET /metrics no token -> 401 -> 200 (198ms) | # HELP sakura_etl_records_processed_total ETL 处理的记录总数
+# TYPE sakura_etl_records_processed_total counter
+# HELP sakura_etl_failures_total ETL 失败原因计数 (reason_code 见 EtlReasonCode 枚举)
+# TYPE sakura_etl_failures_total counter
+# HELP sakura_etl_task_duration_seconds ETL 任务持续时间 (秒)
+# TYPE sakura_etl_task_
+FAIL J01 [GET] GET alerts history -> 0 (0ms) | Cannot index into a null array.
+FAIL J02 [GET] GET alerts stats -> 401 (14ms) | 远程服务器返回错误: (401) 未经授权。
+FAIL J03 [GET] GET alerts rules -> 0 (0ms) | Cannot index into a null array.
+FAIL J04 [GET] GET alerts history id=999 -> 404 -> 0 (0ms) | Cannot index into a null array.
+FAIL K01 [GET] GET xref brands -> 0 (0ms) | Cannot index into a null array.
+FAIL K02 [GET] GET machine-tree -> 0 (0ms) | Cannot index into a null array.
+FAIL K03 [GET] POST batch-bind (method not allowed) -> 401 (2ms) | 远程服务器返回错误: (401) 未经授权。
+FAIL K04 [GET] GET public machine aggregated -> 404 (3ms) | 远程服务器返回错误: (404) 未找到。
+FAIL K05 [GET] GET public machine catalog -> 404 (2ms) | 远程服务器返回错误: (404) 未找到。
+FAIL L01 [GET] GET deadletter list -> 0 (0ms) | Cannot index into a null array.
+FAIL L02 [POST] POST deadletter recover missing -> 404 -> 0 (0ms) | Cannot index into a null array.
+FAIL M01 [GET] GET storage config -> 0 (0ms) | Cannot index into a null array.
+FAIL M02 [GET] GET site-content -> 0 (0ms) | Cannot index into a null array.
+PASS M03 [GET] GET sitemap.xml -> 200 (39ms)
+FAIL M04 [GET] GET public typeahead -> 404 (2ms) | 远程服务器返回错误: (404) 未找到。
+PASS M05 [GET] GET public featured -> 200 (44ms)
+FAIL M06 [GET] GET public compare -> 0 (1ms) | Cannot send a content-body with this verb-type.
+SKIP N01-N03
+PASS O01 [POST] rate limit -> 429x8
+PERF search: avg=2ms p95=3ms max=3ms
+PERF detail: avg=3ms p95=4ms max=4ms
+PERF dict: avg=0ms p95=4ms max=4ms
+PERF health: avg=38ms p95=44ms max=44ms
+
+=================== SUMMARY ===================
+PASS: 32 / FAIL: 67 / TOTAL: 99 / ELAPSED: 4.1s
+================================================
+
+id                 name                                     expected    actual detail                                                                                                                   
+--                 ----                                     --------    ------ ------                                                                                                                   
+C08                POST search page=-1 -> 400               400            200 {"provider":"resilient(meili→pg)","result":{"total":1000,"page":1,"pageSize":20,"totalPages":50,"elapsedMs":9,"items":[{"
+                                                                               id":0,"oemNoDisplay":"Air Filter","remark":"HiFi Filter SA 42359 Air Filter","type":"others","d1Mm":null,"d2Mm":null,"h1M
+                                                                               m":null,"imageKey":null,"isDiscontinued":false},{"id":0,"o                                                               
+C10                POST public aggregate                    200            200 missing: items                                                                                                           
+D05                GET legacy /product/{oem} -> 301         301|308|302    404 远程服务器返回错误: (404) 未找到。                                                                                                    
+D06                GET by-type                              200              0 Cannot send a content-body with this verb-type.                                                                          
+E01-oem-brands     GET dict list oem-brands                 200              0 Cannot index into a null array.                                                                                          
+E02-oem-brands     GET dict typeahead oem-brands            200              0 Cannot index into a null array.                                                                                          
+E01-product-name1s GET dict list product-name1s             200              0 Cannot index into a null array.                                                                                          
+E02-product-name1s GET dict typeahead product-name1s        200              0 Cannot index into a null array.                                                                                          
+E01-product-name2s GET dict list product-name2s             200              0 Cannot index into a null array.                                                                                          
+E02-product-name2s GET dict typeahead product-name2s        200              0 Cannot index into a null array.                                                                                          
+E01-types          GET dict list types                      200              0 Cannot index into a null array.                                                                                          
+E02-types          GET dict typeahead types                 200              0 Cannot index into a null array.                                                                                          
+E01-oem-no3s       GET dict list oem-no3s                   200              0 Cannot index into a null array.                                                                                          
+E02-oem-no3s       GET dict typeahead oem-no3s              200              0 Cannot index into a null array.                                                                                          
+E01-medias         GET dict list medias                     200              0 Cannot index into a null array.                                                                                          
+E02-medias         GET dict typeahead medias                200              0 Cannot index into a null array.                                                                                          
+E01-machines       GET dict list machines                   200              0 Cannot index into a null array.                                                                                          
+E02-machines       GET dict typeahead machines              200              0 Cannot index into a null array.                                                                                          
+E01-engines        GET dict list engines                    200              0 Cannot index into a null array.                                                                                          
+E02-engines        GET dict typeahead engines               200              0 Cannot index into a null array.                                                                                          
+E03                GET dict export                          200              0 Cannot index into a null array.                                                                                          
+E04                GET dict export-xlsx                     200              0 Cannot index into a null array.                                                                                          
+E06                POST dict create                         200|201          0 Cannot index into a null array.                                                                                          
+F01                GET admin products list                  200              0 Cannot index into a null array.                                                                                          
+F02                GET admin products search                200              0 Cannot index into a null array.                                                                                          
+F03                GET admin product id=1                   200              0 Cannot index into a null array.                                                                                          
+F04                GET admin product id=999999 -> 404       404              0 Cannot index into a null array.                                                                                          
+F05                GET admin product id=abc -> 400          400              0 Cannot index into a null array.                                                                                          
+F07                POST create product empty -> 400         400              0 Cannot index into a null array.                                                                                          
+F08                POST create dup MR1 -> 409               409              0 Cannot index into a null array.                                                                                          
+F09                POST products compare                    200              0 Cannot index into a null array.                                                                                          
+F10                GET product images                       200              0 Cannot index into a null array.                                                                                          
+F11                GET product history id=1                 200              0 Cannot index into a null array.                                                                                          
+G01                GET etl status                           200              0 Cannot index into a null array.                                                                                          
+G03                GET etl progress                         200              0 Cannot index into a null array.                                                                                          
+G04                GET etl history                          200              0 Cannot index into a null array.                                                                                          
+G05                GET etl history aggregate                200              0 Cannot index into a null array.                                                                                          
+G06                GET etl template                         200              0 Cannot index into a null array.                                                                                          
+G07                POST etl trigger empty path -> 400       400              0 Cannot index into a null array.                                                                                          
+G08                POST etl trigger missing path -> 400/404 400|404          0 Cannot index into a null array.                                                                                          
+G09                POST etl reindex-all                     200              0 Cannot index into a null array.                                                                                          
+H01                GET users list                           200              0 Cannot index into a null array.                                                                                          
+H03                POST create weak pwd -> 400              400              0 Cannot index into a null array.                                                                                          
+H04                POST create bad role -> 400              400              0 Cannot index into a null array.                                                                                          
+H05                POST create user ok                      200              0 Cannot index into a null array.                                                                                          
+H10                GET audit login                          200              0 Cannot index into a null array.                                                                                          
+I01                GET /metrics                             200              0 Cannot index into a null array.                                                                                          
+I02                GET /api/perf                            200            401 远程服务器返回错误: (401) 未经授权。                                                                                                   
+I03                GET perf alerts                          200            401 远程服务器返回错误: (401) 未经授权。                                                                                                   
+I04                GET meili snapshot                       200              0 Cannot index into a null array.                                                                                          
+I05                GET auth status                          200              0 Cannot index into a null array.                                                                                          
+I06                GET /metrics no token -> 401             401            200 # HELP sakura_etl_records_processed_total ETL 处理的记录总数                                                                    
+                                                                               # TYPE sakura_etl_records_processed_total counter                                                                        
+                                                                               # HELP sakura_etl_failures_total ETL 失败原因计数 (reason_code 见 EtlReasonCode 枚举)                                             
+                                                                               # TYPE sakura_etl_failures_total counter                                                                                 
+                                                                               # HELP sakura_etl_task_duration_seconds ETL 任务持续时间 (秒)                                                                   
+                                                                               # TYPE sakura_etl_task_                                                                                                  
+J01                GET alerts history                       200              0 Cannot index into a null array.                                                                                          
+J02                GET alerts stats                         200            401 远程服务器返回错误: (401) 未经授权。                                                                                                   
+J03                GET alerts rules                         200              0 Cannot index into a null array.                                                                                          
+J04                GET alerts history id=999 -> 404         404              0 Cannot index into a null array.                                                                                          
+K01                GET xref brands                          200              0 Cannot index into a null array.                                                                                          
+K02                GET machine-tree                         200              0 Cannot index into a null array.                                                                                          
+K03                POST batch-bind (method not allowed)     405            401 远程服务器返回错误: (401) 未经授权。                                                                                                   
+K04                GET public machine aggregated            200            404 远程服务器返回错误: (404) 未找到。                                                                                                    
+K05                GET public machine catalog               200            404 远程服务器返回错误: (404) 未找到。                                                                                                    
+L01                GET deadletter list                      200              0 Cannot index into a null array.                                                                                          
+L02                POST deadletter recover missing -> 404   404              0 Cannot index into a null array.                                                                                          
+M01                GET storage config                       200              0 Cannot index into a null array.                                                                                          
+M02                GET site-content                         200              0 Cannot index into a null array.                                                                                          
+M04                GET public typeahead                     200            404 远程服务器返回错误: (404) 未找到。                                                                                                    
+M06                GET public compare                       200              0 Cannot send a content-body with this verb-type.                                                                          
+
+
+
+Report: F:\sakurafilter-perf\_qa\api_test_report.json

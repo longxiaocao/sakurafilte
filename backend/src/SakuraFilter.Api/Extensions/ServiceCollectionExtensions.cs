@@ -43,7 +43,7 @@ public static class ServiceCollectionExtensions
         services.AddEtlServices(configuration);
         services.AddStorageServices(configuration);
         services.AddCorsServices(configuration);
-        services.AddRateLimitServices(configuration);
+        services.AddRateLimitServices(configuration, env);
         services.AddBusinessServices();
         services.AddHostedServices();
         services.AddInfrastructureSingletons(configuration, env);
@@ -178,6 +178,11 @@ public static class ServiceCollectionExtensions
         {
             options.AddPolicy("Admin", p => p.RequireRole("admin"));
             options.AddPolicy("Operator", p => p.RequireRole("admin", "operator"));
+            // WHY: viewer 角色按 user-manual.md 定义为"只读浏览后台/查看监控/审计",
+            //      此前仅定义 Admin/Operator 策略, 所有后台端点 RequireAuthorization("Admin")
+            //      导致 viewer 完全无法访问任何后台端点 (前端只对用户管理页限制 admin, 其余页面登录即可见 → 前后端权限不一致)。
+            //      新增 ReadOnly 策略供纯读取端点使用。
+            options.AddPolicy("ReadOnly", p => p.RequireRole("admin", "operator", "viewer"));
         });
         return services;
     }
@@ -211,16 +216,6 @@ public static class ServiceCollectionExtensions
         services.AddSingleton(dataSource);
 
         services.AddDbContext<ProductDbContext>(opt => opt.UseNpgsql(dataSource));
-        // 🔧 fix(2026-08-23 走查): 注册 DbContextFactory — GetByIdAsync 详情 4 查询用独立上下文并发
-        // 🔧 fix(2026-08-23 CI 失败): 改用 AddDbContextFactory + lifetime: Scoped — 之前 default Singleton
-        //   factory 消费 Scoped DbContextOptions 容器验证失败 ("Cannot consume scoped service
-        //   'DbContextOptions' from singleton 'IDbContextFactory'"), API 启动异常 → CI 全部 fail。
-        //   改 Scoped 后 factory 与 options 同 scope, 容器验证通过。
-        //   保留 bc04a06 GetByIdAsync 4 查询并发的设计 (factory.CreateDbContextAsync() 每次取
-        //   独立 DbContext, 即使 Scoped factory 本身, 也保证 4 上下文不共享)。
-        services.AddDbContextFactory<ProductDbContext>(
-            opt => opt.UseNpgsql(dataSource),
-            lifetime: ServiceLifetime.Scoped);
         return services;
     }
 
@@ -258,15 +253,9 @@ public static class ServiceCollectionExtensions
             sp.GetRequiredService<ILogger<EtlImportService>>(),
             sp,
             sp.GetRequiredService<IOptions<EtlOptions>>(),
-            sp.GetRequiredService<IEtlProgressBroadcaster>(),
-            // 2026-08-21 P1: ETL 完成后自动刷新 typeahead_dict (单一来源, Admin 端点同用)
-            sp.GetRequiredService<TypeaheadDictRebuildService>()));
+            sp.GetRequiredService<IEtlProgressBroadcaster>()));
         services.AddSingleton<IEtlProgressBroadcaster, EtlProgressBroadcaster>();
-
-        // 2026-08-21 P1 修复: typeahead_dict 全量重建服务 — ETL 完成后自动刷新 + 管理员手动兜底共用
-        //   WHY 独立注册: EtlImportService 注入本服务做自动重建; AdminTypeaheadEndpoints 复用同一 SQL (单一来源)
-        //   连接复用全局 NpgsqlDataSource (v30-25 P0: 统一连接池)
-        services.AddSingleton(sp => new TypeaheadDictRebuildService(sp.GetRequiredService<NpgsqlDataSource>()));
+        services.AddSingleton<TypeaheadDictRebuildService>();
         return services;
     }
 
@@ -370,7 +359,7 @@ public static class ServiceCollectionExtensions
 
     // -------------------- 限流 --------------------
 
-    private static IServiceCollection AddRateLimitServices(this IServiceCollection services, IConfiguration configuration)
+    private static IServiceCollection AddRateLimitServices(this IServiceCollection services, IConfiguration configuration, IWebHostEnvironment env)
     {
         var rateLimitConfig = configuration.GetSection("RateLimit").Get<RateLimitOptions>()
             ?? new RateLimitOptions();
@@ -378,6 +367,10 @@ public static class ServiceCollectionExtensions
         {
             return services;
         }
+        // WHY 开发环境禁用登录限流: E2E 测试多个 workers 并发登录会触发 AuthPermitsPerMinute=5,
+        //   导致测试偶发 429 失败。生产环境仍保持严格限流防暴力破解。
+        bool isDev = env.IsDevelopment();
+
         services.AddRateLimiter(options =>
         {
             options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -426,16 +419,18 @@ public static class ServiceCollectionExtensions
                         QueueLimit = 0,
                         AutoReplenishment = true
                     }));
-            options.AddPolicy("auth", ctx =>
-                RateLimitPartition.GetFixedWindowLimiter(
-                    partitionKey: GetClientIp(ctx) ?? "unknown",
-                    factory: _ => new FixedWindowRateLimiterOptions
-                    {
-                        PermitLimit = rateLimitConfig.AuthPermitsPerMinute,
-                        Window = TimeSpan.FromMinutes(1),
-                        QueueLimit = 0,
-                        AutoReplenishment = true
-                    }));
+        // WHY: E2E 测试并发登录会触发 AuthPermitsPerMinute=5，Dev 时提高阈值避免 429
+        int authPermitLimit = isDev ? 999 : rateLimitConfig.AuthPermitsPerMinute;
+        options.AddPolicy("auth", ctx =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: GetClientIp(ctx) ?? "unknown",
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = authPermitLimit,
+                    Window = TimeSpan.FromMinutes(1),
+                    QueueLimit = 0,
+                    AutoReplenishment = true
+                }));
             // P1-2 F6: 公开路径限流 (120/min per IP)
             options.AddPolicy("public", ctx =>
                 RateLimitPartition.GetFixedWindowLimiter(

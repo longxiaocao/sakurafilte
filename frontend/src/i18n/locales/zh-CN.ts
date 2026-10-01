@@ -20,8 +20,11 @@ export default {
         input_product_id_add: '输入产品 ID 加入',
       },
       string: {
-
-
+        compare_title: '产品对比',
+        only_diff: '仅看差异',
+        clear_btn: '清空',
+        print_btn: '打印',
+        field_cell: '字段',
         outer_carton: '外箱',
         outer_carton_pcs: '外箱/件',
         outer_carton_kg: '外箱重 (kg)',
@@ -72,12 +75,8 @@ export default {
       error: {
 
 
-
-
-
       },
       label: {
-
 
 
       },
@@ -87,7 +86,8 @@ export default {
         e_g_isb_l: '例: ISB 4.5 L (可空)',
       },
       string: {
-
+        add_engine: '新增发动机',
+        unique_2_fields: '2 字段组成 UNIQUE 索引, 型号可空',
       },
       success: {
 
@@ -169,8 +169,10 @@ export default {
         recent_errors: '最近错误 (最多 10 条)',
         row_errors: '导入失败明细 (行号定位, 最多 100 条)',
         audit: '取消审计 (按 reason_code 聚合)'
-      ,reindex_confirm: '执行全量重建', total_cancelled: '总取消数', no_cancelled_records: '暂无取消记录'
       },
+      reindex_confirm: '执行全量重建',
+      total_cancelled: '总取消数',
+      no_cancelled_records: '暂无取消记录',
       pipeline: {
         stage_read: '读取',
         stage_staging: '暂存',
@@ -405,7 +407,7 @@ export default {
         product_name_e_g: '产品主名称 (例: Oil Filter, Fuel Filter), 影响前台产品页',
 
         product_name_model_back: '产品副名称/型号后缀 (例: OF100)',
-        category_oil_fuel_air: '5 固定分类: oil / fuel / air / cabin / others, sort_order 决定前台排序',
+        category_oil_fuel_air: '固定分类: air / oil / fuel / hydraulic / cabin / others, sort_order 决定前台排序',
         type_type: '类型 (Type)',
         alternative_brand_oem_number: '替代品牌 OEM 编号 (5.27M distinct), 字典化便于 typeahead 联想',
         filter_media_name_model: '滤材名称 + 型号 (2 字段字典), 例: Cellulose / A020',
@@ -492,7 +494,8 @@ export default {
         select: '选择 4 大类之一',
       },
       string: {
-
+        add_machine_model: '新增机型',
+        unique_3_fields: '3 字段组成 UNIQUE 索引, 任一字段可空',
       },
       success: {
 
@@ -545,8 +548,6 @@ export default {
 
 
 
-
-
       },
       label: {
         media_name: 'Media 名称',
@@ -559,7 +560,7 @@ export default {
         e_g_m_m: '例: 5μm / 10μm (可空)',
       },
       string: {
-
+        add_media: '新增介质',
       },
       success: {
 
@@ -637,7 +638,7 @@ export default {
         e_g: '例: 11427622448',
       },
       string: {
-
+        add_oem: '新增 OEM 3',
       },
       success: {
 
@@ -656,6 +657,42 @@ export default {
 
       },
     },
+    orphansview: {
+      title: '孤儿机型管理',
+      hint: '以下机型未关联任何产品。手动关联后即进入产品详情「适配机型」列表。',
+      search_placeholder: '搜索品牌 / 型号 / 名称',
+      total_orphans: '孤儿总量 {total}',
+      filtered: '已过滤: {keyword} ({total})',
+      col: {
+        id: 'ID',
+        brand: '机型品牌',
+        model: '机型型号',
+        model_name: '机型名称',
+        category: '类别',
+        created_at: '创建时间',
+      },
+      action: {
+        link: '关联',
+      },
+      dialog: {
+        title: '关联到产品',
+        linked_success: '已关联: {mr1}',
+        search_product: '搜索产品 (OEM / MR1)',
+        search_placeholder: '输入 OEM 或 MR.1 搜索',
+        col_id: 'ID',
+        col_mr1: 'MR.1',
+        select_hint: '从下方选择产品后点击「确认关联」',
+        confirm_link: '确认关联',
+      },
+      error: {
+        load_failed: '孤儿列表加载失败',
+        select_product: '请先选择产品',
+        link_failed: '关联失败',
+      },
+      success: {
+        linked: '已关联: {mr1}',
+      },
+    },
     perfview: {
       label: {
         pause_auto_refresh: '暂停自动刷新',
@@ -663,6 +700,15 @@ export default {
         refresh: '刷新间隔',
       },
       string: {
+        total_requests: '总请求数',
+        error_rate_label: '错误率',
+        sample_time: '采样时间',
+        health_probe: '健康探针',
+        current_token: '当前 Token',
+        source_data: '数据来源',
+        operator: '操作员',
+        token_not_found_auth: 'Auth 配置中未找到 Token',
+        perf_ring_buffer_tip: '环形缓冲区：最近 {sec}s 采样',
         p_ms_ms_ms: 'P95 = {ms}ms (≥1000ms 严重)',
         p_ms_ms_ms_v2: 'P95 = {ms}ms (≥500ms 警告)',
         error_rate_pct_critical: '错误率 = {pct}% (≥10% 严重)',
@@ -778,11 +824,7 @@ export default {
         e_g_oil_filter: '例: OIL FILTER',
       },
       string: {
-
-
-
-
-
+        add_product: '新增产品名 1',
       },
       success: {
 
@@ -807,7 +849,6 @@ export default {
 
 
 
-
       },
       label: {
 
@@ -817,7 +858,7 @@ export default {
         e_g_spin_on: '例: SPIN-ON',
       },
       string: {
-
+        add_product: '新增产品名 2',
       },
       success: {
 
@@ -890,19 +931,16 @@ export default {
 
 
 
-
-
       },
       label: {
 
       },
       placeholder: {
         search_type: '搜索 Type',
-        e_g_oil_fuel: '例: oil / fuel / air / cabin / others',
+        e_g_oil_fuel: '例: air / oil / fuel / hydraulic / cabin / others',
       },
       string: {
-
-
+        add_type: '新增 Type',
       },
       success: {
 
@@ -1287,6 +1325,8 @@ export default {
       success_015: '已清空所有错误日志',
       success_016: '已在对比列表中, 跳转查看',
       success_019: '已退出登录',
+      // 2026-10-01: 公开搜索页「清空」按钮专用文案（原误用 success_016 对比列表文案）
+      success_020: '已清空搜索条件',
       // ----- 信息提示 -----
       info_004: 'OEM 编号不能为空',
       info_005: '权限不足, 已跳到产品管理',
@@ -1372,6 +1412,7 @@ export default {
       },
     },
   nav: {
+    oemCatalog: 'OEM 目录核验',
     productSearch: '产品搜索',
     oemLookup: 'OEM 查询',
     productManage: '产品管理',
@@ -1384,7 +1425,7 @@ export default {
     opsCenter: '运维中心',
     // 🔧 fix(审查): 运维中心 el-tabs label i18n (原硬编码中文)
     opsview: {
-      tab: { perf: '性能', errors: '错误', api: 'API 文档', storage: '存储配置', backup: '数据备份' }
+      tab: { perf: '性能', errors: '错误', api: 'API 文档', storage: '存储配置', orphans: '孤立机型', backup: '数据备份' }
     },
     storage: {
       provider: '存储服务商',
@@ -1446,7 +1487,7 @@ export default {
       oemBrands: { title: 'OEM 品牌字典', subtitle: 'P1.3 后台管理 · 用于产品表单分区 2 自动补全' },
       productName1s: { title: '产品名 1 字典', subtitle: 'P2.2 后台管理 · 用于产品表单分区 1 自动补全' },
       productName2s: { title: '产品名 2 字典', subtitle: 'P2.2 后台管理 · 用于产品表单分区 1 product_name_2 自动补全' },
-      types: { title: '类型字典 (Type)', subtitle: 'P2.2 后台管理 · 固定 5 值: oil / fuel / air / cabin / others · 拖动排序后前台立即生效' },
+      types: { title: '类型字典 (Type)', subtitle: 'P2.2 后台管理 · 固定分类: air / oil / fuel / hydraulic / cabin / others · 拖动排序后前台立即生效' },
       oemNo3s: { title: 'OEM 3 字典', subtitle: 'P2.2 后台管理 · 用于交叉引用分区 2 oem_no_3 自动补全' },
       medias: { title: '介质字典 (Media)', subtitle: 'P2.2 后台管理 · 2 字段: Media 名称 + 型号 · 用于产品表单分区 4 media/media_model 二合一' },
       machines: { title: '机型字典 (Machine)', subtitle: 'P2.2 后台管理 · 3 字段: 品牌 + 型号 + 名称 · 用于产品表单分区 7 适用车型' },

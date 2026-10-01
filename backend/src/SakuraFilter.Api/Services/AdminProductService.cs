@@ -1260,7 +1260,7 @@ public class AdminProductService
             select new { x.ProductId, x.Id, x.ProductName1, x.OemBrand, x.OemNo3, x.Oem2, x.SortOrder, x.MachineType, x.IsPublished, x.RowVersion }
         ).ToListAsync(ct);
         var apps = await _db.MachineApplications.AsNoTracking()
-            .Where(m => idList.Contains(m.ProductId))
+            .Where(m => m.ProductId.HasValue && idList.Contains(m.ProductId.Value))
             .ToListAsync(ct);
 
         var result = new List<ProductDetailDto>();

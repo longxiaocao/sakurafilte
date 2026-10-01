@@ -79,7 +79,7 @@ const columns = [
           maxlength="200"
           show-word-limit
         />
-        <div class="text-xs text-muted mt-1">2 字段组成 UNIQUE 索引, 型号可空</div>
+        <div class="text-xs text-muted mt-1">{{ t('admin.enginesview.string.unique_2_fields') }}</div>
       </el-form-item>
       <el-form-item :label="t('common.action.sort_order')">
         <el-input-number v-model="form.sortOrder" :min="0" :step="10" style="width: 100%" />

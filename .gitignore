@@ -184,3 +184,57 @@ docker/certs/
 backup-drill/
 # 数据库备份目录 (scripts/backup-db.sh 输出, 不入库)
 _backups/
+
+## 2026-10-01 未跟踪产物收口 (清理 git status, 文件保留在磁盘)
+#   WHY: 这些是调试/构建/备份产物, 体积大或含本机数据, 不应入库;
+#        统一用 .gitignore 收口而非删除, 避免误删数据库备份与测试夹具。
+
+# 根级孤立依赖目录 (仓库根无 package.json / lock, 该目录是误在根执行 pnpm i 的残留, 可重建)
+/node_modules/
+
+# 代码图谱工具缓存 (可重建)
+/.codegraph/
+
+# WorkBuddy 工具状态 (含个人记忆 memory/*.md, 不提交)
+/.workbuddy/
+
+# 部署暂存目录 (含 _deploy/backups 下 GB 级 pg_dump 数据库备份, 严禁入库)
+/_deploy/
+# 数据去重产物 (由根目录 xlsx 派生, 体积大)
+/outputs/
+
+# 根目录数据源 xlsx (2026-08-27 导入用, 体积大; 已在版本控制内的 3 个中文名 xlsx 不受影响)
+/data0827.xlsx
+/dataa0827.xlsx
+/OEM NUMBER0827.xlsx
+
+# 根目录一次性脚本与输出 (临时校验/查找, 可重建)
+/tmp_find.py
+/find_out.txt
+/dedupe_dataa_exact.py
+/dedupe_dataa_err.txt
+/dedupe_dataa_out.txt
+/verify_dataa_fix.py
+/verify_dataa_fix.err
+/verify_dataa_fix.out
+/stage_import_testdb.out
+/stage_import_testdb.err
+
+# 生产编排备份文件 (带版本号后缀, 不入库)
+/docker-compose.prod.yml.bak-*
+
+# _tmp/ 内临时调试产物
+#   WHY 逐文件忽略而非整体忽略 _tmp/: 目录内有 37 个已跟踪测试夹具
+#        (tpl_*.xlsx / demo-images/ / bad_*.jsonl 等 ETL 测试依赖), 必须保留跟踪
+/_tmp/w_*
+/_tmp/_dumplist.txt
+/_tmp/perf_files.txt
+/_tmp/oem_files.txt
+/_tmp/oem_fe.patch
+/_tmp/p0914.txt
+
+# spike-test 临时 SQL 与压测报告 (含时间戳, 每次跑都不同, 可重建)
+/spike-test/_explain_*.sql
+/spike-test/_sample_dict.sql
+/spike-test/perf_regression_report.md
+/spike-test/perf_regression_results.json

@@ -159,6 +159,7 @@ function cellClass(col: DictColumn): string {
 </script>
 
 <template>
+<!-- eslint-disable vue/no-mutating-props -- WHY: mgr 为 prop 传入的 Ref 对象集合 (DictManagerReturn), 模板 v-model/@click 均绑定其 .value, 属 Vue3 合法"传 ref 对象做双向绑定"模式; 修改的是外部 ref 的 value 而非重赋 prop 本身。vue/no-mutating-props 无法区分此模式而误报, 见 .ai/decisions.md lint 配置一致性策略 -->
   <div class="p-3 w-full">
     <!-- 顶部工具条 -->
     <div class="flex items-center gap-2 mb-3 flex-wrap">

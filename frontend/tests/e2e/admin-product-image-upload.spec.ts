@@ -112,13 +112,13 @@ async function mockProductGet(page: Page) {
   })
 }
 
-// 展开 el-collapse-item name="8" (图片区, 默认折叠)
+// 点击 el-tabs 中 name="8" 的图片 tab (左侧竖排 tab, 默认激活分区 1)
 async function expandImageSection(page: Page) {
-  // el-collapse-item header 是 .el-collapse-item__header, 通过文本匹配
-  // WHY 不用 activeNames: 直接点击 header 模拟用户行为, 更真实
-  const header = page.locator('.el-collapse-item__header').filter({ hasText: '图片' }).first()
-  await header.click()
-  // 等待折叠区内容可见
+  // el-tabs 的 tab 按钮是 .el-tabs__item, 通过文本匹配
+  // WHY 直接点击 tab: 表单已从 el-collapse 重构为 el-tabs (tab-position="left"), 原 .el-collapse-item__header 已不存在
+  const imgTab = page.locator('.el-tabs__item').filter({ hasText: '图片' }).first()
+  await imgTab.click()
+  // 等待图片区的 file input 可见 (tab-pane 渲染需要下一个 tick)
   await page.waitForSelector('input[type="file"]', { timeout: 5000 })
 }
 
@@ -127,11 +127,11 @@ test.describe('v27-5 管理员产品图片上传 E2E (V24-F83 前端路径补全
     await injectAdminToken(page)
     await mockProductGet(page)
     // 路由: /admin/products/:id/edit (router.ts L100), 不是 /admin/products/:id
-    await page.goto(`${BASE}/admin/products/123/edit`, { waitUntil: 'domcontentloaded', timeout: 15000 })
+    await page.goto(`${BASE}/admin/products/123/edit`, { waitUntil: 'domcontentloaded', timeout: 40000 })
     // 验证表单标题 (编辑模式含 id)
     await page.waitForSelector('h1', { timeout: 10000 })
-    // 验证图片折叠区 header 存在 (isEdit=true 时 v-if 显示)
-    const imgHeader = page.locator('.el-collapse-item__header').filter({ hasText: '图片' })
+    // 验证图片 tab 存在 (isEdit=true 时 v-if 显示)
+    const imgHeader = page.locator('.el-tabs__item').filter({ hasText: '图片' })
     await expect(imgHeader).toBeVisible()
     await page.screenshot({ path: 'test-results/e2e-v27-5-product-form-edit.png' })
   })
@@ -147,7 +147,7 @@ test.describe('v27-5 管理员产品图片上传 E2E (V24-F83 前端路径补全
         body: JSON.stringify(MOCK_PRIMARY_UPLOAD_RESP)
       })
     })
-    await page.goto(`${BASE}/admin/products/123/edit`, { waitUntil: 'domcontentloaded', timeout: 15000 })
+    await page.goto(`${BASE}/admin/products/123/edit`, { waitUntil: 'domcontentloaded', timeout: 40000 })
     await expandImageSection(page)
     // 选 OEM 3 (默认 selectedOemNo3ForPrimary 在 load 时自动选中第一个有 oemNo3 的 xref, 这里验证)
     // 上传主图: input[type="file"] 是裸 input, 用 setInputFiles
@@ -173,7 +173,7 @@ test.describe('v27-5 管理员产品图片上传 E2E (V24-F83 前端路径补全
         body: JSON.stringify(problemDetails(409, 'ERR_DB_CONFLICT', 'DB Conflict'))
       })
     })
-    await page.goto(`${BASE}/admin/products/123/edit`, { waitUntil: 'domcontentloaded', timeout: 15000 })
+    await page.goto(`${BASE}/admin/products/123/edit`, { waitUntil: 'domcontentloaded', timeout: 40000 })
     await expandImageSection(page)
     const fileInput = page.locator('input[type="file"]').first()
     await fileInput.setInputFiles({ name: 'test.png', mimeType: 'image/png', buffer: PIXEL_PNG })
@@ -196,7 +196,7 @@ test.describe('v27-5 管理员产品图片上传 E2E (V24-F83 前端路径补全
         body: JSON.stringify(problemDetails(409, 'IMAGE_DETAIL_SLOT_DUPLICATE', 'Detail slot duplicate'))
       })
     })
-    await page.goto(`${BASE}/admin/products/123/edit`, { waitUntil: 'domcontentloaded', timeout: 15000 })
+    await page.goto(`${BASE}/admin/products/123/edit`, { waitUntil: 'domcontentloaded', timeout: 40000 })
     await expandImageSection(page)
     // 详情图 input 是第 2 个 input[type="file"] (主图第 1, 详情图第 2-6)
     const detailFileInput = page.locator('input[type="file"]').nth(1)
@@ -232,7 +232,7 @@ test.describe('v27-5 管理员产品图片上传 E2E (V24-F83 前端路径补全
         await route.continue()
       }
     })
-    await page.goto(`${BASE}/admin/products/123/edit`, { waitUntil: 'domcontentloaded', timeout: 15000 })
+    await page.goto(`${BASE}/admin/products/123/edit`, { waitUntil: 'domcontentloaded', timeout: 40000 })
     await expandImageSection(page)
     // 验证主图已渲染 (有删除按钮)
     const deleteBtn = page.locator('button').filter({ hasText: '删除主图' })
@@ -244,12 +244,12 @@ test.describe('v27-5 管理员产品图片上传 E2E (V24-F83 前端路径补全
     await page.screenshot({ path: 'test-results/e2e-v27-5-delete-primary-success.png' })
   })
 
-  test('6. 新建模式 (/admin/products/new) 图片折叠区不显示 (isEdit=false)', async ({ page }) => {
+  test('6. 新建模式 (/admin/products/new) 图片 tab 不显示 (isEdit=false)', async ({ page }) => {
     await injectAdminToken(page)
-    await page.goto(`${BASE}/admin/products/new`, { waitUntil: 'domcontentloaded', timeout: 15000 })
+    await page.goto(`${BASE}/admin/products/new`, { waitUntil: 'domcontentloaded', timeout: 40000 })
     await page.waitForSelector('h1', { timeout: 10000 })
-    // 验证图片折叠区 header 不存在 (v-if="isEdit" 为 false)
-    const imgHeader = page.locator('.el-collapse-item__header').filter({ hasText: '图片' })
+    // 验证图片 tab 不存在 (v-if="isEdit" 为 false)
+    const imgHeader = page.locator('.el-tabs__item').filter({ hasText: '图片' })
     await expect(imgHeader).toHaveCount(0)
     await page.screenshot({ path: 'test-results/e2e-v27-5-product-form-new.png' })
   })

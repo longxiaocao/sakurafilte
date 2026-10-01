@@ -162,7 +162,9 @@ function saveOrder() {
   try {
     const data = products.value.map((p, i) => ({ id: p.id, order: i }))
     localStorage.setItem(ORDER_KEY, JSON.stringify(data))
-  } catch {}
+  } catch {
+    // WHY: 隐私模式/存储满时 localStorage 可能抛异常, 静默降级 (仅本次会话内排序顺序丢失, 无数据损坏)
+  }
 }
 
 function persistUrlOrder() {
@@ -308,6 +310,19 @@ function valueOf(p: ProductDetail | undefined, def: FieldDef): string {
   return def.get(p)
 }
 
+// ===== 主图获取 =====
+// V24-F105: 获取产品主图 (slot=1 优先)
+function getPrimaryImage(p: ProductDetail | undefined): { imageUrl: string } | undefined {
+  if (!p?.images || p.images.length === 0) return undefined
+  // 优先找 slot=1 (主图), 其次 fallback 到第一张图
+  const primary = p.images.find((img) => img.slot === 1)
+  if (primary?.imageUrl) return { imageUrl: primary.imageUrl }
+  // fallback: 第一张图
+  const first = p.images[0]
+  if (first?.imageUrl) return { imageUrl: first.imageUrl }
+  return undefined
+}
+
 // ===== 仅看差异 开关 =====
 const onlyDiff = ref(false)
 function groupHasDiff(group: FieldGroup): boolean {
@@ -337,7 +352,7 @@ function doPrint() {
     <h1 class="sr-only">{{ t('dict.pageTitles.compare') }}</h1>
     <!-- 工具条 -->
     <div class="compare-toolbar flex items-center gap-2 mb-3 flex-wrap">
-      <span class="text-sm font-medium">产品对比</span>
+      <span class="text-sm font-medium">{{ t('admin.compareview.string.compare_title') }}</span>
       <span class="text-xs text-muted">最多 {{ MAX_COMPARE }} 个</span>
       <div class="flex-1" />
       <el-input
@@ -348,9 +363,9 @@ function doPrint() {
         @keyup.enter="addProductById"
       />
       <el-button size="small" :loading="loading" @click="addProductById">加入</el-button>
-      <el-checkbox v-model="onlyDiff" size="small">仅看差异</el-checkbox>
-      <el-button size="small" @click="clearAll" :disabled="products.length === 0">清空</el-button>
-      <el-button size="small" @click="doPrint" :disabled="products.length === 0">打印</el-button>
+      <el-checkbox v-model="onlyDiff" size="small">{{ t('admin.compareview.string.only_diff') }}</el-checkbox>
+      <el-button size="small" @click="clearAll" :disabled="products.length === 0">{{ t('admin.compareview.string.clear_btn') }}</el-button>
+      <el-button size="small" @click="doPrint" :disabled="products.length === 0">{{ t('admin.compareview.string.print_btn') }}</el-button>
     </div>
 
     <!-- 空状态 -->
@@ -390,7 +405,7 @@ function doPrint() {
         :style="{ gridTemplateColumns: `200px repeat(${products.length}, minmax(0, 1fr))` }"
       >
         <!-- 表头: 字段名 + 产品列 -->
-        <div class="compare-header-cell field-name-cell sticky-left">字段</div>
+        <div class="compare-header-cell field-name-cell sticky-left">{{ t('admin.compareview.string.field_cell') }}</div>
         <div
           v-for="(p, idx) in products"
           :key="p.id"
@@ -400,6 +415,17 @@ function doPrint() {
             <div class="flex-1 min-w-0">
               <div class="font-medium text-sm truncate" :title="p.oemNoDisplay">{{ p.oemNoDisplay }}</div>
               <div class="text-xs text-muted truncate" :title="p.oem2 || ''">{{ p.oem2 || '—' }}</div>
+              <!-- V24-F105: 主图缩略图 (60x60px) -->
+              <!--   WHY: 客户反馈对比时无法看到产品图片, 增加主图便于直观对比 -->
+              <div v-if="getPrimaryImage(p)" class="mt-1 flex justify-center">
+                <img
+                  :src="getPrimaryImage(p)!.imageUrl"
+                  :alt="p.oemNoDisplay"
+                  class="w-12 h-12 object-contain rounded border"
+                  loading="lazy"
+                  @error="(e) => { const target = e.target as HTMLImageElement; if (target) target.style.display = 'none' }"
+                />
+              </div>
             </div>
             <div class="flex flex-col gap-0.5 no-print">
               <el-button
@@ -444,7 +470,7 @@ function doPrint() {
           <template v-for="field in group.fields" :key="(group.name + '.' + field.key)">
             <div class="field-name-cell sticky-left">{{ field.label }}</div>
             <div
-              v-for="(p, idx) in products"
+              v-for="p in products"
               :key="p.id + '.' + field.key"
               :class="['data-cell', cellClass(products.map((pp) => valueOf(pp, field)))]"
             >
