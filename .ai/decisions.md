@@ -50,6 +50,10 @@
 <!-- #36 catalog 投影为公开层 public(替换旧业务数据) | backend/migrations/036_catalog_to_public_cutover.sql | 状态: 有效 -->
 <!-- #37 Meili 文档主键字符集 → mr_1 净化 | backend/migrations/037_products_meili_safe_ids.sql | 状态: 有效 -->
 <!-- #38 派生分类规则 v2(交叉引用名主判据+OEM前缀兜底) | backend/migrations/038_supplement_product_category.sql | 状态: 有效 -->
+<!-- #39 高级搜索 8 字段与尺寸: 零 Meili 索引变更, 任一非空改走 PG 精确过滤 | Search/PostgresSearchProvider.cs + Api/Controllers/PublicSearchController.cs | 状态: 有效 -->
+<!-- #40 高级搜索与高级筛选合并为统一入口「高级搜索与筛选」 | frontend/src/views/public/AggregateSearchView.vue | 状态: 有效 -->
+<!-- #41 typeahead 缓存按重建世代号失效 | Api/Services/PublicTypeaheadService.cs + Etl/TypeaheadDictRebuildService.cs | 状态: 有效 -->
+<!-- #42 /public/search 保留路由不重定向, 仅统一导航入口至合并页 | frontend/src/router/index.ts + components/AppHeader.vue | 状态: 有效 -->
 
 ---
 
@@ -760,3 +764,43 @@ v30-14 1M OFFSET 深分页专项压测验证数据 (2026-07-21, sakurafilter_per
 效果: others 40,378 → 9,908(82.9% → 20.3%); air 16,428 / hydraulic 14,218 / fuel 3,877 / cabin 2,674 / oil 1,628; catalog/public/Meili 三层分布完全一致。
 附带修复: 325 行 mr_1 已被 #37 净化为 Meili 安全形态, 与 catalog.oem_key 字面不等 → 追加按同一净化规则 regexp_replace(oem_key,'[^A-Za-z0-9_-]','-','g') 的对齐传播。
 关联文件: backend/migrations/038_supplement_product_category.sql, backend/migrations/035_oem_catalog_serving.sql, frontend/src/views/public/AggregateSearchView.vue
+
+#39 高级搜索 8 字段与尺寸: 零 Meili 索引变更, 任一非空改走 PG 精确过滤 (2026-10-01)
+决策: 聚合搜索新增 8 个高级字段(oemBrand / oemNo2 / oemNo3 / machineBrand / machineModel / modelName / engineBrand / engineType)与 6 个尺寸字段(d1/d2/d3/h1/h2/h3)。这 8 个字段**不加入 Meili 的 filterableAttributes**, 而是在控制器层判定: 任一 8 字段非空 → 直接走 `PostgresSearchProvider.AggregateSearchAsync` 做 ILIKE 精确过滤; 全部为空 → 维持原有「Meili 主(1s 超时) + PG 兜底」路径。字段间关系为**互不替代、可叠加**(OEM Brand 不融合进关键词框, 也不与其他 7 字段合并为一次 OR 检索)。
+理由: (1) Meili 只支持前缀/全文匹配, 不支持任意子串 ILIKE, 且 OEM Brand / Engine Type 等值域小、精确性要求高; (2) 把这 8 个字段加入 filterableAttributes 需全量重建索引(48,733 文档)并改动 Mr1IndexDoc 构建, 回归面覆盖 ETL 索引回放与详情页, 成本远高于收益; (3) 生产实测带 `{q:"MANN", oemBrand:"MANN", d1:100, h1:200}` 的聚合请求 HTTP 200 / 0.558s, 满足交互要求。
+排除方案:
+  - 加 Meili filterableAttributes 全量重建: 需改索引模型 + 重建 48,733 文档 + 回归 ETL 回放, 且 Meili 仍无法做子串匹配
+  - 8 字段与关键词框融合为一次 OR 检索: 与用户明确要求「各自独立、互不融合」冲突, 且会互相污染召回集
+  - 为每个字段单独建索引/物化列: 数据层改动大, 当前量级(48,733)下收益不明显
+约束: SQL 拼装统一走参数化 + `EscapeLikePattern()`, 不做字符串拼接; `oemBrand + oemNo3` 合并为 1 个 `cross_references` EXISTS, `machine*` 5 字段合并为 1 个 `machine_applications` EXISTS, 避免 5 次表扫描; `oemNo2` 直查 `products.oem_2`。
+关联文件: backend/src/SakuraFilter.Core/DTOs/AggregateSearchDto.cs, backend/src/SakuraFilter.Search/PostgresSearchProvider.cs, backend/src/SakuraFilter.Api/Controllers/PublicSearchController.cs, frontend/src/api/types.ts
+
+#40 高级搜索与高级筛选合并为统一入口「高级搜索与筛选」 (2026-10-01)
+决策: 以原「聚合搜索页(`/search/aggregate`)」为基准, 把原独立「高级筛选」的 8 字段与尺寸条件整体并入同一可展开面板, 命名「高级搜索与筛选」; 页面自上而下重排为: 顶部融合搜索框 → 中部高级搜索与筛选展开区 → 下部批量 OEM 查询结果。批量查询结果按 `hit` 拆为「已匹配」与「未匹配」两个分区, 未匹配行 hover 显示「快捷添加」并复用后台 `POST /api/admin/products`(Operator 策略)在页内弹窗新建产品; 未登录时先跳登录页并带 `redirect`。
+理由: (1) 用户明确要求合并入口并给出命名; (2) 原有的 `/search/aggregate` 已承载分类导航 + 关键词搜索 + 结果卡片, 作为基准可最大限度复用既有状态与 URL 同步逻辑; (3) 快捷添加复用既有后台写接口, 不新增无鉴权的公开写端点, 写操作最小权限审计与后台产品表单保持一致(MR.1 必填、OEM2 必填, 前端预填 `sanitizeToMr1(oem)` 并即时提示)。
+排除方案:
+  - 以原「高级筛选页」为基准: 该页仅 8 个过滤字段, 需重建分类导航/卡片/分页/对比等全套, 改动量与回归面最大
+  - 新增公开写接口供未登录用户快捷添加: 无鉴权写接口违反最小权限原则, 且会绕过后台校验
+  - 快捷添加跳转到后台产品页表单(`/admin/products?new=...`): 参数传递链路长、丢失上下文, 且用户要求"页内弹窗直接新建"
+约束: 空条件搜索统一提示 `common.feedback.warn_empty_form`(不得复用对比数量提示 `warn_040`); `advancedForm` 使用显式 `interface` 约束类型(避免 `reactive` 索引访问被扩宽为 `string | number | null`); 尺寸字段以 `undefined` 表示"未填写"以对齐 `el-input-number` 的 v-model 类型; URL 同步 `syncUrl()` 覆盖 8 字段 + 6 尺寸, `clearSearch()` 一并对齐重置。
+关联文件: frontend/src/views/public/AggregateSearchView.vue, frontend/src/views/public/PublicSearchView.vue, frontend/src/i18n/locales/en-US.ts, frontend/src/api/index.ts
+
+#41 typeahead 缓存按重建世代号失效 (2026-10-01)
+决策: 在 `TypeaheadDictRebuildService` 内维护静态世代号 `CacheGeneration`(原子切换成功后 `Interlocked.Increment`), `PublicTypeaheadService` 的缓存键统一带前缀 `v{世代号}`(`typeahead:v{n}:{field}:{q}:{limit}` 与 `typeahead:cardinality:v{n}`), 使快照重建后旧缓存条目自然不再命中。不主动调用 `IMemoryCache.Remove`(无法枚举前缀键)。
+理由: `IMemoryCache` 不支持按前缀批量失效, 而重建是在另一程序集(`SakuraFilter.Etl`)的宿主机后台任务中完成, 通过 DI 拿不到 `Api` 层的缓存实例; 世代号是进程内静态量, 两侧同进程可见, 实现最小且无跨层依赖。重建后查询自动落到新快照, 旧条目按 TTL(5/10 分钟)自然淘汰。
+排除方案:
+  - `IMemoryCache.Remove` 精确删除: 键集合不可枚举(字段 × 查询串 × limit 组合爆炸), 无法穷举
+  - 把 `IMemoryCache` 注入 `SakuraFilter.Etl`: 跨程序集引入 `Microsoft.Extensions.Caching.Memory` 依赖与生命周期耦合, 且 `Etl` 不应感知 API 层缓存
+  - 重建后重启 API 进程: 不可接受(生产可用性), 且容器内无自重启机制
+约束: 世代号仅在进程内有效; 重建服务与 API 必须同进程(当前 `TypeaheadDictRebuildService` 由 API 宿主机承载, 成立)。若未来重建改为独立进程, 需改回共享存储(如 DB 表或 Redis 键)。
+关联文件: backend/src/SakuraFilter.Etl/TypeaheadDictRebuildService.cs, backend/src/SakuraFilter.Api/Services/PublicTypeaheadService.cs
+
+#42 /public/search 保留路由不重定向, 仅统一导航入口至合并页 (2026-10-01)
+决策: `/public/search` **保留原路由与组件**(不重定向到 `/search/aggregate`), 仅把站内导航入口(AppHeader 的 `adv-search` 菜单项、SearchView 的跳转按钮)统一指向合并后的 `/search/aggregate`; 路由注释标明 `/public/search` 承载「对比内嵌视图」。
+理由: grep 发现 `/public/search?compare=<ids>` 是「产品对比内嵌视图」(`.compare-grid`), 被 `public-search-flow.spec.ts`、`real-search-compare.spec.ts`、`deep-flow.spec.ts`、`real-ui-theme-i18n-mobile.spec.ts` 共 4 个 E2E 用例依赖; 若重定向, 对比功能与 4 个用例同时失效(对比入口本身已从导航移除, 但页面与用例仍在)。统一导航入口已足以达成"用户不再在两个面板间切换"的目标。
+排除方案:
+  - 重定向 `/public/search` → `/search/aggregate`: 破坏对比内嵌视图与 4 个 E2E 用例, 需同步改测试与对比功能的承载页
+  - 删除 `/public/search` 路由与组件: 同上, 且对比功能需另行找落点
+  - 保留两套独立页面各自演进而仅改菜单: 与"合并入口避免面板切换"的用户要求冲突
+约束: 导航入口变更仅 2 处(AppHeader.vue `adv-search`、SearchView.vue 跳转); 后续若产品决定彻底下线对比页, 再评估重定向与用例迁移。
+关联文件: frontend/src/router/index.ts, frontend/src/components/AppHeader.vue, frontend/src/views/SearchView.vue, frontend/tests/e2e/public-search-flow.spec.ts
