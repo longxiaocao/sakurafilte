@@ -1,3 +1,4 @@
+-- idempotent 可重跑: 约束操作用 DROP ... IF EXISTS 后重建 + UPDATE 按值净化, 重复执行结果一致。
 -- 037: 公开层 Meili 文档 ID 安全化 + oem_2 回填
 -- WHY:
 --   1) Meilisearch 文档主键仅允许 [A-Za-z0-9_-]（≤511 字节），而 036 令 mr_1 = OEM 锚点键，

@@ -1,3 +1,4 @@
+-- idempotent 可重跑: DDL 带 IF NOT EXISTS + 数据写入用 ON CONFLICT, 重复执行不产生重复数据。
 -- OEM NO 1 正式目录层
 -- WHY: 客户尚未提供 MR.1 时，仍须完整保存 OEM 规格、交叉号码和机型适配；因此与旧 public 产品层隔离。
 

@@ -1,3 +1,4 @@
+-- idempotent 可重跑: 全部为 UPDATE 按规则重算列值, 重复执行结果一致。
 -- 038_supplement_product_category.sql
 -- 目的: 修复 035 派生分类覆盖率过低的问题（others 占 82.9%），并把结果传播到公开层。
 --

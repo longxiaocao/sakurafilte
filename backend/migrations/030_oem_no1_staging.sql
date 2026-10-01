@@ -1,3 +1,4 @@
+-- idempotent 可重跑: DDL 全部带 IF NOT EXISTS, 重复执行不报错、不产生重复对象。
 -- OEM NO 1 暂存导入区
 -- WHY: 客户 MR.1 尚未定稿，先保留三份 Excel 的原始粒度，避免直接写入正式业务表造成不可逆合并。
 

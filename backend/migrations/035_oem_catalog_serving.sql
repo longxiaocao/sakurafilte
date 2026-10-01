@@ -1,3 +1,4 @@
+-- idempotent 可重跑: DDL 带 IF NOT EXISTS + 数据写入用 ON CONFLICT, 重复执行不产生重复数据。
 -- 035_oem_catalog_serving.sql
 -- 目的: 让 OEM 目录层具备"对外唯一且稳定"的锚点键，并派生公开层需要的分类维度。
 --

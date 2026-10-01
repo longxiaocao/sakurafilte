@@ -1,3 +1,5 @@
+-- 一次性脚本,不可重跑: 含 TRUNCATE 业务表 (cross_references/products/machine_applications 等),
+-- 重复执行会清空已导入的公开层数据; 仅在 catalog → public 单次切换时执行。
 -- 036_catalog_to_public_cutover.sql
 -- 目的: 把已发布的 OEM 目录（catalog schema，48,733 个锚点）装载为公开层数据，
 --      替换旧的 public 业务数据（9,376 产品）。公开站点、搜索、详情、对比、SEO 全部照旧读取 public 表。

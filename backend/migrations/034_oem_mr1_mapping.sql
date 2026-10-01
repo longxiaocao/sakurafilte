@@ -1,3 +1,4 @@
+-- idempotent 可重跑: 仅 CREATE OR REPLACE FUNCTION, 重复执行覆盖定义、无副作用。
 -- OEM NO 1 到 MR.1 的可追溯映射：复用 uq_catalog_oem_mr1_active_value 保证生效 MR.1 全局唯一。
 CREATE OR REPLACE FUNCTION catalog.set_oem_mr1_mapping(
     p_oem_no_1_normalized TEXT,

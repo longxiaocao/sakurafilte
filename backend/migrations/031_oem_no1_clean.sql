@@ -1,3 +1,4 @@
+-- idempotent 可重跑: DDL 全部带 IF NOT EXISTS, 重复执行不报错、不产生重复对象。
 -- OEM NO 1 清洗合并层
 -- WHY: raw 暂存层保留原始粒度；clean 层只生成可追溯快照和逻辑去重明细，绝不直接覆盖正式业务表。
 
