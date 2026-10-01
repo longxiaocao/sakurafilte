@@ -294,7 +294,7 @@ onBeforeUnmount(() => {
           <el-button
             size="large"
             plain
-            @click="router.push('/public/search')"
+            @click="router.push('/search/aggregate')"
             :aria-label="t('search.advancedSearch', '高级搜索 (公开版)')"
           >
             <el-icon class="mr-1" aria-hidden="true"><Search /></el-icon>

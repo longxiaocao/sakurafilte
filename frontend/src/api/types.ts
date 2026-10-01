@@ -782,6 +782,17 @@ export interface AggregateSearchRequest {
   h1?: number
   h2?: number
   h3?: number
+  // W4 (2026-10-01): 8 字段多框条件并入聚合搜索
+  //   语义与 GET /api/public/search 一致 (各字段 AND 收窄, 空字段不参与)
+  //   后端注意: 这 8 字段不在 Meili filterableAttributes 中, 任一非空时控制器改走 PG 精确过滤
+  oemBrand?: string
+  oemNo2?: string
+  oemNo3?: string
+  machineBrand?: string
+  machineModel?: string
+  modelName?: string
+  engineBrand?: string
+  engineType?: string
 }
 
 export interface AggregateOemItem {

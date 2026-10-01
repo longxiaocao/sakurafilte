@@ -537,6 +537,51 @@ SELECT COUNT(*) FROM sort_cte";
             }
         }
 
+        // W4 (2026-10-01 走查): 8 字段多框过滤 — 语义与 GET /api/public/search (EightField) 完全一致
+        //   各字段 AND 收窄, 空字段不参与; 走 EXISTS 而非 JOIN 避免与 LATERAL JSON 聚合产生笛卡尔积。
+        //   WHY 分组合并: oemBrand/oemNo3 同属 cross_references, machine* 5 字段同属 machine_applications,
+        //     合并为 1 个 EXISTS 可避免同表多次扫描 (与 EightField 的合并 EXISTS 同模式)。
+        if (!string.IsNullOrWhiteSpace(req.OemNo2))
+        {
+            baseWhereSql += @" AND p.oem_2 IS NOT NULL AND p.oem_2 ILIKE '%' || @fOemNo2 || '%' ESCAPE '\'";
+            baseParams.Add(new NpgsqlParameter("@fOemNo2", NpgsqlDbType.Text)
+            { Value = req.OemNo2.Trim().EscapeLikePattern() });
+        }
+        if (!string.IsNullOrWhiteSpace(req.OemBrand) || !string.IsNullOrWhiteSpace(req.OemNo3))
+        {
+            var conds = new List<string> { "x.product_id = p.id" };
+            if (!string.IsNullOrWhiteSpace(req.OemBrand))
+            {
+                conds.Add(@"x.oem_brand IS NOT NULL AND x.oem_brand ILIKE '%' || @fOemBrand || '%' ESCAPE '\'");
+                baseParams.Add(new NpgsqlParameter("@fOemBrand", NpgsqlDbType.Text)
+                { Value = req.OemBrand.Trim().EscapeLikePattern() });
+            }
+            if (!string.IsNullOrWhiteSpace(req.OemNo3))
+            {
+                conds.Add(@"x.oem_no_3 IS NOT NULL AND x.oem_no_3 ILIKE '%' || @fOemNo3 || '%' ESCAPE '\'");
+                baseParams.Add(new NpgsqlParameter("@fOemNo3", NpgsqlDbType.Text)
+                { Value = req.OemNo3.Trim().EscapeLikePattern() });
+            }
+            baseWhereSql += $" AND EXISTS (SELECT 1 FROM cross_references x WHERE {string.Join(" AND ", conds)})";
+        }
+        var machineConds = new List<string> { "m.product_id = p.id" };
+        void AddMachineCond(string? value, string column, string paramName)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return;
+            machineConds.Add($@"m.{column} IS NOT NULL AND m.{column} ILIKE '%' || {paramName} || '%' ESCAPE '\'");
+            baseParams.Add(new NpgsqlParameter(paramName, NpgsqlDbType.Text)
+            { Value = value.Trim().EscapeLikePattern() });
+        }
+        AddMachineCond(req.MachineBrand, "machine_brand", "@fMachineBrand");
+        AddMachineCond(req.MachineModel, "machine_model", "@fMachineModel");
+        AddMachineCond(req.ModelName, "model_name", "@fModelName");
+        AddMachineCond(req.EngineBrand, "engine_brand", "@fEngineBrand");
+        AddMachineCond(req.EngineType, "engine_type", "@fEngineType");
+        if (machineConds.Count > 1)
+        {
+            baseWhereSql += $" AND EXISTS (SELECT 1 FROM machine_applications m WHERE {string.Join(" AND ", machineConds)})";
+        }
+
         var page = Math.Max(1, req.Page);
         var pageSize = Math.Clamp(req.PageSize, 1, 100);
         var offset = (page - 1) * pageSize;

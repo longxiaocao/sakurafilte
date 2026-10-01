@@ -1304,7 +1304,9 @@ export default {
       info_042: 'Please sign in first',
       info_043: 'Session expired, please sign in again',
       // ----- Warning -----
-      warn_040: 'Compare list is full (6/6), please remove first'
+      warn_040: 'Compare list is full (6/6), please remove first',
+      // V24-F103-1: 空表单提示 (与 zh-CN 同步, 融合搜索框输入时不得误用 warn_040)
+      warn_empty_form: 'Please enter at least one value in the combined search box or the 8 fields'
     },
     // V24-F103 i18n residue fix: aria-label a11y text (AppHeader + DictManagerLayout)
     aria: {

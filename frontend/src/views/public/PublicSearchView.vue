@@ -150,12 +150,18 @@ const store = useCompareStore()
 const compareIds = store.ids
 const MAX_COMPARE = 6  // 与 PublicCompareView 一致
 
-// 8 字段是否全部空 — 用于禁用搜索按钮 + 提示文案
+// 8 字段是否全部空 — 仅表示 8 字段本身, 不包含融合搜索框 (模板"已填 N/8 字段"依赖此语义)
 const allEmpty = computed(() =>
   !form.oemBrand && !form.oemNo2 && !form.oemNo3
   && !form.machineBrand && !form.machineModel
   && !form.modelName && !form.engineBrand && !form.engineType
 )
+
+// 🔧 fix(2026-10-01 走查): 是否具备任一搜索条件 — 必须把融合搜索框 fuzzy 计入
+//   WHY: 原 doSearch 守卫只看 allEmpty(8 字段), 用户在融合框输入时 8 字段为空
+//        → 被误判为"空表单"并弹出对比上限提示(warn_040)后 return, 搜索根本不执行。
+//   注意: 不能用 allEmpty 替代本判断去禁用按钮/重置结果, 否则会再次漏掉融合框输入。
+const hasCondition = computed(() => !allEmpty.value || !!fuzzy.value.trim())
 
 // 当前填了几个字段 — 显示在结果区顶部 "8 字段中 N 项有值"
 const filledCount = computed(() =>
@@ -207,7 +213,7 @@ watch(pageSize, () => {
   syncUrlFromForm()
   // 🔧 fix(审查): 已在第 1 页时切换每页条数, el-pagination 重置 current-page 为 1 但值不变,
   //   watch(page) 不触发 → 列表不刷新; 显式刷新
-  if (page.value === 1 && !allEmpty.value) doSearch()
+  if (page.value === 1 && hasCondition.value) doSearch()
 })
 
 // 🔧 fix(2026-08-23 走查): 融合搜索框 watch — 用户输入 AIR/G1312 等需自动搜索
@@ -241,8 +247,8 @@ watch(() => route.query, () => {
 // 取消前序未完成请求, 防止旧响应后到覆盖新结果 (快速输入竞态)
 let searchAbort: AbortController | null = null
 async function doSearch() {
-  if (allEmpty.value) {
-    ElMessage.warning(t('common.feedback.warn_040'))
+  if (!hasCondition.value) {
+    ElMessage.warning(t('common.feedback.warn_empty_form'))
     return
   }
   searchAbort?.abort()
@@ -290,8 +296,8 @@ async function doSearch() {
 // 任意字段输入 → 自动搜索 (debounce 500ms, 与 Day 9 SearchView 体验一致)
 let debounceTimer: number | null = null
 watch(form, () => {
-  if (allEmpty.value) {
-    // 全部清空 → 重置结果
+  if (!hasCondition.value) {
+    // 全部清空 (含融合框) → 重置结果
     results.value = []
     total.value = 0
     return
@@ -305,7 +311,7 @@ watch(form, () => {
 
 // 翻页
 watch(page, () => {
-  if (allEmpty.value) return
+  if (!hasCondition.value) return
   doSearch()
 })
 
@@ -438,7 +444,7 @@ onUnmounted(() => {
           规格: OEM Brand / OEM 2 / OEM 3 / Machine Brand / Machine Model / Model Name / Engine Brand / Engine Type
         </p>
       </div>
-      <el-button @click="clearAll" size="small" :disabled="allEmpty">清空</el-button>
+      <el-button @click="clearAll" size="small" :disabled="!hasCondition">清空</el-button>
     </div>
 
     <!-- 🔧 fix(2026-08-23 走查): 融合搜索框 — 不区分 8 字段, 随便输入自动查 (全部字段 OR) -->
@@ -507,8 +513,8 @@ onUnmounted(() => {
     <!-- 错误提示 -->
     <div v-if="lastError" class="text-red-600 text-sm mb-2">{{ lastError }}</div>
 
-    <!-- 全部空 → 显示最新产品明细表 (用户可点行查看/点按钮加入对比) -->
-    <div v-if="allEmpty">
+    <!-- 无任何条件 (含融合框为空) → 显示最新产品明细表 (用户可点行查看/点按钮加入对比) -->
+    <div v-if="!hasCondition">
       <div class="flex items-center justify-between mb-2">
         <div class="text-xs text-muted">
           <el-icon class="mr-1 align-middle"><InfoFilled /></el-icon>

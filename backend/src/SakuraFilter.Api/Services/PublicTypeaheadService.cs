@@ -4,6 +4,7 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using SakuraFilter.Api.Extensions;
 using SakuraFilter.Core.Extensions;
+using SakuraFilter.Etl;
 using SakuraFilter.Infrastructure.Data;
 
 namespace SakuraFilter.Api.Services;
@@ -42,8 +43,9 @@ public class PublicTypeaheadService
     /// <summary>守卫日志去重: 每个字段只记一次</summary>
     private readonly ConcurrentDictionary<string, bool> _guardLogged = new();
 
-    /// <summary>缓存键: 各字段 distinct 计数 (5~10 分钟 TTL, 避免每请求 GROUP BY 1465 万行)</summary>
-    private const string CardinalityCacheKey = "typeahead:cardinality";
+    /// <summary>缓存键: 各字段 distinct 计数 (5~10 分钟 TTL, 避免每请求 GROUP BY 1465 万行)
+    /// 前缀含快照世代号: 重建切换后键换代, 旧计数不再命中 (基数守卫也能立即反映新数据)</summary>
+    private static string CardinalityCacheKey => $"typeahead:cardinality:v{TypeaheadDictRebuildService.CacheGeneration}";
     private static readonly TimeSpan CardinalityCacheTtl = TimeSpan.FromMinutes(10);
 
     /// <summary>缓存 TTL (秒): 5 分钟, 平衡新鲜度与 PG 压力</summary>
@@ -102,7 +104,9 @@ public class PublicTypeaheadService
         }
 
         // 缓存键: 字段 + 小写查询 + 限数 (大小写不敏感场景)
-        var cacheKey = $"typeahead:{field}:{q.ToLowerInvariant()}:{limit}";
+        // 🔧 fix(2026-10-01 遗留 P2): 拼入快照世代号 — typeahead_dict 重建切换后自动补全
+        //   不必再等 5 分钟 TTL 自然过期 (旧键不再被查询到, 新键首次访问即写最新候选)。
+        var cacheKey = $"typeahead:v{TypeaheadDictRebuildService.CacheGeneration}:{field}:{q.ToLowerInvariant()}:{limit}";
         if (_cache.TryGetValue(cacheKey, out List<string>? cached) && cached is not null)
         {
             return cached;

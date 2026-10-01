@@ -65,7 +65,8 @@ const allNavItems = computed(() => {
     // admin 高优 (必显示, 不可收纳)
     items.push(
       { key: 'products', labelKey: 'nav.productManage', path: '/admin/products', icon: 'Goods', priority: 4 },
-      { key: 'adv-search', labelKey: 'nav.advSearch', path: '/public/search', icon: 'Filter', priority: 5 },
+      // W9 (2026-10-01): 8 字段搜索页已并入聚合搜索页的「高级搜索与筛选」面板 → 导航直指合并页
+      { key: 'adv-search', labelKey: 'nav.advSearch', path: '/search/aggregate', icon: 'Filter', priority: 5 },
       { key: 'dict', labelKey: 'nav.dictManage', dropdown: 'dict', icon: 'Collection', priority: 6 },
     // 🔧 fix(审查): 独立对比页移除, '产品对比'菜单入口删除 — 对比内嵌高级搜索页 (结果勾选 + 详情页按钮),
       // V2 Task 2.2.6: OEM 排序管理入口 (priority 6.5, 在字典和 ETL 之间)

@@ -46,6 +46,10 @@ const routes: RouteRecordRaw[] = [
     meta: { title: 'Contact us' }
   },
   // ===== P3.4 (Task 11.5): 公开搜索页 8 字段多框 (公开, 无需 token) =====
+  //   W9 (2026-10-01 走查): 8 字段搜索能力已并入聚合搜索页的「高级搜索与筛选」面板,
+  //     导航入口 (AppHeader) 与 /search 页按钮统一指向 /search/aggregate。
+  //   本路由保留: ① 承载「对比内嵌视图」(?compare=id1,id2 → .compare-grid), 该视图合并页未实现;
+  //     ② 旧书签/外链仍可用。不做重定向以免破坏对比功能与既有 E2E 用例。
   {
     path: '/public/search',
     name: 'PublicSearch',
@@ -55,7 +59,7 @@ const routes: RouteRecordRaw[] = [
   // ===== V2 Task 1.3.7: 聚合搜索页 (需求 5, 文档级返回 + 高亮) =====
   //   URL: /search/aggregate?q=CAT 320D&page=1
   //   公开路由 (无 requireAuth, 游客可访问)
-  //   与 /public/search 区别: 聚合搜索走 Meilisearch (typo 容错 + 高亮), 8 字段走 PG ILIKE
+  //   W9 (2026-10-01): 该页现为公开搜索统一入口 — 融合搜索框 + 8 字段 + 分类/机型分类 + 6 尺寸 + 批量查询
   {
     path: '/search/aggregate',
     name: 'AggregateSearch',

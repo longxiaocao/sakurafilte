@@ -606,17 +606,34 @@ public class PublicSearchController : ControllerBase
         // V2 Task 1.2.5/1.2.6: Meili 主搜索 (含高亮 + XSS 防御)
         //   1s 超时: 与 ResilientSearchProvider 一致,避免公开搜索长耗时
         //   失败降级 PG (修复漏洞 2)
+        // W4 (2026-10-01 走查): 8 字段多框条件不在 Meili filterableAttributes 中 (零索引变更原则),
+        //   任一字段非空时直接走 PG 精确过滤; 此时 Q 仍传给 PG 做 ILIKE (融合框与其他字段可叠加)。
         AggregateSearchResponse response;
-        try
+        var hasEightField = !string.IsNullOrWhiteSpace(req.OemBrand)
+            || !string.IsNullOrWhiteSpace(req.OemNo2)
+            || !string.IsNullOrWhiteSpace(req.OemNo3)
+            || !string.IsNullOrWhiteSpace(req.MachineBrand)
+            || !string.IsNullOrWhiteSpace(req.MachineModel)
+            || !string.IsNullOrWhiteSpace(req.ModelName)
+            || !string.IsNullOrWhiteSpace(req.EngineBrand)
+            || !string.IsNullOrWhiteSpace(req.EngineType);
+        if (hasEightField)
         {
-            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            cts.CancelAfter(1000);
-            response = await _meili.AggregateSearchAsync(req with { Page = page, PageSize = pageSize }, cts.Token);
-        }
-        catch (Exception ex) when (ex is OperationCanceledException or TimeoutException or HttpRequestException)
-        {
-            _logger.LogWarning(ex, "聚合搜索 Meili 失败,降级 PG 兜底 (q={Q})", req.Q);
             response = await _pg.AggregateSearchAsync(req with { Page = page, PageSize = pageSize }, ct);
+        }
+        else
+        {
+            try
+            {
+                using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                cts.CancelAfter(1000);
+                response = await _meili.AggregateSearchAsync(req with { Page = page, PageSize = pageSize }, cts.Token);
+            }
+            catch (Exception ex) when (ex is OperationCanceledException or TimeoutException or HttpRequestException)
+            {
+                _logger.LogWarning(ex, "聚合搜索 Meili 失败,降级 PG 兜底 (q={Q})", req.Q);
+                response = await _pg.AggregateSearchAsync(req with { Page = page, PageSize = pageSize }, ct);
+            }
         }
 
         _logger.LogInformation("aggregate search: q={Q} page={Page} pageSize={PageSize} → total={Total} provider={Provider} elapsed={Elapsed}ms",

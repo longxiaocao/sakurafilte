@@ -8,17 +8,22 @@
 //   - Musk 风格极简: 纯黑白 + 1px 细线 + 8px 网格 + 无阴影
 import { ref, reactive, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 // V24-F38: 改用 searchWithFallback (封装聚合 API 404 降级逻辑)
 //   保留 publicSearchApi 导入: clearSearch 等其他函数可能用到 (此处仅类型兼容)
 // V24-F40: shouldShowLegacyFallbackWarn 5 秒去重, 避免连续搜索刷屏
-import { publicSearchApi, searchApi, searchWithFallback, wasLastSearchLegacyFallback, shouldShowLegacyFallbackWarn } from '@/api'
+import { publicSearchApi, searchApi, searchWithFallback, wasLastSearchLegacyFallback, shouldShowLegacyFallbackWarn, adminProductApi } from '@/api'
 import type { AggregateSearchHit, AggregateSearchResponse, MachineCatalogResponse, BatchOemResult } from '@/api/types'
 import { sanitizeFormatted } from '@/utils/html-sanitizer'
 import { buildProductUrl } from '@/utils/build-product-url'
+// W7 (2026-10-01 走查): 快捷添加复用后台 Operator 接口 → 需判断登录态 (未登录先跳登录, 不新增公开写接口)
+import { useAdminAuth } from '@/composables/useAdminAuth'
 
 const route = useRoute()
 const router = useRouter()
+const { t } = useI18n()
+const { isAuthenticated } = useAdminAuth()
 
 // ===== 搜索表单 =====
 const q = ref<string>((route.query.q as string) || '')
@@ -29,10 +34,87 @@ const pageSize = ref<number>(6)
 // 高级筛选 (折叠展开, 默认收起)
 const showAdvanced = ref(false)
 const routeTolerance = Number(route.query.tolerance)
-const advancedForm = reactive({
-  type: (route.query.type as string) || '',
-  machineCategory: (route.query.machineCategory as string) || '',
-  tolerance: [1, 5, 10].includes(routeTolerance) ? routeTolerance : 5
+
+// W5 (2026-10-01 走查): 高级搜索与筛选合并 — 8 字段集中定义 (模板循环渲染 + URL 同步 + 请求组装共用)
+//   WHY: 原"高级筛选"(分类/机型分类/容差) 与 8 字段搜索分处两页 (/search/aggregate 与 /public/search),
+//     用户需在两个面板间切换; 合并为单一"高级搜索与筛选"入口, 一次提交。
+//   语义保持各自独立: OEM Brand 与其他 7 字段互不替代, 空字段不参与, 多字段 AND 收窄。
+const EIGHT_FIELDS: ReadonlyArray<{ key: EightFieldKey; label: string; placeholder: string }> = [
+  { key: 'oemBrand',     label: 'OEM Brand',     placeholder: 'e.g. MANN, Bosch, CAT' },
+  { key: 'oemNo2',       label: 'OEM 2 NO.',     placeholder: '产品自身 OEM 2 编号' },
+  { key: 'oemNo3',       label: 'OEM 3 NO.',     placeholder: 'e.g. 207-60... (交叉引用)' },
+  { key: 'machineBrand', label: 'Machine Brand', placeholder: 'e.g. Caterpillar, JCB' },
+  { key: 'machineModel', label: 'Machine Model', placeholder: '机型' },
+  { key: 'modelName',    label: 'Model Name',    placeholder: '型号名' },
+  { key: 'engineBrand',  label: 'Engine Brand',  placeholder: '发动机品牌' },
+  { key: 'engineType',   label: 'Engine Type',   placeholder: '发动机型号' }
+]
+
+// W5: 尺寸拆为 6 个子条件 (用户决策: D1/D2/D3 + H1/H2/H3 各自独立), 共用同一容差
+const DIMENSIONS: ReadonlyArray<{ key: DimensionKey; label: string }> = [
+  { key: 'd1', label: 'D1 (mm)' }, { key: 'd2', label: 'D2 (mm)' }, { key: 'd3', label: 'D3 (mm)' },
+  { key: 'h1', label: 'H1 (mm)' }, { key: 'h2', label: 'H2 (mm)' }, { key: 'h3', label: 'H3 (mm)' }
+]
+
+// W5: OEM Brand 在面板中单独一行展示 (独立语义), 其余 7 字段走网格
+const OTHER_EIGHT_FIELDS = EIGHT_FIELDS.slice(1)
+
+// W5: 显式声明表单模型类型 — WHY: reactive 推断类型下 advancedForm[f.key] 会被扩宽为
+//   string | number | undefined 的联合, 循环里调用 .trim() / 赋 undefined 均无法通过 vue-tsc;
+//   显式接口让 8 字段组恒为 string、尺寸组恒为 number | undefined。
+type EightFieldKey =
+  | 'oemBrand' | 'oemNo2' | 'oemNo3' | 'machineBrand'
+  | 'machineModel' | 'modelName' | 'engineBrand' | 'engineType'
+type DimensionKey = 'd1' | 'd2' | 'd3' | 'h1' | 'h2' | 'h3'
+
+interface AdvancedSearchFormModel {
+  type: string
+  machineCategory: string
+  tolerance: number
+  oemBrand: string
+  oemNo2: string
+  oemNo3: string
+  machineBrand: string
+  machineModel: string
+  modelName: string
+  engineBrand: string
+  engineType: string
+  // 用 undefined (而非 null) 表示"该尺寸子条件不参与" — 与 el-input-number 的 v-model 类型一致
+  d1: number | undefined
+  d2: number | undefined
+  d3: number | undefined
+  h1: number | undefined
+  h2: number | undefined
+  h3: number | undefined
+}
+
+function queryStr(key: string): string {
+  return (route.query[key] as string) || ''
+}
+// 尺寸是数字: 空/非数字 → undefined (undefined 表示该子条件不参与过滤)
+function queryNum(key: string): number | undefined {
+  const raw = route.query[key]
+  if (raw === undefined || raw === '') return undefined
+  const n = Number(raw)
+  return Number.isFinite(n) ? n : undefined
+}
+
+const advancedForm = reactive<AdvancedSearchFormModel>({
+  type: queryStr('type'),
+  machineCategory: queryStr('machineCategory'),
+  tolerance: [1, 5, 10].includes(routeTolerance) ? routeTolerance : 5,
+  // 8 字段 (与融合搜索框可叠加, 互不替代)
+  oemBrand: queryStr('oemBrand'),
+  oemNo2: queryStr('oemNo2'),
+  oemNo3: queryStr('oemNo3'),
+  machineBrand: queryStr('machineBrand'),
+  machineModel: queryStr('machineModel'),
+  modelName: queryStr('modelName'),
+  engineBrand: queryStr('engineBrand'),
+  engineType: queryStr('engineType'),
+  // 尺寸 6 子条件
+  d1: queryNum('d1'), d2: queryNum('d2'), d3: queryNum('d3'),
+  h1: queryNum('h1'), h2: queryNum('h2'), h3: queryNum('h3')
 })
 // 🔧 fix(切库 2026-10-01): 原快捷分类直接把展示名 ('Air Filter') 当过滤值发给后端,
 //   而 products.type 实际取值是短码 (air/oil/fuel/hydraulic/cabin/others, 由 catalog 派生分类写入),
@@ -47,7 +129,20 @@ const quickProductTypes = [
 
 function toggleQuickProductType(type: string) {
   advancedForm.type = advancedForm.type === type ? '' : type
+  // 🔧 fix(2026-10-01 走查): 快捷分类点击后同步 URL — 原实现只改 advancedForm,
+  //   watch(advancedForm) 只触发 doSearch 不同步 URL, 导致刷新/分享后分类条件丢失。
+  syncUrl()
 }
+
+// W5: 是否存在任一搜索条件 — 8 字段/尺寸任一有值即视为有条件
+//   WHY: doSearch 原守卫只看 q/type/machineCategory, 合并面板新增 8 字段与尺寸后必须同步,
+//     否则"只填 OEM Brand 点搜索"会被当作空条件直接清空结果。
+const hasEightField = computed(() => EIGHT_FIELDS.some((f) => !!advancedForm[f.key].trim()))
+const hasDimension = computed(() => DIMENSIONS.some((d) => advancedForm[d.key] !== undefined))
+const hasCondition = computed(() =>
+  !!q.value.trim() || !!advancedForm.type || !!advancedForm.machineCategory
+  || hasEightField.value || hasDimension.value
+)
 
 // ===== 搜索结果状态 =====
 const loading = ref(false)
@@ -139,6 +234,91 @@ function viewBatchProduct(row: BatchOemResult) {
   router.push(url)
 }
 
+// ===== W6 (2026-10-01 走查): 批量结果分区 (已匹配 / 未匹配) =====
+//   WHY: 用户需求 5 — 未命中的 OEM 需要单独成区, 才能对其做"快捷添加"(补录缺失数据)。
+const batchHitRows = computed(() => batchResults.value.filter((r) => r.hit))
+const batchMissRows = computed(() => batchResults.value.filter((r) => !r.hit))
+
+// ===== W7: 未匹配行快捷添加 (页内弹窗直接新建产品, 复用 POST /api/admin/products, 策略 Operator) =====
+const quickAddVisible = ref(false)
+const quickAddSubmitting = ref(false)
+const quickAddSourceOem = ref('')
+const quickAddForm = reactive({
+  mr1: '',
+  oem2: '',
+  productName1: '',
+  type: 'others',
+  oemBrand: '',
+  oemNo3: ''
+})
+
+// MR.1 规则 (见后端 Mr1Validator): 1-10 位字母数字; 未命中 OEM 常含 '/' '-' 等字符 → 预填时净化
+const Mr1MaxLength = 10
+function sanitizeToMr1(oem: string): string {
+  return oem.replace(/[^A-Za-z0-9]/g, '').slice(0, Mr1MaxLength)
+}
+
+function openQuickAdd(row: BatchOemResult) {
+  // 复用后台写接口 → 未登录先引导登录 (回跳当前页), 不新增公开写接口
+  if (!isAuthenticated()) {
+    ElMessage.warning('快捷添加需要管理员登录, 正在跳转登录页')
+    router.push({ path: '/login', query: { redirect: route.fullPath } })
+    return
+  }
+  quickAddSourceOem.value = row.oem
+  quickAddForm.mr1 = sanitizeToMr1(row.oem)
+  quickAddForm.oem2 = row.oem
+  quickAddForm.productName1 = ''
+  quickAddForm.type = 'others'
+  quickAddForm.oemBrand = ''
+  quickAddForm.oemNo3 = row.oem
+  quickAddVisible.value = true
+}
+
+async function submitQuickAdd() {
+  if (!quickAddForm.mr1.trim() || !quickAddForm.oem2.trim()) {
+    ElMessage.warning('MR.1 与 OEM 2 为必填项')
+    return
+  }
+  quickAddSubmitting.value = true
+  try {
+    // 交叉引用与主号同源: OEM 3 记录用户查询的那个未命中号, 便于下次批量查询直接命中
+    await adminProductApi.create(
+      {
+        mr1: quickAddForm.mr1.trim(),
+        oem2: quickAddForm.oem2.trim(),
+        productName1: quickAddForm.productName1.trim() || null,
+        productName2: null,
+        type: quickAddForm.type || 'others',
+        isPublished: true,
+        crossReferences: [
+          {
+            productName1: quickAddForm.productName1.trim() || null,
+            oemBrand: quickAddForm.oemBrand.trim() || null,
+            oemNo3: quickAddForm.oemNo3.trim() || null,
+            oem2: quickAddForm.oem2.trim(),
+            sortOrder: 0,
+            machineType: null,
+            isPublished: true
+          }
+        ],
+        machineApplications: []
+      },
+      'admin'
+    )
+    ElMessage.success(`已新建产品: ${quickAddForm.oem2.trim()}`)
+    quickAddVisible.value = false
+    // 刷新批量查询结果 (新建后原未命中行应变为已匹配), 并同步刷新聚合搜索结果
+    await doBatchSearch()
+    doSearch()
+  } catch (e: any) {
+    const detail = e?.response?.data?.detail || e?.response?.data?.error || e?.message || '新建产品失败'
+    ElMessage.error(detail)
+  } finally {
+    quickAddSubmitting.value = false
+  }
+}
+
 // 🔧 fix(2026-08-23 走查): 加载更多 — page++ 后调 doSearch, 因 _loadMoreInFlight 累积结果
 async function loadMore() {
   if (!hasMore.value || loading.value) return
@@ -169,7 +349,9 @@ async function doSearch() {
   if (abortCtrl) abortCtrl.abort()
   abortCtrl = new AbortController()
 
-  if (!q.value.trim() && !advancedForm.type && !advancedForm.machineCategory) {
+  if (!hasCondition.value) {
+    // W5: 合并面板后条件来源变多, 空条件提示不能只提关键词 (见 t('common.feedback.warn_empty_form'))
+    ElMessage.warning(t('common.feedback.warn_empty_form'))
     results.value = []
     total.value = 0
     totalPages.value = 0
@@ -190,7 +372,23 @@ async function doSearch() {
         pageSize: pageSize.value,
         tolerance: advancedForm.tolerance,
         type: advancedForm.type || undefined,
-        machineCategory: advancedForm.machineCategory || undefined
+        machineCategory: advancedForm.machineCategory || undefined,
+        // W4/W5: 8 字段多框条件 (后端任一非空 → 走 PG 精确过滤; 与 q 可叠加)
+        oemBrand: advancedForm.oemBrand.trim() || undefined,
+        oemNo2: advancedForm.oemNo2.trim() || undefined,
+        oemNo3: advancedForm.oemNo3.trim() || undefined,
+        machineBrand: advancedForm.machineBrand.trim() || undefined,
+        machineModel: advancedForm.machineModel.trim() || undefined,
+        modelName: advancedForm.modelName.trim() || undefined,
+        engineBrand: advancedForm.engineBrand.trim() || undefined,
+        engineType: advancedForm.engineType.trim() || undefined,
+        // W5: 尺寸 6 子条件 (null → 该子条件不参与)
+        d1: advancedForm.d1 ?? undefined,
+        d2: advancedForm.d2 ?? undefined,
+        d3: advancedForm.d3 ?? undefined,
+        h1: advancedForm.h1 ?? undefined,
+        h2: advancedForm.h2 ?? undefined,
+        h3: advancedForm.h3 ?? undefined
       },
       abortCtrl.signal
     )
@@ -269,6 +467,16 @@ function syncUrl() {
   if (advancedForm.type) query.type = advancedForm.type
   if (advancedForm.machineCategory) query.machineCategory = advancedForm.machineCategory
   if (advancedForm.tolerance !== 5) query.tolerance = String(advancedForm.tolerance)
+  // W5 (2026-10-01 走查): 合并面板新增的 8 字段 + 6 尺寸同样需要同步,
+  //   否则刷新/分享链接后 OEM Brand、尺寸等条件全部丢失 (与 advancedForm 初始 queryStr/queryNum 读取对称)。
+  for (const f of EIGHT_FIELDS) {
+    const value = advancedForm[f.key].trim()
+    if (value) query[f.key] = value
+  }
+  for (const d of DIMENSIONS) {
+    const value = advancedForm[d.key]
+    if (value !== undefined) query[d.key] = String(value)
+  }
   router.replace({ path: '/search/aggregate', query })
 }
 
@@ -329,6 +537,9 @@ function clearSearch() {
   advancedForm.type = ''
   advancedForm.machineCategory = ''
   advancedForm.tolerance = 5
+  // W5: 合并面板新增条件必须一并清空, 否则"清空"后仍被 8 字段/尺寸过滤 (用户会以为清空无效)
+  for (const f of EIGHT_FIELDS) advancedForm[f.key] = ''
+  for (const d of DIMENSIONS) advancedForm[d.key] = undefined
   page.value = 1
   results.value = []
   total.value = 0
@@ -386,7 +597,8 @@ function getHighlighted(hit: AggregateSearchHit, field: string): string {
 
 onMounted(() => {
   loadMachineCatalog()
-  if (q.value.trim() || advancedForm.type || advancedForm.machineCategory) doSearch()
+  // W5: 首屏条件判断改用 hasCondition — 合并面板后 URL 可能只带 oemBrand/尺寸等条件 (原判断会漏掉不搜索)
+  if (hasCondition.value) doSearch()
 })
 
 onBeforeUnmount(() => {
@@ -474,33 +686,87 @@ onBeforeUnmount(() => {
           {{ type.label }}
         </el-button>
       </div>
-      <!-- 高级筛选 (折叠展开) -->
+      <!-- W5 (2026-10-01 走查): 原「高级筛选」与 8 字段搜索合并为统一入口「高级搜索与筛选」 — 见用户需求 6/8 -->
       <div class="mt-2">
         <el-button text size="small" @click="showAdvanced = !showAdvanced">
-          {{ showAdvanced ? '收起高级筛选' : '展开高级筛选' }}
+          {{ showAdvanced ? '收起高级搜索与筛选' : '展开高级搜索与筛选' }}
         </el-button>
-        <div v-if="showAdvanced" class="flex flex-wrap gap-3 mt-2 p-3 border border-gray-200 rounded dark:border-[var(--color-border)]">
-          <el-form-item label="分类" class="!mb-0">
-            <el-select v-model="advancedForm.type" placeholder="全部" clearable size="small" style="width: 120px">
-              <el-option v-for="type in quickProductTypes" :key="type.value" :label="type.label" :value="type.value" />
-            </el-select>
+        <div
+          v-if="showAdvanced"
+          class="mt-2 p-3 border border-gray-200 rounded dark:border-[var(--color-border)]"
+        >
+          <!-- OEM Brand: 独立一行, 与其他 7 字段互不替代 (用户需求 4) -->
+          <el-form-item label="OEM Brand" class="!mb-3">
+            <el-input
+              v-model="advancedForm.oemBrand"
+              placeholder="e.g. MANN, Bosch, CAT"
+              clearable
+              size="small"
+              style="max-width: 320px"
+            />
           </el-form-item>
-          <el-form-item label="机型分类" class="!mb-0">
-            <el-select v-model="advancedForm.machineCategory" placeholder="全部" clearable size="small" style="width: 140px">
-              <el-option label="农业" value="agriculture" />
-              <el-option label="商用" value="commercial" />
-              <el-option label="工程机械" value="construction" />
-              <el-option label="工业" value="industrial" />
-              <el-option label="其他" value="others" />
-            </el-select>
-          </el-form-item>
-          <el-form-item label="尺寸容差" class="!mb-0">
-            <el-select v-model="advancedForm.tolerance" size="small" style="width: 100px">
-              <el-option label="±1mm" :value="1" />
-              <el-option label="±5mm" :value="5" />
-              <el-option label="±10mm" :value="10" />
-            </el-select>
-          </el-form-item>
+
+          <!-- 其他 7 字段: 各自独立输入, 多字段 AND 收窄, 空字段不参与 -->
+          <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            <el-form-item
+              v-for="field in OTHER_EIGHT_FIELDS"
+              :key="field.key"
+              :label="field.label"
+              class="!mb-0"
+            >
+              <el-input
+                v-model="advancedForm[field.key]"
+                :placeholder="field.placeholder"
+                clearable
+                size="small"
+              />
+            </el-form-item>
+          </div>
+
+          <!-- 分类 / 机型分类 / 容差 -->
+          <div class="flex flex-wrap gap-3 mt-3 pt-3 border-t border-gray-100 dark:border-[var(--color-border-subtle)]">
+            <el-form-item label="分类" class="!mb-0">
+              <el-select v-model="advancedForm.type" placeholder="全部" clearable size="small" style="width: 120px">
+                <el-option v-for="type in quickProductTypes" :key="type.value" :label="type.label" :value="type.value" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="机型分类" class="!mb-0">
+              <el-select v-model="advancedForm.machineCategory" placeholder="全部" clearable size="small" style="width: 140px">
+                <el-option label="农业" value="agriculture" />
+                <el-option label="商用" value="commercial" />
+                <el-option label="工程机械" value="construction" />
+                <el-option label="工业" value="industrial" />
+                <el-option label="其他" value="others" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="尺寸容差" class="!mb-0">
+              <el-select v-model="advancedForm.tolerance" size="small" style="width: 100px">
+                <el-option label="±1mm" :value="1" />
+                <el-option label="±5mm" :value="5" />
+                <el-option label="±10mm" :value="10" />
+              </el-select>
+            </el-form-item>
+          </div>
+
+          <!-- 尺寸 6 子条件 (用户决策: D1/D2/D3 与 H1/H2/H3 各自独立, 共用上方容差) -->
+          <div class="mt-3 pt-3 border-t border-gray-100 dark:border-[var(--color-border-subtle)]">
+            <div class="text-xs text-gray-500 mb-2 dark:text-[var(--color-text-muted)]">
+              尺寸 (mm) — 填写则按容差匹配, 留空不参与
+            </div>
+            <div class="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
+              <el-form-item v-for="dim in DIMENSIONS" :key="dim.key" :label="dim.label" class="!mb-0">
+                <el-input-number
+                  v-model="advancedForm[dim.key]"
+                  :controls="false"
+                  :precision="1"
+                  :min="0"
+                  placeholder="—"
+                  size="small"
+                  class="!w-full"
+                />
+              </el-form-item>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -726,56 +992,156 @@ onBeforeUnmount(() => {
       />
     </div>
 
-    <el-table
-      v-if="batchResults.length > 0"
-      :data="batchResults"
-      stripe
-      size="small"
-      border
-      :row-style="{ cursor: 'pointer' }"
-      @row-click="viewBatchProduct"
-      v-loading="batchLoading"
-      max-height="calc(100vh - 320px)"
-    >
-      <el-table-column type="index" label="#" width="50" />
-      <el-table-column prop="oem" label="OEM 编号" min-width="180" show-overflow-tooltip />
-      <el-table-column label="命中" width="80">
-        <template #default="{ row }">
-          <span v-if="row.hit" class="text-green-600 font-semibold">✓</span>
-          <span v-else class="text-red-500 font-semibold">✗</span>
-        </template>
-      </el-table-column>
-      <el-table-column prop="productId" label="产品 ID" width="100">
-        <template #default="{ row }">
-          <span v-if="row.productId" class="text-blue-600">{{ row.productId }}</span>
-          <span v-else class="text-muted">-</span>
-        </template>
-      </el-table-column>
-      <el-table-column prop="oemBrand" label="OEM Brand" min-width="160" show-overflow-tooltip>
-        <template #default="{ row }">
-          <span v-if="row.oemBrand">{{ row.oemBrand }}</span>
-          <span v-else class="text-muted">-</span>
-        </template>
-      </el-table-column>
-      <el-table-column prop="productName1" label="Product Name 1" min-width="200" show-overflow-tooltip>
-        <template #default="{ row }">
-          <span v-if="row.productName1">{{ row.productName1 }}</span>
-          <span v-else class="text-muted">-</span>
-        </template>
-      </el-table-column>
-      <el-table-column prop="oem2" label="备用 OEM 2" min-width="180" show-overflow-tooltip>
-        <template #default="{ row }">
-          <span v-if="row.oem2">{{ row.oem2 }}</span>
-          <span v-else class="text-muted">-</span>
-        </template>
-      </el-table-column>
-    </el-table>
+    <!-- W8: 批量查询加载态 (首次查询尚无结果时也需明确反馈, 见用户需求 9) -->
+    <div v-if="batchLoading && batchResults.length === 0" class="py-8 text-center text-gray-500 dark:text-[var(--color-text-muted)]">
+      <el-icon class="is-loading text-2xl"><Loading /></el-icon>
+      <p class="mt-2">查询中...</p>
+    </div>
 
-    <div v-else-if="!batchLoading && batchTotal === 0" class="py-12 text-center text-muted">
+    <!-- W6: 已匹配区 (用户需求 5/8 — 上方展示已搜索到的内容) -->
+    <div v-if="batchHitRows.length > 0" class="mb-3" data-testid="batch-hit-section">
+      <div class="text-sm font-medium mb-2">
+        已匹配 ({{ batchHitRows.length }})
+      </div>
+      <el-table
+        :data="batchHitRows"
+        stripe
+        size="small"
+        border
+        :row-style="{ cursor: 'pointer' }"
+        @row-click="viewBatchProduct"
+        v-loading="batchLoading"
+        max-height="calc(100vh - 420px)"
+      >
+        <el-table-column type="index" label="#" width="50" />
+        <el-table-column prop="oem" label="OEM 编号" min-width="180" show-overflow-tooltip />
+        <el-table-column label="状态" width="80">
+          <template #default>
+            <span class="text-green-600 font-semibold">✓</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="productId" label="产品 ID" width="100">
+          <template #default="{ row }">
+            <span v-if="row.productId" class="text-blue-600">{{ row.productId }}</span>
+            <span v-else class="text-muted">-</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="oemBrand" label="OEM Brand" min-width="160" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span v-if="row.oemBrand">{{ row.oemBrand }}</span>
+            <span v-else class="text-muted">-</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="productName1" label="Product Name 1" min-width="200" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span v-if="row.productName1">{{ row.productName1 }}</span>
+            <span v-else class="text-muted">-</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="oem2" label="备用 OEM 2" min-width="180" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span v-if="row.oem2">{{ row.oem2 }}</span>
+            <span v-else class="text-muted">-</span>
+          </template>
+        </el-table-column>
+      </el-table>
+    </div>
+
+    <!-- W6/W7: 未匹配区 (下部单独区域 + 悬停快捷添加) -->
+    <div v-if="batchTotal > 0" class="mb-3" data-testid="batch-miss-section">
+      <div class="text-sm font-medium mb-2 flex items-center gap-2">
+        <span>未匹配 ({{ batchMissRows.length }})</span>
+        <span v-if="batchMissRows.length > 0" class="text-xs text-gray-500 dark:text-[var(--color-text-muted)]">
+          未找到匹配结果 — 悬停行可快捷添加
+        </span>
+      </div>
+      <el-table
+        v-if="batchMissRows.length > 0"
+        :data="batchMissRows"
+        size="small"
+        border
+        :row-class-name="() => 'batch-miss-row'"
+        v-loading="batchLoading"
+        max-height="calc(100vh - 420px)"
+      >
+        <el-table-column type="index" label="#" width="50" />
+        <el-table-column prop="oem" label="OEM 编号" min-width="220" show-overflow-tooltip />
+        <el-table-column label="状态" width="110">
+          <template #default>
+            <span class="text-red-500 font-semibold">✗ 未找到匹配结果</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="140">
+          <template #default="{ row }">
+            <el-button
+              class="quick-add-btn"
+              type="primary"
+              size="small"
+              data-testid="quick-add-btn"
+              @click.stop="openQuickAdd(row)"
+            >
+              + 快捷添加
+            </el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+      <div v-else class="text-xs text-gray-500 py-2 dark:text-[var(--color-text-muted)]">
+        全部命中, 无未匹配项
+      </div>
+    </div>
+
+    <div v-if="batchResults.length === 0 && !batchLoading && batchTotal === 0" class="py-12 text-center text-muted">
       <div class="text-4xl mb-2">📋</div>
       <div>粘贴 OEM 编号后点击"查询"</div>
       <div class="text-xs mt-2">支持每行一个 / tab 分列 / 逗号 / 分号, 自动 trim + 去重</div>
     </div>
+  </el-dialog>
+
+  <!-- W7: 快捷添加产品弹窗 (未匹配 OEM 补录, 提交后自动重跑批量查询) -->
+  <el-dialog
+    v-model="quickAddVisible"
+    title="快捷添加产品"
+    width="560px"
+    :close-on-click-modal="false"
+    destroy-on-close
+  >
+    <div class="text-xs text-gray-500 mb-3 dark:text-[var(--color-text-muted)]">
+      未匹配 OEM: <span class="font-mono">{{ quickAddSourceOem }}</span>
+    </div>
+    <el-form label-width="110px" size="small">
+      <el-form-item label="MR.1" required>
+        <el-input v-model="quickAddForm.mr1" maxlength="10" placeholder="1-10 位字母数字" data-testid="quick-add-mr1" />
+      </el-form-item>
+      <el-form-item label="OEM 2" required>
+        <el-input v-model="quickAddForm.oem2" maxlength="50" data-testid="quick-add-oem2" />
+      </el-form-item>
+      <el-form-item label="Product Name 1">
+        <el-input v-model="quickAddForm.productName1" maxlength="100" placeholder="可选" />
+      </el-form-item>
+      <el-form-item label="Type">
+        <el-select v-model="quickAddForm.type" style="width: 160px">
+          <el-option v-for="type in quickProductTypes" :key="type.value" :label="type.label" :value="type.value" />
+          <el-option label="其他" value="others" />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="OEM Brand">
+        <el-input v-model="quickAddForm.oemBrand" maxlength="100" placeholder="可选" />
+      </el-form-item>
+      <el-form-item label="OEM 3">
+        <el-input v-model="quickAddForm.oemNo3" maxlength="100" />
+      </el-form-item>
+    </el-form>
+    <template #footer>
+      <el-button :disabled="quickAddSubmitting" @click="quickAddVisible = false">取消</el-button>
+      <el-button
+        type="primary"
+        :loading="quickAddSubmitting"
+        data-testid="quick-add-submit"
+        @click="submitQuickAdd"
+      >
+        保存
+      </el-button>
+    </template>
   </el-dialog>
 </template>
 
@@ -795,5 +1161,15 @@ export default { components: { Loading } }
 html.dark .catalog-node.is-selected {
   background-color: rgba(64, 158, 255, 0.15);
   color: var(--el-color-primary-light-3);
+}
+/* W7 (2026-10-01 走查): 未匹配行 — 默认隐藏「+ 快捷添加」按钮, 悬停/键盘聚焦时显示 (用户需求 5)
+   若 :deep 选择器未命中 (例如表格被 teleport 到 body), 按钮保持常显, 属可接受的降级。 */
+:deep(.batch-miss-row) .quick-add-btn {
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+:deep(.batch-miss-row:hover) .quick-add-btn,
+:deep(.batch-miss-row:focus-within) .quick-add-btn {
+  opacity: 1;
 }
 </style>

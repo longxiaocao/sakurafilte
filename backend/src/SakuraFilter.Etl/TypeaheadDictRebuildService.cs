@@ -239,5 +239,19 @@ public class TypeaheadDictRebuildService
             await cmd.ExecuteNonQueryAsync(ct);
         }
         await tx.CommitAsync(ct);
+
+        // 5) 快照已切换完成 → 递增世代号, 使公开自动补全服务的内存缓存键立即换代。
+        //    WHY: 公开端对 (field,q,limit) 缓存 5 分钟, 若不换代, 重建后的新候选最长 5 分钟不可见
+        //      ("重建成功但下拉仍查不到新数据" 的假象, 见 .ai/suggestions.md 遗留 P2)。
+        //    实现: 只换缓存键前缀, 不遍历/清理 IMemoryCache (避免新增失效 API 与锁竞争)。
+        BumpCacheGeneration();
     }
+
+    private static int _cacheGeneration;
+
+    /// <summary>快照世代号 (进程内, 每次重建成功后 +1)。公开端把它拼进缓存键, 旧键自然过期。</summary>
+    public static int CacheGeneration => Volatile.Read(ref _cacheGeneration);
+
+    /// <summary>递增快照世代号 (仅 TypeaheadDictRebuildService 在切换成功后调用)。</summary>
+    private static void BumpCacheGeneration() => Interlocked.Increment(ref _cacheGeneration);
 }
