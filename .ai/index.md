@@ -31,9 +31,10 @@
 
 ## 关键接口（公开搜索，2026-10-01 切库后）
 
-- POST `/api/public/search/aggregate` → 聚合搜索；`type` 过滤值必须是短码 `air/oil/fuel/hydraulic/cabin/others`（传展示名恒 0 结果）
+- POST `/api/public/search/aggregate` → 聚合搜索；`type` 过滤值必须是短码 `air/oil/fuel/hydraulic/cabin/others`（传展示名恒 0 结果）；另支持 8 个高级字段 `oemBrand/oemNo2/oemNo3/machineBrand/machineModel/modelName/engineBrand/engineType`（各字段独立、互不融合、可叠加）与 6 个尺寸 `d1/d2/d3/h1/h2/h3`。**这 8 字段不在 Meili filterableAttributes**：任一非空时控制器 `PublicSearchController.Aggregate` 直接改走 `PostgresSearchProvider` 做 ILIKE 精确过滤，全空才走「Meili 主 + PG 兜底」（ADR #39）
 - GET `/api/public/product/{**slug}`、`GET /product/{oem}` → 详情；反查优先级 OemNo3(1) → OemNoDisplay(2) → Oem2(3) → Mr1(4)
-- POST `/api/public/search/batch-oem` → 批量 OEM 查询
+- POST `/api/public/search/batch-oem` → 批量 OEM 查询；前端按 `hit` 拆「已匹配 / 未匹配」两分区，未匹配行可快捷添加（复用 `POST /api/admin/products`，Operator 策略）
+- POST `/api/admin/products` → 后台新建产品（策略 `Operator`）；前端「快捷添加」弹窗复用此端点，未登录先跳 `/login?redirect=`
 - POST `/api/admin/etl/reindex-all` → 全量重建索引（需 Admin，限流 "etl"）
 
 ## 关键接口（OEM 目录，2026-09-30 上线）
@@ -48,6 +49,8 @@
 
 ## 前端路由
 
+- `/search/aggregate` → `views/public/AggregateSearchView.vue`：**公开搜索统一入口**（合并原高级搜索与高级筛选为「高级搜索与筛选」面板；顶部融合搜索框 / 中部高级搜索与筛选展开区 / 下部批量 OEM 查询结果分区）
+- `/public/search` → `views/public/PublicSearchView.vue`：**保留路由不重定向**，承载「产品对比内嵌视图」(`?compare=<ids>`)；仅导航入口统一指向 `/search/aggregate`（ADR #42）
 - `/admin/oem-catalog` → `views/admin/AdminOemCatalogView.vue`（后台菜单 key `oem-catalog`）
 - 其余后台页 `requireAuth`；`/admin/ops?tab=etl` 为 ETL 入口
 
@@ -65,7 +68,5 @@
 - Meilisearch 文档 ID 只允许 `[A-Za-z0-9_-]`（≤511 字节）；含 `/ . " +` 或空格会整批 `invalid_document_id`
 - 生产栈 `sakura-api` / `sakura-meili` **未映射宿主端口**（宿主 `:7700`/`:5148` 属压测栈）；生产只能经 `https://localhost/api/...`（`curl -k`）或 `docker exec`
 - OEM catalog 的 MR.1 映射当前为空（`oem_mr1_mappings = 0`），属设计预期（客户 MR.1 编码未定稿），待编码规则就绪后按 OEM 回填
-- `PublicTypeaheadService` 的内存缓存（查询 5 分钟 / 基数 10 分钟）在 `typeahead_dict` 重建后不会被失效，切换后最多 10 分钟窗口内可能返回旧快照
-- 前端搜索页快捷分类按钮只改 `advancedForm.type` 并触发 `doSearch()`，不调用 `syncUrl()` → 点击后 URL 不带 `type`，刷新/分享会丢失筛选
 - 派生分类仍有 `others` 9,908（20.3%，如 Cyclone / Mist Purifier / Liquid / Breather / Gasket Kit，无 6 类归属）；新增类别需同步前端 `dict_type`、`AdminTypesView.FIXED_TYPES`、i18n 与契约测试
 - 前端聚合搜索页有**两个**搜索输入框：页头全局框（placeholder「搜索产品 / OEM / 机型」）与页面搜索框（「输入关键词 …」）；自动化须定位后者
