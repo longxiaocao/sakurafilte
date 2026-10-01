@@ -16,7 +16,7 @@ function closeMobileNav() { mobileNavOpen.value = false }
 
 const route = useRoute()
 const router = useRouter()
-const { isAdmin, user, token, refreshToken, clearAuth } = useAdminAuth()
+const { isAdmin, isAuthenticated, user, token, refreshToken, clearAuth } = useAdminAuth()
 const theme = useThemeStore()  // P5.3
 // 🔧 fix(审查): 站点名从后端读取 (后台 AdminSiteContentView 可维护), 兜底 SakuraFilter
 const siteName = ref('SakuraFilter')
@@ -57,21 +57,27 @@ const allNavItems = computed(() => {
     { key: 'news', labelKey: 'nav.news', path: '/news', icon: 'Document', priority: 3 },
     { key: 'contact', labelKey: 'nav.contact', path: '/contact', icon: 'Message', priority: 4 },
     { key: 'oem', labelKey: 'nav.oemLookup', action: 'oemLookup', icon: 'Document', priority: 5 },
+    // V3(2026-08-25) 用户反馈: 高级搜索是公共功能, 从 admin 菜单移出归公共区
+    // W9 (2026-10-01): 8 字段搜索页已并入聚合搜索页的「高级搜索与筛选」面板 → 导航直指合并页
+    { key: 'adv-search', labelKey: 'nav.advSearch', path: '/search/aggregate', icon: 'Filter', priority: 4.5 },
   ]
-  // 已登录用户: 在任何路径都看到 admin 入口, 解决 v3 跳公开页丢 admin 体验问题
-  // 🔧 fix(审查): admin 菜单以 token 为准 (旧 token 迁移场景 user 为 null 时导航仍完整)
-  //   原 if (user.value): 旧 localStorage 纯 token (LEGACY key 迁移) user=null → 已登录但导航只显示公共 5 项 (用户实测反馈)
-  if (token.value) {
+  // V3(2026-08-25) 用户反馈 (bug): admin 登录后访问公开页显示完整 admin 布局 —
+  //   admin 菜单仅"有效登录 + /admin/* 路径"显示; 公开页不显示 admin 菜单
+  //   (原实现 isAuthenticated() 任意路径都显示 admin 菜单 → 公开页被污染)
+  //   admin 回后台入口在右侧用户下拉菜单 (goAdmin), 见 toggleAdmin/onUserCommand
+  if (isAuthenticated() && isAdminPath.value) {
     // admin 高优 (必显示, 不可收纳)
     items.push(
       { key: 'products', labelKey: 'nav.productManage', path: '/admin/products', icon: 'Goods', priority: 4 },
-      // W9 (2026-10-01): 8 字段搜索页已并入聚合搜索页的「高级搜索与筛选」面板 → 导航直指合并页
-      { key: 'adv-search', labelKey: 'nav.advSearch', path: '/search/aggregate', icon: 'Filter', priority: 5 },
+      //   admin 区不再重复放"高级搜索"入口, 统一走公共区那一条
       { key: 'dict', labelKey: 'nav.dictManage', dropdown: 'dict', icon: 'Collection', priority: 6 },
-    // 🔧 fix(审查): 独立对比页移除, '产品对比'菜单入口删除 — 对比内嵌高级搜索页 (结果勾选 + 详情页按钮),
+      // 🔧 fix(审查): 独立对比页移除, '产品对比'菜单入口删除 — 对比内嵌高级搜索页 (结果勾选 + 详情页按钮),
       // V2 Task 2.2.6: OEM 排序管理入口 (priority 6.5, 在字典和 ETL 之间)
-      { key: 'xref-reorder', labelKey: 'nav.xrefReorder', path: '/admin/xrefs/reorder', icon: 'Sort', priority: 6.5 }
-      // 🔧 fix(审查): ETL 高优独立项移除 — 与 perf/errors/api 合并为 "运维中心" (/admin/ops el-tabs)
+      { key: 'xref-reorder', labelKey: 'nav.xrefReorder', path: '/admin/xrefs/reorder', icon: 'Sort', priority: 6.5 },
+      // V3 fix(2026-08-25): 数据导入独立入口恢复 — 交付后客户管理员需自助导入产品数据,
+      //   用户反馈"找不到导入入口" (原合并进运维中心 tab 太隐蔽); /admin/etl 路由已存在
+      //   (redirect → /admin/ops?tab=etl), 高优区不收纳
+      { key: 'etl', labelKey: 'nav.importData', path: '/admin/etl', icon: 'Upload', priority: 6.8 }
     )
     if (isAdmin()) {
       items.push({ key: 'users', labelKey: 'nav.userManage', path: '/admin/users', icon: 'User', priority: 8 })
@@ -80,6 +86,7 @@ const allNavItems = computed(() => {
     // 🔧 fix(审查): ETL/性能/错误/API 文档 4 项合并为 1 项 "运维中心" (/admin/ops el-tabs) —
     //   用户反馈: 更多里仍分开显示 4 项, 且整合页信息密度低; 合并后菜单只露 1 入口, 更简洁
     //   adv-compare 已移除 (对比内嵌高级搜索页, 独立页冗余)
+    //   V3(2026-08-25): 数据导入(etl)已独立回高优区, 运维中心保留 性能/错误/API/存储
     items.push(
       // OEM 目录核验入口 (OEM NO 1 → catalog 只读查询)
       { key: 'oem-catalog', labelKey: 'nav.oemCatalog', path: '/admin/oem-catalog', icon: 'Collection', priority: 8.5 },
@@ -278,6 +285,10 @@ function onUserCommand(cmd: string) {
     router.push('/change-password')
   } else if (cmd === 'logout') {
     handleLogout()
+  } else if (cmd === 'goAdmin') {
+    // V3(2026-08-24): 已登录用户后台入口 (未登录按钮已降权为"登录", 后台入口移至用户菜单)
+    // V3(2026-08-25): admin 菜单仅 /admin/* 显示后, 公开页需经此回到后台 → 跳运维中心 (通用首页)
+    router.push('/admin/ops')
   }
 }
 
@@ -567,19 +578,23 @@ function doGlobalSearch() {
       </button>
       <template #dropdown>
         <el-dropdown-menu>
-          <el-dropdown-item command="changePassword">{{ t('auth.changePassword') }}</el-dropdown-item>
+          <!-- V3(2026-08-24): 已登录用户后台入口 (原"进入后台"按钮已降权为"登录") -->
+          <el-dropdown-item command="goAdmin">
+            <el-icon class="mr-1"><Setting /></el-icon>{{ t('nav.enterAdminArea') }}
+          </el-dropdown-item>
+          <el-dropdown-item command="changePassword" divided>{{ t('auth.changePassword') }}</el-dropdown-item>
           <el-dropdown-item command="logout" divided>{{ t('auth.logout') }}</el-dropdown-item>
         </el-dropdown-menu>
       </template>
     </el-dropdown>
-    <!-- P-Admin-UX v4: 移除 v3 的"已登录 admin 角标"按钮, 因为 v4 admin 6 入口在任意路径都保留, 此按钮冗余 -->
+    <!-- V3(2026-08-24): 未登录按钮降权 — 文案"登录"(不再叫"进入后台"), 去锁图标, 缩小+中性色,
+        避免向访客暴露"内部后台"语义; 已登录用户从用户菜单进后台 -->
     <button
       v-else
       @click="toggleAdmin"
-      class="hidden sm:flex px-2 py-1 text-sm hairline hover:bg-[var(--color-bg-hover)] items-center gap-1"
+      class="hidden sm:flex px-1.5 py-0.5 text-xs text-gray-500 hover:text-[var(--color-text)] hover:bg-[var(--color-bg-hover)] rounded items-center gap-1"
       :aria-label="isAdminPath ? t('nav.exitAdmin') : t('common.aria.enterAdminLogin')"
     >
-      <el-icon aria-hidden="true"><Lock v-if="!isAdminPath" /><Unlock v-else /></el-icon>
       {{ isAdminPath ? t('nav.exitAdmin') : t('nav.enterAdmin') }}
     </button>
   </header>

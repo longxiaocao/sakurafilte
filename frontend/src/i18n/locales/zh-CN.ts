@@ -106,6 +106,22 @@ export default {
 
       },
     },
+
+    backupview: {
+      title: '数据备份',
+      subtitle: '查看主机 _backups 目录下的 PostgreSQL 备份; 异机备份需配置 BACKUP_S3_ENDPOINT',
+      how_to_run: '如何在主机执行备份',
+      copy: '复制命令',
+      copied: '已复制',
+      copy_failed: '复制失败 (浏览器权限)',
+      run_note: '执行需要在部署主机 (非 API 容器内); 异机对象存储配置见 .env.prod.example',
+      list_title: '最近备份文件',
+      col: { name: '文件名', size: '大小', created_at: '创建时间' },
+      dir_missing: '目录不存在',
+      dir_missing_desc: '主机 _backups 目录不存在 — 尚未生成任何备份, 请先在主机执行 backup-db.sh',
+      err_load: '加载备份列表失败',
+      refresh: '刷新',
+    },
     etlview: {
       page_title: 'ETL 触发与监控',
       guide_title: 'ETL 是什么与使用步骤',
@@ -152,7 +168,7 @@ export default {
         dry_run: '最近 dry-run 校验',
         recent_errors: '最近错误 (最多 10 条)',
         row_errors: '导入失败明细 (行号定位, 最多 100 条)',
-        audit: '取消审计 (按 reason_code 聚合)',
+        audit: '取消审计 (按 reason_code 聚合)'
       },
       reindex_confirm: '执行全量重建',
       total_cancelled: '总取消数',
@@ -171,6 +187,7 @@ export default {
         status_paused: '已暂停',
         status_cancelled: '已取消',
         status_idle: '空闲',
+        empty_hint: '当前无运行中任务 (空闲属正常状态)。在顶部配置并触发 ETL 后, 此处显示导入流程进度。',
         elapsed_label: '已耗时',
         errors_label: '错误'
       },
@@ -250,6 +267,10 @@ export default {
         phrase_63454: '已读/插/改',
         en_v3: '耗时',
         cancel_timestamp: '取消时间',
+        // V3(2026-08-25): P2 行级错误
+        row_no: '行号',
+        field: '字段',
+        reason: '原因',
       },
       placeholder: {
         jsonl_absolute_path: 'JSONL 绝对路径',
@@ -410,13 +431,13 @@ export default {
         upload_image_back_frontend_sho: '上传图片后前台不显示?',
         check_product_ispublished_true: '检查 (1) 产品 isPublished=true (上架) (2) slot 1-6 范围 (3) 浏览器 console 看 OSS 预签名 URL 1 h 有效. 如过期, 重新加载产品页.',
         product_ispublished_true_listed: '检查 (1) 产品 isPublished=true (上架) (2) slot 1-6 范围 (3) 浏览器 console 看 OSS 预签名 URL 1 ',
-        enter_admin: '进入后台',
+        enter_admin: '登录',
         mode_full_load_insert: ' + 模式 (full-load / insert-only / upsert), 点 ',
         // V24-F103 i18n 残留修复: HelpView 静态文档内容 i18n 化
         page_title: '后台操作指南',
         page_subtitle: '5 个模块: 快速开始 / 字典规范 / 批量导入 / 搜索容差 / FAQ',
         quick_start_title: '1. 快速开始 (5 步入门)',
-        quick_start_step1: "点击右上\"进入后台登录\", 输入账号密码 (admin/Admin{'@'}2026 或 operator/Operator{'@'}2026)",
+        quick_start_step1: "点击右上角\"登录\", 输入账号密码 (admin/Admin{'@'}2026 或 operator/Operator{'@'}2026)",
         quick_start_step2: '字典管理 → 8 个字典先 seed 数据 (首次部署): 走 spike-test/_seed_dict_*.py 6 个脚本',
         quick_start_step3: 'ETL 触发 → 选择 products.xlsx / xrefs.xlsx / apps.xlsx, 推荐"全量"模式触发',
         quick_start_step4: '产品管理 → 用 8 字段 / OEM 查询 / 批量粘贴查询, 命中产品进入详情',
@@ -1008,7 +1029,7 @@ export default {
       dialog_edit_title: '编辑 OEM 3',
       field_current_brand: '当前品牌',
       field_product: '关联产品',
-      product_placeholder: '输入 MR.1 / 产品名搜索该品牌下产品',
+      product_placeholder: '🔍 搜索产品 (输入 MR.1 / 产品名 / OEM 号)',
       field_oem_no3: 'OEM 3 号',
       field_oem2: 'OEM 2',
       field_machine_type: '机型类型',
@@ -1045,6 +1066,16 @@ export default {
       success_brand_added: "品牌 '{brand}' 已新增",
       err_brand_exists: '品牌已存在',
       err_add_brand_failed: '新增品牌失败',
+      // V3(2026-08-24): 品牌搜索 + 软删
+      brand_search_placeholder: '搜索品牌...',
+      no_brand_match: '无匹配品牌',
+      remove_brand_title: '移除品牌',
+      confirm_remove_brand: '确认移除品牌 "{brand}"? (软删除, 不影响产品数据; 之后用同名"新增品牌"可恢复)',
+      success_brand_removed: "品牌 '{brand}' 已移除",
+      err_remove_brand_failed: '移除品牌失败',
+      // V3(2026-08-24): 产品搜索 UX 强化
+      product_no_data: '未找到匹配产品, 换个关键词试试',
+      product_auto_hint: '选择产品后自动填入 OEM 3 / OEM 2, 可手动修改',
     },
     // 2026-08-01: AdminApiDocsView i18n 化 (批次 6d 页面补充)
     apidocs: {
@@ -1321,7 +1352,7 @@ export default {
       userMenu: '用户菜单: {username}, 角色 {role}',
       searchBox: '全局搜索框, 输入时显示联想建议, 回车跳转聚合搜索页',
       searchPlaceholder: '搜索产品 / OEM / 机型',
-      enterAdminLogin: '进入后台登录',
+      enterAdminLogin: '登录',
       switchToLight: '切换到浅色',
       switchToDark: '切换到深色'
     },
@@ -1365,6 +1396,21 @@ export default {
       MR1_EMPTY: 'mr_1 不能为空',
     },
   },
+
+    compare: {
+      floating: {
+        toggle: '打开/关闭产品对比',
+        label: '对比 {n}/{max}',
+        clear: '清空对比',
+        drawer_title: '产品对比 ({n})',
+        empty: '对比列表为空 — 在搜索结果中点击"加入对比"添加产品',
+      },
+      panel: {
+        diffOnly: '只看不同项',
+        diffOnly_hint: '隐藏所有产品值相同的字段',
+        productCount: '当前 {n} 个产品 (6 个以内一屏显示)',
+      },
+    },
   nav: {
     oemCatalog: 'OEM 目录核验',
     productSearch: '产品搜索',
@@ -1375,10 +1421,11 @@ export default {
     etlTrigger: 'ETL 触发',
     compare: '产品对比',
     perf: '性能',
+    importData: '数据导入',
     opsCenter: '运维中心',
     // 🔧 fix(审查): 运维中心 el-tabs label i18n (原硬编码中文)
     opsview: {
-      tab: { etl: 'ETL 触发与监控', perf: '性能', errors: '错误', api: 'API 文档', storage: '存储配置', orphans: '孤立机型' }
+      tab: { perf: '性能', errors: '错误', api: 'API 文档', storage: '存储配置', orphans: '孤立机型', backup: '数据备份' }
     },
     storage: {
       provider: '存储服务商',
@@ -1401,7 +1448,8 @@ export default {
       restart_tip: '保存的配置将在容器重启后生效 (存储客户端为单例, 不支持热切换)。测试按钮用于验证凭证与网络连通性 (上传/读取/删除探针)。',
     },
     help: '帮助',
-    enterAdmin: '进入后台',
+    enterAdmin: '登录',
+    enterAdminArea: '后台管理',
     exitAdmin: '退出后台',
     // V24-F103 i18n 残留修复: AppHeader 顶栏按钮 + 字典下拉 + drawer 文案
     more: '更多',

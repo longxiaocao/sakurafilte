@@ -11,7 +11,7 @@ namespace SakuraFilter.Api.Tests.Integration;
 ///
 /// 关注点: 验证 IndexReplayWorker.ProcessPendingAsync 依赖的 PG 锁机制在真实 PG 上生效
 ///   - FOR UPDATE SKIP LOCKED: 多事务并发拉取同一表, 第二个事务跳过被锁行 (不阻塞)
-///   - pg_try_advisory_xact_lock(7740005): 与 ReindexAllAsync 互斥 (跨事务独占锁)
+///   - pg_try_advisory_xact_lock(7740000): 与 ReindexAllAsync 互斥 (跨事务独占锁)
 ///   - UpdateRetryAsync 路径: Meili 调用失败时 retry_count +1 + next_retry_at 推迟 (指数退避)
 ///
 /// 为什么不直接调用 IndexReplayWorker.ProcessPendingAsync:
@@ -90,23 +90,23 @@ VALUES
     }
 
     /// <summary>
-    /// 场景: 一个事务持有 pg_advisory_xact_lock(7740005), 另一事务尝试获取应失败
-    /// 预期: 第二个 pg_try_advisory_xact_lock(7740005) 返回 false (0)
+    /// 场景: 一个事务持有 pg_advisory_xact_lock(7740000), 另一事务尝试获取应失败
+    /// 预期: 第二个 pg_try_advisory_xact_lock(7740000) 返回 false (0)
     /// 覆盖: spec Task V15-1.1.3 (V24-F26) - IndexReplayWorker 与 ReindexAllAsync 互斥
     /// </summary>
     [Fact]
-    public async Task AdvisoryXactLock7740005_ConcurrentTransactions_SecondFails_Integration()
+    public async Task AdvisoryXactLock7740000_ConcurrentTransactions_SecondFails_Integration()
     {
         if (!IsEnabled) { _output.WriteLine("Skip: PG_TEST_CONNECTION_STRING 未配置"); return; }
 
-        // Arrange: conn1 持有 advisory_xact_lock(7740005) (事务级, 不 commit 一直持有)
+        // Arrange: conn1 持有 advisory_xact_lock(7740000) (事务级, 不 commit 一直持有)
         await using var conn1 = new NpgsqlConnection(ConnectionString);
         await conn1.OpenAsync();
         await using var tx1 = conn1.BeginTransaction();
         await using (var cmd = tx1.Connection!.CreateCommand())
         {
             cmd.Transaction = tx1;
-            cmd.CommandText = "SELECT pg_try_advisory_xact_lock(7740005)";
+            cmd.CommandText = "SELECT pg_try_advisory_xact_lock(7740000)";
             var result1 = await cmd.ExecuteScalarAsync();
             ((bool)result1!).Should().BeTrue("第一个事务应成功获取锁");
         }
@@ -119,18 +119,18 @@ VALUES
         await using (var cmd = tx2.Connection!.CreateCommand())
         {
             cmd.Transaction = tx2;
-            cmd.CommandText = "SELECT pg_try_advisory_xact_lock(7740005)";
+            cmd.CommandText = "SELECT pg_try_advisory_xact_lock(7740000)";
             lock2Acquired = (bool)(await cmd.ExecuteScalarAsync())!;
         }
 
         // Assert: 第二个事务应失败
-        lock2Acquired.Should().BeFalse("advisory_xact_lock(7740005) 是独占锁, 第二个事务应失败");
+        lock2Acquired.Should().BeFalse("advisory_xact_lock(7740000) 是独占锁, 第二个事务应失败");
 
         // Cleanup: tx1 commit 释放锁 (事务级锁自动释放)
         await tx1.CommitAsync();
         await tx2.CommitAsync();
 
-        _output.WriteLine("advisory_xact_lock(7740005) 互斥验证通过: 第二个事务立即返回 false");
+        _output.WriteLine("advisory_xact_lock(7740000) 互斥验证通过: 第二个事务立即返回 false");
     }
 
     /// <summary>

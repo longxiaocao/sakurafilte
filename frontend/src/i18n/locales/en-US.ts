@@ -102,9 +102,26 @@ export default {
 
       },
     },
+
+    backupview: {
+      title: 'Database Backup',
+      subtitle: 'View PostgreSQL backups in the host _backups directory; configure BACKUP_S3_ENDPOINT for off-host storage',
+      how_to_run: 'How to run a backup on the host',
+      copy: 'Copy command',
+      copied: 'Copied',
+      copy_failed: 'Copy failed (browser permission)',
+      run_note: 'Run on the deployment host (not inside the API container); see .env.prod.example for off-host S3 config',
+      list_title: 'Recent backup files',
+      col: { name: 'File', size: 'Size', created_at: 'Created at' },
+      dir_missing: 'directory missing',
+      dir_missing_desc: 'Host _backups directory does not exist — no backups yet, run backup-db.sh on the host first',
+      err_load: 'Failed to load backup list',
+      refresh: 'Refresh',
+    },
     etlview: {
       page_title: 'ETL Trigger & Monitor',
-      guide_title: 'How to use',
+      guide_title: 'What is ETL & how to use',
+      guide_intro: 'ETL is the bulk product-data import tool: it loads product files (XLSX or JSONL) into the database. Use it for initial data load, catalog updates, or after data corrections; no action needed for daily queries.',
       // V3(2026-08-25): data type explanations (user: products/xrefs/apps confusing)
       data_types_title: 'Three data types (read before importing)',
       data_type_products: 'Products: your catalog of items for sale — internal code (MR number), name, type (e.g. oil filter / air filter), dimensions. This is the system master data.',
@@ -146,7 +163,8 @@ export default {
         last_finished: 'Last Finished Result',
         dry_run: 'Recent dry-run Validation',
         recent_errors: 'Recent Errors (max 10)',
-        audit: 'Cancel Audit (aggregate by reason_code)',
+        row_errors: 'Import failures (line-level, max 100)',
+        audit: 'Cancel Audit (aggregate by reason_code)'
       },
       reindex_confirm: 'Full Rebuild',
       total_cancelled: 'Total Cancelled',
@@ -165,6 +183,7 @@ export default {
         status_paused: 'Paused',
         status_cancelled: 'Cancelled',
         status_idle: 'Idle',
+        empty_hint: 'No task running (idle is normal). Configure and trigger ETL above to see the pipeline here.',
         elapsed_label: 'Elapsed',
         errors_label: 'Errors'
       },
@@ -407,13 +426,13 @@ export default {
         upload_image_back_frontend_sho: 'Uploaded image not showing on frontend?',
         check_product_ispublished_true: 'Check (1) product isPublished=true (2) slot 1-6 range (3) browser console for OSS pre-signed URL 1h validity. If expired, reload product page.',
         product_ispublished_true_listed: 'Check (1) product isPublished=true (listed) (2) slot 1-6 range (3) browser console for OSS pre-signed URL 1h validity',
-        enter_admin: 'Enter Admin',
+        enter_admin: 'Login',
         mode_full_load_insert: '+ Mode (full-load / insert-only / upsert), click',
         // V24-F103 i18n residue fix: HelpView static doc content i18n
         page_title: 'Admin Operation Guide',
         page_subtitle: '5 modules: Quick Start / Dictionary Specs / Bulk Import / Search Tolerance / FAQ',
         quick_start_title: '1. Quick Start (5 steps)',
-        quick_start_step1: "Click \"Enter Admin\" at top-right, enter credentials (admin/Admin{'@'}2026 or operator/Operator{'@'}2026)",
+        quick_start_step1: "Click \"Login\" at top-right, enter credentials (admin/Admin{'@'}2026 or operator/Operator{'@'}2026)",
         quick_start_step2: 'Dictionary Management → seed 8 dictionaries (first deploy): run spike-test/_seed_dict_*.py (6 scripts)',
         quick_start_step3: 'ETL Trigger → select products.xlsx / xrefs.xlsx / apps.xlsx, recommend "full-load" mode',
         quick_start_step4: 'Product Management → query by 8 fields / OEM / bulk paste, click product to enter detail',
@@ -1009,7 +1028,7 @@ export default {
       dialog_edit_title: 'Edit OEM 3',
       field_current_brand: 'Brand',
       field_product: 'Linked product',
-      product_placeholder: 'Search product by MR.1 / name under this brand',
+      product_placeholder: '🔍 Search product (MR.1 / name / OEM no.)',
       field_oem_no3: 'OEM 3 No.',
       field_oem2: 'OEM 2',
       field_machine_type: 'Machine type',
@@ -1046,6 +1065,16 @@ export default {
       success_brand_added: "Brand '{brand}' added",
       err_brand_exists: 'Brand already exists',
       err_add_brand_failed: 'Failed to add brand',
+      // V3(2026-08-24): brand search + soft delete
+      brand_search_placeholder: 'Search brands...',
+      no_brand_match: 'No matching brands',
+      remove_brand_title: 'Remove brand',
+      confirm_remove_brand: 'Remove brand "{brand}"? (soft delete, product data untouched; re-add same name to restore)',
+      success_brand_removed: "Brand '{brand}' removed",
+      err_remove_brand_failed: 'Failed to remove brand',
+      // V3(2026-08-24): product search UX
+      product_no_data: 'No matching product, try another keyword',
+      product_auto_hint: 'OEM 3 / OEM 2 auto-filled after product selection, editable',
     },
     // 2026-08-01: AdminApiDocsView i18n 化 (批次 6d 页面补充)
     apidocs: {
@@ -1321,7 +1350,7 @@ export default {
       userMenu: 'User menu: {username}, role {role}',
       searchBox: 'Global search box, shows suggestions while typing, press Enter to open aggregate search',
       searchPlaceholder: 'Search product / OEM / model',
-      enterAdminLogin: 'Enter admin login',
+      enterAdminLogin: 'Login',
       switchToLight: 'Switch to light',
       switchToDark: 'Switch to dark'
     },
@@ -1365,6 +1394,21 @@ export default {
       MR1_EMPTY: 'mr_1 is empty',
     },
   },
+
+    compare: {
+      floating: {
+        toggle: 'Open/close product compare',
+        label: 'Compare {n}/{max}',
+        clear: 'Clear compare',
+        drawer_title: 'Product Compare ({n})',
+        empty: 'Compare list is empty — click "Add to compare" on search results',
+      },
+      panel: {
+        diffOnly: 'Diff only',
+        diffOnly_hint: 'Hide fields where all products have the same value',
+        productCount: '{n} products (fits in one screen for ≤6)',
+      },
+    },
   nav: {
     oemCatalog: 'OEM Catalog',
     productSearch: 'Product Search',
@@ -1375,10 +1419,11 @@ export default {
     etlTrigger: 'ETL Trigger',
     compare: 'Compare',
     perf: 'Performance',
+    importData: 'Import Data',
     opsCenter: 'Ops Center',
     // 🔧 fix(审查): 运维中心 el-tabs label i18n
     opsview: {
-      tab: { etl: 'ETL Trigger & Monitor', perf: 'Performance', errors: 'Errors', api: 'API Docs', storage: 'Storage Config', orphans: 'Orphan Machines' }
+      tab: { perf: 'Performance', errors: 'Errors', api: 'API Docs', storage: 'Storage Config', orphans: 'Orphan Machines', backup: 'Backup' }
     },
     storage: {
       provider: 'Storage Provider',
@@ -1401,7 +1446,8 @@ export default {
       restart_tip: 'Saved config applies after container restart (storage client is singleton). The test button verifies credentials/connectivity (upload/read/delete probe).',
     },
     help: 'Help',
-    enterAdmin: 'Enter Admin',
+    enterAdmin: 'Login',
+    enterAdminArea: 'Admin Panel',
     exitAdmin: 'Exit Admin',
     // V24-F103 i18n residue fix: AppHeader nav buttons + dict dropdown + drawer
     more: 'More',

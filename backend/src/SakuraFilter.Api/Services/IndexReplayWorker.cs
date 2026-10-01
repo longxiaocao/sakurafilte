@@ -73,23 +73,23 @@ public class IndexReplayWorker : BackgroundService
         var db = scope.ServiceProvider.GetRequiredService<ProductDbContext>();
         var meili = scope.ServiceProvider.GetRequiredService<MeiliSearchProvider>();
 
-        // V24-F26 (spec Task V15-1.1.3): 与 ReindexAllAsync 互斥 (advisory lock 7740005)
+        // V24-F26 (spec Task V15-1.1.3): 与 ReindexAllAsync/ETL 互斥 (advisory lock 7740000)
+        //   V3(2026-08-25) 上线审查: key 从 7740005 统一为全局 ETL 锁 (7740000) — 与导入/重建共享互斥
         //   WHY: ReindexAllAsync 全量重建时清空 Meili + search_index_pending,
         //        若 IndexReplayWorker 并发写入会导致: (1) pending 条目被清空但 Meili 已写入 (脏数据);
         //        (2) ReindexAllAsync 重建完成后又被 IndexReplayWorker 写入旧数据 (数据回退)
-        //   实现: 用 EF Core 显式事务包裹整个处理逻辑, 在事务内获取 pg_try_advisory_xact_lock(7740005)
-        //   - 失败 (锁被 ReindexAllAsync 占用): rollback + return (跳过本次批次, 等下次轮询)
+        //   实现: 用 EF Core 显式事务包裹整个处理逻辑, 在事务内获取 pg_try_advisory_xact_lock(7740000)
+        //   - 失败 (锁被占用): rollback + return (跳过本次批次, 等下次轮询)
         //   - 成功: 继续处理, commit 释放锁 (锁持有时间 = DB 查询 + Meili 调用 + DB save)
-        //   spec 验证: "IndexReplayWorker.ProcessPendingAsync 含 advisory lock 7740005 获取"
         await using var tx = await db.Database.BeginTransactionAsync(ct);
 
         var lockAcquired = await db.Database.SqlQueryRaw<int>(
-            "SELECT CASE WHEN pg_try_advisory_xact_lock(7740005) THEN 1 ELSE 0 END AS \"Value\""
+            "SELECT CASE WHEN pg_try_advisory_xact_lock(7740000) THEN 1 ELSE 0 END AS \"Value\""
         ).FirstAsync(ct);
         if (lockAcquired == 0)
         {
             await tx.RollbackAsync(ct);
-            _logger.LogDebug("IndexReplayWorker 跳过本次批次 (advisory lock 7740005 被占用, 与 ReindexAllAsync 互斥)");
+            _logger.LogDebug("IndexReplayWorker 跳过本次批次 (advisory lock 7740000 被占用, 与 ETL/重建互斥)");
             return;
         }
 

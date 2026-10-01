@@ -132,7 +132,8 @@ public class PublicCompareController : ControllerBase
             {
                 imgList.Add(new ProductImageInfo(0, p.Id, 1, pi.ImageKey,
                     $"/api/public/images/{pi.ImageKey}", pi.FileSize, pi.ContentType,
-                    pi.Width, pi.Height, pi.IsPrimary, pi.UploadedAt, pi.UploadedBy, pi.OemNo3, "primary"));
+                    pi.Width, pi.Height, pi.IsPrimary, pi.UploadedAt, pi.UploadedBy, pi.OemNo3, "primary",
+                    pi.ShowDimension));  // V2(2026-08-24): 尺寸标注线开关 (分支新增字段, 合并 master 后补齐)
             }
             // 公开对比不需要 RowVersion (前台不修改数据), 传 0 即可
             result.Add(new ProductDetailDto(

@@ -335,11 +335,35 @@ public class MeiliSearchProvider : ISearchProvider
         var rawResult = await _index.SearchAsync<JsonObject>(query, searchQuery, ct);
         var total = (rawResult as SearchResult<JsonObject>)?.EstimatedTotalHits ?? rawResult.Hits.Count;
 
+        // V3(2026-08-24): Hybrid 白名单补位 — Meili 命中集上限 1000, 白名单产品(竞价排名)
+        //   可能被 ranking 挤出命中集 (如搜品牌缩写时 oem_brands_str 单 token 匹配分数低).
+        //   二次重排只能排"命中集内"顺序, 集外产品必须从 PG 单独取并强制排最前.
+        //   补位条件: 搜索词非空 且 白名单产品的 品牌/OEM3/OEM2/产品名 含搜索词 (大小写不敏感)
+        //   白名单数量级 < 100, 构造成本可忽略; 查询失败降级为空 (不阻塞主搜索)
+        // V3(2026-08-25): OEM 精确子串补位 — 搜 OEM 号 (含数字) 时 Meili typo 数字容错
+        //   产生大量误匹配 (如 '1002390' 71 命中, 精确产品 MR00839317 排 71 位). 
+        //   从 PG 按 oem_no_3 ILIKE %q% 精确子串匹配, 强制排最前 (精确 OEM 优先于 typo)
+        var boostHits = new List<AggregateSearchHit>();
+        var boostMr1s = new HashSet<string>();
+        if (!string.IsNullOrWhiteSpace(query))
+        {
+            var qLower = query.ToLowerInvariant();
+            boostHits = await LoadWhitelistBoostHitsAsync(qLower, ct);
+            if (ContainsDigit(qLower))
+            {
+                // 含数字 → OEM 号特征, 精确子串补位 (精确匹配优先)
+                var oemExact = await LoadOemExactBoostHitsAsync(qLower, ct);
+                boostHits = boostHits.Concat(oemExact).ToList();
+            }
+            boostMr1s = boostHits.Select(h => h.Mr1).ToHashSet();
+        }
+
         // ① P0 缩索引: oem_list/machine_list 已移出 Meili 索引体, 检索后按 mr_1 从 PG 批量回填 (仅当前页)
         var pageMr1s = rawResult.Hits
             .Select(h => h.TryGetPropertyValue("mr_1", out var n) ? n?.GetValue<string>() : null)
             .Where(m => !string.IsNullOrWhiteSpace(m))
             .Select(m => m!)
+            .Where(m => !boostMr1s.Contains(m))  // 白名单补位产品不重复回填
             .Distinct()
             .ToList();
         // ① P0 缩索引: oem/machine 列表由 PG 回填。PG 不可用时降级为空列表,
@@ -355,9 +379,14 @@ public class MeiliSearchProvider : ISearchProvider
         }
 
         // 映射 hits → AggregateSearchHit (含完整 oem_list + machine_list + _formatted + _rankingScore)
-        var hits = new List<AggregateSearchHit>(rawResult.Hits.Count);
+        // V3(2026-08-24): 暂存白名单/品牌 sort 值, 用于二次重排 (白名单优先, 不依赖 Meili inverted index 索引时延)
+        var indexed = new List<(AggregateSearchHit Hit, int? OemSort, int? BrandSort, int OriginalIdx)>(rawResult.Hits.Count);
         foreach (var hit in rawResult.Hits)
         {
+            // V3: 跳过已由白名单补位覆盖的产品 (避免重复)
+            if (hit.TryGetPropertyValue("mr_1", out var hitMr1) && hitMr1?.GetValue<string>() is string hm1 && boostMr1s.Contains(hm1))
+                continue;
+
             // XSS 防御: 递归处理 _formatted
             var formatted = hit.ContainsKey("_formatted") ? hit["_formatted"] : null;
             if (formatted is JsonObject formattedObj)
@@ -375,6 +404,10 @@ public class MeiliSearchProvider : ISearchProvider
             var media = ExtractFieldValue(hit, formatted, "media");
             var isPublished = hit.TryGetPropertyValue("is_published", out var pubNode) && pubNode?.GetValue<bool>() == true;
             var isDiscontinued = hit.TryGetPropertyValue("is_discontinued", out var discNode) && discNode?.GetValue<bool>() == true;
+
+            // 提取白名单/品牌 sort 值 (用于二次重排)
+            int? oemSort = TryGetInt(hit, "oem_list_sort_order_min");
+            int? brandSort = TryGetInt(hit, "brand_sort_order_min");
 
             // WHY: 兼容 P0 缩索引上线前已存在的旧文档。旧文档仍带嵌套列表，PG 暂时不可用时不能丢失公开 OEM/机型。
             enrichMap.TryGetValue(mr1 ?? "", out var enrichPair);
@@ -406,22 +439,37 @@ public class MeiliSearchProvider : ISearchProvider
                 }
             }
 
-            hits.Add(new AggregateSearchHit(
-                Mr1: mr1 ?? "",
-                ProductName1: productName1,
-                ProductName2: productName2,
-                Oem2: oem2,
-                Type: type,
-                Remark: remark,
-                Media: media,
-                IsPublished: isPublished,
-                IsDiscontinued: isDiscontinued,
-                OemList: oemList,
-                MachineList: machineList,
-                Formatted: formattedDict,
-                RankingScore: rankingScore
+            indexed.Add((
+                new AggregateSearchHit(
+                    Mr1: mr1 ?? "",
+                    ProductName1: productName1,
+                    ProductName2: productName2,
+                    Oem2: oem2,
+                    Type: type,
+                    Remark: remark,
+                    Media: media,
+                    IsPublished: isPublished,
+                    IsDiscontinued: isDiscontinued,
+                    OemList: oemList,
+                    MachineList: machineList,
+                    Formatted: formattedDict,
+                    RankingScore: rankingScore
+                ),
+                oemSort, brandSort, indexed.Count
             ));
         }
+
+        // V3(2026-08-24): Hybrid 补位 + 二次重排
+        //   1. 白名单补位产品 (boostHits) 无条件最前 — 竞价排名语义 (Meili 命中集外也保证可见)
+        //   2. Meili 命中集内: 白名单 (oemSort != null) 排前, 非白名单保持 Meili 原相对位置
+        var finalHits = boostHits
+            .Concat(indexed
+                .OrderBy(t => t.OemSort.HasValue ? 0 : 1)
+                .ThenBy(t => t.OemSort ?? int.MaxValue)
+                .ThenBy(t => t.BrandSort ?? int.MaxValue)
+                .ThenBy(t => t.OriginalIdx)
+                .Select(t => t.Hit))
+            .ToList();
 
         sw.Stop();
         var response = new AggregateSearchResponse(
@@ -431,7 +479,7 @@ public class MeiliSearchProvider : ISearchProvider
             TotalPages: (int)Math.Ceiling(total / (double)pageSize),
             ProcessingTimeMs: (int)sw.ElapsedMilliseconds,
             Provider: "meilisearch",
-            Hits: hits
+            Hits: finalHits
         );
         _searchCache?.Set(cacheKey, response);
         return response;
@@ -600,6 +648,165 @@ public class MeiliSearchProvider : ISearchProvider
         return null;
     }
 
+    /// <summary>V3(2026-08-24): 从 Meili hit 安全读取 int 字段 (sort 字段), 失败返回 null</summary>
+    private static int? TryGetInt(JsonObject hit, string fieldName)
+    {
+        if (!hit.TryGetPropertyValue(fieldName, out var node) || node == null) return null;
+        if (node is JsonValue val)
+        {
+            if (val.TryGetValue<int>(out var i)) return i;
+            if (val.TryGetValue<long>(out var l)) return (int)l;
+            if (val.TryGetValue<double>(out var d)) return (int)d;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// V3(2026-08-24): Hybrid 搜索 — 白名单(竞价排名)产品强制补位
+    ///   WHY: Meili 命中集上限 1000 + ranking 规则可能把白名单产品挤出命中集
+    ///        (搜品牌缩写时 oem_brands_str 单 token 匹配分数低于 typo 匹配),
+    ///        二次重排只能排命中集内顺序. 本方法从 PG 直接取白名单产品,
+    ///        搜索词匹配 (品牌/OEM3/OEM2/产品名 含 q) 时构造成结果排最前.
+    ///   白名单数量级 &lt; 100, 构造成本可忽略; 查询失败降级为空 (不阻塞主搜索).
+    /// </summary>
+    private async Task<List<AggregateSearchHit>> LoadWhitelistBoostHitsAsync(string queryLower, CancellationToken ct)
+    {
+        try
+        {
+            // V3(2026-08-25): Join Products 取真实 ProductName1/Type/Mr1 — xrefs.product_name_1
+            //   是 ETL 冗余列, 与 products 不一致 (白名单量少暂未暴露, 但同 OEM 精确补位一并发修)
+            var rows = await _db.CrossReferences.AsNoTracking()
+                .Where(x => x.IsWhitelisted && !x.IsDiscontinued && x.IsPublished)
+                .OrderBy(x => x.SortOrder)
+                .Join(_db.Products.AsNoTracking(), x => x.ProductId, p => p.Id, (x, p) => new
+                {
+                    x.ProductId, x.SortOrder, x.OemBrand, x.OemNo3, x.Oem2, x.MachineType,
+                    p.ProductName1, p.Mr1, p.Type
+                })
+                .ToListAsync(ct);
+            if (rows.Count == 0) return new List<AggregateSearchHit>();
+
+            // 同一产品多品牌白名单: 取最小 sortOrder 的一条 (避免重复展示); ProductName1/Mr1 已是真实值
+            var best = rows.GroupBy(r => r.ProductId).Select(g => g.First()).ToList();
+
+            var result = new List<AggregateSearchHit>(best.Count);
+            foreach (var r in best)
+            {
+                // 搜索词匹配判断: 品牌/OEM3/OEM2/产品名 任一包含 (大小写不敏感)
+                var haystacks = new[] { r.OemBrand, r.OemNo3, r.Oem2, r.ProductName1 };
+                if (!haystacks.Any(h => h != null && h.ToLowerInvariant().Contains(queryLower, StringComparison.OrdinalIgnoreCase)))
+                    continue;  // 与搜索词不相关, 不补位 (避免污染无关搜索)
+
+                if (string.IsNullOrWhiteSpace(r.Mr1))
+                    continue;
+
+                var oemList = new List<AggregateOemItem>
+                {
+                    new(r.OemBrand, r.OemNo3, r.Oem2, r.SortOrder, r.MachineType, true, null)
+                };
+                result.Add(new AggregateSearchHit(
+                    Mr1: r.Mr1,
+                    ProductName1: r.ProductName1,
+                    ProductName2: null,
+                    Oem2: r.Oem2,
+                    Type: r.Type ?? r.ProductName1 ?? "UNKNOWN",
+                    Remark: null,
+                    Media: null,
+                    IsPublished: true,
+                    IsDiscontinued: false,
+                    OemList: oemList,
+                    MachineList: new List<AggregateMachineItem>(),
+                    Formatted: null,
+                    RankingScore: null
+                ));
+            }
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "白名单补位查询失败, 降级为空 (主搜索不受影响)");
+            return new List<AggregateSearchHit>();
+        }
+    }
+
+    /// <summary>
+    /// V3(2026-08-25): OEM 精确子串补位 — 搜含数字的 OEM 号时, Meili typo 数字容错产生大量
+    ///   误匹配 (如 '1002390' 71 命中, 精确产品 MR00839317 排第 71 位).
+    ///   本方法从 PG 按 oem_no_3 ILIKE %q% 精确子串匹配, 强制排最前 (精确 OEM 优先于 typo 匹配).
+    ///   与白名单补位同模式: 数量级小, 构造成本可忽略; 失败降级为空 (不阻塞主搜索).
+    /// </summary>
+    private async Task<List<AggregateSearchHit>> LoadOemExactBoostHitsAsync(string queryLower, CancellationToken ct)
+    {
+        try
+        {
+            // ILIKE 通配符转义 (用户输入含 %/_ 时按字面匹配)
+            string likePattern = "%" + EscapeLikePattern(queryLower) + "%";
+            // V3(2026-08-25): Join Products 取真实 ProductName1/Type/Mr1 — 之前误用 xrefs 冗余字段
+            //   (xrefs.product_name_1 是 ETL 导入时的冗余列, 与 products 不一致, 如 MR00839317 真实是 OIL FILTER
+            //    但 xrefs 里出现 FUEL/AIR/PETROL/WATER SEPARATOR 等多种值)
+            var rows = await _db.CrossReferences.AsNoTracking()
+                .Where(x => !x.IsDiscontinued && EF.Functions.ILike(x.OemNo3, likePattern))
+                .OrderBy(x => x.SortOrder)
+                .Take(30)  // 精确子串匹配上限 30, 防极端输入扫全表
+                .Join(_db.Products.AsNoTracking(), x => x.ProductId, p => p.Id, (x, p) => new
+                {
+                    x.ProductId, x.SortOrder, x.OemBrand, x.OemNo3, x.Oem2, x.MachineType,
+                    p.ProductName1, p.Mr1, p.Type
+                })
+                .ToListAsync(ct);
+            if (rows.Count == 0) return new List<AggregateSearchHit>();
+
+            // 同一产品多个 OEM 号命中: 去重 (取最小 sortOrder); 此时 ProductName1/Mr1 已是真实值
+            var best = rows.GroupBy(r => r.ProductId).Select(g => g.First()).ToList();
+
+            var result = new List<AggregateSearchHit>(best.Count);
+            foreach (var r in best)
+            {
+                if (string.IsNullOrWhiteSpace(r.Mr1))
+                    continue;
+                var oemList = new List<AggregateOemItem>
+                {
+                    new(r.OemBrand, r.OemNo3, r.Oem2, r.SortOrder, r.MachineType, true, null)
+                };
+                result.Add(new AggregateSearchHit(
+                    Mr1: r.Mr1,
+                    ProductName1: r.ProductName1,
+                    ProductName2: null,
+                    Oem2: r.Oem2,
+                    Type: r.Type ?? r.ProductName1 ?? "UNKNOWN",
+                    Remark: null,
+                    Media: null,
+                    IsPublished: true,
+                    IsDiscontinued: false,
+                    OemList: oemList,
+                    MachineList: new List<AggregateMachineItem>(),
+                    Formatted: null,
+                    RankingScore: null
+                ));
+            }
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "OEM 精确子串补位查询失败, 降级为空 (主搜索不受影响)");
+            return new List<AggregateSearchHit>();
+        }
+    }
+
+    /// <summary>判断字符串是否含数字 (OEM 号特征, 触发精确子串补位)</summary>
+    private static bool ContainsDigit(string s)
+    {
+        foreach (var c in s)
+        {
+            if (c >= '0' && c <= '9') return true;
+        }
+        return false;
+    }
+
+    /// <summary>ILIKE 模式转义 (%, _ 按字面匹配)</summary>
+    private static string EscapeLikePattern(string s)
+        => s.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
+
     public async Task IndexAsync(IEnumerable<Mr1IndexDoc> docs, CancellationToken ct = default)
     {
         var batch = docs.ToList();
@@ -675,6 +882,7 @@ public class MeiliSearchProvider : ISearchProvider
                 x.SortOrder,
                 x.MachineType,
                 x.IsPublished,
+                x.IsWhitelisted,
                 BrandSortOrder = _db.XrefOemBrands
                     .Where(b => b.Brand == x.OemBrand && b.DeletedAt == null)
                     .Select(b => (int?)b.SortOrder)
@@ -743,11 +951,13 @@ public class MeiliSearchProvider : ISearchProvider
             .Select(x => (int?)x.BrandSortOrder!.Value)
             .Min();
 
-        // S4-16: oem_list_sort_order_min 取上架 OEM 3 的 sort_order MIN
-        // 修复: sort_order=0 是数据库默认值 (未通过 /admin/xrefs/reorder 维护), 视为 null 排末尾
-        //   仅 sort_order > 0 的 OEM 3 (管理员手动维护过优先级) 参与排序
+        // S4-16: oem_list_sort_order_min 取白名单内上架 OEM 3 的 sort_order MIN
+        // V3(2026-08-24): 白名单判定改 is_whitelisted — 源数据 92% 记录 sort_order>0,
+        //   原"sort_order > 0 视为管理员维护过优先级"被源数据淹没 (所有产品都有值, 排序无区分);
+        //   现仅 is_whitelisted=true (管理员手动添加到白名单) 的 OEM 参与优先排序, 语义与白名单页一致
+        //   修复: sort_order=0 或未入白名单 → 不参与 (视为 null 排末尾)
         int? oemListSortOrderMin = publishedOemList
-            .Where(x => x.SortOrder > 0)
+            .Where(x => x.IsWhitelisted && x.SortOrder > 0)
             .Select(x => (int?)x.SortOrder)
             .Min();
 
@@ -1024,6 +1234,8 @@ public class MeiliSearchProvider : ISearchProvider
 
                 // S4 修复: typoTolerance (OneTypo=3/TwoTypos=5, 3 字品牌缩写容错)
                 //   WHY: spec L1526 + L1685 要求, 默认 5/9, 先改 4/8, 再改为 3/5 让 "BOS" 匹配 "BOSCH"
+                //   V3(2026-08-25): 数字误匹配由 LoadOemExactBoostHitsAsync (OEM 精确子串补位) 兜底,
+                //   不改 typo 配置 (Meili 1.12 无 disableOnNumbers, 且字母容错是产品特性)
                 var typoTolerance = new TypoTolerance
                 {
                     Enabled = true,

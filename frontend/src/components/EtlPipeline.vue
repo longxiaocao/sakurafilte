@@ -124,6 +124,10 @@ const indeterminate = computed(() =>
 
 <template>
   <div class="pipeline-wrap">
+    <!-- V3(2026-08-25): 空闲空状态提示 — 用户反馈"数据流程没数据, 不知道是否正常" -->
+    <div v-if="props.status === 'idle'" class="mb-2 text-xs text-gray-400 dark:text-[var(--color-text-muted)]">
+      {{ t('admin.etlview.pipeline.empty_hint') }}
+    </div>
     <div class="pipeline-header">
       <el-tag :type="statusBadge.type as any" size="small">{{ statusBadge.label }}</el-tag>
       <span v-if="elapsedSec !== undefined" class="pipeline-elapsed">

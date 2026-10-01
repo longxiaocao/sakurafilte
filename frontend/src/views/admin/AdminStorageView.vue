@@ -35,7 +35,7 @@ async function load() {
     Object.assign(form.aliyun, cfg.aliyun || {})
     Object.assign(form.r2, cfg.r2 || {})
   } catch {
-    ElMessage.error(t('admin.storage.load_failed'))
+    ElMessage.error(t('nav.storage.load_failed'))
   } finally {
     loading.value = false
   }
@@ -53,11 +53,11 @@ async function onTest() {
   try {
     const res = await storageApi.testConfig(buildPayload())
     testResult.value = res
-    if (res.ok) ElMessage.success(`${t('admin.storage.test_ok')} (${res.latencyMs ?? '-'}ms)`)
-    else ElMessage.error(res.message || t('admin.storage.test_failed'))
+    if (res.ok) ElMessage.success(`${t('nav.storage.test_ok')} (${res.latencyMs ?? '-'}ms)`)
+    else ElMessage.error(res.message || t('nav.storage.test_failed'))
   } catch (e: any) {
     testResult.value = { ok: false, message: e?.message || String(e) }
-    ElMessage.error(t('admin.storage.test_failed'))
+    ElMessage.error(t('nav.storage.test_failed'))
   } finally {
     testing.value = false
   }
@@ -88,9 +88,9 @@ function buildPayload() {
 async function onSave() {
   try {
     await storageApi.saveConfig(buildPayload())
-    ElMessage.success(t('admin.storage.saved'))
+    ElMessage.success(t('nav.storage.saved'))
   } catch {
-    ElMessage.error(t('admin.storage.save_failed'))
+    ElMessage.error(t('nav.storage.save_failed'))
   }
 }
 
@@ -101,52 +101,52 @@ onMounted(load)
   <div v-loading="loading" class="p-4">
     <!-- Provider 选择 -->
     <div class="mb-4">
-      <div class="text-sm font-medium text-gray-700 mb-2">{{ t('admin.storage.provider') }}</div>
+      <div class="text-sm font-medium text-gray-700 mb-2">{{ t('nav.storage.provider') }}</div>
       <el-radio-group v-model="form.provider">
         <el-radio v-for="p in providers" :key="p.value" :value="p.value" class="mr-4">{{ p.label }}</el-radio>
       </el-radio-group>
-      <div class="text-xs text-gray-400 mt-1">{{ t('admin.storage.provider_tip') }}</div>
+      <div class="text-xs text-gray-400 mt-1">{{ t('nav.storage.provider_tip') }}</div>
     </div>
 
     <el-divider />
 
     <!-- MinIO -->
     <el-form v-if="form.provider === 'minio'" label-width="140px" class="max-w-2xl">
-      <el-form-item :label="t('admin.storage.endpoint')"><el-input v-model="form.minio.endpoint" placeholder="minio:9000" /></el-form-item>
-      <el-form-item :label="t('admin.storage.access_key')"><el-input v-model="form.minio.accessKey" show-password placeholder="sakura-minio-admin" /></el-form-item>
-      <el-form-item :label="t('admin.storage.secret_key')"><el-input v-model="form.minio.secretKey" show-password /></el-form-item>
-      <el-form-item :label="t('admin.storage.bucket')"><el-input v-model="form.minio.bucketName" placeholder="sakurafilter" /></el-form-item>
-      <el-form-item :label="t('admin.storage.public_endpoint')"><el-input v-model="form.minio.publicEndpoint" placeholder="http://localhost:9000" /></el-form-item>
+      <el-form-item :label="t('nav.storage.endpoint')"><el-input v-model="form.minio.endpoint" placeholder="minio:9000" /></el-form-item>
+      <el-form-item :label="t('nav.storage.access_key')"><el-input v-model="form.minio.accessKey" show-password placeholder="sakura-minio-admin" /></el-form-item>
+      <el-form-item :label="t('nav.storage.secret_key')"><el-input v-model="form.minio.secretKey" show-password /></el-form-item>
+      <el-form-item :label="t('nav.storage.bucket')"><el-input v-model="form.minio.bucketName" placeholder="sakurafilter" /></el-form-item>
+      <el-form-item :label="t('nav.storage.public_endpoint')"><el-input v-model="form.minio.publicEndpoint" placeholder="http://localhost:9000" /></el-form-item>
     </el-form>
 
     <!-- 阿里云 OSS -->
     <el-form v-else-if="form.provider === 'aliyun-oss'" label-width="140px" class="max-w-2xl">
-      <el-form-item :label="t('admin.storage.endpoint')"><el-input v-model="form.aliyun.endpoint" placeholder="oss-cn-hangzhou.aliyuncs.com" /></el-form-item>
-      <el-form-item :label="t('admin.storage.access_key_id')"><el-input v-model="form.aliyun.accessKeyId" show-password /></el-form-item>
-      <el-form-item :label="t('admin.storage.access_key_secret')"><el-input v-model="form.aliyun.accessKeySecret" show-password /></el-form-item>
-      <el-form-item :label="t('admin.storage.bucket')"><el-input v-model="form.aliyun.bucketName" /></el-form-item>
-      <el-form-item :label="t('admin.storage.public_endpoint')"><el-input v-model="form.aliyun.publicEndpoint" placeholder="https://bucket.oss-cn-hangzhou.aliyuncs.com" /></el-form-item>
-      <el-form-item :label="t('admin.storage.cdn_endpoint')"><el-input v-model="form.aliyun.cdnEndpoint" placeholder="https://img.yoursite.com (可选, CDN 加速)" /></el-form-item>
+      <el-form-item :label="t('nav.storage.endpoint')"><el-input v-model="form.aliyun.endpoint" placeholder="oss-cn-hangzhou.aliyuncs.com" /></el-form-item>
+      <el-form-item :label="t('nav.storage.access_key_id')"><el-input v-model="form.aliyun.accessKeyId" show-password /></el-form-item>
+      <el-form-item :label="t('nav.storage.access_key_secret')"><el-input v-model="form.aliyun.accessKeySecret" show-password /></el-form-item>
+      <el-form-item :label="t('nav.storage.bucket')"><el-input v-model="form.aliyun.bucketName" /></el-form-item>
+      <el-form-item :label="t('nav.storage.public_endpoint')"><el-input v-model="form.aliyun.publicEndpoint" placeholder="https://bucket.oss-cn-hangzhou.aliyuncs.com" /></el-form-item>
+      <el-form-item :label="t('nav.storage.cdn_endpoint')"><el-input v-model="form.aliyun.cdnEndpoint" placeholder="https://img.yoursite.com (可选, CDN 加速)" /></el-form-item>
     </el-form>
 
     <!-- Cloudflare R2 -->
     <el-form v-else label-width="140px" class="max-w-2xl">
-      <el-form-item :label="t('admin.storage.endpoint')"><el-input v-model="form.r2.endpoint" placeholder="https://<account>.r2.cloudflarestorage.com" /></el-form-item>
-      <el-form-item :label="t('admin.storage.access_key_id')"><el-input v-model="form.r2.accessKeyId" show-password placeholder="R2 S3 API Token (Access Key ID)" /></el-form-item>
-      <el-form-item :label="t('admin.storage.access_key_secret')"><el-input v-model="form.r2.accessKeySecret" show-password /></el-form-item>
-      <el-form-item :label="t('admin.storage.bucket')"><el-input v-model="form.r2.bucketName" /></el-form-item>
-      <el-form-item :label="t('admin.storage.public_endpoint')"><el-input v-model="form.r2.publicEndpoint" placeholder="https://pub-xxx.r2.dev (可选)" /></el-form-item>
+      <el-form-item :label="t('nav.storage.endpoint')"><el-input v-model="form.r2.endpoint" placeholder="https://<account>.r2.cloudflarestorage.com" /></el-form-item>
+      <el-form-item :label="t('nav.storage.access_key_id')"><el-input v-model="form.r2.accessKeyId" show-password placeholder="R2 S3 API Token (Access Key ID)" /></el-form-item>
+      <el-form-item :label="t('nav.storage.access_key_secret')"><el-input v-model="form.r2.accessKeySecret" show-password /></el-form-item>
+      <el-form-item :label="t('nav.storage.bucket')"><el-input v-model="form.r2.bucketName" /></el-form-item>
+      <el-form-item :label="t('nav.storage.public_endpoint')"><el-input v-model="form.r2.publicEndpoint" placeholder="https://pub-xxx.r2.dev (可选)" /></el-form-item>
     </el-form>
 
     <!-- 操作 -->
     <div class="mt-4 flex items-center gap-3">
-      <el-button type="primary" :loading="testing" @click="onTest">{{ t('admin.storage.test') }}</el-button>
-      <el-button type="success" @click="onSave">{{ t('admin.storage.save') }}</el-button>
+      <el-button type="primary" :loading="testing" @click="onTest">{{ t('nav.storage.test') }}</el-button>
+      <el-button type="success" @click="onSave">{{ t('nav.storage.save') }}</el-button>
     </div>
     <div v-if="testResult" class="mt-3 text-sm" :class="testResult.ok ? 'text-green-600' : 'text-red-600'">
       {{ testResult.ok ? '✓' : '✗' }} {{ testResult.message }}
       <span v-if="testResult.latencyMs != null" class="text-gray-400"> ({{ testResult.latencyMs }}ms)</span>
     </div>
-    <div class="mt-2 text-xs text-gray-400">{{ t('admin.storage.restart_tip') }}</div>
+    <div class="mt-2 text-xs text-gray-400">{{ t('nav.storage.restart_tip') }}</div>
   </div>
 </template>

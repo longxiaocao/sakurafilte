@@ -139,16 +139,11 @@ const lastError = ref('')
 const featuredItems = ref<PublicSearchHit[]>([])
 const featuredLoading = ref(false)
 
-// P-Demo: 对比功能 — 已加入对比的产品 ID 集合 (Set 用于 O(1) 查重)
-// 全局共享对比 store — 与详情页共用同一集合, 各页不再各自维护独立 compareIds
-//   WHY: 详情页"加入对比"曾被迫跳转到此页(打断体验), 现统一走共享集合,
-//        悬浮球+抽屉由 App 级 GlobalCompare.vue 渲染, 本页不再自带悬浮球/抽屉。
-import { useCompareStore } from '@/stores/useCompareStore'
-
+// V3(2026-08-25): 对比状态提升到全局共享 store (useCompareStore) —
+//   任何页面 (聚合搜索/详情页) 的加入/移除/清空/查看 共用同一状态 + sessionStorage 持久化,
+//   全局浮动栏 CompareFloatingBar 消费同一状态显示 N/6.
+import { useCompareStore, MAX_COMPARE } from '@/composables/useCompareStore'
 const store = useCompareStore()
-// 只读全局集合引用 (跨页共享, 摘要条 / 表格按钮 disabled 依赖它)
-const compareIds = store.ids
-const MAX_COMPARE = 6  // 与 PublicCompareView 一致
 
 // 8 字段是否全部空 — 仅表示 8 字段本身, 不包含融合搜索框 (模板"已填 N/8 字段"依赖此语义)
 const allEmpty = computed(() =>
@@ -363,21 +358,16 @@ async function loadFeatured() {
   }
 }
 
-// 🔧 fix(审查): 对比功能 — 统一走全局 store + 全局 GlobalCompare 悬浮球/抽屉
-//   行为: 累加而非替换, 已加入的禁用按钮; 达 MAX_COMPARE 给提示
-
+// 🔧 fix(审查): 对比功能内嵌 — 移除独立 /compare 页 (用户反馈与高级搜索重复), 勾选后在页内抽屉展示对比
+//   V3(2026-08-25): 状态已提升到全局 store (useCompareStore), 本地函数委托 store 方法
 function addToCompare(row: PublicSearchHit, event?: Event) {
   if (event) event.stopPropagation()  // 阻止冒泡到 row-click (查看详情)
-  // 🔧 fix(对比交互 v3): 改用全局共享 store — 集合跨页一致, 悬浮球见全局组件
-  const res = store.add(row.id)
-  if (res.ok && res.reason === 'added') {
-    ElMessage.success(`已加入对比 (${store.count.value}/${MAX_COMPARE})`)
-  } else if (res.ok && res.reason === 'existing') {
-    ElMessage.info('已在对比列表中')
-  } else if (!res.ok && res.reason === 'full') {
-    // 🔧 fix(2026-08-23 走查): 上限提示带可操作指引 — 提示可点击右下角悬浮球清空
-    ElMessage.warning({ message: `最多对比 ${MAX_COMPARE} 个产品, 可点击右下角悬浮球"清空对比"后重新添加`, duration: 4000 })
-  }
+  store.add(row.id)
+}
+
+// 对比抽屉 (全局浮动栏 CompareFloatingBar 持有; 本页只触发开关)
+function openCompare() {
+  store.openCompare()
 }
 
 // ===== SEO meta =====
@@ -417,10 +407,12 @@ onMounted(() => {
   if (typeof cmp === 'string' && cmp) {
     const ids = cmp.split(',').map(Number).filter((n) => Number.isInteger(n) && n > 0)
     if (ids.length > 0) {
-      // 🔧 fix(对比交互 v3): 统一走全局 store.replace — 集合跨页共享一致。
-      //   不再本地赋 compareIds (现为只读), 抽屉由全局组件接管, 不再自动弹抽屉
-      store.replace(ids)
+      // V3(2026-08-25): 只填入 store.ids (摘要条/浮动栏显示), 不开抽屉 — 用户主动点查看才展开.
+      //   store 内部已持久化 + 预拉产品详情
+      store.adoptFromUrl(ids)
     }
+  } else {
+    // 无 URL 参数: store 构造时已从 sessionStorage 恢复 (摘要条/浮动栏显示; 不自动开抽屉)
   }
   // 无 URL 参数时, 全局 store 在模块加载时已从 sessionStorage 恢复对比集合
   // 进入页面拉一次 featured 明细表 (即使有搜索条件也拉, 用户清空后可看)
@@ -480,17 +472,17 @@ onUnmounted(() => {
 
     <!-- 🔧 fix(2026-08-23 走查): 对比状态摘要条 — 选满 6 个后用户能看到/清空/跳转对比页 -->
     <div
-      v-if="compareIds.size > 0"
+      v-if="store.state.ids.length > 0"
       class="hairline p-3 mb-3 flex items-center gap-3 border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20"
       data-testid="compare-summary-bar"
     >
       <span class="text-amber-600 text-lg leading-none">⚠</span>
       <span class="text-sm">
-        对比列表已有 <b>{{ compareIds.size }} / {{ MAX_COMPARE }}</b> 个产品
+        对比列表已有 <b>{{ store.state.ids.length }} / {{ MAX_COMPARE }}</b> 个产品
       </span>
       <span class="text-xs text-muted hidden sm:inline">— 加更多时会触发上限提示，可先清空</span>
       <div class="ml-auto flex items-center gap-2">
-        <el-button size="small" @click="store.requestOpen">查看对比</el-button>
+        <el-button size="small" @click="store.openCompare">查看对比</el-button>
         <el-button size="small" type="danger" plain @click="store.clear">清空对比</el-button>
       </div>
     </div>
@@ -532,12 +524,12 @@ onUnmounted(() => {
           请输入搜索条件 (≥2 字符), 或浏览下方最新 20 条产品
         </div>
         <div class="flex items-center gap-2">
-          <span v-if="compareIds.size > 0" class="text-xs text-blue-600">
-            已选 {{ compareIds.size }} / {{ MAX_COMPARE }} 个对比
+          <span v-if="store.state.ids.length > 0" class="text-xs text-blue-600">
+            已选 {{ store.state.ids.length }} / {{ MAX_COMPARE }} 个对比
           </span>
           <el-button
-            v-if="compareIds.size > 0"
-            @click="store.requestOpen"
+            v-if="store.state.ids.length > 0"
+            @click="store.openCompare"
             type="primary"
             size="small"
             plain
@@ -597,11 +589,11 @@ onUnmounted(() => {
           <template #default="{ row }">
             <el-button
               @click="(e: any) => addToCompare(row, e)"
-              :disabled="compareIds.has(row.id)"
+              :disabled="store.state.ids.includes(row.id)"
               size="small"
               plain
               type="primary"
-            >{{ compareIds.has(row.id) ? '已加入' : '加入对比' }}</el-button>
+            >{{ store.state.ids.includes(row.id) ? '已加入' : '加入对比' }}</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -620,12 +612,12 @@ onUnmounted(() => {
           <span>显示第 {{ (page - 1) * pageSize + 1 }}-{{ Math.min(page * pageSize, total) }} 条</span>
         </div>
         <div class="flex items-center gap-2">
-          <span v-if="compareIds.size > 0" class="text-blue-600">
-            已选 {{ compareIds.size }} / {{ MAX_COMPARE }} 个对比
+          <span v-if="store.state.ids.length > 0" class="text-blue-600">
+            已选 {{ store.state.ids.length }} / {{ MAX_COMPARE }} 个对比
           </span>
           <el-button
-            v-if="compareIds.size > 0"
-            @click="store.requestOpen"
+            v-if="store.state.ids.length > 0"
+            @click="store.openCompare"
             size="small"
             plain
             type="primary"
@@ -700,11 +692,11 @@ onUnmounted(() => {
           <template #default="{ row }">
             <el-button
               @click="(e: any) => addToCompare(row, e)"
-              :disabled="compareIds.has(row.id)"
+              :disabled="store.state.ids.includes(row.id)"
               size="small"
               plain
               type="primary"
-            >{{ compareIds.has(row.id) ? '已加入' : '加入对比' }}</el-button>
+            >{{ store.state.ids.includes(row.id) ? '已加入' : '加入对比' }}</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -722,6 +714,8 @@ onUnmounted(() => {
       </div>
     </div>
   </div>
+
+  <!-- V3(2026-08-25): 对比抽屉已上移到全局浮动栏 CompareFloatingBar (所有页面统一入口) -->
 </template>
 
 <style scoped>

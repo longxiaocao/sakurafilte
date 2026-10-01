@@ -122,7 +122,8 @@ public class AdminProductImageService
     public async Task<ProductImageInfo> UploadAsync(
         string mr1, string imageRole, string? oemNo3, short slot,
         Stream stream, string contentType,
-        string? uploadedBy, CancellationToken ct = default)
+        string? uploadedBy, CancellationToken ct = default,
+        bool showDimension = false)
     {
         // V2 Task 3.2.2: 校验 imageRole / slot 一致性
         if (imageRole == "primary" && slot != 1)
@@ -203,6 +204,7 @@ public class AdminProductImageService
             old.DisplayOrder = slot;
             old.OemNo3 = imageRole == "primary" ? oemNo3 : null;
             old.ImageRole = imageRole;
+            old.ShowDimension = showDimension;
             saved = old;
         }
         else
@@ -219,7 +221,8 @@ public class AdminProductImageService
                 UploadedAt = DateTime.UtcNow,
                 UploadedBy = uploadedBy,
                 OemNo3 = imageRole == "primary" ? oemNo3 : null,
-                ImageRole = imageRole
+                ImageRole = imageRole,
+                ShowDimension = showDimension
             };
             _db.ProductImages.Add(saved);
         }
@@ -300,6 +303,38 @@ public class AdminProductImageService
         var key = img.ImageKey;
         _ = SafeDeleteOldImageAsync(key, $"DeleteAsync mr1={mr1} role={imageRole} slot={slot}");
         _logger.LogInformation("V2 产品图删除 mr1={Mr1} role={Role} slot={Slot} key={Key}", mr1, imageRole, slot, key);
+    }
+
+    // ========== 切换尺寸标注开关 (V2 功能 2026-08-24: 详情页主图叠加尺寸线) ==========
+    /// <summary>
+    /// 设置图片是否叠加尺寸标注线 (show_dimension)。管理后台逐图切换, 不重传图片文件。
+    /// 仅 primary 主图参与详情页标注展示; detail 图也可配置(预留)。
+    /// </summary>
+    public async Task<ProductImageInfo> SetShowDimensionAsync(
+        string mr1, string imageRole, short slot, bool showDimension, CancellationToken ct = default)
+    {
+        if (imageRole == "primary" && slot != 1)
+            throw new InvalidOperationException("IMAGE_ROLE_SLOT_MISMATCH: 主图 slot 必须为 1");
+        if (imageRole == "detail" && (slot < 2 || slot > 6))
+            throw new InvalidOperationException("IMAGE_DETAIL_SLOT_INVALID: 详情图 slot 必须在 2-6 之间");
+
+        var product = await _db.Products.AsNoTracking().FirstOrDefaultAsync(p => p.Mr1 == mr1, ct)
+            ?? throw new KeyNotFoundException($"MR1_NOT_FOUND: MR.1 '{mr1}' 不存在");
+
+        ProductImage? img;
+        if (imageRole == "primary")
+            img = await _db.ProductImages.FirstOrDefaultAsync(i => i.ImageRole == "primary" && i.ProductId == product.Id, ct);
+        else
+            img = await _db.ProductImages.FirstOrDefaultAsync(i => i.ProductId == product.Id && i.Slot == slot && i.ImageRole == "detail", ct);
+
+        if (img == null)
+            throw new KeyNotFoundException($"MR.1 '{mr1}' {imageRole} slot {slot} 无图片");
+
+        img.ShowDimension = showDimension;
+        await _db.SaveChangesAsync(ct);
+        _logger.LogInformation("V2 图片尺寸标注开关 mr1={Mr1} role={Role} slot={Slot} showDimension={Flag}",
+            mr1, imageRole, slot, showDimension);
+        return ToInfo(img, await GetUrlAsync(img.ImageKey));
     }
 
     // ========== 列出产品图片 (V2: 按 mr1, 区分 primary/detail) ==========
@@ -463,7 +498,7 @@ public class AdminProductImageService
     private static ProductImageInfo ToInfo(ProductImage i, string url) => new(
         i.Id, i.ProductId, i.Slot, i.ImageKey, url,
         i.FileSize, i.ContentType, i.Width, i.Height, i.IsPrimary,
-        i.UploadedAt, i.UploadedBy, i.OemNo3, i.ImageRole
+        i.UploadedAt, i.UploadedBy, i.OemNo3, i.ImageRole, i.ShowDimension
     );
 }
 

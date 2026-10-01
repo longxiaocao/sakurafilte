@@ -385,11 +385,11 @@ export const productApi = {
 //   用途: 产品详情页"加入对比" 按钮跳转目标; 也可作为公开 URL 分享
 //   限位: 最多 6 个产品 (后端校验, 超限 400)
 export const publicCompareApi = {
-  compare(ids: number[]): Promise<{ count: number; items: PublicProductDetail[] }> {
+  compare(ids: number[], config?: { signal?: AbortSignal }): Promise<{ count: number; items: PublicProductDetail[] }> {
     if (ids.length === 0) {
       return Promise.resolve({ count: 0, items: [] })
     }
-    return http.get('/public/compare', { params: { ids: ids.join(',') } }).then((r) => r.data)
+    return http.get('/public/compare', { params: { ids: ids.join(',') }, signal: config?.signal }).then((r) => r.data)
   }
 }
 
@@ -511,6 +511,11 @@ export const adminXrefApi = {
   addBrand(brand: string): Promise<{ brand: string; sortOrder: number; oem3Count: number; restored: boolean }> {
     return http.post('/admin/xrefs/reorder/brands', { brand }).then((r) => r.data)
   },
+  // DELETE /api/admin/xrefs/reorder/brands/{brand} — 软删品牌 (从白名单管理列表移除, 数据保留; 同名新增可恢复)
+  //   V3(2026-08-24): 品牌"减少"能力 — xref_oem_brand.deleted_at = now()
+  deleteBrand(brand: string): Promise<{ brand: string; removed: boolean }> {
+    return http.delete(`/admin/xrefs/reorder/brands/${encodeURIComponent(brand)}`).then((r) => r.data)
+  },
   // GET /api/admin/xrefs/reorder?oemBrand=BOSCH — 某 Brand 下 OEM 3 列表 (分页 + 搜索, 含 rowVersion)
   //   V24-F86: 加 page/pageSize/q 参数, 返回 XrefOem3Page (含分页元数据)
   listByBrand(
@@ -570,17 +575,19 @@ export const imageApi = {
   },
   // V2 Task 3.3.3: 上传主图 (slot=1, 按 OEM 3 命名)
   //   改进 3.1: onUploadProgress 回调由调用方传入, 用于 UI 进度条更新
+  //   V2(2026-08-24): showDimension 参数 — 上传即指定是否叠加尺寸标注线
   uploadPrimary(
     mr1: string,
     oemNo3: string,
     file: File,
-    onProgress?: (progress: number) => void
+    onProgress?: (progress: number) => void,
+    showDimension = false
   ): Promise<import('./types').ProductImageV2> {
     const fd = new FormData()
     fd.append('file', file)
     return http
       .post(`/admin/products/${encodeURIComponent(mr1)}/images/primary`, fd, {
-        params: { oemNo3 },
+        params: { oemNo3, showDimension },
         headers: { 'Content-Type': 'multipart/form-data' },
         onUploadProgress: onProgress
           ? (e: any) => {
@@ -598,13 +605,14 @@ export const imageApi = {
     mr1: string,
     slot: number,
     file: File,
-    onProgress?: (progress: number) => void
+    onProgress?: (progress: number) => void,
+    showDimension = false
   ): Promise<import('./types').ProductImageV2> {
     const fd = new FormData()
     fd.append('file', file)
     return http
       .post(`/admin/products/${encodeURIComponent(mr1)}/images/detail`, fd, {
-        params: { slot },
+        params: { slot, showDimension },
         headers: { 'Content-Type': 'multipart/form-data' },
         onUploadProgress: onProgress
           ? (e: any) => {
@@ -613,6 +621,12 @@ export const imageApi = {
             }
           : undefined
       })
+      .then((r) => r.data)
+  },
+  // V2(2026-08-24): 切换图片尺寸标注开关 (不重传文件)
+  setDimension(mr1: string, imageRole: 'primary' | 'detail', slot: number, showDimension: boolean): Promise<import('./types').ProductImageV2> {
+    return http
+      .post(`/admin/products/${encodeURIComponent(mr1)}/images/${imageRole}/${slot}/dimension`, { showDimension })
       .then((r) => r.data)
   },
   // V2: 删除图片 (按 mr1 + imageRole + slot)
@@ -1142,3 +1156,23 @@ export const oemCatalogApi = {
 }
 
 export type { SiteContent, NewsItem } from './types'
+
+
+// ===== V3(2026-08-25) 数据备份 (运维中心"数据备份" tab) =====
+//   list:        GET /api/admin/backup/list       列出 /backups 目录下的 .dump 文件
+//   scriptInfo:  GET /api/admin/backup/script-info 返回主机执行 backup-db.sh 的命令 (实际执行需在主机)
+export interface BackupFile {
+  name: string
+  sizeBytes: number
+  sizeHuman: string
+  createdAt: string
+}
+
+export const backupApi = {
+  list(): Promise<{ dir: string; exists: boolean; count: number; files: BackupFile[] }> {
+    return http.get('/admin/backup/list').then((r) => r.data)
+  },
+  scriptInfo(): Promise<{ hostCommand: string; note: string }> {
+    return http.get('/admin/backup/script-info').then((r) => r.data)
+  }
+}

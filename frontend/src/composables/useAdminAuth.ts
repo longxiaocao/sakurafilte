@@ -117,6 +117,21 @@ export const useAdminAuthStore = defineStore('adminAuth', () => {
     clearAuth()
   }
 
+  // V3(2026-08-24): 启动时 token 已过期 → 静默 refresh 续期 (有 refreshToken 时)
+  //   或直接 clearAuth (无 refreshToken / refresh 失败)
+  //   WHY: 过期 token 残留 localStorage → ①axios 拦截器携带过期 token 请求 → 401 红字
+  //   "未登录或登录已过期" (用户反馈) ②AppHeader admin 菜单虽已由 isAuthenticated 控制,
+  //   但 store 里过期 token 不清, user 仍可能显示用户菜单
+  if (initial.token && initial.expiresAt > 0 && Date.now() >= initial.expiresAt - 30_000) {
+    if (initial.refreshToken) {
+      authApi.refresh(initial.refreshToken)
+        .then((r) => setAuth(r))
+        .catch(() => clearAuth())
+    } else {
+      clearAuth()
+    }
+  }
+
   // 检查 token 是否存在且未过期 (留 30s 缓冲, 避免 boundary 竞态)
   function isAuthenticated(): boolean {
     return !!token.value && Date.now() < expiresAt.value - 30_000

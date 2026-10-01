@@ -16,15 +16,12 @@ import { ElMessage } from 'element-plus'
 import { productApi } from '@/api'
 import type { PublicProductDetail } from '@/api/types'
 import SkeletonCard from '@/components/SkeletonCard.vue'
+import { useCompareStore } from '@/composables/useCompareStore'  // V3(2026-08-25): 全局对比状态
+const store = useCompareStore()
 import { buildProductUrl } from '@/utils/build-product-url'
-// 全局共享对比 store: 详情页加入对比后停留在当前页继续对比 (见 addToCompare)
-import { useCompareStore, MAX_COMPARE } from '@/stores/useCompareStore'
 
 const route = useRoute()
 const router = useRouter()
-
-// 全局对比 store 单例 (模块级共享, 跨路由保持同一集合)
-const compareStore = useCompareStore()
 
 // SEO 路由使用 oem3；保留旧 oem 参数兼容历史入口。
 const slug = computed(() => String(route.params.oem3 ?? route.params.oem ?? ''))
@@ -114,8 +111,25 @@ const imageUrls = computed(() => {
   if (!d) return []
   return (d.images ?? []).map(img => ({
     slot: img.slot,
-    url: img.imageUrl || buildImageUrl(img.imageKey)
+    url: img.imageUrl || buildImageUrl(img.imageKey),
+    // V2(2026-08-24): 管理后台逐图配置的尺寸标注开关
+    showDimension: !!img.showDimension
   }))
+})
+
+// ===== 尺寸标注线 (V2 功能 2026-08-24) =====
+//   示意模式: 线段按图片尺寸等比展示, 数值显示真实 mm (以参数表为准)
+//   🔧 fix(2026-08-24 体验): 显示与否完全以管理后台 show_dimension 配置为准,
+//     移除本地临时开关 (客户侧不覆盖产品配置)
+const activeImageShowDim = computed(() => {
+  const img = imageUrls.value[activeImageIdx.value]
+  return img?.showDimension ?? false
+})
+const dimensionSpecs = computed(() => {
+  const d = data.value
+  if (!d) return null
+  if (!d.d1Mm || !d.h1Mm) return null
+  return { d1: d.d1Mm, h1: d.h1Mm }
 })
 
 // 工业极简融合风: 主图 + 灯箱预览列表
@@ -186,17 +200,9 @@ function addToCompare() {
     ElMessage.warning(t('common.feedback.info_004'))
     return
   }
-  // 🔧 fix(对比交互 v3): 不再跳转搜页 — 改用全局共享对比 store + 全局悬浮球。
-  //   WHY: 用户反馈"详情页点加入对比被 jump 到高搜页, 打断继续对比"。
-  //        现停留本页, 全局 GlobalCompare 悬浮球随时可继续加/查看对比。
-  const res = compareStore.add(data.value.id)
-  if (res.ok && res.reason === 'added') {
-    ElMessage.success(`已加入对比 (${compareStore.count.value}/${MAX_COMPARE})`)
-  } else if (res.ok && res.reason === 'existing') {
-    ElMessage.info('已在对比列表中')
-  } else if (!res.ok && res.reason === 'full') {
-    ElMessage.warning({ message: `最多对比 ${MAX_COMPARE} 个产品, 可点击右下角悬浮球"清空对比"后重新添加`, duration: 4000 })
-  }
+  // V3(2026-08-25): 详情页加入对比 → 全局 store (useCompareStore), 不跳转;
+  //   用户从哪来回哪去 (router.back 或继续浏览), 全局浮动栏/搜索页摘要条自动显示 N/6
+  store.add(data.value.id)
 }
 
 function numOrDash(v?: number | string) {
@@ -251,7 +257,7 @@ function numOrDash(v?: number | string) {
     <section v-if="data" class="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 mb-12" role="region" aria-label="产品关键信息">
       <!-- 左: 主图 + 缩略图列表 -->
       <div class="lg:col-span-5">
-        <div class="hairline bg-[var(--color-bg-elevated)] aspect-square flex items-center justify-center overflow-hidden">
+        <div class="hairline bg-[var(--color-bg-elevated)] aspect-square flex items-center justify-center overflow-hidden relative">
           <el-image
             :src="activeImage"
             :preview-src-list="previewSrcList"
@@ -274,6 +280,36 @@ function numOrDash(v?: number | string) {
               <div class="w-full h-full flex items-center justify-center text-muted text-xs">加载中...</div>
             </template>
           </el-image>
+
+          <!-- V2(2026-08-24): 尺寸标注线 overlay — 管理后台开启后展示, 黑白极简工程图纸风(无箭头) -->
+          <svg
+            v-if="activeImageShowDim && dimensionSpecs"
+            viewBox="0 0 400 400"
+            class="absolute inset-0 w-full h-full pointer-events-none"
+            role="img"
+            aria-label="产品尺寸标注示意"
+          >
+            <!-- 高度线 H1 (右侧垂直: 细线 + 端部短界线, 无箭头; 靠右缘避免遮挡主图) -->
+            <g stroke="#2C2C2A" stroke-width="1" fill="none" opacity="0.9">
+              <line x1="368" y1="60" x2="368" y2="335" />
+              <line x1="358" y1="60" x2="378" y2="60" />
+              <line x1="358" y1="335" x2="378" y2="335" />
+            </g>
+            <!-- 宽度线 D1 (底部水平: 细线 + 端部短界线, 无箭头; 靠下缘避免遮挡主图) -->
+            <g stroke="#2C2C2A" stroke-width="1" fill="none" opacity="0.9">
+              <line x1="65" y1="382" x2="335" y2="382" />
+              <line x1="65" y1="372" x2="65" y2="392" />
+              <line x1="335" y1="372" x2="335" y2="392" />
+            </g>
+            <!-- 数值文字 (无矩形框, 白色描边 halo 保证可读性, 极简; 标签贴线内侧) -->
+            <g font-family="monospace" font-size="13" font-weight="500" fill="#2C2C2A"
+               stroke="#FFFFFF" stroke-width="3" stroke-linejoin="round" paint-order="stroke fill">
+              <text x="362" y="204" text-anchor="end">{{ dimensionSpecs.h1 }}mm</text>
+              <text x="200" y="374" text-anchor="middle">{{ dimensionSpecs.d1 }}mm</text>
+            </g>
+            <!-- 示意图提示 -->
+            <text x="12" y="26" font-size="10" fill="#888780">示意图, 尺寸以参数表为准</text>
+          </svg>
         </div>
         <!-- 缩略图列表 -->
         <div v-if="imageUrls.length > 1" class="flex gap-2 mt-3 overflow-x-auto">

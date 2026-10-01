@@ -162,6 +162,7 @@ public class AuthController : ControllerBase
     /// - 401: refresh token 无效/过期/已撤销
     /// </remarks>
     [HttpPost("refresh")]
+    [EnableRateLimiting("auth")]  // V3(2026-08-25) 上线审查: refresh 防高频重放 (与 login 同策略)
     [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

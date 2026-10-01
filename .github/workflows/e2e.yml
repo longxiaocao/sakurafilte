@@ -21,6 +21,8 @@ on:
 
 env:
   DOTNET_VERSION: '8.0.x'
+  # V3 fix(2026-08-25): .NET 10 SDK 抢占 8.0 → backend build 失败 (db38966 实测), 强制 roll forward
+  DOTNET_ROLL_FORWARD: 'LatestMajor'
   PYTHON_VERSION: '3.12'
   NODE_VERSION: '20'
   ADMIN_TOKEN: 'dev-admin-token-rotate-in-prod-MZK4R9P3X6V2N7Q1L5F0B8H3C'

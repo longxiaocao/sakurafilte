@@ -5,12 +5,14 @@
 # 用法:
 #   bash scripts/backup-db.sh              # 备份一次
 #   bash scripts/backup-db.sh --verify     # 备份 + pg_restore -l 校验归档可读
+#   bash scripts/backup-db.sh --upload     # 备份 + 上传 MinIO 桶 (异机/多副本)
+#   bash scripts/backup-db.sh --verify --upload  # 全开 (推荐每日任务)
 #
 # 调度 (Windows 生产机):
 #   用任务计划程序注册每日 03:00 运行 (沙箱内无法注册系统级计划任务,
 #   需在"任务计划程序" GUI 手动添加或使用 schtasks 提权执行):
 #     Program:  C:\Program Files\Git\bin\bash.exe
-#     Arguments: -lc "cd /f/sakurafilter-real && bash scripts/backup-db.sh"
+#     Arguments: -lc "cd /f/sakurafilter-real && bash scripts/backup-db.sh --verify --upload"
 #
 # 恢复示例 (灾难恢复):
 #   docker exec -i sakura-postgres pg_restore -U postgres -d sakurafilter \
@@ -33,6 +35,12 @@ BACKUP_DIR="${BACKUP_DIR:-_backups}"
 KEEP_DAYS="${KEEP_DAYS:-7}"
 
 VERIFY=""
+UPLOAD=""
+for a in "$@"; do
+    [ "$a" = "--verify" ] && VERIFY=1
+    # V3(2026-08-25) 上线审查: --upload 将备份上传 MinIO 桶 (异机/多副本, S3 兼容)
+    [ "$a" = "--upload" ] && UPLOAD=1
+done
 [ "${1:-}" = "--verify" ] && VERIFY=1
 
 STAMP=$(date +%Y%m%d_%H%M%S)
@@ -65,6 +73,62 @@ fi
 # 清理超过 KEEP_DAYS 的旧备份 (只删本库文件, 不误删其他)
 find "$BACKUP_DIR" -name "${PG_DB}_*.dump" -mtime "+${KEEP_DAYS}" -delete
 echo "==> 已清理 ${KEEP_DAYS} 天前的 ${PG_DB} 备份"
+
+# V3(2026-08-25) 上线审查 v4 (codex): 异机/多副本 — 备份上传对象存储
+#   - endpoint 默认容器网络 http://minio:9000 (本机多副本); 真正异机配 BACKUP_S3_ENDPOINT (R2 等)
+#   - REQUIRE_REMOTE_BACKUP=1 (默认): endpoint 是本机 (minio:9000/127.0.0.1/localhost) 时
+#     **拒绝视为备份成功** — 未配 R2 的 --upload 直接失败 (防"同机备份成功"假象);
+#     应急 REQUIRE_REMOTE_BACKUP=0 允许本机多副本 (仅限明确授权)
+#   - 上传失败必须返回非零退出码 (任务计划监控退出码, 不能静默成功)
+if [ -n "$UPLOAD" ]; then
+    MINIO_ALIAS="backup-src"
+    MINIO_BUCKET="${BACKUP_MINIO_BUCKET:-sakurafilter-backups}"
+    # V3(2026-08-25) codex v5: BACKUP_S3_* 必须从 .env.prod 兜底读取 —
+    #   原实现只读 shell 环境变量, 用户按文档写入 .env.prod 后脚本读不到 (阻断发布误判).
+    #   读取链: 环境变量优先 (计划任务/手动 export) → .env.prod grep 兜底
+    BACKUP_S3_ENDPOINT="${BACKUP_S3_ENDPOINT:-$(grep -oP '^BACKUP_S3_ENDPOINT=\K.*' "$ENV_FILE" 2>/dev/null | tr -d '"')}"
+    BACKUP_S3_USER="${BACKUP_S3_USER:-$(grep -oP '^BACKUP_S3_USER=\K.*' "$ENV_FILE" 2>/dev/null | tr -d '"')}"
+    BACKUP_S3_PASS="${BACKUP_S3_PASS:-$(grep -oP '^BACKUP_S3_PASS=\K.*' "$ENV_FILE" 2>/dev/null | tr -d '"')}"
+    MINIO_ENDPOINT="${BACKUP_S3_ENDPOINT:-http://minio:9000}"
+    MINIO_USER="${BACKUP_S3_USER:-$(grep -oP '^MINIO_ROOT_USER=\K.*' "$ENV_FILE" | tr -d '"')}"
+    MINIO_PASS="${BACKUP_S3_PASS:-$(grep -oP '^MINIO_ROOT_PASSWORD=\K.*' "$ENV_FILE" | tr -d '"')}"
+
+    # 异机强制: 判断 endpoint 是否本机 (未配 BACKUP_S3_ENDPOINT 或指向本机容器/回环)
+    IS_LOCAL_ENDPOINT=0
+    case "$MINIO_ENDPOINT" in
+        *"minio:9000"*|*"127.0.0.1"*|*"localhost"*|*"localhost:9000"*) IS_LOCAL_ENDPOINT=1 ;;
+    esac
+    if [ "$IS_LOCAL_ENDPOINT" = "1" ] && [ "${REQUIRE_REMOTE_BACKUP:-1}" = "1" ]; then
+        echo "❌ REQUIRE_REMOTE_BACKUP=1 且 endpoint=$MINIO_ENDPOINT 是本机 MinIO (仅多副本, 非异机)" >&2
+        echo "   生产必须配置 BACKUP_S3_ENDPOINT=https://<R2 或异地对象存储> + BACKUP_S3_USER/PASS" >&2
+        echo "   应急: REQUIRE_REMOTE_BACKUP=0 允许本机多副本 (仅限明确授权)" >&2
+        exit 1
+    fi
+
+    if docker exec sakura-minio sh -c 'command -v mc >/dev/null' 2>/dev/null; then
+        echo "==> 上传备份到 $MINIO_ENDPOINT / $MINIO_BUCKET ..."
+        # mc cp 不支持 stdin 管道 → 先 docker cp 进 minio 容器, 再 mc cp, 最后清理
+        TMP_IN_MC="/tmp/$(basename "$OUT_FILE")"
+        if docker cp "$OUT_FILE" "sakura-minio:$TMP_IN_MC" \
+            && docker exec sakura-minio mc alias set "$MINIO_ALIAS" "$MINIO_ENDPOINT" "$MINIO_USER" "$MINIO_PASS" >/dev/null 2>&1 \
+            && docker exec sakura-minio mc mb --ignore-existing "$MINIO_ALIAS/$MINIO_BUCKET" >/dev/null 2>&1 \
+            && docker exec sakura-minio mc cp "$TMP_IN_MC" "$MINIO_ALIAS/$MINIO_BUCKET/" >/dev/null; then
+            docker exec sakura-minio rm -f "$TMP_IN_MC" 2>/dev/null || true
+            if [ "$IS_LOCAL_ENDPOINT" = "1" ]; then
+                echo "✅ 已上传本机 MinIO 副本 (REQUIRE_REMOTE_BACKUP=0 应急模式): $MINIO_BUCKET/$(basename "$OUT_FILE")"
+            else
+                echo "✅ 已上传异地副本: $MINIO_BUCKET/$(basename "$OUT_FILE")"
+            fi
+        else
+            docker exec sakura-minio rm -f "$TMP_IN_MC" 2>/dev/null || true
+            echo "❌ 对象存储上传失败 (endpoint=$MINIO_ENDPOINT bucket=$MINIO_BUCKET) — 本地备份仍有效, 但按失败处理" >&2
+            exit 1
+        fi
+    else
+        echo "❌ MinIO 容器无 mc — 请求了 --upload 但无法上传, 按失败处理 (可手动上传 $OUT_FILE 至 R2)" >&2
+        exit 1
+    fi
+fi
 
 # 列出当前保留
 echo "==> 当前备份:"
