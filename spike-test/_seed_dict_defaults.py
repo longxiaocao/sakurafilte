@@ -2,8 +2,8 @@
 """Day 10+ P2.3 seed 脚本: dict_type 默认值 + dict_machine 4 大类分配
 
 任务 P2.3 (Task 8.1):
-  1) dict_type: 固定 5 值 (oil/fuel/air/cabin/others) ON CONFLICT DO UPDATE SET sort_order
-     排序按 P2.3 计划: oil=1, fuel=2, air=3, cabin=4, others=99
+  1) dict_type: 固定 6 值 (oil/fuel/air/cabin/hydraulic/others) ON CONFLICT DO UPDATE SET sort_order
+     排序按 P2.3 计划: oil=1, fuel=2, air=3, cabin=4, hydraulic=7, others=99
   2) dict_machine: 已有 brand 按规则分配 category (4 大类)
      - Agriculture 关键词: tractor, agri, farm, kubota, john deere, case ih, new holland, fendt, massey
      - Commercial  关键词: truck, volvo, scania, mercedes, man, iveco, daf, renault, hino, isuzu, daihatsu
@@ -25,13 +25,16 @@ PG = dict(host="localhost", port=5432, dbname="spike_test_v3",
           user="postgres", password="784533")
 
 # ========== 1) dict_type seed ==========
-# P2.3 排序: oil=1, fuel=2, air=3, cabin=4, others=99
-#   others=99 让其永远排最后, 兼容 5 值扩展
+# P2.3 排序: oil=1, fuel=2, air=3, cabin=4, hydraulic=7, others=99
+#   others=99 让其永远排最后, 兼容后续值扩展
+#   hydraulic=7 与 migration 036_catalog_to_public_cutover.sql 的补充行保持一致
+#   (catalog 派生分类之一, 前端 AdminTypesView.FIXED_TYPES 已同步为 6 类)
 DEFAULTS_TYPE = [
     ("oil", 1),
     ("fuel", 2),
     ("air", 3),
     ("cabin", 4),
+    ("hydraulic", 7),
     ("others", 99),
 ]
 
@@ -75,15 +78,15 @@ def classify_brand(brand: str) -> str:
 
 
 def seed_dict_type(cur, conn) -> dict:
-    """dict_type seed 5 个默认值, ON CONFLICT (type) DO UPDATE SET sort_order
+    """dict_type seed 6 个默认值, ON CONFLICT (type) DO UPDATE SET sort_order
 
     Day 11 fix v1: 推后 sort_order=0 的历史脏数据
     WHY: 历史 40+ 行 dict_type sort_order=0 (EF Core HasDefaultValue(0) 默认),
-         后端 by-type 端点 ORDER BY sort_order ASC 把它们排到前 5 个,
-         导致 case 2 期望 ["oil","fuel","air","cabin","others"] 失败
+         后端 by-type 端点 ORDER BY sort_order ASC 把它们排到前 6 个,
+         导致 case 2 期望 ["oil","fuel","air","cabin","hydraulic","others"] 失败
          实际返 ["ACTIVATED CARBON FILTER", "Air", "AIR DRYER", "AIR FILTER", "AIR/OIL SEPARATOR"]
-    策略: 把 sort_order=0 的非 P2.3 行推后到 100+ (按 id ASC 分配),
-         保证 P2.3 五类 (sort_order 1/2/3/4/99) 永远排前面
+    策略: 把 sort_order=0 的 canonical 之外的行推后到 100+ (按 id ASC 分配),
+         保证 canonical 六类 (sort_order 1/2/3/4/7/99) 永远排前面
     """
     cur.execute("SELECT COUNT(*) FROM dict_type")
     before = cur.fetchone()[0]
@@ -108,9 +111,9 @@ def seed_dict_type(cur, conn) -> dict:
             updated += 1
         else:
             unchanged += 1
-    # 2) 推后 sort_order=0 的历史脏数据 (非 P2.3 五类)
+    # 2) 推后 sort_order=0 的历史脏数据 (canonical 之外)
     #    用 100 + id 保证 id 小的行 sort_order 也小, 顺序稳定
-    #    排除 5 个 P2.3 canonical type, 排除 deleted_at IS NOT NULL
+    #    排除 6 个 canonical type, 排除 deleted_at IS NOT NULL
     p23_types = tuple(t for t, _ in DEFAULTS_TYPE)
     cur.execute("""
         UPDATE dict_type
