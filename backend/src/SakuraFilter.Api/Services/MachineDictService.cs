@@ -121,13 +121,14 @@ public class MachineDictService : BaseDictService<DictMachine>
         var rows = await _db.DictMachines
             .FromSqlRaw(@"
                 SELECT DISTINCT ON (machine_category, machine_brand, machine_model)
-                    machine_category, machine_brand, machine_model, machine_name
+                    id, machine_category, machine_brand, machine_model, machine_name
                 FROM dict_machine
                 WHERE deleted_at IS NULL
                 ORDER BY machine_category, machine_brand, machine_model, id
             ")
             .AsNoTracking()
             .Select(m => new {
+                MachineId = m.Id,
                 MachineCategory = m.MachineCategory,
                 MachineBrand = m.MachineBrand,
                 MachineModel = m.MachineModel,
@@ -147,7 +148,10 @@ public class MachineDictService : BaseDictService<DictMachine>
                         brandGroup.Key,
                         brandGroup
                             .Select(m => new MachineModelNode(
-                                0,  // id 占位, 树节点不需要真实 ID
+                                // WHY 取真实 id (组内最小 id, 由 ORDER BY ... id 决定):
+                                //   前端 AdminMachinesView.el-tree 以 node-key="id" 绑定, 若用常量占位会导致
+                                //   所有机型节点 key 重复 (model-0) 且标签恒显示 (#0), 与 master 语义不一致。
+                                m.MachineId,
                                 // WHY: machine_model 可能为 null, fallback 到 machine_name 保证前端展示有值
                                 m.MachineModel ?? m.MachineName ?? ""))
                             .OrderBy(m => m.ModelName)

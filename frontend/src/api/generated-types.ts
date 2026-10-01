@@ -21,6 +21,14 @@ export interface AggregateSearchRequest {
   h3?: number | null
   d7Thread?: string | null
   d8Thread?: string | null
+  oemBrand?: string | null
+  oemNo2?: string | null
+  oemNo3?: string | null
+  machineBrand?: string | null
+  machineModel?: string | null
+  modelName?: string | null
+  engineBrand?: string | null
+  engineType?: string | null
 }
 
 export interface AlertRuleUpdateRequest {
@@ -142,6 +150,10 @@ export interface ImportRequest {
   cascade?: boolean | null
 }
 
+export interface LinkOrphanRequest {
+  productId?: number | null
+}
+
 export interface LoginRequest {
   username?: string | null
   password?: string | null
@@ -239,6 +251,11 @@ export interface OemBrandReorderRequest {
 export interface OemBrandUpdateRequest {
   brand?: string | null
   sortOrder?: number | null
+}
+
+export interface OemMr1MappingRequest {
+  mr1?: string | null
+  changeReason?: string | null
 }
 
 export interface OemNo3CreateRequest {
@@ -374,7 +391,10 @@ export interface PublicSearchHit {
   h1Mm?: string | null
   oemBrand?: string | null
   machineBrand?: string | null
+  machineModel?: string | null
+  modelName?: string | null
   engineBrand?: string | null
+  engineType?: string | null
 }
 
 export interface RefreshRequest {
@@ -489,4 +509,4 @@ export interface XrefReorderRequest {
   oemBrand?: string | null
   items?: XrefReorderItem[] | null
 }
-// 共生成 67 个 interface (跳过 1 个框架内置 schema)
+// 共生成 69 个 interface (跳过 1 个框架内置 schema)
