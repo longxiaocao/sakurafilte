@@ -439,6 +439,14 @@ watch(() => route.query.q as string | undefined, (newQ, oldQ) => {
 watch(q, () => {
   if (programmaticUpdate) return
   if (debounceTimer) window.clearTimeout(debounceTimer)
+  // 🔧 fix(2026-10-01 走查): 清空关键词/点「清空」后已无任何条件时, 自动触发路径不得发起搜索 —
+  //   否则误弹「请在融合搜索框或 8 字段中输入至少一项」。与 clearSearch() 空态一致: 静默重置结果。
+  if (!hasCondition.value) {
+    results.value = []
+    total.value = 0
+    totalPages.value = 0
+    return
+  }
   debounceTimer = window.setTimeout(() => {
     page.value = 1
     syncUrl()
@@ -455,6 +463,13 @@ watch(page, () => {
 // 高级筛选变化 → 立即搜索 (用户主动改条件, 无需防抖)
 watch(advancedForm, () => {
   if (programmaticUpdate) return
+  // 🔧 fix(2026-10-01 走查): 8 字段/尺寸被清空且无其它条件时, 不应自动搜索 (同 watch(q) 守卫理由)
+  if (!hasCondition.value) {
+    results.value = []
+    total.value = 0
+    totalPages.value = 0
+    return
+  }
   page.value = 1
   doSearch()
 }, { deep: true })

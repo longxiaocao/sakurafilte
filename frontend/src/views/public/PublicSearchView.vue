@@ -224,6 +224,15 @@ watch(fuzzy, (nv, ov) => {
   if (syncing) return
   if (nv === ov) return
   if (fuzzyDebounceTimer) window.clearTimeout(fuzzyDebounceTimer)
+  // 🔧 fix(2026-10-01 走查): 清空融合框 (或点「清空」按钮) 后条件为空时, 自动触发路径不得发起搜索 —
+  //   否则误弹「请在融合搜索框或 8 字段中输入至少一项」(用户主动清空却收到警示)。
+  //   与上方 watch(form) 的空态处理保持一致: 静默重置结果。
+  if (!hasCondition.value) {
+    results.value = []
+    total.value = 0
+    totalPages.value = 0
+    return
+  }
   fuzzyDebounceTimer = window.setTimeout(() => {
     doSearch()
   }, 500)
