@@ -54,6 +54,9 @@
 <!-- #40 高级搜索与高级筛选合并为统一入口「高级搜索与筛选」 | frontend/src/views/public/AggregateSearchView.vue | 状态: 有效 -->
 <!-- #41 typeahead 缓存按重建世代号失效 | Api/Services/PublicTypeaheadService.cs + Etl/TypeaheadDictRebuildService.cs | 状态: 有效 -->
 <!-- #42 /public/search 保留路由不重定向, 仅统一导航入口至合并页 | frontend/src/router/index.ts + components/AppHeader.vue | 状态: 有效 -->
+<!-- #43 ETL 端点授权保留 per-endpoint 粒度(拒绝 group 级 Admin) | Api/Endpoints/AdminEtlEndpoints.cs | 状态: 有效 -->
+<!-- #44 对比(compare)子系统统一为公开页实现, 弃用分支重复实现 | frontend/src/composables/useCompareStore.ts + components/CompareFloatingBar.vue | 状态: 有效 -->
+<!-- #45 行尾伪冲突: 以三方 LF 归一流水线解合并冲突 | .gitattributes(缺) / 合并工具链 | 状态: 有效 -->
 
 ---
 
@@ -804,3 +807,32 @@ v30-14 1M OFFSET 深分页专项压测验证数据 (2026-07-21, sakurafilter_per
   - 保留两套独立页面各自演进而仅改菜单: 与"合并入口避免面板切换"的用户要求冲突
 约束: 导航入口变更仅 2 处(AppHeader.vue `adv-search`、SearchView.vue 跳转); 后续若产品决定彻底下线对比页, 再评估重定向与用例迁移。
 关联文件: frontend/src/router/index.ts, frontend/src/components/AppHeader.vue, frontend/src/views/SearchView.vue, frontend/tests/e2e/public-search-flow.spec.ts
+
+#43 ETL 端点授权保留 per-endpoint 粒度, 拒绝 group 级 Admin (2026-10-01, 合并 master 时裁决)
+决策: 合并 `origin/master` 时, `AdminEtlEndpoints.cs` 的授权模型取**分支的 per-endpoint 粒度**(`/template`+`/progress`+`/history`+`/history/aggregate`+`/apps/orphans` 为 `ReadOnly`; `/upload`+`/trigger`+`/task`+`/pause`+`/resume`+`/reindex-all`+`/reindex-resume`+`/apps/orphan/{id}/link` 为 `Operator`; SSE `/progress/stream` 为 `ReadOnly`), 放弃 master 的 group 级 `.RequireAuthorization("Admin")`; 同时并入 master 的 `/reindex-resume`(断点续传重建)并按 `Operator` 收口。
+理由: 分支显式新增了 `ReadOnly` 策略(`ServiceCollectionExtensions.cs` L181-185), 注释与 `user-manual.md` 的角色定义对齐(operator=ETL 导入, viewer=只读浏览/查看监控); 合并后 `Endpoints/` 目录下 16 个文件的 per-endpoint 授权模式已是大面积既成事实(161 处), 若本文件单独回到 group 级 `Admin` 会与其余端点文件不一致, 且会使 operator 无法执行 ETL 导入(破坏唯一有权限导入数据的角色), 使新增的 `ReadOnly` 策略在 ETL 侧形同虚设。
+排除方案:
+  - 取 master 的 group 级 `.RequireAuthorization("Admin")`: 与合并后其余端点文件的粒度冲突; operator 无法导入数据; `ReadOnly` 策略失去 ETL 场景
+  - 两者叠加(既加 group 级, 又保留 per-endpoint): 语义冗余, 且 group 级 Admin 更严格, per-endpoint 粒度被架空
+  - per-endpoint 用 `Admin` 统一收紧: 同上, 破坏 operator 导入工作流
+约束: 角色权限矩阵(admin/operator/viewer)是安全相关语义, 后续若 spec F11 要求 ETL 全量 Admin, 需先确认 user-manual 的角色定义是否同步修订, 再统一调整全部 16 个端点文件。测试侧无针对 ETL 端点具体策略的断言, 本次选择不破坏现有单测。
+关联文件: backend/src/SakuraFilter.Api/Endpoints/AdminEtlEndpoints.cs, backend/src/SakuraFilter.Api/Extensions/ServiceCollectionExtensions.cs
+
+#44 对比(compare)子系统统一为公开页实现, 弃用分支重复实现 (2026-10-01, 合并 master 时裁决)
+决策: 分支与 master 各自发展出一套对比实现, 合并时**统一取 master 版**: `composables/useCompareStore.ts`(状态 `state.ids/products/open` + `openCompare/close/adoptFromUrl/add`, 导出 `MAX_COMPARE=6`/`COMPARE_STORAGE_KEY`) + `components/CompareFloatingBar.vue`(i18n `compare.floating.*`); 删除分支的 `stores/useCompareStore.ts`(107 行 store 版, `count/ids/pendingOpen/requestOpen/consumeOpen/replace`) 与 `components/GlobalCompare.vue`(硬编码中文, 含左右移按钮)。相关页面对比逻辑(`App.vue`/`PublicProductView.vue`/`PublicSearchView.vue`/`PublicComparePanel.vue`)一并取 master 版。
+理由: master 版把状态放在 composable 而非 Pinia store, 且文案全部走 vue-i18n(符合项目 i18n 规范); 分支版存在硬编码中文与已被用户否决的左右移按钮(V3 用户反馈"删左右移按钮")。两套实现同时保留会产生双份对比状态源(state 分裂), 必须择一。master 版与 `CompareFloatingBar` + `PublicComparePanel` 的 `diffOnly` 交互是同一次迭代的成套实现, 内部一致性更高。
+排除方案:
+  - 保留分支版(store + GlobalCompare): 与 master 的 `CompareFloatingBar`/`PublicComparePanel` 不配套, 且带回已否决的交互与硬编码中文
+  - 两套并存: 双状态源导致对比计数与实际集合不一致
+约束: 删除前已 grep 确认无其他引用(`GlobalCompare.vue` 与 `stores/useCompareStore.ts` 仅互相引用, 其余全部走 `@/composables/useCompareStore`); 前端 `npm run build` 与 259 项 vitest 通过。
+关联文件: frontend/src/composables/useCompareStore.ts, frontend/src/components/CompareFloatingBar.vue, frontend/src/components/PublicComparePanel.vue, frontend/src/views/public/PublicProductView.vue, frontend/src/views/public/PublicSearchView.vue, frontend/src/App.vue
+
+#45 行尾伪冲突: 以三方 LF 归一流水线解合并冲突 (2026-10-01)
+决策: 仓库 `core.autocrlf=true` 但**无 `.gitattributes`**, 导致 `origin/master` 与本分支对同一文件存储的行尾不一致(LF vs CRLF), git 对 13 个文件产生**整文件级伪冲突**(如 `en-US.ts` 冲突横跨 1-3146 行, 实际是全文对撞)。处置: 用临时 `GIT_INDEX_FILE` + `read-tree` + `checkout-index` 取出 base/ours/theirs 三方原字节, 统一 `Normalize-LF`(UTF-8 无 BOM)后用 `git -c core.autocrlf=false merge-file --diff3` 重新三方合并 → 25 个文件中 12 个变干净, 其余按语义手工解决。
+理由: 伪冲突的根因是行尾而非内容, 在归一化行尾后重跑三方合并可把"全文冲突"还原为真实的最小差异, 大幅降低误判风险(直接按 ours/theirs 整体取值会静默丢弃另一侧的真实改动)。
+排除方案:
+  - 直接 `git checkout --ours/--theirs` 整文件取一侧: 会丢失另一侧的真实功能改动(i18n 键、tab 白名单等), 且无法发现内容级冲突
+  - `git merge -X ours/-X theirs`: 同上, 静默丢改动
+  - 本次顺手新增 `.gitattributes`(`* text=auto eol=lf`): 会改变全仓后续检出的行尾, 产生大面积"无内容变更"的 diff, 需单独评估与统一提交, 本次不做(见 suggestions.md P2)
+约束: 该流水线(`C:\Users\C\AppData\Local\Temp\m3`)是一次性临时工具, 不纳入仓库; 根治手段是补 `.gitattributes` 并统一一次行尾, 待单独任务处理。
+关联文件: .gitattributes(缺失), frontend/src/i18n/locales/en-US.ts, frontend/src/i18n/locales/zh-CN.ts
