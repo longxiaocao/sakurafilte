@@ -35,7 +35,7 @@
 - GET `/api/public/product/{**slug}`、`GET /product/{oem}` → 详情；反查优先级 OemNo3(1) → OemNoDisplay(2) → Oem2(3) → Mr1(4)
 - POST `/api/public/search/batch-oem` → 批量 OEM 查询；前端按 `hit` 拆「已匹配 / 未匹配」两分区，未匹配行可快捷添加（复用 `POST /api/admin/products`，Operator 策略）
 - POST `/api/admin/products` → 后台新建产品（策略 `Operator`）；前端「快捷添加」弹窗复用此端点，未登录先跳 `/login?redirect=`
-- POST `/api/admin/etl/reindex-all` → 全量重建索引（需 Admin，限流 "etl"）
+- POST `/api/admin/etl/reindex-all` → 全量重建索引（策略 `Operator`，限流 "etl"）；`POST /api/admin/etl/reindex-resume?fromId=&limit=` → 断点续传重建（策略 `Operator`）。ETL 端点按 per-endpoint 粒度授权，非 group 级 Admin（ADR #43）
 
 ## 关键接口（OEM 目录，2026-09-30 上线）
 
