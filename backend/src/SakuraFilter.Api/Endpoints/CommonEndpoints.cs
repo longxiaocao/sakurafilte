@@ -38,7 +38,9 @@ public static class CommonEndpoints
     private static IEndpointRouteBuilder MapPerfEndpoints(this IEndpointRouteBuilder app)
     {
         // 性能埋点快照
-        // v30-19 P0: 加 RequireAuthorization("Admin"), 原公开访问泄漏 P50/P95/P99 运维数据
+        // v30-19 P0: 加鉴权 (初为 "Admin"), 原公开访问泄漏 P50/P95/P99 运维数据
+        // 🔧 fix(2026-10-03, P2 技术债): 实际策略已放宽为 "ReadOnly" (viewer 可查看监控, 见 user-manual.md),
+        //   同步修正本注释, 避免后续维护者按注释误判权限
         //   WHY: /api/perf 返回 PerfMetrics.GetSnapshot() 含 P50/P95/P99 + 样本数,
         //     与 v30-18 修复的 /api/admin/perf/alerts 同类敏感数据 (性能告警也基于这些指标)
         //   攻击场景: 攻击者读取性能快照推断系统负载, 选择最佳攻击时机 (DDoS/QPS 压测)
@@ -50,7 +52,8 @@ public static class CommonEndpoints
             .WithOpenApi();
 
         // 性能告警列表
-        // v30-18 P0: 加 RequireAuthorization("Admin"), 原脱离 group 无鉴权
+        // v30-18 P0: 加鉴权, 原脱离 group 无鉴权
+        // 🔧 fix(2026-10-03, P2 技术债): 实际策略为 "ReadOnly" (运维只读观测面), 注释同步对齐
         //   WHY: /api/admin/perf/alerts 在 DevTokenAuthMiddleware AdminPaths 内,
         //     但 Bearer 请求会跳过 DevToken 校验放行 (DevTokenAuthMiddleware.cs L122-127),
         //     端点无 RequireAuthorization 时 Bearer 攻击可绕过 (任意 Bearer token 即可访问)
@@ -64,7 +67,7 @@ public static class CommonEndpoints
         // v30-20: Meili 主路径性能快照 (P50/P95/P99 + FallbackRate)
         //   WHY 独立端点: PerfMetrics 是全局 HTTP 指标, 不区分 Meili vs PG fallback,
         //     MeiliSearchMetrics 独立采集搜索调用, 反映 Meili 真实性能
-        //   数据敏感性: 与 /api/perf 同类 (P50/P95/P99 运维数据), 必须 RequireAuthorization("Admin")
+        //   数据敏感性: 与 /api/perf 同类 (P50/P95/P99 运维数据), 必须鉴权 (实际策略 "ReadOnly")
         //   攻击场景: 攻击者读取 Meili P99 推断搜索服务负载, 选择最佳攻击时机
         app.MapGet("/api/admin/perf/meili/snapshot", (MeiliSearchMetrics metrics) =>
             Results.Ok(metrics.GetSnapshot()))
@@ -155,7 +158,8 @@ public static class CommonEndpoints
 
     private static IEndpointRouteBuilder MapAdminAuthStatusEndpoint(this IEndpointRouteBuilder app)
     {
-        // v30-18 P0: 加 RequireAuthorization("Admin"), 原脱离 group 无鉴权
+        // v30-18 P0: 加鉴权, 原脱离 group 无鉴权
+        // 🔧 fix(2026-10-03, P2 技术债): 实际策略为 "ReadOnly" (运维只读观测面), 注释同步对齐
         //   WHY: /api/admin/auth/status 在 DevTokenAuthMiddleware AdminPaths 内,
         //     但 Bearer 请求会跳过 DevToken 校验放行 (DevTokenAuthMiddleware.cs L122-127),
         //     端点无 RequireAuthorization 时 Bearer 攻击可绕过

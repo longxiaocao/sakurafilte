@@ -351,6 +351,45 @@ public class ProblemDetailsFactoryTests
         GetErrorCode(problem).Should().Be("ERR_VALIDATION_FAILED");
     }
 
+    // ==================== 表单绑定缺 Content-Type (2026-10-03 P2 技术债修复) ====================
+
+    [Fact]
+    public void FormBindingMissingContentType_Returns400_WithFriendlyDetail()
+    {
+        // 覆盖: 10 个 IFormFile 端点 (ETL /upload + 9 个字典 /import-xlsx) 缺 Content-Type 时
+        //   框架在参数绑定阶段抛的固定英文 InvalidOperationException 应映射为 400, 而非 409。
+        //   WHY: 409 语义为"冲突", 前端 axios 会误提示; 且原样透传框架英文消息对调用方不友好。
+        var ctx = CreateContext(path: "/api/admin/etl/upload");
+        ctx.Request.Method = "POST";
+        var ex = new InvalidOperationException(
+            "This request does not have a Content-Type header. Form content is only supported when the Content-Type header is set to 'application/x-www-form-urlencoded' or 'multipart/form-data'.");
+
+        var result = ProblemDetailsFactory.FromException(ctx, ex);
+        var problem = AsProblem(result);
+
+        problem.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
+        problem.ProblemDetails.Title.Should().Be("Bad Request");
+        GetErrorCode(problem).Should().Be("ERR_VALIDATION_FAILED");
+        problem.ProblemDetails.Detail.Should().Contain("multipart/form-data");
+        // 防御: 不得把框架英文原文透传给调用方
+        problem.ProblemDetails.Detail.Should().NotContain("This request does not have a Content-Type header");
+    }
+
+    [Fact]
+    public void BusinessInvalidOperationException_DoesNotHitFormBindingBranch_Still409()
+    {
+        // 回归保护: 仅按固定消息前缀匹配, 业务 InvalidOperationException 仍走 409
+        //   WHY: 防止前缀匹配过宽, 把 MR1_ALREADY_EXISTS 等业务冲突误降级为 400
+        var ctx = CreateContext();
+        var ex = new InvalidOperationException("MR1_ALREADY_EXISTS: mr1 已存在");
+
+        var result = ProblemDetailsFactory.FromException(ctx, ex);
+        var problem = AsProblem(result);
+
+        problem.StatusCode.Should().Be(StatusCodes.Status409Conflict);
+        GetErrorCode(problem).Should().Be("MR1_ALREADY_EXISTS");
+    }
+
     // ==================== Instance 字段 ====================
 
     [Fact]
