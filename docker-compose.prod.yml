@@ -124,7 +124,7 @@ services:
         VITE_PUBLIC_ABOUT_TEXT: ${VITE_PUBLIC_ABOUT_TEXT:-}
         VITE_PUBLIC_NEWS_TEXT: ${VITE_PUBLIC_NEWS_TEXT:-}
         VITE_PUBLIC_CONTACT_TEXT: ${VITE_PUBLIC_CONTACT_TEXT:-}
-    image: sakurafilter-web:1.0.41
+    image: sakurafilter-web:1.0.42
     container_name: sakura-web
     restart: unless-stopped
     depends_on:
@@ -312,7 +312,9 @@ services:
       - grafana-data:/var/lib/grafana
       - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
     ports:
-      - "3000:3000"
+      # 🔧 fix(部署): 宿主 3000 被压测栈 sakurafilter-grafana 长期占用, 生产 grafana 无法启动。
+      #   生产改用宿主 3100 (容器内仍 3000, 与 provisioning 无关)。访问: http://localhost:3100
+      - "3100:3000"
     depends_on:
       - prometheus
     networks:
