@@ -18,7 +18,7 @@
 - `backend/src/SakuraFilter.Etl/`: Excel 导入 + `Staging/`（OEM staging 清洗/映射，030–034 迁移建立）
 - `backend/src/SakuraFilter.Search/`: `MeiliSearchProvider`（主）、`PostgresSearchProvider`（fallback）、`ResilientSearchProvider`（弹性包装）
 - `backend/src/SakuraFilter.Cli/`: 运维 CLI（孤儿图片清理、OEM staging 导入/清洗/映射/发布）
-- `backend/migrations/`: SQL 迁移，按文件名顺序；`run-migrations.sh` 以 `__sakura_migrations` 幂等登记。OEM 切库相关：`035_oem_catalog_serving.sql`（`oem_key`/派生分类）、`036_catalog_to_public_cutover.sql`（catalog → public 投影）、`037_products_meili_safe_ids.sql`（`mr_1` 净化为 Meili 安全 ID + `oem_2` 回填）、`038_supplement_product_category.sql`（派生分类规则 v2：交叉引用名主判据 + OEM 前缀兜底）
+- `backend/migrations/`: SQL 迁移，按文件名顺序；`run-migrations.sh` 以 `__sakura_migrations` 幂等登记。OEM 切库相关：`035_oem_catalog_serving.sql`（`oem_key`/派生分类）、`036_catalog_to_public_cutover.sql`（catalog → public 投影）、`037_products_meili_safe_ids.sql`（`mr_1` 净化为 Meili 安全 ID + `oem_2` 回填）、`038_supplement_product_category.sql`（派生分类规则 v2：交叉引用名主判据 + OEM 前缀兜底）、`039_machine_mr1_bindings.sql`（机型-MR.1 批量绑定关系表；此前实体/DbContext 已声明但 EF 与 SQL 迁移均缺建表脚本，属补齐）
 - `frontend/src/api/`: `types.ts` + `index.ts`（契约层）；`utils/http.ts`（axios 拦截器）
 - `frontend/src/views/public/`: 搜索/详情/对比；`frontend/src/views/admin/`: 后台各管理页
 
