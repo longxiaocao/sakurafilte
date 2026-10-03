@@ -70,6 +70,33 @@ else
     exit 1
 fi
 
+# 6.5 schema 闸门 (2026-10-03 新增; 来源 .ai/suggestions.md 2026-10-03 P1 建议)
+#   迁移完成后机械校验「目录里的迁移 DDL 是否都已落地到目标库」。
+#   WHY 需要独立闸门: migrate.sh 内置验证只查历史表一致性 + 4 个关键列; 本步覆盖全部
+#     CREATE TABLE / ADD COLUMN, 专防「CI 全绿但生产缺表/缺列」——已发生两次:
+#     ① 实体声明 machine_mr1_bindings 但迁移脚本未生成 → 端点 42P01
+#     ② 合并 master 后生产缺 026-029 → cross_references.is_whitelisted 等列 42703
+#   失败即不启动 API (与第 5 步同策略: 结构不完整不允许新 API 跑旧 schema)。
+echo "[5.5/9] schema 闸门 (迁移登记完整性 + DDL 落地)..."
+PS_BIN=""
+if command -v pwsh >/dev/null 2>&1; then PS_BIN=pwsh
+elif command -v powershell >/dev/null 2>&1; then PS_BIN=powershell
+fi
+if [ -n "$PS_BIN" ]; then
+    # 库名/用户取本次实际使用的 env 文件 (兼容 .env.prod 与历史 .env)
+    PG_DB_V=$(grep -oP '^POSTGRES_DB=\K.*' "$ENV_FILE" | tr -d '"')
+    PG_USER_V=$(grep -oP '^POSTGRES_USER=\K.*' "$ENV_FILE" | tr -d '"')
+    if "$PS_BIN" -NoProfile -ExecutionPolicy Bypass -File scripts/preflight-schema-check.ps1 -Database "$PG_DB_V" -User "$PG_USER_V"; then
+        echo "    [OK] schema 闸门通过"
+    else
+        echo "[FAIL] schema 闸门未通过 (存在未落地的迁移 DDL) — API 未启动, 补齐迁移后重跑"
+        exit 1
+    fi
+else
+    echo "    [WARN] 未找到 pwsh/powershell — 已跳过自动闸门 (请在部署前人工执行并确认 [PASS]):"
+    echo "           pwsh -File scripts/preflight-schema-check.ps1"
+fi
+
 # 7. 启动 PG + API (用刚构建的新镜像; --force-recreate 确保配置/镜像变更生效)
 echo "[6/9] 启动 postgres + api (--force-recreate, 新镜像)..."
 docker compose -f docker-compose.prod.yml --env-file "$ENV_FILE" up -d --force-recreate postgres api || { echo "[FAIL] 启动失败"; exit 1; }

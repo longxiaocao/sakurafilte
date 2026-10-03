@@ -227,6 +227,25 @@ powershell -File scripts/check-migration-uniqueness.ps1
 
 CI 中由 `.github/workflows/ci.yml` 的 `Detect EF Core migration conflicts` step 内联 bash 版执行同一规则。
 
+### 3.6 部署前 schema 闸门 (2026-10-03 新增)
+
+CI 每次都在**全新空库**上执行 `dotnet ef database update` + 全部 `backend/migrations/*.sql`, 因此 CI 全绿**不能**证明生产库具备这些表/列。**部署前**必须执行:
+
+```powershell
+# 生产默认 (容器 sakura-postgres / 库 sakurafilter / 用户从 .env.prod 读取)
+powershell -File scripts/preflight-schema-check.ps1
+
+# 指定库 (如集成测试库)
+powershell -File scripts/preflight-schema-check.ps1 -Database sakurafilter_int_tests
+```
+
+| 检查项 | 判据 | 对应历史事故 |
+|--------|------|--------------|
+| 迁移登记完整性 | `backend/migrations/*.sql` 的 basename 是否都在 `public.__sakura_migrations` | 合并 master 后生产缺 `026`-`029` |
+| DDL 落地 | 迁移中的 `CREATE TABLE` / `ADD COLUMN` 是否在目标库 `information_schema` 中真实存在 | `machine_mr1_bindings` 缺表 (`42P01`)、`cross_references.is_whitelisted` 缺列 (`42703`) |
+
+退出码 `0` = 可部署, `1` = 禁止部署。`scripts/deploy-prod.sh` 已在第 5 步迁移之后自动调用本闸门 (失败即不启动 API); 未找到 `pwsh`/`powershell` 时降级为 `[WARN]` 并提示人工执行。
+
 > 注: 生产库 SQL 迁移历史记录表是 `public.__sakura_migrations(basename PK, applied_at)`, 由 `backend/migrations/run-migrations.sh` 维护 (生产为人工执行)。`scripts/migrate.sh` 曾使用另一套 `schema_migrations` 表名 (与生产库**不一致**, 且会自动建空表 → 全部迁移被当未应用重跑, 含 `018` 的 TRUNCATE 清空业务表), 已于 2026-10-03 统一为 `__sakura_migrations`, 并加 `to_regclass` 存在性 fail-fast 守卫 (表缺失即中止, 不再自动建表)。见 commit `9e43d69` 与 `.ai/suggestions.md`。
 
 ---
