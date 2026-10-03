@@ -227,7 +227,7 @@ powershell -File scripts/check-migration-uniqueness.ps1
 
 CI 中由 `.github/workflows/ci.yml` 的 `Detect EF Core migration conflicts` step 内联 bash 版执行同一规则。
 
-> 注: 生产库 SQL 迁移历史记录表是 `public.__sakura_migrations(basename PK, applied_at)`, 由 `backend/migrations/run-migrations.sh` 维护 (生产为人工执行)。`scripts/migrate.sh` 使用另一套 `schema_migrations` 表名, 两者**不一致**, 使用前需先对齐 (见 `.ai/suggestions.md`)。
+> 注: 生产库 SQL 迁移历史记录表是 `public.__sakura_migrations(basename PK, applied_at)`, 由 `backend/migrations/run-migrations.sh` 维护 (生产为人工执行)。`scripts/migrate.sh` 曾使用另一套 `schema_migrations` 表名 (与生产库**不一致**, 且会自动建空表 → 全部迁移被当未应用重跑, 含 `018` 的 TRUNCATE 清空业务表), 已于 2026-10-03 统一为 `__sakura_migrations`, 并加 `to_regclass` 存在性 fail-fast 守卫 (表缺失即中止, 不再自动建表)。见 commit `9e43d69` 与 `.ai/suggestions.md`。
 
 ---
 
