@@ -283,7 +283,10 @@ public class ProductDbContext : DbContext
         //   (machine_id, mr_1) 唯一约束保证幂等, 等价于 ON CONFLICT (machine_id, mr_1) DO NOTHING
         mb.Entity<MachineMr1Binding>(e =>
         {
-            e.ToTable("machine_mr1_bindings");
+            // 🔧 fix(2026-10-03, P2 技术债): 该表由 SQL 迁移 039_machine_mr1_bindings.sql 建 (EF 迁移未建),
+            //   标记 ExcludeFromMigrations 使 EF 模型快照与运行时模型一致 (否则 has-pending-model-changes 恒 true)。
+            //   ExcludeFromMigrations 仅影响迁移 DDL 生成, 不影响运行时查询与写入。
+            e.ToTable("machine_mr1_bindings", t => t.ExcludeFromMigrations());
             e.HasKey(b => b.Id);
             e.Property(b => b.MachineId).IsRequired();
             e.Property(b => b.Mr1).HasMaxLength(10).IsRequired();

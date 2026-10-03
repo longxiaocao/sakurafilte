@@ -100,6 +100,20 @@ public static class ProblemDetailsFactory
                 instance: ctx.Request.Path,
                 extensions: new Dictionary<string, object?> { ["errorCode"] = ErrNotFound }),
 
+            // 🔧 fix(2026-10-03, P2 技术债): 表单绑定缺 Content-Type 由 409 改为友好 400
+            //   WHY: 参数为 IFormFile 的端点在**参数绑定阶段**调用 FormFeature.ReadForm(),
+            //     请求无 Content-Type 时框架抛 InvalidOperationException(固定英文消息),
+            //     原样落入下面的 409 分支 —— 状态码语义错误, 且把框架英文原文透传给调用方。
+            //   影响面: 10 个 IFormFile 端点 (ETL /upload + 9 个字典 /import-xlsx);
+            //     脚本/CI 传裸 body 时必踩, 前端 axios 也会按 409"冲突"语义误提示。
+            //   仅按固定消息前缀匹配, 不误伤业务 InvalidOperationException (如 MR1_ALREADY_EXISTS)。
+            InvalidOperationException io0 when IsFormBindingMissingContentType(io0) => Results.Problem(
+                title: "Bad Request",
+                detail: "请求缺少 Content-Type: 表单类接口请使用 multipart/form-data 并携带 file 字段",
+                statusCode: StatusCodes.Status400BadRequest,
+                instance: ctx.Request.Path,
+                extensions: new Dictionary<string, object?> { ["errorCode"] = ErrValidationFailed }),
+
             // V2: InvalidOperationException 根据消息内容映射到 V2 错误码(向后兼容旧 ERR_CONFLICT)
             InvalidOperationException io => Results.Problem(
                 title: "Conflict",
@@ -195,6 +209,14 @@ public static class ProblemDetailsFactory
             _ => ErrDbConstraint
         };
     }
+
+    // 🔧 fix(2026-10-03): 识别「表单绑定缺 Content-Type」框架异常
+    //   WHY: Microsoft.AspNetCore.Http.Features.FormFeature.ReadForm() 在请求无 Content-Type 时
+    //     抛出固定英文消息的 InvalidOperationException; .NET 8 该消息稳定, 故用前缀匹配。
+    //   不能用 ctx.Request.HasFormContentType 判定 —— JSON body 的 POST 同样为 false, 会误伤业务异常。
+    //   internal: FormBindingErrorMiddleware 复用同一判定, 保证「前置中间件」与「兜底异常映射」单一来源。
+    internal static bool IsFormBindingMissingContentType(InvalidOperationException ex)
+        => ex.Message.StartsWith("This request does not have a Content-Type header", StringComparison.Ordinal);
 
     // V2: 根据异常消息内容映射到 V2 错误码(无 ERR_ 前缀),未匹配时回退到旧错误码
     private static string MapErrorCode(string message)

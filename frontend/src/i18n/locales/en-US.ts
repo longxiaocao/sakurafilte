@@ -938,14 +938,9 @@ export default {
         e_g_oil_fuel: 'e.g.: air / oil / fuel / hydraulic / cabin / others',
       },
       string: {
-
-
+        add_type: 'Add Type',
       },
       success: {
-
-
-
-
         sort_order_saved_frontend: 'Sort Order Saved, frontend Product P2.3 Immediately take effect',
       },
       title: {

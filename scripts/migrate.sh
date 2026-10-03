@@ -5,7 +5,8 @@
 # 背景: db-init/db-migrate compose 服务已禁用 (8/22 有意, 防重建清库),
 #       新增迁移只能手工应用, 易漏跑.
 # 通道:
-#   1) SQL 迁移: backend/migrations/*.sql, 用 schema_migrations 表对比目录 vs 已应用
+#   1) SQL 迁移: backend/migrations/*.sql, 用 __sakura_migrations 表对比目录 vs 已应用
+#      (表名/列名与 backend/migrations/run-migrations.sh 及生产库严格一致: basename PK + applied_at)
 #   2) EF Core C# 迁移: __EFMigrationsHistory 由 EF 管理, 用 API 镜像 --migrate-db 模式执行
 #      (与 compose db-init 服务等价: MigrateAsync 只跑 pending, 幂等)
 # 顺序: EF 先 → SQL 后 (与 db-init/db-migrate 原编排一致)
@@ -27,6 +28,9 @@ if [ -f "$ENV_FILE" ]; then
     PG_USER=$(grep -oP '^POSTGRES_USER=\K.*' "$ENV_FILE" | tr -d '"')
     PG_DB=$(grep -oP '^POSTGRES_DB=\K.*' "$ENV_FILE" | tr -d '"')
     PG_PASS=$(grep -oP '^POSTGRES_PASSWORD=\K.*' "$ENV_FILE" | tr -d '"')
+    # 2026-10-03: 镜像 tag 改为不可变标识后, docker-compose.prod.yml 里是 ${API_IMAGE_TAG} 变量,
+    #   无法再用 grep 直接解析字面量 tag → 改为从 env 文件读取同一变量 (单一来源)。
+    API_IMAGE_TAG=$(grep -oP '^API_IMAGE_TAG=\K.*' "$ENV_FILE" | tr -d '"' || true)
 else
     PG_USER="${PG_USER:-sakura}"
     PG_DB="${PG_DB:-sakurafilter}"
@@ -61,7 +65,7 @@ psql() { docker exec -i "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" "$@"; }
 #   apply 模式才执行; list 模式只提示
 if [ "$MODE" = "apply" ]; then
     echo "==> [1/2] EF Core C# 迁移 (--migrate-db)..."
-    API_IMAGE=$(grep -oP 'image: \Ksakurafilter-api:[0-9.]+' docker-compose.prod.yml | head -1)
+    API_IMAGE="${API_IMAGE_TAG:+sakurafilter-api:${API_IMAGE_TAG}}"
     # compose 网络名 = {项目名}_sakura-net (项目名默认目录名, 动态探测)
     NET_NAME=$(docker network ls --format '{{.Name}}' | grep '_sakura-net$' | head -1 || true)
     # V3(2026-08-25) codex v3: EF 条件不满足必须 exit 1, 不允许降级继续 —
@@ -80,7 +84,7 @@ if [ "$MODE" = "apply" ]; then
         fi
     else
         echo "❌ 无法执行 EF 迁移 (API_IMAGE=$API_IMAGE NET_NAME=$NET_NAME PG_PASS=${PG_PASS:+set}) — 阻断部署" >&2
-        echo "   原因排查: ①API 镜像未构建 (deploy-prod.sh 已先 build api) ②docker 网络未创建 ③PG_PASSWORD 未配置" >&2
+        echo "   原因排查: ①API 镜像未构建 (deploy-prod.sh 已先 build api) ②.env.prod 缺 API_IMAGE_TAG ③docker 网络未创建 ④PG_PASSWORD 未配置" >&2
         echo "   应急绕行: SKIP_EF=1 bash scripts/migrate.sh (仅限明确授权)" >&2
         exit 1
     fi
@@ -88,8 +92,19 @@ elif [ "$MODE" = "list" ]; then
     echo "==> [1/2] EF Core 迁移: 由 API --migrate-db 模式管理 (__EFMigrationsHistory), 与 SQL 通道独立"
 fi
 
-# --- 确保 SQL 记录表存在 ---
-psql -c "CREATE TABLE IF NOT EXISTS schema_migrations (filename TEXT PRIMARY KEY, applied_at TIMESTAMPTZ DEFAULT now());" >/dev/null
+# --- 校验 SQL 记录表存在 (2026-10-03 修复 P1: 原实现在这里 CREATE TABLE IF NOT EXISTS schema_migrations) ---
+#   WHY 只校验、不自动建表: 原实现用的是另一张表名 schema_migrations (生产库不存在, 生产实际是
+#     __sakura_migrations) 且会 IF NOT EXISTS 自动建出**空表** → 目录里全部 SQL 都被判定为"未应用"
+#     而重跑, 其中 018_v2_legacy_data_cleanup.sql 含 TRUNCATE → 生产业务表被清空。
+#   首次空库部署请走 docker-compose.prod.yml 的 db-migrate 服务 (backend/migrations/run-migrations.sh,
+#     它才会 CREATE TABLE IF NOT EXISTS), 而不是本脚本。
+MIGRATIONS_TABLE="__sakura_migrations"
+if [ "$(psql -t -A -c "SELECT to_regclass('public.${MIGRATIONS_TABLE}') IS NOT NULL;" | tr -d ' ')" != "t" ]; then
+    echo "❌ 迁移历史表 public.${MIGRATIONS_TABLE} 不存在 — 已中止 (禁止自动建表后重跑, 会导致 018 的 TRUNCATE 清空业务表)" >&2
+    echo "   首次空库部署: 取消 docker-compose.prod.yml 中 db-migrate 服务注释, 走 run-migrations.sh 建表" >&2
+    echo "   既有环境: 请人工确认为何历史表缺失 (连错库 / 表被删), 修复后再执行本脚本" >&2
+    exit 1
+fi
 
 # --baseline 结构校验: 关键业务表/列存在才允许标记 (防误在不完整环境执行后永久跳过缺失迁移)
 if [ "$MODE" = "baseline" ]; then
@@ -116,7 +131,7 @@ fi
 applied=0; skipped=0; pending=""
 for f in "$MIGRATIONS_DIR"/*.sql; do
     name="$(basename "$f")"
-    is_applied=$(psql -t -A -c "SELECT 1 FROM schema_migrations WHERE filename='${name}';")
+    is_applied=$(psql -t -A -c "SELECT 1 FROM ${MIGRATIONS_TABLE} WHERE basename='${name}';")
     if [ "$is_applied" = "1" ]; then
         skipped=$((skipped+1))
         continue
@@ -125,12 +140,12 @@ for f in "$MIGRATIONS_DIR"/*.sql; do
     if [ "$MODE" = "apply" ]; then
         echo "[APPLY] $name"
         psql -v ON_ERROR_STOP=1 < "$f" || { echo "❌ $name 执行失败, 已中止 (未记录, 修复后重跑)" >&2; exit 1; }
-        psql -c "INSERT INTO schema_migrations(filename) VALUES ('${name}');" >/dev/null
+        psql -c "INSERT INTO ${MIGRATIONS_TABLE}(basename) VALUES ('${name}');" >/dev/null
         applied=$((applied+1))
     elif [ "$MODE" = "baseline" ]; then
         # 首次部署基线: DB 结构已与代码匹配 (历史手工应用), 只标记不执行
         echo "[BASELINE] $name"
-        psql -c "INSERT INTO schema_migrations(filename) VALUES ('${name}') ON CONFLICT DO NOTHING;" >/dev/null
+        psql -c "INSERT INTO ${MIGRATIONS_TABLE}(basename) VALUES ('${name}') ON CONFLICT DO NOTHING;" >/dev/null
         applied=$((applied+1))
     fi
 done
@@ -147,16 +162,16 @@ if [ "$MODE" = "apply" ]; then
     echo "==> 迁移后结构验证..."
     FAILED=0
 
-    # 1. SQL schema_migrations 与目录一致 (全部已应用 + 无多余/幽灵记录)
+    # 1. SQL 迁移历史表与目录一致 (全部已应用 + 无多余/幽灵记录)
     DIR_COUNT=$(ls "$MIGRATIONS_DIR"/*.sql 2>/dev/null | wc -l)
-    DB_COUNT=$(psql -t -A -c "SELECT COUNT(*) FROM schema_migrations;" 2>/dev/null | tr -d ' ')
-    EXTRA=$(psql -t -A -c "SELECT filename FROM schema_migrations;" 2>/dev/null | while read -r f; do
+    DB_COUNT=$(psql -t -A -c "SELECT COUNT(*) FROM ${MIGRATIONS_TABLE};" 2>/dev/null | tr -d ' ')
+    EXTRA=$(psql -t -A -c "SELECT basename FROM ${MIGRATIONS_TABLE};" 2>/dev/null | while read -r f; do
         [ -n "$f" ] && [ ! -f "$MIGRATIONS_DIR/$f" ] && echo "$f"
     done)
     if [ "$DIR_COUNT" = "$DB_COUNT" ] && [ "$DIR_COUNT" -gt 0 ] && [ -z "$EXTRA" ]; then
-        echo "    [OK] schema_migrations 完整一致 ($DB_COUNT/$DIR_COUNT, 无多余记录)"
+        echo "    [OK] ${MIGRATIONS_TABLE} 完整一致 ($DB_COUNT/$DIR_COUNT, 无多余记录)"
     else
-        echo "❌ schema_migrations 不一致 (DB=$DB_COUNT 目录=$DIR_COUNT, 多余记录: ${EXTRA:-无}) — 迁移未全部记录或存在幽灵记录" >&2
+        echo "❌ ${MIGRATIONS_TABLE} 不一致 (DB=$DB_COUNT 目录=$DIR_COUNT, 多余记录: ${EXTRA:-无}) — 迁移未全部记录或存在幽灵记录" >&2
         FAILED=1
     fi
 
