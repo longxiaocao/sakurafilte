@@ -1,0 +1,44 @@
+# 统一行尾 — 防跨分支合并产生「整文件级伪冲突」(2026-10-04)
+#
+# WHY: 本仓库 core.autocrlf=true, 且各分支 blob 行尾历史不统一 (LF vs CRLF), 导致同一文件
+#   在跨分支合并时被 git 判定为全文冲突 —— 2026-10-01 合并 origin/master 时 13 个文件
+#   全文件冲突 (如 en-US.ts 冲突横跨 1-3146 行), 与内容无关, 只能人工裁决。
+#   本文件把行尾统一为单一权威形式, 消除该根因。
+#
+# ⚠️ 引入本文件后**必须**立即执行 `git add --renormalize .` 并单独提交一次规范化 commit,
+#   否则索引中仍是旧行尾的 blob, 与另一侧分支依旧不同, 伪冲突会原样重演
+#   (见 .ai/suggestions.md 2026-10-01 [P2] 与 ADR #45)。
+
+# 默认: 文本文件在仓库内统一 LF (所有平台提交都规范为同一形式)
+* text=auto eol=lf
+
+# Windows 专用脚本: 仓库内 LF, 检出为 CRLF (兼容记事本等老工具)
+*.ps1  text eol=crlf
+*.psm1 text eol=crlf
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+
+# shell 脚本必须 LF: 在 Linux/Docker 容器内执行, CRLF 会触发 /bin/sh^M 报错
+*.sh text eol=lf
+
+# 二进制: 禁止任何行尾/编码转换 (否则文件损坏)
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.webp  binary
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
+*.eot   binary
+*.pdf   binary
+*.zip   binary
+*.gz    binary
+*.xlsx  binary
+*.xls   binary
+*.docx  binary
+*.dll   binary
+*.exe   binary
+*.so    binary
+*.nupkg binary
