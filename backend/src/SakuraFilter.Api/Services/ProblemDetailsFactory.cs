@@ -214,7 +214,8 @@ public static class ProblemDetailsFactory
     //   WHY: Microsoft.AspNetCore.Http.Features.FormFeature.ReadForm() 在请求无 Content-Type 时
     //     抛出固定英文消息的 InvalidOperationException; .NET 8 该消息稳定, 故用前缀匹配。
     //   不能用 ctx.Request.HasFormContentType 判定 —— JSON body 的 POST 同样为 false, 会误伤业务异常。
-    private static bool IsFormBindingMissingContentType(InvalidOperationException ex)
+    //   internal: FormBindingErrorMiddleware 复用同一判定, 保证「前置中间件」与「兜底异常映射」单一来源。
+    internal static bool IsFormBindingMissingContentType(InvalidOperationException ex)
         => ex.Message.StartsWith("This request does not have a Content-Type header", StringComparison.Ordinal);
 
     // V2: 根据异常消息内容映射到 V2 错误码(无 ERR_ 前缀),未匹配时回退到旧错误码

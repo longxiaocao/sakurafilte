@@ -12,7 +12,7 @@ namespace SakuraFilter.Infrastructure.Data.Migrations
     ///   导致 `dotnet ef migrations has-pending-model-changes` 恒为 true, 该门禁失去意义:
     ///     - product_images.show_dimension          → 026_product_images_show_dimension.sql
     ///     - machine_applications.product_id 改可空 → 020_allow_null_product_id_in_apps.sql
-    ///     - etl_progress_log.auto_generated_mr1    → 026_etl_progress_log_add_auto_generated_mr1.sql
+    ///     - etl_progress_log.auto_generated_mr1    → 041_etl_progress_log_add_auto_generated_mr1.sql (原 026, 2026-10-03 改名消除编号冲突)
     ///     - cross_references.is_whitelisted        → 027_cross_references_is_whitelisted.sql
     ///     - typeahead_dict / machine_mr1_bindings  → 023 / 039 建表, 已标记 ExcludeFromMigrations
     ///
@@ -25,7 +25,7 @@ namespace SakuraFilter.Infrastructure.Data.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            // 有意为空 —— 见类注释。DDL 由 SQL 迁移 020/023/026/027/039 负责。
+            // 有意为空 —— 见类注释。DDL 由 SQL 迁移 020/023/026/027/039/040/041 负责。
         }
 
         /// <inheritdoc />

@@ -232,6 +232,17 @@ jobs:
           SQL_COUNT=$(ls ../../migrations/*.sql 2>/dev/null | wc -l)
           echo "[PASS] backend/migrations/ 下 $SQL_COUNT 个一次性脚本头注释完整"
 
+          # 3) 校验迁移编号全局唯一 (2026-10-03)
+          #   WHY: 020_*/026_* 曾各有 2 个同号文件, 编号失去"顺序 + 唯一标识"语义,
+          #        迁移器按文件名升序执行时顺序不确定, 且无法判断某编号是否已应用。
+          #   编号约定: 三位数字前缀全局唯一、只增不复用, 详见 docs/ef-migrations-baseline.md §3.5
+          DUP=$(ls ../../migrations/*.sql | xargs -n1 basename | cut -c1-3 | sort | uniq -d)
+          if [ -n "$DUP" ]; then
+            echo "::error::迁移编号重复: $(echo $DUP | tr '\n' ' ') (编号必须全局唯一, 见 docs/ef-migrations-baseline.md §3.5)"
+            exit 1
+          fi
+          echo "[PASS] 迁移编号全局唯一"
+
       - name: Publish backend
         working-directory: backend
         run: dotnet publish src/SakuraFilter.Api/SakuraFilter.Api.csproj -c Release --no-build -o /tmp/backend-publish

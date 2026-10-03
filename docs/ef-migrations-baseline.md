@@ -205,6 +205,32 @@ dotnet run -c Debug
 
 ---
 
+### 3.5 SQL 迁移编号约定 (2026-10-03 起强制)
+
+`backend/migrations/*.sql` 统一为 `NNN_snake_case描述.sql` 三位数字前缀, **全局唯一 + 只增不复用**。
+
+| 规则 | 说明 |
+|------|------|
+| 全局唯一 | 同一编号不得出现两个文件。历史遗留 `020_*` / `026_*` 曾各有两份, 2026-10-03 已改名为 `040_machine_apps_is_discontinued_default.sql` / `041_etl_progress_log_add_auto_generated_mr1.sql` 消除冲突 |
+| 只增不改 | 已应用的脚本不改内容、不改编号; 需要修正则**新开编号**追加脚本 |
+| 取号规则 | 新脚本编号 = 当前目录最大编号 + 1 (不回收已废弃/跳号空位, 避免与历史记录歧义) |
+| 头注释 | 首行必须标注 `-- 一次性脚本,不可重跑` 或 `-- idempotent 可重跑` (CI 校验) |
+| 执行顺序 | 按**文件名升序**逐个执行, 编号即顺序 → 严禁"插号"(如补 019_1) |
+| 改名连带 | 重命名已应用的脚本, 必须同步生产历史表: `UPDATE public.__sakura_migrations SET basename='<新名>' WHERE basename='<旧名>';`, 否则迁移器会把旧名当作幽灵记录并重复执行新名脚本 |
+
+**守卫**:
+
+```powershell
+# 本地守卫 (零依赖, Windows PowerShell 5.1 / PowerShell 7 均可)
+powershell -File scripts/check-migration-uniqueness.ps1
+```
+
+CI 中由 `.github/workflows/ci.yml` 的 `Detect EF Core migration conflicts` step 内联 bash 版执行同一规则。
+
+> 注: 生产库 SQL 迁移历史记录表是 `public.__sakura_migrations(basename PK, applied_at)`, 由 `backend/migrations/run-migrations.sh` 维护 (生产为人工执行)。`scripts/migrate.sh` 使用另一套 `schema_migrations` 表名, 两者**不一致**, 使用前需先对齐 (见 `.ai/suggestions.md`)。
+
+---
+
 ## 4. 回滚流程
 
 ### 4.1 强制 EF Core 重跑全部 migration (调试用)
@@ -358,9 +384,10 @@ psql -h localhost -U postgres -d spike_test_v3 -c "SELECT 1;"
 | `.github/workflows/e2e.yml` | CI workflow (含 baseline seed 步骤) |
 | `docs/ef-migrations-baseline.md` | 本文档 |
 | `backend/src/SakuraFilter.Infrastructure/Data/Migrations/` | EF Core 8 migration 文件 (5 个) |
-| `backend/migrations/00X_*.sql` | 历史 SQL migration (18 个) |
+| `backend/migrations/NNN_*.sql` | 历史 + 增量 SQL migration (31 个, 编号约定见 §3.5) |
+| `scripts/check-migration-uniqueness.ps1` | SQL 迁移编号唯一性守卫 (CI 同规则) |
 
 ---
 
 > 文档维护: Day 10+ P0.2 Task 2 / SubTask 2.4
-> 最后更新: 2026-07-02
+> 最后更新: 2026-10-03 (§3.5 新增 SQL 迁移编号约定)

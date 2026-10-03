@@ -26,7 +26,11 @@ services:
     build:
       context: ./backend
       dockerfile: ../docker/Dockerfile.api
-    image: sakurafilter-api:1.0.41
+    # 不可变镜像标识 (2026-10-03): 禁止回退为 latest / 固定语义版本裸号 —
+    #   约定格式 <semver>-<git-short-sha>, 例如 1.0.42-a1b2c3d。代码变更 → sha 变 → tag 变,
+    #   回滚可精确指向某次构建产物; 同 tag 不允许覆盖推送。
+    #   必需变量: 由 .env.prod 提供 (所有 docker compose 命令需带 --env-file .env.prod, 缺失即 fail-fast)。
+    image: sakurafilter-api:${API_IMAGE_TAG:?API_IMAGE_TAG is required - immutable tag format semver-git-short-sha}
     container_name: sakura-api
     restart: unless-stopped
     depends_on:
@@ -124,7 +128,7 @@ services:
         VITE_PUBLIC_ABOUT_TEXT: ${VITE_PUBLIC_ABOUT_TEXT:-}
         VITE_PUBLIC_NEWS_TEXT: ${VITE_PUBLIC_NEWS_TEXT:-}
         VITE_PUBLIC_CONTACT_TEXT: ${VITE_PUBLIC_CONTACT_TEXT:-}
-    image: sakurafilter-web:1.0.42
+    image: sakurafilter-web:${WEB_IMAGE_TAG:?WEB_IMAGE_TAG is required - immutable tag format semver-git-short-sha}
     container_name: sakura-web
     restart: unless-stopped
     depends_on:

@@ -27,6 +27,9 @@ if [ -f "$ENV_FILE" ]; then
     PG_USER=$(grep -oP '^POSTGRES_USER=\K.*' "$ENV_FILE" | tr -d '"')
     PG_DB=$(grep -oP '^POSTGRES_DB=\K.*' "$ENV_FILE" | tr -d '"')
     PG_PASS=$(grep -oP '^POSTGRES_PASSWORD=\K.*' "$ENV_FILE" | tr -d '"')
+    # 2026-10-03: 镜像 tag 改为不可变标识后, docker-compose.prod.yml 里是 ${API_IMAGE_TAG} 变量,
+    #   无法再用 grep 直接解析字面量 tag → 改为从 env 文件读取同一变量 (单一来源)。
+    API_IMAGE_TAG=$(grep -oP '^API_IMAGE_TAG=\K.*' "$ENV_FILE" | tr -d '"' || true)
 else
     PG_USER="${PG_USER:-sakura}"
     PG_DB="${PG_DB:-sakurafilter}"
@@ -61,7 +64,7 @@ psql() { docker exec -i "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" "$@"; }
 #   apply 模式才执行; list 模式只提示
 if [ "$MODE" = "apply" ]; then
     echo "==> [1/2] EF Core C# 迁移 (--migrate-db)..."
-    API_IMAGE=$(grep -oP 'image: \Ksakurafilter-api:[0-9.]+' docker-compose.prod.yml | head -1)
+    API_IMAGE="${API_IMAGE_TAG:+sakurafilter-api:${API_IMAGE_TAG}}"
     # compose 网络名 = {项目名}_sakura-net (项目名默认目录名, 动态探测)
     NET_NAME=$(docker network ls --format '{{.Name}}' | grep '_sakura-net$' | head -1 || true)
     # V3(2026-08-25) codex v3: EF 条件不满足必须 exit 1, 不允许降级继续 —
@@ -80,7 +83,7 @@ if [ "$MODE" = "apply" ]; then
         fi
     else
         echo "❌ 无法执行 EF 迁移 (API_IMAGE=$API_IMAGE NET_NAME=$NET_NAME PG_PASS=${PG_PASS:+set}) — 阻断部署" >&2
-        echo "   原因排查: ①API 镜像未构建 (deploy-prod.sh 已先 build api) ②docker 网络未创建 ③PG_PASSWORD 未配置" >&2
+        echo "   原因排查: ①API 镜像未构建 (deploy-prod.sh 已先 build api) ②.env.prod 缺 API_IMAGE_TAG ③docker 网络未创建 ④PG_PASSWORD 未配置" >&2
         echo "   应急绕行: SKIP_EF=1 bash scripts/migrate.sh (仅限明确授权)" >&2
         exit 1
     fi
