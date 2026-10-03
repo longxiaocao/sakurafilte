@@ -1,7 +1,7 @@
 # 项目知识索引
 
 > 维护：随 `.ai/decisions.md` 同步更新；门控通过后做路径比对（规则 §5.2.1 第 6 步）。
-> 更新时间：2026-10-01
+> 更新时间：2026-10-04
 
 ## 技术栈
 
@@ -19,6 +19,7 @@
 - `backend/src/SakuraFilter.Search/`: `MeiliSearchProvider`（主）、`PostgresSearchProvider`（fallback）、`ResilientSearchProvider`（弹性包装）
 - `backend/src/SakuraFilter.Cli/`: 运维 CLI（孤儿图片清理、OEM staging 导入/清洗/映射/发布）
 - `backend/migrations/`: SQL 迁移，按文件名顺序；`run-migrations.sh` 以 `__sakura_migrations` 幂等登记。OEM 切库相关：`035_oem_catalog_serving.sql`（`oem_key`/派生分类）、`036_catalog_to_public_cutover.sql`（catalog → public 投影）、`037_products_meili_safe_ids.sql`（`mr_1` 净化为 Meili 安全 ID + `oem_2` 回填）、`038_supplement_product_category.sql`（派生分类规则 v2：交叉引用名主判据 + OEM 前缀兜底）、`039_machine_mr1_bindings.sql`（机型-MR.1 批量绑定关系表；此前实体/DbContext 已声明但 EF 与 SQL 迁移均缺建表脚本，属补齐）
+- `scripts/`: 部署/迁移运维脚本 —— `deploy-prod.sh`（生产发布 9 步；第 5 步迁移、第 5.5 步 schema 闸门）、`migrate.sh`（EF `--migrate-db` + SQL 迁移，历史表 `__sakura_migrations`，含结构验证）、`preflight-schema-check.ps1`（部署前 schema 闸门：迁移登记完整性 + CREATE TABLE/ADD COLUMN 落地比对，失败阻断 API 启动）、`backup-db.sh`、`check-migration-uniqueness.ps1`
 - `frontend/src/api/`: `types.ts` + `index.ts`（契约层）；`utils/http.ts`（axios 拦截器）
 - `frontend/src/views/public/`: 搜索/详情/对比；`frontend/src/views/admin/`: 后台各管理页
 
@@ -60,6 +61,7 @@
 - C# JSON 契约默认 PascalCase（已反映到前端类型）
 - 前端 i18n: `nav.*` / `admin.*` 命名空间，zh-CN + en-US 必须同步
 - 迁移文件: `<序号>_<描述>.sql`；历史表 `__sakura_migrations(basename PK, applied_at)`
+- 行尾 (`.gitattributes`, 2026-10-04): 仓库内统一 LF；`.ps1/.psm1/.bat/.cmd` 检出 CRLF、`.sh` 保持 LF；二进制禁转换。引入后必须 `git add --renormalize .` 并单独提交，否则旧 blob 行尾不一致仍会产生整文件级合并伪冲突
 
 ## 已知限制与风险
 
