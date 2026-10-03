@@ -20,7 +20,10 @@ namespace SakuraFilter.Api.Services;
 ///   记 Warning 并按既有 ProblemDetails 契约返回 400; **其余异常一律原样抛出**, 交由外层
 ///   <c>UseExceptionHandler</c> / <c>UseDeveloperExceptionPage</c> 按原逻辑处理, 不影响任何既有错误路径。
 ///
-/// 注册位置: 必须注册在异常处理中间件**之前**(更外层), 否则异常先被后者捕获并记 Error, 本中间件失效。
+/// 注册位置: 必须注册在异常处理中间件**之后**(更内层 / 更靠端点侧)。
+///   ASP.NET Core 中「注册越早 = 越外层」, 而异常由内向外冒泡、内层先捕获;
+///   若注册在 <c>UseExceptionHandler</c> 之前(更外层), 异常会先被后者捕获并落 Error 日志,
+///   本中间件永远收不到 —— 2026-10-03 首次实现即按错误顺序注册, 生产复测暴露, 特此写明。
 /// </summary>
 public sealed class FormBindingErrorMiddleware
 {

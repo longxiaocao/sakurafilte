@@ -14,6 +14,7 @@ namespace SakuraFilter.Api.Extensions;
 ///   0) CorrelationIdMiddleware
 ///   1) UseForwardedHeaders
 ///   2) UseExceptionHandler (生产) / UseDeveloperExceptionPage (开发)
+///   2.5) FormBindingErrorMiddleware (必须在异常处理**之后**=更内层, 否则抢不到异常)
 ///   3) UseHsts + UseHttpsRedirection (仅生产)
 ///   4) UseCors
 ///   5) SecurityHeadersMiddleware
@@ -50,14 +51,6 @@ public static class MiddlewarePipelineExtensions
         forwardedHeaders.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(IPAddress.Parse("192.168.0.0"), 16));
         app.UseForwardedHeaders(forwardedHeaders);
 
-        // 1.5) 表单绑定缺 Content-Type 的客户端错误「前置处置」(2026-10-03, P2 技术债)
-        //   WHY: 参数含 IFormFile 的端点在**参数绑定阶段**就抛 InvalidOperationException,
-        //     若放任冒泡, ExceptionHandlerMiddleware 会先以 Error 级别落
-        //     "An unhandled exception has occurred while executing the request." + 完整堆栈
-        //     (框架行为, 无法通过配置关闭) → 客户端输入问题被记为服务端故障, 污染告警。
-        //   必须注册在异常处理中间件**之前**(更外层)才能先捕获。
-        app.UseMiddleware<FormBindingErrorMiddleware>();
-
         // 2) 异常处理
         if (env.IsDevelopment())
         {
@@ -76,6 +69,17 @@ public static class MiddlewarePipelineExtensions
                 });
             });
         }
+
+        // 2.5) 表单绑定缺 Content-Type 的客户端错误「前置处置」(2026-10-03, P2 技术债)
+        //   WHY: 参数含 IFormFile 的端点在**参数绑定阶段**就抛 InvalidOperationException,
+        //     若放任冒泡, ExceptionHandlerMiddleware 会先以 Error 级别落
+        //     "An unhandled exception has occurred while executing the request." + 完整堆栈
+        //     (框架行为, 无法通过配置关闭) → 客户端输入问题被记为服务端故障, 污染告警。
+        //   ⚠️ 注册位置必须在异常处理中间件**之后**(更内层, 更靠端点侧):
+        //     异常沿管道由内向外冒泡, 内层先捕获。若注册在 UseExceptionHandler 之前(更外层),
+        //     异常已被后者捕获并落 Error 日志, 本中间件永远收不到
+        //     (2026-10-03 首次实现即踩此坑, 生产复测才暴露, 故在此显式标注)。
+        app.UseMiddleware<FormBindingErrorMiddleware>();
 
         // 3) HSTS + HTTPS 重定向（仅生产）
         if (!env.IsDevelopment())

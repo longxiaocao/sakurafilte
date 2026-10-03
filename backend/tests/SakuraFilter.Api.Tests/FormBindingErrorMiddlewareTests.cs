@@ -15,9 +15,11 @@ namespace SakuraFilter.Api.Tests;
 /// 测试目标: <see cref="FormBindingErrorMiddleware"/> 只拦截「表单缺 Content-Type」这一类框架异常,
 ///   其余异常必须原样抛出。
 ///
-/// WHY 需要这层测试: 该中间件注册在 ExceptionHandlerMiddleware 之前 (更外层), 是
+/// WHY 需要这层测试: 该中间件注册在 ExceptionHandlerMiddleware **之后 (更内层)**, 是
 ///   「防止客户端输入问题被记为 Error 级服务端故障」的唯一手段。拦截过宽会吞掉真实服务端
 ///   异常 (掩盖故障), 过窄则日志噪音回归 —— 两侧都是生产可观测性风险, 必须有回归保护。
+///   注: 注册顺序本身由 2026-10-03 生产复测确认 (顺序写反时本中间件永不触发), 见
+///   MiddlewarePipelineExtensions 第 2.5 步注释。
 /// </summary>
 public class FormBindingErrorMiddlewareTests
 {
