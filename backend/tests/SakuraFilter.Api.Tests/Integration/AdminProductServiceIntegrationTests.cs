@@ -332,4 +332,29 @@ public class AdminProductServiceIntegrationTests : PgIntegrationTestBase
         await db1.DisposeAsync();
         await db2.DisposeAsync();
     }
+
+    [Fact]
+    public async Task SearchAsync_CombinedTypeAndOemBrandFilters_PaginatesCorrectly_Integration()
+    {
+        if (!IsEnabled) { _output.WriteLine("Skip: PG_TEST_CONNECTION_STRING 未配置"); return; }
+
+        await using var db = CreateDbContext();
+        var sut = CreateAdminProductService(db);
+        await sut.CreateAsync(CreateForm("MRSEARCH001", "OEM-SEARCH-001",
+            xrefs: new() { CreateXref("Bosch", "BOSCH-SEARCH-001") }), "test-user", default);
+        await sut.CreateAsync(CreateForm("MRSEARCH002", "OEM-SEARCH-002",
+            xrefs: new() { CreateXref("Denso", "DENSO-SEARCH-002") }), "test-user", default);
+
+        var (items, total, _, _) = await sut.SearchAsync(new AdminProductSearchRequest
+        {
+            Page = 1,
+            PageSize = 1,
+            Type = "oil",
+            OemBrand = "Bosch"
+        });
+
+        total.Should().Be(1);
+        items.Should().ContainSingle();
+        items[0].Mr1.Should().Be("MRSEARCH001");
+    }
 }
