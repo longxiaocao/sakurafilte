@@ -298,6 +298,29 @@ public class PostgresSearchProviderIntegrationTests : PgIntegrationTestBase
     }
 
     [Fact]
+    public async Task AggregateSearchAsync_EightFieldFilters_RequireMatchingRelatedRows()
+    {
+        if (!IsEnabled) return;
+
+        await using var db = CreateDbContext();
+        await SeedTestDataAsync(db);
+        var provider = new PostgresSearchProvider(db, NullLogger<PostgresSearchProvider>.Instance);
+
+        var result = await provider.AggregateSearchAsync(new AggregateSearchRequest(
+            Q: null,
+            Page: 1,
+            PageSize: 20,
+            OemBrand: "Bosch",
+            OemNo3: "BOSCH-001",
+            MachineBrand: "Caterpillar",
+            MachineModel: "CAT-320"));
+
+        Assert.Equal(1, result.Total);
+        Assert.Single(result.Hits);
+        Assert.Equal("MR10001", result.Hits[0].Mr1);
+    }
+
+    [Fact]
     public async Task SearchAsync_QWithSpecialCharacters_EscapesLikePattern()
     {
         // 覆盖: q 含 LIKE 特殊字符 (%, _, \) 时正确转义, 不破坏 SQL
