@@ -120,8 +120,8 @@ Run: dotnet test backend/tests/SakuraFilter.Api.Tests/SakuraFilter.Api.Tests.csp
 - Consumes: PostgreSQL 通道 auth_token_rotated、IAuthTokenStore.ReloadFromDbAsync、IHostedServiceStatus。
 - Produces: NOTIFY 后 Reload 被调用、循环可取消、无 Connection is busy 的回归测试。
 
-- [ ] **Step 1: 建立可观察替身并写失败测试。**
-- [ ] **Step 2: 运行 RED，必要时最小修复，运行完整相关测试。**
+- [x] **Step 1: 建立可观察替身并写失败测试；快速发送两条 NOTIFY，确认两次 Reload 均完成且服务可停止。**
+- [x] **Step 2: 运行真实 PG 集成和完整后端测试；711/711 通过。**
 
 Run: dotnet test backend/tests/SakuraFilter.Api.Tests/SakuraFilter.Api.Tests.csproj
 
@@ -143,7 +143,7 @@ Run: pwsh -NoProfile -File scripts/ci-local.ps1
 
 Run: git diff --check; git status --short
 
-- [ ] **Step 3: 按可独立验收单元提交。**
+- [x] **Step 3: 按可独立验收单元提交。**
 
 Run: git add docs/superpowers/plans backend/tests && git commit -m 测试：补充生产回归关键测试
 

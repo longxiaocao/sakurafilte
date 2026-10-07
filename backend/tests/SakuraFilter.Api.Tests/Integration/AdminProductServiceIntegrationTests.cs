@@ -340,9 +340,9 @@ public class AdminProductServiceIntegrationTests : PgIntegrationTestBase
 
         await using var db = CreateDbContext();
         var sut = CreateAdminProductService(db);
-        await sut.CreateAsync(CreateForm("MRSEARCH001", "OEM-SEARCH-001",
+        await sut.CreateAsync(CreateForm("MRSEA001", "OEM-SEARCH-001",
             xrefs: new() { CreateXref("Bosch", "BOSCH-SEARCH-001") }), "test-user", default);
-        await sut.CreateAsync(CreateForm("MRSEARCH002", "OEM-SEARCH-002",
+        await sut.CreateAsync(CreateForm("MRSEA002", "OEM-SEARCH-002",
             xrefs: new() { CreateXref("Denso", "DENSO-SEARCH-002") }), "test-user", default);
 
         var (items, total, _, _) = await sut.SearchAsync(new AdminProductSearchRequest
@@ -355,6 +355,6 @@ public class AdminProductServiceIntegrationTests : PgIntegrationTestBase
 
         total.Should().Be(1);
         items.Should().ContainSingle();
-        items[0].Mr1.Should().Be("MRSEARCH001");
+        items[0].Mr1.Should().Be("MRSEA001");
     }
 }
